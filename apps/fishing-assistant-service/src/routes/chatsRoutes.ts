@@ -19,7 +19,7 @@ function parseChatMessageBody(body: unknown): ChatMessageBody {
 }
 
 export function registerChatsRoutes(app: FastifyInstance): void {
-  app.get('/fishing/chats', async (request, reply) => {
+  app.get('/chats', async (request, reply) => {
     logIncomingRequest(request);
     return await withAuth(request, reply, async (user) => {
       const result = await getServices().chatRepository.listChatsByUserId(user.userId);
@@ -28,7 +28,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.post('/fishing/chats', async (request, reply) => {
+  app.post('/chats', async (request, reply) => {
     logIncomingRequest(request);
     return await withAuth(request, reply, async (user) => {
       const result = await getServices().chatRepository.createChat({
@@ -41,7 +41,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.get('/fishing/chats/:chatId', async (request, reply) => {
+  app.get('/chats/:chatId', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { chatId: string };
@@ -57,7 +57,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.get('/fishing/chats/:chatId/messages', async (request, reply) => {
+  app.get('/chats/:chatId/messages', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { chatId: string };
@@ -70,7 +70,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.post('/fishing/chats/:chatId/messages', async (request, reply) => {
+  app.post('/chats/:chatId/messages', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true, bodyPreviewLength: 0 });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { chatId: string };

@@ -113,12 +113,12 @@ describe('chat-agent routes', () => {
       });
 
       const body = JSON.parse(response.body);
-      expect(body.paths['/chat']).toBeDefined();
-      expect(body.paths['/chat'].post).toBeDefined();
+      expect(body.paths['/']).toBeDefined();
+      expect(body.paths['/'].post).toBeDefined();
     });
   });
 
-  describe('POST /chat', () => {
+  describe('POST /', () => {
     let authToken: string;
 
     beforeEach(async () => {
@@ -129,7 +129,7 @@ describe('chat-agent routes', () => {
       it('should return 401 without JWT token', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           payload: {
             message: 'Hello',
             conversationHistory: [],
@@ -142,7 +142,7 @@ describe('chat-agent routes', () => {
       it('should return 401 with invalid JWT', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: 'Bearer invalid-token',
           },
@@ -163,7 +163,7 @@ describe('chat-agent routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${expiredToken}`,
           },
@@ -181,7 +181,7 @@ describe('chat-agent routes', () => {
       it('should return 400 for missing message field', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -196,7 +196,7 @@ describe('chat-agent routes', () => {
       it('should return 400 for empty message', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -215,7 +215,7 @@ describe('chat-agent routes', () => {
       it('should return 400 for invalid conversation history role', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -233,7 +233,7 @@ describe('chat-agent routes', () => {
       it('should accept valid request with minimal fields', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -250,7 +250,7 @@ describe('chat-agent routes', () => {
       it('should return 200 with response data', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -271,7 +271,7 @@ describe('chat-agent routes', () => {
       it('should include sources from documentation', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -288,7 +288,7 @@ describe('chat-agent routes', () => {
       it('should handle conversation history', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -311,7 +311,7 @@ describe('chat-agent routes', () => {
       it('should return suggested action when LLM provides one', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -328,7 +328,7 @@ describe('chat-agent routes', () => {
       it('should handle confirmation flow with pending action', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -355,7 +355,7 @@ describe('chat-agent routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -377,7 +377,7 @@ describe('chat-agent routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -403,7 +403,7 @@ describe('chat-agent routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -419,7 +419,7 @@ describe('chat-agent routes', () => {
       it('should handle message with special characters', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -434,7 +434,7 @@ describe('chat-agent routes', () => {
       it('should handle null pendingAction', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             authorization: `Bearer ${authToken}`,
           },
@@ -449,12 +449,12 @@ describe('chat-agent routes', () => {
     });
   });
 
-  describe('POST /chat (guest user)', () => {
+  describe('POST / (guest user)', () => {
     describe('session validation', () => {
       it('should return 401 without guest session header', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           payload: {
             message: 'Hello',
           },
@@ -469,7 +469,7 @@ describe('chat-agent routes', () => {
       it('should return 401 with empty guest session header', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             'x-guest-session': '',
           },
@@ -491,7 +491,7 @@ describe('chat-agent routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             'x-guest-session': 'fake-token-for-guest-session-123',
           },
@@ -510,7 +510,7 @@ describe('chat-agent routes', () => {
       it('blocks rotation: same signed token sent repeatedly hits 429 at the configured cap', async () => {
         // AC#1 of INT-1520: guests cannot bypass rate limits by rotating the
         // X-Guest-Session header. Verify that sending the SAME signed token to
-        // POST /chat repeatedly is capped — the limiter is keyed on the verified
+        // POST / repeatedly is capped — the limiter is keyed on the verified
         // sub, so all four requests share one bucket. Use the real limiter
         // (small cap to keep the test fast) instead of the fake.
         const realLimiter = createGuestRateLimiter({ maxPerHour: 3 });
@@ -524,7 +524,7 @@ describe('chat-agent routes', () => {
           for (let i = 0; i < 4; i++) {
             const response = await localApp.inject({
               method: 'POST',
-              url: '/chat',
+              url: '/',
               headers: {
                 'x-guest-session': token,
                 'x-forwarded-for': '203.0.113.99',
@@ -563,7 +563,7 @@ describe('chat-agent routes', () => {
           const requests = Array.from({ length: 10 }, () =>
             localApp.inject({
               method: 'POST',
-              url: '/chat',
+              url: '/',
               headers: {
                 'x-guest-session': token,
                 'x-forwarded-for': '203.0.113.100',
@@ -586,7 +586,7 @@ describe('chat-agent routes', () => {
       it('rejects an x-guest-session header that is not a valid signed token (401)', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: { 'x-guest-session': 'not-a-real-token' },
           payload: { message: 'Hello' },
         });
@@ -604,7 +604,7 @@ describe('chat-agent routes', () => {
         fakeServices.fakeGuestRateLimiter.setBlock(true, 'Rate limit exceeded.');
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: { 'x-guest-session': 'fake-token-for-fake-sub-1' },
           payload: { message: 'Hello' },
         });
@@ -614,7 +614,7 @@ describe('chat-agent routes', () => {
       it('verifies the signed token once and uses the verified sub for limiter check', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: { 'x-guest-session': 'fake-token-for-abc' },
           payload: { message: 'Hello' },
         });
@@ -631,7 +631,7 @@ describe('chat-agent routes', () => {
       it('should return 200 for guest with valid session', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             'x-guest-session': 'fake-token-for-guest-session-123',
           },
@@ -649,7 +649,7 @@ describe('chat-agent routes', () => {
       it('should handle guest conversation history', async () => {
         const response = await app.inject({
           method: 'POST',
-          url: '/chat',
+          url: '/',
           headers: {
             'x-guest-session': 'fake-token-for-guest-session-123',
           },

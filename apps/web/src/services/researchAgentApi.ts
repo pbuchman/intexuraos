@@ -17,7 +17,7 @@ export async function createResearch(
   accessToken: string,
   request: CreateResearchRequest
 ): Promise<Research> {
-  return await apiRequest<Research>(config.ResearchAgentUrl, '/research', accessToken, {
+  return await apiRequest<Research>(config.ResearchAgentUrl, '/', accessToken, {
     method: 'POST',
     body: request,
   });
@@ -32,7 +32,7 @@ export async function saveDraft(
 ): Promise<{ id: string }> {
   return await apiRequest<{ id: string }>(
     config.ResearchAgentUrl,
-    '/research/draft',
+    '/draft',
     accessToken,
     {
       method: 'POST',
@@ -56,7 +56,7 @@ export async function listResearches(
   params.set('limit', String(limit));
 
   const query = params.toString();
-  const path = query !== '' ? `/research?${query}` : '/research';
+  const path = query !== '' ? `/?${query}` : '/';
 
   return await apiRequest<ListResearchSummariesResponse>(config.ResearchAgentUrl, path, accessToken);
 }
@@ -65,7 +65,7 @@ export async function listResearches(
  * Get a single research by ID.
  */
 export async function getResearch(accessToken: string, id: string): Promise<Research> {
-  return await apiRequest<Research>(config.ResearchAgentUrl, `/research/${id}`, accessToken);
+  return await apiRequest<Research>(config.ResearchAgentUrl, `/${id}`, accessToken);
 }
 
 /**
@@ -76,7 +76,7 @@ export async function updateDraft(
   id: string,
   request: SaveDraftRequest
 ): Promise<Research> {
-  return await apiRequest<Research>(config.ResearchAgentUrl, `/research/${id}`, accessToken, {
+  return await apiRequest<Research>(config.ResearchAgentUrl, `/${id}`, accessToken, {
     method: 'PATCH',
     body: request,
   });
@@ -88,7 +88,7 @@ export async function updateDraft(
 export async function approveResearch(accessToken: string, id: string): Promise<Research> {
   return await apiRequest<Research>(
     config.ResearchAgentUrl,
-    `/research/${id}/approve`,
+    `/${id}/approve`,
     accessToken,
     { method: 'POST' }
   );
@@ -100,7 +100,7 @@ export async function approveResearch(accessToken: string, id: string): Promise<
 export async function deleteResearch(accessToken: string, id: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.ResearchAgentUrl,
-    `/research/${id}`,
+    `/${id}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -116,7 +116,7 @@ export async function confirmPartialFailure(
 ): Promise<ConfirmPartialFailureResponse> {
   return await apiRequest<ConfirmPartialFailureResponse>(
     config.ResearchAgentUrl,
-    `/research/${id}/confirm`,
+    `/${id}/confirm`,
     accessToken,
     {
       method: 'POST',
@@ -131,7 +131,7 @@ export async function confirmPartialFailure(
 export async function retryFromFailed(accessToken: string, id: string): Promise<Research> {
   return await apiRequest<Research>(
     config.ResearchAgentUrl,
-    `/research/${id}/retry`,
+    `/${id}/retry`,
     accessToken,
     { method: 'POST' }
   );
@@ -141,7 +141,7 @@ export async function retryFromFailed(accessToken: string, id: string): Promise<
  * Remove public share access for a research.
  */
 export async function unshareResearch(accessToken: string, id: string): Promise<void> {
-  await apiRequest<null>(config.ResearchAgentUrl, `/research/${id}/share`, accessToken, {
+  await apiRequest<null>(config.ResearchAgentUrl, `/${id}/share`, accessToken, {
     method: 'DELETE',
   });
 }
@@ -155,7 +155,7 @@ export async function validateInput(
 ): Promise<{ quality: 0 | 1 | 2; reason: string; improvedPrompt: string | null }> {
   return await apiRequest<{ quality: 0 | 1 | 2; reason: string; improvedPrompt: string | null }>(
     config.ResearchAgentUrl,
-    '/research/validate-input',
+    '/validate-input',
     accessToken,
     {
       method: 'POST',
@@ -173,7 +173,7 @@ export async function improveInput(
 ): Promise<{ improvedPrompt: string }> {
   return await apiRequest<{ improvedPrompt: string }>(
     config.ResearchAgentUrl,
-    '/research/improve-input',
+    '/improve-input',
     accessToken,
     {
       method: 'POST',
@@ -199,7 +199,7 @@ export async function enhanceResearch(
 ): Promise<Research> {
   return await apiRequest<Research>(
     config.ResearchAgentUrl,
-    `/research/${id}/enhance`,
+    `/${id}/enhance`,
     accessToken,
     {
       method: 'POST',
@@ -218,7 +218,7 @@ export async function toggleResearchFavourite(
 ): Promise<Research> {
   return await apiRequest<Research>(
     config.ResearchAgentUrl,
-    `/research/${id}/favourite`,
+    `/${id}/favourite`,
     accessToken,
     {
       method: 'PATCH',
@@ -234,7 +234,7 @@ export async function toggleResearchFavourite(
 export async function exportToNotion(accessToken: string, id: string): Promise<Research> {
   return await apiRequest<Research>(
     config.ResearchAgentUrl,
-    `/research/${id}/export-notion`,
+    `/${id}/export-notion`,
     accessToken,
     { method: 'POST' }
   );

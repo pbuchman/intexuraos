@@ -399,7 +399,7 @@ describe('GET /code/issue-groups', () => {
   it('returns empty groups when no tasks exist', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -432,7 +432,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -464,7 +464,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -488,7 +488,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -509,7 +509,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -532,7 +532,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -565,7 +565,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -593,7 +593,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=failed',
+      url: '/issue-groups?groupStatus=failed',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -633,7 +633,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -670,7 +670,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=pr-number',
+      url: '/issue-groups?sortBy=pr-number',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -702,7 +702,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=last-updated',
+      url: '/issue-groups?sortBy=last-updated',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -738,7 +738,7 @@ describe('GET /code/issue-groups', () => {
     // Request first page with limit=2
     const page1Response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?limit=2',
+      url: '/issue-groups?limit=2',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -751,7 +751,7 @@ describe('GET /code/issue-groups', () => {
     // Request second page
     const page2Response = await server.inject({
       method: 'GET',
-      url: `/code/issue-groups?limit=2&cursor=${page1.data.nextCursor}`,
+      url: `/issue-groups?limit=2&cursor=${page1.data.nextCursor}`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -784,7 +784,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=active',
+      url: '/issue-groups?groupStatus=active',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -807,7 +807,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -836,7 +836,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -852,7 +852,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer invalid-token' },
     });
 
@@ -885,7 +885,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -938,7 +938,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -977,7 +977,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1022,7 +1022,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1059,7 +1059,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=bogus,invalid',
+      url: '/issue-groups?groupStatus=bogus,invalid',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1161,7 +1161,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1270,7 +1270,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1309,7 +1309,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=dispatched',
+      url: '/issue-groups?sortBy=dispatched',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1330,7 +1330,7 @@ describe('GET /code/issue-groups', () => {
     const badCursor = Buffer.from(JSON.stringify({ index: -1 })).toString('base64url');
     const response = await server.inject({
       method: 'GET',
-      url: `/code/issue-groups?cursor=${badCursor}`,
+      url: `/issue-groups?cursor=${badCursor}`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1350,7 +1350,7 @@ describe('GET /code/issue-groups', () => {
     const badCursor = Buffer.from(JSON.stringify({ index: 'abc' })).toString('base64url');
     const response = await server.inject({
       method: 'GET',
-      url: `/code/issue-groups?cursor=${badCursor}`,
+      url: `/issue-groups?cursor=${badCursor}`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1379,7 +1379,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1472,7 +1472,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups',
+        url: '/issue-groups',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1571,7 +1571,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups',
+        url: '/issue-groups',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1635,7 +1635,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups',
+        url: '/issue-groups',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1658,7 +1658,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1692,7 +1692,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1715,7 +1715,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=archived',
+      url: '/issue-groups?groupStatus=archived',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1747,7 +1747,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1805,7 +1805,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1869,7 +1869,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=done',
+        url: '/issue-groups?groupStatus=done',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -1913,7 +1913,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=done',
+        url: '/issue-groups?groupStatus=done',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -1978,7 +1978,7 @@ describe('GET /code/issue-groups', () => {
       // Request WITHOUT "done" in the filter
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2028,7 +2028,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action',
+        url: '/issue-groups?groupStatus=active,needs-action',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2078,7 +2078,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2125,7 +2125,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2189,7 +2189,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2251,7 +2251,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2342,7 +2342,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2392,7 +2392,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=archived&sortBy=linear-id',
+        url: '/issue-groups?groupStatus=archived&sortBy=linear-id',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2488,7 +2488,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups',
+        url: '/issue-groups',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2612,7 +2612,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action',
+        url: '/issue-groups?groupStatus=active,needs-action',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2755,7 +2755,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/INT-500/important',
+      url: '/issue-groups/INT-500/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: true },
     });
@@ -2771,7 +2771,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/INT-500/important',
+      url: '/issue-groups/INT-500/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: false },
     });
@@ -2784,7 +2784,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
   it('returns NOT_FOUND for non-existent group', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/nonexistent/important',
+      url: '/issue-groups/nonexistent/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: true },
     });
@@ -2802,7 +2802,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/INT-500/important',
+      url: '/issue-groups/INT-500/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: true },
     });
@@ -2817,7 +2817,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 

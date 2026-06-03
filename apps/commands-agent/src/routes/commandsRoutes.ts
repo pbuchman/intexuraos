@@ -5,7 +5,7 @@ import { commandSchema } from './schemas/index.js';
 
 export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
-    '/commands',
+    '/',
     {
       schema: {
         operationId: 'listCommands',
@@ -62,7 +62,7 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post(
-    '/commands',
+    '/',
     {
       schema: {
         operationId: 'createCommand',
@@ -150,7 +150,7 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete(
-    '/commands/:commandId',
+    '/:commandId',
     {
       schema: {
         operationId: 'deleteCommand',
@@ -236,7 +236,7 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch(
-    '/commands/:commandId',
+    '/:commandId',
     {
       schema: {
         operationId: 'archiveCommand',

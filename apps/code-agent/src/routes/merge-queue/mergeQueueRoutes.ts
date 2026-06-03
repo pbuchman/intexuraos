@@ -63,7 +63,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
     // POST /code/merge-queue/watch — create a new merge queue watch
     fastify.post(
-      '/code/merge-queue/watch',
+      '/merge-queue/watch',
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to POST /code/merge-queue/watch',
@@ -152,7 +152,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
     // DELETE /code/merge-queue/watch/:watchId — cancel a watch
     fastify.delete(
-      '/code/merge-queue/watch/:watchId',
+      '/merge-queue/watch/:watchId',
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to DELETE /code/merge-queue/watch/:watchId',
@@ -197,7 +197,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
     // PUT /code/merge-queue/watch/:watchId/exclusions — set excluded PRs
     fastify.put(
-      '/code/merge-queue/watch/:watchId/exclusions',
+      '/merge-queue/watch/:watchId/exclusions',
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to PUT /code/merge-queue/watch/:watchId/exclusions',
@@ -253,7 +253,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
     // GET /code/merge-queue/watches — list watches for a user+repo
     fastify.get(
-      '/code/merge-queue/watches',
+      '/merge-queue/watches',
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to GET /code/merge-queue/watches',
@@ -281,7 +281,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
     // GET /code/merge-queue/branches — list branches with open PR counts (reads from Firestore)
     fastify.get(
-      '/code/merge-queue/branches',
+      '/merge-queue/branches',
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to GET /code/merge-queue/branches',
@@ -322,7 +322,7 @@ const mergeQueueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
     // GET /code/merge-queue/prs — list PRs for a specific base branch (reads from Firestore)
     fastify.get(
-      '/code/merge-queue/prs',
+      '/merge-queue/prs',
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to GET /code/merge-queue/prs',

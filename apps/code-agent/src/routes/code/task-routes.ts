@@ -1414,7 +1414,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         timeoutHours?: number;
       };
     }>(
-      '/code/submit',
+      '/submit',
       {
         schema: {
           operationId: 'submitCodeTask',
@@ -1759,7 +1759,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         cursor?: string;
       };
     }>(
-      '/code/tasks',
+      '/tasks',
       {
         schema: {
           operationId: 'listCodeTasks',
@@ -1942,7 +1942,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     fastify.get<{
       Params: { taskId: string };
     }>(
-      '/code/tasks/:taskId',
+      '/tasks/:taskId',
       {
         schema: {
           operationId: 'getCodeTask',
@@ -2166,7 +2166,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     fastify.delete<{
       Params: { taskId: string };
     }>(
-      '/code/tasks/:taskId',
+      '/tasks/:taskId',
       {
         schema: {
           operationId: 'deleteCodeTask',
@@ -2230,7 +2230,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     fastify.post<{
       Params: { taskId: string };
     }>(
-      '/code/tasks/:taskId/archive',
+      '/tasks/:taskId/archive',
       {
         schema: {
           operationId: 'archiveCodeTask',
@@ -2306,7 +2306,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     fastify.post<{
       Body: { taskId: string };
     }>(
-      '/code/cancel',
+      '/cancel',
       {
         schema: {
           operationId: 'cancelCodeTask',
@@ -2440,7 +2440,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     );
 
     fastify.get(
-      '/code/workers/status',
+      '/workers/status',
       {
         schema: {
           operationId: 'getWorkersStatus',
@@ -2601,7 +2601,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     );
 
     fastify.post(
-      '/code/workers/refresh-status',
+      '/workers/refresh-status',
       {
         schema: {
           operationId: 'refreshWorkersStatus',
@@ -2734,7 +2734,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
     // POST /code/retry - Retry a failed or cancelled code task (INT-520)
     fastify.post(
-      '/code/retry',
+      '/retry',
       {
         schema: {
           operationId: 'retryCodeTask',
@@ -2947,7 +2947,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
     // POST /code/tasks/:taskId/implement - Start Execution Agent implementation from a completed planning task
     fastify.post(
-      '/code/tasks/:taskId/implement',
+      '/tasks/:taskId/implement',
       {
         schema: {
           operationId: 'submitToExecutionAgent',

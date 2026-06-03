@@ -77,7 +77,7 @@ interface CreateTodoInternalOutput {
 
 ### Create Todo (Public — direct)
 
-**Endpoint:** `POST /todos`
+**Endpoint:** `POST /`
 
 **When to use:** When the authenticated user is creating a todo directly without AI extraction (no async processing step). Status starts as `pending` immediately.
 
@@ -104,7 +104,7 @@ interface CreateTodoPublicInput {
 
 ### List Todos
 
-**Endpoint:** `GET /todos`
+**Endpoint:** `GET /`
 
 **When to use:** Retrieve the authenticated user's todos, optionally filtered.
 
@@ -123,7 +123,7 @@ interface ListTodosQuery {
 
 ### Get Todo
 
-**Endpoint:** `GET /todos/:id`
+**Endpoint:** `GET /:id`
 
 **When to use:** Retrieve a specific todo and its items by ID. Poll this endpoint to check AI extraction status after creating via `/internal/todos`.
 
@@ -165,7 +165,7 @@ interface TodoItem {
 
 ### Update Todo Item
 
-**Endpoint:** `PATCH /todos/:id/items/:itemId`
+**Endpoint:** `PATCH /:id/items/:itemId`
 
 **When to use:** Mark an item as completed, update its title, priority, or due date. Completing all items automatically sets the todo status to `completed`.
 
@@ -186,10 +186,10 @@ interface UpdateTodoItemInput {
 
 | Action    | Endpoint                    | Restriction                            |
 | --------- | --------------------------- | -------------------------------------- |
-| Archive   | `POST /todos/:id/archive`   | Only `completed` or `cancelled` todos  |
-| Unarchive | `POST /todos/:id/unarchive` | No restriction                         |
-| Cancel    | `POST /todos/:id/cancel`    | Cannot cancel `completed` todos        |
-| Delete    | `DELETE /todos/:id`         | Permanently deletes todo and all items |
+| Archive   | `POST /:id/archive`   | Only `completed` or `cancelled` todos  |
+| Unarchive | `POST /:id/unarchive` | No restriction                         |
+| Cancel    | `POST /:id/cancel`    | Cannot cancel `completed` todos        |
+| Delete    | `DELETE /:id`         | Permanently deletes todo and all items |
 
 ## Constraints
 
@@ -197,14 +197,14 @@ interface UpdateTodoItemInput {
 
 - Call `/internal/todos` without a valid `userId` — the todo will be unowned
 - Fabricate `sourceId` values — use a stable, unique identifier from the caller's system
-- Assume AI extraction is complete immediately — poll `GET /todos/:id` until `status !== 'processing'`
+- Assume AI extraction is complete immediately — poll `GET /:id` until `status !== 'processing'`
 - Send reorder requests with a partial item list — all item IDs must be present or the request fails
 - Attempt to cancel a `completed` todo — returns `INVALID_OPERATION`
 
 **Requires:**
 
 - `X-Internal-Auth` header for all `/internal/*` endpoints
-- Bearer token for all public `/todos` endpoints
+- Bearer token for all public `/` endpoints
 - User must have an LLM API key configured in user-service for AI extraction to produce items
 
 ## Usage Patterns
@@ -214,30 +214,30 @@ interface UpdateTodoItemInput {
 ```
 1. Call POST /internal/todos with description field populated
 2. Record the todoId from resourceUrl in response ("/#/todos/<id>")
-3. Optionally: poll GET /todos/<id> until status !== 'processing'
+3. Optionally: poll GET /<id> until status !== 'processing'
 4. If polling: check items[] array for extracted results
 ```
 
 ### Pattern 2: Check and Complete Todo Items
 
 ```
-1. Call GET /todos to list todos for a user (filter by status=pending or in_progress)
+1. Call GET / to list todos for a user (filter by status=pending or in_progress)
 2. For each todo, inspect items[] for pending items
-3. When work is done, call PATCH /todos/:id/items/:itemId with status: "completed"
+3. When work is done, call PATCH /:id/items/:itemId with status: "completed"
 4. When all items completed, todo auto-transitions to "completed"
-5. Call POST /todos/:id/archive to clean up completed todos
+5. Call POST /:id/archive to clean up completed todos
 ```
 
 ### Pattern 3: Extraction Failure Handling
 
 ```
-1. After POST /internal/todos, poll GET /todos/:id
+1. After POST /internal/todos, poll GET /:id
 2. If status === 'pending' but items contain title starting with "Item extraction failed":
    - User has no LLM API key, or Gemini was unreachable
    - Treat todo as needing manual item entry
 3. If items contain "No actionable items found in todo description":
    - Description had no extractable action items
-   - Add items manually via POST /todos/:id/items
+   - Add items manually via POST /:id/items
 ```
 
 ## Error Handling

@@ -54,7 +54,7 @@ describe('linearApi', () => {
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[0]).toBe('https://linear.test');
-      expect(call?.[1]).toBe('/linear/connection');
+      expect(call?.[1]).toBe('/connection');
       expect(result).toBe(conn);
     });
 
@@ -83,7 +83,7 @@ describe('linearApi', () => {
       const teams = await validateLinearApiKey(TOKEN, 'lin_api_key');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/connection/validate');
+      expect(call?.[1]).toBe('/connection/validate');
       expect(call?.[3]).toEqual({ method: 'POST', body: { apiKey: 'lin_api_key' } });
       expect(teams).toEqual([{ id: '1', name: 'Eng' }]);
     });
@@ -99,7 +99,7 @@ describe('linearApi', () => {
       const result = await saveLinearConnection(TOKEN, req);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/connection');
+      expect(call?.[1]).toBe('/connection');
       expect(call?.[3]).toEqual({ method: 'POST', body: req });
       expect(result).toBe(conn);
     });
@@ -113,7 +113,7 @@ describe('linearApi', () => {
       await disconnectLinear(TOKEN);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/connection');
+      expect(call?.[1]).toBe('/connection');
       expect(call?.[3]).toEqual({ method: 'DELETE' });
     });
   });
@@ -126,7 +126,7 @@ describe('linearApi', () => {
       await listLinearIssues(TOKEN);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/issues?includeArchive=true');
+      expect(call?.[1]).toBe('/issues?includeArchive=true');
     });
 
     it('omits query when includeArchive=false', async () => {
@@ -136,7 +136,7 @@ describe('linearApi', () => {
       await listLinearIssues(TOKEN, false);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/issues');
+      expect(call?.[1]).toBe('/issues');
     });
   });
 
@@ -148,7 +148,7 @@ describe('linearApi', () => {
       const result = await listFailedLinearIssues(TOKEN);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/failed-issues');
+      expect(call?.[1]).toBe('/failed-issues');
       expect(result).toEqual([{ id: 'f1' }]);
     });
   });
@@ -160,13 +160,13 @@ describe('linearApi', () => {
 
       await deleteFailedIssue(TOKEN, 'f1');
       let call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/failed-issues/f1');
+      expect(call?.[1]).toBe('/failed-issues/f1');
       expect(call?.[3]).toEqual({ method: 'DELETE' });
 
       vi.mocked(apiRequest).mockResolvedValue({ issue: { id: 'i', identifier: 'INT-1', url: 'u' } });
       await retryFailedIssue(TOKEN, 'f1');
       call = vi.mocked(apiRequest).mock.calls[1];
-      expect(call?.[1]).toBe('/linear/failed-issues/f1/retry');
+      expect(call?.[1]).toBe('/failed-issues/f1/retry');
       expect(call?.[3]).toEqual({ method: 'POST' });
     });
   });
@@ -206,7 +206,7 @@ describe('linearApi', () => {
       await syncFromLinear(TOKEN);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/linear/sync');
+      expect(call?.[1]).toBe('/sync');
       expect(call?.[3]).toEqual({ method: 'POST' });
     });
   });
@@ -216,18 +216,18 @@ describe('linearApi', () => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue({ url: 'u', secretConfigured: true });
       await getWebhookConfig(TOKEN);
-      expect(vi.mocked(apiRequest).mock.calls[0]?.[1]).toBe('/linear/webhook-config');
+      expect(vi.mocked(apiRequest).mock.calls[0]?.[1]).toBe('/webhook-config');
 
       vi.mocked(apiRequest).mockResolvedValue({ configured: true });
       await saveWebhookSecret(TOKEN, 'secret');
       const post = vi.mocked(apiRequest).mock.calls[1];
-      expect(post?.[1]).toBe('/linear/webhook-config');
+      expect(post?.[1]).toBe('/webhook-config');
       expect(post?.[3]).toEqual({ method: 'POST', body: { secret: 'secret' } });
 
       vi.mocked(apiRequest).mockResolvedValue({ configured: false });
       await removeWebhookSecret(TOKEN);
       const del = vi.mocked(apiRequest).mock.calls[2];
-      expect(del?.[1]).toBe('/linear/webhook-config');
+      expect(del?.[1]).toBe('/webhook-config');
       expect(del?.[3]).toEqual({ method: 'DELETE' });
     });
   });
@@ -238,13 +238,13 @@ describe('linearApi', () => {
       vi.mocked(apiRequest).mockResolvedValue({ candidates: [{ id: 'p1' }] });
 
       const list = await listPruneCandidates(TOKEN);
-      expect(vi.mocked(apiRequest).mock.calls[0]?.[1]).toBe('/linear/prune-candidates');
+      expect(vi.mocked(apiRequest).mock.calls[0]?.[1]).toBe('/prune-candidates');
       expect(list).toEqual([{ id: 'p1' }]);
 
       vi.mocked(apiRequest).mockResolvedValue({ deleted: 1, failedDeletions: [], durationMs: 5 });
       await deletePruneCandidates(TOKEN);
       const call = vi.mocked(apiRequest).mock.calls[1];
-      expect(call?.[1]).toBe('/linear/prune-candidates');
+      expect(call?.[1]).toBe('/prune-candidates');
       expect(call?.[3]).toEqual({ method: 'DELETE' });
     });
   });

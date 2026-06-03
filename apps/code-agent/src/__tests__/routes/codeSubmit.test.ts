@@ -248,7 +248,7 @@ describe('POST /code/submit', () => {
     it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         payload: {
           prompt: 'Fix the bug',
         },
@@ -271,7 +271,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer invalid-token',
         },
@@ -299,7 +299,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -337,7 +337,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Build execution feature' },
       });
@@ -382,7 +382,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -416,7 +416,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -448,7 +448,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Implement feature', taskMode: 'execution' },
       });
@@ -475,7 +475,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Plan feature', taskMode: 'planning', linearIssueId: 'INT-999' },
       });
@@ -502,7 +502,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Do something unique' },
       });
@@ -534,7 +534,7 @@ describe('POST /code/submit', () => {
       // Submit first task
       const response1 = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -548,7 +548,7 @@ describe('POST /code/submit', () => {
       // Try to submit duplicate immediately
       const response2 = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -594,7 +594,7 @@ describe('POST /code/submit', () => {
       // Try to create second task with same Linear issue (should fail)
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -629,7 +629,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
@@ -657,7 +657,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
@@ -674,7 +674,7 @@ describe('POST /code/submit', () => {
     it('rejects requests without prompt', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -689,7 +689,7 @@ describe('POST /code/submit', () => {
     it('rejects empty prompt', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -717,7 +717,7 @@ describe('POST /code/submit', () => {
       for (const workerType of workerTypes) {
         const response = await app.inject({
           method: 'POST',
-          url: '/code/submit',
+          url: '/submit',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -748,7 +748,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -785,7 +785,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Run this later',
@@ -831,7 +831,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Plan later',
@@ -866,7 +866,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Run in the past',
@@ -899,7 +899,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Run with bad iso',
@@ -931,7 +931,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Run now',
@@ -968,7 +968,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Long-running task',
@@ -990,7 +990,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Bad lower bound',
@@ -1006,7 +1006,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Bad upper bound',
@@ -1025,7 +1025,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Float bound',
@@ -1043,7 +1043,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'No override',

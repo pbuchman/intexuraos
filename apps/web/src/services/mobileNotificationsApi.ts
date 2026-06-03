@@ -17,7 +17,7 @@ export async function connectMobileNotifications(
   const body = deviceLabel !== undefined ? { deviceLabel } : {};
   return await apiRequest<MobileNotificationsConnectResponse>(
     config.mobileNotificationsServiceUrl,
-    '/mobile-notifications/connect',
+    '/connect',
     accessToken,
     { method: 'POST', body }
   );
@@ -60,7 +60,7 @@ export async function getMobileNotifications(
   }
   const queryString = params.toString();
   const path =
-    queryString !== '' ? `/mobile-notifications?${queryString}` : '/mobile-notifications';
+    queryString !== '' ? `/?${queryString}` : '/';
 
   return await apiRequest<MobileNotificationsResponse>(
     config.mobileNotificationsServiceUrl,
@@ -77,7 +77,7 @@ export async function getNotificationFilters(
 ): Promise<NotificationFiltersData> {
   return await apiRequest<NotificationFiltersData>(
     config.mobileNotificationsServiceUrl,
-    '/notifications/filters',
+    '/filters',
     accessToken
   );
 }
@@ -103,7 +103,7 @@ export async function createSavedNotificationFilter(
 ): Promise<SavedNotificationFilter> {
   return await apiRequest<SavedNotificationFilter>(
     config.mobileNotificationsServiceUrl,
-    '/notifications/filters/saved',
+    '/filters/saved',
     accessToken,
     { method: 'POST', body: filter }
   );
@@ -118,7 +118,7 @@ export async function deleteSavedNotificationFilter(
 ): Promise<void> {
   await apiRequest<unknown>(
     config.mobileNotificationsServiceUrl,
-    `/notifications/filters/saved/${encodeURIComponent(filterId)}`,
+    `/filters/saved/${encodeURIComponent(filterId)}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -133,7 +133,7 @@ export async function deleteMobileNotification(
 ): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.mobileNotificationsServiceUrl,
-    `/mobile-notifications/${notificationId}`,
+    `/${notificationId}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -155,7 +155,7 @@ export async function getMobileNotificationsStatus(
 ): Promise<MobileNotificationsStatusResponse> {
   return await apiRequest<MobileNotificationsStatusResponse>(
     config.mobileNotificationsServiceUrl,
-    '/mobile-notifications/status',
+    '/status',
     accessToken
   );
 }

@@ -25,7 +25,7 @@
                                          │    draft    │
                                          └──────┬──────┘
                                                 │
-                                       POST /research (start)
+                                       POST / (start)
                                                 │
                                                 ▼
                                          ┌─────────────┐
@@ -79,7 +79,7 @@
 ### 1.1 Draft Creation
 
 ```
-User fills form  ──►  POST /research/draft  ──►  status: draft
+User fills form  ──►  POST /draft  ──►  status: draft
 ```
 
 | Field             | Source                                          |
@@ -94,7 +94,7 @@ User fills form  ──►  POST /research/draft  ──►  status: draft
 ### 1.2 Start Research
 
 ```
-User clicks Start  ──►  POST /research  ──►  status: processing
+User clicks Start  ──►  POST /  ──►  status: processing
 ```
 
 **Validation:**
@@ -257,7 +257,7 @@ const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCoun
 
 ### 5.2 User Actions
 
-**Endpoint:** `POST /research/:id/confirm`
+**Endpoint:** `POST /:id/confirm`
 
 | Action    | Effect                                     |
 | --------- | ------------------------------------------ |
@@ -356,7 +356,7 @@ research.status === 'failed';
 
 ### 6.3 Endpoint Behavior
 
-**Endpoint:** `POST /research/:id/retry`
+**Endpoint:** `POST /:id/retry`
 
 | Current Status              | Action           | Result                   |
 | --------------------------- | ---------------- | ------------------------ |

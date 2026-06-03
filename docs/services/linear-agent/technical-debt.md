@@ -48,7 +48,7 @@ Based on code analysis, git history, and domain patterns:
 
 | File                                                   | Issue                          | Impact                                                        |
 | ------------------------------------------------------ | ------------------------------ | ------------------------------------------------------------- |
-| `src/infra/linear/linearApiClient.ts`                  | Module-level client cache      | Global state, harder to test in isolation                     |
+| `src/infra/linearApiClient.ts`                  | Module-level client cache      | Global state, harder to test in isolation                     |
 | `src/domain/useCases/triggerCodeTaskFromAssignment.ts` | Fire-and-forget async pattern  | Errors logged but not propagated to caller                    |
 | `src/services.ts`                                      | Conditional pruning classifier | Null-key fallback creates a stub classifier that always fails |
 

@@ -22,7 +22,7 @@ export const askAgentRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
     fastify.addHook('onRequest', jwtValidator);
 
     fastify.post<{ Body: { prompt: string } }>(
-      '/code/ask-agent/start',
+      '/ask-agent/start',
       {
         schema: {
           operationId: 'startAskAgent',
@@ -157,7 +157,7 @@ export const askAgentRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
     );
 
     fastify.get(
-      '/code/ask-agent/active',
+      '/ask-agent/active',
       {
         schema: {
           operationId: 'getActiveAskAgent',

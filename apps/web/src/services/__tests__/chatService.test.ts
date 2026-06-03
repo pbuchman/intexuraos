@@ -148,7 +148,7 @@ describe('chatService', () => {
 
       expect(mockApiRequest).toHaveBeenCalledWith(
         'http://localhost:8129',
-        '/chat',
+        '/',
         mockAccessToken,
         {
           method: 'POST',
@@ -169,7 +169,7 @@ describe('chatService', () => {
 
       expect(mockApiRequest).toHaveBeenCalledWith(
         'http://localhost:8129',
-        '/chat',
+        '/',
         mockAccessToken,
         {
           method: 'POST',
@@ -195,7 +195,7 @@ describe('chatService', () => {
 
       expect(mockApiRequest).toHaveBeenCalledWith(
         'http://localhost:8129',
-        '/chat',
+        '/',
         mockAccessToken,
         {
           method: 'POST',
@@ -472,7 +472,7 @@ describe('chatService', () => {
       expect(sessionCall?.[0]).toBe('http://localhost:8129/guest-session');
 
       const chatCall = fetchSpy.mock.calls[1];
-      expect(chatCall?.[0]).toBe('http://localhost:8129/chat');
+      expect(chatCall?.[0]).toBe('http://localhost:8129/');
       const chatInit = chatCall?.[1] as RequestInit;
       const headers = chatInit.headers as Record<string, string>;
       expect(headers['X-Guest-Session']).toBe('guest.jwt');

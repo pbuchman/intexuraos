@@ -136,34 +136,34 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 
 | Method | Path                            | Purpose                     | Auth         |
 | ------ | ------------------------------- | --------------------------- | ------------ |
-| POST   | `/mobile-notifications/connect` | Create signature connection | Bearer token |
-| GET    | `/mobile-notifications/status`  | Get connection status       | Bearer token |
+| POST   | `/connect` | Create signature connection | Bearer token |
+| GET    | `/status`  | Get connection status       | Bearer token |
 
 ### Notifications
 
 | Method | Path                                     | Purpose             | Auth         |
 | ------ | ---------------------------------------- | ------------------- | ------------ |
-| GET    | `/mobile-notifications`                  | List notifications  | Bearer token |
-| DELETE | `/mobile-notifications/:notification_id` | Delete notification | Bearer token |
+| GET    | `/`                  | List notifications  | Bearer token |
+| DELETE | `/:notification_id` | Delete notification | Bearer token |
 
 ### Filters
 
 | Method | Path                               | Purpose                    | Auth         | Response       |
 | ------ | ---------------------------------- | -------------------------- | ------------ | -------------- |
-| GET    | `/notifications/filters`           | Get filter options + saved | Bearer token | 200 OK         |
-| POST   | `/notifications/filters/saved`     | Create saved filter        | Bearer token | 201 Created    |
-| DELETE | `/notifications/filters/saved/:id` | Delete saved filter        | Bearer token | 204 No Content |
+| GET    | `/filters`           | Get filter options + saved | Bearer token | 200 OK         |
+| POST   | `/filters/saved`     | Create saved filter        | Bearer token | 201 Created    |
+| DELETE | `/filters/saved/:id` | Delete saved filter        | Bearer token | 204 No Content |
 
 ### Digest (User-Facing)
 
 | Method | Path                                           | Purpose                            | Auth         |
 | ------ | ---------------------------------------------- | ---------------------------------- | ------------ |
-| GET    | `/notifications/digests`                       | List digests for date range        | Bearer token |
-| GET    | `/notifications/digests/:groupKey/:date`       | Get single digest                  | Bearer token |
-| GET    | `/notifications/digests/:groupKey/:date/state` | Get group state snapshot           | Bearer token |
-| POST   | `/notifications/digests/run`                   | Regenerate digest for group + date | Bearer token |
-| POST   | `/notifications/digests/backfill`              | Start backfill run for date range  | Bearer token |
-| GET    | `/notifications/digests/backfill/:runId`       | Get backfill run status            | Bearer token |
+| GET    | `/digests`                       | List digests for date range        | Bearer token |
+| GET    | `/digests/:groupKey/:date`       | Get single digest                  | Bearer token |
+| GET    | `/digests/:groupKey/:date/state` | Get group state snapshot           | Bearer token |
+| POST   | `/digests/run`                   | Regenerate digest for group + date | Bearer token |
+| POST   | `/digests/backfill`              | Start backfill run for date range  | Bearer token |
+| GET    | `/digests/backfill/:runId`       | Get backfill run status            | Bearer token |
 
 ### Digest (Internal)
 
@@ -182,7 +182,7 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 
 | Method | Path                             | Purpose                          | Auth      |
 | ------ | -------------------------------- | -------------------------------- | --------- |
-| POST   | `/mobile-notifications/webhooks` | Receive push from mobile devices | Signature |
+| POST   | `/webhooks` | Receive push from mobile devices | Signature |
 
 ### System
 
@@ -404,7 +404,7 @@ After changing digest prompt language behavior, rerun the affected date range th
 
 - **Signature security** — Plaintext signature returned only on creation. Store it securely. The service stores only the SHA-256 hash. Lost tokens require creating a new connection.
 
-- **Single signature per user** — Creating a new connection (`POST /mobile-notifications/connect`) deletes all existing signatures for the user first. Only one active signature per user at a time.
+- **Single signature per user** — Creating a new connection (`POST /connect`) deletes all existing signatures for the user first. Only one active signature per user at a time.
 
 - **Hash comparison** — Webhook signatures are compared as SHA-256 hashes; plaintext is never stored or logged.
 
@@ -412,17 +412,17 @@ After changing digest prompt language behavior, rerun the affected date range th
 
 - **Title filter is in-memory** — The `title` filter uses case-insensitive substring matching performed in application code after the Firestore query. The 5-batch cap was removed in v3.6.0 — it now iterates all batches.
 
-- **Filter defaults** — `GET /notifications/filters` returns an empty options document if no notifications have been received yet; it never returns 404.
+- **Filter defaults** — `GET /filters` returns an empty options document if no notifications have been received yet; it never returns 404.
 
-- **Response contract** — All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. `DELETE /notifications/filters/saved/:id` uses raw `reply.send()` with 204 (`@allow-raw-send`).
+- **Response contract** — All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. `DELETE /filters/saved/:id` uses raw `reply.send()` with 204 (`@allow-raw-send`).
 
-- **DELETE notification returns 200** — `DELETE /mobile-notifications/:notification_id` returns `{ success: true, data: {} }` (not 204).
+- **DELETE notification returns 200** — `DELETE /:notification_id` returns `{ success: true, data: {} }` (not 204).
 
 - **Filter options best-effort** — When a notification is saved, filter options (app, device, source) are updated via Firestore `arrayUnion`. If this update fails, the notification is still accepted; the failure is logged as non-critical.
 
 - **Cursor encoding** — Pagination cursors are base64-encoded JSON containing `receivedAt` and `id`. Invalid cursors are silently ignored (treated as no cursor).
 
-- **Raw body capture** — The webhook endpoint (`/mobile-notifications/webhooks`) captures the raw request body in a `preParsing` hook for debugging JSON parse errors.
+- **Raw body capture** — The webhook endpoint (`/webhooks`) captures the raw request body in a `preParsing` hook for debugging JSON parse errors.
 
 - **Digest CET timezone** — Day boundaries use `Europe/Warsaw`. A date of `2026-04-15` resolves to midnight-to-midnight in CET/CEST, not UTC.
 
@@ -456,11 +456,11 @@ apps/mobile-notifications-service/src/
     firestore/             # All Firestore repository implementations (7 repositories)
     notification/          # WhatsAppDigestNotifier + formatDigestMessage
   routes/
-    connectRoutes.ts       # POST /mobile-notifications/connect
-    statusRoutes.ts        # GET /mobile-notifications/status
-    notificationRoutes.ts  # GET /mobile-notifications, DELETE /mobile-notifications/:id
-    filterRoutes.ts        # GET/POST/DELETE /notifications/filters/...
-    webhookRoutes.ts       # POST /mobile-notifications/webhooks
+    connectRoutes.ts       # POST /connect
+    statusRoutes.ts        # GET /status
+    notificationRoutes.ts  # GET /, DELETE /:id
+    filterRoutes.ts        # GET/POST/DELETE /filters/...
+    webhookRoutes.ts       # POST /webhooks
     internalRoutes.ts      # POST /internal/mobile-notifications/query
     digestRoutes.ts        # All digest endpoints (internal + user-facing + backfill)
     digestSchemas.ts       # Request/response schemas for digest routes

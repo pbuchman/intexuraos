@@ -63,7 +63,7 @@ describe('workerOpsRoutes (sub-plugin)', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/code/worker-settings/workers/home-mac/test',
+      url: '/worker-settings/workers/home-mac/test',
       headers: { Authorization: 'Bearer test-token' },
     });
 
@@ -80,7 +80,7 @@ describe('workerOpsRoutes (sub-plugin)', () => {
   it('POST /code/worker-settings/workers/:name/test returns 404 for unknown worker', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/code/worker-settings/workers/nonexistent/test',
+      url: '/worker-settings/workers/nonexistent/test',
       headers: { Authorization: 'Bearer test-token' },
     });
 
@@ -108,7 +108,7 @@ describe('workerOpsRoutes (sub-plugin)', () => {
 
     const response = await app.inject({
       method: 'PUT',
-      url: '/code/worker-settings/priority',
+      url: '/worker-settings/priority',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: { workerNames: ['office-pc', 'home-mac'] },
     });

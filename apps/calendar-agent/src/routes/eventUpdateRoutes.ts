@@ -14,7 +14,7 @@ import {
 
 export const eventUpdateRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.patch<{ Params: EventParams; Body: UpdateEventBody }>(
-    '/calendar/events/:eventId',
+    '/events/:eventId',
     {
       schema: {
         operationId: 'updateCalendarEvent',

@@ -167,8 +167,8 @@ type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remedia
 ### Ask Agent (Interactive Sessions)
 
 **Endpoints:**
-- `POST /code/ask-agent/start` — Start an interactive session (Auth0 JWT)
-- `GET /code/ask-agent/active` — Get active session for cross-device restoration (Auth0 JWT)
+- `POST /ask-agent/start` — Start an interactive session (Auth0 JWT)
+- `GET /ask-agent/active` — Get active session for cross-device restoration (Auth0 JWT)
 
 **When to use:** Back-and-forth conversations with Claude Code from the web UI
 
@@ -226,7 +226,7 @@ interface ActiveTaskCheckResponse {
 
 ### Issue Groups (Paginated)
 
-**Endpoint:** `GET /code/issue-groups`
+**Endpoint:** `GET /issue-groups`
 
 **When to use:** Display tasks grouped by Linear issue with aggregated status
 
@@ -243,7 +243,7 @@ type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 
 ### Toggle Issue Group Important Flag
 
-**Endpoint:** `POST /code/issue-groups/:groupKey/important`
+**Endpoint:** `POST /issue-groups/:groupKey/important`
 
 **When to use:** Mark or unmark an issue group as high-priority
 
@@ -314,12 +314,12 @@ interface DispatchMetadataResponse {
 ### Merge Queue
 
 **Endpoints:**
-- `POST /code/merge-queue/watch` — Create a new merge queue watch
-- `DELETE /code/merge-queue/watch/:watchId` — Cancel a watch
-- `PUT /code/merge-queue/watch/:watchId/exclusions` — Set excluded PRs
-- `GET /code/merge-queue/watches` — List active watches
-- `GET /code/merge-queue/branches` — List available base branches
-- `GET /code/merge-queue/prs` — List eligible PRs
+- `POST /merge-queue/watch` — Create a new merge queue watch
+- `DELETE /merge-queue/watch/:watchId` — Cancel a watch
+- `PUT /merge-queue/watch/:watchId/exclusions` — Set excluded PRs
+- `GET /merge-queue/watches` — List active watches
+- `GET /merge-queue/branches` — List available base branches
+- `GET /merge-queue/prs` — List eligible PRs
 - `POST /internal/merge-queue/tick` — Process one merge cycle (Cloud Scheduler)
 
 **When to use:** When multiple bot-authored PRs target the same branch and need ordered merging
@@ -804,7 +804,7 @@ interface ReconcileResult {
 
 | Route Pattern          | Auth Method                        |
 | ---------------------- | ---------------------------------- |
-| `/code/*`              | Auth0 JWT (via `onRequest` hook)   |
+| `/*`              | Auth0 JWT (via `onRequest` hook)   |
 | `/internal/*`          | `X-Internal-Auth` header           |
 | `/internal/webhooks/*` | `X-Internal-Auth` + HMAC signature |
 | `/webhooks/github`     | GitHub HMAC-SHA256 signature       |
@@ -871,7 +871,7 @@ X-Trace-Id: <trace-id>
 ### Submit task from web UI
 
 ```
-POST /code/submit
+POST /submit
 Authorization: Bearer <auth0-jwt>
 
 {
@@ -904,7 +904,7 @@ X-Internal-Auth: <token>
 ### Start Ask Agent session
 
 ```
-POST /code/ask-agent/start
+POST /ask-agent/start
 Authorization: Bearer <auth0-jwt>
 
 {
@@ -918,7 +918,7 @@ Authorization: Bearer <auth0-jwt>
 ### List issue groups
 
 ```
-GET /code/issue-groups?status=active&sort=last-updated&limit=20
+GET /issue-groups?status=active&sort=last-updated&limit=20
 Authorization: Bearer <auth0-jwt>
 
 -> 200: { "success": true, "data": { "groups": [...], "nextCursor": "cursor-id", "counts": { "active": 5, "needsAction": 2, ... } } }
@@ -927,7 +927,7 @@ Authorization: Bearer <auth0-jwt>
 ### Create merge queue watch
 
 ```
-POST /code/merge-queue/watch
+POST /merge-queue/watch
 Authorization: Bearer <auth0-jwt>
 
 {
@@ -943,7 +943,7 @@ Authorization: Bearer <auth0-jwt>
 ### List tasks
 
 ```
-GET /code/tasks?status=running,dispatched&limit=10
+GET /tasks?status=running,dispatched&limit=10
 Authorization: Bearer <auth0-jwt>
 
 -> 200: { "success": true, "data": { "tasks": [...], "nextCursor": "cursor-id" } }
@@ -954,10 +954,10 @@ Note: The `status` parameter accepts comma-separated values. Tasks with `agentTy
 ### Start execution agent implementation
 
 ```
-POST /code/tasks/:taskId/implement
+POST /tasks/:taskId/implement
 Authorization: Bearer <auth0-jwt>
 
--> 200: { "success": true, "data": { "codeTaskId": "uuid", "resourceUrl": "/code/tasks/uuid", "workerLocation": "home-mac", "implementationOf": "original-task-id" } }
+-> 200: { "success": true, "data": { "codeTaskId": "uuid", "resourceUrl": "/tasks/uuid", "workerLocation": "home-mac", "implementationOf": "original-task-id" } }
 -> 400: { "success": false, "error": { "code": "invalid_status", "message": "Task must be a completed planning task to start implementation" } }
 -> 400: { "success": false, "error": { "code": "label_not_ready", "message": "The code-task label hasn't been added yet." } }
 -> 409: { "success": false, "error": { "code": "already_implemented", "message": "Implementation already started" } }
@@ -966,7 +966,7 @@ Authorization: Bearer <auth0-jwt>
 ### Send message to task
 
 ```
-POST /code/tasks/:taskId/messages
+POST /tasks/:taskId/messages
 Authorization: Bearer <auth0-jwt>
 
 { "message": "Please also add error handling for the null case" }

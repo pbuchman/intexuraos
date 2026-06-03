@@ -249,7 +249,7 @@ describe('GET /code/ask-agent/active', () => {
   it('returns 401 without Authorization header', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
     });
 
     expect(response.statusCode).toBe(401);
@@ -262,7 +262,7 @@ describe('GET /code/ask-agent/active', () => {
   it('returns null when no ask-agent task exists', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -290,7 +290,7 @@ describe('GET /code/ask-agent/active', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -309,7 +309,7 @@ describe('GET /code/ask-agent/active', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
       headers: { authorization: 'Bearer test-token' },
     });
 

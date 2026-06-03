@@ -5,7 +5,7 @@
  *
  * The returned token is an HS256 JWT bound to a server-generated opaque sub
  * claim. Clients must include the token as the `X-Guest-Session` header on
- * subsequent /chat calls; the route verifies the signature and rate-limits
+ * subsequent chat message calls; the route verifies the signature and rate-limits
  * by the verified sub, so rotating the header value cannot bypass the limit.
  *
  * This endpoint is unauthenticated (guests must be able to call it) but is
@@ -25,7 +25,7 @@ export const guestSessionRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         operationId: 'issueGuestSession',
         summary: 'Issue a signed guest session token',
         description:
-          'Returns a short-lived signed guest session token. The client MUST send this token as the X-Guest-Session header on subsequent /chat calls.',
+          'Returns a short-lived signed guest session token. The client MUST send this token as the X-Guest-Session header on subsequent chat message calls.',
         tags: ['chat'],
         response: {
           200: {

@@ -70,7 +70,7 @@ export async function listCodeTasks(
     params.set('cursor', options.cursor);
   }
   const query = params.toString();
-  const path = query !== '' ? `/code/tasks?${query}` : '/code/tasks';
+  const path = query !== '' ? `/tasks?${query}` : '/tasks';
   return await apiRequest<ListCodeTasksResponse>(config.codeAgentUrl, path, accessToken);
 }
 
@@ -78,7 +78,7 @@ export async function listCodeTasks(
  * Get a single code task by ID
  */
 export async function getCodeTask(accessToken: string, taskId: string): Promise<CodeTask> {
-  return await apiRequest<CodeTask>(config.codeAgentUrl, `/code/tasks/${taskId}`, accessToken);
+  return await apiRequest<CodeTask>(config.codeAgentUrl, `/tasks/${taskId}`, accessToken);
 }
 
 /**
@@ -88,7 +88,7 @@ export async function submitCodeTask(
   accessToken: string,
   request: SubmitCodeTaskRequest
 ): Promise<SubmitCodeTaskResponse> {
-  return await apiRequest<SubmitCodeTaskResponse>(config.codeAgentUrl, '/code/submit', accessToken, {
+  return await apiRequest<SubmitCodeTaskResponse>(config.codeAgentUrl, '/submit', accessToken, {
     method: 'POST',
     body: request,
     timeout: 90000, // 90s — submit can take 30+ seconds due to Linear API + worker dispatch
@@ -99,7 +99,7 @@ export async function submitCodeTask(
  * Delete a code task by ID
  */
 export async function deleteCodeTask(accessToken: string, taskId: string): Promise<void> {
-  await apiRequest<{ deleted: boolean }>(config.codeAgentUrl, `/code/tasks/${taskId}`, accessToken, {
+  await apiRequest<{ deleted: boolean }>(config.codeAgentUrl, `/tasks/${taskId}`, accessToken, {
     method: 'DELETE',
   });
 }
@@ -108,7 +108,7 @@ export async function deleteCodeTask(accessToken: string, taskId: string): Promi
  * Archive a code task by ID
  */
 export async function archiveCodeTask(accessToken: string, taskId: string): Promise<void> {
-  await apiRequest<{ archived: boolean }>(config.codeAgentUrl, `/code/tasks/${taskId}/archive`, accessToken, {
+  await apiRequest<{ archived: boolean }>(config.codeAgentUrl, `/tasks/${taskId}/archive`, accessToken, {
     method: 'POST',
   });
 }
@@ -120,7 +120,7 @@ export async function retryCodeTask(
   accessToken: string,
   request: RetryCodeTaskRequest
 ): Promise<RetryCodeTaskResponse> {
-  return await apiRequest<RetryCodeTaskResponse>(config.codeAgentUrl, '/code/retry', accessToken, {
+  return await apiRequest<RetryCodeTaskResponse>(config.codeAgentUrl, '/retry', accessToken, {
     method: 'POST',
     body: request,
   });
@@ -130,7 +130,7 @@ export async function retryCodeTask(
  * Cancel a running code task
  */
 export async function cancelCodeTask(accessToken: string, taskId: string): Promise<{ status: 'cancelled' }> {
-  return await apiRequest<{ status: 'cancelled' }>(config.codeAgentUrl, '/code/cancel', accessToken, {
+  return await apiRequest<{ status: 'cancelled' }>(config.codeAgentUrl, '/cancel', accessToken, {
     method: 'POST',
     body: { taskId },
   });
@@ -140,14 +140,14 @@ export async function cancelCodeTask(accessToken: string, taskId: string): Promi
  * Get worker status (Mac and VM health)
  */
 export async function getWorkersStatus(accessToken: string): Promise<WorkersStatusResponse> {
-  return await apiRequest<WorkersStatusResponse>(config.codeAgentUrl, '/code/workers/status', accessToken);
+  return await apiRequest<WorkersStatusResponse>(config.codeAgentUrl, '/workers/status', accessToken);
 }
 
 /**
  * Refresh worker status synchronously
  */
 export async function refreshWorkersStatus(accessToken: string): Promise<WorkersStatusResponse> {
-  return await apiRequest<WorkersStatusResponse>(config.codeAgentUrl, '/code/workers/refresh-status', accessToken, {
+  return await apiRequest<WorkersStatusResponse>(config.codeAgentUrl, '/workers/refresh-status', accessToken, {
     method: 'POST',
   });
 }
@@ -162,7 +162,7 @@ export async function sendTaskMessage(
 ): Promise<{ action: 'queued' | 'resumed' }> {
   const response = await apiRequest<{ action: 'queued' | 'resumed' }>(
     config.codeAgentUrl,
-    `/code/tasks/${taskId}/messages`,
+    `/tasks/${taskId}/messages`,
     accessToken,
     { method: 'POST', body: request }
   );
@@ -182,7 +182,7 @@ export async function startImplementation(
 ): Promise<StartImplementationResponse> {
   return await apiRequest<StartImplementationResponse>(
     config.codeAgentUrl,
-    `/code/tasks/${taskId}/implement`,
+    `/tasks/${taskId}/implement`,
     accessToken,
     {
       method: 'POST',
@@ -213,7 +213,7 @@ export async function getGitHubPREvents(
     params.set('limit', String(options.limit));
   }
   const query = params.toString();
-  const path = query !== '' ? `/code/github-pr-events?${query}` : '/code/github-pr-events';
+  const path = query !== '' ? `/github-pr-events?${query}` : '/github-pr-events';
   return await apiRequest<GitHubPREventsResponse>(config.codeAgentUrl, path, accessToken);
 }
 
@@ -221,7 +221,7 @@ export async function getGitHubPREvents(
  * Get GitHub PR summaries (last 30 days, sorted by PR number desc)
  */
 export async function getGitHubPRSummaries(accessToken: string): Promise<GitHubPRSummariesResponse> {
-  return await apiRequest<GitHubPRSummariesResponse>(config.codeAgentUrl, '/code/github-pr-summaries', accessToken);
+  return await apiRequest<GitHubPRSummariesResponse>(config.codeAgentUrl, '/github-pr-summaries', accessToken);
 }
 
 export async function getGitHubEventLog(
@@ -240,7 +240,7 @@ export async function getGitHubEventLog(
   }
 
   const query = params.toString();
-  const path = query !== '' ? `/code/github-event-log?${query}` : '/code/github-event-log';
+  const path = query !== '' ? `/github-event-log?${query}` : '/github-event-log';
   return await apiRequest<GitHubEventLogResponse>(config.codeAgentUrl, path, accessToken);
 }
 
@@ -250,7 +250,7 @@ export async function hydrateGitHubEventLogRows(
 ): Promise<GitHubEventLogResponse> {
   return await apiRequest<GitHubEventLogResponse>(
     config.codeAgentUrl,
-    '/code/github-event-log/rows',
+    '/github-event-log/rows',
     accessToken,
     {
       method: 'POST',
@@ -269,7 +269,7 @@ export async function getGitHubEventLogPayload(
 ): Promise<GitHubEventLogPayloadResponse> {
   return await apiRequest<GitHubEventLogPayloadResponse>(
     config.codeAgentUrl,
-    `/code/github-event-log/${encodeURIComponent(id)}/payload`,
+    `/github-event-log/${encodeURIComponent(id)}/payload`,
     accessToken,
   );
 }
@@ -280,7 +280,7 @@ export async function getGitHubEventLogPayload(
 export async function getDispatchQueue(accessToken: string): Promise<QueueResponse> {
   return await apiRequest<QueueResponse>(
     config.codeAgentUrl,
-    '/code/queue',
+    '/queue',
     accessToken,
   );
 }
@@ -292,7 +292,7 @@ export async function startAskAgent(
   accessToken: string,
   request: { prompt: string }
 ): Promise<AskAgentStartResponse> {
-  return await apiRequest<AskAgentStartResponse>(config.codeAgentUrl, '/code/ask-agent/start', accessToken, {
+  return await apiRequest<AskAgentStartResponse>(config.codeAgentUrl, '/ask-agent/start', accessToken, {
     method: 'POST',
     body: request,
   });
@@ -306,7 +306,7 @@ export async function getActiveAskAgent(
 ): Promise<ActiveAskAgentTaskResponse> {
   return await apiRequest<ActiveAskAgentTaskResponse>(
     config.codeAgentUrl,
-    '/code/ask-agent/active',
+    '/ask-agent/active',
     accessToken,
   );
 }

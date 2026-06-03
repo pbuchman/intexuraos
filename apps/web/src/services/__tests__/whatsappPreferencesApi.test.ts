@@ -37,7 +37,7 @@ describe('whatsappPreferencesApi', () => {
       expect(apiRequest).toHaveBeenCalledTimes(1);
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[0]).toBe('https://wa.test');
-      expect(call?.[1]).toBe('/whatsapp/preferences');
+      expect(call?.[1]).toBe('/preferences');
       expect(call?.[2]).toBe(TOKEN);
       expect(call?.[3]).toBeUndefined();
       expect(result).toBe(resp);
@@ -67,7 +67,7 @@ describe('whatsappPreferencesApi', () => {
       expect(apiRequest).toHaveBeenCalledTimes(1);
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[0]).toBe('https://wa.test');
-      expect(call?.[1]).toBe('/whatsapp/preferences');
+      expect(call?.[1]).toBe('/preferences');
       expect(call?.[2]).toBe(TOKEN);
       expect(call?.[3]).toEqual({
         method: 'PUT',

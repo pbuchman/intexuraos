@@ -132,7 +132,7 @@ export async function sendMessage(
 ): Promise<ChatResponse> {
   return await apiRequest<ChatResponse>(
     config.chatAgentUrl,
-    '/chat',
+    '/',
     accessToken,
     {
       method: 'POST',
@@ -162,7 +162,7 @@ export async function sendGuestMessage(
   pendingAction?: SuggestedAction
 ): Promise<ChatResponse> {
   const guestSessionToken = await getOrCreateGuestSessionToken();
-  const url = `${config.chatAgentUrl}/chat`;
+  const url = `${config.chatAgentUrl}/`;
 
   const response = await fetch(url, {
     method: 'POST',

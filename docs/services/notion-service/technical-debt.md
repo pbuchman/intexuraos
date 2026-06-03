@@ -22,7 +22,7 @@
 ## Future Plans
 
 1. **Multiple workspaces** — Support connecting multiple Notion workspaces per user (currently limited to one; reconnecting replaces the existing connection)
-2. **Webhook event processing** — Replace the stub at `POST /notion-webhooks` with real event handling for sync triggers, cache invalidation, or page change notifications
+2. **Webhook event processing** — Replace the stub at `POST /webhooks` with real event handling for sync triggers, cache invalidation, or page change notifications
 3. **Scoped page access** — Granular database/page permissions beyond the current all-or-nothing integration token approach
 4. **Sync status tracking** — Detailed progress reporting for operations that read from or write to Notion (e.g., research export progress)
 
@@ -36,7 +36,7 @@
 | ------------------------------------ | -------------- | --------------------------------------------------- |
 | `src/routes/webhookRoutes.ts`        | Webhook stub   | Accepts any JSON, logs it, performs no side effects |
 
-**Detail:** The `POST /notion-webhooks` endpoint accepts any JSON payload via `z.record(z.unknown())`, logs it for debugging, and returns `{ received: true }`. This is intentionally a stub awaiting future webhook processing implementation. It has no security impact since it produces no side effects, but represents an incomplete feature.
+**Detail:** The `POST /webhooks` endpoint accepts any JSON payload via `z.record(z.unknown())`, logs it for debugging, and returns `{ received: true }`. This is intentionally a stub awaiting future webhook processing implementation. It has no security impact since it produces no side effects, but represents an incomplete feature.
 
 ---
 

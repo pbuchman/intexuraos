@@ -83,7 +83,7 @@ sequenceDiagram
     participant API as todos-agent
     participant Firestore
 
-    Client->>+API: POST /todos (Bearer token)
+    Client->>+API: POST / (Bearer token)
     API->>Firestore: Create todo (status: pending)
     Firestore-->>API: Todo document
     API-->>-Client: 201 Created
@@ -125,18 +125,18 @@ sequenceDiagram
 
 | Method | Path                       | Description             | Auth         |
 | ------ | -------------------------- | ----------------------- | ------------ |
-| GET    | `/todos`                   | List todos (filterable) | Bearer token |
-| POST   | `/todos`                   | Create todo             | Bearer token |
-| GET    | `/todos/:id`               | Get specific todo       | Bearer token |
-| PATCH  | `/todos/:id`               | Update todo             | Bearer token |
-| DELETE | `/todos/:id`               | Delete todo             | Bearer token |
-| POST   | `/todos/:id/items`         | Add item to todo        | Bearer token |
-| PATCH  | `/todos/:id/items/:itemId` | Update todo item        | Bearer token |
-| DELETE | `/todos/:id/items/:itemId` | Delete todo item        | Bearer token |
-| POST   | `/todos/:id/items/reorder` | Reorder todo items      | Bearer token |
-| POST   | `/todos/:id/archive`       | Archive todo            | Bearer token |
-| POST   | `/todos/:id/unarchive`     | Unarchive todo          | Bearer token |
-| POST   | `/todos/:id/cancel`        | Cancel todo             | Bearer token |
+| GET    | `/`                   | List todos (filterable) | Bearer token |
+| POST   | `/`                   | Create todo             | Bearer token |
+| GET    | `/:id`               | Get specific todo       | Bearer token |
+| PATCH  | `/:id`               | Update todo             | Bearer token |
+| DELETE | `/:id`               | Delete todo             | Bearer token |
+| POST   | `/:id/items`         | Add item to todo        | Bearer token |
+| PATCH  | `/:id/items/:itemId` | Update todo item        | Bearer token |
+| DELETE | `/:id/items/:itemId` | Delete todo item        | Bearer token |
+| POST   | `/:id/items/reorder` | Reorder todo items      | Bearer token |
+| POST   | `/:id/archive`       | Archive todo            | Bearer token |
+| POST   | `/:id/unarchive`     | Unarchive todo          | Bearer token |
+| POST   | `/:id/cancel`        | Cancel todo             | Bearer token |
 
 ### Internal Endpoints
 
@@ -285,7 +285,7 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 
 ## Gotchas
 
-- **Processing status**: Todos created via `/internal/todos` start with `processing` status and transition to `pending` asynchronously after AI extraction completes via the Pub/Sub handler. Todos created via the public `POST /todos` start directly as `pending`.
+- **Processing status**: Todos created via `/internal/todos` start with `processing` status and transition to `pending` asynchronously after AI extraction completes via the Pub/Sub handler. Todos created via the public `POST /` start directly as `pending`.
 - **Description truncation**: Descriptions over 10,000 characters are truncated before LLM extraction (hard limit in both `processTodoCreated` and `todoItemExtractionService`).
 - **Item extraction requires user API key**: If user has no configured LLM API key, extraction fails and a warning item is added to the todo. The todo still transitions to `pending`.
 - **Archive restriction**: Only completed or cancelled todos can be archived. Already-archived todos return success without changes.
@@ -294,7 +294,7 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 - **Max items cap**: LLM extraction results are capped at 50 items per todo.
 - **Markdown stripping**: LLM responses wrapped in markdown code blocks (` ```json ... ``` `) are automatically stripped before parsing.
 - **Pub/Sub auth**: The Pub/Sub handler accepts both Cloud Run OIDC (from header `noreply@google.com`) and internal auth token.
-- **Tag filtering**: The `GET /todos` endpoint filters tags using OR logic (any matching tag), applied in-memory after Firestore query.
+- **Tag filtering**: The `GET /` endpoint filters tags using OR logic (any matching tag), applied in-memory after Firestore query.
 - **Adding items to completed todos**: Adding an item to a completed todo automatically reverts its status to `in_progress` and clears `completedAt`.
 
 ## AI Item Extraction

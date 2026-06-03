@@ -40,7 +40,7 @@ describe('createJwtValidator', () => {
   describe('missing authorization header', () => {
     it('should return 401 when Authorization header is missing', async () => {
       const validator = createJwtValidator(mockConfig, logger);
-      const request: TestRequest = { headers: {}, url: '/code/submit' };
+      const request: TestRequest = { headers: {}, url: '/submit' };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
@@ -52,7 +52,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Basic abc123' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -67,7 +67,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer invalid.token.here' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -87,7 +87,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer valid.token.here' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -109,7 +109,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer valid.token.here' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -127,7 +127,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer valid.token.here' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -149,7 +149,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer valid.token.here' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
 
@@ -176,7 +176,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer my-token' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -202,7 +202,7 @@ describe('createJwtValidator', () => {
       // The validator should be the E2E variant - test by calling it
       const request: TestRequest = {
         headers: { authorization: 'Bearer any-token' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -255,7 +255,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer any-token' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -271,7 +271,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer any-token' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -287,7 +287,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer some-token' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -303,7 +303,7 @@ describe('createJwtValidator', () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {
         headers: { authorization: 'Bearer some-token' },
-        url: '/code/submit',
+        url: '/submit',
       };
       const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -328,7 +328,7 @@ describe('createE2eJwtValidator', () => {
 
   it('should return 401 when Authorization header is missing', async () => {
     const validator = createE2eJwtValidator(logger);
-    const request: TestRequest = { headers: {}, url: '/code/submit' };
+    const request: TestRequest = { headers: {}, url: '/submit' };
     const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
     await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
@@ -340,7 +340,7 @@ describe('createE2eJwtValidator', () => {
     const validator = createE2eJwtValidator(logger);
     const request: TestRequest = {
       headers: { authorization: 'Basic abc123' },
-      url: '/code/submit',
+      url: '/submit',
     };
     const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -355,7 +355,7 @@ describe('createE2eJwtValidator', () => {
     const validator = createE2eJwtValidator(logger);
     const request: TestRequest = {
       headers: { authorization: 'Bearer any-token-value' },
-      url: '/code/submit',
+      url: '/submit',
     };
     const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
@@ -372,7 +372,7 @@ describe('createE2eJwtValidator', () => {
     const validator = createE2eJwtValidator(logger);
     const request: TestRequest = {
       headers: { authorization: 'Bearer test-token' },
-      url: '/code/submit',
+      url: '/submit',
     };
     const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 

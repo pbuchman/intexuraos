@@ -55,7 +55,7 @@ describe('todosApi', () => {
   });
 
   describe('listTodos', () => {
-    it('GETs /todos with no query when filters empty', async () => {
+    it('GETs / with no query when filters empty', async () => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue([sampleTodo]);
 
@@ -63,7 +63,7 @@ describe('todosApi', () => {
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[0]).toBe('https://todos.test');
-      expect(call?.[1]).toBe('/todos');
+      expect(call?.[1]).toBe('/');
       expect(call?.[2]).toBe(TOKEN);
       expect(result).toEqual([sampleTodo]);
     });
@@ -81,7 +81,7 @@ describe('todosApi', () => {
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       const path = call?.[1] ?? '';
-      expect(path.startsWith('/todos?')).toBe(true);
+      expect(path.startsWith('/?')).toBe(true);
       expect(path).toContain('status=pending');
       expect(path).toContain('archived=true');
       expect(path).toContain('priority=high');
@@ -95,12 +95,12 @@ describe('todosApi', () => {
       await listTodos(TOKEN, { tags: [] });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos');
+      expect(call?.[1]).toBe('/');
     });
   });
 
   describe('createTodo (happy path)', () => {
-    it('POSTs body to /todos', async () => {
+    it('POSTs body to /', async () => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue(sampleTodo);
 
@@ -113,21 +113,21 @@ describe('todosApi', () => {
       const result = await createTodo(TOKEN, req);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos');
+      expect(call?.[1]).toBe('/');
       expect(call?.[3]).toEqual({ method: 'POST', body: req });
       expect(result).toBe(sampleTodo);
     });
   });
 
   describe('getTodo', () => {
-    it('GETs /todos/:id', async () => {
+    it('GETs /:id', async () => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue(sampleTodo);
 
       await getTodo(TOKEN, 'todo-1');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos/todo-1');
+      expect(call?.[1]).toBe('/todo-1');
     });
   });
 
@@ -139,7 +139,7 @@ describe('todosApi', () => {
       await updateTodo(TOKEN, 'todo-1', { title: 'New' });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos/todo-1');
+      expect(call?.[1]).toBe('/todo-1');
       expect(call?.[3]).toEqual({ method: 'PATCH', body: { title: 'New' } });
     });
   });
@@ -152,16 +152,16 @@ describe('todosApi', () => {
       await deleteTodo(TOKEN, 'todo-1');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos/todo-1');
+      expect(call?.[1]).toBe('/todo-1');
       expect(call?.[3]).toEqual({ method: 'DELETE' });
     });
   });
 
   describe('archive/unarchive/cancel', () => {
     it.each([
-      ['archive', archiveTodo, '/todos/todo-1/archive'],
-      ['unarchive', unarchiveTodo, '/todos/todo-1/unarchive'],
-      ['cancel', cancelTodo, '/todos/todo-1/cancel'],
+      ['archive', archiveTodo, '/todo-1/archive'],
+      ['unarchive', unarchiveTodo, '/todo-1/unarchive'],
+      ['cancel', cancelTodo, '/todo-1/cancel'],
     ])('POSTs to %s endpoint', async (_name, fn, expectedPath) => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue(sampleTodo);
@@ -182,7 +182,7 @@ describe('todosApi', () => {
       await addTodoItem(TOKEN, 'todo-1', { title: 'sub' });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos/todo-1/items');
+      expect(call?.[1]).toBe('/todo-1/items');
       expect(call?.[3]).toEqual({ method: 'POST', body: { title: 'sub' } });
     });
 
@@ -193,7 +193,7 @@ describe('todosApi', () => {
       await updateTodoItem(TOKEN, 'todo-1', 'item-1', { status: 'completed' });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos/todo-1/items/item-1');
+      expect(call?.[1]).toBe('/todo-1/items/item-1');
       expect(call?.[3]).toEqual({ method: 'PATCH', body: { status: 'completed' } });
     });
 
@@ -204,7 +204,7 @@ describe('todosApi', () => {
       await deleteTodoItem(TOKEN, 'todo-1', 'item-1');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos/todo-1/items/item-1');
+      expect(call?.[1]).toBe('/todo-1/items/item-1');
       expect(call?.[3]).toEqual({ method: 'DELETE' });
     });
 
@@ -215,7 +215,7 @@ describe('todosApi', () => {
       await reorderTodoItems(TOKEN, 'todo-1', ['a', 'b']);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/todos/todo-1/items/reorder');
+      expect(call?.[1]).toBe('/todo-1/items/reorder');
       expect(call?.[3]).toEqual({ method: 'POST', body: { itemIds: ['a', 'b'] } });
     });
   });

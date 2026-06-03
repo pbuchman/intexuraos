@@ -12,7 +12,7 @@ export async function getWhatsAppPreferences(
 ): Promise<WhatsAppPreferences> {
   return await apiRequest<WhatsAppPreferences>(
     config.whatsappServiceUrl,
-    '/whatsapp/preferences',
+    '/preferences',
     accessToken
   );
 }
@@ -23,7 +23,7 @@ export async function updateWhatsAppPreferences(
 ): Promise<WhatsAppPreferences> {
   return await apiRequest<WhatsAppPreferences>(
     config.whatsappServiceUrl,
-    '/whatsapp/preferences',
+    '/preferences',
     accessToken,
     { method: 'PUT', body }
   );

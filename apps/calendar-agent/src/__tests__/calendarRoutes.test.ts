@@ -105,7 +105,7 @@ describe('Calendar Routes', () => {
     it('returns 401 without auth token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events',
+        url: '/events',
       });
 
       expect(response.statusCode).toBe(401);
@@ -123,7 +123,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -139,7 +139,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events?calendarId=work&timeMin=2025-01-01T00:00:00Z&maxResults=10',
+        url: '/events?calendarId=work&timeMin=2025-01-01T00:00:00Z&maxResults=10',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -151,7 +151,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events?timeMin=2025-01-01T00:00:00Z&timeMax=2025-01-31T23:59:59Z&q=meeting',
+        url: '/events?timeMin=2025-01-01T00:00:00Z&timeMax=2025-01-31T23:59:59Z&q=meeting',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -164,7 +164,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -178,7 +178,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -191,7 +191,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -203,7 +203,7 @@ describe('Calendar Routes', () => {
     it('returns 401 without auth token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -222,7 +222,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -239,7 +239,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events/nonexistent',
+        url: '/events/nonexistent',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -257,7 +257,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events/event-123?calendarId=work',
+        url: '/events/event-123?calendarId=work',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -270,7 +270,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -282,7 +282,7 @@ describe('Calendar Routes', () => {
     it('returns 401 without auth token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/events',
+        url: '/events',
         payload: {
           summary: 'New Event',
           start: { dateTime: '2025-01-01T10:00:00Z' },
@@ -298,7 +298,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           summary: 'New Meeting',
@@ -320,7 +320,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           description: 'Missing summary',
@@ -335,7 +335,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           summary: 'Team Meeting',
@@ -353,7 +353,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           calendarId: 'work',
@@ -372,7 +372,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           summary: 'Bad Event',
@@ -390,7 +390,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/events',
+        url: '/events',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           summary: 'New Event',
@@ -407,7 +407,7 @@ describe('Calendar Routes', () => {
     it('returns 401 without auth token', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         payload: { summary: 'Updated' },
       });
 
@@ -425,7 +425,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           summary: 'Updated Title',
@@ -450,7 +450,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           location: 'Conference Room B',
@@ -466,7 +466,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/nonexistent',
+        url: '/events/nonexistent',
         headers: { authorization: `Bearer ${jwt}` },
         payload: { summary: 'Updated' },
       });
@@ -485,7 +485,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           calendarId: 'work',
@@ -507,7 +507,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           start: { dateTime: '2025-01-01T14:00:00Z' },
@@ -529,7 +529,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           attendees: [
@@ -548,7 +548,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
         payload: { summary: 'Updated' },
       });
@@ -561,7 +561,7 @@ describe('Calendar Routes', () => {
     it('returns 401 without auth token', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -578,7 +578,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -594,7 +594,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/events/nonexistent',
+        url: '/events/nonexistent',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -612,7 +612,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/events/event-123?calendarId=work',
+        url: '/events/event-123?calendarId=work',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -625,7 +625,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/events/event-123',
+        url: '/events/event-123',
         headers: { authorization: `Bearer ${jwt}` },
       });
 
@@ -637,7 +637,7 @@ describe('Calendar Routes', () => {
     it('returns 401 without auth token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/freebusy',
+        url: '/freebusy',
         payload: {
           timeMin: '2025-01-01T00:00:00Z',
           timeMax: '2025-01-02T00:00:00Z',
@@ -656,7 +656,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/freebusy',
+        url: '/freebusy',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           timeMin: '2025-01-01T00:00:00Z',
@@ -675,7 +675,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/freebusy',
+        url: '/freebusy',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {},
       });
@@ -696,7 +696,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/freebusy',
+        url: '/freebusy',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           timeMin: '2025-01-01T00:00:00Z',
@@ -716,7 +716,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/freebusy',
+        url: '/freebusy',
         headers: { authorization: `Bearer ${jwt}` },
         payload: {
           timeMin: '2025-01-01T00:00:00Z',
@@ -944,7 +944,7 @@ describe('Calendar Routes', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/failed-events',
+        url: '/failed-events',
       });
 
       expect(response.statusCode).toBe(401);
@@ -956,7 +956,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/failed-events',
+        url: '/failed-events',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -972,7 +972,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/failed-events?limit=5',
+        url: '/failed-events?limit=5',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -988,7 +988,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/calendar/failed-events',
+        url: '/failed-events',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1003,7 +1003,7 @@ describe('Calendar Routes', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/failed-events/event-123',
+        url: '/failed-events/event-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1014,7 +1014,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/failed-events/nonexistent',
+        url: '/failed-events/nonexistent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1042,7 +1042,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/calendar/failed-events/${String(eventId)}`,
+        url: `/failed-events/${String(eventId)}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1068,7 +1068,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/calendar/failed-events/${String(eventId)}`,
+        url: `/failed-events/${String(eventId)}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1084,7 +1084,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/calendar/failed-events/event-123',
+        url: '/failed-events/event-123',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1114,7 +1114,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/calendar/failed-events/${String(eventId)}`,
+        url: `/failed-events/${String(eventId)}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1128,7 +1128,7 @@ describe('Calendar Routes', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/failed-events/event-123/retry',
+        url: '/failed-events/event-123/retry',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1139,7 +1139,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/failed-events/nonexistent/retry',
+        url: '/failed-events/nonexistent/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1167,7 +1167,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        url: `/failed-events/${String(eventId)}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1193,7 +1193,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        url: `/failed-events/${String(eventId)}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1221,7 +1221,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        url: `/failed-events/${String(eventId)}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1255,7 +1255,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        url: `/failed-events/${String(eventId)}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1270,7 +1270,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/calendar/failed-events/event-123/retry',
+        url: '/failed-events/event-123/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1300,7 +1300,7 @@ describe('Calendar Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        url: `/failed-events/${String(eventId)}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 

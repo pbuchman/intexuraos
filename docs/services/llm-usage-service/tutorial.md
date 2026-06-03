@@ -173,7 +173,7 @@ curl -X POST http://localhost:8080/internal/usage/events \
 ### Step 3.1: Retrieve the Event by ID
 
 ```bash
-curl -s http://localhost:8080/llm-usage/events/evt-tutorial-001 \
+curl -s http://localhost:8080/events/evt-tutorial-001 \
   -H "Authorization: Bearer $AUTH0_TOKEN" | jq .
 ```
 
@@ -182,7 +182,7 @@ curl -s http://localhost:8080/llm-usage/events/evt-tutorial-001 \
 ### Step 3.2: List Events in a Time Range
 
 ```bash
-curl -X POST http://localhost:8080/llm-usage/events/list \
+curl -X POST http://localhost:8080/events/list \
   -H "Authorization: Bearer $AUTH0_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -198,7 +198,7 @@ curl -X POST http://localhost:8080/llm-usage/events/list \
 ### Step 3.3: Query Aggregated Usage
 
 ```bash
-curl -X POST http://localhost:8080/llm-usage/query \
+curl -X POST http://localhost:8080/query \
   -H "Authorization: Bearer $AUTH0_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -336,12 +336,12 @@ curl -X POST http://localhost:8080/internal/usage/events \
   }'
 ```
 
-Then verify: `GET /llm-usage/events/evt-exercise-1` should show `cost.billedUsd: 0.05` and `cost.pricingSource: "provider_reported"`.
+Then verify: `GET /events/evt-exercise-1` should show `cost.billedUsd: 0.05` and `cost.pricingSource: "provider_reported"`.
 
 ### Exercise 2: Multi-Dimension Query
 
 ```bash
-curl -X POST http://localhost:8080/llm-usage/query \
+curl -X POST http://localhost:8080/query \
   -H "Authorization: Bearer $AUTH0_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

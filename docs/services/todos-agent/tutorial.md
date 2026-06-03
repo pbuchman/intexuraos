@@ -35,7 +35,7 @@ Start with the simplest interaction: create a todo and read it back.
 ### Step 1.1: Create a Todo
 
 ```bash
-curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -76,7 +76,7 @@ The service created a todo owned by your user account. Because this came via the
 ### Step 1.2: Retrieve It
 
 ```bash
-curl https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/abc123 \
+curl https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/abc123 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -91,7 +91,7 @@ Now add structure to a todo using items.
 ### Step 2.1: Create a Todo with Initial Items
 
 ```bash
-curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -113,7 +113,7 @@ Items are assigned `position` values starting from 0. The todo starts as `pendin
 ### Step 2.2: Add an Item Later
 
 ```bash
-curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/items \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/$TODO_ID/items \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -128,7 +128,7 @@ The response is the full updated todo including all items.
 ### Step 2.3: Complete an Item
 
 ```bash
-curl -X PATCH https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/items/$ITEM_ID \
+curl -X PATCH https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/$TODO_ID/items/$ITEM_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "status": "completed" }'
@@ -139,7 +139,7 @@ curl -X PATCH https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO
 ### Step 2.4: Reorder Items
 
 ```bash
-curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/items/reorder \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/$TODO_ID/items/reorder \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -191,7 +191,7 @@ The todo was created with `status: processing` and a Pub/Sub event was fired. Be
 ### Step 3.2: Poll for the Processed Result
 
 ```bash
-curl https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/def456 \
+curl https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/def456 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -220,7 +220,7 @@ Tag filtering uses OR logic — passing `tags=work` returns todos tagged with "w
 ### Step 4.2: Archive a Completed Todo
 
 ```bash
-curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/archive \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/$TODO_ID/archive \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -229,7 +229,7 @@ Only `completed` or `cancelled` todos can be archived. Attempting to archive a `
 ### Step 4.3: Cancel a Todo
 
 ```bash
-curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/cancel \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/$TODO_ID/cancel \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -254,7 +254,7 @@ Cancelling a `completed` todo returns `400 INVALID_REQUEST`. Already-cancelled t
 
 Now that you understand the basics:
 
-1. Explore `PATCH /todos/:id` to update title, description, tags, priority, or due date
+1. Explore `PATCH /:id` to update title, description, tags, priority, or due date
 2. Read the [Technical Reference](technical.md) for the full domain model and AI extraction details
 3. Check out [actions-agent](../actions-agent/features.md) to see how voice commands create todos automatically
 
@@ -266,7 +266,7 @@ Test your understanding:
 
 1. **Easy:** Create a todo with all optional fields — description, tags, priority, dueDate, and initial items
 2. **Medium:** Create a todo via the internal endpoint with a description, poll until processing completes, then complete all items and verify the status becomes `completed`
-3. **Hard:** Write a TypeScript function that creates a todo via the internal endpoint, polls `GET /todos/:id` until status is no longer `processing`, and returns the final list of extracted item titles
+3. **Hard:** Write a TypeScript function that creates a todo via the internal endpoint, polls `GET /:id` until status is no longer `processing`, and returns the final list of extracted item titles
 
 <details>
 <summary>Solutions</summary>
@@ -274,7 +274,7 @@ Test your understanding:
 ### Exercise 1: All Optional Fields
 
 ```bash
-curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -307,14 +307,14 @@ TODO_ID="${RESOURCE_URL##*/}"
 STATUS="processing"
 while [ "$STATUS" = "processing" ]; do
   sleep 2
-  STATUS=$(curl -s .../todos/$TODO_ID -H "Authorization: Bearer $TOKEN" | jq -r '.data.status')
+  STATUS=$(curl -s .../$TODO_ID -H "Authorization: Bearer $TOKEN" | jq -r '.data.status')
 done
 
 # 3. Complete all items
-curl -s .../todos/$TODO_ID -H "Authorization: Bearer $TOKEN" \
+curl -s .../$TODO_ID -H "Authorization: Bearer $TOKEN" \
   | jq -r '.data.items[].id' \
   | while read ITEM_ID; do
-      curl -s -X PATCH .../todos/$TODO_ID/items/$ITEM_ID \
+      curl -s -X PATCH .../$TODO_ID/items/$ITEM_ID \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"status":"completed"}'
@@ -356,7 +356,7 @@ async function createAndWaitForExtraction(
   let todo: { status: string; items: Array<{ title: string }> };
   do {
     await new Promise<void>((resolve) => setTimeout(resolve, 2000));
-    const getRes = await fetch(`${baseUrl}/todos/${todoId}`, {
+    const getRes = await fetch(`${baseUrl}/${todoId}`, {
       headers: { Authorization: `Bearer ${bearerToken}` },
     });
     const body = (await getRes.json()) as { data: typeof todo };

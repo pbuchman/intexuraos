@@ -65,8 +65,9 @@ replacement PR, then close it without merging.
   nginx while the buckets stay in GCP.
 - Provider callback endpoints move to the Hetzner domain where applicable:
   GitHub OAuth uses `/oauth/connections/github/callback`, Linear uses
-  `/api/linear/linear/webhook`, and WhatsApp uses
-  `/api/whatsapp/whatsapp/webhooks`.
+  `/api/linear/webhook`, WhatsApp uses `/api/whatsapp/webhooks`, Notion uses
+  `/api/notion/webhooks` if webhooks are enabled, and the code-agent GitHub
+  webhook remains `/api/code/webhooks/github`.
 - Cloudflare DNS apex records move to the Hetzner public IP only during the
   approved cutover window; `www` records are recorded for rollback context but
   remain out of scope unless a later approved change adds certificate and nginx

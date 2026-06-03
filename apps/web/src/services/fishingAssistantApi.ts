@@ -156,7 +156,7 @@ function buildDigestQuery(options: ListFishingDigestsOptions): string {
 export async function listFishingDigestGroups(accessToken: string): Promise<FishingDigestGroup[]> {
   const response = await apiRequest<{ items: FishingDigestGroup[] }>(
     config.fishingAssistantServiceUrl,
-    '/fishing/digest-groups',
+    '/digest-groups',
     accessToken
   );
   return response.items;
@@ -168,7 +168,7 @@ export async function listFishingDigests(
 ): Promise<FishingDigestListResponse> {
   return await apiRequest<FishingDigestListResponse>(
     config.fishingAssistantServiceUrl,
-    `/fishing/digests?${buildDigestQuery(options)}`,
+    `/digests?${buildDigestQuery(options)}`,
     accessToken
   );
 }
@@ -180,7 +180,7 @@ export async function getFishingDigestDetail(
 ): Promise<FishingDigestDetail> {
   return await apiRequest<FishingDigestDetail>(
     config.fishingAssistantServiceUrl,
-    `/fishing/digests/${encodeURIComponent(groupKey)}/${encodeURIComponent(date)}`,
+    `/digests/${encodeURIComponent(groupKey)}/${encodeURIComponent(date)}`,
     accessToken
   );
 }
@@ -190,7 +190,7 @@ export async function listFishingKnowledgeFolders(
 ): Promise<FishingKnowledgeFolder[]> {
   const response = await apiRequest<{ items: FishingKnowledgeFolderResponse[] }>(
     config.fishingAssistantServiceUrl,
-    '/fishing/folders',
+    '/folders',
     accessToken
   );
   return response.items.map(normalizeKnowledgeFolder);
@@ -202,7 +202,7 @@ export async function createFishingKnowledgeFolder(
 ): Promise<FishingKnowledgeFolder> {
   const response = await apiRequest<{ folder: FishingKnowledgeFolderResponse }>(
     config.fishingAssistantServiceUrl,
-    '/fishing/folders',
+    '/folders',
     accessToken,
     {
       method: 'POST',
@@ -219,7 +219,7 @@ export async function updateFishingKnowledgeFolder(
 ): Promise<FishingKnowledgeFolder> {
   const response = await apiRequest<{ folder: FishingKnowledgeFolderResponse }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/folders/${encodeURIComponent(folderId)}`,
+    `/folders/${encodeURIComponent(folderId)}`,
     accessToken,
     {
       method: 'PATCH',
@@ -235,7 +235,7 @@ export async function deleteFishingKnowledgeFolder(
 ): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/folders/${encodeURIComponent(folderId)}`,
+    `/folders/${encodeURIComponent(folderId)}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -252,7 +252,7 @@ export async function listFishingKnowledgePages(
   const suffix = params.size > 0 ? `?${params.toString()}` : '';
   const response = await apiRequest<{ items: FishingKnowledgePageResponse[] }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/pages${suffix}`,
+    `/pages${suffix}`,
     accessToken
   );
   return response.items.map(normalizeKnowledgePage);
@@ -264,7 +264,7 @@ export async function createFishingKnowledgePage(
 ): Promise<FishingKnowledgePage> {
   const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
-    '/fishing/pages',
+    '/pages',
     accessToken,
     {
       method: 'POST',
@@ -280,7 +280,7 @@ export async function getFishingKnowledgePage(
 ): Promise<FishingKnowledgePage> {
   const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/pages/${encodeURIComponent(pageId)}`,
+    `/pages/${encodeURIComponent(pageId)}`,
     accessToken
   );
   return normalizeKnowledgePage(response.page);
@@ -293,7 +293,7 @@ export async function updateFishingKnowledgePage(
 ): Promise<FishingKnowledgePage> {
   const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/pages/${encodeURIComponent(pageId)}`,
+    `/pages/${encodeURIComponent(pageId)}`,
     accessToken,
     {
       method: 'PATCH',
@@ -309,7 +309,7 @@ export async function deleteFishingKnowledgePage(
 ): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/pages/${encodeURIComponent(pageId)}`,
+    `/pages/${encodeURIComponent(pageId)}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -321,7 +321,7 @@ export async function reindexFishingKnowledgePage(
 ): Promise<FishingKnowledgePage> {
   const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/pages/${encodeURIComponent(pageId)}/reindex`,
+    `/pages/${encodeURIComponent(pageId)}/reindex`,
     accessToken,
     { method: 'POST' }
   );
@@ -331,7 +331,7 @@ export async function reindexFishingKnowledgePage(
 export async function listFishingChats(accessToken: string): Promise<FishingChat[]> {
   const response = await apiRequest<{ items: FishingChatResponse[] }>(
     config.fishingAssistantServiceUrl,
-    '/fishing/chats',
+    '/chats',
     accessToken
   );
   return response.items.map(normalizeChat);
@@ -340,7 +340,7 @@ export async function listFishingChats(accessToken: string): Promise<FishingChat
 export async function createFishingChat(accessToken: string): Promise<FishingChat> {
   const response = await apiRequest<{ chat: FishingChatResponse }>(
     config.fishingAssistantServiceUrl,
-    '/fishing/chats',
+    '/chats',
     accessToken,
     { method: 'POST' }
   );
@@ -353,7 +353,7 @@ export async function listFishingChatMessages(
 ): Promise<FishingChatMessage[]> {
   const response = await apiRequest<{ items: FishingChatMessageResponse[] }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/chats/${encodeURIComponent(chatId)}/messages`,
+    `/chats/${encodeURIComponent(chatId)}/messages`,
     accessToken
   );
   return response.items.map(normalizeChatMessage);
@@ -369,7 +369,7 @@ export async function sendFishingChatMessage(
     message: FishingChatMessageResponse;
   }>(
     config.fishingAssistantServiceUrl,
-    `/fishing/chats/${encodeURIComponent(chatId)}/messages`,
+    `/chats/${encodeURIComponent(chatId)}/messages`,
     accessToken,
     {
       method: 'POST',

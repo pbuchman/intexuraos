@@ -61,6 +61,7 @@
     "verify:sentry-logging": "node scripts/verify-sentry-logging.mjs",
     "verify:v8-ignore": "node scripts/verify-v8-ignore.mjs",
     "verify:service-wiring": "node scripts/verify-service-wiring.mjs",
+    "verify:route-resource-names": "node scripts/verify-route-resource-names.mjs",
     "verify:error-serializers": "node scripts/verify-error-serializers.mjs",
     "verify:prompt-versions": "node scripts/verify-prompt-versions.mjs",
     "verify:dead-code": "node scripts/verify-dead-code.mjs",

@@ -16,7 +16,7 @@
 | SRP violations | 1      | High     |
 | **Total**      | **13** | ---      |
 
-> Note: codeRoutes.ts remains a large file. Routing split is an ongoing priority. New routes are correctly added to `routes/code/` and `routes/merge-queue/` as separate files (e.g., `updateTaskStatusRoute.ts`, `prTriagePubsubRoute.ts`). The execution memory pipeline is in alpha and under active iteration.
+> Note: codeRoutes.ts remains a large file. Routing split is an ongoing priority. New routes are correctly added to `routes/` and `routes/merge-queue/` as separate files (e.g., `updateTaskStatusRoute.ts`, `prTriagePubsubRoute.ts`). The execution memory pipeline is in alpha and under active iteration.
 
 ---
 
@@ -30,7 +30,7 @@ Replace static hash placeholders with computed hashes from the real system promp
 
 ### 2. Route splitting for codeRoutes.ts
 
-Continue the pattern established by `routes/code/` and `routes/merge-queue/` and split the remaining routes by domain concern. See Code Smells section below for details.
+Continue the pattern established by `routes/` and `routes/merge-queue/` and split the remaining routes by domain concern. See Code Smells section below for details.
 
 ### 3. Distributed drain queue guard
 
@@ -72,18 +72,18 @@ The `systemPromptHash` field is designed for audit tracking — recording which 
 
 **File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
-This single file contains all internal code task routes AND all public code task routes, plus the ask-agent endpoints. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, ask-agent start/active, internal submit, and queue draining. Each route includes inline Fastify schema definitions that contribute significant line count. New routes are added to `routes/code/` and `routes/merge-queue/` as separate files (e.g., `issueGroupRoutes.ts`, `github-pr-summaries.ts`, `github-event-log.ts`, `mergeQueueRoutes.ts`, `updateTaskStatusRoute.ts`) but the original routes remain consolidated.
+This single file contains all internal code task routes AND all public code task routes, plus the ask-agent endpoints. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, ask-agent start/active, internal submit, and queue draining. Each route includes inline Fastify schema definitions that contribute significant line count. New routes are added to `routes/` and `routes/merge-queue/` as separate files (e.g., `issueGroupRoutes.ts`, `github-pr-summaries.ts`, `github-event-log.ts`, `mergeQueueRoutes.ts`, `updateTaskStatusRoute.ts`) but the original routes remain consolidated.
 
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
-**Remediation:** Continue the pattern established by `routes/code/` and split the remaining routes by domain concern:
+**Remediation:** Continue the pattern established by `routes/` and split the remaining routes by domain concern:
 
-- `routes/code/submit.ts` (public submit)
-- `routes/code/tasks.ts` (public list/get/cancel)
-- `routes/code/retry.ts` (public retry)
-- `routes/code/feedback.ts` (public feedback)
-- `routes/code/messages.ts` (public sendTaskMessage)
-- `routes/code/ask-agent.ts` (ask-agent start/active)
+- `routes/submit.ts` (public submit)
+- `routes/tasks.ts` (public list/get/cancel)
+- `routes/retry.ts` (public retry)
+- `routes/feedback.ts` (public feedback)
+- `routes/messages.ts` (public sendTaskMessage)
+- `routes/ask-agent.ts` (ask-agent start/active)
 - `routes/internal/process.ts` (internal code action processing)
 - `routes/internal/submit.ts` (internal code submit)
 - `routes/internal/taskUpdate.ts` (internal task PATCH)
@@ -168,9 +168,9 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 | -------- | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | INT-1414 | Task finalization stalls on webhook timeout        | Dedicated `PATCH /internal/code-tasks/:id/status` endpoint for idempotent status write |
 | INT-1406 | PR triage blocks webhook response                  | Moved to Pub/Sub push subscription — webhook returns immediately                       |
-| INT-1383 | No way to mark issue groups as high-priority       | `POST /code/issue-groups/:groupKey/important` endpoint with `isImportant` flag         |
+| INT-1383 | No way to mark issue groups as high-priority       | `POST /issue-groups/:groupKey/important` endpoint with `isImportant` flag         |
 | INT-1389 | GitHub Agent uses hardcoded model                  | Per-user `resolveToolCallingClient` tries user key first, falls back to platform key   |
-| INT-1360 | Cannot skip design phase for known-good tasks      | `taskMode` parameter on `POST /code/submit` — choose planning or execution explicitly  |
+| INT-1360 | Cannot skip design phase for known-good tasks      | `taskMode` parameter on `POST /submit` — choose planning or execution explicitly  |
 | INT-1345 | Code tasks triggered on draft PRs waste compute    | `DraftPRRule` blocks all code tasks when `isDraft === true`                            |
 | INT-1380 | Merge step attempted on closed/merged PRs          | Pipeline suppresses merge step for closed/merged PRs                                   |
 | INT-1375 | Failed tasks not auto-retried on different worker  | Self-healing triage with `autoRetryTask` — up to 3 retries excluding failed worker     |
@@ -196,7 +196,7 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 | INT-1020 | Merge queue for ordered PR merging                 | Merge queue watch + Cloud Scheduler tick + GitHub as source of truth                   |
 | INT-1023 | Merge conflict detection blocking webhooks         | Dedicated cron job for reconciliation, decoupled from webhook pipeline                 |
 | INT-1040 | Orchestrator direct Linear dependency              | Code-agent proxy endpoint for issue context                                            |
-| INT-1027 | Cannot inspect raw webhook payloads                | Expandable rows + GET /code/github-event-log/:id/payload endpoint                      |
+| INT-1027 | Cannot inspect raw webhook payloads                | Expandable rows + GET /github-event-log/:id/payload endpoint                      |
 | INT-1025 | GitHub Event Log shows unsupported event types     | Server-side filtering to VISIBLE_EVENT_TYPES                                           |
 | INT-1029 | Task queue capacity too small                      | Queue capacity increased from 10 to 50                                                 |
 | INT-1048 | Merge queue reliability issues                     | GitHub as source of truth, Firestore as synchronized cache                             |

@@ -69,6 +69,7 @@ const phases = [
       { name: 'v8-ignore', script: 'verify-v8-ignore.mjs' },
       { name: 'web-service-manifest', script: 'verify-web-service-manifest.mjs' },
       { name: 'service-wiring', script: 'verify-service-wiring.mjs' },
+      { name: 'route-resource-names', script: 'verify-route-resource-names.mjs' },
       { name: 'error-serializers', script: 'verify-error-serializers.mjs' },
       { name: 'prompt-versions', script: 'verify-prompt-versions.mjs' },
       { name: 'llm-architecture', run: 'npx tsx scripts/verify-llm-architecture.ts' },

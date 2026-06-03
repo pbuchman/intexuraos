@@ -1,7 +1,7 @@
 /**
  * Chat Routes
  *
- * POST   /chat                      - Send a message and get a response
+ * POST   /                          - Send a message and get a response
  */
 
 import type { FastifyPluginCallback } from 'fastify';
@@ -19,9 +19,9 @@ type ChatErrorCode =
   | 'RATE_LIMITED';
 
 export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /chat
+  // POST /
   fastify.post(
-    '/chat',
+    '/',
     {
       schema: {
         operationId: 'chat',
@@ -102,7 +102,7 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request, reply) => {
       logIncomingRequest(request, {
-        message: 'Received request to POST /chat',
+        message: 'Received request to POST /',
         bodyPreviewLength: 200,
       });
 

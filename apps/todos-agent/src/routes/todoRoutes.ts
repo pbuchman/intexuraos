@@ -242,7 +242,7 @@ function parseDate(dateStr: string | null | undefined): Date | null {
 
 export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get<{ Querystring: ListTodosQuery }>(
-    '/todos',
+    '/',
     {
       schema: {
         operationId: 'listTodos',
@@ -295,7 +295,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Body: CreateTodoBody }>(
-    '/todos',
+    '/',
     {
       schema: {
         operationId: 'createTodo',
@@ -357,7 +357,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: TodoParams }>(
-    '/todos/:id',
+    '/:id',
     {
       schema: {
         operationId: 'getTodo',
@@ -410,7 +410,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: TodoParams; Body: UpdateTodoBody }>(
-    '/todos/:id',
+    '/:id',
     {
       schema: {
         operationId: 'updateTodo',
@@ -477,7 +477,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete<{ Params: TodoParams }>(
-    '/todos/:id',
+    '/:id',
     {
       schema: {
         operationId: 'deleteTodo',
@@ -530,7 +530,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams; Body: CreateTodoItemBody }>(
-    '/todos/:id/items',
+    '/:id/items',
     {
       schema: {
         operationId: 'addTodoItem',
@@ -596,7 +596,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: TodoItemParams; Body: UpdateTodoItemBody }>(
-    '/todos/:id/items/:itemId',
+    '/:id/items/:itemId',
     {
       schema: {
         operationId: 'updateTodoItem',
@@ -661,7 +661,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete<{ Params: TodoItemParams }>(
-    '/todos/:id/items/:itemId',
+    '/:id/items/:itemId',
     {
       schema: {
         operationId: 'deleteTodoItem',
@@ -713,7 +713,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams; Body: ReorderItemsBody }>(
-    '/todos/:id/items/reorder',
+    '/:id/items/reorder',
     {
       schema: {
         operationId: 'reorderTodoItems',
@@ -775,7 +775,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams }>(
-    '/todos/:id/archive',
+    '/:id/archive',
     {
       schema: {
         operationId: 'archiveTodo',
@@ -832,7 +832,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams }>(
-    '/todos/:id/unarchive',
+    '/:id/unarchive',
     {
       schema: {
         operationId: 'unarchiveTodo',
@@ -888,7 +888,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams }>(
-    '/todos/:id/cancel',
+    '/:id/cancel',
     {
       schema: {
         operationId: 'cancelTodo',

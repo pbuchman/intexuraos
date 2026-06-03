@@ -102,7 +102,7 @@ sequenceDiagram
     participant GitHub
 
     User->>WebUI: Submit task
-    WebUI->>+CodeAgent: POST /code/submit (Auth0 JWT)
+    WebUI->>+CodeAgent: POST /submit (Auth0 JWT)
     CodeAgent->>CodeAgent: Sanitize prompt (2 layers)
     CodeAgent->>CodeAgent: Dedup check (4 layers)
     CodeAgent->>Firestore: Create CodeTask (queued/dispatched)
@@ -126,9 +126,9 @@ Changes since v3.5.0, sourced from release context and git history:
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
 | Dedicated task status endpoint              | `PATCH /internal/code-tasks/:id/status` — lightweight, idempotent endpoint for the orchestrator to commit terminal task status directly to Firestore before the side-effect-heavy completion webhook fires. Prevents stalled tasks from webhook timeouts.             | INT-1414, PR #1875 |
 | PR triage via Pub/Sub push subscription     | PR triage processing moved from inline webhook execution to a Pub/Sub push subscription (`POST /internal/code/pubsub/pr-triage`). The webhook publishes a `PRTriageEvent` and returns immediately; triage runs asynchronously through the push handler.               | INT-1406, PR #1864 |
-| Important flag for issue groups             | `POST /code/issue-groups/:groupKey/important` — users mark issue groups as high-priority via the `isImportant` field on `TaskGroupSummary`.                                                                                                                           | INT-1383, PR #1830 |
+| Important flag for issue groups             | `POST /issue-groups/:groupKey/important` — users mark issue groups as high-priority via the `isImportant` field on `TaskGroupSummary`.                                                                                                                           | INT-1383, PR #1830 |
 | GitHub Agent inherits user LLM settings     | `resolveToolCallingClient` replaced the static `toolCallingClient` with per-user resolution. Tries the user's own Google API key first, falls back to the platform key. Ensures the GitHub Agent triage pipeline uses the user's configured LLM provider.             | INT-1389, PR #1835 |
-| Task mode selector (planning/execution)     | `POST /code/submit` accepts optional `taskMode` parameter (`'planning'` or `'execution'`), letting users explicitly choose between the design-first workflow and direct implementation.                                                                               | INT-1360, PR #1788 |
+| Task mode selector (planning/execution)     | `POST /submit` accepts optional `taskMode` parameter (`'planning'` or `'execution'`), letting users explicitly choose between the design-first workflow and direct implementation.                                                                               | INT-1360, PR #1788 |
 | Block code tasks on draft PRs               | `DraftPRRule` added to the webhook rules chain. When `isDraft` is `true`, all code tasks are blocked — preventing wasted compute on work-in-progress branches. The `isDraft` field was added to the domain model and parsers.                                         | INT-1345, PR #1792 |
 | Suppress merge step for closed/merged PRs   | The task pipeline no longer attempts the merge step when the PR is already closed or merged, avoiding unnecessary GitHub API calls and confusing error messages.                                                                                                      | INT-1380, PR #1833 |
 | Self-healing failure triage                 | `triageFailedTask` classifies failures and auto-retries tasks up to 3 times, excluding the failed worker location on each retry. Tasks failing with `TASK_EXIT_CODE_OVERRIDE` trigger automatic retry on a different worker.                                          | INT-1375, PR #1855 |
@@ -143,8 +143,8 @@ Changes since v3.5.0, sourced from release context and git history:
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | Execution Memory Graph (alpha)            | Data collection pipeline with vector retrieval (OpenAI embeddings) and post-run distillation (Gemini). Memories scored, fingerprinted, and deduplicated. Query normalization, reranking, and application tracking. Feature-flagged via `INTEXURAOS_EXECUTION_MEMORY_ENABLED`. | INT-1098, INT-1257, INT-1268, INT-1271, INT-1272, INT-1275, INT-1302, INT-1309           |
 | Remediation Agent & Review Loop           | Autonomous remediation tasks created from review findings. Cross-LLM verification, event-sourced plan/implementation improvements. `onReviewSkipped` callback sets `ready-to-merge` label. PR evidence enforced for all task types.                                           | INT-1087, INT-1103, INT-1116, INT-1119, INT-1130, INT-1132, INT-1139, INT-1279, INT-1292 |
-| Ask Agent                                 | Interactive Claude Code sessions from the web UI. `POST /code/ask-agent/start` and `GET /code/ask-agent/active` endpoints. Uses `ask_agent` agent type, opus model. Filtered from task list and issue group endpoints.                                                        | INT-1291, INT-1293, INT-1294, INT-1295, INT-1299, INT-1308                               |
-| Code Tasks Pagination & Group Aggregation | Server-side issue grouping via `GET /code/issue-groups`. `TaskGroupSummary` and `UserGroupCounts` Firestore collections for precomputed aggregation. Cursor pagination, multi-status filtering, sort by linear-id/pr-number/dispatched/last-updated.                          | INT-1173, INT-1184, INT-1187, INT-1202, INT-1217, INT-1238, INT-1239, INT-1241           |
+| Ask Agent                                 | Interactive Claude Code sessions from the web UI. `POST /ask-agent/start` and `GET /ask-agent/active` endpoints. Uses `ask_agent` agent type, opus model. Filtered from task list and issue group endpoints.                                                        | INT-1291, INT-1293, INT-1294, INT-1295, INT-1299, INT-1308                               |
+| Code Tasks Pagination & Group Aggregation | Server-side issue grouping via `GET /issue-groups`. `TaskGroupSummary` and `UserGroupCounts` Firestore collections for precomputed aggregation. Cursor pagination, multi-status filtering, sort by linear-id/pr-number/dispatched/last-updated.                          | INT-1173, INT-1184, INT-1187, INT-1202, INT-1217, INT-1238, INT-1239, INT-1241           |
 | Batch Archive & V3 Loading UX             | Archive multiple groups at once. Improved loading states for the grouped task view.                                                                                                                                                                                           | INT-1166, INT-1175, INT-1176, INT-1181, INT-1182, INT-1218                               |
 | Auto-Archive Merged Tasks                 | Daily cron archives tasks whose PRs were merged 7+ days ago. `prMergedAt` field set by `handlePrClose` webhook. `POST /internal/auto-archive-merged-tasks` endpoint.                                                                                                          | INT-1276                                                                                 |
 | Internal Code Submit                      | `POST /internal/code/submit` endpoint for internal task creation on behalf of a user.                                                                                                                                                                                         | INT-1287                                                                                 |
@@ -158,41 +158,41 @@ Changes since v3.5.0, sourced from release context and git history:
 
 | Method   | Path                                               | Purpose                                              |
 | -------- | -------------------------------------------------- | ---------------------------------------------------- |
-| `POST`   | `/code/submit`                                     | Submit a new code task                               |
-| `POST`   | `/code/ask-agent/start`                            | Start an interactive Ask Agent session               |
-| `GET`    | `/code/ask-agent/active`                           | Get user's active Ask Agent conversation             |
-| `GET`    | `/code/tasks`                                      | List tasks (cursor pagination, multi-status filter)  |
-| `GET`    | `/code/tasks/:taskId`                              | Get a single task with full detail                   |
-| `DELETE` | `/code/tasks/:taskId`                              | Delete a task                                        |
-| `POST`   | `/code/tasks/:taskId/archive`                      | Archive a task                                       |
-| `POST`   | `/code/tasks/:taskId/feedback`                     | Submit follow-up feedback on a completed task        |
-| `POST`   | `/code/tasks/:taskId/implement`                    | Start execution agent from a completed planning task |
-| `POST`   | `/code/tasks/:taskId/messages`                     | Send mid-task message or resume ended task           |
-| `POST`   | `/code/cancel`                                     | Cancel a running or dispatched task                  |
-| `POST`   | `/code/retry`                                      | Retry a failed, cancelled, or interrupted task       |
-| `GET`    | `/code/queue`                                      | Get task queue status                                |
-| `GET`    | `/code/issue-groups`                               | List issue groups with aggregated status (paginated) |
-| `POST`   | `/code/issue-groups/:groupKey/important`           | Toggle important flag on an issue group              |
-| `GET`    | `/code/workers/status`                             | Get worker health status                             |
-| `POST`   | `/code/workers/refresh-status`                     | Refresh worker health status synchronously           |
-| `GET`    | `/code/worker-settings`                            | Get user's worker settings (secrets masked)          |
-| `POST`   | `/code/worker-settings/workers`                    | Add a new worker                                     |
-| `PATCH`  | `/code/worker-settings/workers/:name`              | Update worker configuration                          |
-| `DELETE` | `/code/worker-settings/workers/:name`              | Delete a worker                                      |
-| `POST`   | `/code/worker-settings/workers/:name/test`         | Test worker connectivity                             |
-| `PUT`    | `/code/worker-settings/priority`                   | Reorder workers by priority                          |
-| `PATCH`  | `/code/worker-settings/default-review-worker-type` | Set default review worker type                       |
-| `GET`    | `/code/github-pr-summaries`                        | List PR summaries (30-day window)                    |
-| `GET`    | `/code/github-pr-events`                           | List GitHub PR events timeline                       |
-| `GET`    | `/code/github-event-log`                           | List GitHub event decision log (paginated)           |
-| `GET`    | `/code/github-event-log/:id/payload`               | Get raw webhook payload for a specific event         |
-| `POST`   | `/code/github-event-log/rows`                      | Hydrate event log rows with audit + decision detail  |
-| `POST`   | `/code/merge-queue/watch`                          | Create a new merge queue watch                       |
-| `DELETE` | `/code/merge-queue/watch/:watchId`                 | Cancel a merge queue watch                           |
-| `PUT`    | `/code/merge-queue/watch/:watchId/exclusions`      | Set excluded PRs for a watch                         |
-| `GET`    | `/code/merge-queue/watches`                        | List active merge queue watches                      |
-| `GET`    | `/code/merge-queue/branches`                       | List available branches for merge queue              |
-| `GET`    | `/code/merge-queue/prs`                            | List PRs eligible for merge queue                    |
+| `POST`   | `/submit`                                     | Submit a new code task                               |
+| `POST`   | `/ask-agent/start`                            | Start an interactive Ask Agent session               |
+| `GET`    | `/ask-agent/active`                           | Get user's active Ask Agent conversation             |
+| `GET`    | `/tasks`                                      | List tasks (cursor pagination, multi-status filter)  |
+| `GET`    | `/tasks/:taskId`                              | Get a single task with full detail                   |
+| `DELETE` | `/tasks/:taskId`                              | Delete a task                                        |
+| `POST`   | `/tasks/:taskId/archive`                      | Archive a task                                       |
+| `POST`   | `/tasks/:taskId/feedback`                     | Submit follow-up feedback on a completed task        |
+| `POST`   | `/tasks/:taskId/implement`                    | Start execution agent from a completed planning task |
+| `POST`   | `/tasks/:taskId/messages`                     | Send mid-task message or resume ended task           |
+| `POST`   | `/cancel`                                     | Cancel a running or dispatched task                  |
+| `POST`   | `/retry`                                      | Retry a failed, cancelled, or interrupted task       |
+| `GET`    | `/queue`                                      | Get task queue status                                |
+| `GET`    | `/issue-groups`                               | List issue groups with aggregated status (paginated) |
+| `POST`   | `/issue-groups/:groupKey/important`           | Toggle important flag on an issue group              |
+| `GET`    | `/workers/status`                             | Get worker health status                             |
+| `POST`   | `/workers/refresh-status`                     | Refresh worker health status synchronously           |
+| `GET`    | `/worker-settings`                            | Get user's worker settings (secrets masked)          |
+| `POST`   | `/worker-settings/workers`                    | Add a new worker                                     |
+| `PATCH`  | `/worker-settings/workers/:name`              | Update worker configuration                          |
+| `DELETE` | `/worker-settings/workers/:name`              | Delete a worker                                      |
+| `POST`   | `/worker-settings/workers/:name/test`         | Test worker connectivity                             |
+| `PUT`    | `/worker-settings/priority`                   | Reorder workers by priority                          |
+| `PATCH`  | `/worker-settings/default-review-worker-type` | Set default review worker type                       |
+| `GET`    | `/github-pr-summaries`                        | List PR summaries (30-day window)                    |
+| `GET`    | `/github-pr-events`                           | List GitHub PR events timeline                       |
+| `GET`    | `/github-event-log`                           | List GitHub event decision log (paginated)           |
+| `GET`    | `/github-event-log/:id/payload`               | Get raw webhook payload for a specific event         |
+| `POST`   | `/github-event-log/rows`                      | Hydrate event log rows with audit + decision detail  |
+| `POST`   | `/merge-queue/watch`                          | Create a new merge queue watch                       |
+| `DELETE` | `/merge-queue/watch/:watchId`                 | Cancel a merge queue watch                           |
+| `PUT`    | `/merge-queue/watch/:watchId/exclusions`      | Set excluded PRs for a watch                         |
+| `GET`    | `/merge-queue/watches`                        | List active merge queue watches                      |
+| `GET`    | `/merge-queue/branches`                       | List available branches for merge queue              |
+| `GET`    | `/merge-queue/prs`                            | List PRs eligible for merge queue                    |
 
 ### Internal Endpoints (X-Internal-Auth)
 
@@ -487,7 +487,7 @@ Changes since v3.5.0, sourced from release context and git history:
 - **Tasks finish as `planned`, `implemented`, or `reviewed` — never `completed`.** Code that checks `status === 'completed'` will never match. Terminal success statuses are agent-type-specific.
 - **`queued` status means waiting for worker capacity, not Pub/Sub.** The task queue is Firestore-backed, drained by Cloud Scheduler (`POST /internal/drain-queue`).
 - **Review tasks now queue when workers are at capacity.** Previously review tasks failed immediately if no worker was available. The queue TTL applies equally.
-- **Ask Agent tasks are excluded from task list and issue group endpoints.** Tasks with `agentType: 'ask_agent'` are filtered out of `GET /code/tasks` and `GET /code/issue-groups`. Use `GET /code/ask-agent/active` to retrieve them.
+- **Ask Agent tasks are excluded from task list and issue group endpoints.** Tasks with `agentType: 'ask_agent'` are filtered out of `GET /tasks` and `GET /issue-groups`. Use `GET /ask-agent/active` to retrieve them.
 - **Worker credentials are encrypted in Firestore** using AES-256-GCM with `INTEXURAOS_TOKEN_ENCRYPTION_KEY`. API responses mask secrets to the last 3 characters.
 - **Four deduplication layers run on every submission.** A 409 Conflict response means one of these fired: approvalEventId replay, actionId Pub/Sub retry, dedupKey (same prompt within the window), or active task on the same Linear issue.
 - **Dispatch is optimistic.** Tasks are created with `queued` status first; `dispatched` status is only written after the worker ACKs the request. This prevents phantom `dispatched` tasks on restart.
@@ -508,7 +508,7 @@ Changes since v3.5.0, sourced from release context and git history:
 - **The status endpoint (`PATCH /internal/code-tasks/:id/status`) is idempotent.** If the task is already in a terminal state, it returns 200 no-op without calling the repository. The orchestrator calls this endpoint before the full completion webhook to ensure terminal status is persisted even if the webhook fails.
 - **Draft PRs block all code tasks.** The `DraftPRRule` in the webhook rules chain skips all events where `isDraft === true`. When `isDraft` is `null` (event type does not carry draft info), the rule fails open.
 - **`resolveToolCallingClient` is per-user, not static.** The GitHub Agent tries the user's own Google API key first (via `userServiceClient.getApiKeys`), then falls back to the platform `INTEXURAOS_GEMINI_APP_API_KEY`. This means different users can use different Gemini keys for triage.
-- **`taskMode` on `/code/submit` is optional.** When omitted, the default behavior applies. Set `'planning'` for design-first or `'execution'` for direct implementation.
+- **`taskMode` on `/submit` is optional.** When omitted, the default behavior applies. Set `'planning'` for design-first or `'execution'` for direct implementation.
 - **Auto-retry excludes the failed worker location.** Tasks that fail with `TASK_EXIT_CODE_OVERRIDE` are retried up to 3 times (`autoRetryAttempt`), each time excluding the `failedWorkerLocation` from dispatch.
 - **Zombie sweep runs every 5 minutes.** The `POST /internal/code/detect-zombies` endpoint is triggered by Cloud Scheduler on a 5-minute interval, using `lastHeartbeat` field for detection.
 - **The turn-metrics viewer moved into code-agent.** To inspect `code_tasks/{taskId}/turn_metrics` locally, run `pnpm --filter @intexuraos/code-agent view-metrics <taskId>` or pipe JSON into the same command.

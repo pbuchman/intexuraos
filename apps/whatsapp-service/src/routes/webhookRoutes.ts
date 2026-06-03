@@ -27,7 +27,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
   return (fastify, _opts, done) => {
     // GET /whatsapp/webhooks - Webhook verification endpoint
     fastify.get(
-      '/whatsapp/webhooks',
+      '/webhooks',
       {
         schema: {
           operationId: 'verifyWhatsAppWebhook',
@@ -99,7 +99,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
     // POST /whatsapp/webhooks - Webhook event receiver
     fastify.post(
-      '/whatsapp/webhooks',
+      '/webhooks',
       {
         schema: {
           operationId: 'receiveWhatsAppWebhook',

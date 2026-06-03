@@ -192,7 +192,7 @@ export function getFallbackConfig(): ActionConfig {
     actions: {
       delete: {
         endpoint: {
-          path: '/actions/{actionId}',
+          path: '/{actionId}',
           method: 'DELETE',
         },
         ui: {

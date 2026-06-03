@@ -146,7 +146,7 @@ function extractGeneratedByInfo(user: AuthUser, logger: Logger): GeneratedByUser
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /research
   fastify.post(
-    '/research',
+    '/',
     {
       schema: {
         operationId: 'createResearch',
@@ -267,7 +267,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/draft
   fastify.post(
-    '/research/draft',
+    '/draft',
     {
       schema: {
         operationId: 'saveDraft',
@@ -378,7 +378,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // PATCH /research/:id
   fastify.patch(
-    '/research/:id',
+    '/:id',
     {
       schema: {
         operationId: 'updateDraft',
@@ -505,7 +505,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/validate-input
   fastify.post(
-    '/research/validate-input',
+    '/validate-input',
     {
       schema: {
         operationId: 'validateInput',
@@ -597,7 +597,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/improve-input
   fastify.post(
-    '/research/improve-input',
+    '/improve-input',
     {
       schema: {
         operationId: 'improveInput',
@@ -668,7 +668,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // GET /research
   fastify.get(
-    '/research',
+    '/',
     {
       schema: {
         operationId: 'listResearches',
@@ -722,7 +722,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // GET /research/:id
   fastify.get(
-    '/research/:id',
+    '/:id',
     {
       schema: {
         operationId: 'getResearch',
@@ -771,7 +771,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/approve
   fastify.post(
-    '/research/:id/approve',
+    '/:id/approve',
     {
       schema: {
         operationId: 'approveResearch',
@@ -874,7 +874,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/confirm
   fastify.post(
-    '/research/:id/confirm',
+    '/:id/confirm',
     {
       schema: {
         operationId: 'confirmPartialFailure',
@@ -1087,7 +1087,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/retry
   fastify.post(
-    '/research/:id/retry',
+    '/:id/retry',
     {
       schema: {
         operationId: 'retryFromFailed',
@@ -1245,7 +1245,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/enhance
   fastify.post(
-    '/research/:id/enhance',
+    '/:id/enhance',
     {
       schema: {
         operationId: 'enhanceResearch',
@@ -1387,7 +1387,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // DELETE /research/:id
   fastify.delete(
-    '/research/:id',
+    '/:id',
     {
       schema: {
         operationId: 'deleteResearch',
@@ -1433,7 +1433,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // DELETE /research/:id/share - Remove public share access
   fastify.delete(
-    '/research/:id/share',
+    '/:id/share',
     {
       schema: {
         operationId: 'unshareResearch',
@@ -1488,7 +1488,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // PATCH /research/:id/favourite - Toggle favourite status
   fastify.patch(
-    '/research/:id/favourite',
+    '/:id/favourite',
     {
       schema: {
         operationId: 'toggleFavourite',
@@ -1539,7 +1539,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/export-notion
   fastify.post(
-    '/research/:id/export-notion',
+    '/:id/export-notion',
     {
       schema: {
         operationId: 'exportResearchToNotion',

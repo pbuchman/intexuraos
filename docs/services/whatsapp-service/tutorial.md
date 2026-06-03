@@ -361,9 +361,9 @@ If the user's notification level is `all` (the default), the `important` flag ha
 
 | Problem                       | Solution                                                              |
 | ----------------------------- | --------------------------------------------------------------------- |
-| "Message not delivered"       | Check user has connected WhatsApp number via `GET /whatsapp/status`   |
+| "Message not delivered"       | Check user has connected WhatsApp number via `GET /status`   |
 | "Message silently dropped"    | User's notification level may be `important` — set `important: true`  |
-| "Phone not verified"          | Run `/whatsapp/verify/send` then `/whatsapp/verify/confirm` first     |
+| "Phone not verified"          | Run `/verify/send` then `/verify/confirm` first     |
 | "No approval event received"  | Verify buttonId format or correlationId matches expected pattern      |
 | "actionId is undefined"       | User replied to non-approval message; check correlationId pattern     |
 | "Duplicate actions created"   | Ensure approval and command handlers do not both run for same reply   |

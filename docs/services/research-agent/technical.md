@@ -73,7 +73,7 @@ sequenceDiagram
     participant LlmProvider as LLM Provider\n(per model)
     participant GCS
 
-    Client->>+ResearchAgent: POST /research
+    Client->>+ResearchAgent: POST /
     ResearchAgent->>Firestore: Save research (status: pending)
     ResearchAgent->>PubSub: Publish research.process
     ResearchAgent-->>-Client: 200 { researchId }
@@ -137,13 +137,13 @@ sequenceDiagram
 
 - **OpenRouterAdapter:** New LLM adapter implementing both `LlmResearchProvider` and `LlmSynthesisProvider` via the `infra-openrouter` package. Strips the `or:` prefix from model IDs before passing to the OpenRouter API. Supports research, synthesis, and title generation.
 - **Allowlist enforcement:** Execution-time validation ensures only the curated models from 10 providers can be dispatched through OpenRouter. Unauthorized model IDs are rejected.
-- **Live pricing endpoint:** `GET /research/openrouter/models` returns the curated allowlist enriched with live pricing from the OpenRouter catalog API. Results are cached in-memory for 5 minutes. Falls back to hardcoded pricing when the catalog is unavailable.
+- **Live pricing endpoint:** `GET /openrouter/models` returns the curated allowlist enriched with live pricing from the OpenRouter catalog API. Results are cached in-memory for 5 minutes. Falls back to hardcoded pricing when the catalog is unavailable.
 - **Key validation:** OpenRouter API keys are validated using the lightweight `/api/v1/key` endpoint rather than making a full model call.
 - **Pricing correlation:** OpenRouter models use `useProviderCost: true` pricing when live catalog data is available, falling back to allowlist-defined per-token pricing otherwise.
 
 **Cover Image Provider Failover (INT-1310):** The `generateCoverImage` function now tries multiple image generation pipelines in order of preference. If the preferred provider fails (prompt generation or image generation), the service falls back to the next available provider. Provider preference is determined by the synthesis model: GPT-based synthesis prefers the OpenAI pipeline; all others prefer Google. All failures across providers are logged with structured error details.
 
-**ResearchSummary Projection:** The `GET /research` list endpoint now returns lightweight `ResearchSummary` projections instead of full `Research` documents. Summaries exclude large text fields (`synthesizedResult`, `llmResults[].result`, `inputContexts[].content`) to reduce payload size on list views. Uses single-query Firestore pagination via `.select()`.
+**ResearchSummary Projection:** The `GET /` list endpoint now returns lightweight `ResearchSummary` projections instead of full `Research` documents. Summaries exclude large text fields (`synthesizedResult`, `llmResults[].result`, `inputContexts[].content`) to reduce payload size on list views. Uses single-query Firestore pagination via `.select()`.
 
 **Other Changes:**
 
@@ -165,25 +165,25 @@ sequenceDiagram
 
 | Method   | Path                                   | Purpose                                                    |
 | -------- | -------------------------------------- | ---------------------------------------------------------- |
-| `POST`   | `/research`                            | Submit new research for immediate processing               |
-| `POST`   | `/research/draft`                      | Save research as draft (requires approval)                 |
-| `GET`    | `/research`                            | List authenticated user's researches (summary projections) |
-| `GET`    | `/research/:id`                        | Get single research by ID                                  |
-| `PATCH`  | `/research/:id`                        | Update research fields                                     |
-| `POST`   | `/research/validate-input`             | Validate research input quality                            |
-| `POST`   | `/research/improve-input`              | Force-improve research input                               |
-| `POST`   | `/research/:id/approve`                | Approve draft research and trigger processing              |
-| `POST`   | `/research/:id/confirm`                | Confirm partial failure decision                           |
-| `POST`   | `/research/:id/retry`                  | Retry research from failed status                          |
-| `POST`   | `/research/:id/enhance`                | Create enhanced research from a completed one              |
-| `POST`   | `/research/:id/export-notion`          | Manually trigger Notion export                             |
-| `DELETE` | `/research/:id`                        | Delete research                                            |
-| `DELETE` | `/research/:id/share`                  | Remove public share access (unshare)                       |
-| `PATCH`  | `/research/:id/favourite`              | Toggle favourite status                                    |
-| `GET`    | `/research/openrouter/models`          | Get curated OpenRouter allowlist with live pricing         |
-| `GET`    | `/research/settings/notion`            | Get Notion export page configuration                       |
-| `POST`   | `/research/settings/notion`            | Save Notion export page configuration                      |
-| `POST`   | `/research/settings/notion/validate`   | Validate a Notion page ID before saving                    |
+| `POST`   | `/`                            | Submit new research for immediate processing               |
+| `POST`   | `/draft`                      | Save research as draft (requires approval)                 |
+| `GET`    | `/`                            | List authenticated user's researches (summary projections) |
+| `GET`    | `/:id`                        | Get single research by ID                                  |
+| `PATCH`  | `/:id`                        | Update research fields                                     |
+| `POST`   | `/validate-input`             | Validate research input quality                            |
+| `POST`   | `/improve-input`              | Force-improve research input                               |
+| `POST`   | `/:id/approve`                | Approve draft research and trigger processing              |
+| `POST`   | `/:id/confirm`                | Confirm partial failure decision                           |
+| `POST`   | `/:id/retry`                  | Retry research from failed status                          |
+| `POST`   | `/:id/enhance`                | Create enhanced research from a completed one              |
+| `POST`   | `/:id/export-notion`          | Manually trigger Notion export                             |
+| `DELETE` | `/:id`                        | Delete research                                            |
+| `DELETE` | `/:id/share`                  | Remove public share access (unshare)                       |
+| `PATCH`  | `/:id/favourite`              | Toggle favourite status                                    |
+| `GET`    | `/openrouter/models`          | Get curated OpenRouter allowlist with live pricing         |
+| `GET`    | `/settings/notion`            | Get Notion export page configuration                       |
+| `POST`   | `/settings/notion`            | Save Notion export page configuration                      |
+| `POST`   | `/settings/notion/validate`   | Validate a Notion page ID before saving                    |
 
 ### Internal Endpoints (X-Internal-Auth or Pub/Sub OIDC)
 
@@ -392,9 +392,9 @@ Research Agent reports usage to `llm-usage-service` for all models it invokes. M
 - **Research context propagation:** The inferred `ResearchContext` is saved to Firestore during `process-research` and passed to each LLM adapter's `research()` call via `buildResearchPrompt()`. This means the context is inferred once and reused for all models in the research.
 - **OpenRouter `or:` prefix:** OpenRouter model IDs are prefixed with `or:` in the llm-contract registry (e.g., `or:qwen/qwen3.5-plus-02-15`). The `OpenRouterAdapter` strips this prefix before calling the OpenRouter API using `getOpenRouterRawId()`.
 - **OpenRouter allowlist enforcement:** At execution time (not just at selection), the `process-llm-call` handler validates that OpenRouter models are on the curated allowlist. Unauthorized model IDs are rejected.
-- **OpenRouter model cache:** The `GET /research/openrouter/models` endpoint caches responses in-memory for 5 minutes. The cache is per-process, not shared across Cloud Run instances.
+- **OpenRouter model cache:** The `GET /openrouter/models` endpoint caches responses in-memory for 5 minutes. The cache is per-process, not shared across Cloud Run instances.
 - **Cover image provider failover:** The `generateCoverImage` function iterates through available provider pipelines (Google and/or OpenAI) in preference order. If prompt generation or image generation fails for one provider, it continues to the next. Only logs an error when all providers are exhausted.
-- **ResearchSummary projection:** The `GET /research` list endpoint uses `findSummariesByUserId` which returns `ResearchSummary` objects (no `synthesizedResult`, no `llmResults[].result`, no `inputContexts[].content`). The `toResearchSummary` mapper strips these fields server-side.
+- **ResearchSummary projection:** The `GET /` list endpoint uses `findSummariesByUserId` which returns `ResearchSummary` objects (no `synthesizedResult`, no `llmResults[].result`, no `inputContexts[].content`). The `toResearchSummary` mapper strips these fields server-side.
 - **Important WhatsApp notifications:** Both research completion and LLM failure notifications are published with `important: true`, bypassing quiet-hours suppression in the WhatsApp notification pipeline.
 - **Usage reporting via HttpInternalAuthUsageSink:** Each LLM adapter receives a `UsageSink` scoped to its component name (e.g., `research:gemini-2.5-pro`, `synthesis:claude-opus-4-6`, `title-generator`). Usage is reported asynchronously to `llm-usage-service` after each call completes.
 
@@ -431,9 +431,9 @@ apps/research-agent/src/
 │   ├── helpers/             # synthesisHelper, completionHandlers, storedResearchModels
 │   ├── schemas/             # Fastify JSON schemas
 │   ├── internalRoutes.ts    # /internal/* endpoints
-│   ├── openRouterRoutes.ts  # /research/openrouter/* endpoints
-│   ├── researchExportRoutes.ts  # /research/settings/notion endpoints
-│   └── researchRoutes.ts    # All /research/* public endpoints
+│   ├── openRouterRoutes.ts  # /openrouter/* endpoints
+│   ├── researchExportRoutes.ts  # /settings/notion endpoints
+│   └── researchRoutes.ts    # All /* public endpoints
 ├── index.ts                 # Entry point, env validation
 ├── server.ts                # Fastify server setup
 └── services.ts              # Dependency injection container

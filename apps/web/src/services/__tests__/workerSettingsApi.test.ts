@@ -53,7 +53,7 @@ describe('workerSettingsApi', () => {
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[0]).toBe('https://code.test');
-      expect(call?.[1]).toBe('/code/worker-settings');
+      expect(call?.[1]).toBe('/worker-settings');
       expect(call?.[2]).toBe(TOKEN);
       expect(result).toBe(sampleSettings);
     });
@@ -74,7 +74,7 @@ describe('workerSettingsApi', () => {
       await addWorker(TOKEN, config);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/code/worker-settings/workers');
+      expect(call?.[1]).toBe('/worker-settings/workers');
       expect(call?.[3]).toEqual({ method: 'POST', body: config });
     });
   });
@@ -87,7 +87,7 @@ describe('workerSettingsApi', () => {
       await updateWorker(TOKEN, 'mac', { enabled: false });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/code/worker-settings/workers/mac');
+      expect(call?.[1]).toBe('/worker-settings/workers/mac');
       expect(call?.[3]).toEqual({ method: 'PATCH', body: { enabled: false } });
     });
   });
@@ -100,7 +100,7 @@ describe('workerSettingsApi', () => {
       await deleteWorker(TOKEN, 'mac');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/code/worker-settings/workers/mac');
+      expect(call?.[1]).toBe('/worker-settings/workers/mac');
       expect(call?.[3]).toEqual({ method: 'DELETE' });
     });
   });
@@ -113,7 +113,7 @@ describe('workerSettingsApi', () => {
       await reorderWorkers(TOKEN, { workerNames: ['a', 'b'] });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/code/worker-settings/priority');
+      expect(call?.[1]).toBe('/worker-settings/priority');
       expect(call?.[3]).toEqual({ method: 'PUT', body: { workerNames: ['a', 'b'] } });
     });
   });
@@ -128,18 +128,18 @@ describe('workerSettingsApi', () => {
       await testWorkerConnectivity(TOKEN, 'mac');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/code/worker-settings/workers/mac/test');
+      expect(call?.[1]).toBe('/worker-settings/workers/mac/test');
       expect(call?.[3]).toEqual({ method: 'POST' });
     });
   });
 
   describe('updateDefaultWorkerType', () => {
     it.each([
-      ['review' as const, '/code/worker-settings/default-review-worker-type'],
-      ['remediation' as const, '/code/worker-settings/default-remediation-worker-type'],
-      ['execution' as const, '/code/worker-settings/default-execution-worker-type'],
-      ['planning' as const, '/code/worker-settings/default-planning-worker-type'],
-      ['pull-request' as const, '/code/worker-settings/default-pull-request-worker-type'],
+      ['review' as const, '/worker-settings/default-review-worker-type'],
+      ['remediation' as const, '/worker-settings/default-remediation-worker-type'],
+      ['execution' as const, '/worker-settings/default-execution-worker-type'],
+      ['planning' as const, '/worker-settings/default-planning-worker-type'],
+      ['pull-request' as const, '/worker-settings/default-pull-request-worker-type'],
     ])('PATCHes the right path for category %s', async (category, expectedPath) => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue({ updated: true });

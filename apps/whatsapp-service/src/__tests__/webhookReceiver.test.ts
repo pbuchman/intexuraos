@@ -23,7 +23,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -47,7 +47,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -67,7 +67,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
       },
@@ -89,7 +89,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': 'sha256=invalid-signature',
@@ -114,7 +114,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': hash, // Missing sha256= prefix
@@ -132,7 +132,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -148,7 +148,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': '',
@@ -164,7 +164,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': 'sha256=invalid',
@@ -211,7 +211,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -269,7 +269,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -327,7 +327,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -350,7 +350,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -422,7 +422,7 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/whatsapp/webhooks',
+      url: '/webhooks',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
