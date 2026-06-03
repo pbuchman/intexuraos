@@ -24,7 +24,7 @@ graph TB
         Firestore[(Firestore<br>notion_connections)]
     end
 
-    User -->|"POST /notion/connect<br>GET /notion/status<br>DELETE /notion/disconnect"| Routes
+    User -->|"POST /connect<br>GET /status<br>DELETE /disconnect"| Routes
     RA -->|"GET /internal/.../context<br>GET /internal/.../preview"| Routes
     Routes --> Domain
     Domain --> Infra
@@ -50,7 +50,7 @@ sequenceDiagram
     participant NotionAPI as Notion API
     participant FS as Firestore
 
-    User->>+NS: POST /notion/connect {notionToken}
+    User->>+NS: POST /connect {notionToken}
     NS->>+NotionAPI: Validate token (users.me)
     NotionAPI-->>-NS: Token valid
     NS->>+FS: Save connection doc
@@ -93,15 +93,15 @@ sequenceDiagram
 
 | Method | Path                 | Purpose                     | Auth         |
 | ------ | -------------------- | --------------------------- | ------------ |
-| POST   | `/notion/connect`    | Connect Notion integration  | Bearer (JWT) |
-| GET    | `/notion/status`     | Get integration status      | Bearer (JWT) |
-| DELETE | `/notion/disconnect` | Disconnect integration      | Bearer (JWT) |
+| POST   | `/connect`    | Connect Notion integration  | Bearer (JWT) |
+| GET    | `/status`     | Get integration status      | Bearer (JWT) |
+| DELETE | `/disconnect` | Disconnect integration      | Bearer (JWT) |
 
 ### Webhook Endpoints
 
 | Method | Path               | Purpose                          | Auth |
 | ------ | ------------------ | -------------------------------- | ---- |
-| POST   | `/notion-webhooks` | Receive Notion webhook events    | None |
+| POST   | `/webhooks` | Receive Notion webhook events    | None |
 
 ### Internal Endpoints
 
@@ -120,7 +120,7 @@ sequenceDiagram
 
 ## Request/Response Schemas
 
-### POST /notion/connect
+### POST /connect
 
 **Request:**
 
@@ -143,7 +143,7 @@ sequenceDiagram
 }
 ```
 
-### GET /notion/status
+### GET /status
 
 **Response (200):**
 
@@ -159,7 +159,7 @@ sequenceDiagram
 }
 ```
 
-### DELETE /notion/disconnect
+### DELETE /disconnect
 
 **Response (200):**
 
@@ -198,7 +198,7 @@ sequenceDiagram
 }
 ```
 
-### POST /notion-webhooks
+### POST /webhooks
 
 **Request:** Any JSON object (Zod `z.record(z.unknown())`).
 
@@ -318,13 +318,13 @@ sequenceDiagram
 
 ## Gotchas
 
-- **Token validation is eager** — `POST /notion/connect` calls the Notion API before saving. If Notion is down, the connection fails even though the token may be valid.
+- **Token validation is eager** — `POST /connect` calls the Notion API before saving. If Notion is down, the connection fails even though the token may be valid.
 - **One connection per user** — Reconnecting with a new token replaces the existing connection. The old token is overwritten.
-- **Disconnect does not delete** — `DELETE /notion/disconnect` sets `connected: false` but keeps the Firestore document. The token remains in storage but is inaccessible via the `getToken` path (returns `null` when `connected === false`).
+- **Disconnect does not delete** — `DELETE /disconnect` sets `connected: false` but keeps the Firestore document. The token remains in storage but is inaccessible via the `getToken` path (returns `null` when `connected === false`).
 - **createdAt fallback** — When disconnecting, if the existing document somehow lacks `createdAt`, the service falls back to the current timestamp (backward compatibility for early connections).
 - **Page preview requires active connection** — The internal page preview endpoint checks `connected === true` and a non-null token before querying Notion. Disconnected users get a 404.
-- **Webhook is a stub** — `POST /notion-webhooks` accepts any JSON, logs it, and returns `{ received: true }`. No event processing occurs. Validation uses `z.record(z.unknown())`.
-- **Disconnect returns empty data** — `DELETE /notion/disconnect` returns `reply.ok({})`, not connection state.
+- **Webhook is a stub** — `POST /webhooks` accepts any JSON, logs it, and returns `{ received: true }`. No event processing occurs. Validation uses `z.record(z.unknown())`.
+- **Disconnect returns empty data** — `DELETE /disconnect` returns `reply.ok({})`, not connection state.
 
 ## File Structure
 

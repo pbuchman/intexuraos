@@ -139,15 +139,15 @@ sequenceDiagram
 
 | Method | Path                                | Description                      | Auth         |
 | ------ | ----------------------------------- | -------------------------------- | ------------ |
-| GET    | `/calendar/events`                  | List events with filters         | Bearer token |
-| GET    | `/calendar/events/:eventId`         | Get specific event               | Bearer token |
-| POST   | `/calendar/events`                  | Create event                     | Bearer token |
-| PATCH  | `/calendar/events/:eventId`         | Update event                     | Bearer token |
-| DELETE | `/calendar/events/:eventId`         | Delete event                     | Bearer token |
-| POST   | `/calendar/freebusy`                | Get free/busy info               | Bearer token |
-| GET    | `/calendar/failed-events`           | List failed extractions          | Bearer token |
-| DELETE | `/calendar/failed-events/:id`       | Delete a failed event            | Bearer token |
-| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed event | Bearer token |
+| GET    | `/events`                  | List events with filters         | Bearer token |
+| GET    | `/events/:eventId`         | Get specific event               | Bearer token |
+| POST   | `/events`                  | Create event                     | Bearer token |
+| PATCH  | `/events/:eventId`         | Update event                     | Bearer token |
+| DELETE | `/events/:eventId`         | Delete event                     | Bearer token |
+| POST   | `/freebusy`                | Get free/busy info               | Bearer token |
+| GET    | `/failed-events`           | List failed extractions          | Bearer token |
+| DELETE | `/failed-events/:id`       | Delete a failed event            | Bearer token |
+| POST   | `/failed-events/:id/retry` | Retry creating from failed event | Bearer token |
 
 ### Internal Endpoints
 
@@ -275,7 +275,7 @@ interface GeneratePreviewMessage {
 | ------------------- | ----------- | ------------------------------------ |
 | `NOT_CONNECTED`     | 403         | User hasn't connected Google account |
 | `TOKEN_ERROR`       | 401         | OAuth token invalid/expired          |
-| `NOT_FOUND`         | 404         | Event/calendar not found             |
+| `NOT_FOUND`         | 404         | Event/ not found             |
 | `INVALID_REQUEST`   | 400         | Malformed request                    |
 | `PERMISSION_DENIED` | 403         | Insufficient permissions             |
 | `QUOTA_EXCEEDED`    | 403         | API rate limit exceeded              |
@@ -389,12 +389,12 @@ apps/calendar-agent/src/
     calendarRoutes.ts            # Barrel that registers all public route plugins
     calendarHelpers.ts           # Shared types and builder functions for routes
     calendarErrorHandler.ts      # Maps domain errors to HTTP responses
-    eventQueryRoutes.ts          # GET /calendar/events, GET /calendar/events/:eventId
-    eventCreateRoutes.ts         # POST /calendar/events
-    eventUpdateRoutes.ts         # PATCH /calendar/events/:eventId
-    eventDeleteRoutes.ts         # DELETE /calendar/events/:eventId
-    freeBusyRoutes.ts            # POST /calendar/freebusy
-    failedEventRoutes.ts         # GET/DELETE/POST /calendar/failed-events
+    eventQueryRoutes.ts          # GET /events, GET /events/:eventId
+    eventCreateRoutes.ts         # POST /events
+    eventUpdateRoutes.ts         # PATCH /events/:eventId
+    eventDeleteRoutes.ts         # DELETE /events/:eventId
+    freeBusyRoutes.ts            # POST /freebusy
+    failedEventRoutes.ts         # GET/DELETE/POST /failed-events
     internalRoutes.ts            # Internal + Pub/Sub + direct HTTP endpoints
   services.ts                    # DI container
   server.ts                      # Fastify server

@@ -332,7 +332,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.get<{ Params: BackfillRunParams }>(
-    '/notifications/digests/backfill/:runId',
+    '/digests/backfill/:runId',
     {
       schema: {
         operationId: 'getBackfillRun',
@@ -370,7 +370,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.get<{ Querystring: DigestsQuerystring }>(
-    '/notifications/digests',
+    '/digests',
     {
       schema: {
         operationId: 'listDigests',
@@ -417,7 +417,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.get<{ Params: DigestParams }>(
-    '/notifications/digests/:groupKey/:date',
+    '/digests/:groupKey/:date',
     {
       schema: {
         operationId: 'getDigestByDate',
@@ -453,7 +453,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.post<{ Body: UserRunBody }>(
-    '/notifications/digests/run',
+    '/digests/run',
     {
       schema: {
         operationId: 'userRunDigest',
@@ -508,7 +508,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.post<{ Body: UserBackfillBody }>(
-    '/notifications/digests/backfill',
+    '/digests/backfill',
     {
       schema: {
         operationId: 'userStartBackfill',
@@ -570,7 +570,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: DigestParams }>(
-    '/notifications/digests/:groupKey/:date/state',
+    '/digests/:groupKey/:date/state',
     {
       schema: {
         operationId: 'getDigestState',

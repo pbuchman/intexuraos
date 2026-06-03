@@ -18,7 +18,7 @@
 
 ### List Notes
 
-**Endpoint:** `GET /notes`
+**Endpoint:** `GET /`
 
 **When to use:** Retrieve all notes for the authenticated user. Returns notes ordered by `updatedAt` descending (most recent first). No server-side filtering available.
 
@@ -42,7 +42,7 @@ interface ListNotesResponse {
 
 ```json
 // Request
-// GET /notes
+// GET /
 // Authorization: Bearer <jwt>
 
 // Response (200)
@@ -66,7 +66,7 @@ interface ListNotesResponse {
 
 ### Create Note
 
-**Endpoint:** `POST /notes`
+**Endpoint:** `POST /`
 
 **When to use:** Create a new note for the authenticated user. All notes start with `active` status (status field not accepted on this endpoint).
 
@@ -96,7 +96,7 @@ interface CreateNoteResponse {
 
 ```json
 // Request
-// POST /notes
+// POST /
 {
   "title": "Research Findings",
   "content": "Key insights from Q4 analysis",
@@ -124,7 +124,7 @@ interface CreateNoteResponse {
 
 ### Get Note
 
-**Endpoint:** `GET /notes/:id`
+**Endpoint:** `GET /:id`
 
 **When to use:** Retrieve a specific note by ID. Returns 403 if the note belongs to a different user.
 
@@ -146,7 +146,7 @@ interface GetNoteResponse {
 
 ### Update Note
 
-**Endpoint:** `PATCH /notes/:id`
+**Endpoint:** `PATCH /:id`
 
 **When to use:** Partially update a note's title, content, or tags. Only include fields you want to change. Returns 403 if not the owner. Status, source, sourceId, and userId cannot be changed.
 
@@ -171,7 +171,7 @@ interface UpdateNoteResponse {
 
 ### Delete Note
 
-**Endpoint:** `DELETE /notes/:id`
+**Endpoint:** `DELETE /:id`
 
 **When to use:** Permanently delete a note. Returns 403 if not the owner, 404 if not found.
 
@@ -286,7 +286,7 @@ interface Note {
 **Do NOT:**
 
 - Assume the list endpoint supports filtering — it returns all notes
-- Send `status` to the public `POST /notes` endpoint — it is ignored
+- Send `status` to the public `POST /` endpoint — it is ignored
 - Expect a Note object from `/internal/notes` — it returns ServiceFeedback
 - Try to update `source`, `sourceId`, `status`, or `userId` via PATCH
 
@@ -324,16 +324,16 @@ interface Note {
 ### Pattern 2: User CRUD via Dashboard
 
 ```
-1. GET /notes to list all notes
-2. POST /notes to create a new note
-3. PATCH /notes/:id to update content or tags
-4. DELETE /notes/:id to remove a note
+1. GET / to list all notes
+2. POST / to create a new note
+3. PATCH /:id to update content or tags
+4. DELETE /:id to remove a note
 ```
 
 ### Pattern 3: Client-Side Tag Filtering
 
 ```
-1. GET /notes to retrieve all notes
+1. GET / to retrieve all notes
 2. Filter locally: notes.filter(n => n.tags.includes('work'))
 3. Display filtered results
 ```

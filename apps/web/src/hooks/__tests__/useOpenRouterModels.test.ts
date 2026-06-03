@@ -68,7 +68,7 @@ describe('useOpenRouterModels', () => {
     expect(result.current.error).toBeNull();
     expect(mockRequest).toHaveBeenCalledWith(
       'http://test-research-agent',
-      '/research/openrouter/models'
+      '/openrouter/models'
     );
   });
 

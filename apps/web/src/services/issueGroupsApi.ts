@@ -33,7 +33,7 @@ export async function listIssueGroups(
     params.set('cursor', options.cursor);
   }
   const query = params.toString();
-  const path = query !== '' ? `/code/issue-groups?${query}` : '/code/issue-groups';
+  const path = query !== '' ? `/issue-groups?${query}` : '/issue-groups';
   return await apiRequest<ListIssueGroupsResponse>(config.codeAgentUrl, path, accessToken);
 }
 
@@ -47,7 +47,7 @@ export async function setGroupImportant(
 ): Promise<{ important: boolean }> {
   return await apiRequest<{ important: boolean }>(
     config.codeAgentUrl,
-    `/code/issue-groups/${encodeURIComponent(groupKey)}/important`,
+    `/issue-groups/${encodeURIComponent(groupKey)}/important`,
     accessToken,
     {
       method: 'POST',

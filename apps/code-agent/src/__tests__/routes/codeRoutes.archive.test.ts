@@ -293,7 +293,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -313,7 +313,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -333,7 +333,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const firstResponse = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
     expect(firstResponse.statusCode).toBe(200);
@@ -341,7 +341,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
     // Try to archive again
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -357,7 +357,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -370,7 +370,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
   it('returns 404 for non-existent task', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/code/tasks/non-existent-task-id/archive',
+      url: '/tasks/non-existent-task-id/archive',
       headers: { authorization: 'Bearer test-token' },
     });
 

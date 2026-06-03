@@ -14,7 +14,7 @@
 
 ### Create Schedule
 
-**Endpoint:** `POST /cron/schedules`
+**Endpoint:** `POST /schedules`
 
 **When to use:** When a user wants to automate a recurring task described in natural language.
 
@@ -25,7 +25,7 @@ interface CreateScheduleInput {
   name: string;
   schedule: string; // Natural language, e.g. "every weekday at 9am"
   action: {
-    services: string[]; // Service keys from GET /cron/services
+    services: string[]; // Service keys from GET /services
     instruction: string; // What the agent should do
     preferredTools?: string[]; // Tool names to prioritize
   };
@@ -88,7 +88,7 @@ interface CronSchedule {
 
 ### Trigger Schedule
 
-**Endpoint:** `POST /cron/schedules/:id/trigger`
+**Endpoint:** `POST /schedules/:id/trigger`
 
 **When to use:** When you need to execute a schedule immediately without waiting for the next scheduled time.
 
@@ -132,13 +132,13 @@ interface CronExecution {
 
 ### List Available Services
 
-**Endpoint:** `GET /cron/services`
+**Endpoint:** `GET /services`
 
 **When to use:** Before creating a schedule, to discover which services and tools are available. Only services with at least one permitted tool appear in the response.
 
 ### List Schedules
 
-**Endpoint:** `GET /cron/schedules`
+**Endpoint:** `GET /schedules`
 
 **When to use:** To retrieve all schedules for the authenticated user.
 
@@ -146,7 +146,7 @@ interface CronExecution {
 
 ### List Executions
 
-**Endpoint:** `GET /cron/executions`
+**Endpoint:** `GET /executions`
 
 **When to use:** To review execution history and results.
 
@@ -166,7 +166,7 @@ interface CronExecution {
 - Trigger a schedule that already has a running execution
 - Exceed 50 schedules per user
 - Call `/internal/cron/tick` without proper authentication (OIDC or X-Internal-Auth)
-- Assume all services in the catalog are available — check `GET /cron/services` first
+- Assume all services in the catalog are available — check `GET /services` first
 
 **Requires:**
 
@@ -179,20 +179,20 @@ interface CronExecution {
 ### Pattern 1: Create and Verify Schedule
 
 ```
-1. GET /cron/services to discover available services and tools
-2. POST /cron/schedules with name, schedule, action
+1. GET /services to discover available services and tools
+2. POST /schedules with name, schedule, action
 3. Verify cronExpression, scheduleSummary, and nextExecutionAt in response
-4. Optionally POST /cron/schedules/:id/trigger to test immediately
-5. GET /cron/executions?scheduleId=:id to check result
+4. Optionally POST /schedules/:id/trigger to test immediately
+5. GET /executions?scheduleId=:id to check result
 ```
 
 ### Pattern 2: Monitor Execution Health
 
 ```
-1. GET /cron/schedules to list all active schedules
+1. GET /schedules to list all active schedules
 2. Check failureCount vs executionCount for each
-3. GET /cron/executions?scheduleId=:id&status=failure to review failures
-4. PATCH /cron/schedules/:id to pause problematic schedules
+3. GET /executions?scheduleId=:id&status=failure to review failures
+4. PATCH /schedules/:id to pause problematic schedules
 ```
 
 ## Error Handling

@@ -195,7 +195,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
     fastify.get<{
       Querystring: { repository?: string; pullRequestNumber?: number; limit?: number };
     }>(
-      '/code/github-pr-events',
+      '/github-pr-events',
       {
         schema: {
           querystring: githubPREventsQuerySchema,

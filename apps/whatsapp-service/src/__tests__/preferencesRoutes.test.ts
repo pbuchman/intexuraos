@@ -15,7 +15,7 @@ describe('WhatsApp Preferences Routes', () => {
     it('returns 401 when no authorization header', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
       });
 
       expect(response.statusCode).toBe(401);
@@ -32,7 +32,7 @@ describe('WhatsApp Preferences Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -51,7 +51,7 @@ describe('WhatsApp Preferences Routes', () => {
       // Update the level via PUT
       const putResponse = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: { notificationLevel: 'important' },
       });
@@ -60,7 +60,7 @@ describe('WhatsApp Preferences Routes', () => {
       // Read it back via GET
       const getResponse = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -82,7 +82,7 @@ describe('WhatsApp Preferences Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -100,7 +100,7 @@ describe('WhatsApp Preferences Routes', () => {
     it('returns 401 when no authorization header', async () => {
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         payload: { notificationLevel: 'important' },
       });
 
@@ -118,7 +118,7 @@ describe('WhatsApp Preferences Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -137,7 +137,7 @@ describe('WhatsApp Preferences Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: { notificationLevel: 'loud' },
       });
@@ -156,7 +156,7 @@ describe('WhatsApp Preferences Routes', () => {
 
       const putResponse = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: { notificationLevel: 'important' },
       });
@@ -172,7 +172,7 @@ describe('WhatsApp Preferences Routes', () => {
       // Verify GET returns the same value
       const getResponse = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -193,7 +193,7 @@ describe('WhatsApp Preferences Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: { notificationLevel: 'important' },
       });
@@ -212,14 +212,14 @@ describe('WhatsApp Preferences Routes', () => {
 
       await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: { notificationLevel: 'important' },
       });
 
       const switchResponse = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: { notificationLevel: 'all' },
       });
@@ -243,7 +243,7 @@ describe('WhatsApp Preferences Routes', () => {
       // Set notificationLevel to 'important' via PUT
       const putResponse = await ctx.app.inject({
         method: 'PUT',
-        url: '/whatsapp/preferences',
+        url: '/preferences',
         headers: { authorization: `Bearer ${token}` },
         payload: { notificationLevel: 'important' },
       });
@@ -252,7 +252,7 @@ describe('WhatsApp Preferences Routes', () => {
       // GET /whatsapp/status — must NOT include notificationLevel anywhere
       const statusResponse = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 

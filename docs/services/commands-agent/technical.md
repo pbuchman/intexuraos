@@ -181,10 +181,10 @@ sequenceDiagram
 
 | Method | Path                   | Description                                   | Auth         |
 | ------ | ---------------------- | --------------------------------------------- | ------------ |
-| GET    | `/commands`            | List user's commands                          | Bearer token |
-| POST   | `/commands`            | Create command from web app                   | Bearer token |
-| DELETE | `/commands/:commandId` | Delete command (received/pending/failed only) | Bearer token |
-| PATCH  | `/commands/:commandId` | Archive classified command                    | Bearer token |
+| GET    | `/`            | List user's commands                          | Bearer token |
+| POST   | `/`            | Create command from web app                   | Bearer token |
+| DELETE | `/:commandId` | Delete command (received/pending/failed only) | Bearer token |
+| PATCH  | `/:commandId` | Archive classified command                    | Bearer token |
 
 ### Internal Endpoints
 
@@ -332,7 +332,7 @@ sequenceDiagram
 
 **Pub/Sub push authentication** — Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls. Pub/Sub requests are authenticated by Cloud Run OIDC validation before reaching the handler; direct calls use `X-Internal-Auth`.
 
-**Archive vs delete** — Classified commands can only be archived (`PATCH /commands/:commandId` with `status: "archived"`). Only commands with status `received`, `pending_classification`, or `failed` can be deleted.
+**Archive vs delete** — Classified commands can only be archived (`PATCH /:commandId` with `status: "archived"`). Only commands with status `received`, `pending_classification`, or `failed` can be deleted.
 
 **LLM usage tracking** — The user-service client is wired with `HttpInternalAuthUsageSink` from `llm-pricing`, which reports LLM usage to `llm-usage-service` for cost tracking. This replaced the previous startup pricing fetch from `app-settings-service` (removed in v3.6.0).
 
@@ -383,7 +383,7 @@ apps/commands-agent/src/
     actionsAgent/
       client.ts               # HTTP client for actions-agent
   routes/
-    commandsRoutes.ts         # Public endpoints (GET/POST/DELETE/PATCH /commands)
+    commandsRoutes.ts         # Public endpoints (GET/POST/DELETE/PATCH /)
     internalRoutes.ts         # Internal endpoints (/internal/*)
     helpers/
       internalAuth.ts         # PubSub OIDC and Cloud Scheduler auth strategies

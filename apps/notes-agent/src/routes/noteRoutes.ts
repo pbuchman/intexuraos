@@ -86,7 +86,7 @@ function formatNote(note: Note): object {
 
 export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
-    '/notes',
+    '/',
     {
       schema: {
         operationId: 'listNotes',
@@ -128,7 +128,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Body: CreateNoteBody }>(
-    '/notes',
+    '/',
     {
       schema: {
         operationId: 'createNote',
@@ -172,7 +172,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: NoteParams }>(
-    '/notes/:id',
+    '/:id',
     {
       schema: {
         operationId: 'getNote',
@@ -222,7 +222,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: NoteParams; Body: UpdateNoteBody }>(
-    '/notes/:id',
+    '/:id',
     {
       schema: {
         operationId: 'updateNote',
@@ -277,7 +277,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete<{ Params: NoteParams }>(
-    '/notes/:id',
+    '/:id',
     {
       schema: {
         operationId: 'deleteNote',

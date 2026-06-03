@@ -34,7 +34,7 @@ export async function sendVerificationCode(
 ): Promise<SendVerificationResponse> {
   return await apiRequest<SendVerificationResponse>(
     config.whatsappServiceUrl,
-    '/whatsapp/verify/send',
+    '/verify/send',
     accessToken,
     {
       method: 'POST',
@@ -49,7 +49,7 @@ export async function confirmVerificationCode(
 ): Promise<ConfirmVerificationResponse> {
   return await apiRequest<ConfirmVerificationResponse>(
     config.whatsappServiceUrl,
-    '/whatsapp/verify/confirm',
+    '/verify/confirm',
     accessToken,
     {
       method: 'POST',
@@ -65,7 +65,7 @@ export async function getVerificationStatus(
   const encodedPhone = encodeURIComponent(phoneNumber.replace(/^\+/, ''));
   return await apiRequest<VerificationStatusResponse>(
     config.whatsappServiceUrl,
-    `/whatsapp/verify/status/${encodedPhone}`,
+    `/verify/status/${encodedPhone}`,
     accessToken
   );
 }
@@ -73,7 +73,7 @@ export async function getVerificationStatus(
 export async function getWhatsAppStatus(accessToken: string): Promise<WhatsAppStatus | null> {
   return await apiRequest<WhatsAppStatus | null>(
     config.whatsappServiceUrl,
-    '/whatsapp/status',
+    '/status',
     accessToken
   );
 }
@@ -88,7 +88,7 @@ export async function connectWhatsApp(
 ): Promise<WhatsAppConnectResponse> {
   return await apiRequest<WhatsAppConnectResponse>(
     config.whatsappServiceUrl,
-    '/whatsapp/connect',
+    '/connect',
     accessToken,
     {
       method: 'POST',
@@ -100,7 +100,7 @@ export async function connectWhatsApp(
 export async function disconnectWhatsApp(accessToken: string): Promise<void> {
   await apiRequest<{ disconnected: boolean }>(
     config.whatsappServiceUrl,
-    '/whatsapp/disconnect',
+    '/disconnect',
     accessToken,
     { method: 'DELETE' }
   );
@@ -118,7 +118,7 @@ export async function getWhatsAppMessages(
     params.set('cursor', options.cursor);
   }
   const queryString = params.toString();
-  const path = queryString !== '' ? `/whatsapp/messages?${queryString}` : '/whatsapp/messages';
+  const path = queryString !== '' ? `/messages?${queryString}` : '/messages';
 
   return await apiRequest<WhatsAppMessagesResponse>(config.whatsappServiceUrl, path, accessToken);
 }
@@ -126,7 +126,7 @@ export async function getWhatsAppMessages(
 export async function deleteWhatsAppMessage(accessToken: string, messageId: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.whatsappServiceUrl,
-    `/whatsapp/messages/${messageId}`,
+    `/messages/${messageId}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -149,7 +149,7 @@ export async function getMessageMediaUrl(
 ): Promise<MediaUrlResponse> {
   return await apiRequest<MediaUrlResponse>(
     config.whatsappServiceUrl,
-    `/whatsapp/messages/${messageId}/media`,
+    `/messages/${messageId}/media`,
     accessToken
   );
 }
@@ -163,7 +163,7 @@ export async function getMessageThumbnailUrl(
 ): Promise<MediaUrlResponse> {
   return await apiRequest<MediaUrlResponse>(
     config.whatsappServiceUrl,
-    `/whatsapp/messages/${messageId}/thumbnail`,
+    `/messages/${messageId}/thumbnail`,
     accessToken
   );
 }

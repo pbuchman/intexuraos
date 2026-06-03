@@ -15,7 +15,7 @@ export interface StatusResponse {
 export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 /* v8 ignore stop @preserve */
   fastify.get(
-    '/mobile-notifications/status',
+    '/status',
     {
       schema: {
         operationId: 'getMobileNotificationsStatus',

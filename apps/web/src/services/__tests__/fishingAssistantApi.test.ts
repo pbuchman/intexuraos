@@ -54,7 +54,7 @@ describe('fishingAssistantApi', () => {
 
     expect(apiRequest).toHaveBeenCalledWith(
       'https://fishing-assistant.test',
-      '/fishing/digest-groups',
+      '/digest-groups',
       accessToken
     );
     expect(result).toEqual(groups);
@@ -84,7 +84,7 @@ describe('fishingAssistantApi', () => {
 
     expect(apiRequest).toHaveBeenCalledWith(
       'https://fishing-assistant.test',
-      '/fishing/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03',
+      '/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03',
       accessToken
     );
     expect(result).toEqual(response);
@@ -108,7 +108,7 @@ describe('fishingAssistantApi', () => {
 
     expect(apiRequest).toHaveBeenCalledWith(
       'https://fishing-assistant.test',
-      '/fishing/digests/feeder/2026-05-01',
+      '/digests/feeder/2026-05-01',
       accessToken
     );
     expect(result).toEqual(detail);
@@ -153,13 +153,13 @@ describe('fishingAssistantApi', () => {
     expect(apiRequest).toHaveBeenNthCalledWith(
       1,
       'https://fishing-assistant.test',
-      '/fishing/folders',
+      '/folders',
       accessToken
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       2,
       'https://fishing-assistant.test',
-      '/fishing/pages?folderId=folder-1',
+      '/pages?folderId=folder-1',
       accessToken
     );
     expect(folderResult).toEqual(folders);
@@ -433,14 +433,14 @@ describe('fishingAssistantApi', () => {
     expect(apiRequest).toHaveBeenNthCalledWith(
       1,
       'https://fishing-assistant.test',
-      '/fishing/folders',
+      '/folders',
       accessToken,
       { method: 'POST', body: { name: 'Recipes' } }
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       2,
       'https://fishing-assistant.test',
-      '/fishing/folders/folder-1',
+      '/folders/folder-1',
       accessToken,
       {
         method: 'PATCH',
@@ -450,41 +450,41 @@ describe('fishingAssistantApi', () => {
     expect(apiRequest).toHaveBeenNthCalledWith(
       3,
       'https://fishing-assistant.test',
-      '/fishing/folders/folder-1',
+      '/folders/folder-1',
       accessToken,
       { method: 'DELETE' }
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       4,
       'https://fishing-assistant.test',
-      '/fishing/pages',
+      '/pages',
       accessToken,
       { method: 'POST', body: { folderId: 'folder-1', rawText: 'raw' } }
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       5,
       'https://fishing-assistant.test',
-      '/fishing/pages/page-1',
+      '/pages/page-1',
       accessToken
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       6,
       'https://fishing-assistant.test',
-      '/fishing/pages/page-1',
+      '/pages/page-1',
       accessToken,
       { method: 'PATCH', body: { rawText: 'updated raw' } }
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       7,
       'https://fishing-assistant.test',
-      '/fishing/pages/page-1/reindex',
+      '/pages/page-1/reindex',
       accessToken,
       { method: 'POST' }
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       8,
       'https://fishing-assistant.test',
-      '/fishing/pages/page-1',
+      '/pages/page-1',
       accessToken,
       { method: 'DELETE' }
     );
@@ -549,26 +549,26 @@ describe('fishingAssistantApi', () => {
     expect(apiRequest).toHaveBeenNthCalledWith(
       1,
       'https://fishing-assistant.test',
-      '/fishing/chats',
+      '/chats',
       accessToken
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       2,
       'https://fishing-assistant.test',
-      '/fishing/chats',
+      '/chats',
       accessToken,
       { method: 'POST' }
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       3,
       'https://fishing-assistant.test',
-      '/fishing/chats/chat-1/messages',
+      '/chats/chat-1/messages',
       accessToken
     );
     expect(apiRequest).toHaveBeenNthCalledWith(
       4,
       'https://fishing-assistant.test',
-      '/fishing/chats/chat-1/messages',
+      '/chats/chat-1/messages',
       accessToken,
       { method: 'POST', body: { message: 'Use pinka?' } }
     );

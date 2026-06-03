@@ -54,7 +54,7 @@ const validStatuses: ActionStatus[] = [
 
 export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
-    '/actions',
+    '/',
     {
       schema: {
         operationId: 'listActions',
@@ -130,7 +130,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch(
-    '/actions/:actionId',
+    '/:actionId',
     {
       schema: {
         operationId: 'updateAction',
@@ -232,7 +232,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete(
-    '/actions/:actionId',
+    '/:actionId',
     {
       schema: {
         operationId: 'deleteAction',
@@ -305,7 +305,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // 💰 CostGuard: Batch endpoint prevents N+1 API calls
   // Fetches up to 50 actions in single request instead of 50 individual requests
   fastify.post(
-    '/actions/batch',
+    '/batch',
     {
       schema: {
         operationId: 'batchGetActions',
@@ -398,7 +398,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post(
-    '/actions/:actionId/execute',
+    '/:actionId/execute',
     {
       schema: {
         operationId: 'executeAction',
@@ -517,7 +517,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: { actionId: string } }>(
-    '/actions/:actionId/preview',
+    '/:actionId/preview',
     {
       schema: {
         operationId: 'getActionPreview',
@@ -632,7 +632,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: { actionId: string }; Body: { action: 'skip' | 'update' } }>(
-    '/actions/:actionId/resolve-duplicate',
+    '/:actionId/resolve-duplicate',
     {
       schema: {
         operationId: 'resolveDuplicateAction',

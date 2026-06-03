@@ -59,7 +59,7 @@ sequenceDiagram
     participant DraftGen as Draft Generator
     participant Firestore
 
-    User->>+API: POST /hellscript/impose
+    User->>+API: POST /impose
     API->>UserSvc: getLlmClient(userId)
     UserSvc-->>API: LlmGenerateClient
     API->>Firestore: Get buffer + state (single read)
@@ -121,21 +121,21 @@ Introduced in v3.4.0 (INT-1032). Major update in v3.5.0 with categorized writing
 
 | Method | Path                      | Purpose                                           | Auth   |
 | ------ | ------------------------- | ------------------------------------------------- | ------ |
-| POST   | `/hellscript/impose`      | Send an utterance to a buffer (creates if needed) | Bearer |
-| GET    | `/hellscript/buffers`     | List all buffers for the authenticated user       | Bearer |
-| GET    | `/hellscript/buffers/:id` | Get buffer workspace (events, drafts, state)      | Bearer |
+| POST   | `/impose`      | Send an utterance to a buffer (creates if needed) | Bearer |
+| GET    | `/buffers`     | List all buffers for the authenticated user       | Bearer |
+| GET    | `/buffers/:id` | Get buffer workspace (events, drafts, state)      | Bearer |
 
 ### Public Endpoints — Writing Configuration
 
 | Method | Path                                                     | Purpose                                      | Auth   |
 | ------ | -------------------------------------------------------- | -------------------------------------------- | ------ |
-| GET    | `/hellscript/writing-config`                             | Get style instructions for all categories    | Bearer |
-| PUT    | `/hellscript/writing-config/:category/style`             | Set style instructions for a category        | Bearer |
-| DELETE | `/hellscript/writing-config/:category/style`             | Clear style instructions for a category      | Bearer |
-| GET    | `/hellscript/writing-config/:category/samples`           | List writing samples for a category          | Bearer |
-| POST   | `/hellscript/writing-config/:category/samples`           | Create a writing sample (max 5 per category) | Bearer |
-| PUT    | `/hellscript/writing-config/:category/samples/:sampleId` | Update a writing sample                      | Bearer |
-| DELETE | `/hellscript/writing-config/:category/samples/:sampleId` | Delete a writing sample                      | Bearer |
+| GET    | `/writing-config`                             | Get style instructions for all categories    | Bearer |
+| PUT    | `/writing-config/:category/style`             | Set style instructions for a category        | Bearer |
+| DELETE | `/writing-config/:category/style`             | Clear style instructions for a category      | Bearer |
+| GET    | `/writing-config/:category/samples`           | List writing samples for a category          | Bearer |
+| POST   | `/writing-config/:category/samples`           | Create a writing sample (max 5 per category) | Bearer |
+| PUT    | `/writing-config/:category/samples/:sampleId` | Update a writing sample                      | Bearer |
+| DELETE | `/writing-config/:category/samples/:sampleId` | Delete a writing sample                      | Bearer |
 
 ### System Endpoints
 

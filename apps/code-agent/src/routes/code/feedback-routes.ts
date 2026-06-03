@@ -247,7 +247,7 @@ export const feedbackRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
 
     // POST /code/tasks/:taskId/feedback - Submit feedback on completed task (INT-465 Phase 4)
     fastify.post(
-      '/code/tasks/:taskId/feedback',
+      '/tasks/:taskId/feedback',
       {
         schema: {
           operationId: 'submitTaskFeedback',
@@ -454,7 +454,7 @@ export const feedbackRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
       Params: { taskId: string };
       Body: { message: string };
     }>(
-      '/code/tasks/:taskId/messages',
+      '/tasks/:taskId/messages',
       {
         schema: {
           operationId: 'sendTaskMessage',

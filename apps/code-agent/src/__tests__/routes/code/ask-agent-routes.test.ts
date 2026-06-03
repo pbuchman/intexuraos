@@ -21,8 +21,8 @@ describe('askAgentRoutes plugin', () => {
     await app.register(askAgentRoutes, { jwtValidator: async () => undefined });
     await app.ready();
 
-    expect(app.hasRoute({ method: 'POST', url: '/code/ask-agent/start' })).toBe(true);
-    expect(app.hasRoute({ method: 'GET', url: '/code/ask-agent/active' })).toBe(true);
+    expect(app.hasRoute({ method: 'POST', url: '/ask-agent/start' })).toBe(true);
+    expect(app.hasRoute({ method: 'GET', url: '/ask-agent/active' })).toBe(true);
 
     await app.close();
   });

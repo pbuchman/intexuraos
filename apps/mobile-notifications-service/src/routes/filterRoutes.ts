@@ -61,7 +61,7 @@ const filtersDataSchema = {
 export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /notifications/filters
   fastify.get(
-    '/notifications/filters',
+    '/filters',
     {
       schema: {
         operationId: 'getNotificationFilters',
@@ -129,7 +129,7 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /notifications/filters/saved
   fastify.post<{ Body: CreateSavedFilterBody }>(
-    '/notifications/filters/saved',
+    '/filters/saved',
     {
       schema: {
         operationId: 'createSavedNotificationFilter',
@@ -223,7 +223,7 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // DELETE /notifications/filters/saved/:id
   fastify.delete<{ Params: DeleteSavedFilterParams }>(
-    '/notifications/filters/saved/:id',
+    '/filters/saved/:id',
     {
       schema: {
         operationId: 'deleteSavedNotificationFilter',

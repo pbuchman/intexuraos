@@ -16,7 +16,7 @@ function parseFolderBody(body: unknown): FolderBody {
 }
 
 export function registerFoldersRoutes(app: FastifyInstance): void {
-  app.get('/fishing/folders', async (request, reply) => {
+  app.get('/folders', async (request, reply) => {
     logIncomingRequest(request);
     return await withAuth(request, reply, async (user) => {
       const result = await getServices().repositories.folderRepository.listByUserId(user.userId);
@@ -25,7 +25,7 @@ export function registerFoldersRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.post('/fishing/folders', async (request, reply) => {
+  app.post('/folders', async (request, reply) => {
     logIncomingRequest(request);
     return await withAuth(request, reply, async (user) => {
       const body = parseFolderBody(request.body);
@@ -45,7 +45,7 @@ export function registerFoldersRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.patch('/fishing/folders/:folderId', async (request, reply) => {
+  app.patch('/folders/:folderId', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { folderId: string };
@@ -66,7 +66,7 @@ export function registerFoldersRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.delete('/fishing/folders/:folderId', async (request, reply) => {
+  app.delete('/folders/:folderId', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { folderId: string };

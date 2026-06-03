@@ -39,7 +39,7 @@ Features that are planned but not yet implemented:
 3. **Reading list queue** — Track read/unread status with time estimates
 4. **Summary regeneration** — Re-run AI summary on demand (currently only OG refresh via force-refresh)
 5. **Configurable WhatsApp notifications** — User preference to enable/disable summary delivery (currently always sent as important)
-6. **Public API enrichment trigger** — Allow enrichment from the public `POST /bookmarks` endpoint (currently only internal create triggers it)
+6. **Public API enrichment trigger** — Allow enrichment from the public `POST /` endpoint (currently only internal create triggers it)
 
 ---
 
@@ -153,7 +153,7 @@ The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub t
 
 ### Enrichment Asymmetry
 
-The public `POST /bookmarks` endpoint does not trigger enrichment — only the internal `POST /internal/bookmarks` does. This means bookmarks created directly by end users via the public API will remain in `ogFetchStatus: pending` unless manually force-refreshed or enriched through another mechanism. This is by design because the public endpoint is currently only used by the web dashboard, which has its own enrichment trigger.
+The public `POST /` endpoint does not trigger enrichment — only the internal `POST /internal/bookmarks` does. This means bookmarks created directly by end users via the public API will remain in `ogFetchStatus: pending` unless manually force-refreshed or enriched through another mechanism. This is by design because the public endpoint is currently only used by the web dashboard, which has its own enrichment trigger.
 
 ---
 

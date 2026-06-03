@@ -66,7 +66,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks',
+        '/tasks',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -80,7 +80,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?status=running',
+        '/tasks?status=running',
         mockAccessToken
       );
     });
@@ -93,7 +93,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?status=running%2Cfailed',
+        '/tasks?status=running%2Cfailed',
         mockAccessToken
       );
     });
@@ -106,7 +106,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks',
+        '/tasks',
         mockAccessToken
       );
     });
@@ -119,7 +119,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?limit=10',
+        '/tasks?limit=10',
         mockAccessToken
       );
     });
@@ -132,7 +132,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?cursor=abc123',
+        '/tasks?cursor=abc123',
         mockAccessToken
       );
     });
@@ -145,7 +145,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?status=completed&limit=5&cursor=xyz789',
+        '/tasks?status=completed&limit=5&cursor=xyz789',
         mockAccessToken
       );
     });
@@ -160,7 +160,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-123',
+        '/tasks/task-123',
         mockAccessToken
       );
       expect(result).toEqual(mockTask);
@@ -183,7 +183,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log?limit=25&cursor=2026-03-12T09%3A00%3A00.000Z',
+        '/github-event-log?limit=25&cursor=2026-03-12T09%3A00%3A00.000Z',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -205,7 +205,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log/rows',
+        '/github-event-log/rows',
         mockAccessToken,
         {
           method: 'POST',
@@ -226,7 +226,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log/delivery-abc/payload',
+        '/github-event-log/delivery-abc/payload',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -240,7 +240,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log/id%2Fwith%20special/payload',
+        '/github-event-log/id%2Fwith%20special/payload',
         mockAccessToken
       );
     });
@@ -256,7 +256,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/submit',
+        '/submit',
         mockAccessToken,
         {
           method: 'POST',
@@ -282,7 +282,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/submit',
+        '/submit',
         mockAccessToken,
         {
           method: 'POST',
@@ -306,7 +306,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/submit',
+        '/submit',
         mockAccessToken,
         {
           method: 'POST',
@@ -339,7 +339,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/cancel',
+        '/cancel',
         mockAccessToken,
         {
           method: 'POST',
@@ -359,7 +359,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-123',
+        '/tasks/task-123',
         mockAccessToken,
         { method: 'DELETE' }
       );
@@ -376,7 +376,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-123/implement',
+        '/tasks/task-123/implement',
         mockAccessToken,
         {
           method: 'POST',
@@ -395,7 +395,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-456/implement',
+        '/tasks/task-456/implement',
         mockAccessToken,
         {
           method: 'POST',
@@ -422,7 +422,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/workers/status',
+        '/workers/status',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -445,7 +445,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/queue',
+        '/queue',
         mockAccessToken
       );
       expect(result).toEqual(mockQueueData);

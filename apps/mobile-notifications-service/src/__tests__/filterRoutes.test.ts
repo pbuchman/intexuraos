@@ -73,7 +73,7 @@ describe('Filter Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/notifications/filters',
+        url: '/filters',
       });
 
       expect(response.statusCode).toBe(401);
@@ -85,7 +85,7 @@ describe('Filter Routes', () => {
     it('returns empty filters for new user', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/notifications/filters',
+        url: '/filters',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -110,7 +110,7 @@ describe('Filter Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/notifications/filters',
+        url: '/filters',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -136,7 +136,7 @@ describe('Filter Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/notifications/filters',
+        url: '/filters',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -150,7 +150,7 @@ describe('Filter Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/notifications/filters/saved',
+        url: '/filters/saved',
         payload: { name: 'Test Filter' },
       });
 
@@ -160,7 +160,7 @@ describe('Filter Routes', () => {
     it('creates saved filter with name only', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/notifications/filters/saved',
+        url: '/filters/saved',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -181,7 +181,7 @@ describe('Filter Routes', () => {
     it('creates saved filter with all optional fields', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/notifications/filters/saved',
+        url: '/filters/saved',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -216,7 +216,7 @@ describe('Filter Routes', () => {
     it('returns 400 when name is missing', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/notifications/filters/saved',
+        url: '/filters/saved',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -231,7 +231,7 @@ describe('Filter Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/notifications/filters/saved',
+        url: '/filters/saved',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -246,7 +246,7 @@ describe('Filter Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/notifications/filters/saved/filter-123',
+        url: '/filters/saved/filter-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -260,7 +260,7 @@ describe('Filter Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/notifications/filters/saved/${filterId}`,
+        url: `/filters/saved/${filterId}`,
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -272,7 +272,7 @@ describe('Filter Routes', () => {
     it('returns 404 when filter not found', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/notifications/filters/saved/nonexistent-filter-id',
+        url: '/filters/saved/nonexistent-filter-id',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
@@ -290,7 +290,7 @@ describe('Filter Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/notifications/filters/saved/some-filter-id',
+        url: '/filters/saved/some-filter-id',
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },

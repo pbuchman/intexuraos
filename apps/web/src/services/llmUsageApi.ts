@@ -15,7 +15,7 @@ export async function listLlmUsageEvents(
 ): Promise<ListLlmUsageEventsResponse> {
   return await apiRequest<ListLlmUsageEventsResponse>(
     config.llmUsageServiceUrl,
-    '/llm-usage/events/list',
+    '/events/list',
     accessToken,
     { method: 'POST', body: request }
   );
@@ -27,7 +27,7 @@ export async function getLlmUsageEvent(
 ): Promise<GetUsageEventResponse> {
   return await apiRequest<GetUsageEventResponse>(
     config.llmUsageServiceUrl,
-    `/llm-usage/events/${encodeURIComponent(eventId)}`,
+    `/events/${encodeURIComponent(eventId)}`,
     accessToken
   );
 }
@@ -38,7 +38,7 @@ export async function queryLlmUsage(
 ): Promise<LlmUsageQueryResponse> {
   return await apiRequest<LlmUsageQueryResponse>(
     config.llmUsageServiceUrl,
-    '/llm-usage/query',
+    '/query',
     accessToken,
     { method: 'POST', body: request }
   );
@@ -47,7 +47,7 @@ export async function queryLlmUsage(
 export async function getLlmPricing(accessToken: string): Promise<AllProvidersPricing> {
   return await apiRequest<AllProvidersPricing>(
     config.llmUsageServiceUrl,
-    '/llm-usage/pricing',
+    '/pricing',
     accessToken
   );
 }

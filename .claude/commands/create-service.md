@@ -85,11 +85,11 @@ If you see domain importing from infra, define a port interface in domain and in
 
 When creating routes for your service:
 
-- **Public routes:** `/{resource-name}` (e.g., `/todos`, `/bookmarks/:id`)
+- **Public routes:** relative to the service mount; do not repeat the mounted resource segment. Use `/` and `/:id` for collection resources, or subresources such as `/messages`, `/schedules/:id`, and `/webhooks`.
 - **Internal routes:** `/internal/{resource-name}` (e.g., `/internal/todos`, `/internal/bookmarks/:id`)
 - **HTTP methods:** Use `PATCH` for partial updates, `PUT` for full replacement
 
-Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/todos`.
+Avoid redundant paths like `/todos/todos` or `/internal/todos/todos` — use `/` for the public collection route and `/internal/todos` for internal routes.
 
 ### 2. Create package.json
 

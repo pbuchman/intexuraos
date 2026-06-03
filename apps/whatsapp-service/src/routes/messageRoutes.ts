@@ -14,7 +14,7 @@ interface ListQuerystring {
 export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /whatsapp/messages — list user's messages
   fastify.get<{ Querystring: ListQuerystring }>(
-    '/whatsapp/messages',
+    '/messages',
     {
       schema: {
         operationId: 'getWhatsAppMessages',

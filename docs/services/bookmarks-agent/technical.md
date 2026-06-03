@@ -121,13 +121,13 @@ sequenceDiagram
 
 | Method | Path                       | Description                        | Auth         |
 | ------ | -------------------------- | ---------------------------------- | ------------ |
-| GET    | `/bookmarks`               | List user's bookmarks (filterable) | Bearer token |
-| POST   | `/bookmarks`               | Create new bookmark                | Bearer token |
-| GET    | `/bookmarks/:id`           | Get specific bookmark              | Bearer token |
-| PATCH  | `/bookmarks/:id`           | Update bookmark                    | Bearer token |
-| DELETE | `/bookmarks/:id`           | Delete bookmark                    | Bearer token |
-| POST   | `/bookmarks/:id/archive`   | Archive a bookmark                 | Bearer token |
-| POST   | `/bookmarks/:id/unarchive` | Unarchive a bookmark               | Bearer token |
+| GET    | `/`               | List user's bookmarks (filterable) | Bearer token |
+| POST   | `/`               | Create new bookmark                | Bearer token |
+| GET    | `/:id`           | Get specific bookmark              | Bearer token |
+| PATCH  | `/:id`           | Update bookmark                    | Bearer token |
+| DELETE | `/:id`           | Delete bookmark                    | Bearer token |
+| POST   | `/:id/archive`   | Archive a bookmark                 | Bearer token |
+| POST   | `/:id/unarchive` | Unarchive a bookmark               | Bearer token |
 | GET    | `/images/proxy`            | Proxy external images (no auth)    | None         |
 
 ### Internal Endpoints
@@ -310,7 +310,7 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 ## Gotchas
 
 - **Enrichment is async** — `POST /internal/bookmarks` returns immediately with `{ id, url, bookmark }` where `url` is the app deep link (`/#/bookmarks/{id}`); OG data and AI summary populate later via Pub/Sub
-- **Enrichment only triggers on internal create** — The public `POST /bookmarks` endpoint does NOT trigger the enrichment pipeline; only `POST /internal/bookmarks` publishes the `bookmarks.enrich` event (via `enrichPublisher` dependency on `createBookmark`)
+- **Enrichment only triggers on internal create** — The public `POST /` endpoint does NOT trigger the enrichment pipeline; only `POST /internal/bookmarks` publishes the `bookmarks.enrich` event (via `enrichPublisher` dependency on `createBookmark`)
 - **Duplicate detection by userId+url** — Same URL can exist for different users
 - **OG fetch can fail** — Some sites block scrapers; status will be `failed`
 - **WhatsApp delivery is fire-and-forget** — If Pub/Sub publish fails, no retry for WhatsApp notification (summary is still saved)

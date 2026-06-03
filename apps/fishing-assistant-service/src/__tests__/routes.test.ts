@@ -30,14 +30,14 @@ describe('fishing assistant routes', () => {
     it('logs the incoming status request', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/fishing-assistant/status',
+        url: '/status',
       });
 
       expect(response.statusCode).toBe(200);
       expect(logIncomingRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           method: 'GET',
-          url: '/fishing-assistant/status',
+          url: '/status',
         }),
         { message: 'Received Fishing Assistant status request' }
       );

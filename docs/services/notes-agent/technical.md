@@ -95,11 +95,11 @@ sequenceDiagram
 
 | Method | Path         | Description        | Auth         | Request Body                                 | Response     |
 | ------ | ------------ | ------------------ | ------------ | -------------------------------------------- | ------------ |
-| GET    | `/notes`     | List user's notes  | Bearer token | —                                            | `Note[]`     |
-| POST   | `/notes`     | Create new note    | Bearer token | `{ title, content, tags, source, sourceId }` | `Note` (201) |
-| GET    | `/notes/:id` | Get specific note  | Bearer token | —                                            | `Note`       |
-| PATCH  | `/notes/:id` | Update note fields | Bearer token | `{ title?, content?, tags? }`                | `Note`       |
-| DELETE | `/notes/:id` | Delete note        | Bearer token | —                                            | `{}`         |
+| GET    | `/`     | List user's notes  | Bearer token | —                                            | `Note[]`     |
+| POST   | `/`     | Create new note    | Bearer token | `{ title, content, tags, source, sourceId }` | `Note` (201) |
+| GET    | `/:id` | Get specific note  | Bearer token | —                                            | `Note`       |
+| PATCH  | `/:id` | Update note fields | Bearer token | `{ title?, content?, tags? }`                | `Note`       |
+| DELETE | `/:id` | Delete note        | Bearer token | —                                            | `{}`         |
 
 **Note:** The public note response does **not** include the `status` field. Status is stored in Firestore but is intentionally omitted from the serialized response (`formatNote` excludes it).
 

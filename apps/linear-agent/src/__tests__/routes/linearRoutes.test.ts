@@ -41,7 +41,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/connection',
+        url: '/connection',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -56,7 +56,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/connection',
+        url: '/connection',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -69,7 +69,7 @@ describe('linearRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/connection',
+        url: '/connection',
       });
 
       expect(response.statusCode).toBe(401);
@@ -84,7 +84,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/connection',
+        url: '/connection',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -104,7 +104,7 @@ describe('linearRoutes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/connection/validate',
+        url: '/connection/validate',
         headers: { 'content-type': 'application/json' },
         payload: { apiKey: 'valid-api-key' },
       });
@@ -119,7 +119,7 @@ describe('linearRoutes', () => {
     it('returns 401 for invalid API key', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/connection/validate',
+        url: '/connection/validate',
         headers: { 'content-type': 'application/json' },
         payload: { apiKey: 'invalid' },
       });
@@ -135,7 +135,7 @@ describe('linearRoutes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/connection/validate',
+        url: '/connection/validate',
         headers: { 'content-type': 'application/json' },
         payload: { apiKey: 'valid-api-key' },
       });
@@ -150,7 +150,7 @@ describe('linearRoutes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/connection/validate',
+        url: '/connection/validate',
         headers: { 'content-type': 'application/json' },
         payload: { apiKey: 'valid-api-key' },
       });
@@ -166,7 +166,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/connection',
+        url: '/connection',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -189,7 +189,7 @@ describe('linearRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/connection',
+        url: '/connection',
         headers: { 'content-type': 'application/json' },
         payload: {
           apiKey: 'api-key',
@@ -211,7 +211,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/connection',
+        url: '/connection',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -238,7 +238,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/linear/connection',
+        url: '/connection',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -251,7 +251,7 @@ describe('linearRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/linear/connection',
+        url: '/connection',
       });
 
       expect(response.statusCode).toBe(401);
@@ -267,7 +267,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/linear/connection',
+        url: '/connection',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -304,7 +304,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues',
+        url: '/issues',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -320,7 +320,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues',
+        url: '/issues',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -332,7 +332,7 @@ describe('linearRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues',
+        url: '/issues',
       });
 
       expect(response.statusCode).toBe(401);
@@ -366,7 +366,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues?includeArchive=false',
+        url: '/issues?includeArchive=false',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -385,7 +385,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues',
+        url: '/issues',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -411,7 +411,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/failed-issues',
+        url: '/failed-issues',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -427,7 +427,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/failed-issues',
+        url: '/failed-issues',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -460,7 +460,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/failed-issues',
+        url: '/failed-issues',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -473,7 +473,7 @@ describe('linearRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/failed-issues',
+        url: '/failed-issues',
       });
 
       expect(response.statusCode).toBe(401);
@@ -488,7 +488,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/failed-issues',
+        url: '/failed-issues',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -516,7 +516,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/linear/failed-issues/${createResult.value.id}`,
+        url: `/failed-issues/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -533,7 +533,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/linear/failed-issues/nonexistent-id',
+        url: '/failed-issues/nonexistent-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -559,7 +559,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/linear/failed-issues/${createResult.value.id}`,
+        url: `/failed-issues/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -572,7 +572,7 @@ describe('linearRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/linear/failed-issues/some-id',
+        url: '/failed-issues/some-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -596,7 +596,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/linear/failed-issues/${createResult.value.id}`,
+        url: `/failed-issues/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -624,7 +624,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/linear/failed-issues/${createResult.value.id}`,
+        url: `/failed-issues/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -653,7 +653,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -693,7 +693,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -734,7 +734,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -775,7 +775,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -800,7 +800,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/failed-issues/nonexistent-id/retry',
+        url: '/failed-issues/nonexistent-id/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -827,7 +827,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -840,7 +840,7 @@ describe('linearRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/linear/failed-issues/some-id/retry',
+        url: '/failed-issues/some-id/retry',
       });
 
       expect(response.statusCode).toBe(401);
@@ -863,7 +863,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -895,7 +895,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -913,7 +913,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'GET',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -934,7 +934,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'GET',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -948,7 +948,7 @@ describe('linearRoutes', () => {
       it('returns 401 when no auth token provided', async () => {
         const response = await ctx.app.inject({
           method: 'GET',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
         });
 
         expect(response.statusCode).toBe(401);
@@ -958,7 +958,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'GET',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -977,7 +977,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'GET',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -992,7 +992,7 @@ describe('linearRoutes', () => {
       it('returns 401 when no auth token provided', async () => {
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           payload: { secret: 'my-secret' },
         });
 
@@ -1005,7 +1005,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
           payload: { secret: 'new-webhook-secret' },
         });
@@ -1028,7 +1028,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
           payload: { secret: '' },
         });
@@ -1044,7 +1044,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
           payload: { secret: '   ' },
         });
@@ -1059,7 +1059,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
           payload: { secret: 'my-secret' },
         });
@@ -1077,7 +1077,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
           payload: { secret: 'new-secret' },
         });
@@ -1100,7 +1100,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
           payload: { secret: 'my-secret' },
         });
@@ -1121,7 +1121,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'POST',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
           payload: { secret: 'my-secret' },
         });
@@ -1137,7 +1137,7 @@ describe('linearRoutes', () => {
       it('returns 401 when no auth token provided', async () => {
         const response = await ctx.app.inject({
           method: 'DELETE',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
         });
 
         expect(response.statusCode).toBe(401);
@@ -1150,7 +1150,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'DELETE',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -1170,7 +1170,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'DELETE',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -1191,7 +1191,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'DELETE',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -1212,7 +1212,7 @@ describe('linearRoutes', () => {
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
           method: 'DELETE',
-          url: '/linear/webhook-config',
+          url: '/webhook-config',
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -1249,7 +1249,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123',
+        url: '/issues/ENG-123',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1292,7 +1292,7 @@ describe('linearRoutes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123',
+        url: '/issues/ENG-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1302,7 +1302,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-999',
+        url: '/issues/ENG-999',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1336,7 +1336,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123',
+        url: '/issues/ENG-123',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1352,7 +1352,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123',
+        url: '/issues/ENG-123',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1386,7 +1386,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123',
+        url: '/issues/ENG-123',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1444,7 +1444,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123',
+        url: '/issues/ENG-123',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1479,7 +1479,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123',
+        url: '/issues/ENG-123',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1539,7 +1539,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments',
+        url: '/issues/ENG-123/comments',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1577,7 +1577,7 @@ describe('linearRoutes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments',
+        url: '/issues/ENG-123/comments',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1587,7 +1587,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-999/comments',
+        url: '/issues/ENG-999/comments',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1621,7 +1621,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments',
+        url: '/issues/ENG-123/comments',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1637,7 +1637,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments',
+        url: '/issues/ENG-123/comments',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1672,7 +1672,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments',
+        url: '/issues/ENG-123/comments',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1707,7 +1707,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments',
+        url: '/issues/ENG-123/comments',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1755,7 +1755,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments?limit=2',
+        url: '/issues/ENG-123/comments?limit=2',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1805,7 +1805,7 @@ describe('linearRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments?offset=3',
+        url: '/issues/ENG-123/comments?offset=3',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1856,7 +1856,7 @@ describe('linearRoutes', () => {
       // offset=5 equals total=5, should return empty array
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments?offset=5',
+        url: '/issues/ENG-123/comments?offset=5',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1908,7 +1908,7 @@ describe('linearRoutes', () => {
       // offset=10 exceeds total=5, should return empty array
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/linear/issues/ENG-123/comments?offset=10',
+        url: '/issues/ENG-123/comments?offset=10',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2009,7 +2009,7 @@ describe('linearRoutes logging coverage', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await loggingApp.inject({
         method: 'DELETE',
-        url: `/linear/failed-issues/${createResult.value.id}`,
+        url: `/failed-issues/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2035,7 +2035,7 @@ describe('linearRoutes logging coverage', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await loggingApp.inject({
         method: 'DELETE',
-        url: `/linear/failed-issues/${createResult.value.id}`,
+        url: `/failed-issues/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2063,7 +2063,7 @@ describe('linearRoutes logging coverage', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await loggingApp.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2091,7 +2091,7 @@ describe('linearRoutes logging coverage', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await loggingApp.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2118,7 +2118,7 @@ describe('linearRoutes logging coverage', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await loggingApp.inject({
         method: 'POST',
-        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        url: `/failed-issues/${createResult.value.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2131,7 +2131,7 @@ describe('linearRoutes logging coverage', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await loggingApp.inject({
         method: 'POST',
-        url: '/linear/sync',
+        url: '/sync',
       });
 
       expect(response.statusCode).toBe(401);
@@ -2143,7 +2143,7 @@ describe('linearRoutes logging coverage', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await loggingApp.inject({
         method: 'POST',
-        url: '/linear/sync',
+        url: '/sync',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2163,7 +2163,7 @@ describe('linearRoutes logging coverage', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await loggingApp.inject({
         method: 'POST',
-        url: '/linear/sync',
+        url: '/sync',
         headers: { authorization: `Bearer ${token}` },
       });
 

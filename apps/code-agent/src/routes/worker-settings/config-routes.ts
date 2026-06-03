@@ -32,7 +32,7 @@ interface DefaultWorkerTypeRoute {
 
 const DEFAULT_WORKER_TYPE_ROUTES: readonly DefaultWorkerTypeRoute[] = [
   {
-    path: '/code/worker-settings/default-review-worker-type',
+    path: '/worker-settings/default-review-worker-type',
     operationId: 'updateDefaultReviewWorkerType',
     summary: 'Update default review worker type',
     description: 'Set the default worker type for automated PR reviews. Requires Auth0 JWT.',
@@ -40,7 +40,7 @@ const DEFAULT_WORKER_TYPE_ROUTES: readonly DefaultWorkerTypeRoute[] = [
     label: 'review',
   },
   {
-    path: '/code/worker-settings/default-remediation-worker-type',
+    path: '/worker-settings/default-remediation-worker-type',
     operationId: 'updateDefaultRemediationWorkerType',
     summary: 'Update default remediation worker type',
     description: 'Set the default worker type for automated remediations. Requires Auth0 JWT.',
@@ -48,7 +48,7 @@ const DEFAULT_WORKER_TYPE_ROUTES: readonly DefaultWorkerTypeRoute[] = [
     label: 'remediation',
   },
   {
-    path: '/code/worker-settings/default-execution-worker-type',
+    path: '/worker-settings/default-execution-worker-type',
     operationId: 'updateDefaultExecutionWorkerType',
     summary: 'Update default execution worker type',
     description: 'Set the default worker type for code execution tasks. Requires Auth0 JWT.',
@@ -56,7 +56,7 @@ const DEFAULT_WORKER_TYPE_ROUTES: readonly DefaultWorkerTypeRoute[] = [
     label: 'execution',
   },
   {
-    path: '/code/worker-settings/default-planning-worker-type',
+    path: '/worker-settings/default-planning-worker-type',
     operationId: 'updateDefaultPlanningWorkerType',
     summary: 'Update default planning worker type',
     description: 'Set the default worker type for planning tasks. Requires Auth0 JWT.',
@@ -64,7 +64,7 @@ const DEFAULT_WORKER_TYPE_ROUTES: readonly DefaultWorkerTypeRoute[] = [
     label: 'planning',
   },
   {
-    path: '/code/worker-settings/default-pull-request-worker-type',
+    path: '/worker-settings/default-pull-request-worker-type',
     operationId: 'updateDefaultPullRequestWorkerType',
     summary: 'Update default pull request worker type',
     description: 'Set the default worker type for pull request tasks. Requires Auth0 JWT.',

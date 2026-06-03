@@ -95,10 +95,10 @@ sequenceDiagram
 
 | Method | Path                         | Purpose                        |
 | ------ | ---------------------------- | ------------------------------ |
-| POST   | `/llm-usage/events/list`     | List usage events (paginated)  |
-| GET    | `/llm-usage/events/:eventId` | Get a single usage event by ID |
-| POST   | `/llm-usage/query`           | Query aggregated usage data    |
-| GET    | `/llm-usage/pricing`         | Get all LLM pricing            |
+| POST   | `/events/list`     | List usage events (paginated)  |
+| GET    | `/events/:eventId` | Get a single usage event by ID |
+| POST   | `/query`           | Query aggregated usage data    |
+| GET    | `/pricing`         | Get all LLM pricing            |
 
 ### Internal Endpoints (X-Internal-Auth)
 

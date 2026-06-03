@@ -257,7 +257,7 @@ describe('GET /code/github-pr-events', () => {
   it('should return 401 without auth token', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo',
+      url: '/github-pr-events?repository=intexuraos/test-repo',
     });
 
     expect(response.statusCode).toBe(401);
@@ -319,7 +319,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events',
+      url: '/github-pr-events',
       headers: {
         authorization: 'Bearer fake-token',
       },
@@ -334,7 +334,7 @@ describe('GET /code/github-pr-events', () => {
   it('should return 400 for invalid repository format', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=invalid-format',
+      url: '/github-pr-events?repository=invalid-format',
       headers: {
         authorization: 'Bearer fake-token',
       },
@@ -349,7 +349,7 @@ describe('GET /code/github-pr-events', () => {
   it('should return 200 with empty array when no events found', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo',
+      url: '/github-pr-events?repository=intexuraos/test-repo',
       headers: {
         authorization: 'Bearer fake-token',
       },
@@ -395,7 +395,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo',
+      url: '/github-pr-events?repository=intexuraos/test-repo',
       headers: {
         authorization: 'Bearer fake-token',
       },
@@ -441,7 +441,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -454,7 +454,7 @@ describe('GET /code/github-pr-events', () => {
   it('should pass limit parameter to repository', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&limit=25',
+      url: '/github-pr-events?repository=intexuraos/test-repo&limit=25',
       headers: {
         authorization: 'Bearer fake-token',
       },
@@ -469,7 +469,7 @@ describe('GET /code/github-pr-events', () => {
   it('should default to limit of 50 when not specified', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo',
+      url: '/github-pr-events?repository=intexuraos/test-repo',
       headers: {
         authorization: 'Bearer fake-token',
       },
@@ -488,7 +488,7 @@ describe('GET /code/github-pr-events', () => {
     // The error handling path is covered by the repository's own tests
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo',
+      url: '/github-pr-events?repository=intexuraos/test-repo',
       headers: {
         authorization: 'Bearer fake-token',
       },
@@ -551,7 +551,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -566,7 +566,7 @@ describe('GET /code/github-pr-events', () => {
   it('should return 400 when pullRequestNumber is provided without repository', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?pullRequestNumber=5',
+      url: '/github-pr-events?pullRequestNumber=5',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -678,7 +678,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=7',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=7',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -756,7 +756,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=8',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=8',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -871,7 +871,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -943,7 +943,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=11',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=11',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -987,7 +987,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=12',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=12',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -1011,7 +1011,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -1051,7 +1051,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=99',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=99',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -1090,7 +1090,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=100',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=100',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -1129,7 +1129,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=101',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=101',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -1172,7 +1172,7 @@ describe('GET /code/github-pr-events', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=102',
+      url: '/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=102',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -1195,7 +1195,7 @@ describe('GET /code/github-pr-events', () => {
     // Request without repository filter triggers findAll()
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-events',
+      url: '/github-pr-events',
       headers: { authorization: 'Bearer fake-token' },
     });
 

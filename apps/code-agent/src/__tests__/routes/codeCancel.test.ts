@@ -253,7 +253,7 @@ describe('POST /code/cancel', () => {
     it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         payload: {
           taskId: 'task-123',
         },
@@ -273,7 +273,7 @@ describe('POST /code/cancel', () => {
     it('returns 401 with invalid X-Internal-Auth header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           'x-internal-auth': 'invalid-token',
         },
@@ -290,7 +290,7 @@ describe('POST /code/cancel', () => {
     it('returns 404 for non-existent task', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -329,7 +329,7 @@ describe('POST /code/cancel', () => {
       // Try to cancel as unknown-user
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -369,7 +369,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -407,7 +407,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -445,7 +445,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -483,7 +483,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -534,7 +534,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -579,7 +579,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -626,7 +626,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -672,7 +672,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },

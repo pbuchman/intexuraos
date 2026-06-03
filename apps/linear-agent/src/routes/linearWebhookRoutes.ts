@@ -211,7 +211,7 @@ const webhookSchema: FastifySchema = {
 
 export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: LinearWebhookBody }>(
-    '/linear/webhook',
+    '/webhook',
     {
       schema: webhookSchema,
       // Configure raw body parser for signature validation

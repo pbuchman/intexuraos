@@ -193,7 +193,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 **Resolved in:** INT-867 (34fde5eeb, 2026-03-15)
 
-**Previous issue:** Owner auth checks (returning 404 when command belongs to different user) and status validation in `DELETE /commands/:commandId` and `PATCH /commands/:commandId` were not covered by tests.
+**Previous issue:** Owner auth checks (returning 404 when command belongs to different user) and status validation in `DELETE /:commandId` and `PATCH /:commandId` were not covered by tests.
 
 **Solution:** Added dedicated test cases for owner auth enforcement and status-based restrictions on delete and archive operations.
 

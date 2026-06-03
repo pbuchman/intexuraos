@@ -34,7 +34,7 @@ export const workerOpsRoutes: FastifyPluginCallback<WorkerOpsRoutesOptions> = (
   fastify.post<{
     Params: { name: string };
   }>(
-    '/code/worker-settings/workers/:name/test',
+    '/worker-settings/workers/:name/test',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
@@ -170,7 +170,7 @@ export const workerOpsRoutes: FastifyPluginCallback<WorkerOpsRoutesOptions> = (
   fastify.put<{
     Body: { workerNames: string[] };
   }>(
-    '/code/worker-settings/priority',
+    '/worker-settings/priority',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,

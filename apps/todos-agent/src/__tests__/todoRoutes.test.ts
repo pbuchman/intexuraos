@@ -9,7 +9,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -31,7 +31,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -53,7 +53,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos?status=completed',
+        url: '/?status=completed',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -65,7 +65,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos',
+        url: '/',
       });
 
       expect(response.statusCode).toBe(401);
@@ -80,7 +80,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -93,7 +93,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -118,7 +118,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -141,7 +141,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -158,7 +158,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -177,7 +177,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos',
+        url: '/',
         headers: { 'content-type': 'application/json' },
         payload: {
           title: 'New Todo',
@@ -206,7 +206,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -229,7 +229,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -240,7 +240,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos/non-existent',
+        url: '/non-existent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -250,7 +250,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos/any-id',
+        url: '/any-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -265,7 +265,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos/any-id',
+        url: '/any-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -288,7 +288,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -304,7 +304,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/todos/any-id',
+        url: '/any-id',
         headers: { 'content-type': 'application/json' },
         payload: { title: 'Updated' },
       });
@@ -328,7 +328,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -339,7 +339,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/todos/any-id',
+        url: '/any-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -361,7 +361,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items`,
+        url: `/${createResult.value.id}/items`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -378,7 +378,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/any-id/items',
+        url: '/any-id/items',
         headers: { 'content-type': 'application/json' },
         payload: { title: 'New Item' },
       });
@@ -407,7 +407,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -423,7 +423,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/todos/any-id/items/any-item-id',
+        url: '/any-id/items/any-item-id',
         headers: { 'content-type': 'application/json' },
         payload: { status: 'completed' },
       });
@@ -455,7 +455,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -487,7 +487,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -520,7 +520,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -551,7 +551,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items/reorder`,
+        url: `/${createResult.value.id}/items/reorder`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -585,7 +585,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${todo.id}/archive`,
+        url: `/${todo.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -608,7 +608,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/archive`,
+        url: `/${createResult.value.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -636,7 +636,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${todo.id}/unarchive`,
+        url: `/${todo.id}/unarchive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -649,7 +649,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/non-existent/unarchive',
+        url: '/non-existent/unarchive',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -670,7 +670,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/unarchive`,
+        url: `/${createResult.value.id}/unarchive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -693,7 +693,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/cancel`,
+        url: `/${createResult.value.id}/cancel`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -720,7 +720,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${todo.id}/cancel`,
+        url: `/${todo.id}/cancel`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -731,7 +731,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/non-existent/cancel',
+        url: '/non-existent/cancel',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -752,7 +752,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/cancel`,
+        url: `/${createResult.value.id}/cancel`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -762,7 +762,7 @@ describe('Todo Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/any-id/cancel',
+        url: '/any-id/cancel',
       });
 
       expect(response.statusCode).toBe(401);
@@ -787,7 +787,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/cancel`,
+        url: `/${createResult.value.id}/cancel`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -815,7 +815,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos?archived=true',
+        url: '/?archived=true',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -838,7 +838,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos?priority=high',
+        url: '/?priority=high',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -860,7 +860,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos?tags=work',
+        url: '/?tags=work',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -875,7 +875,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/todos/non-existent',
+        url: '/non-existent',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -900,7 +900,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -915,7 +915,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/todos/non-existent',
+        url: '/non-existent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -936,7 +936,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -947,7 +947,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/non-existent/items',
+        url: '/non-existent/items',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -972,7 +972,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items`,
+        url: `/${createResult.value.id}/items`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -987,7 +987,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/todos/non-existent/items/item-id',
+        url: '/non-existent/items/item-id',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1017,7 +1017,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1042,7 +1042,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}/items/non-existent`,
+        url: `/${createResult.value.id}/items/non-existent`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1057,7 +1057,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/todos/non-existent/items/item-id',
+        url: '/non-existent/items/item-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1083,7 +1083,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1093,7 +1093,7 @@ describe('Todo Routes', () => {
     it('DELETE /todos/:id/items/:itemId returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/todos/any-id/items/any-item-id',
+        url: '/any-id/items/any-item-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1103,7 +1103,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/non-existent/items/reorder',
+        url: '/non-existent/items/reorder',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1129,7 +1129,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items/reorder`,
+        url: `/${createResult.value.id}/items/reorder`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1143,7 +1143,7 @@ describe('Todo Routes', () => {
     it('POST /todos/:id/items/reorder returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/any-id/items/reorder',
+        url: '/any-id/items/reorder',
         headers: { 'content-type': 'application/json' },
         payload: { itemIds: [] },
       });
@@ -1166,7 +1166,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items/reorder`,
+        url: `/${createResult.value.id}/items/reorder`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1181,7 +1181,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/non-existent/archive',
+        url: '/non-existent/archive',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1206,7 +1206,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${todo.id}/archive`,
+        url: `/${todo.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1216,7 +1216,7 @@ describe('Todo Routes', () => {
     it('POST /todos/:id/archive returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/any-id/archive',
+        url: '/any-id/archive',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1245,7 +1245,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${todo.id}/archive`,
+        url: `/${todo.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1255,7 +1255,7 @@ describe('Todo Routes', () => {
     it('POST /todos/:id/unarchive returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos/any-id/unarchive',
+        url: '/any-id/unarchive',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1285,7 +1285,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${todo.id}/unarchive`,
+        url: `/${todo.id}/unarchive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1307,7 +1307,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items/reorder`,
+        url: `/${createResult.value.id}/items/reorder`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1339,7 +1339,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items/reorder`,
+        url: `/${createResult.value.id}/items/reorder`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1357,7 +1357,7 @@ describe('Todo Routes', () => {
       const dueDate = new Date('2025-12-31').toISOString();
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1384,7 +1384,7 @@ describe('Todo Routes', () => {
       const dueDate = new Date('2025-12-31').toISOString();
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/todos',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1422,7 +1422,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1458,7 +1458,7 @@ describe('Todo Routes', () => {
       const dueDate = new Date('2025-12-31').toISOString();
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/todos/${createResult.value.id}/items`,
+        url: `/${createResult.value.id}/items`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1485,7 +1485,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos?archived=false',
+        url: '/?archived=false',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1514,7 +1514,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/todos?tags=work,urgent',
+        url: '/?tags=work,urgent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1541,7 +1541,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1570,7 +1570,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1602,7 +1602,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1635,7 +1635,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        url: `/${createResult.value.id}/items/${itemId}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -1664,7 +1664,7 @@ describe('Todo Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/todos/${createResult.value.id}/items/non-existent`,
+        url: `/${createResult.value.id}/items/non-existent`,
         headers: { authorization: `Bearer ${token}` },
       });
 

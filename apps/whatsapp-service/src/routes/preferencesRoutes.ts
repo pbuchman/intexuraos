@@ -21,7 +21,7 @@ type PutBody = z.infer<typeof putSchema>;
 
 export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
-    '/whatsapp/preferences',
+    '/preferences',
     {
       schema: {
         operationId: 'getWhatsAppPreferences',
@@ -91,7 +91,7 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
   );
 
   fastify.put<{ Body: PutBody }>(
-    '/whatsapp/preferences',
+    '/preferences',
     {
       schema: {
         operationId: 'updateWhatsAppPreferences',

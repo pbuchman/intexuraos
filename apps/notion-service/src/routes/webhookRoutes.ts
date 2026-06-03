@@ -11,7 +11,7 @@ import { webhookRequestSchema } from './schemas.js';
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /notion-webhooks (no auth required)
   fastify.post(
-    '/notion-webhooks',
+    '/webhooks',
     {
       schema: {
         operationId: 'receiveNotionWebhook',

@@ -41,7 +41,7 @@ function parseTerms(terms: string | undefined): string[] | undefined {
 }
 
 export function registerDigestsRoutes(app: FastifyInstance): void {
-  app.get('/fishing/digest-groups', async (request, reply) => {
+  app.get('/digest-groups', async (request, reply) => {
     logIncomingRequest(request);
     return await withAuth(request, reply, async (user) => {
       const result = await getServices().mobileNotificationsClient.listDigestSubscriptions({
@@ -52,7 +52,7 @@ export function registerDigestsRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.get('/fishing/digests', async (request, reply) => {
+  app.get('/digests', async (request, reply) => {
     logIncomingRequest(request);
     return await withAuth(request, reply, async (user) => {
       const query = request.query as DigestListQuery;
@@ -80,7 +80,7 @@ export function registerDigestsRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.get('/fishing/digests/:groupKey/:date', async (request, reply) => {
+  app.get('/digests/:groupKey/:date', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as DigestDetailParams;

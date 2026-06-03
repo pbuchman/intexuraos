@@ -38,7 +38,7 @@ Let's start with the simplest possible interaction: create a command from the PW
 export TOKEN="your-bearer-token-here"
 export BASE="https://commands-agent.dev.intexuraos.cloud"
 
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "Create a todo to review the Q1 report", "source": "pwa-shared"}' \
@@ -87,7 +87,7 @@ Note the `id` format: `pwa-shared:{externalId}`. This composite key is the dedup
 ### Step 2.1: List your commands
 
 ```bash
-curl -s "$BASE/commands" \
+curl -s "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   | jq '.data.commands[] | {id, status, type: .classification.type, confidence: .classification.confidence}'
 ```
@@ -109,21 +109,21 @@ Test the classification logic with different inputs:
 
 ```bash
 # Research task — via explicit intent phrase
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "investigate competitor pricing trends for Q2", "source": "pwa-shared"}' \
   | jq '.data.command.classification'
 
 # Link — URL presence triggers link classification
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "https://example.com/article-about-pricing", "source": "pwa-shared"}' \
   | jq '.data.command.classification'
 
 # Ambiguous — explicit instruction wins over URL keywords
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "create a todo to research https://example.com", "source": "pwa-shared"}' \
@@ -144,7 +144,7 @@ Once you have acted on a classified command, archive it to keep your list clean:
 ```bash
 export CMD_ID="pwa-shared:1710000000000-abc1234"
 
-curl -s -X PATCH "$BASE/commands/$CMD_ID" \
+curl -s -X PATCH "$BASE/$CMD_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "archived"}' \
@@ -160,13 +160,13 @@ Commands that are still in `received`, `pending_classification`, or `failed` sta
 
 ```bash
 # Provide an explicit externalId to control the command ID
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "delete me", "source": "pwa-shared", "externalId": "test-delete-1"}' \
   | jq '.data.command.status'
 
-curl -s -X DELETE "$BASE/commands/pwa-shared:test-delete-1" \
+curl -s -X DELETE "$BASE/pwa-shared:test-delete-1" \
   -H "Authorization: Bearer $TOKEN" \
   | jq '.success'
 # Expected: true
@@ -293,7 +293,7 @@ The Polish phrase "zbadaj" (investigate) should produce `"type": "research"` —
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `401 Unauthorized`                                | Check your bearer token is valid and not expired                                               |
 | `400 Cannot delete classified`                    | Use `PATCH` with `status: "archived"` instead of `DELETE` for classified commands              |
-| `400 Can only archive classified`                 | Command is not in `classified` status — check current status first with `GET /commands`        |
+| `400 Can only archive classified`                 | Command is not in `classified` status — check current status first with `GET /`        |
 | `404 Command not found`                           | Verify the command ID format: `{sourceType}:{externalId}`                                      |
 | Stuck in `pending_classification`                 | LLM API key not configured for that user — call `/internal/retry-pending` after key is added   |
 | Classification returns `note` with low confidence | LLM response was unparseable — check classifier logs for raw response preview                  |
@@ -325,7 +325,7 @@ Test your understanding:
 ### Exercise 1: Polish todo
 
 ```bash
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "stworz zadanie: kupic mleko", "source": "pwa-shared"}' \
@@ -338,7 +338,7 @@ curl -s -X POST "$BASE/commands" \
 ### Exercise 2: Explicit intent overrides URL
 
 ```bash
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "research this https://example.com/report", "source": "pwa-shared"}' \
@@ -354,14 +354,14 @@ curl -s -X POST "$BASE/commands" \
 EXTERNAL_ID="dedup-test-$(date +%s)"
 
 # First call
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"text\": \"buy milk\", \"source\": \"pwa-shared\", \"externalId\": \"$EXTERNAL_ID\"}" \
   | jq '.data.command.id'
 
 # Second call — same externalId
-curl -s -X POST "$BASE/commands" \
+curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"text\": \"buy milk\", \"source\": \"pwa-shared\", \"externalId\": \"$EXTERNAL_ID\"}" \

@@ -12,7 +12,7 @@ export function fishingAssistantRoutes(app: FastifyInstance): void {
   registerPagesRoutes(app);
 
   app.get(
-    '/fishing-assistant/status',
+    '/status',
     {
       schema: {
         description: 'Fishing Assistant service status',

@@ -106,7 +106,7 @@ No `@ts-ignore`, `@ts-expect-error`, or `any` types found in production code.
 
 | File                                                         | Issue                                     | Suggestion                                                                |
 | ------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------- |
-| `domain/whatsapp/usecases/processWebhookEventUseCase.ts`     | Handles routing + 4 message type handlers | Extract handleTextMessage and handleButtonMessage into separate use cases |
+| `domain/usecases/processWebhookEventUseCase.ts`     | Handles routing + 4 message type handlers | Extract handleTextMessage and handleButtonMessage into separate use cases |
 
 **Details:** `processWebhookEventUseCase.ts` contains:
 

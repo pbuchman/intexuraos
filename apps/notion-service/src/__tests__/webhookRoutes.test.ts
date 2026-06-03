@@ -10,7 +10,7 @@ describe('POST /notion-webhooks', () => {
   it('accepts any JSON and returns ok (no auth required)', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/notion-webhooks',
+      url: '/webhooks',
       payload: {
         type: 'page_updated',
         data: { pageId: 'some-page' },
@@ -30,7 +30,7 @@ describe('POST /notion-webhooks', () => {
     // Send an array instead of an object - arrays fail z.record() validation
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/notion-webhooks',
+      url: '/webhooks',
       payload: ['array', 'not', 'object'],
     });
 

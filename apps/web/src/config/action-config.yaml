@@ -4,7 +4,7 @@
 actions:
   approve:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -18,7 +18,7 @@ actions:
 
   approve_todo:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -32,7 +32,7 @@ actions:
 
   approve_note:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -46,7 +46,7 @@ actions:
 
   approve_link:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -60,7 +60,7 @@ actions:
 
   approve_calendar:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -74,7 +74,7 @@ actions:
 
   approve_linear:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -88,7 +88,7 @@ actions:
 
   approve_code:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -102,7 +102,7 @@ actions:
 
   retry:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -116,7 +116,7 @@ actions:
 
   retry_todo:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -130,7 +130,7 @@ actions:
 
   retry_note:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -144,7 +144,7 @@ actions:
 
   retry_link:
     endpoint:
-      path: /actions/{actionId}/resolve-duplicate
+      path: /{actionId}/resolve-duplicate
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
       body:
@@ -160,7 +160,7 @@ actions:
 
   retry_calendar:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -174,7 +174,7 @@ actions:
 
   retry_linear:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -188,7 +188,7 @@ actions:
 
   retry_code:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /{actionId}/execute
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
@@ -202,7 +202,7 @@ actions:
 
   reject:
     endpoint:
-      path: /actions/{actionId}
+      path: /{actionId}
       method: PATCH
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
       body:
@@ -214,7 +214,7 @@ actions:
 
   archive:
     endpoint:
-      path: /actions/{actionId}
+      path: /{actionId}
       method: PATCH
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
       body:
@@ -226,7 +226,7 @@ actions:
 
   delete:
     endpoint:
-      path: /actions/{actionId}
+      path: /{actionId}
       method: DELETE
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:

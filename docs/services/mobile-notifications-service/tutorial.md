@@ -39,7 +39,7 @@ Register your device to receive a signature token.
 ### Step 1.1: Create a Connection
 
 ```bash
-curl -X POST http://localhost:8114/mobile-notifications/connect \
+curl -X POST http://localhost:8114/connect \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -64,7 +64,7 @@ curl -X POST http://localhost:8114/mobile-notifications/connect \
 ### Step 1.2: Verify Connection Status
 
 ```bash
-curl http://localhost:8114/mobile-notifications/status \
+curl http://localhost:8114/status \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -95,7 +95,7 @@ Simulate what Tasker/Automate sends when a notification appears on your device.
 ### Step 2.1: Post to the Webhook
 
 ```bash
-curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+curl -X POST http://localhost:8114/webhooks \
   -H "X-Mobile-Notifications-Signature: a1b2c3d4e5f6...your-signature-here" \
   -H "Content-Type: application/json" \
   -d '{
@@ -127,7 +127,7 @@ curl -X POST http://localhost:8114/mobile-notifications/webhooks \
 Send the same request again with the same `notification_id`:
 
 ```bash
-curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+curl -X POST http://localhost:8114/webhooks \
   -H "X-Mobile-Notifications-Signature: a1b2c3d4e5f6...your-signature-here" \
   -H "Content-Type: application/json" \
   -d '{
@@ -165,7 +165,7 @@ The duplicate is silently ignored. No error, no duplicate entry.
 ### Step 3.1: List All Notifications
 
 ```bash
-curl "http://localhost:8114/mobile-notifications" \
+curl "http://localhost:8114/" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -231,7 +231,7 @@ curl "http://localhost:8114/mobile-notifications?limit=2&cursor=CURSOR_VALUE" \
 ### Step 4.1: View Available Filter Options
 
 ```bash
-curl "http://localhost:8114/notifications/filters" \
+curl "http://localhost:8114/filters" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -259,7 +259,7 @@ The `options` arrays auto-populate from received notifications as they arrive.
 ### Step 4.2: Create a Saved Filter
 
 ```bash
-curl -X POST "http://localhost:8114/notifications/filters/saved" \
+curl -X POST "http://localhost:8114/filters/saved" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -285,7 +285,7 @@ curl -X POST "http://localhost:8114/notifications/filters/saved" \
 ### Step 4.3: Delete a Saved Filter
 
 ```bash
-curl -X DELETE "http://localhost:8114/notifications/filters/saved/uuid-of-saved-filter" \
+curl -X DELETE "http://localhost:8114/filters/saved/uuid-of-saved-filter" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -300,7 +300,7 @@ If the digest pipeline is configured for your user and group, you can browse AI-
 ### Step 5.1: List Digests for a Date Range
 
 ```bash
-curl "http://localhost:8114/notifications/digests?groupKey=my-group&fromDate=2026-04-14&toDate=2026-04-21&limit=7" \
+curl "http://localhost:8114/digests?groupKey=my-group&fromDate=2026-04-14&toDate=2026-04-21&limit=7" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -339,7 +339,7 @@ curl "http://localhost:8114/notifications/digests?groupKey=my-group&fromDate=202
 ### Step 5.2: Get a Single Digest
 
 ```bash
-curl "http://localhost:8114/notifications/digests/my-group/2026-04-21" \
+curl "http://localhost:8114/digests/my-group/2026-04-21" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -348,7 +348,7 @@ Returns the full digest for that specific day, or 404 if none exists.
 ### Step 5.3: Regenerate a Digest
 
 ```bash
-curl -X POST "http://localhost:8114/notifications/digests/run" \
+curl -X POST "http://localhost:8114/digests/run" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -379,7 +379,7 @@ The `generation` field increments on each regeneration. WhatsApp notifications a
 ## Part 6: Delete a Notification (2 minutes)
 
 ```bash
-curl -X DELETE "http://localhost:8114/mobile-notifications/firestore-doc-id" \
+curl -X DELETE "http://localhost:8114/firestore-doc-id" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -401,7 +401,7 @@ Returns 404 if not found, 403 if the notification belongs to another user.
 ### Missing Signature Header
 
 ```bash
-curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+curl -X POST http://localhost:8114/webhooks \
   -H "Content-Type: application/json" \
   -d '{ "source": "tasker", "device": "Test", "app": "com.test", "notification_id": "1", "title": "t", "text": "b", "timestamp": 0, "post_time": "now" }'
 ```
@@ -456,7 +456,7 @@ All endpoints return a standardized response contract:
 
 - **Success:** `{ "success": true, "data": { ... } }`
 - **Error:** `{ "success": false, "error": { "code": "...", "message": "..." } }`
-- **Exception:** `DELETE /notifications/filters/saved/:id` returns 204 No Content (empty body)
+- **Exception:** `DELETE /filters/saved/:id` returns 204 No Content (empty body)
 
 ---
 
@@ -481,7 +481,7 @@ Test your understanding:
 
 1. **Easy:** Connect a device, send 3 notifications from different apps, and list them filtered by one app
 2. **Medium:** Send 5+ notifications and paginate through them with `limit=2`, following the `nextCursor` chain
-3. **Hard:** Create a saved filter for two apps, verify it appears in `GET /notifications/filters`, then delete it
+3. **Hard:** Create a saved filter for two apps, verify it appears in `GET /filters`, then delete it
 
 <details>
 <summary>Solutions</summary>
@@ -490,13 +490,13 @@ Test your understanding:
 
 ```bash
 # Connect
-curl -X POST http://localhost:8114/mobile-notifications/connect \
+curl -X POST http://localhost:8114/connect \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"deviceLabel": "Test Device"}'
 
 # Save the signature from the response, then send 3 notifications from different apps
 for APP in com.whatsapp com.telegram com.slack; do
-  curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+  curl -X POST http://localhost:8114/webhooks \
     -H "X-Mobile-Notifications-Signature: $SIGNATURE" \
     -H "Content-Type: application/json" \
     -d "{\"source\":\"tasker\",\"device\":\"Test\",\"app\":\"$APP\",\"notification_id\":\"$APP-001\",\"title\":\"Test\",\"text\":\"Hello\",\"timestamp\":$(date +%s)000,\"post_time\":\"$(date)\"}"
@@ -520,15 +520,15 @@ curl "http://localhost:8114/mobile-notifications?limit=2&cursor=CURSOR" -H "Auth
 
 ```bash
 # Create saved filter
-curl -X POST "http://localhost:8114/notifications/filters/saved" \
+curl -X POST "http://localhost:8114/filters/saved" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name":"Messaging","app":["com.whatsapp","com.telegram"]}'
 
 # Verify it appears
-curl "http://localhost:8114/notifications/filters" -H "Authorization: Bearer $TOKEN"
+curl "http://localhost:8114/filters" -H "Authorization: Bearer $TOKEN"
 
 # Delete it (use the id from the create response)
-curl -X DELETE "http://localhost:8114/notifications/filters/saved/FILTER_ID" \
+curl -X DELETE "http://localhost:8114/filters/saved/FILTER_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

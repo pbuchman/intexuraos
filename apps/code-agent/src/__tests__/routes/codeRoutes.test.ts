@@ -312,7 +312,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -358,7 +358,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -435,7 +435,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -492,7 +492,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -506,7 +506,7 @@ describe('codeRoutes', () => {
     it('returns 404 for non-existent task', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/non-existent',
+        url: '/tasks/non-existent',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -520,7 +520,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/task-123',
+        url: '/tasks/task-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -641,7 +641,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -688,7 +688,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -738,7 +738,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?status=implemented',
+        url: '/tasks?status=implemented',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -774,7 +774,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?limit=2',
+        url: '/tasks?limit=2',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -790,7 +790,7 @@ describe('codeRoutes', () => {
     it('returns empty array for user with no tasks', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -805,7 +805,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
       });
 
       expect(response.statusCode).toBe(401);
@@ -828,7 +828,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?userId=user-123',
+        url: '/tasks?userId=user-123',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1337,7 +1337,7 @@ describe('codeRoutes', () => {
     it('submits task successfully', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1359,7 +1359,7 @@ describe('codeRoutes', () => {
     it('submits task with workerType and linearIssueId', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1384,7 +1384,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         payload: {
           prompt: 'Fix the login bug',
         },
@@ -1412,7 +1412,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1446,7 +1446,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1472,7 +1472,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1495,7 +1495,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1534,7 +1534,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1579,7 +1579,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1597,7 +1597,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         payload: {
           taskId: 'task-123',
         },
@@ -1609,7 +1609,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1647,7 +1647,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1687,7 +1687,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1707,7 +1707,7 @@ describe('codeRoutes', () => {
     it('returns workers array from user settings', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1723,7 +1723,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1737,7 +1737,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1760,7 +1760,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1824,7 +1824,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1884,7 +1884,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1960,7 +1960,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2027,7 +2027,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2094,7 +2094,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2165,7 +2165,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2231,7 +2231,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2305,7 +2305,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2359,7 +2359,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2953,7 +2953,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3010,7 +3010,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3068,7 +3068,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3102,7 +3102,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3120,7 +3120,7 @@ describe('codeRoutes', () => {
     it('should return 401 when user is not authenticated', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
       });
 
       expect(response.statusCode).toBe(401);
@@ -3138,7 +3138,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3181,7 +3181,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3228,7 +3228,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3272,7 +3272,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3318,7 +3318,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3466,7 +3466,7 @@ describe('codeRoutes', () => {
     it('returns 401 when user is not authenticated', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
       });
 
       expect(response.statusCode).toBe(401);
@@ -3589,7 +3589,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3665,7 +3665,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3685,7 +3685,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3726,7 +3726,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3768,7 +3768,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3831,7 +3831,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3850,7 +3850,7 @@ describe('codeRoutes', () => {
     it('should return 401 when user is not authenticated', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         payload: {
           taskId,
         },
@@ -3868,7 +3868,7 @@ describe('codeRoutes', () => {
     it('returns 401 without JWT token', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         payload: {
           message: 'Hello task',
         },
@@ -3880,7 +3880,7 @@ describe('codeRoutes', () => {
     it('returns 400 with empty message body', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3895,7 +3895,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/non-existent-task/messages',
+        url: '/tasks/non-existent-task/messages',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3933,7 +3933,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/messages`,
+        url: `/tasks/${created.value.id}/messages`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3971,7 +3971,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/messages`,
+        url: `/tasks/${created.value.id}/messages`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3992,7 +3992,7 @@ describe('codeRoutes', () => {
     it('returns 401 without JWT token', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
       });
 
       expect(response.statusCode).toBe(401);
@@ -4001,7 +4001,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/non-existent-task/implement',
+        url: '/tasks/non-existent-task/implement',
         headers: { authorization: 'Bearer test-token' },
         body: {},
       });
@@ -4078,7 +4078,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/implement`,
+        url: `/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
         body: { workerType: 'sonnet' },
       });
@@ -4155,7 +4155,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/implement`,
+        url: `/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
         body: { workerType: 'kimi' },
       });
@@ -4220,7 +4220,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/messages`,
+        url: `/tasks/${created.value.id}/messages`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -4254,7 +4254,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -4267,7 +4267,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task does not exist', async () => {
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/tasks/non-existent-task-id',
+        url: '/tasks/non-existent-task-id',
         headers: { authorization: 'Bearer test-token' },
       });
 

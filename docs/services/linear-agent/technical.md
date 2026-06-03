@@ -165,7 +165,7 @@ sequenceDiagram
     participant FS as Firestore
     participant CA as Code Agent
 
-    Linear->>LA: POST /linear/webhook
+    Linear->>LA: POST /webhook
     LA->>FS: Lookup ALL user IDs by team ID
     LA->>FS: Get webhook secret for team
     LA->>LA: Validate HMAC-SHA256 signature
@@ -194,7 +194,7 @@ sequenceDiagram
     participant Linear as Linear API
     participant FS as Firestore
 
-    User->>LA: POST /linear/sync (or /internal/linear/sync-all)
+    User->>LA: POST /sync (or /internal/linear/sync-all)
     LA->>FS: Get user connection(s)
     LA->>Linear: List all team issues
     LA->>FS: List existing synced issues
@@ -225,10 +225,10 @@ sequenceDiagram
         LA->>FS: Store candidates for review
         LA-->>Scheduler: Stats (stored count)
     end
-    User->>LA: GET /linear/prune-candidates
+    User->>LA: GET /prune-candidates
     LA->>FS: List stored candidates
     LA-->>User: Candidates with scores/reasons
-    User->>LA: DELETE /linear/prune-candidates
+    User->>LA: DELETE /prune-candidates
     LA->>Linear: Delete each candidate (soft-delete)
     LA->>FS: Remove local copies
     LA->>FS: Clear candidates collection
@@ -278,28 +278,28 @@ Issue display endpoints (`display-batch`, `GET /internal/linear/issues/:identifi
 
 | Method | Path                                  | Purpose                           | Auth   |
 | ------ | ------------------------------------- | --------------------------------- | ------ |
-| GET    | `/linear/connection`                  | Get user's connection status      | Bearer |
-| POST   | `/linear/connection/validate`         | Validate API key, get teams       | None   |
-| POST   | `/linear/connection`                  | Save connection configuration     | Bearer |
-| DELETE | `/linear/connection`                  | Disconnect from Linear            | Bearer |
-| GET    | `/linear/issues`                      | List issues grouped by column     | Bearer |
-| GET    | `/linear/issues/:identifier`          | Get single issue with comments    | Bearer |
-| GET    | `/linear/issues/:identifier/comments` | List paginated issue comments     | Bearer |
-| GET    | `/linear/failed-issues`               | List failed extractions           | Bearer |
-| DELETE | `/linear/failed-issues/:id`           | Delete a failed extraction        | Bearer |
-| POST   | `/linear/failed-issues/:id/retry`     | Retry a failed extraction         | Bearer |
-| POST   | `/linear/sync`                        | Trigger full issue sync           | Bearer |
-| GET    | `/linear/webhook-config`              | Get webhook URL and secret status | Bearer |
-| POST   | `/linear/webhook-config`              | Set webhook signing secret        | Bearer |
-| DELETE | `/linear/webhook-config`              | Remove webhook signing secret     | Bearer |
-| GET    | `/linear/prune-candidates`            | List prune candidates for review  | Bearer |
-| DELETE | `/linear/prune-candidates`            | Confirm and delete all candidates | Bearer |
+| GET    | `/connection`                  | Get user's connection status      | Bearer |
+| POST   | `/connection/validate`         | Validate API key, get teams       | None   |
+| POST   | `/connection`                  | Save connection configuration     | Bearer |
+| DELETE | `/connection`                  | Disconnect from Linear            | Bearer |
+| GET    | `/issues`                      | List issues grouped by column     | Bearer |
+| GET    | `/issues/:identifier`          | Get single issue with comments    | Bearer |
+| GET    | `/issues/:identifier/comments` | List paginated issue comments     | Bearer |
+| GET    | `/failed-issues`               | List failed extractions           | Bearer |
+| DELETE | `/failed-issues/:id`           | Delete a failed extraction        | Bearer |
+| POST   | `/failed-issues/:id/retry`     | Retry a failed extraction         | Bearer |
+| POST   | `/sync`                        | Trigger full issue sync           | Bearer |
+| GET    | `/webhook-config`              | Get webhook URL and secret status | Bearer |
+| POST   | `/webhook-config`              | Set webhook signing secret        | Bearer |
+| DELETE | `/webhook-config`              | Remove webhook signing secret     | Bearer |
+| GET    | `/prune-candidates`            | List prune candidates for review  | Bearer |
+| DELETE | `/prune-candidates`            | Confirm and delete all candidates | Bearer |
 
 ### Webhook Endpoints
 
 | Method | Path              | Purpose                       | Auth                   |
 | ------ | ----------------- | ----------------------------- | ---------------------- |
-| POST   | `/linear/webhook` | Receive Linear webhook events | HMAC-SHA256 (per-team) |
+| POST   | `/webhook` | Receive Linear webhook events | HMAC-SHA256 (per-team) |
 
 ### Internal Endpoints
 
@@ -321,7 +321,7 @@ Issue display endpoints (`display-batch`, `GET /internal/linear/issues/:identifi
 | GET    | `/internal/issues/:issueId/tree`                   | Get issue + recursive descendants      | X-Internal        |
 | GET    | `/internal/linear/issues/:issueId/direct-children` | Get live direct children from Linear   | X-Internal        |
 
-### GET /linear/issues Response
+### GET /issues Response
 
 ```typescript
 interface ListIssuesResponse {
@@ -438,7 +438,7 @@ interface PruneStats {
 }
 ```
 
-### DELETE /linear/prune-candidates Response
+### DELETE /prune-candidates Response
 
 ```typescript
 interface PruneDeleteStats {
@@ -759,7 +759,7 @@ The client is split into three focused modules:
 - `linear_issues` documents use composite key `userId_issueId` — queries by issueId alone require a field query
 - Unknown webhook state types default to `unstarted`; out-of-range priority values default to `0`
 - `generateIssueTitle` returns `err()` on LLM failure — no silent degradation
-- Dashboard (`GET /linear/issues`) reads from Firestore; run a full sync if data seems stale
+- Dashboard (`GET /issues`) reads from Firestore; run a full sync if data seems stale
 - `/internal/linear/sync-all` and `/internal/linear/prune-issues` accept both OIDC Bearer tokens (Cloud Scheduler) and `X-Internal-Auth`
 - Labels are full objects `{ id, name, color }` internally; `validateIssue` HTTP response maps them to `string[]` (names only)
 - Auto-trigger code task fires on first assignment (null -> non-null assignee) while state is `backlog` or `unstarted` AND issue has a `planning-task` or `code-task` label

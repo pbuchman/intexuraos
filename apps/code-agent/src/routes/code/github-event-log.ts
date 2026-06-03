@@ -222,7 +222,7 @@ const githubEventLogRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
     secured.get<{
       Querystring: { limit?: number; cursor?: string };
     }>(
-      '/code/github-event-log',
+      '/github-event-log',
       {
         schema: {
           querystring: listQuerySchema,
@@ -285,7 +285,7 @@ const githubEventLogRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
     secured.get<{
       Params: { id: string };
     }>(
-      '/code/github-event-log/:id/payload',
+      '/github-event-log/:id/payload',
       {
         schema: {
           params: {
@@ -344,7 +344,7 @@ const githubEventLogRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
     secured.post<{
       Body: { ids: string[] };
     }>(
-      '/code/github-event-log/rows',
+      '/github-event-log/rows',
       {
         schema: {
           body: rowsBodySchema,

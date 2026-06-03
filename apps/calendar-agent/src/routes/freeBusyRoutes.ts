@@ -10,7 +10,7 @@ import type { FreeBusyBody } from './calendarHelpers.js';
 
 export const freeBusyRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: FreeBusyBody }>(
-    '/calendar/freebusy',
+    '/freebusy',
     {
       schema: {
         operationId: 'getFreeBusy',

@@ -33,7 +33,7 @@ Before starting, ensure you have:
 ### Step 1.1: Create a bookmark via the public API
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks \
+curl -X POST http://localhost:8124/ \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -118,7 +118,7 @@ Note the `url` field is the app deep link, not the bookmarked URL. This endpoint
 The enrichment pipeline processes asynchronously. Poll for completion (typically 5–10 seconds):
 
 ```bash
-curl "http://localhost:8124/bookmarks/bookmark_def456" \
+curl "http://localhost:8124/bookmark_def456" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -165,7 +165,7 @@ The message is marked as important, so it will always be delivered regardless of
 ### Step 3.1: List all bookmarks
 
 ```bash
-curl "http://localhost:8124/bookmarks" \
+curl "http://localhost:8124/" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -199,7 +199,7 @@ curl "http://localhost:8124/bookmarks?ogFetchStatus=pending" \
 ### Step 4.1: Update bookmark tags
 
 ```bash
-curl -X PATCH http://localhost:8124/bookmarks/bookmark_abc123 \
+curl -X PATCH http://localhost:8124/bookmark_abc123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -210,21 +210,21 @@ curl -X PATCH http://localhost:8124/bookmarks/bookmark_abc123 \
 ### Step 4.2: Archive a bookmark
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks/bookmark_abc123/archive \
+curl -X POST http://localhost:8124/bookmark_abc123/archive \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ### Step 4.3: Unarchive a bookmark
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks/bookmark_abc123/unarchive \
+curl -X POST http://localhost:8124/bookmark_abc123/unarchive \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ### Step 4.4: Delete a bookmark
 
 ```bash
-curl -X DELETE http://localhost:8124/bookmarks/bookmark_abc123 \
+curl -X DELETE http://localhost:8124/bookmark_abc123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -334,7 +334,7 @@ Test your understanding:
 ### Exercise 1: Custom Tags
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks \
+curl -X POST http://localhost:8124/ \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/tagged", "tags": ["exercise", "test"], "source": "manual", "sourceId": "ex-1"}'
@@ -356,7 +356,7 @@ BOOKMARK_ID=$(echo $RESPONSE | jq -r '.data.id')
 
 # Poll until aiSummary is not null
 while true; do
-  SUMMARY=$(curl -s "http://localhost:8124/bookmarks/$BOOKMARK_ID" \
+  SUMMARY=$(curl -s "http://localhost:8124/$BOOKMARK_ID" \
     -H "Authorization: Bearer YOUR_ACCESS_TOKEN" | jq -r '.data.aiSummary')
   if [ "$SUMMARY" != "null" ]; then
     echo "Summary: $SUMMARY"

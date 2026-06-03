@@ -231,7 +231,7 @@ describe('GET /code/tasks endpoints', () => {
       it('returns 401 without Authorization header', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
         });
 
         expect(response.statusCode).toBe(401);
@@ -251,7 +251,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
           headers: {
             authorization: 'Bearer invalid-token',
           },
@@ -319,7 +319,7 @@ describe('GET /code/tasks endpoints', () => {
       it('returns only user tasks with valid auth', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -336,7 +336,7 @@ describe('GET /code/tasks endpoints', () => {
       it('respects default pagination limit', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -351,7 +351,7 @@ describe('GET /code/tasks endpoints', () => {
       it('respects custom limit parameter', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks?limit=1',
+          url: '/tasks?limit=1',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -366,7 +366,7 @@ describe('GET /code/tasks endpoints', () => {
       it('returns tasks ordered by createdAt descending', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -424,7 +424,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -479,7 +479,7 @@ describe('GET /code/tasks endpoints', () => {
       it('filters tasks by single status', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks?status=implemented',
+          url: '/tasks?status=implemented',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -495,7 +495,7 @@ describe('GET /code/tasks endpoints', () => {
       it('filters tasks by comma-separated statuses', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks?status=implemented,failed',
+          url: '/tasks?status=implemented,failed',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -514,7 +514,7 @@ describe('GET /code/tasks endpoints', () => {
       it('ignores invalid status tokens in comma-separated list', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks?status=implemented,bogus',
+          url: '/tasks?status=implemented,bogus',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -532,7 +532,7 @@ describe('GET /code/tasks endpoints', () => {
       it('accepts cursor parameter for pagination', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks?cursor=task_abc123',
+          url: '/tasks?cursor=task_abc123',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -589,7 +589,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -650,7 +650,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks',
+          url: '/tasks',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -689,7 +689,7 @@ describe('GET /code/tasks endpoints', () => {
       it('returns 401 without Authorization header', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks/task-123',
+          url: '/tasks/task-123',
         });
 
         expect(response.statusCode).toBe(401);
@@ -749,7 +749,7 @@ describe('GET /code/tasks endpoints', () => {
       it('returns task details for owner', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: `/code/tasks/${testTaskId}`,
+          url: `/tasks/${testTaskId}`,
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -809,7 +809,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: `/code/tasks/${task.value.id}`,
+          url: `/tasks/${task.value.id}`,
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -850,7 +850,7 @@ describe('GET /code/tasks endpoints', () => {
       it('returns 404 for non-existent task', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks/non-existent-task',
+          url: '/tasks/non-existent-task',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -870,7 +870,7 @@ describe('GET /code/tasks endpoints', () => {
       it('returns 403 for other user task', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: `/code/tasks/${otherUserIdTaskId}`,
+          url: `/tasks/${otherUserIdTaskId}`,
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -889,7 +889,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks/task-123',
+          url: '/tasks/task-123',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -942,7 +942,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: `/code/tasks/${task.value.id}`,
+          url: `/tasks/${task.value.id}`,
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -995,7 +995,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: `/code/tasks/${task.value.id}`,
+          url: `/tasks/${task.value.id}`,
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -1032,7 +1032,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: `/code/tasks/${task.value.id}`,
+          url: `/tasks/${task.value.id}`,
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -1070,7 +1070,7 @@ describe('GET /code/tasks endpoints', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: `/code/tasks/${task.value.id}`,
+          url: `/tasks/${task.value.id}`,
           headers: {
             authorization: 'Bearer test-token',
           },

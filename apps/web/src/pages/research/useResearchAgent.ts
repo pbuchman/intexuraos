@@ -316,7 +316,7 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
         if (contextObjects.length > 0) draftRequest.inputContexts = contextObjects;
         await updateDraftFn(token, draftId, draftRequest);
         const research = await approveResearch(token, draftId);
-        void navigate(`/research/${research.id}`);
+        void navigate(`/${research.id}`);
       } else {
         if (synthesisModel === null) throw new Error('Synthesis model is required');
         const { createResearch } = await import('@/services/researchAgentApi');
@@ -328,7 +328,7 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
         if (params?.originalPrompt !== undefined) request.originalPrompt = params.originalPrompt;
         if (contextObjects.length > 0) request.inputContexts = contextObjects;
         const research = await createResearch(token, request);
-        void navigate(`/research/${research.id}`);
+        void navigate(`/${research.id}`);
       }
     } catch (err) {
       let errorMessage: string;
@@ -447,7 +447,7 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
       const token = await getAccessToken();
       const { deleteResearch } = await import('@/services/researchAgentApi');
       await deleteResearch(token, draftId);
-      void navigate('/research');
+      void navigate('/');
     } catch {
       setError('Failed to discard draft');
       setDiscarding(false);
@@ -479,7 +479,7 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
         const result = await saveDraft(token, request);
         resultId = result.id;
       }
-      void navigate(`/research/${resultId}`);
+      void navigate(`/${resultId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save draft');
     } finally {

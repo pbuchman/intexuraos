@@ -33,7 +33,7 @@ Before creating a schedule, check which services and tools are available for the
 ### Step 1.1: List Available Services
 
 ```bash
-curl -X GET https://dev.intexuraos.cloud/api/cron-agent/cron/services \
+curl -X GET https://dev.intexuraos.cloud/api/cron-agent/services \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -75,7 +75,7 @@ Choose a target service and an instruction. The `schedule` field is the natural 
 ### Step 2.2: Create the Schedule
 
 ```bash
-curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
+curl -X POST https://dev.intexuraos.cloud/api/cron-agent/schedules \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -124,7 +124,7 @@ The service sent your schedule description ("every weekday at 9am") to Gemini 2.
 ### Step 2.3: Verify the Schedule
 
 ```bash
-curl -X GET https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123def456 \
+curl -X GET https://dev.intexuraos.cloud/api/cron-agent/schedules/abc123def456 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -139,7 +139,7 @@ curl -X GET https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123def
 Instead of waiting for Cloud Scheduler, trigger the schedule immediately:
 
 ```bash
-curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123def456/trigger \
+curl -X POST https://dev.intexuraos.cloud/api/cron-agent/schedules/abc123def456/trigger \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -180,7 +180,7 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123de
 ### Step 3.2: List Execution History
 
 ```bash
-curl -X GET "https://dev.intexuraos.cloud/api/cron-agent/cron/executions?scheduleId=abc123def456" \
+curl -X GET "https://dev.intexuraos.cloud/api/cron-agent/executions?scheduleId=abc123def456" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -193,7 +193,7 @@ curl -X GET "https://dev.intexuraos.cloud/api/cron-agent/cron/executions?schedul
 ### Step 4.1: Pause a Schedule
 
 ```bash
-curl -X PATCH https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123def456 \
+curl -X PATCH https://dev.intexuraos.cloud/api/cron-agent/schedules/abc123def456 \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "paused"}'
@@ -204,7 +204,7 @@ When paused, `nextExecutionAt` is set to `null` and the schedule is skipped duri
 ### Step 4.2: Resume a Schedule
 
 ```bash
-curl -X PATCH https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123def456 \
+curl -X PATCH https://dev.intexuraos.cloud/api/cron-agent/schedules/abc123def456 \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "active"}'
@@ -215,7 +215,7 @@ Resuming recomputes `nextExecutionAt` from the current time and cron expression.
 ### Step 4.3: Delete a Schedule
 
 ```bash
-curl -X DELETE https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123def456 \
+curl -X DELETE https://dev.intexuraos.cloud/api/cron-agent/schedules/abc123def456 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -230,7 +230,7 @@ curl -X DELETE https://dev.intexuraos.cloud/api/cron-agent/cron/schedules/abc123
 | "401 Unauthorized"                 | Check your Bearer token is valid and not expired                             |
 | "PARSE_FAILED"                     | Reword your schedule description — the LLM could not convert it to cron      |
 | "INVALID_CRON: frequency too high" | Schedules must run at least 5 minutes apart                                  |
-| "Unknown service: xyz"             | The service key is not in the allowed services list — check `/cron/services` |
+| "Unknown service: xyz"             | The service key is not in the allowed services list — check `/services` |
 | "Schedule is already running"      | Wait for the current execution to complete before triggering again           |
 | "Maximum of 50 schedules"          | Delete unused schedules to make room                                         |
 
@@ -260,7 +260,7 @@ Test your understanding:
 ### Exercise 1: Sunday Midnight Schedule
 
 ```bash
-curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
+curl -X POST https://dev.intexuraos.cloud/api/cron-agent/schedules \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -276,7 +276,7 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
 ### Exercise 2: Multi-Service with Preferred Tools
 
 ```bash
-curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
+curl -X POST https://dev.intexuraos.cloud/api/cron-agent/schedules \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -295,22 +295,22 @@ curl -X POST https://dev.intexuraos.cloud/api/cron-agent/cron/schedules \
 
 ```bash
 # 1. Create
-SCHEDULE_ID=$(curl -s -X POST .../cron/schedules ... | jq -r '.data.id')
+SCHEDULE_ID=$(curl -s -X POST .../schedules ... | jq -r '.data.id')
 
 # 2. Trigger
-curl -X POST .../cron/schedules/$SCHEDULE_ID/trigger -H "Authorization: Bearer $TOKEN"
+curl -X POST .../schedules/$SCHEDULE_ID/trigger -H "Authorization: Bearer $TOKEN"
 
 # 3. List executions
-curl -X GET ".../cron/executions?scheduleId=$SCHEDULE_ID" -H "Authorization: Bearer $TOKEN"
+curl -X GET ".../executions?scheduleId=$SCHEDULE_ID" -H "Authorization: Bearer $TOKEN"
 
 # 4. Update schedule (re-parses cron expression)
-curl -X PATCH .../cron/schedules/$SCHEDULE_ID \
+curl -X PATCH .../schedules/$SCHEDULE_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"schedule": "every other Monday at 10am"}'
 
 # 5. Verify new cron expression
-curl -X GET .../cron/schedules/$SCHEDULE_ID -H "Authorization: Bearer $TOKEN"
+curl -X GET .../schedules/$SCHEDULE_ID -H "Authorization: Bearer $TOKEN"
 # cronExpression should now reflect biweekly Mondays
 ```
 

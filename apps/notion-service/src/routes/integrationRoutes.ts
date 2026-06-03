@@ -40,7 +40,7 @@ export function mapConnectErrorToHttp(
 export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /notion/connect
   fastify.post(
-    '/notion/connect',
+    '/connect',
     {
       schema: {
         operationId: 'connectNotion',
@@ -129,7 +129,7 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
 
   // GET /notion/status
   fastify.get(
-    '/notion/status',
+    '/status',
     {
       schema: {
         operationId: 'getNotionStatus',
@@ -194,7 +194,7 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
 
   // DELETE /notion/disconnect
   fastify.delete(
-    '/notion/disconnect',
+    '/disconnect',
     {
       schema: {
         operationId: 'disconnectNotion',

@@ -59,7 +59,7 @@ describe('configRoutes (sub-plugin)', () => {
     async ({ endpoint, field, value }) => {
       const patchResponse = await app.inject({
         method: 'PATCH',
-        url: `/code/worker-settings/${endpoint}`,
+        url: `/worker-settings/${endpoint}`,
         headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
         payload: { workerType: value },
       });
@@ -69,7 +69,7 @@ describe('configRoutes (sub-plugin)', () => {
 
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
       const getBody = JSON.parse(getResponse.body) as {
@@ -84,7 +84,7 @@ describe('configRoutes (sub-plugin)', () => {
     // First store a concrete value.
     await app.inject({
       method: 'PATCH',
-      url: '/code/worker-settings/default-review-worker-type',
+      url: '/worker-settings/default-review-worker-type',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: { workerType: 'glm' },
     });
@@ -92,7 +92,7 @@ describe('configRoutes (sub-plugin)', () => {
     // Then clear via the "auto" sentinel.
     const clearResponse = await app.inject({
       method: 'PATCH',
-      url: '/code/worker-settings/default-review-worker-type',
+      url: '/worker-settings/default-review-worker-type',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: { workerType: 'auto' },
     });
@@ -100,7 +100,7 @@ describe('configRoutes (sub-plugin)', () => {
 
     const getResponse = await app.inject({
       method: 'GET',
-      url: '/code/worker-settings',
+      url: '/worker-settings',
       headers: { Authorization: 'Bearer test-token' },
     });
     const getBody = JSON.parse(getResponse.body) as {
@@ -113,7 +113,7 @@ describe('configRoutes (sub-plugin)', () => {
   it('rejects an unknown worker type with 400', async () => {
     const response = await app.inject({
       method: 'PATCH',
-      url: '/code/worker-settings/default-review-worker-type',
+      url: '/worker-settings/default-review-worker-type',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: { workerType: 'not-a-real-type' },
     });
