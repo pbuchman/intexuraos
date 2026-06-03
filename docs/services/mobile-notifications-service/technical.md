@@ -2,7 +2,7 @@
 
 ## Overview
 
-Mobile-notifications-service receives push notification data from Android devices via webhook, validates device signatures using SHA-256 hash comparison, deduplicates notifications, and stores them in Firestore. It also runs a WhatsApp group digest pipeline that aggregates daily messages into AI-generated summaries using LLM calls, persists group state across days, and delivers digest-ready notifications via Pub/Sub to WhatsApp. Runs on Cloud Run with Fastify. Local port: 8114.
+Mobile-notifications-service receives push notification data from Android devices via webhook, validates device signatures using SHA-256 hash comparison, deduplicates notifications, and stores them in Firestore. It also runs a WhatsApp group digest pipeline that aggregates daily messages into AI-generated summaries using LLM calls, persists group state across days, and delivers digest-ready notifications via Pub/Sub to WhatsApp. Production runs behind Hetzner nginx at `https://intexuraos.cloud/api/notifications`; development runs at `https://dev.intexuraos.cloud/api/notifications`. Service port: 8114.
 
 ## Architecture
 
@@ -67,7 +67,7 @@ sequenceDiagram
     participant Firestore
 
     Device->>Tasker: Notification event
-    Tasker->>+Service: POST /webhooks (signature header)
+    Tasker->>+Service: POST /api/notifications/webhooks (signature header)
     Service->>Service: SHA-256 hash signature
     Service->>Firestore: Lookup signatureHash
     Firestore-->>Service: SignatureConnection (userId)
@@ -202,8 +202,8 @@ interface WebhookPayload {
   notification_id: string; // Idempotency key (unique per user)
   title: string;           // Notification title
   text: string;            // Notification body/content
-  timestamp: number;       // Unix milliseconds from device
-  post_time: string;       // Post time string from device
+  timestamp: number;       // Unix seconds from device
+  post_time: string;       // Unix seconds as string from device
 }
 ```
 
@@ -248,8 +248,8 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 | `app`            | string | App package name                       |
 | `title`          | string | Notification title                     |
 | `text`           | string | Notification body content              |
-| `timestamp`      | number | Unix milliseconds from device          |
-| `postTime`       | string | Post time string from device           |
+| `timestamp`      | number | Unix seconds from device               |
+| `postTime`       | string | Unix seconds as string from device     |
 | `receivedAt`     | string | ISO 8601 server-side receipt timestamp |
 | `notificationId` | string | Idempotency key (device-provided)      |
 
@@ -432,7 +432,7 @@ After changing digest prompt language behavior, rerun the affected date range th
 
 - **Digest subscriptions are hard-coded** — `DIGEST_SUBSCRIPTIONS` is a constant array in `digestSubscriptions.ts`. Adding a group requires a code change.
 
-- **run-yesterday dual auth** — The daily cron endpoint accepts both OIDC Bearer tokens (Cloud Scheduler) and `x-internal-auth` header (direct internal calls). The OIDC check validates JWT structure as defence-in-depth; actual Cloud Run IAM binding handles the primary auth.
+- **run-yesterday dual auth** — The daily cron endpoint accepts both OIDC Bearer tokens (Cloud Scheduler) and `x-internal-auth` header (direct internal calls). Production nginx verifies scheduler OIDC tokens at the edge for `/internal/notifications/*`.
 
 - **Backfill chain self-calls** — Backfill uses `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` to POST to itself. If the URL is misconfigured, backfill silently fails after the first day.
 

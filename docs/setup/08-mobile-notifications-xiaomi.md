@@ -122,7 +122,8 @@ This task handles data transmission to the backend with error handling and local
 ### 5.2. HTTP Request Configuration
 
 - **Method:** `POST`
-- **URL:** `https://YOUR_SERVICE_URL/mobile-notifications/webhooks`
+- **Production URL:** `https://intexuraos.cloud/api/notifications/webhooks`
+- **Development URL:** `https://dev.intexuraos.cloud/api/notifications/webhooks`
 - **Headers:**
   - `Content-Type: application/json`
   - `X-Mobile-Notifications-Signature: YOUR_SIGNATURE`
@@ -137,6 +138,7 @@ To prevent WhatsApp updates from being treated as duplicates, the `notification_
   "device": "redmi-note-13-pro",
   "timestamp": %TIMES,
   "notification_id": "%ankey_%TIMES",
+  "post_time": "%TIMES",
   "app": "%anpackage",
   "title": "%antitle",
   "text": "%antext"
@@ -147,13 +149,13 @@ To prevent WhatsApp updates from being treated as duplicates, the `notification_
 
 **Variables:**
 
-| Variable     | Description                                 |
-| ------------ | ------------------------------------------- |  |  |
-| `%TIMES`     | Current Unix timestamp (seconds)            |
-| `%ankey`     | Unique notification key (e.g., `0\          | com.whatsapp.w4b\ | 101...`) |
-| `%anpackage` | App package name (e.g., `com.whatsapp.w4b`) |
-| `%antitle`   | Notification title (sanitized)              |
-| `%antext`    | Notification text content (sanitized)       |
+| Variable     | Description                                                  |
+| ------------ | ------------------------------------------------------------ |
+| `%TIMES`     | Current Unix timestamp in seconds; send it as both numeric `timestamp` and string `post_time` |
+| `%ankey`     | Unique notification key (for example, `0|com.whatsapp.w4b|101...`) |
+| `%anpackage` | App package name (for example, `com.whatsapp.w4b`)           |
+| `%antitle`   | Notification title (sanitized)                               |
+| `%antext`    | Notification text content (sanitized)                        |
 
 ---
 
@@ -192,7 +194,7 @@ To ensure the service remains alive on HyperOS:
 
 1. Log in to IntexuraOS web app.
 2. Navigate to **Mobile Notifications** in the sidebar.
-3. Click **Connect Device** and follow the instructions.
+3. Click **Generate Signature** and follow the instructions.
 4. Copy the generated signature and paste it into your Tasker HTTP Request header.
 
 **Important:** The signature is only shown once. If you lose it, you'll need to disconnect and reconnect to generate a new one.

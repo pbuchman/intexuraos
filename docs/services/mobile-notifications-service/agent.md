@@ -12,6 +12,7 @@
 | Role      | Mobile notification capture, storage, and WhatsApp group digest generation                                                 |
 | Goal      | Capture device notifications, query them for analysis, and produce AI-generated daily digests from WhatsApp group messages |
 | Port      | 8114                                                                                                                       |
+| Public URL | `https://intexuraos.cloud/api/notifications`                                                                              |
 
 ---
 
@@ -119,7 +120,7 @@ interface MobileNotification {
   app: string;
   title: string;
   text: string;
-  timestamp: number;   // Unix milliseconds from device
+  timestamp: number;   // Unix seconds from device
   postTime: string;
   receivedAt: string;  // ISO 8601 server-side receipt time
 }
@@ -171,6 +172,8 @@ interface StatusOutput {
 
 **Endpoint:** `POST /webhooks`
 
+**Public URL:** `https://intexuraos.cloud/api/notifications/webhooks`
+
 **When to use:** Called by mobile automation apps (Tasker/Automate) to forward device notifications.
 
 **Auth:** `X-Mobile-Notifications-Signature` header (plaintext — hashed server-side)
@@ -185,8 +188,8 @@ interface WebhookPayload {
   notification_id: string;
   title: string;
   text: string;
-  timestamp: number;
-  post_time: string;
+  timestamp: number;   // Unix seconds from device
+  post_time: string;   // Unix seconds as string
 }
 ```
 
