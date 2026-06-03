@@ -53,6 +53,13 @@ function writeManifest(rootDir: string): void {
           proxyTarget: 'http://localhost:8129',
           serviceUrl: 'http://localhost:8129',
         },
+        {
+          name: 'code-agent',
+          envSuffix: 'CODE_AGENT',
+          apiPath: '/api/code',
+          proxyTarget: 'http://localhost:8128',
+          serviceUrl: 'http://localhost:8128',
+        },
       ],
     })
   );
@@ -215,5 +222,24 @@ actions:
     expect(result.stderr).toMatch(/action-config/);
     expect(result.stderr).toMatch(/INTEXURAOS_ACTIONS_AGENT_URL/);
     expect(result.stderr).toMatch(/\/actions\/\{actionId\}\/execute/);
+  });
+
+  it('fails e2e code-agent service-base calls that repeat the service mount resource', () => {
+    writeFixture(
+      rootDir,
+      'e2e/tests/code-tasks.spec.ts',
+      `
+export async function listCodeTasks(client) {
+  return client.get('/code/tasks');
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/e2e/);
+    expect(result.stderr).toMatch(/e2e\/tests\/code-tasks\.spec\.ts:3/);
+    expect(result.stderr).toMatch(/\/code\/tasks/);
   });
 });

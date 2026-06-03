@@ -15,6 +15,12 @@ const ROUTE_OBJECT_RE =
 const FRONTEND_CALL_RE =
   /(?:apiRequest|request|fetchJson|sendRequest)\s*(?:<[\s\S]*?>)?\(\s*config\.([A-Za-z0-9_]+)\s*,\s*(['"`])([^'"`$]+)(?:\2|\$\{)/g;
 const FRONTEND_CONFIG_URL_TEMPLATE_RE = /`\$\{config\.([A-Za-z0-9_]+)\}([^`$]*)/g;
+const E2E_DIRECT_CALL_RE = new RegExp(
+  '\\bclient\\.(?:' +
+    HTTP_METHODS.join('|') +
+    ')\\s*(?:<[\\s\\S]*?>)?\\(\\s*([\'"`])([^\'"`$]+)(?:\\1|\\$\\{)',
+  'g'
+);
 const CONFIG_MAPPING_RE = /\b([A-Za-z0-9_]+)\s*:\s*serviceUrls\.(INTEXURAOS_[A-Z0-9_]+_URL)\b/g;
 const ACTION_CONFIG_ENDPOINT_RE =
   /\bpath:\s*(\/[^\s#]+)[\s\S]*?\bbaseUrl:\s*\$\{(INTEXURAOS_[A-Z0-9_]+_URL)\}/g;
@@ -195,6 +201,12 @@ function findFrontendFiles(root) {
   return files.filter((file) => !file.endsWith('.d.ts') && !file.endsWith('.test.ts'));
 }
 
+function findE2eFiles(root) {
+  const files = [];
+  walk(resolve(root, 'e2e'), files, ['.ts', '.tsx']);
+  return files.filter((file) => !file.endsWith('.d.ts'));
+}
+
 function isIgnoredRoute(routePath) {
   return IGNORED_ROUTES.has(routePath) || routePath.startsWith('/internal/');
 }
@@ -322,6 +334,35 @@ function scanFrontendFile(filePath, root, checksByConfigProperty, checksByEnvVar
   return violations;
 }
 
+function scanE2eFile(filePath, root, codeAgentCheck) {
+  if (codeAgentCheck === undefined) {
+    return [];
+  }
+
+  const source = readFileSync(filePath, 'utf8');
+  const violations = [];
+
+  E2E_DIRECT_CALL_RE.lastIndex = 0;
+  let match;
+  while ((match = E2E_DIRECT_CALL_RE.exec(source)) !== null) {
+    const requestPath = match[2];
+    if (typeof requestPath !== 'string' || isIgnoredRoute(requestPath)) {
+      continue;
+    }
+
+    const duplicated = findDuplicatedResource(requestPath, codeAgentCheck.resourceSegments);
+    if (duplicated === null) {
+      continue;
+    }
+
+    violations.push(
+      `${relative(root, filePath)}:${String(lineNumberOf(source, match.index))}: e2e code-agent call path "${requestPath}" repeats mounted resource segment "/${duplicated}"`
+    );
+  }
+
+  return violations;
+}
+
 function main() {
   try {
     const { root } = parseArgs(process.argv);
@@ -329,12 +370,14 @@ function main() {
     const { byName, byConfigProperty, byEnvVar } = buildServiceChecks(services, root);
     const routeFiles = findRouteFiles(root);
     const frontendFiles = findFrontendFiles(root);
+    const e2eFiles = findE2eFiles(root);
 
     const violations = [
       ...routeFiles.flatMap((filePath) => scanRouteFile(filePath, root, byName)),
       ...frontendFiles.flatMap((filePath) =>
         scanFrontendFile(filePath, root, byConfigProperty, byEnvVar)
       ),
+      ...e2eFiles.flatMap((filePath) => scanE2eFile(filePath, root, byName.get('code-agent'))),
     ];
 
     if (violations.length > 0) {
@@ -346,7 +389,7 @@ function main() {
     }
 
     console.log(
-      `✓ Route resource names valid (${String(routeFiles.length)} route files, ${String(frontendFiles.length)} frontend files scanned)`
+      `✓ Route resource names valid (${String(routeFiles.length)} route files, ${String(frontendFiles.length)} frontend files, ${String(e2eFiles.length)} e2e files scanned)`
     );
   } catch (error) {
     console.error(`❌ ${error.message}`);
@@ -364,10 +407,12 @@ if (invokedDirectly) {
 export {
   buildServiceChecks,
   findDuplicatedResource,
+  findE2eFiles,
   findFrontendFiles,
   findRouteFiles,
   parseArgs,
   scanActionConfigFile,
+  scanE2eFile,
   scanFrontendFile,
   scanRouteFile,
 };
