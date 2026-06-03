@@ -1,8 +1,8 @@
 /**
  * WhatsApp Webhook Routes
  *
- * GET  /whatsapp/webhooks - Webhook verification endpoint
- * POST /whatsapp/webhooks - Webhook event receiver
+ * GET  /webhooks - Webhook verification endpoint
+ * POST /webhooks - Webhook event receiver
  *
  * This file handles HTTP transport concerns (validation, signature, response).
  * Business logic is delegated to domain usecases.
@@ -25,7 +25,7 @@ import {
  */
 export function createWebhookRoutes(config: Config): FastifyPluginCallback {
   return (fastify, _opts, done) => {
-    // GET /whatsapp/webhooks - Webhook verification endpoint
+    // GET /webhooks - Webhook verification endpoint
     fastify.get(
       '/webhooks',
       {
@@ -78,7 +78,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         },
       },
       async (request: FastifyRequest, reply: FastifyReply) => {
-        logIncomingRequest(request, { message: 'GET /whatsapp/webhooks' });
+        logIncomingRequest(request, { message: 'GET /webhooks' });
 
         const parseResult = webhookVerifyQuerySchema.safeParse(request.query);
 
@@ -97,7 +97,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
       }
     );
 
-    // POST /whatsapp/webhooks - Webhook event receiver
+    // POST /webhooks - Webhook event receiver
     fastify.post(
       '/webhooks',
       {

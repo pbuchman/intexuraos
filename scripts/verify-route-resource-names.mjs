@@ -32,6 +32,12 @@ const ALIAS_RESOURCE_SEGMENTS = new Map([
   ['cron-agent', ['cron']],
   ['hellscript-agent', ['hellscript']],
 ]);
+const CANONICAL_PROVIDER_WEBHOOK_ROUTES = new Map([
+  ['linear-agent', new Set(['/webhooks'])],
+  ['whatsapp-service', new Set(['/webhooks'])],
+  ['notion-service', new Set(['/webhooks'])],
+  ['code-agent', new Set(['/webhooks/github'])],
+]);
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -224,6 +230,23 @@ function findDuplicatedResource(routePath, resourceSegments) {
   return null;
 }
 
+function isWebhookConfigRoute(routePath) {
+  return routePath === '/webhook-config' || routePath.startsWith('/webhook-config/');
+}
+
+function findCanonicalWebhookViolation(appName, routePath) {
+  const canonicalRoutes = CANONICAL_PROVIDER_WEBHOOK_ROUTES.get(appName);
+  if (canonicalRoutes === undefined || !routePath.includes('webhook')) {
+    return null;
+  }
+
+  if (isWebhookConfigRoute(routePath) || canonicalRoutes.has(routePath)) {
+    return null;
+  }
+
+  return `must use canonical webhook route ${Array.from(canonicalRoutes).join(', ')}`;
+}
+
 function scanRouteFile(filePath, root, checksByName) {
   const appName = relative(resolve(root, 'apps'), filePath).split('/')[0];
   const check = checksByName.get(appName);
@@ -240,6 +263,14 @@ function scanRouteFile(filePath, root, checksByName) {
     while ((match = regex.exec(source)) !== null) {
       const routePath = match[2];
       if (typeof routePath !== 'string' || isIgnoredRoute(routePath)) {
+        continue;
+      }
+
+      const webhookViolation = findCanonicalWebhookViolation(appName, routePath);
+      if (webhookViolation !== null) {
+        violations.push(
+          `${relative(root, filePath)}:${String(lineNumberOf(source, match.index))}: ${appName} public route "${routePath}" ${webhookViolation}`
+        );
         continue;
       }
 

@@ -9,6 +9,7 @@ import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { listIssues, fullSync, retryFailedIssue, getIssueComments, getIssueDetail, confirmPruneDeletion } from '../domain/index.js';
 import { handleLinearError } from './routeUtils.js';
+import { loadConfig } from '../config.js';
 
 interface ConnectionBody {
   apiKey: string;
@@ -18,6 +19,11 @@ interface ConnectionBody {
 
 interface ValidateBody {
   apiKey: string;
+}
+
+function buildLinearWebhookUrl(serviceUrl: string): string {
+  const baseUrl = serviceUrl.endsWith('/') ? serviceUrl.slice(0, -1) : serviceUrl;
+  return `${baseUrl}/webhooks`;
 }
 
 export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -707,8 +713,9 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Linear not connected');
       }
 
+      const config = loadConfig();
       return await reply.ok({
-        webhookUrl: 'https://intexuraos-linear-agent-cj44trunra-lm.a.run.app/linear/webhook',
+        webhookUrl: buildLinearWebhookUrl(config.serviceUrl),
         hasWebhookSecret: conn.webhookSecret !== null,
         teamId: conn.teamId,
       });
@@ -1049,4 +1056,3 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
-

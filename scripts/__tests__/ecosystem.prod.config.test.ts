@@ -308,6 +308,9 @@ describe('ecosystem.config.prod.cjs', () => {
       'http://127.0.0.1:8117'
     );
     expect(byName.get('linear-agent')?.env.INTEXURAOS_CODE_AGENT_URL).toBe('http://127.0.0.1:8128');
+    expect(byName.get('linear-agent')?.env.INTEXURAOS_SERVICE_URL).toBe(
+      'https://intexuraos.cloud/api/linear'
+    );
     expect(byName.get('code-agent')?.env.INTEXURAOS_SERVICE_URL).toBe(
       'https://intexuraos.cloud/api/code'
     );

@@ -909,6 +909,7 @@ describe('linearRoutes', () => {
     describe('GET /linear/webhook-config', () => {
       it('returns webhook config when connected without secret', async () => {
         seedConnection('test-user-123');
+        process.env['INTEXURAOS_SERVICE_URL'] = 'https://intexuraos.cloud/api/linear';
 
         const token = await createToken({ sub: 'test-user-123' });
         const response = await ctx.app.inject({
@@ -920,9 +921,26 @@ describe('linearRoutes', () => {
         expect(response.statusCode).toBe(200);
         const body = response.json();
         expect(body.success).toBe(true);
-        expect(body.data.webhookUrl).toBeDefined();
+        expect(body.data.webhookUrl).toBe('https://intexuraos.cloud/api/linear/webhooks');
         expect(body.data.hasWebhookSecret).toBe(false);
         expect(body.data.teamId).toBe('team-456');
+      });
+
+      it('normalizes service URL trailing slash in advertised webhook URL', async () => {
+        seedConnection('test-user-123');
+        process.env['INTEXURAOS_SERVICE_URL'] = 'https://intexuraos.cloud/api/linear/';
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.success).toBe(true);
+        expect(body.data.webhookUrl).toBe('https://intexuraos.cloud/api/linear/webhooks');
       });
 
       it('returns webhook config when connected with secret', async () => {

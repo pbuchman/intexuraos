@@ -26,6 +26,20 @@ function writeManifest(rootDir: string): void {
           serviceUrl: 'http://localhost:8126',
         },
         {
+          name: 'whatsapp-service',
+          envSuffix: 'WHATSAPP_SERVICE',
+          apiPath: '/api/whatsapp',
+          proxyTarget: 'http://localhost:8113',
+          serviceUrl: 'http://localhost:8113',
+        },
+        {
+          name: 'notion-service',
+          envSuffix: 'NOTION_SERVICE',
+          apiPath: '/api/notion',
+          proxyTarget: 'http://localhost:8112',
+          serviceUrl: 'http://localhost:8112',
+        },
+        {
           name: 'mobile-notifications-service',
           envSuffix: 'MOBILE_NOTIFICATIONS_SERVICE',
           apiPath: '/api/notifications',
@@ -122,6 +136,123 @@ export async function routes(fastify) {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/Route resource names valid/);
+  });
+
+  it('passes canonical provider webhook routes', () => {
+    writeFixture(
+      rootDir,
+      'apps/linear-agent/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/webhooks', async () => ({}));
+}
+`
+    );
+    writeFixture(
+      rootDir,
+      'apps/whatsapp-service/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.get('/webhooks', async () => ({}));
+  fastify.post('/webhooks', async () => ({}));
+}
+`
+    );
+    writeFixture(
+      rootDir,
+      'apps/notion-service/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/webhooks', async () => ({}));
+}
+`
+    );
+    writeFixture(
+      rootDir,
+      'apps/code-agent/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/webhooks/github', async () => ({}));
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/Route resource names valid/);
+  });
+
+  it('fails legacy Linear singular webhook route', () => {
+    writeFixture(
+      rootDir,
+      'apps/linear-agent/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/webhook', async () => ({}));
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/linear-agent/);
+    expect(result.stderr).toMatch(/\/webhook/);
+  });
+
+  it('fails nested WhatsApp webhook provider route', () => {
+    writeFixture(
+      rootDir,
+      'apps/whatsapp-service/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/webhooks/whatsapp', async () => ({}));
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/whatsapp-service/);
+    expect(result.stderr).toMatch(/\/webhooks\/whatsapp/);
+  });
+
+  it('fails legacy Notion webhook mount route', () => {
+    writeFixture(
+      rootDir,
+      'apps/notion-service/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/notion-webhooks', async () => ({}));
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/notion-service/);
+    expect(result.stderr).toMatch(/\/notion-webhooks/);
+  });
+
+  it('fails changed code-agent GitHub webhook route', () => {
+    writeFixture(
+      rootDir,
+      'apps/code-agent/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/github/webhooks', async () => ({}));
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/code-agent/);
+    expect(result.stderr).toMatch(/\/github\/webhooks/);
   });
 
   it('fails known alias route prefixes for services with historical mounts', () => {

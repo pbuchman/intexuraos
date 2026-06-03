@@ -1,10 +1,10 @@
 /**
  * Tests for webhook routes:
- * - POST /notion-webhooks
+ * - POST /webhooks
  */
 import { describe, expect, it, setupTestContext } from './testUtils.js';
 
-describe('POST /notion-webhooks', () => {
+describe('POST /webhooks', () => {
   const ctx = setupTestContext();
 
   it('accepts any JSON and returns ok (no auth required)', async () => {

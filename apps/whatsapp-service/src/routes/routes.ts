@@ -3,8 +3,8 @@
  *
  * Route URL → File mapping:
  * ─────────────────────────────────────────────────────────────
- * GET    /whatsapp/webhooks            → ./webhookRoutes.ts
- * POST   /whatsapp/webhooks            → ./webhookRoutes.ts
+ * GET    /webhooks                     → ./webhookRoutes.ts
+ * POST   /webhooks                     → ./webhookRoutes.ts
  * POST   /whatsapp/connect             → ./mappingRoutes.ts
  * GET    /whatsapp/status              → ./mappingRoutes.ts
  * DELETE /whatsapp/disconnect          → ./mappingRoutes.ts
