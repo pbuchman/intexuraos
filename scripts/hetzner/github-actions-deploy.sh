@@ -11,6 +11,11 @@ SSH_PORT="${SSH_PORT:-22}"
 DEPLOY_NGINX="${DEPLOY_NGINX:-true}"
 KEY_FILE=""
 KNOWN_HOSTS_FILE=""
+COMMIT_SHA_VALUE=""
+COMMIT_MESSAGE_VALUE=""
+RETIRED_REMOTE_PATHS=(
+  "packages/infra-otel"
+)
 
 fail() {
   printf 'ERROR: %s\n' "$1" >&2
@@ -39,6 +44,22 @@ validate_inputs() {
     true|false) ;;
     *) fail "DEPLOY_NGINX must be true or false" ;;
   esac
+}
+
+resolve_commit_metadata() {
+  COMMIT_SHA_VALUE="${GITHUB_SHA:-}"
+  COMMIT_MESSAGE_VALUE="${GITHUB_COMMIT_MESSAGE:-}"
+
+  if [[ -z "${COMMIT_SHA_VALUE}" ]]; then
+    COMMIT_SHA_VALUE="$(git rev-parse HEAD)"
+  fi
+
+  if [[ -z "${COMMIT_MESSAGE_VALUE}" ]]; then
+    COMMIT_MESSAGE_VALUE="$(git log -1 --pretty=%s)"
+  fi
+
+  [[ -n "${COMMIT_SHA_VALUE}" ]] || fail "Could not resolve COMMIT_SHA"
+  [[ -n "${COMMIT_MESSAGE_VALUE}" ]] || fail "Could not resolve COMMIT_MESSAGE"
 }
 
 setup_ssh() {
@@ -90,10 +111,29 @@ sync_repo() {
     ./ "${REMOTE_USER}@${HETZNER_PROD_HOST}:${REMOTE_REPO_DIR%/}/"
 }
 
+cleanup_retired_remote_paths() {
+  local path=""
+  local path_quoted=""
+
+  for path in "${RETIRED_REMOTE_PATHS[@]}"; do
+    printf -v path_quoted '%q' "${path}"
+    run_remote "if [[ -e ${path_quoted} || -L ${path_quoted} ]]; then printf 'Removing retired remote path: %s\n' ${path_quoted}; rm -rf -- ${path_quoted}; fi"
+  done
+}
+
+run_remote_deploy_web() {
+  local commit_sha_quoted=""
+  local commit_message_quoted=""
+
+  printf -v commit_sha_quoted '%q' "${COMMIT_SHA_VALUE}"
+  printf -v commit_message_quoted '%q' "${COMMIT_MESSAGE_VALUE}"
+  run_remote "COMMIT_SHA=${commit_sha_quoted} COMMIT_MESSAGE=${commit_message_quoted} INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh"
+}
+
 deploy_runtime() {
   run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
   run_remote 'CI=true pnpm install --frozen-lockfile'
-  run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'
+  run_remote_deploy_web
   run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
 
   if [[ "${DEPLOY_NGINX}" == "true" ]]; then
@@ -120,9 +160,12 @@ main() {
   require_command rsync
   require_command ssh
   require_command ssh-keyscan
+  require_command git
   validate_inputs
+  resolve_commit_metadata
   setup_ssh
   sync_repo
+  cleanup_retired_remote_paths
   deploy_runtime
   verify_deployment
 
