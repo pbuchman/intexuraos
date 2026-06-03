@@ -213,7 +213,7 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
     fastify.addHook('onRequest', jwtValidator);
 
     fastify.get(
-      '/code/queue',
+      '/queue',
       {
         schema: {
           operationId: 'listQueuedTasks',

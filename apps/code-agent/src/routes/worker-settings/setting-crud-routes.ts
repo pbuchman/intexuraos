@@ -46,7 +46,7 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
 
   // GET /code/worker-settings - Get user's worker settings (secrets masked)
   fastify.get(
-    '/code/worker-settings',
+    '/worker-settings',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
@@ -162,7 +162,7 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
   fastify.post<{
     Body: WorkerConfigInput;
   }>(
-    '/code/worker-settings/workers',
+    '/worker-settings/workers',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
@@ -303,7 +303,7 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
     Params: { name: string };
     Body: WorkerConfigUpdateInput;
   }>(
-    '/code/worker-settings/workers/:name',
+    '/worker-settings/workers/:name',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
@@ -429,7 +429,7 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
   fastify.delete<{
     Params: { name: string };
   }>(
-    '/code/worker-settings/workers/:name',
+    '/worker-settings/workers/:name',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,

@@ -50,7 +50,7 @@ describe('notesApi', () => {
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[0]).toBe('https://notes.test');
-      expect(call?.[1]).toBe('/notes');
+      expect(call?.[1]).toBe('/');
       expect(call?.[2]).toBe(TOKEN);
       expect(result).toEqual([sampleNote]);
     });
@@ -71,7 +71,7 @@ describe('notesApi', () => {
       const result = await createNote(TOKEN, request);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notes');
+      expect(call?.[1]).toBe('/');
       expect(call?.[3]).toEqual({ method: 'POST', body: request });
       expect(result).toBe(sampleNote);
     });
@@ -85,7 +85,7 @@ describe('notesApi', () => {
       const result = await getNote(TOKEN, 'note-1');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notes/note-1');
+      expect(call?.[1]).toBe('/note-1');
       expect(result).toBe(sampleNote);
     });
   });
@@ -99,7 +99,7 @@ describe('notesApi', () => {
       const result = await updateNote(TOKEN, 'note-1', { title: 'New title' });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notes/note-1');
+      expect(call?.[1]).toBe('/note-1');
       expect(call?.[3]).toEqual({ method: 'PATCH', body: { title: 'New title' } });
       expect(result).toBe(updated);
     });
@@ -113,7 +113,7 @@ describe('notesApi', () => {
       await deleteNote(TOKEN, 'note-1');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notes/note-1');
+      expect(call?.[1]).toBe('/note-1');
       expect(call?.[3]).toEqual({ method: 'DELETE' });
     });
 

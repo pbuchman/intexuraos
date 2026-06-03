@@ -40,18 +40,18 @@ export async function listTodos(
   filters: ListTodosFilters = {}
 ): Promise<Todo[]> {
   const query = buildQueryString(filters);
-  return await apiRequest<Todo[]>(config.todosAgentUrl, `/todos${query}`, accessToken);
+  return await apiRequest<Todo[]>(config.todosAgentUrl, `/${query}`, accessToken);
 }
 
 export async function createTodo(accessToken: string, request: CreateTodoRequest): Promise<Todo> {
-  return await apiRequest<Todo>(config.todosAgentUrl, '/todos', accessToken, {
+  return await apiRequest<Todo>(config.todosAgentUrl, '/', accessToken, {
     method: 'POST',
     body: request,
   });
 }
 
 export async function getTodo(accessToken: string, id: string): Promise<Todo> {
-  return await apiRequest<Todo>(config.todosAgentUrl, `/todos/${id}`, accessToken);
+  return await apiRequest<Todo>(config.todosAgentUrl, `/${id}`, accessToken);
 }
 
 export async function updateTodo(
@@ -59,32 +59,32 @@ export async function updateTodo(
   id: string,
   request: UpdateTodoRequest
 ): Promise<Todo> {
-  return await apiRequest<Todo>(config.todosAgentUrl, `/todos/${id}`, accessToken, {
+  return await apiRequest<Todo>(config.todosAgentUrl, `/${id}`, accessToken, {
     method: 'PATCH',
     body: request,
   });
 }
 
 export async function deleteTodo(accessToken: string, id: string): Promise<void> {
-  await apiRequest<Record<string, never>>(config.todosAgentUrl, `/todos/${id}`, accessToken, {
+  await apiRequest<Record<string, never>>(config.todosAgentUrl, `/${id}`, accessToken, {
     method: 'DELETE',
   });
 }
 
 export async function archiveTodo(accessToken: string, id: string): Promise<Todo> {
-  return await apiRequest<Todo>(config.todosAgentUrl, `/todos/${id}/archive`, accessToken, {
+  return await apiRequest<Todo>(config.todosAgentUrl, `/${id}/archive`, accessToken, {
     method: 'POST',
   });
 }
 
 export async function unarchiveTodo(accessToken: string, id: string): Promise<Todo> {
-  return await apiRequest<Todo>(config.todosAgentUrl, `/todos/${id}/unarchive`, accessToken, {
+  return await apiRequest<Todo>(config.todosAgentUrl, `/${id}/unarchive`, accessToken, {
     method: 'POST',
   });
 }
 
 export async function cancelTodo(accessToken: string, id: string): Promise<Todo> {
-  return await apiRequest<Todo>(config.todosAgentUrl, `/todos/${id}/cancel`, accessToken, {
+  return await apiRequest<Todo>(config.todosAgentUrl, `/${id}/cancel`, accessToken, {
     method: 'POST',
   });
 }
@@ -94,7 +94,7 @@ export async function addTodoItem(
   todoId: string,
   request: CreateTodoItemRequest
 ): Promise<Todo> {
-  return await apiRequest<Todo>(config.todosAgentUrl, `/todos/${todoId}/items`, accessToken, {
+  return await apiRequest<Todo>(config.todosAgentUrl, `/${todoId}/items`, accessToken, {
     method: 'POST',
     body: request,
   });
@@ -108,7 +108,7 @@ export async function updateTodoItem(
 ): Promise<Todo> {
   return await apiRequest<Todo>(
     config.todosAgentUrl,
-    `/todos/${todoId}/items/${itemId}`,
+    `/${todoId}/items/${itemId}`,
     accessToken,
     {
       method: 'PATCH',
@@ -124,7 +124,7 @@ export async function deleteTodoItem(
 ): Promise<Todo> {
   return await apiRequest<Todo>(
     config.todosAgentUrl,
-    `/todos/${todoId}/items/${itemId}`,
+    `/${todoId}/items/${itemId}`,
     accessToken,
     {
       method: 'DELETE',
@@ -139,7 +139,7 @@ export async function reorderTodoItems(
 ): Promise<Todo> {
   return await apiRequest<Todo>(
     config.todosAgentUrl,
-    `/todos/${todoId}/items/reorder`,
+    `/${todoId}/items/reorder`,
     accessToken,
     {
       method: 'POST',

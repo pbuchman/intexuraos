@@ -34,12 +34,12 @@ No service-level changes. Two package-level updates touched calendar-agent test 
 
 Split the monolithic `calendarRoutes.ts` into six focused route files, each responsible for a single resource or operation type:
 
-- `eventQueryRoutes.ts` — GET /calendar/events, GET /calendar/events/:eventId
-- `eventCreateRoutes.ts` — POST /calendar/events
-- `eventUpdateRoutes.ts` — PATCH /calendar/events/:eventId
-- `eventDeleteRoutes.ts` — DELETE /calendar/events/:eventId
-- `freeBusyRoutes.ts` — POST /calendar/freebusy
-- `failedEventRoutes.ts` — GET/DELETE/POST /calendar/failed-events
+- `eventQueryRoutes.ts` — GET /events, GET /events/:eventId
+- `eventCreateRoutes.ts` — POST /events
+- `eventUpdateRoutes.ts` — PATCH /events/:eventId
+- `eventDeleteRoutes.ts` — DELETE /events/:eventId
+- `freeBusyRoutes.ts` — POST /freebusy
+- `failedEventRoutes.ts` — GET/DELETE/POST /failed-events
 
 The original `calendarRoutes.ts` now serves as a barrel file that registers all sub-route plugins. Shared types and builder functions were extracted to `calendarHelpers.ts`, and error handling was extracted to `calendarErrorHandler.ts`.
 
@@ -121,8 +121,8 @@ Standardized platform LLM API key env vars to use `_APP_` naming convention:
 
 Added two new public endpoints for managing failed event extractions:
 
-- `DELETE /calendar/failed-events/:id` — permanently remove a failed event from the review queue
-- `POST /calendar/failed-events/:id/retry` — retry creating a calendar event using stored extraction data
+- `DELETE /failed-events/:id` — permanently remove a failed event from the review queue
+- `POST /failed-events/:id/retry` — retry creating a calendar event using stored extraction data
 
 Both endpoints enforce user ownership (returns 404 if the event belongs to a different user). Retry requires both start and end times to be present (returns 422 if missing).
 

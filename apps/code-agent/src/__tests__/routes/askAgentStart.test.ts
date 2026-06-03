@@ -249,7 +249,7 @@ describe('POST /code/ask-agent/start', () => {
     it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         payload: {
           prompt: 'What is the architecture?',
         },
@@ -271,7 +271,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer invalid-token',
         },
@@ -288,7 +288,7 @@ describe('POST /code/ask-agent/start', () => {
     it('creates task with valid request', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -317,7 +317,7 @@ describe('POST /code/ask-agent/start', () => {
     it('returns 400 when prompt is missing', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -330,7 +330,7 @@ describe('POST /code/ask-agent/start', () => {
     it('returns 400 when prompt is empty string', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -351,7 +351,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -369,7 +369,7 @@ describe('POST /code/ask-agent/start', () => {
       // Submit the same prompt twice to trigger dedup
       await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -380,7 +380,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -401,7 +401,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -422,7 +422,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },

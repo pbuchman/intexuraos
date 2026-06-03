@@ -199,13 +199,13 @@ apps/web/src/
 | `/bookmarks/:id`                        | BookmarkDetailRedirect            | Yes                             | Redirect to `/my-bookmarks?id=`      |
 | `/notes`                                | WhatsAppNotesPage                 | Yes                             | WhatsApp notes                       |
 | `/calendar`                             | CalendarPage                      | Yes                             | Calendar events                      |
-| `/linear`                               | LinearIssuesPage                  | Yes                             | Linear issues dashboard              |
+| `/`                               | LinearIssuesPage                  | Yes                             | Linear issues dashboard              |
 | `/notifications`                        | MobileNotificationsListPage       | Yes                             | Push notifications history           |
 | `/settings/whatsapp`                    | WhatsAppConnectionPage            | Yes                             | WhatsApp connection                  |
 | `/settings/mobile`                      | MobileNotificationsConnectionPage | Yes                             | Mobile notification settings         |
 | `/settings/notion`                      | NotionConnectionPage              | Yes                             | Notion connection                    |
 | `/settings/calendar`                    | GoogleCalendarConnectionPage      | Yes                             | Google Calendar connection           |
-| `/settings/linear`                      | LinearConnectionPage              | Yes                             | Linear connection + webhooks         |
+| `/settings/`                      | LinearConnectionPage              | Yes                             | Linear connection + webhooks         |
 | `/settings/github`                      | GitHubConnectionPage              | Yes                             | GitHub connection                    |
 | `/settings/code`                        | WorkerSettingsPage                | Yes                             | Code worker configuration            |
 | `/settings/api-keys`                    | ApiKeysSettingsPage               | Yes                             | LLM API key management               |
@@ -412,8 +412,8 @@ buttons:
   - id: approve
     label: Approve
     endpoint:
-      path: /actions/{actionId}/approve
-      method: PATCH
+      path: /{actionId}/execute
+      method: POST
     displayOn:
       status: awaiting_approval
 ```

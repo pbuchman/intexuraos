@@ -145,7 +145,7 @@ export function useResearchDetailActions(
     try {
       const token = await getAccessToken();
       await deleteResearch(token, id);
-      void navigate('/research');
+      void navigate('/');
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete research');
       setShowDeleteConfirm(false);
@@ -237,7 +237,7 @@ export function useResearchDetailActions(
     const token = await getAccessToken();
     const enhanced = await enhanceResearch(token, id, params);
     setShowEnhanceModal(false);
-    void navigate(`/research/${enhanced.id}`);
+    void navigate(`/${enhanced.id}`);
   };
 
   const handleToggleFavourite = async (): Promise<void> => {

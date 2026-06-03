@@ -114,7 +114,7 @@ in `apps/web/dist` or `apps/web/.env` block cutover.
 ## External Callbacks And Allowlists
 
 Use `/api/*` for web bundle service URLs. Use these provider-facing callback
-URLs unless a replacement alias is explicitly documented before cutover.
+URLs; this is a hard cutover with no alias or rewrite fallback.
 
 | System              | Setting                              | Required cutover value                                                                 | Notes |
 | ------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- | ----- |
@@ -127,9 +127,11 @@ URLs unless a replacement alias is explicitly documented before cutover.
 | Firebase Auth       | Authorized domains                   | `intexuraos.cloud`                                                                     | Keep the Firebase `authDomain` secret value from Terraform; do not replace it with the web domain. |
 | GitHub OAuth App    | Homepage URL                         | `https://intexuraos.cloud`                                                             | Applies to the user-service GitHub connection flow. |
 | GitHub OAuth App    | Authorization callback URL           | `https://intexuraos.cloud/oauth/connections/github/callback`                           | Hetzner must proxy `/oauth/connections/github/*` to `user-service`; current code generates this path from forwarded host/proto. |
-| Linear webhook      | Webhook URL                          | `https://intexuraos.cloud/api/linear/linear/webhook`                                   | Or `https://intexuraos.cloud/linear/webhook` only if nginx has an explicit alias. Keep the signing secret unchanged. |
-| WhatsApp webhook    | Callback URL                         | `https://intexuraos.cloud/api/whatsapp/whatsapp/webhooks`                              | Or `https://intexuraos.cloud/webhooks/whatsapp` only if nginx rewrites that alias to `/whatsapp/webhooks`. Keep the verify token unchanged. |
+| Linear webhook      | Webhook URL                          | `https://intexuraos.cloud/api/linear/webhook`                                         | Keep the signing secret unchanged. |
+| WhatsApp webhook    | Callback URL                         | `https://intexuraos.cloud/api/whatsapp/webhooks`                                      | Keep the verify token unchanged. |
 | WhatsApp webhook    | Webhook fields                       | `messages`, `message_status`                                                           | Verify WABA app subscription remains active. |
+| Notion webhook      | Webhook URL                          | `https://intexuraos.cloud/api/notion/webhooks`                                        | Only if Notion webhooks are enabled. |
+| GitHub code webhook | Payload URL                          | `https://intexuraos.cloud/api/code/webhooks/github`                                   | Unchanged canonical code-agent webhook path. |
 | Cloudflare DNS      | Apex `A`/`AAAA`                       | Hetzner public IPs; TTL `300` during cutover window                                    | Rollback value is the recorded GCP LB IP. Record any existing `www` values, but `www` stays out of this cutover unless a later approved change adds certificate and nginx host support. |
 
 ## Cutover
@@ -180,6 +182,26 @@ curl -fsSI https://intexuraos.cloud/assets/<current-hashed-asset>.js
 jq -r '.services[].apiPath' apps/web/service-manifest.json |
 while read -r api_path; do
   curl -fsS "https://intexuraos.cloud${api_path}/health"
+done
+```
+
+- [ ] Canonical API resource paths return a routed response. `2xx`, `401`,
+  `403`, or `405` can be valid depending on auth and method; any `404` means
+  the service mount/resource path normalization regressed.
+
+```bash
+for path in \
+  /api/whatsapp/status \
+  /api/linear/connection \
+  /api/code/tasks \
+  /api/research \
+  /api/actions \
+  /api/notifications \
+  /api/cron-agent/services \
+  /api/llm-usage/pricing; do
+  status="$(curl -sS -o /dev/null -w '%{http_code}' "https://intexuraos.cloud${path}")"
+  printf '%s %s\n' "$status" "$path"
+  test "$status" != "404"
 done
 ```
 

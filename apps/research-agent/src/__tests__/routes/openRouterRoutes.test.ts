@@ -122,7 +122,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -148,7 +148,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -177,7 +177,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -216,7 +216,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     // First request — populates cache
     const response1 = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(response1.statusCode).toBe(200);
@@ -228,7 +228,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     // Second request — should use cache (no new HTTP call)
     const response2 = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(response2.statusCode).toBe(200);
@@ -262,7 +262,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
 
     const response1 = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(response1.statusCode).toBe(200);
@@ -284,7 +284,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     // Second request — should make new HTTP call (cache expired)
     const response2 = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(response2.statusCode).toBe(200);
@@ -305,7 +305,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -336,7 +336,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -367,7 +367,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -399,7 +399,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -431,7 +431,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
-      url: '/research/openrouter/models',
+      url: '/openrouter/models',
       headers: { authorization: `Bearer ${token}` },
     });
 

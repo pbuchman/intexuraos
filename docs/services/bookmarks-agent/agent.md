@@ -20,7 +20,7 @@
 
 ### Create Bookmark (Public)
 
-**Endpoint:** `POST /bookmarks`
+**Endpoint:** `POST /`
 **Auth:** Bearer token
 
 **When to use:** When creating a bookmark directly from the web dashboard. Does NOT trigger enrichment pipeline.
@@ -110,7 +110,7 @@ interface CreateBookmarkInternalOutput {
 
 ### List Bookmarks
 
-**Endpoint:** `GET /bookmarks`
+**Endpoint:** `GET /`
 **Auth:** Bearer token
 
 **When to use:** To retrieve all bookmarks for the authenticated user, optionally filtered.
@@ -127,7 +127,7 @@ interface ListBookmarksQuery {
 
 ### Get Bookmark
 
-**Endpoint:** `GET /bookmarks/:id`
+**Endpoint:** `GET /:id`
 **Auth:** Bearer token
 
 **When to use:** To retrieve a single bookmark by ID. Returns 403 if the bookmark belongs to a different user.
@@ -141,7 +141,7 @@ interface ListBookmarksQuery {
 
 ### Update Bookmark
 
-**Endpoint:** `PATCH /bookmarks/:id`
+**Endpoint:** `PATCH /:id`
 **Auth:** Bearer token
 
 **When to use:** To update user-editable fields (title, description, tags, archived).
@@ -180,14 +180,14 @@ interface UpdateBookmarkInternalInput {
 
 ### Delete Bookmark
 
-**Endpoint:** `DELETE /bookmarks/:id`
+**Endpoint:** `DELETE /:id`
 **Auth:** Bearer token
 
 **When to use:** To permanently delete a bookmark. This is a hard delete.
 
 ### Archive / Unarchive
 
-**Endpoint:** `POST /bookmarks/:id/archive` | `POST /bookmarks/:id/unarchive`
+**Endpoint:** `POST /:id/archive` | `POST /:id/unarchive`
 **Auth:** Bearer token
 
 **When to use:** To soft-delete (archive) or restore (unarchive) a bookmark. Idempotent — archiving an already-archived bookmark returns success.
@@ -270,7 +270,7 @@ interface Bookmark {
 
 ```
 1. POST /internal/bookmarks -> get bookmark ID
-2. Poll GET /bookmarks/:id until ogFetchStatus !== 'pending'
+2. Poll GET /:id until ogFetchStatus !== 'pending'
 3. Bookmark now has ogPreview and aiSummary populated
 4. User receives WhatsApp notification automatically (marked important)
 ```
@@ -278,10 +278,10 @@ interface Bookmark {
 ### Pattern 2: Handle Duplicate URL
 
 ```
-1. POST /internal/bookmarks or POST /bookmarks
+1. POST /internal/bookmarks or POST /
 2. If 409 CONFLICT response:
    a. Extract existingBookmarkId from error.details
-   b. GET /bookmarks/:existingBookmarkId to retrieve existing bookmark
+   b. GET /:existingBookmarkId to retrieve existing bookmark
 ```
 
 ### Pattern 3: Find Failed Enrichments and Retry

@@ -30,7 +30,7 @@ function getIndexingDeps(): Parameters<typeof createKnowledgePage>[0] {
 }
 
 export function registerPagesRoutes(app: FastifyInstance): void {
-  app.get('/fishing/pages', async (request, reply) => {
+  app.get('/pages', async (request, reply) => {
     logIncomingRequest(request);
     return await withAuth(request, reply, async (user) => {
       const query = request.query as { folderId?: string };
@@ -43,7 +43,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.post('/fishing/pages', async (request, reply) => {
+  app.post('/pages', async (request, reply) => {
     logIncomingRequest(request, { bodyPreviewLength: 0 });
     return await withAuth(request, reply, async (user) => {
       const body = parsePageBody(request.body);
@@ -64,7 +64,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.get('/fishing/pages/:pageId', async (request, reply) => {
+  app.get('/pages/:pageId', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { pageId: string };
@@ -78,7 +78,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.patch('/fishing/pages/:pageId', async (request, reply) => {
+  app.patch('/pages/:pageId', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true, bodyPreviewLength: 0 });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { pageId: string };
@@ -97,7 +97,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.delete('/fishing/pages/:pageId', async (request, reply) => {
+  app.delete('/pages/:pageId', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { pageId: string };
@@ -110,7 +110,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
     });
   });
 
-  app.post('/fishing/pages/:pageId/reindex', async (request, reply) => {
+  app.post('/pages/:pageId/reindex', async (request, reply) => {
     logIncomingRequest(request, { includeParams: true });
     return await withAuth(request, reply, async (user) => {
       const params = request.params as { pageId: string };

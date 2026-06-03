@@ -241,26 +241,26 @@ interface ServiceFeedback {
 ### Pattern 3: Direct Event Creation
 
 ```
-1. Call POST /calendar/events with full event details
+1. Call POST /events with full event details
 2. Returns created CalendarEvent with id and htmlLink
 ```
 
 ### Pattern 4: Check Availability Then Create
 
 ```
-1. Call POST /calendar/freebusy with time range and calendar IDs
+1. Call POST /freebusy with time range and calendar IDs
 2. Find available slot from gaps in busy array
-3. Call POST /calendar/events with available time slot
+3. Call POST /events with available time slot
 ```
 
 ### Pattern 5: Failed Event Recovery
 
 ```
-1. Call GET /calendar/failed-events to list extraction failures
+1. Call GET /failed-events to list extraction failures
 2. Display originalText, summary, error, reasoning to user
-3. If start and end are present: Call POST /calendar/failed-events/:id/retry
-4. If start/end missing: Allow manual correction, call POST /calendar/events with corrected data
-5. To dismiss: Call DELETE /calendar/failed-events/:id
+3. If start and end are present: Call POST /failed-events/:id/retry
+4. If start/end missing: Allow manual correction, call POST /events with corrected data
+5. To dismiss: Call DELETE /failed-events/:id
 ```
 
 ---
@@ -269,15 +269,15 @@ interface ServiceFeedback {
 
 | Method | Path                                | Purpose                    | Auth         |
 | ------ | ----------------------------------- | -------------------------- | ------------ |
-| GET    | `/calendar/events`                  | List events with filters   | Bearer token |
-| GET    | `/calendar/events/:eventId`         | Get specific event         | Bearer token |
-| POST   | `/calendar/events`                  | Create event               | Bearer token |
-| PATCH  | `/calendar/events/:eventId`         | Update event               | Bearer token |
-| DELETE | `/calendar/events/:eventId`         | Delete event               | Bearer token |
-| POST   | `/calendar/freebusy`                | Get free/busy info         | Bearer token |
-| GET    | `/calendar/failed-events`           | List failed extractions    | Bearer token |
-| DELETE | `/calendar/failed-events/:id`       | Delete a failed event      | Bearer token |
-| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed | Bearer token |
+| GET    | `/events`                  | List events with filters   | Bearer token |
+| GET    | `/events/:eventId`         | Get specific event         | Bearer token |
+| POST   | `/events`                  | Create event               | Bearer token |
+| PATCH  | `/events/:eventId`         | Update event               | Bearer token |
+| DELETE | `/events/:eventId`         | Delete event               | Bearer token |
+| POST   | `/freebusy`                | Get free/busy info         | Bearer token |
+| GET    | `/failed-events`           | List failed extractions    | Bearer token |
+| DELETE | `/failed-events/:id`       | Delete a failed event      | Bearer token |
+| POST   | `/failed-events/:id/retry` | Retry creating from failed | Bearer token |
 
 ## Internal Endpoints
 

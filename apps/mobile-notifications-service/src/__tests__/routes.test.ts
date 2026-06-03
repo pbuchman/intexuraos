@@ -77,7 +77,7 @@ describe('Connect Routes', () => {
   it('POST /mobile-notifications/connect returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/connect',
+      url: '/connect',
       payload: {},
     });
 
@@ -93,7 +93,7 @@ describe('Connect Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/connect',
+      url: '/connect',
       headers: {
         authorization: `Bearer ${TEST_JWT}`,
       },
@@ -113,7 +113,7 @@ describe('Connect Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/connect',
+      url: '/connect',
       headers: {
         authorization: `Bearer ${TEST_JWT}`,
       },
@@ -168,7 +168,7 @@ describe('Status Routes', () => {
   it('GET /mobile-notifications/status returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/mobile-notifications/status',
+      url: '/status',
     });
 
     expect(response.statusCode).toBe(401);
@@ -183,7 +183,7 @@ describe('Status Routes', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/mobile-notifications/status',
+      url: '/status',
       headers: {
         authorization: `Bearer ${TEST_JWT}`,
       },
@@ -237,7 +237,7 @@ describe('Webhook Routes', () => {
   it('POST /mobile-notifications/webhooks returns 400 without signature header', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/webhooks',
+      url: '/webhooks',
       payload: {
         source: 'tasker',
         device: 'test-phone',
@@ -259,7 +259,7 @@ describe('Webhook Routes', () => {
   it('POST /mobile-notifications/webhooks returns ignored for invalid signature', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/webhooks',
+      url: '/webhooks',
       headers: {
         'x-mobile-notifications-signature': 'invalid-signature',
       },
@@ -296,7 +296,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/webhooks',
+      url: '/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -353,7 +353,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/webhooks',
+      url: '/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -388,7 +388,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/webhooks',
+      url: '/webhooks',
       headers: {
         'x-mobile-notifications-signature': 'some-signature',
       },
@@ -426,7 +426,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/webhooks',
+      url: '/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -464,7 +464,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/mobile-notifications/webhooks',
+      url: '/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -533,7 +533,7 @@ describe('Notification Routes', () => {
   it('GET /mobile-notifications returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/mobile-notifications',
+      url: '/',
     });
 
     expect(response.statusCode).toBe(401);
@@ -542,7 +542,7 @@ describe('Notification Routes', () => {
   it('DELETE /mobile-notifications/:notification_id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'DELETE',
-      url: '/mobile-notifications/notif-123',
+      url: '/notif-123',
     });
 
     expect(response.statusCode).toBe(401);

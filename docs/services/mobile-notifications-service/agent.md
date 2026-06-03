@@ -86,7 +86,7 @@ interface InternalNotification {
 
 ### List Notifications (Public)
 
-**Endpoint:** `GET /mobile-notifications`
+**Endpoint:** `GET /`
 
 **When to use:** When displaying notifications to the authenticated user.
 
@@ -127,7 +127,7 @@ interface MobileNotification {
 
 ### Create Connection
 
-**Endpoint:** `POST /mobile-notifications/connect`
+**Endpoint:** `POST /connect`
 
 **When to use:** When pairing a new device for notification capture.
 
@@ -152,7 +152,7 @@ interface ConnectOutput {
 
 ### Get Connection Status
 
-**Endpoint:** `GET /mobile-notifications/status`
+**Endpoint:** `GET /status`
 
 **When to use:** When checking if a user has an active device connection.
 
@@ -169,7 +169,7 @@ interface StatusOutput {
 
 ### Receive Webhook
 
-**Endpoint:** `POST /mobile-notifications/webhooks`
+**Endpoint:** `POST /webhooks`
 
 **When to use:** Called by mobile automation apps (Tasker/Automate) to forward device notifications.
 
@@ -202,7 +202,7 @@ interface WebhookOutput {
 
 ### List Digests
 
-**Endpoint:** `GET /notifications/digests`
+**Endpoint:** `GET /digests`
 
 **When to use:** When displaying AI-generated daily summaries for a WhatsApp group over a date range.
 
@@ -250,7 +250,7 @@ interface DailySummary {
 
 ### Get Single Digest
 
-**Endpoint:** `GET /notifications/digests/:groupKey/:date`
+**Endpoint:** `GET /digests/:groupKey/:date`
 
 **When to use:** When displaying a specific day's digest.
 
@@ -258,7 +258,7 @@ interface DailySummary {
 
 ### Run Digest (User)
 
-**Endpoint:** `POST /notifications/digests/run`
+**Endpoint:** `POST /digests/run`
 
 **When to use:** When the user wants to regenerate a digest for a specific group and date.
 
@@ -288,7 +288,7 @@ interface RunDigestOutput {
 
 ### Start Backfill
 
-**Endpoint:** `POST /notifications/digests/backfill`
+**Endpoint:** `POST /digests/backfill`
 
 **When to use:** When generating digests for a historical date range.
 
@@ -315,7 +315,7 @@ interface StartBackfillOutput {
 
 ### Get Backfill Status
 
-**Endpoint:** `GET /notifications/digests/backfill/:runId`
+**Endpoint:** `GET /digests/backfill/:runId`
 
 **When to use:** When polling for backfill progress.
 
@@ -370,7 +370,7 @@ interface DigestSubscription {
 
 ### Get Filter Options
 
-**Endpoint:** `GET /notifications/filters`
+**Endpoint:** `GET /filters`
 
 **Auth:** Bearer JWT. Returns empty options arrays (never 404) when no notifications received yet.
 
@@ -402,7 +402,7 @@ interface SavedFilter {
 
 ### Create Saved Filter
 
-**Endpoint:** `POST /notifications/filters/saved`
+**Endpoint:** `POST /filters/saved`
 
 **Auth:** Bearer JWT. Returns 201 Created.
 
@@ -420,13 +420,13 @@ interface CreateSavedFilterInput {
 
 ### Delete Saved Filter
 
-**Endpoint:** `DELETE /notifications/filters/saved/:id`
+**Endpoint:** `DELETE /filters/saved/:id`
 
 **Auth:** Bearer JWT. Returns 204 No Content on success, 404 if not found.
 
 ### Delete Notification
 
-**Endpoint:** `DELETE /mobile-notifications/:notification_id`
+**Endpoint:** `DELETE /:notification_id`
 
 **Auth:** Bearer JWT. Returns 200 `{ success: true, data: {} }` on success, 403 if not owner, 404 if not found.
 
@@ -439,7 +439,7 @@ interface CreateSavedFilterInput {
 - Call the internal query endpoint without `X-Internal-Auth` header — returns 401
 - Expect the plaintext signature after the initial `POST /connect` response — it is never re-shown
 - Send notifications without the `X-Mobile-Notifications-Signature` header — returns 400
-- Call `GET /notifications/filters` expecting 404 for new users — returns empty arrays instead
+- Call `GET /filters` expecting 404 for new users — returns empty arrays instead
 - Run a digest for a group the user is not subscribed to — returns 400
 - Expect WhatsApp notifications on digest regeneration — only first generation triggers notifications
 
@@ -468,34 +468,34 @@ For fishing digest language fixes, regenerate the affected date range after depl
 ### Pattern 2: Check Device Setup
 
 ```
-1. Call GET /mobile-notifications/status
-2. If configured === false, prompt user to connect device via POST /mobile-notifications/connect
+1. Call GET /status
+2. If configured === false, prompt user to connect device via POST /connect
 3. If configured === true, proceed to show notification feed
 ```
 
 ### Pattern 3: Filtered Browsing
 
 ```
-1. Call GET /notifications/filters to get available options
+1. Call GET /filters to get available options
 2. Let user select filters
-3. Call GET /mobile-notifications with selected filters as query params
-4. Optionally save filter as preset via POST /notifications/filters/saved
+3. Call GET / with selected filters as query params
+4. Optionally save filter as preset via POST /filters/saved
 ```
 
 ### Pattern 4: Browse Daily Digests
 
 ```
-1. Call GET /notifications/digests with groupKey, fromDate, toDate
+1. Call GET /digests with groupKey, fromDate, toDate
 2. Display headline and bullets for each day
-3. On click, call GET /notifications/digests/:groupKey/:date for full detail
+3. On click, call GET /digests/:groupKey/:date for full detail
 ```
 
 ### Pattern 5: Backfill Historical Digests
 
 ```
-1. Call POST /notifications/digests/backfill with groupKey, fromDate, toDate
+1. Call POST /digests/backfill with groupKey, fromDate, toDate
 2. Store returned runId
-3. Poll GET /notifications/digests/backfill/:runId until status === 'completed' or 'failed'
+3. Poll GET /digests/backfill/:runId until status === 'completed' or 'failed'
 4. On completion, browse digests via Pattern 4
 ```
 

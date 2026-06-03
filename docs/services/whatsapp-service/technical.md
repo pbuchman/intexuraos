@@ -43,7 +43,7 @@ sequenceDiagram
     participant PS as Pub/Sub
     participant SRT as SRT Service
 
-    WA->>+WS: POST /whatsapp/webhooks
+    WA->>+WS: POST /webhooks
     WS->>WS: Validate HMAC-SHA256 signature
     WS->>WS: Validate WABA ID & Phone Number ID
     WS->>FS: Save webhook_event (status=pending)
@@ -141,7 +141,7 @@ sequenceDiagram
 | Commit     | Description                                                                 | Date       |
 | ---------- | --------------------------------------------------------------------------- | ---------- |
 | `63d174c0` | Cover savePreferences failure + v8-ignore for unreachable Zod branch        | 2026-04-21 |
-| `62d6d647` | Add GET/PUT /whatsapp/preferences endpoints for notification level          | 2026-04-21 |
+| `62d6d647` | Add GET/PUT /preferences endpoints for notification level          | 2026-04-21 |
 | `85a49b38` | Filter WhatsApp deliveries by notification importance level                 | 2026-04-20 |
 | `244ee42d` | Mirror important flag on internal SendMessageEvent                          | 2026-04-20 |
 | `e6e96ee7` | Wire NotificationPreferencesRepository into service container               | 2026-04-20 |
@@ -157,9 +157,9 @@ Users can suppress low-priority WhatsApp notifications by setting their notifica
 1. **Domain model:** `NotificationPreferences` with `notificationLevel: 'all' | 'important'`
 2. **Use case:** `shouldDeliverMessage()` — returns `true` when level is `all` or when the message is flagged `important`
 3. **Repository:** `NotificationPreferencesRepository` stores the level on the `whatsapp_user_mappings/{userId}` document (private `notificationLevel` field)
-4. **Endpoints:** `GET /whatsapp/preferences` and `PUT /whatsapp/preferences` for reading and updating the level
+4. **Endpoints:** `GET /preferences` and `PUT /preferences` for reading and updating the level
 5. **Send-message handler:** Before sending, reads the user's preference and drops non-important messages when level is `important`
-6. **Privacy contract:** The notification level is never returned by `/whatsapp/status`, never published on Pub/Sub, and never read by other services
+6. **Privacy contract:** The notification level is never returned by `/status`, never published on Pub/Sub, and never read by other services
 
 ### Sentry Quota Protection (INT-1172)
 
@@ -171,25 +171,25 @@ WhatsApp API errors in `sender.ts` now use `SKIP_SENTRY_KEY` on all error log en
 
 | Method | Path                 | Description                                  | Auth           |
 | ------ | -------------------- | -------------------------------------------- | -------------- |
-| GET    | `/whatsapp/webhooks` | Webhook verification (returns hub.challenge) | None           |
-| POST   | `/whatsapp/webhooks` | Receive webhook events                       | HMAC signature |
+| GET    | `/webhooks` | Webhook verification (returns hub.challenge) | None           |
+| POST   | `/webhooks` | Receive webhook events                       | HMAC signature |
 
 ### Public Endpoints
 
 | Method | Path                                       | Description                                | Auth         |
 | ------ | ------------------------------------------ | ------------------------------------------ | ------------ |
-| GET    | `/whatsapp/messages`                       | List user's messages (paginated)           | Bearer token |
-| GET    | `/whatsapp/messages/:message_id/media`     | Get signed URL for media                   | Bearer token |
-| GET    | `/whatsapp/messages/:message_id/thumbnail` | Get signed URL for thumbnail               | Bearer token |
-| DELETE | `/whatsapp/messages/:message_id`           | Delete message                             | Bearer token |
-| POST   | `/whatsapp/connect`                        | Connect/update mapping (requires verified) | Bearer token |
-| GET    | `/whatsapp/status`                         | Get mapping status                         | Bearer token |
-| DELETE | `/whatsapp/disconnect`                     | Disconnect mapping                         | Bearer token |
-| POST   | `/whatsapp/verify/send`                    | Send phone verification code               | Bearer token |
-| POST   | `/whatsapp/verify/confirm`                 | Confirm verification code                  | Bearer token |
-| GET    | `/whatsapp/verify/status/:phone`           | Check phone verification status            | Bearer token |
-| GET    | `/whatsapp/preferences`                    | Get notification preferences               | Bearer token |
-| PUT    | `/whatsapp/preferences`                    | Update notification preferences            | Bearer token |
+| GET    | `/messages`                       | List user's messages (paginated)           | Bearer token |
+| GET    | `/messages/:message_id/media`     | Get signed URL for media                   | Bearer token |
+| GET    | `/messages/:message_id/thumbnail` | Get signed URL for thumbnail               | Bearer token |
+| DELETE | `/messages/:message_id`           | Delete message                             | Bearer token |
+| POST   | `/connect`                        | Connect/update mapping (requires verified) | Bearer token |
+| GET    | `/status`                         | Get mapping status                         | Bearer token |
+| DELETE | `/disconnect`                     | Disconnect mapping                         | Bearer token |
+| POST   | `/verify/send`                    | Send phone verification code               | Bearer token |
+| POST   | `/verify/confirm`                 | Confirm verification code                  | Bearer token |
+| GET    | `/verify/status/:phone`           | Check phone verification status            | Bearer token |
+| GET    | `/preferences`                    | Get notification preferences               | Bearer token |
+| PUT    | `/preferences`                    | Update notification preferences            | Bearer token |
 
 ### Internal Endpoints
 
@@ -407,11 +407,11 @@ Uses HMAC-SHA256 with app secret. Signature is in `X-Hub-Signature-256` header. 
 
 ### Async Webhook Processing Pattern
 
-The POST /whatsapp/webhooks handler returns 200 immediately after saving the event and publishing `whatsapp.webhook.process`. Heavy processing (media download, user lookup, Pub/Sub fan-out) happens asynchronously via the process-webhook internal endpoint. This avoids Meta's 20-second webhook timeout.
+The POST /webhooks handler returns 200 immediately after saving the event and publishing `whatsapp.webhook.process`. Heavy processing (media download, user lookup, Pub/Sub fan-out) happens asynchronously via the process-webhook internal endpoint. This avoids Meta's 20-second webhook timeout.
 
 ### Notification Importance Filter (INT-1418)
 
-The send-message Pub/Sub handler reads the user's notification preferences before sending. If `notificationLevel` is `important` and the `SendMessageEvent.important` field is absent or `false`, the message is silently dropped with a 200 OK (acknowledged, not retried). The preference defaults to `all` when no stored preference exists or when the read fails — the service falls back to delivering in case of Firestore errors. The `notificationLevel` field is stored on the `whatsapp_user_mappings/{userId}` document alongside the phone mapping data but is owned exclusively by `NotificationPreferencesRepository`. The `GET /whatsapp/status` endpoint never surfaces this field.
+The send-message Pub/Sub handler reads the user's notification preferences before sending. If `notificationLevel` is `important` and the `SendMessageEvent.important` field is absent or `false`, the message is silently dropped with a 200 OK (acknowledged, not retried). The preference defaults to `all` when no stored preference exists or when the read fails — the service falls back to delivering in case of Firestore errors. The `notificationLevel` field is stored on the `whatsapp_user_mappings/{userId}` document alongside the phone mapping data but is owned exclusively by `NotificationPreferencesRepository`. The `GET /status` endpoint never surfaces this field.
 
 ### Reply Correlation Pattern
 
@@ -449,11 +449,11 @@ Emoji reactions no longer trigger approval events. Reactions are marked as `igno
 
 ### Phone Verification Flow
 
-Phone numbers must be verified before connecting via `/whatsapp/connect`. The verification flow:
+Phone numbers must be verified before connecting via `/connect`. The verification flow:
 
-1. `POST /whatsapp/verify/send` sends a 6-digit code via WhatsApp
-2. `POST /whatsapp/verify/confirm` validates the code
-3. Once verified, `POST /whatsapp/connect` accepts the phone number
+1. `POST /verify/send` sends a 6-digit code via WhatsApp
+2. `POST /verify/confirm` validates the code
+3. Once verified, `POST /connect` accepts the phone number
 
 Rate limits: 3 requests per phone per hour, 60-second cooldown between requests. Codes expire after 10 minutes. Maximum 3 incorrect attempts before lockout.
 
@@ -555,10 +555,10 @@ apps/whatsapp-service/src/
       publisher.ts
   routes/
     webhookRoutes.ts                  # Webhook validation and async dispatch
-    messageRoutes.ts                  # GET /whatsapp/messages (list)
+    messageRoutes.ts                  # GET /messages (list)
     messageMediaRoutes.ts             # GET media, GET thumbnail, DELETE message
     mappingRoutes.ts                  # Verification-gated connect
-    preferencesRoutes.ts              # GET/PUT /whatsapp/preferences (INT-1418)
+    preferencesRoutes.ts              # GET/PUT /preferences (INT-1418)
     pubsubRoutes.ts                   # send-message (importance filter, 429 retry), media-cleanup, transcription-completed, process-webhook
     verificationRoutes.ts
     shared.ts                         # extractButtonResponse (button/button_reply fix)

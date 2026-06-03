@@ -37,7 +37,7 @@ const bufferParamsSchema = {
 
 export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: ImposeBody }>(
-    '/hellscript/impose',
+    '/impose',
     {
       schema: {
         operationId: 'imposeOnBuffer',
@@ -117,7 +117,7 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
   );
 
   fastify.get(
-    '/hellscript/buffers',
+    '/buffers',
     {
       schema: {
         operationId: 'listBuffers',
@@ -175,7 +175,7 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
   );
 
   fastify.get<{ Params: BufferParams }>(
-    '/hellscript/buffers/:id',
+    '/buffers/:id',
     {
       schema: {
         operationId: 'getBufferWorkspace',

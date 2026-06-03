@@ -8,7 +8,7 @@ describe('GET /linear/prune-candidates', () => {
     const token = await createToken({ sub: 'auth0|test-user-id' });
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -44,7 +44,7 @@ describe('GET /linear/prune-candidates', () => {
     const token = await createToken({ sub: 'auth0|test-user-id' });
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -68,7 +68,7 @@ describe('GET /linear/prune-candidates', () => {
     const token = await createToken({ sub: 'auth0|test-user-id' });
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -80,7 +80,7 @@ describe('GET /linear/prune-candidates', () => {
   it('returns 401 without auth token', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
     });
 
     expect(response.statusCode).toBe(401);
@@ -124,7 +124,7 @@ describe('DELETE /linear/prune-candidates', () => {
     const token = await createToken({ sub: 'auth0|test-user-id' });
     const response = await ctx.app.inject({
       method: 'DELETE',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -142,7 +142,7 @@ describe('DELETE /linear/prune-candidates', () => {
     const token = await createToken({ sub: 'auth0|test-user-id' });
     const response = await ctx.app.inject({
       method: 'DELETE',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -160,7 +160,7 @@ describe('DELETE /linear/prune-candidates', () => {
     const token = await createToken({ sub: 'auth0|test-user-id' });
     const response = await ctx.app.inject({
       method: 'DELETE',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -172,7 +172,7 @@ describe('DELETE /linear/prune-candidates', () => {
   it('returns 401 without auth token', async () => {
     const response = await ctx.app.inject({
       method: 'DELETE',
-      url: '/linear/prune-candidates',
+      url: '/prune-candidates',
     });
 
     expect(response.statusCode).toBe(401);

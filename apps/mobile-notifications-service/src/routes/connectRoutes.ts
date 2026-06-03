@@ -14,7 +14,7 @@ interface ConnectBody {
 
 export const connectRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: ConnectBody }>(
-    '/mobile-notifications/connect',
+    '/connect',
     {
       schema: {
         operationId: 'connectMobileNotifications',

@@ -80,7 +80,7 @@ Defines the HTTP request to execute.
 
 ```yaml
 endpoint:
-  path: /router/actions/{actionId}
+  path: /{actionId}
   method: PATCH
   body:
     status: processing
@@ -168,7 +168,7 @@ body:
 
 ```yaml
 endpoint:
-  path: /llm/research/draft
+  path: /draft
   method: POST
   body:
     prompt: '{{action.payload.prompt}}'
@@ -398,7 +398,7 @@ type == 'research' AND (
 actions:
   approve:
     endpoint:
-      path: /router/actions/{actionId}
+      path: /{actionId}
       method: PATCH
       body:
         status: processing
@@ -423,7 +423,7 @@ types:
 actions:
   approve-high-confidence:
     endpoint:
-      path: /router/actions/{actionId}
+      path: /{actionId}
       method: PATCH
       body:
         status: processing
@@ -434,7 +434,7 @@ actions:
 
   review-manual:
     endpoint:
-      path: /router/actions/{actionId}
+      path: /{actionId}
       method: PATCH
       body:
         status: pending_review
@@ -445,7 +445,7 @@ actions:
 
   reject:
     endpoint:
-      path: /router/actions/{actionId}
+      path: /{actionId}
       method: PATCH
       body:
         status: rejected
@@ -488,7 +488,7 @@ types:
 actions:
   create-draft:
     endpoint:
-      path: /llm/research/draft
+      path: /draft
       method: POST
       body:
         prompt: '{{action.payload.prompt}}'

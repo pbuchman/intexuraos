@@ -33,7 +33,7 @@ export async function listSchedules(
     params.set('cursor', options.cursor);
   }
   const query = params.toString();
-  const path = query !== '' ? `/cron/schedules?${query}` : '/cron/schedules';
+  const path = query !== '' ? `/schedules?${query}` : '/schedules';
   return await apiRequest<ListSchedulesResponse>(config.cronAgentUrl, path, accessToken);
 }
 
@@ -44,7 +44,7 @@ export async function createSchedule(
   accessToken: string,
   request: CreateScheduleRequest
 ): Promise<CronSchedule> {
-  return await apiRequest<CronSchedule>(config.cronAgentUrl, '/cron/schedules', accessToken, {
+  return await apiRequest<CronSchedule>(config.cronAgentUrl, '/schedules', accessToken, {
     method: 'POST',
     body: request,
     timeout: 60000, // 60s — LLM cron parsing may take time
@@ -55,7 +55,7 @@ export async function createSchedule(
  * Get a single cron schedule by ID
  */
 export async function getSchedule(accessToken: string, id: string): Promise<CronSchedule> {
-  return await apiRequest<CronSchedule>(config.cronAgentUrl, `/cron/schedules/${id}`, accessToken);
+  return await apiRequest<CronSchedule>(config.cronAgentUrl, `/schedules/${id}`, accessToken);
 }
 
 /**
@@ -66,7 +66,7 @@ export async function updateSchedule(
   id: string,
   updates: Partial<CreateScheduleRequest & { status: CronScheduleStatus }>
 ): Promise<CronSchedule> {
-  return await apiRequest<CronSchedule>(config.cronAgentUrl, `/cron/schedules/${id}`, accessToken, {
+  return await apiRequest<CronSchedule>(config.cronAgentUrl, `/schedules/${id}`, accessToken, {
     method: 'PATCH',
     body: updates,
     timeout: 60000, // 60s — schedule changes may re-parse via LLM
@@ -77,7 +77,7 @@ export async function updateSchedule(
  * Soft-delete a cron schedule
  */
 export async function deleteSchedule(accessToken: string, id: string): Promise<void> {
-  await apiRequest<{ success: true }>(config.cronAgentUrl, `/cron/schedules/${id}`, accessToken, {
+  await apiRequest<{ success: true }>(config.cronAgentUrl, `/schedules/${id}`, accessToken, {
     method: 'DELETE',
   });
 }
@@ -91,7 +91,7 @@ export async function triggerSchedule(
 ): Promise<CronExecution> {
   return await apiRequest<CronExecution>(
     config.cronAgentUrl,
-    `/cron/schedules/${id}/trigger`,
+    `/schedules/${id}/trigger`,
     accessToken,
     { method: 'POST', timeout: 120000 } // 120s — execution may take time
   );
@@ -123,7 +123,7 @@ export async function listExecutions(
     params.set('cursor', options.cursor);
   }
   const query = params.toString();
-  const path = query !== '' ? `/cron/executions?${query}` : '/cron/executions';
+  const path = query !== '' ? `/executions?${query}` : '/executions';
   return await apiRequest<ListExecutionsResponse>(config.cronAgentUrl, path, accessToken);
 }
 
@@ -131,7 +131,7 @@ export async function listExecutions(
  * Get a single cron execution by ID
  */
 export async function getExecution(accessToken: string, id: string): Promise<CronExecution> {
-  return await apiRequest<CronExecution>(config.cronAgentUrl, `/cron/executions/${id}`, accessToken);
+  return await apiRequest<CronExecution>(config.cronAgentUrl, `/executions/${id}`, accessToken);
 }
 
 /**
@@ -140,7 +140,7 @@ export async function getExecution(accessToken: string, id: string): Promise<Cro
 export async function listAvailableServices(accessToken: string): Promise<ServiceInfo[]> {
   const result = await apiRequest<{ services: ServiceInfo[] }>(
     config.cronAgentUrl,
-    '/cron/services',
+    '/services',
     accessToken
   );
   return result.services;

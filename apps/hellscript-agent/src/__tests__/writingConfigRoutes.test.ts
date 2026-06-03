@@ -7,7 +7,7 @@ describe('writingConfigRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config',
+        url: '/writing-config',
       });
 
       expect(response.statusCode).toBe(401);
@@ -17,7 +17,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config',
+        url: '/writing-config',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -35,7 +35,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config',
+        url: '/writing-config',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -53,7 +53,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config',
+        url: '/writing-config',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -65,7 +65,7 @@ describe('writingConfigRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/threads/style',
+        url: '/writing-config/threads/style',
         headers: { 'content-type': 'application/json' },
         payload: { text: 'test' },
       });
@@ -76,7 +76,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/linkedin/style',
+        url: '/writing-config/linkedin/style',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -93,7 +93,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/twitter/style',
+        url: '/writing-config/twitter/style',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -108,7 +108,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/threads/style',
+        url: '/writing-config/threads/style',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -131,7 +131,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/general/style',
+        url: '/writing-config/general/style',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -147,7 +147,7 @@ describe('writingConfigRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/hellscript/writing-config/threads/style',
+        url: '/writing-config/threads/style',
       });
       expect(response.statusCode).toBe(401);
     });
@@ -160,7 +160,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/hellscript/writing-config/linkedin/style',
+        url: '/writing-config/linkedin/style',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -178,7 +178,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/hellscript/writing-config/invalid/style',
+        url: '/writing-config/invalid/style',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -193,7 +193,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/hellscript/writing-config/threads/style',
+        url: '/writing-config/threads/style',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -205,7 +205,7 @@ describe('writingConfigRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config/threads/samples',
+        url: '/writing-config/threads/samples',
       });
       expect(response.statusCode).toBe(401);
     });
@@ -214,7 +214,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config/threads/samples',
+        url: '/writing-config/threads/samples',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -227,7 +227,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config/twitter/samples',
+        url: '/writing-config/twitter/samples',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -242,7 +242,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config/threads/samples',
+        url: '/writing-config/threads/samples',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -259,7 +259,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/writing-config/threads/samples',
+        url: '/writing-config/threads/samples',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -274,7 +274,7 @@ describe('writingConfigRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/writing-config/threads/samples',
+        url: '/writing-config/threads/samples',
         headers: { 'content-type': 'application/json' },
         payload: { title: 'Test', text: 'Test' },
       });
@@ -285,7 +285,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/writing-config/linkedin/samples',
+        url: '/writing-config/linkedin/samples',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -312,7 +312,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/writing-config/general/samples',
+        url: '/writing-config/general/samples',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -327,7 +327,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/writing-config/threads/samples',
+        url: '/writing-config/threads/samples',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -348,7 +348,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/writing-config/threads/samples',
+        url: '/writing-config/threads/samples',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -363,7 +363,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/writing-config/twitter/samples',
+        url: '/writing-config/twitter/samples',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -379,7 +379,7 @@ describe('writingConfigRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/threads/samples/some-id',
+        url: '/writing-config/threads/samples/some-id',
         headers: { 'content-type': 'application/json' },
         payload: { title: 'Test', text: 'Test' },
       });
@@ -398,7 +398,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: `/hellscript/writing-config/threads/samples/${created.value.id}`,
+        url: `/writing-config/threads/samples/${created.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -421,7 +421,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: `/hellscript/writing-config/linkedin/samples/${created.value.id}`,
+        url: `/writing-config/linkedin/samples/${created.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -436,7 +436,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/threads/samples/nonexistent',
+        url: '/writing-config/threads/samples/nonexistent',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -451,7 +451,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: '/hellscript/writing-config/twitter/samples/some-id',
+        url: '/writing-config/twitter/samples/some-id',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -478,7 +478,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'PUT',
-        url: `/hellscript/writing-config/threads/samples/${created.value.id}`,
+        url: `/writing-config/threads/samples/${created.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -494,7 +494,7 @@ describe('writingConfigRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/hellscript/writing-config/general/samples/some-id',
+        url: '/writing-config/general/samples/some-id',
       });
       expect(response.statusCode).toBe(401);
     });
@@ -511,7 +511,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/hellscript/writing-config/general/samples/${created.value.id}`,
+        url: `/writing-config/general/samples/${created.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -530,7 +530,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/hellscript/writing-config/threads/samples/${created.value.id}`,
+        url: `/writing-config/threads/samples/${created.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -541,7 +541,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/hellscript/writing-config/general/samples/nonexistent',
+        url: '/writing-config/general/samples/nonexistent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -552,7 +552,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/hellscript/writing-config/twitter/samples/some-id',
+        url: '/writing-config/twitter/samples/some-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -575,7 +575,7 @@ describe('writingConfigRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/hellscript/writing-config/general/samples/${created.value.id}`,
+        url: `/writing-config/general/samples/${created.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 

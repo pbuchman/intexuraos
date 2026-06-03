@@ -31,7 +31,7 @@
 
 | File                                              | Issue                                                                                          | Impact                                                      |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `src/domain/research/usecases/processResearch.ts` | `LlmCallPublisher` interface duplicated in `retryFromFailed.ts` — same shape, two definitions  | Changing one requires updating both; drift risk             |
+| `src/domain/usecases/processResearch.ts` | `LlmCallPublisher` interface duplicated in `retryFromFailed.ts` — same shape, two definitions  | Changing one requires updating both; drift risk             |
 | `src/infra/notion/notionResearchExporter.ts`      | `LocalNotionError` / `LocalNotionErrorCode` types shadow the imported package types            | Fragile error mapping; package upgrade may diverge silently |
 
 ---
@@ -48,9 +48,9 @@ No significant gaps identified. The service maintains high test coverage across 
 
 | File                                           | Issue                                                                                                   | Count |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----- |
-| `src/domain/research/usecases/runSynthesis.ts` | `notionServiceClient` typed as `unknown` with `as never` cast to bypass domain layer import restriction | 1     |
+| `src/domain/usecases/runSynthesis.ts` | `notionServiceClient` typed as `unknown` with `as never` cast to bypass domain layer import restriction | 1     |
 
-**Context:** The `RunSynthesisDeps` interface declares `notionServiceClient?: unknown` and casts it with `notionServiceClient as never` when passing to `exportResearchToNotionUseCase`. This is an acknowledged architectural boundary workaround — the domain layer cannot import from `infra/`. The fix is to define a `NotionExporterPort` interface in `domain/research/ports/` and implement it in the infra layer.
+**Context:** The `RunSynthesisDeps` interface declares `notionServiceClient?: unknown` and casts it with `notionServiceClient as never` when passing to `exportResearchToNotionUseCase`. This is an acknowledged architectural boundary workaround — the domain layer cannot import from `infra/`. The fix is to define a `NotionExporterPort` interface in `domain/ports/` and implement it in the infra layer.
 
 ---
 
@@ -58,7 +58,7 @@ No significant gaps identified. The service maintains high test coverage across 
 
 | File                                               | Comment                                               | Priority |
 | -------------------------------------------------- | ----------------------------------------------------- | -------- |
-| `src/domain/research/usecases/runSynthesis.ts:414` | `TODO: define port interface for NotionServiceClient` | Low      |
+| `src/domain/usecases/runSynthesis.ts:414` | `TODO: define port interface for NotionServiceClient` | Low      |
 
 ---
 
@@ -72,7 +72,7 @@ No violations. The largest files (`researchRoutes.ts`, `internalRoutes.ts`) are 
 
 | Pattern                      | Locations                                                                                            | Suggestion                                      |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `LlmCallPublisher` interface | `src/domain/research/usecases/processResearch.ts`, `src/domain/research/usecases/retryFromFailed.ts` | Extract to `src/domain/research/ports/index.ts` |
+| `LlmCallPublisher` interface | `src/domain/usecases/processResearch.ts`, `src/domain/usecases/retryFromFailed.ts` | Extract to `src/domain/ports/index.ts` |
 
 ---
 
@@ -89,7 +89,7 @@ No deprecated items identified.
 | 2026-04-22 | LLM pricing fetched from app-settings-service at startup; PricingClient in service container | Removed PricingClient; usage reported via HttpInternalAuthUsageSink (INT-1387)     |
 | 2026-04-22 | Stale model references (gpt-5.2, claude-sonnet-4-5, claude-opus-4-5) in call sites           | Migrated all call sites to gpt-5.4, claude-sonnet-4-6, claude-opus-4-6             |
 | 2026-04-07 | Cover image generation used only one provider; failure meant no cover image                  | Added provider failover with ordered pipeline selection (INT-1310)                 |
-| 2026-03-29 | `GET /research` list endpoint returned full `Research` documents with large text fields      | Added `ResearchSummary` projection via `findSummariesByUserId`                     |
+| 2026-03-29 | `GET /` list endpoint returned full `Research` documents with large text fields      | Added `ResearchSummary` projection via `findSummariesByUserId`                     |
 | 2026-03-26 | OpenRouter pricing display and audit correlation issues (INT-1106)                           | Fixed pricing display and audit log correlation                                    |
 | 2026-03-24 | OpenRouter model validation only at selection, not at execution (INT-1011)                   | Added allowlist enforcement at research execution time                             |
 | 2026-03-10 | Silent dispatch failures in LLM call publishing (INT-810, INT-811)                           | Fixed nested transaction handling and error propagation                            |

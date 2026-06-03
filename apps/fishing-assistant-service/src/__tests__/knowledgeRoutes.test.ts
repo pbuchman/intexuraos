@@ -176,7 +176,7 @@ describe('Fishing Assistant knowledge routes', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/folders',
+      url: '/folders',
     });
 
     expect(response.statusCode).toBe(401);
@@ -185,18 +185,18 @@ describe('Fishing Assistant knowledge routes', () => {
   it('creates, lists, updates, and deletes folders for the authenticated user', async () => {
     const createResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Kurs', parentId: null, sortOrder: 0 },
     });
-    const listResponse = await ctx.app.inject({ method: 'GET', url: '/fishing/folders' });
+    const listResponse = await ctx.app.inject({ method: 'GET', url: '/folders' });
     const updateResponse = await ctx.app.inject({
       method: 'PATCH',
-      url: '/fishing/folders/folder-1',
+      url: '/folders/folder-1',
       payload: { name: 'Kurs główny', parentId: null, sortOrder: 2 },
     });
     const deleteResponse = await ctx.app.inject({
       method: 'DELETE',
-      url: '/fishing/folders/folder-1',
+      url: '/folders/folder-1',
     });
 
     expect(createResponse.statusCode).toBe(200);
@@ -225,21 +225,21 @@ describe('Fishing Assistant knowledge routes', () => {
   it('validates folder write payloads', async () => {
     const createDefaultResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Defaults' },
     });
     const createResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: '' },
     });
     const missingPayloadResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
     });
     const updateResponse = await ctx.app.inject({
       method: 'PATCH',
-      url: '/fishing/folders/missing-folder',
+      url: '/folders/missing-folder',
       payload: { name: '' },
     });
 
@@ -256,18 +256,18 @@ describe('Fishing Assistant knowledge routes', () => {
   it('returns conflict when deleting a folder that contains pages', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Kurs', parentId: null, sortOrder: 0 },
     });
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
       payload: { folderId: 'folder-1', rawText: 'Zanęta delikatna\n\n-300 g otrębów' },
     });
 
     const response = await ctx.app.inject({
       method: 'DELETE',
-      url: '/fishing/folders/folder-1',
+      url: '/folders/folder-1',
     });
 
     expect(response.statusCode).toBe(409);
@@ -277,27 +277,27 @@ describe('Fishing Assistant knowledge routes', () => {
   it('creates, lists, reads, updates, reindexes, and deletes pages', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Kurs', parentId: null, sortOrder: 0 },
     });
     const createResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
       payload: { folderId: 'folder-1', rawText: 'Zanęta delikatna\n\n-300 g otrębów' },
     });
-    const listResponse = await ctx.app.inject({ method: 'GET', url: '/fishing/pages?folderId=folder-1' });
-    const listAllResponse = await ctx.app.inject({ method: 'GET', url: '/fishing/pages' });
-    const getResponse = await ctx.app.inject({ method: 'GET', url: '/fishing/pages/page-1' });
+    const listResponse = await ctx.app.inject({ method: 'GET', url: '/pages?folderId=folder-1' });
+    const listAllResponse = await ctx.app.inject({ method: 'GET', url: '/pages' });
+    const getResponse = await ctx.app.inject({ method: 'GET', url: '/pages/page-1' });
     const updateResponse = await ctx.app.inject({
       method: 'PATCH',
-      url: '/fishing/pages/page-1',
+      url: '/pages/page-1',
       payload: { rawText: 'Zanęta wiosenna\n\n-150 g kukurydzy' },
     });
     const reindexResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages/page-1/reindex',
+      url: '/pages/page-1/reindex',
     });
-    const deleteResponse = await ctx.app.inject({ method: 'DELETE', url: '/fishing/pages/page-1' });
+    const deleteResponse = await ctx.app.inject({ method: 'DELETE', url: '/pages/page-1' });
 
     expect(createResponse.statusCode).toBe(200);
     expect(listResponse.statusCode).toBe(200);
@@ -339,35 +339,35 @@ describe('Fishing Assistant knowledge routes', () => {
   it('validates page payloads and returns not found for missing pages', async () => {
     const missingBody = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
     });
     const missingFolderId = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
       payload: { rawText: 'Text' },
     });
     const missingText = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
       payload: { folderId: 'folder-1', rawText: '' },
     });
     const missingUpdateText = await ctx.app.inject({
       method: 'PATCH',
-      url: '/fishing/pages/page-1',
+      url: '/pages/page-1',
       payload: { rawText: '' },
     });
     const missingPage = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/pages/missing-page',
+      url: '/pages/missing-page',
     });
     const missingUpdatePage = await ctx.app.inject({
       method: 'PATCH',
-      url: '/fishing/pages/missing-page',
+      url: '/pages/missing-page',
       payload: { rawText: 'Zanęta delikatna' },
     });
     const missingReindexPage = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages/missing-page/reindex',
+      url: '/pages/missing-page/reindex',
     });
 
     expect(missingBody.statusCode).toBe(400);
@@ -382,7 +382,7 @@ describe('Fishing Assistant knowledge routes', () => {
   it('maps page indexing errors to HTTP errors', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Kurs', parentId: null, sortOrder: 0 },
     });
     const oversizedText = `Duży dokument\n\n${Array.from({ length: 121 }, (_, index) => [
@@ -391,7 +391,7 @@ describe('Fishing Assistant knowledge routes', () => {
     ].join('\n')).join('\n\n')}`;
     const oversized = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
       payload: { folderId: 'folder-1', rawText: oversizedText },
     });
 
@@ -402,14 +402,14 @@ describe('Fishing Assistant knowledge routes', () => {
   it('stores failed page state when embedding fails', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Kurs', parentId: null, sortOrder: 0 },
     });
     ctx.setEmbeddingFailure(true);
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
       payload: { folderId: 'folder-1', rawText: 'Zanęta delikatna\n\n-300 g otrębów' },
     });
 
@@ -424,17 +424,17 @@ describe('Fishing Assistant knowledge routes', () => {
   it('does not include raw page bodies in request log previews', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Kurs', parentId: null, sortOrder: 0 },
     });
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/pages',
+      url: '/pages',
       payload: { folderId: 'folder-1', rawText: 'sekretna treść zanęty' },
     });
     await ctx.app.inject({
       method: 'PATCH',
-      url: '/fishing/pages/page-1',
+      url: '/pages/page-1',
       payload: { rawText: 'inna sekretna treść zanęty' },
     });
 
@@ -475,14 +475,14 @@ describe('Fishing Assistant knowledge routes', () => {
     replaceFolderRepository({
       listByUserId: vi.fn(async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'list failed' })),
     });
-    const listResponse = await ctx.app.inject({ method: 'GET', url: '/fishing/folders' });
+    const listResponse = await ctx.app.inject({ method: 'GET', url: '/folders' });
 
     replaceFolderRepository({
       create: vi.fn(async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'create failed' })),
     });
     const createResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/folders',
+      url: '/folders',
       payload: { name: 'Kurs' },
     });
 
@@ -491,7 +491,7 @@ describe('Fishing Assistant knowledge routes', () => {
     });
     const updateResponse = await ctx.app.inject({
       method: 'PATCH',
-      url: '/fishing/folders/folder-1',
+      url: '/folders/folder-1',
       payload: { name: 'Kurs' },
     });
 
@@ -504,17 +504,17 @@ describe('Fishing Assistant knowledge routes', () => {
     replacePageRepository({
       listByUserId: vi.fn(async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'page list failed' })),
     });
-    const listResponse = await ctx.app.inject({ method: 'GET', url: '/fishing/pages' });
+    const listResponse = await ctx.app.inject({ method: 'GET', url: '/pages' });
 
     replacePageRepository({
       getByIdForUser: vi.fn(async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'page get failed' })),
     });
-    const getResponse = await ctx.app.inject({ method: 'GET', url: '/fishing/pages/page-1' });
+    const getResponse = await ctx.app.inject({ method: 'GET', url: '/pages/page-1' });
 
     replacePageRepository({
       deleteForUser: vi.fn(async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'page delete failed' })),
     });
-    const deleteResponse = await ctx.app.inject({ method: 'DELETE', url: '/fishing/pages/page-1' });
+    const deleteResponse = await ctx.app.inject({ method: 'DELETE', url: '/pages/page-1' });
 
     expect(listResponse.statusCode).toBe(500);
     expect(getResponse.statusCode).toBe(500);

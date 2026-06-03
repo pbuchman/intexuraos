@@ -112,7 +112,7 @@ interface IngestResponse {
 
 ### Query Aggregated Usage
 
-**Endpoint:** `POST /llm-usage/query`
+**Endpoint:** `POST /query`
 **Auth:** Auth0 Bearer token
 
 **When to use:** To get summarized usage data grouped by dimensions (provider, model, day, etc.).
@@ -166,7 +166,7 @@ interface AggregateMetrics {
 
 ### List Usage Events
 
-**Endpoint:** `POST /llm-usage/events/list`
+**Endpoint:** `POST /events/list`
 **Auth:** Auth0 Bearer token
 
 **When to use:** To browse individual LLM call events with filtering, sorting, and cursor pagination.
@@ -233,10 +233,10 @@ interface PricingResponse {
 ### Pattern 2: Dashboard Data Fetch
 
 ```
-1. POST /llm-usage/query with desired groupBy dimensions and time range
+1. POST /query with desired groupBy dimensions and time range
 2. Render rows as chart/table data
 3. Use totals for summary metrics
-4. For drill-down: POST /llm-usage/events/list with matching filters
+4. For drill-down: POST /events/list with matching filters
 ```
 
 ### Pattern 3: Pricing Bootstrap

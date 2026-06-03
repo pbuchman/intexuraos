@@ -19,7 +19,7 @@ const SIGNATURE_HEADER = 'x-mobile-notifications-signature';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: WebhookPayload }>(
-    '/mobile-notifications/webhooks',
+    '/webhooks',
     {
       schema: {
         operationId: 'receiveMobileNotification',

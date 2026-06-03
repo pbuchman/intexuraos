@@ -170,7 +170,7 @@ describe('GET /code/queue', () => {
     it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
       });
 
       expect(response.statusCode).toBe(401);
@@ -189,7 +189,7 @@ describe('GET /code/queue', () => {
     it('returns empty tasks array when no queued tasks exist', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -277,7 +277,7 @@ describe('GET /code/queue', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -327,7 +327,7 @@ describe('GET /code/queue', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -365,7 +365,7 @@ describe('GET /code/queue', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -405,7 +405,7 @@ describe('GET /code/queue', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -436,7 +436,7 @@ describe('GET /code/queue', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -460,7 +460,7 @@ describe('GET /code/queue', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 

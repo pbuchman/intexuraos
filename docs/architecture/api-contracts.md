@@ -525,7 +525,7 @@ Get non-secret auth configuration for troubleshooting.
 
 ## whatsapp-service Media Endpoints
 
-### GET /whatsapp/messages/:message_id/media
+### GET /messages/:message_id/media
 
 Get a signed URL for the original media file (image or audio).
 
@@ -555,7 +555,7 @@ Get a signed URL for the original media file (image or audio).
 | Not owner of message | `NOT_FOUND`    | 404         |
 | Message has no media | `NOT_FOUND`    | 404         |
 
-### GET /whatsapp/messages/:message_id/thumbnail
+### GET /messages/:message_id/thumbnail
 
 Get a signed URL for the thumbnail image (256px max edge).
 

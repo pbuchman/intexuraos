@@ -171,11 +171,11 @@ describe('Fishing Assistant chat routes', () => {
   it('creates a chat and lists it for the authenticated user', async () => {
     const createResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats',
+      url: '/chats',
     });
     const listResponse = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/chats',
+      url: '/chats',
     });
 
     expect(createResponse.statusCode).toBe(200);
@@ -208,21 +208,21 @@ describe('Fishing Assistant chat routes', () => {
   it('sends a message, stores assistant output, and derives the title from the first user message', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats',
+      url: '/chats',
     });
 
     const sendResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats/chat-1/messages',
+      url: '/chats/chat-1/messages',
       payload: { message: 'Give me a spring feeder recipe for cold water' },
     });
     const messagesResponse = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/chats/chat-1/messages',
+      url: '/chats/chat-1/messages',
     });
     const chatResponse = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/chats/chat-1',
+      url: '/chats/chat-1',
     });
 
     expect(sendResponse.statusCode).toBe(200);
@@ -267,7 +267,7 @@ describe('Fishing Assistant chat routes', () => {
   it('returns a typed NO_API_KEY error when the user has no OpenRouter key', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats',
+      url: '/chats',
     });
     ctx.chatAdapter.createClientForUser.mockResolvedValue({
       ok: false,
@@ -279,7 +279,7 @@ describe('Fishing Assistant chat routes', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats/chat-1/messages',
+      url: '/chats/chat-1/messages',
       payload: { message: 'Need a recipe' },
     });
 
@@ -290,20 +290,20 @@ describe('Fishing Assistant chat routes', () => {
   it('returns NOT_FOUND for missing chats and validates message bodies', async () => {
     const missingChat = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/chats/missing',
+      url: '/chats/missing',
     });
     const missingMessages = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/chats/missing/messages',
+      url: '/chats/missing/messages',
     });
     const invalidBody = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats/missing/messages',
+      url: '/chats/missing/messages',
       payload: { message: '   ' },
     });
     const invalidMessageType = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats/missing/messages',
+      url: '/chats/missing/messages',
       payload: { message: 42 },
     });
 
@@ -370,19 +370,19 @@ describe('Fishing Assistant chat routes', () => {
 
     const listResponse = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/chats',
+      url: '/chats',
     });
     const createResponse = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats',
+      url: '/chats',
     });
     const getResponse = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/chats/chat-1',
+      url: '/chats/chat-1',
     });
     const invalidBody = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats/chat-1/messages',
+      url: '/chats/chat-1/messages',
       payload: 'null',
       headers: { 'content-type': 'application/json' },
     });
@@ -443,12 +443,12 @@ describe('Fishing Assistant chat routes', () => {
 
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats',
+      url: '/chats',
     });
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats/chat-2/messages',
+      url: '/chats/chat-2/messages',
       payload: { message: 'What about today?' },
     });
 
@@ -460,7 +460,7 @@ describe('Fishing Assistant chat routes', () => {
   it('repairs invalid model output before storing the assistant answer', async () => {
     await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats',
+      url: '/chats',
     });
     ctx.chatAdapter.createClientForUser.mockResolvedValueOnce({
       ok: true,
@@ -487,7 +487,7 @@ describe('Fishing Assistant chat routes', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/fishing/chats/chat-1/messages',
+      url: '/chats/chat-1/messages',
       payload: { message: 'Need a repairable answer' },
     });
 

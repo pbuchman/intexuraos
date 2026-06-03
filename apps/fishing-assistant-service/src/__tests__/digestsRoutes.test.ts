@@ -116,7 +116,7 @@ describe('Fishing Assistant digest facade routes', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digest-groups',
+      url: '/digest-groups',
     });
 
     expect(response.statusCode).toBe(401);
@@ -132,7 +132,7 @@ describe('Fishing Assistant digest facade routes', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digest-groups',
+      url: '/digest-groups',
     });
 
     expect(response.statusCode).toBe(200);
@@ -159,7 +159,7 @@ describe('Fishing Assistant digest facade routes', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03',
+      url: '/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03',
     });
 
     expect(response.statusCode).toBe(200);
@@ -178,15 +178,15 @@ describe('Fishing Assistant digest facade routes', () => {
   it('validates required query params and forwards parsed terms and limits', async () => {
     const missingGroup = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests?dateFrom=2026-05-01&dateTo=2026-05-03',
+      url: '/digests?dateFrom=2026-05-01&dateTo=2026-05-03',
     });
     const missingFrom = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests?groupKey=feeder&dateTo=2026-05-03',
+      url: '/digests?groupKey=feeder&dateTo=2026-05-03',
     });
     const missingTo = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests?groupKey=feeder&dateFrom=2026-05-01',
+      url: '/digests?groupKey=feeder&dateFrom=2026-05-01',
     });
 
     ctx.mobileNotificationsClient.queryDigests.mockResolvedValueOnce({
@@ -195,7 +195,7 @@ describe('Fishing Assistant digest facade routes', () => {
     });
     const parsed = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03&terms=, pinka, mix ,, &limit=5',
+      url: '/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03&terms=, pinka, mix ,, &limit=5',
     });
 
     expect(missingGroup.statusCode).toBe(400);
@@ -219,7 +219,7 @@ describe('Fishing Assistant digest facade routes', () => {
     });
     const emptyTerms = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03&terms=, ,',
+      url: '/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03&terms=, ,',
     });
 
     ctx.mobileNotificationsClient.queryDigests.mockResolvedValueOnce({
@@ -228,7 +228,7 @@ describe('Fishing Assistant digest facade routes', () => {
     });
     const downstream = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03',
+      url: '/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03',
     });
 
     expect(emptyTerms.statusCode).toBe(200);
@@ -266,7 +266,7 @@ describe('Fishing Assistant digest facade routes', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests/feeder/2026-05-01',
+      url: '/digests/feeder/2026-05-01',
     });
 
     expect(response.statusCode).toBe(200);
@@ -292,7 +292,7 @@ describe('Fishing Assistant digest facade routes', () => {
     });
     const notFound = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests/feeder/2026-05-09',
+      url: '/digests/feeder/2026-05-09',
     });
 
     const digest: DigestEvidenceItem = {
@@ -309,7 +309,7 @@ describe('Fishing Assistant digest facade routes', () => {
     });
     const missingState = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests/feeder/2026-05-01',
+      url: '/digests/feeder/2026-05-01',
     });
 
     expect(notFound.statusCode).toBe(404);
@@ -329,7 +329,7 @@ describe('Fishing Assistant digest facade routes', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digest-groups',
+      url: '/digest-groups',
     });
     ctx.mobileNotificationsClient.getDigest.mockResolvedValueOnce({
       ok: true,
@@ -351,7 +351,7 @@ describe('Fishing Assistant digest facade routes', () => {
     });
     const detailResponse = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests/feeder/2026-05-01',
+      url: '/digests/feeder/2026-05-01',
     });
 
     expect(response.statusCode).toBe(502);
@@ -371,7 +371,7 @@ describe('Fishing Assistant digest facade routes', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/fishing/digests/feeder/2026-05-01',
+      url: '/digests/feeder/2026-05-01',
     });
 
     expect(response.statusCode).toBe(502);

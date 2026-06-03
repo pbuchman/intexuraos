@@ -122,7 +122,7 @@ export const pricingRoutes: FastifyPluginCallback = (app, _opts, done) => {
 
   // GET /llm-usage/pricing — read all pricing (public, Auth0 bearer)
   app.get(
-    '/llm-usage/pricing',
+    '/pricing',
     {
       schema: {
         operationId: 'getAllPricing',

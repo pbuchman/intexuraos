@@ -233,7 +233,7 @@ describe('GET /code/github-pr-summaries', () => {
   it('should return 401 without auth token', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
     });
 
     expect(response.statusCode).toBe(401);
@@ -245,7 +245,7 @@ describe('GET /code/github-pr-summaries', () => {
   it('should return 200 with empty array when no summaries exist', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -294,7 +294,7 @@ describe('GET /code/github-pr-summaries', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -342,7 +342,7 @@ describe('GET /code/github-pr-summaries', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -368,7 +368,7 @@ describe('GET /code/github-pr-summaries', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 

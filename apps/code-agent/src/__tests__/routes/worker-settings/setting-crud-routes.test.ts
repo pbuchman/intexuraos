@@ -48,7 +48,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
   it('GET /code/worker-settings returns an empty array for a new user', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/code/worker-settings',
+      url: '/worker-settings',
       headers: { Authorization: 'Bearer test-token' },
     });
 
@@ -61,7 +61,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
   it('POST /code/worker-settings/workers adds a worker', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/code/worker-settings/workers',
+      url: '/worker-settings/workers',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: {
         name: 'home-mac',
@@ -81,7 +81,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
   it('PATCH /code/worker-settings/workers/:name merges partial updates', async () => {
     await app.inject({
       method: 'POST',
-      url: '/code/worker-settings/workers',
+      url: '/worker-settings/workers',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: {
         name: 'home-mac',
@@ -94,7 +94,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
 
     const response = await app.inject({
       method: 'PATCH',
-      url: '/code/worker-settings/workers/home-mac',
+      url: '/worker-settings/workers/home-mac',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: { enabled: false },
     });
@@ -103,7 +103,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
 
     const getResponse = await app.inject({
       method: 'GET',
-      url: '/code/worker-settings',
+      url: '/worker-settings',
       headers: { Authorization: 'Bearer test-token' },
     });
     const getBody = JSON.parse(getResponse.body) as {
@@ -118,7 +118,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
   it('DELETE /code/worker-settings/workers/:name removes the worker', async () => {
     await app.inject({
       method: 'POST',
-      url: '/code/worker-settings/workers',
+      url: '/worker-settings/workers',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: {
         name: 'home-mac',
@@ -131,7 +131,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
 
     const response = await app.inject({
       method: 'DELETE',
-      url: '/code/worker-settings/workers/home-mac',
+      url: '/worker-settings/workers/home-mac',
       headers: { Authorization: 'Bearer test-token' },
     });
 
@@ -144,7 +144,7 @@ describe('settingCrudRoutes (sub-plugin)', () => {
   it('POST /code/worker-settings/workers rejects invalid worker names', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/code/worker-settings/workers',
+      url: '/worker-settings/workers',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       payload: {
         name: 'AB', // too short + uppercase

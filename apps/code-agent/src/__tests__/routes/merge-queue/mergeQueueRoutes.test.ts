@@ -269,7 +269,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer bad-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -288,7 +288,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer test-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -332,7 +332,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -346,7 +346,7 @@ describe('Merge queue JWT routes', () => {
     it('should return error when body fields are missing', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: {},
       });
@@ -360,7 +360,7 @@ describe('Merge queue JWT routes', () => {
     it('should reject baseBranch main', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'main' },
       });
@@ -386,7 +386,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -405,7 +405,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -431,7 +431,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -453,7 +453,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -479,7 +479,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -497,7 +497,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -536,7 +536,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer valid-token' },
         payload: { owner: 'testorg', repo: 'testrepo', baseBranch: 'development', excludedPrNumbers: [10, 20] },
       });
@@ -575,7 +575,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer valid-token' },
         payload: { owner: 'testorg', repo: 'testrepo', baseBranch: 'development', excludedPrNumbers: 'not-an-array' },
       });
@@ -597,7 +597,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/merge-queue/watch',
+        url: '/merge-queue/watch',
         headers: { authorization: 'Bearer fake-token' },
         payload: { owner: 'intexuraos', repo: 'repo', baseBranch: 'development' },
       });
@@ -638,7 +638,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/merge-queue/watch/watch-123',
+        url: '/merge-queue/watch/watch-123',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -659,7 +659,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/merge-queue/watch/nonexistent',
+        url: '/merge-queue/watch/nonexistent',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -677,7 +677,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/merge-queue/watch/watch-broken',
+        url: '/merge-queue/watch/watch-broken',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -714,7 +714,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/merge-queue/watch/watch-123',
+        url: '/merge-queue/watch/watch-123',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -747,7 +747,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/merge-queue/watch/watch-456',
+        url: '/merge-queue/watch/watch-456',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -786,7 +786,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/watches?owner=intexuraos&repo=repo',
+        url: '/merge-queue/watches?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -803,7 +803,7 @@ describe('Merge queue JWT routes', () => {
     it('should return error when owner or repo query params are missing', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/watches',
+        url: '/merge-queue/watches',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -837,7 +837,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/watches?owner=testorg&repo=testrepo',
+        url: '/merge-queue/watches?owner=testorg&repo=testrepo',
         headers: { authorization: 'Bearer valid-token' },
       });
 
@@ -853,7 +853,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/watches?owner=intexuraos&repo=repo',
+        url: '/merge-queue/watches?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -879,7 +879,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: [42, 99] },
       });
@@ -906,7 +906,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: [] },
       });
@@ -927,7 +927,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_xyz/exclusions',
+        url: '/merge-queue/watch/watch_xyz/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: [1] },
       });
@@ -950,7 +950,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: [1] },
       });
@@ -973,7 +973,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: [1] },
       });
@@ -987,7 +987,7 @@ describe('Merge queue JWT routes', () => {
     it('returns 400 when excludedPrNumbers is not an array', async () => {
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: 'not-an-array' },
       });
@@ -998,7 +998,7 @@ describe('Merge queue JWT routes', () => {
     it('returns 400 when excludedPrNumbers contains non-numbers', async () => {
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: ['a', 'b'] },
       });
@@ -1011,7 +1011,7 @@ describe('Merge queue JWT routes', () => {
       for (const invalid of cases) {
         const res = await server.inject({
           method: 'PUT',
-          url: '/code/merge-queue/watch/watch_abc/exclusions',
+          url: '/merge-queue/watch/watch_abc/exclusions',
           headers: { authorization: 'Bearer valid-token' },
           payload: { excludedPrNumbers: invalid },
         });
@@ -1034,7 +1034,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: [1] },
       });
@@ -1049,7 +1049,7 @@ describe('Merge queue JWT routes', () => {
 
       const res = await server.inject({
         method: 'PUT',
-        url: '/code/merge-queue/watch/watch_abc/exclusions',
+        url: '/merge-queue/watch/watch_abc/exclusions',
         headers: { authorization: 'Bearer valid-token' },
         payload: { excludedPrNumbers: [1] },
       });
@@ -1085,7 +1085,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        url: '/merge-queue/branches?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1117,7 +1117,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        url: '/merge-queue/branches?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1149,7 +1149,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        url: '/merge-queue/branches?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1175,7 +1175,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        url: '/merge-queue/branches?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1190,7 +1190,7 @@ describe('Merge queue JWT routes', () => {
     it('should return error when owner or repo query params are missing', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/branches?owner=intexuraos',
+        url: '/merge-queue/branches?owner=intexuraos',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1214,7 +1214,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/branches?owner=intexuraos&repo=repo',
+        url: '/merge-queue/branches?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1247,7 +1247,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1269,7 +1269,7 @@ describe('Merge queue JWT routes', () => {
     it('should return error when required query params are missing', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1294,7 +1294,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1341,7 +1341,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1376,7 +1376,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1405,7 +1405,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1437,7 +1437,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -1464,7 +1464,7 @@ describe('Merge queue JWT routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
+        url: '/merge-queue/prs?owner=intexuraos&repo=repo&baseBranch=development',
         headers: { authorization: 'Bearer fake-token' },
       });
 

@@ -25,9 +25,9 @@
 
 ### Planned Features
 
-- **Tag filtering** — Add server-side tag filtering to the `GET /notes` endpoint. Implement via Firestore `array-contains-any` query with optional `tags` query parameter. Requires a composite index on `(userId, tags)`.
+- **Tag filtering** — Add server-side tag filtering to the `GET /` endpoint. Implement via Firestore `array-contains-any` query with optional `tags` query parameter. Requires a composite index on `(userId, tags)`.
 - **Full-text search** — Search across note title and content fields. May require Firestore full-text search integration or a dedicated search index.
-- **Pagination** — Add cursor-based pagination to `GET /notes` to handle users with large note collections efficiently.
+- **Pagination** — Add cursor-based pagination to `GET /` to handle users with large note collections efficiently.
 
 ### Proposed Enhancements
 

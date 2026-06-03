@@ -35,7 +35,7 @@ const listExecutionsQuerySchema = {
 
 export const executionRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get<{ Querystring: ListExecutionsQuery }>(
-    '/cron/executions',
+    '/executions',
     {
       schema: {
         operationId: 'listExecutions',
@@ -95,7 +95,7 @@ export const executionRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
   );
 
   fastify.get<{ Params: ExecutionParams }>(
-    '/cron/executions/:id',
+    '/executions/:id',
     {
       schema: {
         operationId: 'getExecution',

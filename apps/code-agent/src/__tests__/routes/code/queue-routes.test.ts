@@ -22,7 +22,7 @@ describe('queueRoutes plugin', () => {
     await app.register(queueRoutes, { jwtValidator: async () => undefined });
     await app.ready();
 
-    expect(app.hasRoute({ method: 'GET', url: '/code/queue' })).toBe(true);
+    expect(app.hasRoute({ method: 'GET', url: '/queue' })).toBe(true);
     expect(app.hasRoute({ method: 'POST', url: '/internal/drain-queue' })).toBe(true);
 
     await app.close();

@@ -37,7 +37,7 @@ export async function getResearchNotionSettings(
 ): Promise<ResearchNotionSettings> {
   return await apiRequest<ResearchNotionSettings>(
     config.ResearchAgentUrl,
-    '/research/settings/notion',
+    '/settings/notion',
     accessToken
   );
 }
@@ -52,7 +52,7 @@ export async function validateResearchNotionPage(
 ): Promise<ValidatedNotionPage> {
   return await apiRequest<ValidatedNotionPage>(
     config.ResearchAgentUrl,
-    '/research/settings/notion/validate',
+    '/settings/notion/validate',
     accessToken,
     {
       method: 'POST',
@@ -72,7 +72,7 @@ export async function saveResearchNotionSettings(
 ): Promise<SavedResearchNotionSettings> {
   return await apiRequest<SavedResearchNotionSettings>(
     config.ResearchAgentUrl,
-    '/research/settings/notion',
+    '/settings/notion',
     accessToken,
     {
       method: 'POST',

@@ -30,7 +30,7 @@ Before starting, ensure you have:
 
 - [ ] IntexuraOS running locally (`pnpm run dev`)
 - [ ] A valid Auth0 access token
-- [ ] Linear account with API key ([generate here](https://linear.app/settings/api))
+- [ ] Linear account with API key ([generate here](https://.app/settings/api))
 - [ ] Linear team ID (visible in Linear settings)
 
 ---
@@ -42,7 +42,7 @@ Before starting, ensure you have:
 First, validate your Linear API key and retrieve available teams.
 
 ```bash
-curl -X POST http://localhost:3000/linear/connection/validate \
+curl -X POST http://localhost:3000/connection/validate \
   -H "Content-Type: application/json" \
   -d '{"apiKey": "lin_api_YOUR_KEY_HERE"}'
 ```
@@ -66,7 +66,7 @@ curl -X POST http://localhost:3000/linear/connection/validate \
 Save your Linear connection with your preferred team.
 
 ```bash
-curl -X POST http://localhost:3000/linear/connection \
+curl -X POST http://localhost:3000/connection \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN" \
   -d '{
@@ -94,7 +94,7 @@ curl -X POST http://localhost:3000/linear/connection \
 ### Step 1.3: Verify Connection Status
 
 ```bash
-curl http://localhost:3000/linear/connection \
+curl http://localhost:3000/connection \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -129,7 +129,7 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
   "data": {
     "status": "completed",
     "message": "Issue ENG-123 created successfully",
-    "resourceUrl": "https://linear.app/your-team/issue/ENG-123"
+    "resourceUrl": "https://.app/your-team/issue/ENG-123"
   }
 }
 ```
@@ -198,7 +198,7 @@ Re-send `test-action-001` with the same `id` — the service returns the existin
 The dashboard reads from local Firestore cache. Run a full sync first to populate it.
 
 ```bash
-curl -X POST http://localhost:3000/linear/sync \
+curl -X POST http://localhost:3000/sync \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -223,7 +223,7 @@ curl -X POST http://localhost:3000/linear/sync \
 Fetch issues grouped by dashboard column (from Firestore — no Linear API call).
 
 ```bash
-curl http://localhost:3000/linear/issues \
+curl http://localhost:3000/issues \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -232,7 +232,7 @@ Note how parent issues have their `children` array populated — sub-issues are 
 ### Step 3.3: Get Issue Detail
 
 ```bash
-curl http://localhost:3000/linear/issues/ENG-123 \
+curl http://localhost:3000/issues/ENG-123 \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -241,7 +241,7 @@ Returns issue with `commentCount`, `lastCommentAt`, labels with colors, and assi
 ### Step 3.4: Fetch Issue Comments
 
 ```bash
-curl "http://localhost:3000/linear/issues/ENG-123/comments?limit=10&offset=0" \
+curl "http://localhost:3000/issues/ENG-123/comments?limit=10&offset=0" \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -258,7 +258,7 @@ Real-time sync: when something changes in Linear, the webhook fans out to all co
 ### Step 4.1: Get Webhook Configuration
 
 ```bash
-curl http://localhost:3000/linear/webhook-config \
+curl http://localhost:3000/webhook-config \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -272,7 +272,7 @@ curl http://localhost:3000/linear/webhook-config \
 ### Step 4.3: Configure the Webhook Secret
 
 ```bash
-curl -X POST http://localhost:3000/linear/webhook-config \
+curl -X POST http://localhost:3000/webhook-config \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN" \
   -d '{"secret": "YOUR_LINEAR_WEBHOOK_SECRET"}'
@@ -349,7 +349,7 @@ curl -X POST http://localhost:3000/internal/issues \
     "id": "uuid-...",
     "identifier": "ENG-44",
     "title": "Implement pagination for user list",
-    "url": "https://linear.app/engineering/issue/ENG-44"
+    "url": "https://.app/engineering/issue/ENG-44"
   }
 }
 ```
@@ -502,7 +502,7 @@ If you have more than 200 issues, you will receive a response with `storedCandid
 ### Step 7.2: Review Candidates
 
 ```bash
-curl http://localhost:3000/linear/prune-candidates \
+curl http://localhost:3000/prune-candidates \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -511,7 +511,7 @@ Each candidate includes `identifier`, `title`, `score` (0-100), `reason`, and `c
 ### Step 7.3: Confirm Deletion
 
 ```bash
-curl -X DELETE http://localhost:3000/linear/prune-candidates \
+curl -X DELETE http://localhost:3000/prune-candidates \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -545,7 +545,7 @@ Issues are soft-deleted from Linear (recoverable) and removed from all connected
 The dashboard reads from Firestore cache. Trigger a full sync:
 
 ```bash
-curl -X POST http://localhost:3000/linear/sync \
+curl -X POST http://localhost:3000/sync \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -555,15 +555,15 @@ List and retry failed extractions:
 
 ```bash
 # List failed issues
-curl http://localhost:3000/linear/failed-issues \
+curl http://localhost:3000/failed-issues \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 
 # Retry a failed issue
-curl -X POST http://localhost:3000/linear/failed-issues/FAILED_ID/retry \
+curl -X POST http://localhost:3000/failed-issues/FAILED_ID/retry \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 
 # Delete a failed issue
-curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
+curl -X DELETE http://localhost:3000/failed-issues/FAILED_ID \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
@@ -573,19 +573,19 @@ curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
 
 | Symptom                         | Likely Cause                 | Solution                                                            |
 | ------------------------------- | ---------------------------- | ------------------------------------------------------------------- |
-| "Linear not connected"          | No saved connection for user | POST `/linear/connection` with credentials                          |
+| "Linear not connected"          | No saved connection for user | POST `/connection` with credentials                          |
 | "Invalid API key"               | Expired or revoked key       | Generate new key in Linear settings                                 |
 | Extraction returns null title   | Input too vague              | Provide more specific issue description                             |
-| Webhook not syncing             | Missing webhook secret       | POST `/linear/webhook-config` with secret                           |
+| Webhook not syncing             | Missing webhook secret       | POST `/webhook-config` with secret                           |
 | Webhook 401 errors              | Wrong secret                 | Reconfigure secret in Linear and IntexuraOS                         |
-| Dashboard shows stale data      | Firestore not populated      | POST `/linear/sync` to run full sync                                |
+| Dashboard shows stale data      | Firestore not populated      | POST `/sync` to run full sync                                |
 | Title generation returns 500    | LLM failed after 2 attempts  | Retry request or use a manual title                                 |
 | No child issues on dashboard    | Not synced yet               | Run full sync to populate parent-child data                         |
 | Other user missing updates      | Old single-user routing      | Ensure webhook configured; fan-out is default                       |
 | Internal endpoint returns 401   | Missing header               | Both `X-Internal-Auth` and `X-User-Id` required for issue endpoints |
 | Context endpoint returns 404    | Issue not synced             | Run a full sync before querying context                             |
 | Pruning skipped                 | Below 200 issues             | Threshold is 200 active issues — expected behavior                  |
-| Prune candidate still in Linear | Deletion not confirmed       | Call `DELETE /linear/prune-candidates` to confirm                   |
+| Prune candidate still in Linear | Deletion not confirmed       | Call `DELETE /prune-candidates` to confirm                   |
 
 ---
 
@@ -656,11 +656,11 @@ Verify the response contains `description` (string or null) and `comments` array
 
 ```bash
 # List candidates
-curl http://localhost:3000/linear/prune-candidates \
+curl http://localhost:3000/prune-candidates \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 
 # Confirm deletion
-curl -X DELETE http://localhost:3000/linear/prune-candidates \
+curl -X DELETE http://localhost:3000/prune-candidates \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 

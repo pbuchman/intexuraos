@@ -22,8 +22,8 @@ describe('feedbackRoutes plugin', () => {
     await app.register(feedbackRoutes, { jwtValidator: async () => undefined });
     await app.ready();
 
-    expect(app.hasRoute({ method: 'POST', url: '/code/tasks/:taskId/feedback' })).toBe(true);
-    expect(app.hasRoute({ method: 'POST', url: '/code/tasks/:taskId/messages' })).toBe(true);
+    expect(app.hasRoute({ method: 'POST', url: '/tasks/:taskId/feedback' })).toBe(true);
+    expect(app.hasRoute({ method: 'POST', url: '/tasks/:taskId/messages' })).toBe(true);
     expect(app.hasRoute({ method: 'POST', url: '/internal/code/heartbeat' })).toBe(true);
     expect(app.hasRoute({ method: 'POST', url: '/internal/code/group-summary/recompute' })).toBe(
       true,

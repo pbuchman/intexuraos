@@ -124,7 +124,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Capture raw body for debugging JSON parse errors
   // Only capture for webhook endpoint where we see these errors
   app.addHook('preParsing', async (request, _reply, payload) => {
-    if (request.url === '/mobile-notifications/webhooks') {
+    if (request.url === '/webhooks') {
       const chunks: Buffer[] = [];
       for await (const chunk of payload) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));

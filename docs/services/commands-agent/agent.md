@@ -74,7 +74,7 @@ interface IngestCommandOutput {
 
 ### Create Command (PWA path)
 
-**Endpoint:** `POST /commands`
+**Endpoint:** `POST /`
 
 **When to use:** When the PWA user shares text or a link directly from the web app
 
@@ -128,7 +128,7 @@ interface CommandClassification {
 
 ### List Commands
 
-**Endpoint:** `GET /commands`
+**Endpoint:** `GET /`
 
 **When to use:** To retrieve all commands for the authenticated user
 
@@ -198,7 +198,7 @@ interface RetryPendingOutput {
 
 ### Archive Command
 
-**Endpoint:** `PATCH /commands/:commandId`
+**Endpoint:** `PATCH /:commandId`
 
 **When to use:** To mark a classified command as archived after the user has acted on it
 
@@ -218,7 +218,7 @@ interface ArchiveCommandBody {
 
 ### Delete Command
 
-**Endpoint:** `DELETE /commands/:commandId`
+**Endpoint:** `DELETE /:commandId`
 
 **When to use:** To permanently remove a command that is unclassified or failed
 
@@ -232,7 +232,7 @@ interface ArchiveCommandBody {
 
 **Do NOT:**
 
-- Call `DELETE /commands/:commandId` on classified commands — use `PATCH` with `status: "archived"` instead
+- Call `DELETE /:commandId` on classified commands — use `PATCH` with `status: "archived"` instead
 - Submit the same `externalId` expecting re-classification — deduplication is by composite key `{sourceType}:{externalId}`; a duplicate returns the existing command with `isNew: false`
 - Expect synchronous classification always — if LLM API key is unavailable, the command returns with `status: "pending_classification"` and will be classified on the next retry cycle
 - Use fabricated `externalId` values for WhatsApp messages — use the actual WhatsApp message ID to ensure idempotency
@@ -263,7 +263,7 @@ interface ArchiveCommandBody {
 
 ```
 1. User shares text or link from PWA web app
-2. PWA calls POST /commands with source: "pwa-shared"
+2. PWA calls POST / with source: "pwa-shared"
 3. commands-agent classifies and creates action synchronously
 4. Response includes fully-populated command with classification
 5. PWA displays classification type and confidence to user

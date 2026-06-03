@@ -7,7 +7,7 @@ describe('hellscriptRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: { 'content-type': 'application/json' },
         payload: { utterance: 'Hello world' },
       });
@@ -24,7 +24,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -55,7 +55,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -80,7 +80,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -104,7 +104,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -128,7 +128,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -154,7 +154,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -176,7 +176,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -197,7 +197,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/hellscript/impose',
+        url: '/impose',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -216,7 +216,7 @@ describe('hellscriptRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/buffers',
+        url: '/buffers',
       });
 
       expect(response.statusCode).toBe(401);
@@ -226,7 +226,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/buffers',
+        url: '/buffers',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -243,7 +243,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/buffers',
+        url: '/buffers',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -262,7 +262,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/buffers',
+        url: '/buffers',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -275,7 +275,7 @@ describe('hellscriptRoutes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/buffers/some-id',
+        url: '/buffers/some-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -292,7 +292,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/hellscript/buffers/${created.value.id}`,
+        url: `/buffers/${created.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -308,7 +308,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/buffers/nonexistent',
+        url: '/buffers/nonexistent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -327,7 +327,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/hellscript/buffers/${created.value.id}`,
+        url: `/buffers/${created.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -343,7 +343,7 @@ describe('hellscriptRoutes', () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/hellscript/buffers/some-id',
+        url: '/buffers/some-id',
         headers: { authorization: `Bearer ${token}` },
       });
 

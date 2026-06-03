@@ -42,7 +42,7 @@ type ConfirmRequest = z.infer<typeof confirmRequestSchema>;
 export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /whatsapp/verify/send - Send verification code
   fastify.post<{ Body: SendRequest }>(
-    '/whatsapp/verify/send',
+    '/verify/send',
     {
       schema: {
         operationId: 'sendVerificationCode',
@@ -232,7 +232,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
   // POST /whatsapp/verify/confirm - Verify code
   fastify.post<{ Body: ConfirmRequest }>(
-    '/whatsapp/verify/confirm',
+    '/verify/confirm',
     {
       schema: {
         operationId: 'confirmVerificationCode',
@@ -437,7 +437,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
   // GET /whatsapp/verify/status/:phone - Check verification status
   fastify.get<{ Params: { phone: string } }>(
-    '/whatsapp/verify/status/:phone',
+    '/verify/status/:phone',
     {
       schema: {
         operationId: 'getVerificationStatus',

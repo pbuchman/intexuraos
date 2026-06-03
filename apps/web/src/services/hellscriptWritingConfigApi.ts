@@ -7,7 +7,7 @@ export async function getWritingConfig(
 ): Promise<WritingStyleConfig> {
   return await apiRequest<WritingStyleConfig>(
     config.hellscriptAgentUrl,
-    '/hellscript/writing-config',
+    '/writing-config',
     accessToken
   );
 }
@@ -19,7 +19,7 @@ export async function updateStyleInstructions(
 ): Promise<void> {
   await apiRequest<undefined>(
     config.hellscriptAgentUrl,
-    `/hellscript/writing-config/${encodeURIComponent(category)}/style`,
+    `/writing-config/${encodeURIComponent(category)}/style`,
     accessToken,
     {
       method: 'PUT',
@@ -34,7 +34,7 @@ export async function deleteStyleInstructions(
 ): Promise<void> {
   await apiRequest<undefined>(
     config.hellscriptAgentUrl,
-    `/hellscript/writing-config/${encodeURIComponent(category)}/style`,
+    `/writing-config/${encodeURIComponent(category)}/style`,
     accessToken,
     {
       method: 'DELETE',
@@ -48,7 +48,7 @@ export async function listWritingSamples(
 ): Promise<WritingSample[]> {
   return await apiRequest<WritingSample[]>(
     config.hellscriptAgentUrl,
-    `/hellscript/writing-config/${encodeURIComponent(category)}/samples`,
+    `/writing-config/${encodeURIComponent(category)}/samples`,
     accessToken
   );
 }
@@ -61,7 +61,7 @@ export async function createWritingSample(
 ): Promise<WritingSample> {
   return await apiRequest<WritingSample>(
     config.hellscriptAgentUrl,
-    `/hellscript/writing-config/${encodeURIComponent(category)}/samples`,
+    `/writing-config/${encodeURIComponent(category)}/samples`,
     accessToken,
     {
       method: 'POST',
@@ -79,7 +79,7 @@ export async function updateWritingSample(
 ): Promise<void> {
   await apiRequest<undefined>(
     config.hellscriptAgentUrl,
-    `/hellscript/writing-config/${encodeURIComponent(category)}/samples/${encodeURIComponent(sampleId)}`,
+    `/writing-config/${encodeURIComponent(category)}/samples/${encodeURIComponent(sampleId)}`,
     accessToken,
     {
       method: 'PUT',
@@ -95,7 +95,7 @@ export async function deleteWritingSample(
 ): Promise<void> {
   await apiRequest<undefined>(
     config.hellscriptAgentUrl,
-    `/hellscript/writing-config/${encodeURIComponent(category)}/samples/${encodeURIComponent(sampleId)}`,
+    `/writing-config/${encodeURIComponent(category)}/samples/${encodeURIComponent(sampleId)}`,
     accessToken,
     {
       method: 'DELETE',

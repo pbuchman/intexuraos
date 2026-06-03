@@ -39,7 +39,7 @@ Before starting, ensure you have:
 ### Step 1.2: Connect
 
 ```bash
-curl -X POST http://localhost:8112/notion/connect \
+curl -X POST http://localhost:8112/connect \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -71,7 +71,7 @@ The service received your Notion token, called the Notion API to validate it (vi
 ### Step 2.1: Query Connection Status
 
 ```bash
-curl -X GET http://localhost:8112/notion/status \
+curl -X GET http://localhost:8112/status \
   -H "Authorization: Bearer $AUTH_TOKEN"
 ```
 
@@ -116,7 +116,7 @@ If you use a token for a different user who has no Notion connection:
 If you provide a token Notion does not recognize:
 
 ```bash
-curl -X POST http://localhost:8112/notion/connect \
+curl -X POST http://localhost:8112/connect \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -141,7 +141,7 @@ curl -X POST http://localhost:8112/notion/connect \
 ### Common Error: Missing Token
 
 ```bash
-curl -X POST http://localhost:8112/notion/connect \
+curl -X POST http://localhost:8112/connect \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}'
@@ -164,7 +164,7 @@ curl -X POST http://localhost:8112/notion/connect \
 ### Common Error: No Auth Token
 
 ```bash
-curl -X GET http://localhost:8112/notion/status
+curl -X GET http://localhost:8112/status
 ```
 
 **Response (401):**
@@ -224,7 +224,7 @@ curl -X GET http://localhost:8112/internal/notion/users/user-123/pages/abc-page-
   "success": true,
   "data": {
     "title": "My Research Notes",
-    "url": "https://notion.so/abc-page-id"
+    "url": "https://.so/abc-page-id"
   }
 }
 ```
@@ -250,7 +250,7 @@ curl -X GET http://localhost:8112/internal/notion/users/user-123/pages/abc-page-
 ### Step 5.1: Remove the Integration
 
 ```bash
-curl -X DELETE http://localhost:8112/notion/disconnect \
+curl -X DELETE http://localhost:8112/disconnect \
   -H "Authorization: Bearer $AUTH_TOKEN"
 ```
 
@@ -266,7 +266,7 @@ curl -X DELETE http://localhost:8112/notion/disconnect \
 ### Step 5.2: Verify Disconnection
 
 ```bash
-curl -X GET http://localhost:8112/notion/status \
+curl -X GET http://localhost:8112/status \
   -H "Authorization: Bearer $AUTH_TOKEN"
 ```
 
@@ -325,13 +325,13 @@ Test your understanding:
 
 ```bash
 # Connect
-curl -X POST http://localhost:8112/notion/connect \
+curl -X POST http://localhost:8112/connect \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"notionToken": "secret_your_token"}'
 
 # Verify
-curl -X GET http://localhost:8112/notion/status \
+curl -X GET http://localhost:8112/status \
   -H "Authorization: Bearer $AUTH_TOKEN"
 # Expect: configured: true, connected: true
 ```
@@ -340,17 +340,17 @@ curl -X GET http://localhost:8112/notion/status \
 
 ```bash
 # Disconnect
-curl -X DELETE http://localhost:8112/notion/disconnect \
+curl -X DELETE http://localhost:8112/disconnect \
   -H "Authorization: Bearer $AUTH_TOKEN"
 
 # Reconnect with new token
-curl -X POST http://localhost:8112/notion/connect \
+curl -X POST http://localhost:8112/connect \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"notionToken": "secret_new_token"}'
 
 # Check status — createdAt should be the original timestamp
-curl -X GET http://localhost:8112/notion/status \
+curl -X GET http://localhost:8112/status \
   -H "Authorization: Bearer $AUTH_TOKEN"
 ```
 

@@ -242,18 +242,18 @@ describe('OpenAPI contract', () => {
     expect(schema.paths).toHaveProperty('/internal/code-tasks/zombies');
 
     // Verify public endpoints exist
-    expect(schema.paths).toHaveProperty('/code/tasks');
-    expect(schema.paths).toHaveProperty('/code/tasks/{taskId}');
-    expect(schema.paths).toHaveProperty('/code/cancel');
+    expect(schema.paths).toHaveProperty('/tasks');
+    expect(schema.paths).toHaveProperty('/tasks/{taskId}');
+    expect(schema.paths).toHaveProperty('/cancel');
 
     // Verify HTTP methods
     expect(schema.paths['/internal/code/process']).toHaveProperty('post');
     expect(schema.paths['/internal/code-tasks/{taskId}']).toHaveProperty('patch');
     expect(schema.paths['/internal/code-tasks/linear/{linearIssueId}/active']).toHaveProperty('get');
     expect(schema.paths['/internal/code-tasks/zombies']).toHaveProperty('get');
-    expect(schema.paths['/code/tasks']).toHaveProperty('get');
-    expect(schema.paths['/code/tasks/{taskId}']).toHaveProperty('get');
-    expect(schema.paths['/code/cancel']).toHaveProperty('post');
+    expect(schema.paths['/tasks']).toHaveProperty('get');
+    expect(schema.paths['/tasks/{taskId}']).toHaveProperty('get');
+    expect(schema.paths['/cancel']).toHaveProperty('post');
   });
 
   it('includes response schemas for all endpoints', async () => {
@@ -275,7 +275,7 @@ describe('OpenAPI contract', () => {
     expect(processPostEndpoint.responses).toHaveProperty('500');
 
     // Verify GET /code/tasks/{taskId} responses
-    const getByIdEndpoint = schema.paths['/code/tasks/{taskId}'].get;
+    const getByIdEndpoint = schema.paths['/tasks/{taskId}'].get;
     expect(getByIdEndpoint.responses).toHaveProperty('200');
     expect(getByIdEndpoint.responses).toHaveProperty('404');
 
@@ -300,16 +300,16 @@ describe('OpenAPI contract', () => {
     expect(processEndpoint.tags).toContain('internal');
 
     // Check that public endpoints have 'public' tag
-    const tasksListEndpoint = schema.paths['/code/tasks'].get;
+    const tasksListEndpoint = schema.paths['/tasks'].get;
     expect(tasksListEndpoint.tags).toContain('public');
 
-    const cancelEndpoint = schema.paths['/code/cancel'].post;
+    const cancelEndpoint = schema.paths['/cancel'].post;
     expect(cancelEndpoint.tags).toContain('public');
 
     // Check operation IDs
     expect(processEndpoint.operationId).toBe('processCodeAction');
-    expect(schema.paths['/code/tasks/{taskId}'].get.operationId).toBe('getCodeTask');
-    expect(schema.paths['/code/tasks'].get.operationId).toBe('listCodeTasks');
+    expect(schema.paths['/tasks/{taskId}'].get.operationId).toBe('getCodeTask');
+    expect(schema.paths['/tasks'].get.operationId).toBe('listCodeTasks');
     expect(cancelEndpoint.operationId).toBe('cancelCodeTask');
   });
 });
