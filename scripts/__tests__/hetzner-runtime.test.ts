@@ -251,11 +251,21 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-/opt/intexuraos}"');
     expect(script).toContain('rsync -az --delete');
     expect(script).toContain("--exclude '.git/'");
+    expect(script).toContain('RETIRED_REMOTE_PATHS=(');
+    expect(script).toContain('"packages/infra-otel"');
+    expect(script).toContain('cleanup_retired_remote_paths');
+    expect(script).toContain('Removing retired remote path');
     expect(script).toContain(
       'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
     );
     expect(script).toContain('CI=true pnpm install --frozen-lockfile');
-    expect(script).not.toContain(`infra-o${'tel'}`);
+    expect(script).not.toContain(`pnpm --filter @intexuraos/infra-o${'tel'}`);
+    expect(script).toContain('resolve_commit_metadata');
+    expect(script).toContain('GITHUB_SHA');
+    expect(script).toContain('git rev-parse HEAD');
+    expect(script).toContain('git log -1 --pretty=%s');
+    expect(script).toContain('COMMIT_SHA=${commit_sha_quoted}');
+    expect(script).toContain('COMMIT_MESSAGE=${commit_message_quoted}');
     expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh');
     expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh');
     expect(script).toContain(
@@ -388,6 +398,10 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('prepare_sanitized_web_env_file');
     expect(script).toContain('.env.production.local');
     expect(script).toContain('read_env_value "${key}"');
+    expect(script).toContain('export_build_metadata');
+    expect(script).toContain('COMMIT_SHA');
+    expect(script).toContain('COMMIT_MESSAGE');
+    expect(script).toContain('COMMIT_SHA is required when COMMIT_MESSAGE is set');
     expect(script).not.toContain('export_web_safe_secrets');
     expect(script).not.toContain('export "${key}=${value}"');
     expect(script).not.toContain('source "${ENV_FILE}"');
@@ -402,6 +416,29 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('apps/web/dist/index.html');
     expect(provision).toContain('rsync');
     expect(runbook).toContain('scripts/hetzner/deploy-web.sh');
+  });
+
+  it('installs nginx hash sizing in http context before testing and reloading nginx', () => {
+    const script = readRequired(resolve(repoRoot, 'scripts/hetzner/deploy-nginx.sh'));
+    const siteConfig = readRequired(nginxConfigPath);
+
+    expect(script).toContain('NGINX_HASH_CONFIG_TARGET="/etc/nginx/conf.d/intexuraos-hash.conf"');
+    expect(script).toContain('write_nginx_hash_config()');
+    expect(script).toContain('variables_hash_max_size 2048;');
+    expect(script).toContain('variables_hash_bucket_size 128;');
+    expect(script).toContain('install -d -m 755 "$(dirname "${NGINX_HASH_CONFIG_TARGET}")"');
+    expect(script).toContain('install -m 644');
+
+    const deployFlow = script.slice(script.indexOf('main() {'));
+    expect(deployFlow.indexOf('write_nginx_hash_config')).toBeGreaterThan(
+      deployFlow.indexOf('install -m 644 -o root -g root "${NGINX_SOURCE_DIR}/jwt-verify.lua"')
+    );
+    expect(deployFlow.indexOf('nginx -t')).toBeGreaterThan(
+      deployFlow.indexOf('write_nginx_hash_config')
+    );
+    expect(deployFlow.indexOf('reload_nginx')).toBeGreaterThan(deployFlow.indexOf('nginx -t'));
+    expect(siteConfig).not.toContain('variables_hash_max_size');
+    expect(siteConfig).not.toContain('variables_hash_bucket_size');
   });
 });
 
@@ -658,6 +695,10 @@ describe('Hetzner secret loader', () => {
     expect(hetznerBootstrap).toContain('scripts/hetzner/provision.sh --skip-certbot');
     expect(hetznerBootstrap).toContain('pnpm install --frozen-lockfile');
     expect(hetznerBootstrap).not.toContain(`infra-o${'tel'}`);
+    expect(hetznerBootstrap).toContain("git -C '${local.repo_root}' rev-parse HEAD");
+    expect(hetznerBootstrap).toContain("git -C '${local.repo_root}' log -1 --pretty=%s");
+    expect(hetznerBootstrap).toContain('COMMIT_SHA=$commit_sha_quoted');
+    expect(hetznerBootstrap).toContain('COMMIT_MESSAGE=$commit_message_quoted');
     expect(hetznerBootstrap).toContain('scripts/hetzner/deploy-web.sh');
     expect(hetznerBootstrap).toContain('scripts/hetzner/reload-pm2.sh');
     expect(hetznerBootstrap).toContain('scripts/hetzner/deploy-nginx.sh');
