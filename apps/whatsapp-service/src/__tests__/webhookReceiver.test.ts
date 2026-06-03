@@ -1,6 +1,6 @@
 /**
  * Tests for webhook event receiver:
- * - POST /whatsapp/webhooks
+ * - POST /webhooks
  */
 import { createHmac } from 'node:crypto';
 import {
@@ -13,7 +13,7 @@ import {
   testConfig,
 } from './testUtils.js';
 
-describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
+describe('POST /webhooks (webhook event receiver)', () => {
   const ctx = setupTestContext();
 
   it('accepts valid webhook payload with correct signature', async () => {

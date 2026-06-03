@@ -206,7 +206,7 @@ Cross-checking:
 
 **Reports involved:** route-auth-validation (LOW), http-contracts-validation
 
-**Issue:** HTTP contracts shows `POST /notion-webhooks` with auth `HMAC`. Route-auth shows the same path with `None` auth and calls it a stub. This is a discrepancy: HTTP contracts says HMAC, route-auth says no signature verification.
+**Issue:** HTTP contracts shows `POST /notion/webhooks` with auth `HMAC`. Route-auth shows the same path with `None` auth and calls it a stub. This is a discrepancy: HTTP contracts says HMAC, route-auth says no signature verification.
 
 **Impact:** The HTTP contracts report may have documented the intended auth (HMAC) rather than the actual implementation (none — stub). The route-auth report, which analyzed actual code, is more accurate here.
 
@@ -246,8 +246,8 @@ Cross-checking:
 
 | Report                    | Claim                                                                      |
 | ------------------------- | -------------------------------------------------------------------------- |
-| http-contracts-validation | `POST /notion-webhooks` Auth: `HMAC`                                       |
-| route-auth-validation     | `POST /notion-webhooks` Auth: `None` (stub with no signature verification) |
+| http-contracts-validation | `POST /notion/webhooks` Auth: `HMAC`                                       |
+| route-auth-validation     | `POST /notion/webhooks` Auth: `None` (stub with no signature verification) |
 
 **Resolution:** Route-auth analyzed actual code and found no verification. HTTP contracts likely documented intended future auth. **Route-auth is authoritative here.**
 

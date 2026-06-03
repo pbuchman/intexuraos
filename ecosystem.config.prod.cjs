@@ -375,6 +375,9 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS: envValue('INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS') ?? '3',
     INTEXURAOS_ENABLE_METRICS: envValue('INTEXURAOS_ENABLE_METRICS') ?? 'true',
   },
+  'linear-agent': {
+    INTEXURAOS_SERVICE_URL: publicServiceUrl('linear-agent'),
+  },
   'cron-agent': {
     INTEXURAOS_SERVICE_URL:
       envValue('INTEXURAOS_CRON_SERVICE_URL') ?? publicServiceUrl('cron-agent'),

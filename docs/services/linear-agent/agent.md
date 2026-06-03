@@ -590,7 +590,7 @@ None. linear-agent does not publish Pub/Sub events. It receives webhook events f
 
 ## Incoming Webhook
 
-Linear sends issue and comment events to `POST /webhook`. The service:
+Linear sends issue and comment events to `POST /webhooks`. The service:
 
 1. Validates HMAC-SHA256 signature using per-team webhook secret
 2. Fans out issue changes to all connected users for that team

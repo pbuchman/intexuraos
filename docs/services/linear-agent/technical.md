@@ -165,7 +165,7 @@ sequenceDiagram
     participant FS as Firestore
     participant CA as Code Agent
 
-    Linear->>LA: POST /webhook
+    Linear->>LA: POST /webhooks
     LA->>FS: Lookup ALL user IDs by team ID
     LA->>FS: Get webhook secret for team
     LA->>LA: Validate HMAC-SHA256 signature
@@ -299,7 +299,7 @@ Issue display endpoints (`display-batch`, `GET /internal/linear/issues/:identifi
 
 | Method | Path              | Purpose                       | Auth                   |
 | ------ | ----------------- | ----------------------------- | ---------------------- |
-| POST   | `/webhook` | Receive Linear webhook events | HMAC-SHA256 (per-team) |
+| POST   | `/webhooks` | Receive Linear webhook events | HMAC-SHA256 (per-team) |
 
 ### Internal Endpoints
 

@@ -137,6 +137,9 @@ const SERVICE_ENV_MAPPINGS = {
     // INTEXURAOS_LLM_USAGE_SERVICE_URL: already in COMMON_SERVICE_URLS (http://localhost:8132)
     // INTEXURAOS_ENABLE_METRICS: not set — Cloud Monitoring disabled on home-dev (no IAM role)
   },
+  'linear-agent': {
+    INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/linear',
+  },
   'bookmarks-agent': {
     INTEXURAOS_PUBSUB_BOOKMARK_ENRICH:
       process.env.INTEXURAOS_PUBSUB_BOOKMARK_ENRICH ?? 'bookmark-enrich',

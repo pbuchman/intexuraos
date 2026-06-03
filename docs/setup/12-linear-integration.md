@@ -4,7 +4,7 @@ This guide covers setting up the Linear integration for IntexuraOS, including we
 
 ## Prerequisites
 
-- [ ] IntexuraOS deployed to Cloud Run (see [04-cloud-run-services.md](04-cloud-run-services.md))
+- [ ] IntexuraOS deployed to the dev or production PM2 environment
 - [ ] Linear account with admin access to configure webhooks
 - [ ] Linear API key for the user ([generate here](https://linear.app/settings/api))
 
@@ -38,16 +38,16 @@ Webhooks enable real-time synchronization when issues are created, updated, or d
 
 ### Step 2.1: Get Your Webhook URL
 
-| Environment | Webhook URL                                                              |
-| ----------- | ------------------------------------------------------------------------ |
-| Production  | `https://intexuraos-linear-agent-cj44trunra-lm.a.run.app/linear/webhook` |
-| Local Dev   | Not supported (Linear requires HTTPS + public URL)                       |
+| Environment | Webhook URL                                      |
+| ----------- | ------------------------------------------------ |
+| Production  | `https://intexuraos.cloud/api/linear/webhooks`   |
+| Dev         | `https://dev.intexuraos.cloud/api/linear/webhooks` |
 
-> **Note:** For local development testing, use a tunnel service like ngrok:
+> **Note:** Linear requires an HTTPS public URL. For one-off tunnel testing, use a tunnel service like ngrok:
 >
 > ```bash
 > ngrok http 8126
-> # Use the generated https URL + /linear/webhook
+> # Use the generated https URL + /webhooks
 > ```
 
 ### Step 2.2: Configure Webhook in Linear
@@ -56,12 +56,12 @@ Webhooks enable real-time synchronization when issues are created, updated, or d
 2. Click **New webhook**
 3. Fill in the form:
 
-| Field              | Value                                                                    |
-| ------------------ | ------------------------------------------------------------------------ |
-| **Label**          | `IntexuraOS` (or your preferred name)                                    |
-| **URL**            | `https://intexuraos-linear-agent-cj44trunra-lm.a.run.app/linear/webhook` |
-| **Signing secret** | Linear auto-generates this (starts with `lin_wh_...`)                    |
-| **Team selection** | Select the team to receive webhooks for                                  |
+| Field              | Value                                          |
+| ------------------ | ---------------------------------------------- |
+| **Label**          | `IntexuraOS` (or your preferred name)          |
+| **URL**            | `https://intexuraos.cloud/api/linear/webhooks` |
+| **Signing secret** | Linear auto-generates this (starts with `lin_wh_...`) |
+| **Team selection** | Select the team to receive webhooks for        |
 
 4. Under **Data change events**, select:
    - [x] **Issues** (required)
@@ -89,17 +89,14 @@ The secret is stored encrypted in Firestore alongside your Linear connection.
 ### Test Webhook Delivery
 
 1. In Linear, create a test issue in the connected team
-2. Check Cloud Run logs for the webhook receipt:
+2. Check linear-agent logs for the webhook receipt:
 
 ```bash
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=intexuraos-linear-agent" \
-  --project=intexura-os \
-  --limit=10 \
-  --format="table(timestamp,jsonPayload.msg)"
+pm2 logs linear-agent --lines 50
 ```
 
 3. Look for log entries like:
-   - `"Incoming request: POST /linear/webhook"` - Webhook received
+   - `"Incoming request: POST /linear/webhooks"` - Webhook received
    - `"Issue synced from webhook"` - Successfully processed
 
 ### Common Issues
@@ -107,8 +104,8 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 | Symptom                          | Cause                                  | Solution                                            |
 | -------------------------------- | -------------------------------------- | --------------------------------------------------- |
 | 401 Unauthorized                 | Signature mismatch                     | Verify secret matches in both Linear and IntexuraOS |
-| 404 Not Found                    | Wrong webhook URL                      | Check URL path is `/linear/webhook`                 |
-| 500 Internal Error               | Service configuration issue            | Check Cloud Run logs for details                    |
+| 404 Not Found                    | Wrong webhook URL                      | Check URL path is `/api/linear/webhooks`            |
+| 500 Internal Error               | Service configuration issue            | Check linear-agent logs for details                 |
 | Webhook not firing               | Wrong team selected                    | Verify team selection in Linear webhook config      |
 | "Team not connected" in logs     | No user connected to this Linear team  | User must complete Part 1 first                     |
 | "Webhook not configured" in logs | User hasn't saved their webhook secret | User must complete Step 2.3                         |
@@ -121,7 +118,7 @@ Linear Issue Changed
         ▼
 ┌───────────────────┐
 │  Linear Webhook   │
-│  POST /linear/webhook
+│  POST /linear/webhooks
 │  + Linear-Signature header
 └─────────┬─────────┘
           │

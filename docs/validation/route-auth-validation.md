@@ -183,7 +183,7 @@
 | Method | Path                                   | Auth Type                | Status                         |
 | ------ | -------------------------------------- | ------------------------ | ------------------------------ |
 | GET    | /internal/notion/users/:userId/context | `validateInternalAuth()` | OK                             |
-| POST   | /notion-webhooks                       | None                     | LOW (stub — see discrepancies) |
+| POST   | /notion/webhooks                       | None                     | LOW (stub — see discrepancies) |
 
 ### research-agent
 
@@ -275,7 +275,7 @@ Both routes are properly protected. The issue is that the internal route is indi
 ### [LOW] notion-service — Webhook stub has no signature verification
 
 **File:** `apps/notion-service/src/routes/webhookRoutes.ts`
-**Route:** `POST /notion-webhooks`
+**Route:** `POST /notion/webhooks`
 **Issue:** The Notion webhook endpoint accepts any JSON payload with no HMAC signature verification. The route is documented as a stub that accepts events but performs no side effects.
 
 When Notion webhook integration is fully implemented, HMAC signature verification must be added using the `x-notion-signature` header (or equivalent Notion verification mechanism).
