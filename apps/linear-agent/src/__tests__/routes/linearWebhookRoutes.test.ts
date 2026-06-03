@@ -129,14 +129,52 @@ describe('Linear Webhook Routes', () => {
     };
   }
 
-  describe('POST /linear/webhook', () => {
-    it('accepts valid webhook with correct signature', async () => {
+  describe('POST /linear/webhooks', () => {
+    it('accepts valid webhook on canonical plural route', async () => {
+      const payload = createLinearWebhookPayload();
+      const signature = computeLinearSignature(payload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'Linear-Signature': signature,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify(payload),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('created');
+      expect(body.data.issueId).toBe('issue-uuid-1');
+    });
+
+    it('does not expose legacy singular webhook route', async () => {
       const payload = createLinearWebhookPayload();
       const signature = computeLinearSignature(payload);
 
       const response = await app.inject({
         method: 'POST',
         url: '/webhook',
+        headers: {
+          'Linear-Signature': signature,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify(payload),
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('accepts valid webhook with correct signature', async () => {
+      const payload = createLinearWebhookPayload();
+      const signature = computeLinearSignature(payload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': signature,
           'content-type': 'application/json',
@@ -156,7 +194,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'content-type': 'application/json',
         },
@@ -171,7 +209,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': 'sha256=invalid',
           'content-type': 'application/json',
@@ -188,7 +226,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': signature,
           'content-type': 'application/json',
@@ -209,7 +247,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': signature,
           'content-type': 'application/json',
@@ -263,7 +301,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': signature,
           'content-type': 'application/json',
@@ -287,7 +325,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': signature,
           'content-type': 'application/json',
@@ -305,7 +343,7 @@ describe('Linear Webhook Routes', () => {
 
       await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': createSignature,
           'content-type': 'application/json',
@@ -335,7 +373,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': updateSignature,
           'content-type': 'application/json',
@@ -357,7 +395,7 @@ describe('Linear Webhook Routes', () => {
 
       await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': createSignature,
           'content-type': 'application/json',
@@ -387,7 +425,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': removeSignature,
           'content-type': 'application/json',
@@ -410,7 +448,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': signature,
           'content-type': 'application/json',
@@ -432,7 +470,7 @@ describe('Linear Webhook Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/webhook',
+        url: '/webhooks',
         headers: {
           'Linear-Signature': signature,
           'content-type': 'application/json',
@@ -492,7 +530,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -531,7 +569,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': wrongSignature,
             'content-type': 'application/json',
@@ -567,7 +605,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': 'sha256=invalid',
             'content-type': 'application/json',
@@ -611,7 +649,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -655,7 +693,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -683,7 +721,7 @@ describe('Linear Webhook Routes', () => {
 
         await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -717,7 +755,7 @@ describe('Linear Webhook Routes', () => {
 
         await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -751,7 +789,7 @@ describe('Linear Webhook Routes', () => {
 
         await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -770,7 +808,7 @@ describe('Linear Webhook Routes', () => {
 
         await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -791,7 +829,7 @@ describe('Linear Webhook Routes', () => {
 
         await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -812,7 +850,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -850,7 +888,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -885,7 +923,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -919,7 +957,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -969,7 +1007,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -996,7 +1034,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -1031,7 +1069,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -1060,7 +1098,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -1095,7 +1133,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -1131,7 +1169,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -1196,7 +1234,7 @@ describe('Linear Webhook Routes', () => {
         // No valid signature needed - we expect it to be ignored before signature check
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'content-type': 'application/json',
           },
@@ -1252,7 +1290,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -1312,7 +1350,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',
@@ -1340,7 +1378,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: { 'content-type': 'application/json' },
           payload: JSON.stringify(payload),
         });
@@ -1392,7 +1430,7 @@ describe('Linear Webhook Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/webhook',
+          url: '/webhooks',
           headers: {
             'Linear-Signature': signature,
             'content-type': 'application/json',

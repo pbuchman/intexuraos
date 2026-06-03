@@ -127,7 +127,7 @@ URLs; this is a hard cutover with no alias or rewrite fallback.
 | Firebase Auth       | Authorized domains                   | `intexuraos.cloud`                                                                     | Keep the Firebase `authDomain` secret value from Terraform; do not replace it with the web domain. |
 | GitHub OAuth App    | Homepage URL                         | `https://intexuraos.cloud`                                                             | Applies to the user-service GitHub connection flow. |
 | GitHub OAuth App    | Authorization callback URL           | `https://intexuraos.cloud/oauth/connections/github/callback`                           | Hetzner must proxy `/oauth/connections/github/*` to `user-service`; current code generates this path from forwarded host/proto. |
-| Linear webhook      | Webhook URL                          | `https://intexuraos.cloud/api/linear/webhook`                                         | Keep the signing secret unchanged. |
+| Linear webhook      | Webhook URL                          | `https://intexuraos.cloud/api/linear/webhooks`                                         | Keep the signing secret unchanged. |
 | WhatsApp webhook    | Callback URL                         | `https://intexuraos.cloud/api/whatsapp/webhooks`                                      | Keep the verify token unchanged. |
 | WhatsApp webhook    | Webhook fields                       | `messages`, `message_status`                                                           | Verify WABA app subscription remains active. |
 | Notion webhook      | Webhook URL                          | `https://intexuraos.cloud/api/notion/webhooks`                                        | Only if Notion webhooks are enabled. |

@@ -113,7 +113,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     }
   });
 
-  it('GET /whatsapp/webhooks 200 response is text/plain', () => {
+  it('GET /webhooks 200 response is text/plain', () => {
     const paths = openapiSpec.paths;
     const getWebhook = paths?.['/webhooks']?.['get'];
     expect(getWebhook).toBeDefined();
@@ -131,7 +131,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(paths?.['/health']).toBeDefined();
   });
 
-  it('POST /whatsapp/webhooks documents signature header', () => {
+  it('POST /webhooks documents signature header', () => {
     const paths = openapiSpec.paths;
     const postWebhook = paths?.['/webhooks']?.['post'];
     expect(postWebhook).toBeDefined();

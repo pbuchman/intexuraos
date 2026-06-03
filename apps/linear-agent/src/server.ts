@@ -39,16 +39,20 @@ const REQUIRED_SECRETS = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_SERVICE_URL',
   'INTEXURAOS_USER_SERVICE_URL',
 ];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   const servers = [
     {
-      url: 'https://intexuraos-linear-agent-cj44trunra-lm.a.run.app',
-      description: 'Cloud (Development)',
+      url: 'https://intexuraos.cloud/api/linear',
+      description: 'Production',
     },
-    { url: 'http://localhost:8080', description: 'Local' },
+    {
+      url: 'https://dev.intexuraos.cloud/api/linear',
+      description: 'Development',
+    },
   ];
 
   return {

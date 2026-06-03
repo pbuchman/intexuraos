@@ -249,6 +249,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.userServiceClient.reset();
     context.pruneCandidateRepository.reset();
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_SERVICE_URL'];
   });
 
   return context;

@@ -1,10 +1,10 @@
 /**
  * Tests for webhook verification:
- * - GET /whatsapp/webhooks (Meta webhook verification)
+ * - GET /webhooks (Meta webhook verification)
  */
 import { describe, expect, it, setupTestContext, testConfig } from './testUtils.js';
 
-describe('GET /whatsapp/webhooks (webhook verification)', () => {
+describe('GET /webhooks (webhook verification)', () => {
   const ctx = setupTestContext();
 
   it('returns challenge when verify token matches', async () => {
