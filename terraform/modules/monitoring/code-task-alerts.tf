@@ -134,6 +134,99 @@ resource "google_monitoring_alert_policy" "code_tasks_failed_rate" {
 }
 
 # =============================================================================
+# ALERT: Hetzner PR Triage Push 5xx
+# Fires on any Pub/Sub push attempt to the Hetzner PR-triage consumer that the
+# remote server classifies as 5xx. This catches nginx-edge failures before the
+# low-volume automation path reaches the generic backlog threshold.
+# =============================================================================
+resource "google_monitoring_alert_policy" "code_pr_triage_hetzner_push_5xx" {
+  count        = var.alert_email != null ? 1 : 0
+  display_name = "Code PR Triage Hetzner Push 5xx"
+  combiner     = "OR"
+
+  documentation {
+    content   = "Pub/Sub push delivery to `intexuraos-pr-triage-prod-hetzner` is receiving remote 5xx responses. Check Hetzner nginx `/internal/code/pubsub/pr-triage` and code-agent logs."
+    mime_type = "text/markdown"
+  }
+
+  conditions {
+    display_name = "PR triage push remote_server_5xx > 0"
+    condition_threshold {
+      filter          = <<-EOT
+        resource.type="pubsub_subscription"
+        resource.label.subscription_id="intexuraos-pr-triage-prod-hetzner"
+        metric.type="pubsub.googleapis.com/subscription/push_request_count"
+        metric.labels.response_class="remote_server_5xx"
+      EOT
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "60s"
+
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+    }
+  }
+
+  notification_channels = concat(
+    [google_monitoring_notification_channel.email[0].name],
+    var.slack_auth_token != null ? [google_monitoring_notification_channel.slack[0].name] : [],
+  )
+
+  alert_strategy {
+    auto_close = "1800s"
+  }
+}
+
+# =============================================================================
+# ALERT: Hetzner PR Triage Backlog
+# Fires when the PR-triage subscription has unacked messages for 5 minutes.
+# The generic backlog alert is intentionally much higher and can miss this
+# low-volume automation path.
+# =============================================================================
+resource "google_monitoring_alert_policy" "code_pr_triage_hetzner_backlog" {
+  count        = var.alert_email != null ? 1 : 0
+  display_name = "Code PR Triage Hetzner Backlog"
+  combiner     = "OR"
+
+  documentation {
+    content   = "`intexuraos-pr-triage-prod-hetzner` has unacked messages for more than 5 minutes. Check Pub/Sub delivery attempts, DLQ state, and code-agent PR triage logs."
+    mime_type = "text/markdown"
+  }
+
+  conditions {
+    display_name = "PR triage unacked messages > 0"
+    condition_threshold {
+      filter          = <<-EOT
+        resource.type="pubsub_subscription"
+        resource.label.subscription_id="intexuraos-pr-triage-prod-hetzner"
+        metric.type="pubsub.googleapis.com/subscription/num_undelivered_messages"
+      EOT
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "300s"
+
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_MEAN"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+    }
+  }
+
+  notification_channels = concat(
+    [google_monitoring_notification_channel.email[0].name],
+    var.slack_auth_token != null ? [google_monitoring_notification_channel.slack[0].name] : [],
+  )
+
+  alert_strategy {
+    auto_close = "1800s"
+  }
+}
+
+# =============================================================================
 # ALERT: High Daily Cost
 # Triggers when daily code task cost exceeds $50
 # =============================================================================

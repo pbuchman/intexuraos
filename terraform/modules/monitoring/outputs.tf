@@ -42,8 +42,10 @@ output "code_task_dashboard_id" {
 output "code_task_alert_policies" {
   description = "Code task alert policies"
   value = {
-    high_failure_rate  = var.alert_email != null ? try(google_monitoring_alert_policy.code_task_high_failure_rate[0].name, null) : null
-    high_daily_cost    = var.alert_email != null ? try(google_monitoring_alert_policy.code_task_high_daily_cost[0].name, null) : null
-    capacity_exhausted = var.alert_email != null ? try(google_monitoring_alert_policy.code_task_capacity_exhausted[0].name, null) : null
+    high_failure_rate               = var.alert_email != null ? try(google_monitoring_alert_policy.code_task_high_failure_rate[0].name, null) : null
+    high_daily_cost                 = var.alert_email != null ? try(google_monitoring_alert_policy.code_task_high_daily_cost[0].name, null) : null
+    capacity_exhausted              = var.alert_email != null ? try(google_monitoring_alert_policy.code_task_capacity_exhausted[0].name, null) : null
+    code_pr_triage_hetzner_push_5xx = var.alert_email != null ? try(google_monitoring_alert_policy.code_pr_triage_hetzner_push_5xx[0].name, null) : null
+    code_pr_triage_hetzner_backlog  = var.alert_email != null ? try(google_monitoring_alert_policy.code_pr_triage_hetzner_backlog[0].name, null) : null
   }
 }
