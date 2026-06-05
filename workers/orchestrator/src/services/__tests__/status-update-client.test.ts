@@ -81,6 +81,25 @@ describe('StatusUpdateClient', () => {
     expect(nock.isDone()).toBe(true);
   });
 
+  it('uses the task webhook base for terminal status callbacks when provided', async () => {
+    const taskCallbackOrigin = 'https://intexuraos.cloud';
+
+    nock(taskCallbackOrigin)
+      .patch('/internal/code-tasks/task_prod/status')
+      .reply(200, { success: true });
+
+    const { client } = makeClient();
+    const result = await client.commit({
+      taskId: 'task_prod',
+      status: 'failed',
+      completedAt: new Date('2026-04-17T10:00:00.000Z'),
+      webhookUrl: 'https://intexuraos.cloud/internal/webhooks/task-complete',
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(nock.isDone()).toBe(true);
+  });
+
   it('computes signature over the exact rawBody bytes sent', async () => {
     let capturedBody: string | undefined;
     let capturedTimestamp: string | undefined;

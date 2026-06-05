@@ -18,7 +18,13 @@ import type {
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerConfig as WorkerSettingsConfig } from '../../domain/models/workerSettings.js';
+import {
+  classifyCodeTaskDispatchability,
+  type CodeTaskDispatchability,
+} from '../../domain/services/codeTaskDispatchBlockers.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
+
+type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
 
 /**
  * Check if an HTTP status code is a retryable infrastructure error.
@@ -163,9 +169,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
 
     if (workers.length === 0) {
+      const blocker = classifyCodeTaskDispatchability({
+        workerType: request.workerType,
+        workers: [],
+        healthByWorkerName: {},
+      }) as DispatchBlocker;
       return err({
         code: 'worker_unavailable',
-        message: 'No workers configured for this user',
+        message: blocker.message,
+        blocker,
       });
     }
 
@@ -180,6 +192,28 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }));
 
     const healthResults = await this.workerHealthProbe.probeAllWorkers(probeConfigs);
+    const dispatchability = classifyCodeTaskDispatchability({
+      workerType: request.workerType,
+      workers: probeConfigs,
+      healthByWorkerName: healthResults,
+    });
+
+    if (!dispatchability.dispatchable) {
+      this.logger.warn(
+        {
+          taskId: request.taskId,
+          workerType: request.workerType,
+          reason: dispatchability.reason,
+          workerNames: dispatchability.workerNames,
+        },
+        'Dispatch blocked by worker capability or health state'
+      );
+      return err({
+        code: dispatchability.reason === 'workers_at_capacity' ? 'at_capacity' : 'worker_unavailable',
+        message: dispatchability.message,
+        blocker: dispatchability,
+      });
+    }
 
     // Filter to healthy workers and extract available capacity in a single pass.
     // If failedWorkerLocation is set, prefer workers OTHER than the failed one.
@@ -202,17 +236,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     // Fall back to the failed worker if no alternatives are healthy
     if (workersWithCapacity.length === 0) {
       workersWithCapacity.push(...failedWorkerFallback);
-    }
-
-    if (workersWithCapacity.length === 0) {
-      this.logger.warn(
-        { totalWorkers: workers.length },
-        'All worker health probes failed, no workers available for dispatch'
-      );
-      return err({
-        code: 'worker_unavailable',
-        message: 'All worker health probes failed',
-      });
     }
 
     // Sort by available capacity descending, priority as tiebreaker

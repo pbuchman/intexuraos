@@ -11,6 +11,32 @@ describe('WORKER_TYPES configuration', () => {
     expect(codeTaskDomain['CODE_TASK_WORKER_TYPES']).toEqual(Object.keys(WORKER_TYPES));
   });
 
+  it('keeps orchestrator runtime config in sync with shared capability metadata', async () => {
+    const codeTaskDomain = (await import('@intexuraos/code-task-domain')) as Record<
+      string,
+      unknown
+    >;
+    const capabilities = codeTaskDomain['CODE_TASK_WORKER_CAPABILITIES'] as Record<
+      string,
+      { runtimeFamily: string; auth: { kind: string; envVar?: string } }
+    >;
+
+    for (const [workerType, config] of Object.entries(WORKER_TYPES)) {
+      const capability = capabilities[workerType];
+      expect(capability, `${workerType} missing shared capability metadata`).toBeDefined();
+      expect(capability.runtimeFamily === 'codex' ? 'codex' : 'claude').toBe(config.runtime);
+      if (capability.auth.kind === 'api_key') {
+        expect(config.apiKeyEnvVar).toBe(capability.auth.envVar);
+      }
+      if (capability.auth.kind === 'claude') {
+        expect(config.apiKeyEnvVar).toBe('ANTHROPIC_API_KEY');
+      }
+      if (capability.auth.kind === 'codex') {
+        expect(config.apiKeyEnvVar).toBeUndefined();
+      }
+    }
+  });
+
   it('uses generic opus alias so CLI resolves the latest model at runtime', () => {
     expect(WORKER_TYPES.opus.model).toBe('opus');
   });

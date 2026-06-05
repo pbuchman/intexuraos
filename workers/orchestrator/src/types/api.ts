@@ -54,4 +54,9 @@ export interface HealthResponse {
   dockerHealthy: boolean;
   diskHealthy: boolean;
   workerAuths: Record<WorkerAuthProvider, WorkerAuthState>;
+  providerApiKeys: Record<string, ProviderApiKeyHealth>;
+}
+
+export interface ProviderApiKeyHealth {
+  configured: boolean;
 }

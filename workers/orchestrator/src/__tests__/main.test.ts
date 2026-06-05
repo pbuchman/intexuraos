@@ -2004,6 +2004,7 @@ describe('main.ts', () => {
         mockLogger,
         expect.any(Function),
         undefined,
+        undefined,
         undefined
       );
 

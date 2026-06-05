@@ -19,9 +19,29 @@ import {
   workerTypeSchema,
 } from './schemas.js';
 import type { CodeRoutesOptions } from './types.js';
+import type { CodeTaskSystemStatus } from '../../domain/models/codeTaskSystemStatus.js';
 
 /** Max characters of sanitized prompt to include in queue listing responses. */
 const QUEUE_PROMPT_PREVIEW_LENGTH = 200;
+
+function serializeSystemStatus(status: CodeTaskSystemStatus): Record<string, unknown> {
+  return {
+    id: status.id,
+    component: status.component,
+    status: status.status,
+    severity: status.severity,
+    workerType: status.workerType,
+    reason: status.reason,
+    message: status.message,
+    remediation: status.remediation,
+    affectedTaskCount: status.affectedTaskCount,
+    exampleTaskIds: status.exampleTaskIds,
+    workerNames: status.workerNames,
+    firstSeenAt: status.firstSeenAt.toISOString(),
+    lastSeenAt: status.lastSeenAt.toISOString(),
+    ...(status.lastNotifiedAt !== undefined && { lastNotifiedAt: status.lastNotifiedAt.toISOString() }),
+  };
+}
 
 export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opts, done) => {
   const { jwtValidator } = opts;
@@ -114,6 +134,11 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         workerSettingsRepo: services.workerSettingsRepo,
         logLineRepo: services.logLineRepo,
         statusMirrorService: services.statusMirrorService,
+        /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchStatusService @preserve */
+        ...(services.codeTaskDispatchStatusService !== undefined && {
+          codeTaskDispatchStatusService: services.codeTaskDispatchStatusService,
+        }),
+        /* v8 ignore stop @preserve */
         executionMemory: {
           /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
           ...(services.executionMemoryEmbeddingClient !== undefined && {
@@ -177,6 +202,11 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         linearAgentClient: services.linearAgentClient,
         whatsappNotifier: services.whatsappNotifier,
         workerSettingsRepo: services.workerSettingsRepo,
+        /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchStatusService @preserve */
+        ...(services.codeTaskDispatchStatusService !== undefined && {
+          codeTaskDispatchStatusService: services.codeTaskDispatchStatusService,
+        }),
+        /* v8 ignore stop @preserve */
         taskEnqueueService: services.taskEnqueueService,
         orchestratorSecret: loadConfig().orchestratorSecret,
         executionMemory: {
@@ -229,7 +259,7 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
                 success: { type: 'boolean', enum: [true] },
                 data: {
                   type: 'object',
-                  required: ['tasks', 'totalQueued', 'maxQueueSize'],
+                  required: ['tasks', 'systemStatuses', 'totalQueued', 'maxQueueSize'],
                   properties: {
                     tasks: {
                       type: 'array',
@@ -249,6 +279,43 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
                           dispatchScheduleText: { type: 'string' },
                         },
                         required: ['id', 'prompt', 'queuedAt', 'createdAt', 'position'],
+                      },
+                    },
+                    systemStatuses: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          component: { type: 'string', enum: ['code-task-dispatch'] },
+                          status: { type: 'string', enum: ['active'] },
+                          severity: { type: 'string', enum: ['warning', 'critical'] },
+                          workerType: { type: 'string' },
+                          reason: { type: 'string' },
+                          message: { type: 'string' },
+                          remediation: { type: 'string' },
+                          affectedTaskCount: { type: 'number' },
+                          exampleTaskIds: { type: 'array', items: { type: 'string' } },
+                          workerNames: { type: 'array', items: { type: 'string' } },
+                          firstSeenAt: { type: 'string' },
+                          lastSeenAt: { type: 'string' },
+                          lastNotifiedAt: { type: 'string' },
+                        },
+                        required: [
+                          'id',
+                          'component',
+                          'status',
+                          'severity',
+                          'workerType',
+                          'reason',
+                          'message',
+                          'remediation',
+                          'affectedTaskCount',
+                          'exampleTaskIds',
+                          'workerNames',
+                          'firstSeenAt',
+                          'lastSeenAt',
+                        ],
                       },
                     },
                     totalQueued: { type: 'number' },
@@ -278,7 +345,7 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
       },
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, { message: 'Received request to GET /code/queue' });
-        const { codeTaskRepo } = getServices();
+        const { codeTaskRepo, codeTaskSystemStatusRepo } = getServices();
         const config = loadConfig();
 
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
@@ -288,6 +355,17 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         const result = await codeTaskRepo.listQueued();
         if (!result.ok) {
           return await reply.fail('INTERNAL_ERROR', 'Failed to fetch queue');
+        }
+
+        /* v8 ignore start -- ts-type: optional property undefined check for exactOptionalPropertyTypes; production initServices always provides codeTaskSystemStatusRepo @preserve */
+        if (codeTaskSystemStatusRepo === undefined) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch queue system status');
+        }
+        /* v8 ignore stop @preserve */
+
+        const statusResult = await codeTaskSystemStatusRepo.listActiveForUser(userId);
+        if (!statusResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch queue system status');
         }
 
         // Scope to requesting user's tasks only — prevents cross-user data leakage
@@ -318,8 +396,113 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
 
         return await reply.ok({
           tasks,
+          systemStatuses: statusResult.value.map(serializeSystemStatus),
           totalQueued: tasks.length,
           maxQueueSize: config.queue.maxSize,
+        });
+      }
+    );
+
+    fastify.get(
+      '/system-status',
+      {
+        schema: {
+          operationId: 'listCodeTaskSystemStatuses',
+          summary: 'List active code-task system statuses',
+          description: 'Public endpoint for listing active code-task system statuses for the authenticated user. Requires Auth0 JWT.',
+          tags: ['public'],
+          response: {
+            200: {
+              description: 'Active code-task system statuses',
+              type: 'object',
+              required: ['success', 'data'],
+              properties: {
+                success: { type: 'boolean', enum: [true] },
+                data: {
+                  type: 'object',
+                  required: ['systemStatuses'],
+                  properties: {
+                    systemStatuses: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          component: { type: 'string', enum: ['code-task-dispatch'] },
+                          status: { type: 'string', enum: ['active'] },
+                          severity: { type: 'string', enum: ['warning', 'critical'] },
+                          workerType: { type: 'string' },
+                          reason: { type: 'string' },
+                          message: { type: 'string' },
+                          remediation: { type: 'string' },
+                          affectedTaskCount: { type: 'number' },
+                          exampleTaskIds: { type: 'array', items: { type: 'string' } },
+                          workerNames: { type: 'array', items: { type: 'string' } },
+                          firstSeenAt: { type: 'string' },
+                          lastSeenAt: { type: 'string' },
+                          lastNotifiedAt: { type: 'string' },
+                        },
+                        required: [
+                          'id',
+                          'component',
+                          'status',
+                          'severity',
+                          'workerType',
+                          'reason',
+                          'message',
+                          'remediation',
+                          'affectedTaskCount',
+                          'exampleTaskIds',
+                          'workerNames',
+                          'firstSeenAt',
+                          'lastSeenAt',
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            500: {
+              description: 'Internal server error',
+              type: 'object',
+              required: ['success', 'error'],
+              properties: {
+                success: { type: 'boolean', enum: [false] },
+                error: {
+                  type: 'object',
+                  required: ['code', 'message'],
+                  properties: {
+                    code: { type: 'string' },
+                    message: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        logIncomingRequest(request, { message: 'Received request to GET /code/system-status' });
+        const { codeTaskSystemStatusRepo } = getServices();
+
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        const userId = request.user?.userId ?? 'unknown-user';
+        /* v8 ignore stop @preserve */
+
+        /* v8 ignore start -- ts-type: optional property undefined check for exactOptionalPropertyTypes; production initServices always provides codeTaskSystemStatusRepo @preserve */
+        if (codeTaskSystemStatusRepo === undefined) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch system status');
+        }
+        /* v8 ignore stop @preserve */
+
+        const statusResult = await codeTaskSystemStatusRepo.listActiveForUser(userId);
+        if (!statusResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch system status');
+        }
+
+        return await reply.ok({
+          systemStatuses: statusResult.value.map(serializeSystemStatus),
         });
       }
     );

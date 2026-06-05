@@ -314,6 +314,9 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('code-agent')?.env.INTEXURAOS_SERVICE_URL).toBe(
       'https://intexuraos.cloud/api/code'
     );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL).toBe(
+      'https://intexuraos.cloud'
+    );
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'
     );

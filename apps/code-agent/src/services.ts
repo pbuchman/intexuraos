@@ -11,6 +11,7 @@ import type { Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
+import { createCodeTaskDispatchStatusService } from './domain/services/codeTaskDispatchStatusService.js';
 import { createLinearIssueService } from './domain/services/linearIssueService.js';
 import { createStatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
@@ -71,6 +72,11 @@ export function initServices(config: ServiceConfig): void {
     whatsappPublisher,
     linearAgentClient,
     webAppUrl: config.webAppUrl,
+  });
+  const codeTaskDispatchStatusService = createCodeTaskDispatchStatusService({
+    statusRepo: repos.codeTaskSystemStatusRepo,
+    whatsappNotifier,
+    logger,
   });
   const linearIssueService = createLinearIssueService({ linearAgentClient, logger });
   const statusMirrorService = createStatusMirrorService({ actionsAgentClient, logger });
@@ -149,9 +155,9 @@ export function initServices(config: ServiceConfig): void {
   });
 
   container = {
-    firestore, logger, serviceUrl: config.serviceUrl,
+    firestore, logger, serviceUrl: config.serviceUrl, codeTaskCallbackBaseUrl: config.codeTaskCallbackBaseUrl,
     codeTaskRepo: repos.codeTaskRepo, logChunkRepo: repos.logChunkRepo, logLineRepo: repos.logLineRepo,
-    taskDispatcher, whatsappNotifier, actionsAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
+    taskDispatcher, whatsappNotifier, codeTaskDispatchStatusService, actionsAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     archiveStaleGroups: createArchiveStaleGroupsUseCase({
@@ -166,6 +172,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubEventLogEntryRepo: repos.gitHubEventLogEntryRepo, turnMetricsRepo: repos.turnMetricsRepo,
     userServiceClient, gitHubPRClient, userLookupService, webhookRules, resolveToolCallingClient,
     dispatchService, eventDecisionRepo: repos.eventDecisionRepo, dispatchRetryRepo: repos.dispatchRetryRepo,
+    codeTaskSystemStatusRepo: repos.codeTaskSystemStatusRepo,
     unifiedEvaluator, prTriagePublisher, mergeConflictDetector, automationLog, taskEnqueueService,
     mergeQueueWatchRepo: repos.mergeQueueWatchRepo, executionMemoryRepo: repos.executionMemoryRepo,
     executionMemoryApplicationRepo: repos.executionMemoryApplicationRepo,

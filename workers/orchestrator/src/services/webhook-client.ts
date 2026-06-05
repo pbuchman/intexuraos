@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { getErrorCauseChain, type Result, type Logger } from '@intexuraos/common-core';
 import type { StatePersistence } from './state-persistence.js';
 import type { PendingWebhook } from '../types/state.js';
+import { normalizeInternalCallbackUrl } from './callback-url.js';
 
 export interface WebhookPayload {
   taskId: string;
@@ -131,9 +132,10 @@ export class WebhookClient {
           const timestamp = Math.floor(now / 1000);
           const signature = signPayload(rawJsonBody, pending.secret, timestamp);
 
-          await this.deliver(pending.url, rawJsonBody, signature, timestamp);
+          const normalizedUrl = normalizeInternalCallbackUrl(pending.url);
+          await this.deliver(normalizedUrl, rawJsonBody, signature, timestamp);
           this.logger.info(
-            { taskId: pending.taskId, url: pending.url, retryAttempt: pending.attempts + 1 },
+            { taskId: pending.taskId, url: normalizedUrl, retryAttempt: pending.attempts + 1 },
             'Pending webhook delivered successfully'
           );
           success = true;

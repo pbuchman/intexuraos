@@ -74,6 +74,7 @@ describe('collectTurnMetrics', () => {
         containerId: 'container-xyz',
         attempt: 2,
         startedAt: task.startedAt,
+        webhookUrl: task.webhookUrl,
       })
     );
   });

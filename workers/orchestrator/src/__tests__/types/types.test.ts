@@ -89,6 +89,7 @@ describe('Orchestrator Types', () => {
             lastRefreshAt: '2026-03-26T11:50:00.000Z',
           },
         },
+        providerApiKeys: {},
       };
 
       expect(health.status).toBe('ready');

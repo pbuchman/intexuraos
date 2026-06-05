@@ -17,6 +17,11 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../servic
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import type { CodeTaskDispatchStatusService } from '../services/codeTaskDispatchStatusService.js';
+import {
+  classifyCodeTaskDispatchability,
+  type CodeTaskDispatchability,
+} from '../services/codeTaskDispatchBlockers.js';
 import { loadConfig } from '../../config.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
@@ -26,6 +31,7 @@ import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+import { buildTaskCompleteWebhookUrl } from '../services/codeTaskCallbackUrls.js';
 import {
   prepareExecutionMemoryContext,
   toDispatchExecutionMemoryContext,
@@ -49,6 +55,62 @@ function groupTasksByPR(tasks: CodeTask[]): Map<string, CodeTask[]> {
     groups.set(key, group);
   }
   return groups;
+}
+
+type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
+
+function findAffectedDispatchTasks(candidates: readonly CodeTask[], task: CodeTask): CodeTask[] {
+  return candidates.filter(
+    (candidate) => candidate.userId === task.userId && candidate.workerType === task.workerType
+  );
+}
+
+async function recordDispatchBlockedForTask(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskDispatchStatusService'>,
+  candidates: readonly CodeTask[],
+  task: CodeTask,
+  blocker: DispatchBlocker
+): Promise<void> {
+  if (deps.codeTaskDispatchStatusService === undefined) {
+    return;
+  }
+
+  const affectedTasks = findAffectedDispatchTasks(candidates, task);
+  try {
+    await deps.codeTaskDispatchStatusService.recordDispatchBlocked({
+      userId: task.userId,
+      workerType: task.workerType,
+      blocker,
+      affectedTaskCount: affectedTasks.length,
+      exampleTaskIds: affectedTasks.slice(0, 5).map((affectedTask) => affectedTask.id),
+    });
+  } catch (error) {
+    deps.logger.warn(
+      { taskId: task.id, reason: blocker.reason, error },
+      'Failed to record code task dispatch blocker status'
+    );
+  }
+}
+
+async function resolveDispatchBlockersForTask(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskDispatchStatusService'>,
+  task: CodeTask
+): Promise<void> {
+  if (deps.codeTaskDispatchStatusService === undefined) {
+    return;
+  }
+
+  try {
+    await deps.codeTaskDispatchStatusService.resolveDispatchBlockers({
+      userId: task.userId,
+      workerType: task.workerType,
+    });
+  } catch (error) {
+    deps.logger.warn(
+      { taskId: task.id, workerType: task.workerType, error },
+      'Failed to resolve code task dispatch blocker statuses'
+    );
+  }
 }
 
 // In-memory guard for single-instance environments
@@ -77,6 +139,7 @@ export interface DrainTaskQueueDeps {
   linearAgentClient: LinearAgentClient;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
+  codeTaskDispatchStatusService?: CodeTaskDispatchStatusService;
   taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
   executionMemory?: PrepareExecutionMemoryResources;
@@ -347,6 +410,12 @@ export async function drainTaskQueue(
     const enabledWorkers = settings.workers.filter((w) => w.enabled);
 
     if (enabledWorkers.length === 0) {
+      const dispatchability = classifyCodeTaskDispatchability({
+        workerType: task.workerType,
+        workers: enabledWorkers,
+        healthByWorkerName: {},
+      }) as DispatchBlocker;
+      await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchability);
       logger.warn(
         { userId: task.userId, taskId: task.id, reason: 'no_enabled_workers' },
         'Drain blocked: user has no enabled workers — task stays queued until workers are configured or TTL expires',
@@ -536,7 +605,7 @@ export async function drainTaskQueue(
     }
 
     // Step 5: Attempt dispatch
-    const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
+    const webhookUrl = buildTaskCompleteWebhookUrl(config.codeTaskCallbackBaseUrl);
 
     const dispatchResult = await taskDispatcher.dispatch({
       taskId: task.id,
@@ -577,6 +646,9 @@ export async function drainTaskQueue(
       // the task queued. Do NOT reset queuedAt — TTL is measured from queuedAt
       // and resetting would defeat the queue.ttlMinutes bound.
       if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.code)) {
+        if (dispatchError.blocker !== undefined) {
+          await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchError.blocker);
+        }
         logger.info(
           { taskId: task.id, error: dispatchError, retryable: dispatchError.code !== 'at_capacity' },
           'Dispatch transient/retryable, task remains queued',
@@ -627,6 +699,7 @@ export async function drainTaskQueue(
     });
 
     if (updateResult.ok) {
+      await resolveDispatchBlockersForTask(deps, task);
       await archiveRetriedTaskAfterDispatch({
         logger,
         codeTaskRepo,

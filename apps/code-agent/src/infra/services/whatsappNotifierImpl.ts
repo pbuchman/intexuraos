@@ -8,10 +8,14 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
-import type { WhatsAppNotifier, NotificationError } from '../../domain/services/whatsappNotifier.js';
+import type {
+  NotificationError,
+  TaskDispatchBlockedNotificationInfo,
+  WhatsAppNotifier,
+} from '../../domain/services/whatsappNotifier.js';
 import type { CodeTask, TaskError } from '../../domain/models/codeTask.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import { buildCodeTaskUrl, resolveConfiguredWebAppUrl } from '../../domain/utils/taskUrls.js';
+import { buildCodeTaskUrl, normalizeWebAppUrl, resolveConfiguredWebAppUrl } from '../../domain/utils/taskUrls.js';
 
 export function buildTaskUrl(
   taskId: string,
@@ -20,6 +24,10 @@ export function buildTaskUrl(
   return webAppUrl === undefined
     ? buildCodeTaskUrl(taskId)
     : buildCodeTaskUrl(taskId, webAppUrl);
+}
+
+function buildDispatchQueueUrl(webAppUrl: string): string {
+  return `${normalizeWebAppUrl(webAppUrl)}/#/code-tasks/dispatch-queue`;
 }
 
 function buildCtaUrl(task: CodeTask, webAppUrl: string): { displayText: string; url: string } {
@@ -125,6 +133,25 @@ function formatDesignCompleteMessage(
   return `🎨 ${idPrefix}${title}
 
 ${summary}${buttonPrompt}`;
+}
+
+function formatTaskDispatchBlockedMessage(info: TaskDispatchBlockedNotificationInfo): string {
+  const exampleTaskLine = info.exampleTaskId !== undefined
+    ? `\nExample task: ${info.exampleTaskId}`
+    : '';
+  const workersLine = info.workerNames.length > 0
+    ? `\nWorkers: ${info.workerNames.join(', ')}`
+    : '';
+
+  return `⚠️ Code task dispatch blocked
+
+Worker type: ${info.workerType}
+Reason: ${info.reason}
+Affected queued tasks: ${String(info.affectedTaskCount)}${exampleTaskLine}${workersLine}
+
+What went wrong: ${info.message}
+
+Action: ${info.remediation}`;
 }
 
 /**
@@ -426,6 +453,27 @@ Please check worker availability and retry manually if needed.`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        important: true,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyTaskDispatchBlocked(
+      userId: string,
+      info: TaskDispatchBlockedNotificationInfo
+    ): Promise<Result<void, NotificationError>> {
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message: formatTaskDispatchBlockedMessage(info),
+        ctaUrl: { displayText: 'View Dispatch Queue', url: buildDispatchQueueUrl(webAppUrl) },
         important: true,
       });
 

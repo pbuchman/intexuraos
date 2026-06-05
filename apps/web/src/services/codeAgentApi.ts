@@ -42,8 +42,26 @@ export interface QueuedTask {
   dispatchScheduleText?: string;
 }
 
+export interface CodeTaskSystemStatus {
+  id: string;
+  component: 'code-task-dispatch';
+  status: 'active';
+  severity: 'warning' | 'critical';
+  workerType: string;
+  reason: string;
+  message: string;
+  remediation: string;
+  affectedTaskCount: number;
+  exampleTaskIds: string[];
+  workerNames: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastNotifiedAt?: string;
+}
+
 export interface QueueResponse {
   tasks: QueuedTask[];
+  systemStatuses: CodeTaskSystemStatus[];
   totalQueued: number;
   maxQueueSize: number;
 }

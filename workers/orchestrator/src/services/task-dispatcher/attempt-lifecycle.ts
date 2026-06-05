@@ -183,7 +183,7 @@ export class AttemptLifecycle {
         return;
       }
 
-      ctx.logForwarder.registerTask(taskId, request.webhookSecret);
+      ctx.logForwarder.registerTask(taskId, request.webhookSecret, request.webhookUrl);
 
       // Create task object
       const task: Task = {
@@ -359,7 +359,7 @@ export class AttemptLifecycle {
       }),
     };
 
-    ctx.logForwarder.registerTask(taskId, task.webhookSecret);
+    ctx.logForwarder.registerTask(taskId, task.webhookSecret, task.webhookUrl);
     ctx.appendOrchestratorTaskLog(
       taskId,
       'Recreating task from dispatch metadata with user message'

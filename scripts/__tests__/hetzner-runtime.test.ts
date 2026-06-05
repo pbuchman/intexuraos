@@ -525,6 +525,13 @@ describe('Hetzner async edge cutover', () => {
       'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
     );
     expect(hetznerScheduler).toContain('paused      = !var.activate_hetzner_async_consumers');
+    const zombieSweepJob =
+      hetznerScheduler
+        .split('code_tasks_zombie_sweep = {')[1]
+        ?.split('\n    archive_stale_groups = {')[0] ?? '';
+    expect(zombieSweepJob).toContain('path                 = "/internal/code/detect-zombies"');
+    expect(zombieSweepJob).toContain('body                 = null');
+    expect(zombieSweepJob).not.toContain('base64encode("{}")');
     expect(hetznerOutputs).toContain(
       'filter        = subscription.filter == "" ? null : subscription.filter'
     );

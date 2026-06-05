@@ -8,6 +8,7 @@ import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
 import type { DiscoveredContainer, IsolationProvider } from './services/isolation/types.js';
 import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
+import type { ProviderApiKeyHealth } from './types/api.js';
 import { registerRoutes } from './routes.js';
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
@@ -53,7 +54,8 @@ export async function main(
    * Optional so tests that build `main()` without bootstrapping the logger
    * can omit it.
    */
-  flush?: () => Promise<void>
+  flush?: () => Promise<void>,
+  providerApiKeys?: Record<string, ProviderApiKeyHealth>
 ): Promise<void> {
   const app = fastify({
     logger: false,
@@ -76,7 +78,8 @@ export async function main(
       logger,
       () => getServiceStatus(),
       workerAuthRegistry,
-      isolationProvider
+      isolationProvider,
+      providerApiKeys
     );
 
     await app.listen({ port: config.port, host: '0.0.0.0' });

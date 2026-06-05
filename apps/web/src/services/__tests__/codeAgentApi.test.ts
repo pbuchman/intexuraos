@@ -436,6 +436,23 @@ describe('codeAgentApi', () => {
         tasks: [
           { id: 'task-1', prompt: 'Fix bug', workerType: 'opus', queuedAt: '2026-03-17T10:00:00Z', createdAt: '2026-03-17T09:55:00Z', position: 1 },
         ],
+        systemStatuses: [
+          {
+            id: 'status-1',
+            component: 'code-task-dispatch',
+            status: 'active',
+            severity: 'critical',
+            workerType: 'opus',
+            reason: 'claude_auth_unavailable',
+            message: 'No reachable worker has active Claude auth for opus.',
+            remediation: 'Refresh Claude authentication on a worker that can run this task.',
+            affectedTaskCount: 1,
+            exampleTaskIds: ['task-1'],
+            workerNames: ['home-mac'],
+            firstSeenAt: '2026-06-05T10:00:00Z',
+            lastSeenAt: '2026-06-05T10:05:00Z',
+          },
+        ],
         totalQueued: 1,
         maxQueueSize: 10,
       };

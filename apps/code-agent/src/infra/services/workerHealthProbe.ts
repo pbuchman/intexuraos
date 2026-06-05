@@ -10,7 +10,12 @@ import { getErrorMessage } from '@intexuraos/common-core';
 import { performHttpFetch } from '@intexuraos/common-http';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from '../../domain/models/workerSettings.js';
-import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
+import type {
+  ProviderApiKeyStatus,
+  WorkerAuthProvider,
+  WorkerAuthStatusDetails,
+  WorkerHealthState,
+} from '../../domain/models/workerSettings.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 
 const PROBE_TIMEOUT_MS = 5000;
@@ -33,6 +38,10 @@ interface OrchestratorHealthResponse {
   capacity: number;
   running: number;
   available: number;
+  workerAuths: Record<string, unknown>;
+  providerApiKeys: Record<string, { configured: boolean }>;
+  dockerHealthy: boolean;
+  diskHealthy: boolean;
 }
 
 export class WorkerHealthProbeImpl implements WorkerHealthProbe {
@@ -109,7 +118,19 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           capacity: data.capacity,
           running: data.running,
           available: data.available,
+          workerAuths: data.workerAuths as Record<WorkerAuthProvider, WorkerAuthStatusDetails>,
+          providerApiKeys: data.providerApiKeys as Record<string, ProviderApiKeyStatus>,
+          dockerHealthy: data.dockerHealthy,
+          diskHealthy: data.diskHealthy,
           responseTimeMs,
+        };
+      }
+
+      if (this.isLegacyCapacityHealth(data)) {
+        return {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Health response missing worker capability details',
         };
       }
 
@@ -188,6 +209,31 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
   }
 
   private isValidOrchestratorHealth(data: unknown): data is OrchestratorHealthResponse {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'status' in data &&
+      data.status === 'ready' &&
+      'capacity' in data &&
+      typeof data.capacity === 'number' &&
+      'running' in data &&
+      typeof data.running === 'number' &&
+      'available' in data &&
+      typeof data.available === 'number' &&
+      'workerAuths' in data &&
+      typeof data.workerAuths === 'object' &&
+      data.workerAuths !== null &&
+      'providerApiKeys' in data &&
+      typeof data.providerApiKeys === 'object' &&
+      data.providerApiKeys !== null &&
+      'dockerHealthy' in data &&
+      typeof data.dockerHealthy === 'boolean' &&
+      'diskHealthy' in data &&
+      typeof data.diskHealthy === 'boolean'
+    );
+  }
+
+  private isLegacyCapacityHealth(data: unknown): boolean {
     return (
       typeof data === 'object' &&
       data !== null &&

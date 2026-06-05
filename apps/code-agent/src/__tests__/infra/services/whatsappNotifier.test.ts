@@ -617,6 +617,68 @@ describe('WhatsAppNotifier', () => {
     });
   });
 
+  describe('notifyTaskDispatchBlocked', () => {
+    it('sends an actionable dispatch blocker notification with a queue link', async () => {
+      const notifier = createWhatsAppNotifier({
+        ...createMockConfig(),
+        webAppUrl: 'https://dev.intexuraos.cloud/',
+      });
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskDispatchBlocked('user-123', {
+        workerType: 'codex-xhigh',
+        reason: 'codex_auth_unavailable',
+        affectedTaskCount: 2,
+        exampleTaskId: 'task-123',
+        message: 'No reachable worker has active Codex auth for codex-xhigh.',
+        remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+        workerNames: ['home-dev'],
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs).toEqual(
+        expect.objectContaining({
+          userId: 'user-123',
+          ctaUrl: {
+            displayText: 'View Dispatch Queue',
+            url: 'https://dev.intexuraos.cloud/#/code-tasks/dispatch-queue',
+          },
+          important: true,
+        })
+      );
+      expect(callArgs.message).toContain('Code task dispatch blocked');
+      expect(callArgs.message).toContain('Worker type: codex-xhigh');
+      expect(callArgs.message).toContain('Reason: codex_auth_unavailable');
+      expect(callArgs.message).toContain('Affected queued tasks: 2');
+      expect(callArgs.message).toContain('Example task: task-123');
+      expect(callArgs.message).toContain('Workers: home-dev');
+      expect(callArgs.message).toContain('Refresh Codex/ChatGPT authentication');
+    });
+
+    it('returns notification_failed when dispatch blocker publish fails', async () => {
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyTaskDispatchBlocked('user-123', {
+        workerType: 'sonnet',
+        reason: 'claude_auth_unavailable',
+        affectedTaskCount: 1,
+        message: 'No reachable worker has active Claude auth for sonnet.',
+        remediation: 'Refresh Claude authentication on a worker that can run this task.',
+        workerNames: [],
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
+
   describe('notifyTaskFailed', () => {
     it('sends failure notification with ctaUrl deep link', async () => {
       const task = createMockTask({
