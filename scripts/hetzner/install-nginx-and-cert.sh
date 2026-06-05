@@ -91,6 +91,7 @@ install_packages() {
     liblua5.1-0-dev \
     libnginx-mod-http-lua \
     lua5.1 \
+    lua-cjson \
     luarocks \
     nginx-extras \
     python3-certbot-dns-cloudflare
