@@ -240,6 +240,11 @@ EOF
   systemctl enable "pm2-${DEPLOY_USER}.service"
 }
 
+install_grafana_alloy_collector() {
+  printf 'Installing Grafana Alloy PM2 log collector\n'
+  INTEXURAOS_ENVIRONMENT=prod "${SCRIPT_DIR}/../observability/install-grafana-alloy.sh"
+}
+
 main() {
   parse_args "$@"
   require_prod
@@ -255,6 +260,7 @@ main() {
 
   if [[ "${SKIP_SECRETS}" -ne 1 ]]; then
     "${SCRIPT_DIR}/load-secrets.sh" --project-id "${PROJECT_ID}"
+    install_grafana_alloy_collector
   fi
 
   certbot_args=()
@@ -269,7 +275,7 @@ main() {
 
   systemctl enable --now fail2ban
 
-  printf 'Provisioned Hetzner prod host for %s with Node 22, PM2, nginx, and remote GCP services in %s\n' "${DOMAIN}" "${PROJECT_ID}"
+  printf 'Provisioned Hetzner prod host for %s with Node 22, PM2, nginx, Grafana Alloy, and remote GCP services in %s\n' "${DOMAIN}" "${PROJECT_ID}"
 }
 
 main "$@"
