@@ -57,6 +57,11 @@ const terraformHetznerProdAutoTfvarsPath = resolve(
   repoRoot,
   'terraform/hetzner-prod/prod.auto.tfvars.json'
 );
+const terraformMonitoringCodeTaskAlertsPath = resolve(
+  repoRoot,
+  'terraform/modules/monitoring/code-task-alerts.tf'
+);
+const terraformMonitoringOutputsPath = resolve(repoRoot, 'terraform/modules/monitoring/outputs.tf');
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 const pnpmWorkspacePath = resolve(repoRoot, 'pnpm-workspace.yaml');
 
@@ -439,6 +444,48 @@ describe('Hetzner web asset deployment', () => {
     expect(deployFlow.indexOf('reload_nginx')).toBeGreaterThan(deployFlow.indexOf('nginx -t'));
     expect(siteConfig).not.toContain('variables_hash_max_size');
     expect(siteConfig).not.toContain('variables_hash_bucket_size');
+  });
+
+  it('installs and verifies Lua modules required by the nginx JWT verifier before reload', () => {
+    const jwtVerifier = readRequired(jwtVerifierPath);
+    const installNginx = readRequired(installNginxPath);
+    const provision = readRequired(provisionPath);
+    const deployNginx = readRequired(resolve(repoRoot, 'scripts/hetzner/deploy-nginx.sh'));
+
+    expect(jwtVerifier).toContain('require("cjson.safe")');
+    expect(jwtVerifier).toContain('require("resty.openidc")');
+    expect(installNginx).toContain('lua-cjson');
+    expect(provision).toContain('lua-cjson');
+    expect(deployNginx).toContain('verify_lua_jwt_dependencies()');
+    expect(deployNginx).toContain('lua5.1 <<');
+    expect(deployNginx).toContain('pcall(require, "cjson.safe")');
+    expect(deployNginx).toContain('package.loaders[2]("resty.openidc")');
+    expect(deployNginx).not.toContain('require("cjson.safe"); require("resty.openidc")');
+
+    const deployFlow = deployNginx.slice(deployNginx.indexOf('main() {'));
+    expect(deployFlow.indexOf('verify_lua_jwt_dependencies')).toBeGreaterThan(
+      deployFlow.indexOf('ln -sfn "${SITE_TARGET}" "${SITE_ENABLED}"')
+    );
+    expect(deployFlow.indexOf('nginx -t')).toBeGreaterThan(
+      deployFlow.indexOf('verify_lua_jwt_dependencies')
+    );
+    expect(deployFlow.indexOf('reload_nginx')).toBeGreaterThan(deployFlow.indexOf('nginx -t'));
+  });
+});
+
+describe('Code-task automation monitoring', () => {
+  it('alerts specifically when Hetzner PR-triage Pub/Sub push delivery fails', () => {
+    const alerts = readRequired(terraformMonitoringCodeTaskAlertsPath);
+    const outputs = readRequired(terraformMonitoringOutputsPath);
+
+    expect(alerts).toContain('code_pr_triage_hetzner_push_5xx');
+    expect(alerts).toContain('code_pr_triage_hetzner_backlog');
+    expect(alerts).toContain('intexuraos-pr-triage-prod-hetzner');
+    expect(alerts).toContain('pubsub.googleapis.com/subscription/push_request_count');
+    expect(alerts).toContain('metric.labels.response_class="remote_server_5xx"');
+    expect(alerts).toContain('pubsub.googleapis.com/subscription/num_undelivered_messages');
+    expect(outputs).toContain('code_pr_triage_hetzner_push_5xx');
+    expect(outputs).toContain('code_pr_triage_hetzner_backlog');
   });
 });
 

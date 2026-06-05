@@ -80,6 +80,34 @@ function loadWhatsAppLinkProducerWebAppEnv(): Record<string, string | undefined>
   return JSON.parse(stdout.toString()) as Record<string, string | undefined>;
 }
 
+function loadInheritedNodeOptions(): Record<string, string | undefined> {
+  const stdout = execFileSync(
+    process.execPath,
+    [
+      '-e',
+      `
+        process.env.NODE_OPTIONS = process.env.FAKE_NODE_OPTIONS;
+        const config = require('./ecosystem.config.cjs');
+        const result = {};
+        for (const app of config.apps) {
+          result[app.name] = app.env.NODE_OPTIONS;
+        }
+        process.stdout.write(JSON.stringify(result));
+      `,
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        HOME: process.env.HOME ?? '/tmp',
+        PATH: process.env.PATH ?? '',
+        FAKE_NODE_OPTIONS: '--import ./removed-preload/register',
+      },
+    }
+  );
+
+  return JSON.parse(stdout.toString()) as Record<string, string | undefined>;
+}
+
 describe('ecosystem.config.cjs', () => {
   it('uses home-dev Pub/Sub emulator aliases for whatsapp-service fallbacks', () => {
     expect(loadWhatsAppPubSubEnv()).toEqual({
@@ -101,5 +129,9 @@ describe('ecosystem.config.cjs', () => {
       'mobile-notifications-service': 'https://dev.intexuraos.cloud',
       'research-agent': 'https://dev.intexuraos.cloud',
     });
+  });
+
+  it('does not inherit NODE_OPTIONS into PM2 service environments', () => {
+    expect(loadInheritedNodeOptions()).toEqual({});
   });
 });

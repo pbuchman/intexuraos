@@ -86,8 +86,18 @@ INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/provision.sh --email ops@exampl
 ```
 
 Provisioning installs Node 22, PM2, Google Cloud CLI, nginx with Lua support,
-certbot with the Cloudflare DNS plugin, loads secrets, installs certificates,
-and deploys the nginx config.
+`lua-cjson`, certbot with the Cloudflare DNS plugin, loads secrets, installs
+certificates, and deploys the nginx config. A provisioned host must pass the
+nginx JWT Lua dependency check before nginx is reloaded:
+
+```bash
+lua5.1 <<'LUA'
+local ok, cjson = pcall(require, "cjson.safe")
+if not ok or cjson == nil then error("missing cjson.safe") end
+local loader, err = package.loaders[2]("resty.openidc")
+if type(loader) ~= "function" then error(err or "missing resty.openidc") end
+LUA
+```
 
 Certbot uses `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN`, a dedicated Cloudflare
 token with Zone DNS Edit permission for the `intexuraos.cloud` zone. Do not
@@ -143,7 +153,8 @@ Sentry values plus generated public API paths, so ignored local env files
 cannot leak backend secrets into Vite.
 `reload-pm2.sh` renders the CommonJS ecosystem config to a private JSON file
 before starting PM2, because PM2 treats `ecosystem.config.prod.cjs` as a plain
-script on the Hetzner host. `deploy-nginx.sh` runs `nginx -t` before reload. If the VM is not available,
+script on the Hetzner host. `deploy-nginx.sh` verifies `cjson.safe` and
+`resty.openidc`, then runs `nginx -t` before reload. If the VM is not available,
 validate an equivalent generated config in a container or staging VM that has
 nginx Lua/OpenResty modules installed, then record the command output in the
 cutover notes.
@@ -221,6 +232,54 @@ On 2026-05-31 this check destroyed server `134626820`, created server
 `134635829`, retained primary IPv4 `162.55.210.48`, completed Terraform
 bootstrap, and a follow-up `terraform -chdir=terraform/hetzner-prod plan`
 reported no changes.
+
+For runtime-dependency fixes, run two consecutive replacement cycles. After
+each cycle, verify:
+
+```bash
+ssh -i ~/.ssh/intexuraos_hetzner_deploy deploy@162.55.210.48 \
+  'lua5.1 -e '\''local ok,cjson=pcall(require,"cjson.safe"); if not ok or cjson == nil then error("missing cjson.safe") end; local loader,err=package.loaders[2]("resty.openidc"); if type(loader) ~= "function" then error(err or "missing resty.openidc") end'\'' && sudo nginx -t && pm2 status'
+
+curl --fail --silent --show-error --max-time 15 \
+  --resolve intexuraos.cloud:443:162.55.210.48 \
+  https://intexuraos.cloud/healthz
+
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod plan -detailed-exitcode
+```
+
+The final `plan -detailed-exitcode` must return `0`.
+
+## PR Triage Replay
+
+After repairing the Hetzner internal edge, replay a stuck PR-triage event by
+publishing a `code.pr.triage.requested` message whose `eventId` is the
+normalized `github-pr-events` document id:
+
+```bash
+PR_TRIAGE_PAYLOAD="$(
+  node - <<'NODE'
+process.stdout.write(JSON.stringify({
+  type: 'code.pr.triage.requested',
+  eventId: 'f5fc5d26-97d8-41a5-998e-a87205496d0f',
+  repository: 'pbuchman/intexuraos',
+  pullRequestNumber: 2113,
+  correlationId: 'manual-replay-pr-2113',
+  timestamp: new Date().toISOString(),
+}));
+NODE
+)"
+
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+gcloud pubsub topics publish intexuraos-pr-triage-dev \
+  --project=intexuraos-dev-pbuchman \
+  --message="${PR_TRIAGE_PAYLOAD}"
+```
+
+For PR `2113`, verify `github-event-log-entries/RnT6AeqqF2o2zrVPvadO` moves to
+`decisionState: completed`, `event_decisions/ed_RnT6AeqqF2o2zrVPvadO` exists,
+and the expected code-task or explicit skip decision is visible.
 
 ## Async Edge Cutover
 

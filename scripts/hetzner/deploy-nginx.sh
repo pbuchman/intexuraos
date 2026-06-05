@@ -76,6 +76,21 @@ EOF
   rm -f "${temp_file}"
 }
 
+verify_lua_jwt_dependencies() {
+  command -v lua5.1 >/dev/null 2>&1 || fail "lua5.1 is required for nginx JWT verification"
+  lua5.1 <<'LUA' || fail "nginx Lua JWT dependencies are missing"
+local ok, cjson = pcall(require, "cjson.safe")
+if not ok or cjson == nil then
+  error("missing cjson.safe")
+end
+
+local openidc_loader, openidc_error = package.loaders[2]("resty.openidc")
+if type(openidc_loader) ~= "function" then
+  error(openidc_error or "missing resty.openidc")
+end
+LUA
+}
+
 main() {
   parse_args "$@"
   require_prod
@@ -92,6 +107,7 @@ main() {
   ln -sfn "${SITE_TARGET}" "${SITE_ENABLED}"
   rm -f /etc/nginx/sites-enabled/default
 
+  verify_lua_jwt_dependencies
   nginx -t
   reload_nginx
 

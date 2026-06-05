@@ -10,6 +10,9 @@
  */
 const { COMMON_SERVICE_URLS_GENERATED } = require('./ecosystem.generated.cjs');
 
+const PM2_BASE_ENV = { ...process.env };
+delete PM2_BASE_ENV.NODE_OPTIONS;
+
 // Common auth secrets for all services (mirrors Terraform local.common_service_secrets)
 const COMMON_SERVICE_ENV = {
   HOME: process.env.HOME ?? '/root',
@@ -223,7 +226,7 @@ function createServiceConfig(name, port, options = {}) {
     script: TSX_CLI,
     interpreter: 'node',
     env: {
-      ...process.env,
+      ...PM2_BASE_ENV,
       ...COMMON_SERVICE_ENV,
       ...COMMON_SERVICE_URLS,
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
@@ -295,7 +298,7 @@ module.exports = {
       args: ['--mode', 'development'],
       interpreter: 'node',
       env: {
-        ...process.env,
+        ...PM2_BASE_ENV,
         ...COMMON_SERVICE_ENV,
         ...COMMON_SERVICE_URLS,
         NODE_ENV: 'development',

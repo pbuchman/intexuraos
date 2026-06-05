@@ -89,6 +89,8 @@ install_base_packages() {
     gnupg \
     jq \
     libnginx-mod-http-lua \
+    lua5.1 \
+    lua-cjson \
     nginx-extras \
     rsync \
     ufw
