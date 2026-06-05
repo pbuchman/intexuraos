@@ -263,6 +263,9 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain(
       'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
     );
+    expect(script).toContain(
+      'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/observability/install-grafana-alloy.sh'
+    );
     expect(script).toContain('CI=true pnpm install --frozen-lockfile');
     expect(script).not.toContain(`pnpm --filter @intexuraos/infra-o${'tel'}`);
     expect(script).toContain('resolve_commit_metadata');
@@ -275,6 +278,12 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh');
     expect(script).toContain(
       'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh'
+    );
+    expect(script.indexOf('scripts/observability/install-grafana-alloy.sh')).toBeGreaterThan(
+      script.indexOf('scripts/hetzner/load-secrets.sh')
+    );
+    expect(script.indexOf('scripts/observability/install-grafana-alloy.sh')).toBeLessThan(
+      script.indexOf('CI=true pnpm install --frozen-lockfile')
     );
     expect(script).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
     expect(script).not.toContain('terraform apply');
@@ -471,6 +480,26 @@ describe('Hetzner web asset deployment', () => {
     );
     expect(deployFlow.indexOf('reload_nginx')).toBeGreaterThan(deployFlow.indexOf('nginx -t'));
   });
+
+  it('installs Grafana Alloy during provisioning and deploy for durable PM2 log collection', () => {
+    const provision = readRequired(provisionPath);
+    const deploy = readRequired(githubActionsDeployPath);
+
+    expect(provision).toContain('install_grafana_alloy_collector()');
+    expect(provision).toContain(
+      'INTEXURAOS_ENVIRONMENT=prod "${SCRIPT_DIR}/../observability/install-grafana-alloy.sh"'
+    );
+    expect(provision).toContain('Grafana Alloy PM2 log collector');
+    expect(deploy).toContain(
+      'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/observability/install-grafana-alloy.sh'
+    );
+    expect(deploy).toContain('scripts/observability/install-grafana-alloy.sh');
+
+    const provisionFlow = provision.slice(provision.indexOf('main() {'));
+    expect(provisionFlow.indexOf('install_grafana_alloy_collector')).toBeGreaterThan(
+      provisionFlow.indexOf('load-secrets.sh')
+    );
+  });
 });
 
 describe('Code-task automation monitoring', () => {
@@ -612,6 +641,47 @@ describe('Hetzner async edge cutover', () => {
 });
 
 describe('Hetzner secret loader', () => {
+  it('declares Grafana Cloud observability secrets without Terraform-managed values', () => {
+    const script = readRequired(loadSecretsPath);
+    const terraform = readRequired(terraformDevMainPath);
+    const hetznerRuntimeSecretsSection =
+      terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
+    const cloudRunExcludedSecretsSection =
+      terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
+    const grafanaCloudSecrets = [
+      'INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN',
+      'INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL',
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
+    ];
+    const hetznerCollectorSecrets = [
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
+    ];
+
+    for (const secretName of grafanaCloudSecrets) {
+      expect(terraform, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
+    }
+
+    for (const secretName of hetznerCollectorSecrets) {
+      expect(hetznerRuntimeSecretsSection, secretName).toContain(`"${secretName}",`);
+      expect(script, secretName).toContain(secretName);
+    }
+
+    for (const secretName of grafanaCloudSecrets) {
+      expect(cloudRunExcludedSecretsSection, secretName).toContain(`"${secretName}",`);
+    }
+
+    expect(hetznerRuntimeSecretsSection).not.toContain('"INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",');
+    expect(hetznerRuntimeSecretsSection).not.toContain('"INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL",');
+    expect(script).not.toContain('INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN');
+    expect(terraform).not.toContain('google_secret_manager_secret_version" "grafana');
+    expect(terraform).not.toContain('glc_');
+    expect(terraform).not.toContain('glsa_');
+  });
+
   it('fails fast unless INTEXURAOS_ENVIRONMENT=prod and writes protected env material', () => {
     const script = readRequired(loadSecretsPath);
 
