@@ -1,0 +1,222 @@
+{
+  "uid": "intexuraos-pm2-logs",
+  "title": "IntexuraOS PM2 Logs",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "loki",
+        "current": {
+          "text": "Grafana Cloud Logs",
+          "value": "__LOKI_DATASOURCE_UID__"
+        }
+      },
+      {
+        "name": "environment",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource}"
+        },
+        "query": "label_values({project=\"intexuraos\"}, environment)",
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "host",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource}"
+        },
+        "query": "label_values({project=\"intexuraos\", environment=~\"$environment\"}, host)",
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource}"
+        },
+        "query": "label_values({project=\"intexuraos\", environment=~\"$environment\", host=~\"$host\"}, service)",
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "stream",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource}"
+        },
+        "query": "label_values({project=\"intexuraos\"}, stream)",
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Live PM2 Logs",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{project=\"intexuraos\", environment=~\"$environment\", host=~\"$host\", service=~\"$service\", stream=~\"$stream\"}"
+        }
+      ],
+      "options": {
+        "showLabels": true,
+        "showTime": true,
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "id": 2,
+      "title": "Latest Errors",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{project=\"intexuraos\", environment=~\"$environment\", host=~\"$host\", service=~\"$service\", stream=~\"$stream\"} |~ \"(?i)(error|fail|exception|fatal|panic|uncaught)\""
+        }
+      ],
+      "options": {
+        "showLabels": true,
+        "showTime": true,
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "id": 3,
+      "title": "Log Volume by Service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (environment, service) (rate({project=\"intexuraos\", environment=~\"$environment\", host=~\"$host\", service=~\"$service\", stream=~\"$stream\"}[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Lines by Service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (environment, service) (count_over_time({project=\"intexuraos\", environment=~\"$environment\", host=~\"$host\", service=~\"$service\", stream=~\"$stream\"} |~ \"(?i)(error|fail|exception|fatal|panic|uncaught)\"[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Top Noisy Services",
+      "type": "barchart",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, sum by (environment, service) (count_over_time({project=\"intexuraos\", environment=~\"$environment\", host=~\"$host\", service=~\"$service\", stream=~\"$stream\"}[$__range])))"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Dev vs Prod Log Volume",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (environment) (rate({project=\"intexuraos\", environment=~\"dev|prod\", host=~\"$host\", service=~\"$service\", stream=~\"$stream\"}[$__rate_interval]))"
+        }
+      ]
+    }
+  ]
+}

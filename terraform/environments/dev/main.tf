@@ -308,6 +308,9 @@ locals {
     "INTEXURAOS_FIREBASE_AUTH_DOMAIN",
     "INTEXURAOS_FIREBASE_PROJECT_ID",
     "INTEXURAOS_GEMINI_APP_API_KEY",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID",
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
@@ -328,6 +331,15 @@ locals {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
     "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
     "INTEXURAOS_WHATSAPP_WABA_ID",
+  ])
+
+  cloud_run_secret_manager_excluded_names = toset([
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
+    "INTEXURAOS_KIMI_APP_API_KEY",
   ])
 }
 
@@ -539,6 +551,12 @@ module "secret_manager" {
     # Orchestrator repository management (INT-515)
     "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
+    # Grafana Cloud observability
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN" = "Grafana Cloud service account token for dashboard provisioning"
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL"   = "Grafana Cloud stack URL for hosted dashboards"
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN"    = "Grafana Cloud Logs write token for Alloy collectors"
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL"      = "Grafana Cloud Loki push endpoint for Alloy collectors"
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME" = "Grafana Cloud Logs instance ID used as Loki basic auth username"
   }
 
   depends_on = [google_project_service.apis]
@@ -639,7 +657,7 @@ module "iam" {
 
   secret_ids = {
     for name, secret_id in module.secret_manager.secret_ids : name => secret_id
-    if name != "INTEXURAOS_KIMI_APP_API_KEY"
+    if !contains(local.cloud_run_secret_manager_excluded_names, name)
   }
 
   depends_on = [
