@@ -184,6 +184,11 @@
       "owner": "code-agent",
       "description": "Failed webhook dispatch retry queue with TTL and max-attempts bounds"
     },
+    "code_task_system_statuses": {
+      "owner": "code-agent",
+      "description": "Durable user-visible system statuses for code-task dispatch blockers",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
+    },
     "pr_automation_comments": {
       "owner": "code-agent",
       "description": "PR automation comment tracking for unified PR log (one doc per PR, keyed by repository:prNumber)"

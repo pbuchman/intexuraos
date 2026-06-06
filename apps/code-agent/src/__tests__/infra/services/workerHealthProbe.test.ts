@@ -21,6 +21,24 @@ describe('WorkerHealthProbe', () => {
     enabled: true,
   };
 
+  const readyHealth = (overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> => ({
+    status: 'ready',
+    capacity: 2,
+    running: 1,
+    available: 1,
+    workerAuths: {
+      claude: { status: 'active', authMode: 'oauth', refreshSupported: true },
+      codex: { status: 'active', authMode: 'chatgpt', refreshSupported: true },
+    },
+    providerApiKeys: {
+      MINIMAX_API_KEY: { configured: true },
+      DASHSCOPE_API_KEY: { configured: true },
+    },
+    dockerHealthy: true,
+    diskHealthy: true,
+    ...overrides,
+  });
+
   let probe: ReturnType<typeof createWorkerHealthProbe>;
 
   beforeEach(() => {
@@ -30,6 +48,72 @@ describe('WorkerHealthProbe', () => {
 
   describe('probeWorker', () => {
     it('should return healthy state when orchestrator responds with ready status', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => readyHealth(),
+      } as Response);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toEqual({
+        _tag: 'healthy',
+        healthy: true,
+        capacity: 2,
+        running: 1,
+        available: 1,
+        workerAuths: {
+          claude: { status: 'active', authMode: 'oauth', refreshSupported: true },
+          codex: { status: 'active', authMode: 'chatgpt', refreshSupported: true },
+        },
+        providerApiKeys: {
+          MINIMAX_API_KEY: { configured: true },
+          DASHSCOPE_API_KEY: { configured: true },
+        },
+        dockerHealthy: true,
+        diskHealthy: true,
+        responseTimeMs: expect.any(Number),
+      });
+    });
+
+    it('preserves unavailable auth and unhealthy runtime details from health response', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'ready',
+          capacity: 2,
+          running: 0,
+          available: 2,
+          workerAuths: {
+            claude: { status: 'not_configured', message: 'Claude credentials not found' },
+            codex: { status: 'expired', message: 'Codex ChatGPT access token expired' },
+          },
+          providerApiKeys: {
+            DASHSCOPE_API_KEY: { configured: false },
+          },
+          dockerHealthy: false,
+          diskHealthy: false,
+        }),
+      } as Response);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toMatchObject({
+        _tag: 'healthy',
+        workerAuths: {
+          claude: { status: 'not_configured', message: 'Claude credentials not found' },
+          codex: { status: 'expired', message: 'Codex ChatGPT access token expired' },
+        },
+        providerApiKeys: {
+          DASHSCOPE_API_KEY: { configured: false },
+        },
+        dockerHealthy: false,
+        diskHealthy: false,
+      });
+    });
+
+    it('treats legacy health responses without blocker details as unknown', async () => {
       mockedFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -44,12 +128,9 @@ describe('WorkerHealthProbe', () => {
       const result = await probe.probeWorker(mockWorker);
 
       expect(result).toEqual({
-        _tag: 'healthy',
-        healthy: true,
-        capacity: 2,
-        running: 1,
-        available: 1,
-        responseTimeMs: expect.any(Number),
+        _tag: 'unknown',
+        healthy: false,
+        error: 'Health response missing worker capability details',
       });
     });
 
@@ -257,24 +338,14 @@ describe('WorkerHealthProbe', () => {
           return {
             ok: true,
             status: 200,
-            json: async () => ({
-              status: 'ready',
-              capacity: 2,
-              running: 1,
-              available: 1,
-            }),
+            json: async () => readyHealth(),
           } as Response;
         }
         if (url.includes('cc-vm.intexuraos.cloud')) {
           return {
             ok: true,
             status: 200,
-            json: async () => ({
-              status: 'ready',
-              capacity: 1,
-              running: 0,
-              available: 1,
-            }),
+            json: async () => readyHealth({ capacity: 1, running: 0, available: 1 }),
           } as Response;
         }
         throw new Error('Unknown worker');
@@ -289,6 +360,10 @@ describe('WorkerHealthProbe', () => {
           capacity: 2,
           running: 1,
           available: 1,
+          workerAuths: readyHealth()['workerAuths'],
+          providerApiKeys: readyHealth()['providerApiKeys'],
+          dockerHealthy: true,
+          diskHealthy: true,
           responseTimeMs: expect.any(Number),
         },
         'cloud-vm': {
@@ -297,6 +372,10 @@ describe('WorkerHealthProbe', () => {
           capacity: 1,
           running: 0,
           available: 1,
+          workerAuths: readyHealth()['workerAuths'],
+          providerApiKeys: readyHealth()['providerApiKeys'],
+          dockerHealthy: true,
+          diskHealthy: true,
           responseTimeMs: expect.any(Number),
         },
       });

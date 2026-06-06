@@ -16,6 +16,7 @@ import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { createHmac } from 'node:crypto';
 import express from 'express';
 import { pino } from 'pino';
+import { buildMockClaudeHealth } from './health.js';
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
@@ -365,15 +366,7 @@ app.delete('/tasks/:id', (req, res): void => {
 
 // GET /health - Health check endpoint
 app.get('/health', (_req, res) => {
-  const capacity = 3;
-  const running = runningTasks.size;
-
-  res.json({
-    status: 'ready',
-    capacity,
-    running,
-    available: capacity - running,
-  });
+  res.json(buildMockClaudeHealth(runningTasks.size));
 });
 
 // POST /admin/shutdown - For graceful shutdown testing

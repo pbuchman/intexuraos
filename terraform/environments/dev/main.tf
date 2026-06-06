@@ -294,6 +294,10 @@ locals {
   retired_cloud_run_push_endpoint = "https://retired-cloud-run.invalid"
   retired_cloud_run_push_audience = local.retired_cloud_run_push_endpoint
 
+  hetzner_runtime_env_vars = {
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = local.public_origin
+  }
+
   hetzner_runtime_secret_names = toset([
     "INTEXURAOS_AUTH0_CLIENT_ID",
     "INTEXURAOS_AUTH0_DOMAIN",

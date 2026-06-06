@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { DispatchQueuePage } from '../pages/DispatchQueuePage.js';
-import type { QueuedTask } from '../services/codeAgentApi.js';
+import type { CodeTaskSystemStatus, QueuedTask } from '../services/codeAgentApi.js';
 
 vi.mock('react-router-dom', () => ({
   Link: ({
@@ -47,6 +47,22 @@ const baseScheduledTask = (
   dispatchScheduleText: text,
 });
 
+const blockerStatus: CodeTaskSystemStatus = {
+  id: 'status-codex-auth',
+  component: 'code-task-dispatch',
+  status: 'active',
+  severity: 'critical',
+  workerType: 'codex-xhigh',
+  reason: 'codex_auth_unavailable',
+  message: 'No reachable worker has active Codex auth for codex-xhigh.',
+  remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+  affectedTaskCount: 2,
+  exampleTaskIds: ['task-1'],
+  workerNames: ['home-mac'],
+  firstSeenAt: '2026-06-05T10:00:00Z',
+  lastSeenAt: '2026-06-05T10:10:00Z',
+};
+
 describe('DispatchQueuePage — future dispatch metadata (INT-1468)', () => {
   afterEach(() => {
     cleanup();
@@ -56,6 +72,7 @@ describe('DispatchQueuePage — future dispatch metadata (INT-1468)', () => {
   it('renders Dispatches + Scheduled by user for a user_scheduled task', () => {
     mockUseDispatchQueue.mockReturnValue({
       tasks: [baseScheduledTask('user_scheduled', 'Scheduled by user')],
+      systemStatuses: [],
       totalQueued: 1,
       maxQueueSize: 10,
       loading: false,
@@ -74,6 +91,7 @@ describe('DispatchQueuePage — future dispatch metadata (INT-1468)', () => {
   it('renders Waiting for Claude reset label for a retry_cooloff task', () => {
     mockUseDispatchQueue.mockReturnValue({
       tasks: [baseScheduledTask('retry_cooloff', 'Waiting for Claude reset')],
+      systemStatuses: [],
       totalQueued: 1,
       maxQueueSize: 10,
       loading: false,
@@ -98,6 +116,7 @@ describe('DispatchQueuePage — future dispatch metadata (INT-1468)', () => {
     };
     mockUseDispatchQueue.mockReturnValue({
       tasks: [unscheduled],
+      systemStatuses: [],
       totalQueued: 1,
       maxQueueSize: 10,
       loading: false,
@@ -110,5 +129,27 @@ describe('DispatchQueuePage — future dispatch metadata (INT-1468)', () => {
     expect(screen.queryByText(/^Dispatches /)).toBeNull();
     expect(screen.queryByText('Scheduled by user')).toBeNull();
     expect(screen.queryByText('Waiting for Claude reset')).toBeNull();
+  });
+
+  it('renders active dispatch blocker system status details', () => {
+    mockUseDispatchQueue.mockReturnValue({
+      tasks: [],
+      systemStatuses: [blockerStatus],
+      totalQueued: 2,
+      maxQueueSize: 10,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(<DispatchQueuePage />);
+
+    expect(screen.getByText('Dispatch blocked')).toBeDefined();
+    expect(screen.getByText('codex-xhigh')).toBeDefined();
+    expect(screen.getByText('codex auth unavailable')).toBeDefined();
+    expect(screen.getByText('2 affected tasks')).toBeDefined();
+    expect(screen.getByText('No reachable worker has active Codex auth for codex-xhigh.')).toBeDefined();
+    expect(screen.getByText('Refresh Codex/ChatGPT authentication on a worker that can run this task.')).toBeDefined();
+    expect(screen.getByText('home-mac')).toBeDefined();
   });
 });

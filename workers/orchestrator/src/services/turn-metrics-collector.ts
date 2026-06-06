@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto';
 import { join } from 'node:path';
 import { availableParallelism } from 'node:os';
 import type { Logger } from '@intexuraos/common-core';
+import { buildTaskCallbackUrl } from './callback-url.js';
 
 export interface TurnMetrics {
   taskId: string;
@@ -80,6 +81,7 @@ export class TurnMetricsCollector {
     attempt: number;
     startedAt: string;
     completedAt: string;
+    webhookUrl?: string;
   }): Promise<void> {
     try {
       const cgroupPath = `/sys/fs/cgroup/system.slice/docker-${params.containerId}.scope`;
@@ -130,7 +132,7 @@ export class TurnMetricsCollector {
         idlePercent: Math.round(idlePercent * 100) / 100,
       };
 
-      await this.publish(metrics);
+      await this.publish(metrics, params.webhookUrl);
 
       this.logger.info(
         {
@@ -329,7 +331,7 @@ export class TurnMetricsCollector {
     };
   }
 
-  private async publish(metrics: TurnMetrics): Promise<void> {
+  private async publish(metrics: TurnMetrics, webhookUrl: string | undefined): Promise<void> {
     const body = JSON.stringify(metrics);
     const timestamp = Math.floor(Date.now() / 1000);
     const message = `${String(timestamp)}.${body}`;
@@ -337,7 +339,11 @@ export class TurnMetricsCollector {
       .update(message)
       .digest('hex');
 
-    const url = `${this.config.codeAgentUrl}/internal/turn-metrics`;
+    const url = buildTaskCallbackUrl(
+      webhookUrl,
+      this.config.codeAgentUrl,
+      '/internal/turn-metrics'
+    );
     const response = await fetch(url, {
       method: 'POST',
       headers: {

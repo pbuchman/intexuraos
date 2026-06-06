@@ -967,6 +967,13 @@ describe('workerSettingsRepository', () => {
           capacity: 10,
           running: 2,
           available: 8,
+          workerAuths: {
+            claude: { status: 'active' },
+            codex: { status: 'active' },
+          },
+          providerApiKeys: {},
+          dockerHealthy: true,
+          diskHealthy: true,
           responseTimeMs: 150,
         },
         checkedAt: new Date().toISOString(),

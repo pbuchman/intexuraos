@@ -55,6 +55,7 @@ describe('loadConfig', () => {
       expect(config.webhookVerifySecret).toBe('');
       expect(config.tokenEncryptionKey).toBe('');
       expect(config.serviceUrl).toBe('');
+      expect(config.codeTaskCallbackBaseUrl).toBe('');
       expect(config.webAppUrl).toBe('');
       expect(config.userServiceUrl).toBe('');
       expect(config.openRouterAppApiKey).toBe('');
@@ -69,6 +70,8 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] = 'test-webhook';
       process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'test-encryption-key-32chars!';
       process.env['INTEXURAOS_SERVICE_URL'] = 'https://code-agent.test.local';
+      process.env['INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL'] =
+        'https://callbacks.test.local/';
       process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';
       process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service';
       process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'or-platform-key';
@@ -83,9 +86,18 @@ describe('loadConfig', () => {
       expect(config.webhookVerifySecret).toBe('test-webhook');
       expect(config.tokenEncryptionKey).toBe('test-encryption-key-32chars!');
       expect(config.serviceUrl).toBe('https://code-agent.test.local');
+      expect(config.codeTaskCallbackBaseUrl).toBe('https://callbacks.test.local');
       expect(config.webAppUrl).toBe('https://dev.intexuraos.cloud');
       expect(config.userServiceUrl).toBe('http://user-service');
       expect(config.openRouterAppApiKey).toBe('or-platform-key');
+    });
+
+    it('falls back to serviceUrl for callback base when callback env is absent', () => {
+      process.env['INTEXURAOS_SERVICE_URL'] = 'https://code-agent.test.local/api/code/';
+
+      const config = loadConfig();
+
+      expect(config.codeTaskCallbackBaseUrl).toBe('https://code-agent.test.local/api/code');
     });
   });
 });

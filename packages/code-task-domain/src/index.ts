@@ -1,6 +1,10 @@
 export {
   CODE_TASK_WORKER_TYPES,
+  CODE_TASK_WORKER_CAPABILITIES,
   isCodeTaskWorkerType,
+  type CodeTaskApiKeyEnvVar,
+  type CodeTaskAuthRequirement,
+  type CodeTaskWorkerCapability,
   type CodeTaskWorkerType,
 } from './codeTaskWorkerTypes.js';
 export {

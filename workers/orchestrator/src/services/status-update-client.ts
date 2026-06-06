@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { Logger } from 'pino';
+import { buildTaskCallbackUrl } from './callback-url.js';
 
 /**
  * Orchestrator-side HTTP client that commits a terminal task status to code-agent
@@ -28,6 +29,7 @@ export interface StatusUpdatePayload {
   taskId: string;
   status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
   completedAt: Date;
+  webhookUrl?: string;
   error?: { code: string; message: string };
   result?: { prUrl?: string; branch?: string; summary?: string };
 }
@@ -83,7 +85,7 @@ export class StatusUpdateClient {
     const maxAttempts = this.retryDelaysMs.length + 1;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const outcome = await this.deliver(payload.taskId, rawBody);
+      const outcome = await this.deliver(payload.taskId, rawBody, payload.webhookUrl);
 
       if (outcome.ok) {
         if (attempt > 0) {
@@ -136,14 +138,19 @@ export class StatusUpdateClient {
 
   private async deliver(
     taskId: string,
-    rawBody: string
+    rawBody: string,
+    webhookUrl: string | undefined
   ): Promise<{ ok: true } | { ok: false; error: StatusUpdateError }> {
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = createHmac('sha256', this.orchestratorSecret)
       .update(`${String(timestamp)}.${rawBody}`)
       .digest('hex');
 
-    const url = `${this.codeAgentUrl}/internal/code-tasks/${encodeURIComponent(taskId)}/status`;
+    const url = buildTaskCallbackUrl(
+      webhookUrl,
+      this.codeAgentUrl,
+      `/internal/code-tasks/${encodeURIComponent(taskId)}/status`
+    );
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {

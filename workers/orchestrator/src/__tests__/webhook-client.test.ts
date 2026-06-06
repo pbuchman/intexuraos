@@ -604,6 +604,39 @@ describe('WebhookClient', () => {
       vi.useRealTimers();
     });
 
+    it('normalizes stale prod /api/code/internal pending webhook URLs before retrying', async () => {
+      const statePersistence = createStatePersistence();
+      const state = await statePersistence.load();
+      state.pendingWebhooks = [
+        {
+          url: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+          secret: 'secret1',
+          payload: { taskId: 'task-1', status: 'failed' as const, duration: 1000 },
+          taskId: 'task-1',
+          attempts: 197,
+          createdAt: Date.now(),
+        },
+      ];
+      await statePersistence.save(state);
+
+      const deliveredUrls: string[] = [];
+      mockFetch.mockImplementation(async (url: string) => {
+        deliveredUrls.push(url);
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+        } as Response;
+      });
+
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      await client.retryPending();
+
+      expect(deliveredUrls).toEqual(['https://intexuraos.cloud/internal/webhooks/task-complete']);
+      expect((await statePersistence.load()).pendingWebhooks).toHaveLength(0);
+    });
+
     it('should remove pending webhooks older than 24 hours', async () => {
       const statePersistence = createStatePersistence();
       const state = await statePersistence.load();

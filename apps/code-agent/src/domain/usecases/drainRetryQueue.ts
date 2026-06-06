@@ -10,6 +10,7 @@ import { ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { CodeTask } from '../models/codeTask.js';
 import type { DispatchRetry } from '../models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
@@ -19,6 +20,11 @@ import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
+import type { CodeTaskDispatchStatusService } from '../services/codeTaskDispatchStatusService.js';
+import {
+  classifyCodeTaskDispatchability,
+  type CodeTaskDispatchability,
+} from '../services/codeTaskDispatchBlockers.js';
 import { loadConfig } from '../../config.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
@@ -32,7 +38,56 @@ import {
   type PrepareExecutionMemoryResources,
 } from './prepareExecutionMemoryContext.js';
 import { isStaleTaskError } from '../services/gitHubDispatchService.js';
+import { buildTaskCompleteWebhookUrl } from '../services/codeTaskCallbackUrls.js';
 import type { SendTaskMessageErrorCode } from './sendTaskMessage.js';
+
+type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
+
+async function recordDispatchBlockedForRetry(
+  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskDispatchStatusService'>,
+  task: CodeTask,
+  blocker: DispatchBlocker
+): Promise<void> {
+  if (deps.codeTaskDispatchStatusService === undefined) {
+    return;
+  }
+
+  try {
+    await deps.codeTaskDispatchStatusService.recordDispatchBlocked({
+      userId: task.userId,
+      workerType: task.workerType,
+      blocker,
+      affectedTaskCount: 1,
+      exampleTaskIds: [task.id],
+    });
+  } catch (error) {
+    deps.logger.warn(
+      { taskId: task.id, reason: blocker.reason, error },
+      'Failed to record code task retry dispatch blocker status'
+    );
+  }
+}
+
+async function resolveDispatchBlockersForRetry(
+  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskDispatchStatusService'>,
+  task: CodeTask
+): Promise<void> {
+  if (deps.codeTaskDispatchStatusService === undefined) {
+    return;
+  }
+
+  try {
+    await deps.codeTaskDispatchStatusService.resolveDispatchBlockers({
+      userId: task.userId,
+      workerType: task.workerType,
+    });
+  } catch (error) {
+    deps.logger.warn(
+      { taskId: task.id, workerType: task.workerType, error },
+      'Failed to resolve code task retry dispatch blocker statuses'
+    );
+  }
+}
 
 // In-memory guard for single-instance environments
 let isDrainingRetries = false;
@@ -63,6 +118,7 @@ export interface DrainRetryQueueDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   logLineRepo: LogLineRepository;
   statusMirrorService: StatusMirrorService;
+  codeTaskDispatchStatusService?: CodeTaskDispatchStatusService;
   executionMemory?: PrepareExecutionMemoryResources;
   userServiceClient?: Pick<UserServiceClient, 'getLlmClient'>;
   createTaskForPRFn?: (request: {
@@ -229,6 +285,12 @@ async function handleNewTaskRetry(
   const enabledWorkers = settings.workers.filter((w) => w.enabled);
 
   if (enabledWorkers.length === 0) {
+    const dispatchability = classifyCodeTaskDispatchability({
+      workerType: task.workerType,
+      workers: enabledWorkers,
+      healthByWorkerName: {},
+    }) as DispatchBlocker;
+    await recordDispatchBlockedForRetry(deps, task, dispatchability);
     logger.warn({ userId: task.userId }, 'No enabled workers during retry');
     await dispatchRetryRepo.update(entry.id, {
       attempts: entry.attempts + 1,
@@ -265,7 +327,7 @@ async function handleNewTaskRetry(
 
   const agentType = resolveTaskAgentType(task, linearIssueLabels);
   const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
-  const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
+  const webhookUrl = buildTaskCompleteWebhookUrl(config.codeTaskCallbackBaseUrl);
   let taskExecutionMemoryContext = task.executionMemoryContext;
 
   if (
@@ -356,6 +418,9 @@ async function handleNewTaskRetry(
     // but IS retryable during *drain* — if a retry entry already exists and the worker is at capacity,
     // we should increment and try again rather than permanently failing the task.
     if (isRetryableErrorCode(dispatchError.code) || dispatchError.code === 'at_capacity') {
+      if (dispatchError.blocker !== undefined) {
+        await recordDispatchBlockedForRetry(deps, task, dispatchError.blocker);
+      }
       await dispatchRetryRepo.update(entry.id, {
         attempts: entry.attempts + 1,
         lastAttemptAt: new Date(),
@@ -377,6 +442,7 @@ async function handleNewTaskRetry(
 
   // Success! Delete retry entry and update task
   await dispatchRetryRepo.delete(entry.id);
+  await resolveDispatchBlockersForRetry(deps, task);
 
   const cancelNonce = generateCancelNonce();
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();

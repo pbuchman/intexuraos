@@ -9,6 +9,7 @@ import type { AgentType, WorkerType } from '../models/codeTask.js';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
 import type { WorkerLocation } from '../models/worker.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
+import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
 
 /**
  * Per-request worker credentials for dispatch.
@@ -105,9 +106,10 @@ export interface DispatchError {
     | 'worker_busy'
     | 'at_capacity'       // All workers returned 503 (INT-619)
     | 'dispatch_failed'
-    | 'network_error'
-    | 'invalid_response';
+      | 'network_error'
+      | 'invalid_response';
   message: string;
+  blocker?: Extract<CodeTaskDispatchability, { dispatchable: false }>;
 }
 
 /**

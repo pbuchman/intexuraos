@@ -24,6 +24,7 @@ import {
   _resetRetryDrainGuard,
   type DrainRetryQueueDeps,
 } from '../../../domain/usecases/drainRetryQueue.js';
+import type { CodeTaskDispatchStatusService } from '../../../domain/services/codeTaskDispatchStatusService.js';
 
 const prepareExecutionMemoryContextMock = vi.fn();
 let mockExecutionMemoryEnabled = false;
@@ -62,10 +63,12 @@ vi.mock('../../../config.js', () => ({
   loadConfig: (): {
     retryQueue: { maxAttempts: number; ttlMinutes: number };
     serviceUrl: string;
+    codeTaskCallbackBaseUrl: string;
     executionMemoryEnabled: boolean;
   } => ({
     retryQueue: { maxAttempts: 3, ttlMinutes: 10 },
     serviceUrl: 'https://code-agent.test',
+    codeTaskCallbackBaseUrl: 'https://callback.test',
     executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
 }));
@@ -108,6 +111,7 @@ describe('drainRetryQueue', () => {
   let mockStatusMirrorService: {
     mirrorStatus: ReturnType<typeof vi.fn>;
   };
+  let mockDispatchStatusService: CodeTaskDispatchStatusService;
   let mockUserServiceClient: {
     getLlmClient: ReturnType<typeof vi.fn>;
   };
@@ -191,6 +195,7 @@ describe('drainRetryQueue', () => {
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
       logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
       statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
+      codeTaskDispatchStatusService: mockDispatchStatusService,
       createTaskForPRFn: mockCreateTaskForPRFn,
       userServiceClient: mockUserServiceClient as never,
     };
@@ -247,6 +252,11 @@ describe('drainRetryQueue', () => {
 
     mockStatusMirrorService = {
       mirrorStatus: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+
+    mockDispatchStatusService = {
+      recordDispatchBlocked: vi.fn().mockResolvedValue(undefined),
+      resolveDispatchBlockers: vi.fn().mockResolvedValue(undefined),
     };
 
     mockUserServiceClient = {
@@ -632,6 +642,31 @@ describe('drainRetryQueue', () => {
       expect(result.value.action).toBe('dispatched');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({ status: 'dispatched' }));
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
+        })
+      );
+      expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith({
+        userId: 'user_123',
+        workerType: 'opus',
+      });
+    });
+
+    it('dispatches successfully when dispatch status service is omitted', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ ...sampleTask, status: 'dispatched' }));
+      const deps = buildDeps();
+      delete (deps as Partial<DrainRetryQueueDeps>).codeTaskDispatchStatusService;
+
+      const result = await drainRetryQueue(deps);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockDispatchStatusService.resolveDispatchBlockers).not.toHaveBeenCalled();
     });
 
     it('forwards prNumber in dispatch request when task has prNumber', async () => {
@@ -899,6 +934,40 @@ describe('drainRetryQueue', () => {
       }));
     });
 
+    it('records dispatch system status when no enabled workers exist', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
+
+      await drainRetryQueue(buildDeps());
+
+      expect(mockDispatchStatusService.recordDispatchBlocked).toHaveBeenCalledWith({
+        userId: 'user_123',
+        workerType: 'opus',
+        blocker: expect.objectContaining({
+          dispatchable: false,
+          reason: 'no_enabled_workers',
+        }),
+        affectedTaskCount: 1,
+        exampleTaskIds: ['task_xyz'],
+      });
+    });
+
+    it('updates retry entry when no enabled workers exist and dispatch status service is omitted', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
+      const deps = buildDeps();
+      delete (deps as Partial<DrainRetryQueueDeps>).codeTaskDispatchStatusService;
+
+      const result = await drainRetryQueue(deps);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('retry_failed');
+      expect(mockDispatchStatusService.recordDispatchBlocked).not.toHaveBeenCalled();
+    });
+
     it('fetches Linear metadata when task has linearIssueId', async () => {
       const taskWithLinear = { ...sampleTask, linearIssueId: 'INT-123' };
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
@@ -946,6 +1015,32 @@ describe('drainRetryQueue', () => {
         attempts: 1,
         lastError: 'all workers busy',
       }));
+    });
+
+    it('records dispatch system status when dispatcher returns blocker metadata', async () => {
+      const blocker = {
+        dispatchable: false as const,
+        reason: 'claude_auth_unavailable' as const,
+        severity: 'critical' as const,
+        message: 'No reachable worker has active Claude auth for opus.',
+        remediation: 'Refresh Claude authentication on a worker that can run this task.',
+        workerNames: ['home-mac'],
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'worker_unavailable', message: blocker.message, blocker })
+      );
+
+      await drainRetryQueue(buildDeps());
+
+      expect(mockDispatchStatusService.recordDispatchBlocked).toHaveBeenCalledWith({
+        userId: 'user_123',
+        workerType: 'opus',
+        blocker,
+        affectedTaskCount: 1,
+        exampleTaskIds: ['task_xyz'],
+      });
     });
 
     it('notifies user on successful dispatch when task update succeeds', async () => {

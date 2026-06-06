@@ -29,6 +29,7 @@ import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
+import type { CodeTaskSystemStatusRepository } from '../../domain/repositories/codeTaskSystemStatusRepository.js';
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -39,6 +40,7 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import { createFirestoreCodeTaskSystemStatusRepository } from '../../infra/firestore/codeTaskSystemStatusRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 
 describe('GET /code/queue', () => {
@@ -46,6 +48,7 @@ describe('GET /code/queue', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
+  let codeTaskSystemStatusRepo: CodeTaskSystemStatusRepository;
 
   beforeEach(async () => {
     mockedJwtVerify.mockResolvedValue({
@@ -63,6 +66,10 @@ describe('GET /code/queue', () => {
     logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+    codeTaskSystemStatusRepo = createFirestoreCodeTaskSystemStatusRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -137,6 +144,7 @@ describe('GET /code/queue', () => {
       resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
+      codeTaskSystemStatusRepo,
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
       taskEnqueueService: {
@@ -197,6 +205,7 @@ describe('GET /code/queue', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.tasks).toEqual([]);
+      expect(body.data.systemStatuses).toEqual([]);
       expect(body.data.totalQueued).toBe(0);
       expect(body.data.maxQueueSize).toBeGreaterThan(0);
     });
@@ -469,5 +478,318 @@ describe('GET /code/queue', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
+
+    it('returns 500 when queue system status lookup fails', async () => {
+      vi.spyOn(codeTaskSystemStatusRepo, 'listActiveForUser').mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'FIRESTORE_ERROR', message: 'DB unavailable' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/queue',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('system statuses', () => {
+    it('returns active dispatch blocker statuses for the authenticated user only', async () => {
+      const statusResult = await codeTaskSystemStatusRepo.upsertActive({
+        userId: 'test-user-id',
+        workerType: 'codex-xhigh',
+        reason: 'codex_auth_unavailable',
+        severity: 'critical',
+        message: 'No reachable worker has active Codex auth for codex-xhigh.',
+        remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+        affectedTaskCount: 2,
+        exampleTaskIds: ['task-123'],
+        workerNames: ['home-mac'],
+      });
+      if (!statusResult.ok) {
+        throw new Error(`Failed to create status: ${statusResult.error.message}`);
+      }
+      const notifiedAt = new Date('2026-06-05T12:00:00.000Z');
+      const notifyResult = await codeTaskSystemStatusRepo.markNotified(statusResult.value.id, notifiedAt);
+      if (!notifyResult.ok) {
+        throw new Error(`Failed to mark status notified: ${notifyResult.error.message}`);
+      }
+
+      const otherUserStatusResult = await codeTaskSystemStatusRepo.upsertActive({
+        userId: 'other-user-id',
+        workerType: 'opus',
+        reason: 'claude_auth_unavailable',
+        severity: 'critical',
+        message: 'No reachable worker has active Claude auth for opus.',
+        remediation: 'Refresh Claude authentication on a worker that can run this task.',
+        affectedTaskCount: 1,
+        exampleTaskIds: ['task-other'],
+        workerNames: ['other-worker'],
+      });
+      if (!otherUserStatusResult.ok) {
+        throw new Error(`Failed to create other status: ${otherUserStatusResult.error.message}`);
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/queue',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.systemStatuses).toHaveLength(1);
+      expect(body.data.systemStatuses[0]).toEqual(expect.objectContaining({
+        id: statusResult.value.id,
+        component: 'code-task-dispatch',
+        status: 'active',
+        severity: 'critical',
+        workerType: 'codex-xhigh',
+        reason: 'codex_auth_unavailable',
+        message: 'No reachable worker has active Codex auth for codex-xhigh.',
+        remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+        affectedTaskCount: 2,
+        exampleTaskIds: ['task-123'],
+        workerNames: ['home-mac'],
+        firstSeenAt: expect.any(String),
+        lastSeenAt: expect.any(String),
+        lastNotifiedAt: notifiedAt.toISOString(),
+      }));
+    });
+  });
+});
+
+describe('GET /code/system-status', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+  let codeTaskRepo: CodeTaskRepository;
+  let codeTaskSystemStatusRepo: CodeTaskSystemStatusRepository;
+
+  beforeEach(async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
+
+    codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+    codeTaskSystemStatusRepo = createFirestoreCodeTaskSystemStatusRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe });
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const whatsappNotifier = createWhatsAppNotifier({
+      whatsappPublisher: {
+        publishSendMessage: async () => ok(undefined),
+      } as unknown as WhatsAppSendPublisher,
+    });
+
+    const logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const logLineRepo = createFirestoreLogLineRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
+    setServices({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo,
+      taskDispatcher,
+      workerSettingsRepo,
+      whatsappNotifier,
+      logChunkRepo,
+      logLineRepo,
+      actionsAgentClient,
+      linearAgentClient,
+      linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+      processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+      gitHubPRSummaryRepo: {} as never,
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
+      codeTaskSystemStatusRepo,
+      unifiedEvaluator: {} as never,
+      automationLog: {} as never,
+      taskEnqueueService: {
+        enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })),
+      },
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
+    } as never);
+
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    vi.clearAllMocks();
+  });
+
+  it('returns only active system statuses for the authenticated user', async () => {
+    const activeStatusResult = await codeTaskSystemStatusRepo.upsertActive({
+      userId: 'test-user-id',
+      workerType: 'codex-xhigh',
+      reason: 'codex_auth_unavailable',
+      severity: 'critical',
+      message: 'No reachable worker has active Codex auth for codex-xhigh.',
+      remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+      affectedTaskCount: 2,
+      exampleTaskIds: ['task-123'],
+      workerNames: ['home-mac'],
+    });
+    if (!activeStatusResult.ok) {
+      throw new Error(`Failed to create active status: ${activeStatusResult.error.message}`);
+    }
+
+    const resolvedStatusResult = await codeTaskSystemStatusRepo.upsertActive({
+      userId: 'test-user-id',
+      workerType: 'opus',
+      reason: 'claude_auth_unavailable',
+      severity: 'critical',
+      message: 'No reachable worker has active Claude auth for opus.',
+      remediation: 'Refresh Claude authentication on a worker that can run this task.',
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-resolved'],
+      workerNames: ['home-mac'],
+    });
+    if (!resolvedStatusResult.ok) {
+      throw new Error(`Failed to create resolved status: ${resolvedStatusResult.error.message}`);
+    }
+    const resolveResult = await codeTaskSystemStatusRepo.resolveActive({
+      userId: 'test-user-id',
+      workerType: 'opus',
+    });
+    if (!resolveResult.ok) {
+      throw new Error(`Failed to resolve status: ${resolveResult.error.message}`);
+    }
+
+    const otherUserStatusResult = await codeTaskSystemStatusRepo.upsertActive({
+      userId: 'other-user-id',
+      workerType: 'auto',
+      reason: 'no_enabled_workers',
+      severity: 'warning',
+      message: 'No enabled workers are configured for auto.',
+      remediation: 'Enable a worker that can run this task.',
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-other'],
+      workerNames: [],
+    });
+    if (!otherUserStatusResult.ok) {
+      throw new Error(`Failed to create other user status: ${otherUserStatusResult.error.message}`);
+    }
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/system-status',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.systemStatuses).toHaveLength(1);
+    expect(body.data.systemStatuses[0]).toEqual(expect.objectContaining({
+      id: activeStatusResult.value.id,
+      component: 'code-task-dispatch',
+      status: 'active',
+      severity: 'critical',
+      workerType: 'codex-xhigh',
+      reason: 'codex_auth_unavailable',
+      message: 'No reachable worker has active Codex auth for codex-xhigh.',
+      remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+      affectedTaskCount: 2,
+      exampleTaskIds: ['task-123'],
+      workerNames: ['home-mac'],
+      firstSeenAt: expect.any(String),
+      lastSeenAt: expect.any(String),
+    }));
+  });
+
+  it('returns 500 when the status repository fails', async () => {
+    vi.spyOn(codeTaskSystemStatusRepo, 'listActiveForUser').mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'FIRESTORE_ERROR', message: 'DB unavailable' },
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/system-status',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 });

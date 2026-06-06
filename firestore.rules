@@ -132,6 +132,19 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // User-visible code task dispatch blocker system statuses
+    match /code_task_system_statuses/{statusId} {
+      allow get: if isOwner(resource.data.userId);
+
+      // CostGuard: Query limit max 50 docs
+      allow list: if isAuthenticated()
+                  && request.query.limit <= 50
+                  && resource.data.userId == request.auth.uid;
+
+      // Client cannot write (backend-only)
+      allow write: if false;
+    }
+
     // All other collections blocked from client
     match /{document=**} {
       allow read, write: if false;

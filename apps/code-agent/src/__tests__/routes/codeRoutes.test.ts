@@ -48,7 +48,7 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import type { WorkerConfig } from '../../domain/models/workerSettings.js';
+import type { WorkerConfig, WorkerHealthState } from '../../domain/models/workerSettings.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
@@ -62,6 +62,27 @@ function generateOrchestratorSignature(payload: object, secret: string): { times
   const message = `${timestamp}.${rawBody}`;
   const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
   return { timestamp, signature };
+}
+
+function healthyWorkerState(
+  overrides: Partial<Extract<WorkerHealthState, { _tag: 'healthy' }>> = {}
+): Extract<WorkerHealthState, { _tag: 'healthy' }> {
+  return {
+    _tag: 'healthy',
+    healthy: true,
+    capacity: 1,
+    running: 0,
+    available: 1,
+    workerAuths: {
+      claude: { status: 'active' },
+      codex: { status: 'active' },
+    },
+    providerApiKeys: {},
+    dockerHealthy: true,
+    diskHealthy: true,
+    responseTimeMs: 100,
+    ...overrides,
+  };
 }
 
 describe('codeRoutes', () => {
@@ -1798,14 +1819,12 @@ describe('codeRoutes', () => {
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
           'test-worker': {
-            state: {
-              _tag: 'healthy',
-              healthy: true,
+            state: healthyWorkerState({
               capacity: 5,
               running: 2,
               available: 3,
               responseTimeMs: 150,
-            },
+            }),
             checkedAt: new Date().toISOString(),
             stale: false,
           },
@@ -1934,14 +1953,9 @@ describe('codeRoutes', () => {
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
           'legacy-worker': {
-            state: {
-              _tag: 'healthy',
-              healthy: true,
-              capacity: 1,
-              running: 0,
-              available: 1,
+            state: healthyWorkerState({
               responseTimeMs: 50,
-            },
+            }),
             checkedAt: new Date().toISOString(),
             stale: false,
           },
@@ -2139,14 +2153,7 @@ describe('codeRoutes', () => {
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
           'test-worker': {
-            state: {
-              _tag: 'healthy',
-              healthy: true,
-              capacity: 1,
-              running: 0,
-              available: 1,
-              responseTimeMs: 100,
-            },
+            state: healthyWorkerState(),
             checkedAt: oldCheckedAt,
             stale: false,
           },

@@ -179,7 +179,8 @@ export async function start(): Promise<void> {
     logger,
     services.workerAuthRegistry,
     services.isolationProvider,
-    flush
+    flush,
+    services.providerApiKeys
   );
 }
 

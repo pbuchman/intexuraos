@@ -11,7 +11,7 @@ import {
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import { getDispatchQueue } from '@/services/codeAgentApi';
-import type { QueuedTask, QueueResponse } from '@/services/codeAgentApi';
+import type { CodeTaskSystemStatus, QueuedTask, QueueResponse } from '@/services/codeAgentApi';
 import {
   authenticateFirebase,
   getFirestoreClient,
@@ -21,9 +21,11 @@ import {
 
 /** 💰 CostGuard: Firestore security rules enforce query.limit <= 100 */
 const MAX_QUERY_LIMIT = 100;
+const MAX_STATUS_QUERY_LIMIT = 50;
 
 export interface DispatchQueueState {
   tasks: QueuedTask[];
+  systemStatuses: CodeTaskSystemStatus[];
   totalQueued: number;
   maxQueueSize: number;
   loading: boolean;
@@ -34,6 +36,7 @@ export interface DispatchQueueState {
 export function useDispatchQueue(): DispatchQueueState {
   const { getAccessToken, isAuthenticated, user } = useAuth();
   const [tasks, setTasks] = useState<QueuedTask[]>([]);
+  const [systemStatuses, setSystemStatuses] = useState<CodeTaskSystemStatus[]>([]);
   const [totalQueued, setTotalQueued] = useState(0);
   const [maxQueueSize, setMaxQueueSize] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,7 @@ export function useDispatchQueue(): DispatchQueueState {
       const data: QueueResponse = await getDispatchQueue(token);
       if (isMountedRef.current) {
         setTasks(data.tasks);
+        setSystemStatuses(data.systemStatuses);
         setTotalQueued(data.totalQueued);
         setMaxQueueSize(data.maxQueueSize);
         setError(null);
@@ -79,7 +83,7 @@ export function useDispatchQueue(): DispatchQueueState {
     if (!isAuthenticated || user?.sub === undefined) return;
 
     const cancelState = { cancelled: false };
-    let unsub: Unsubscribe | null = null;
+    let unsubscribers: Unsubscribe[] = [];
 
     const setup = async (): Promise<void> => {
       try {
@@ -99,26 +103,40 @@ export function useDispatchQueue(): DispatchQueueState {
           limit(MAX_QUERY_LIMIT),
         );
 
-        let isFirstSnapshot = true;
-        unsub = onSnapshot(
-          queueQuery,
-          () => {
-            // Skip the initial snapshot — the initial load effect already fetches
-            if (isFirstSnapshot) {
-              isFirstSnapshot = false;
-              return;
-            }
-            // On subsequent changes to queued tasks, refetch via API for full data
-            if (!cancelState.cancelled) {
-              void fetchQueue();
-            }
-          },
-          (err) => {
-            if (!cancelState.cancelled) {
-              setError(getErrorMessage(err, 'Queue listener disconnected — showing last known state'));
-            }
-          },
+        const statusQuery = query(
+          collection(db, 'code_task_system_statuses'),
+          where('userId', '==', user.sub),
+          where('status', '==', 'active'),
+          limit(MAX_STATUS_QUERY_LIMIT),
         );
+
+        const subscribeToRefetch = (refetchQuery: ReturnType<typeof query>): Unsubscribe => {
+          let isFirstSnapshot = true;
+          return onSnapshot(
+            refetchQuery,
+            () => {
+              // Skip the initial snapshot — the initial load effect already fetches
+              if (isFirstSnapshot) {
+                isFirstSnapshot = false;
+                return;
+              }
+              // On subsequent changes, refetch via API for full derived data
+              if (!cancelState.cancelled) {
+                void fetchQueue();
+              }
+            },
+            (err) => {
+              if (!cancelState.cancelled) {
+                setError(getErrorMessage(err, 'Queue listener disconnected — showing last known state'));
+              }
+            },
+          );
+        };
+
+        unsubscribers = [
+          subscribeToRefetch(queueQuery),
+          subscribeToRefetch(statusQuery),
+        ];
       } catch {
         // Firebase init error — page still works via initial API load
       }
@@ -128,14 +146,15 @@ export function useDispatchQueue(): DispatchQueueState {
 
     return (): void => {
       cancelState.cancelled = true;
-      if (unsub !== null) {
-        unsub();
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe();
       }
     };
   }, [isAuthenticated, user?.sub, fetchQueue]);
 
   return {
     tasks,
+    systemStatuses,
     totalQueued,
     maxQueueSize,
     loading,

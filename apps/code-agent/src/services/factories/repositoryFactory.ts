@@ -19,6 +19,7 @@ import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestor
 import { createFirestoreGitHubWebhookAuditEventRepository } from '../../infra/firestore/gitHubWebhookAuditEventRepository.js';
 import { createFirestoreGitHubEventLogEntryRepository } from '../../infra/firestore/gitHubEventLogEntryRepository.js';
 import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/dispatchRetryRepository.js';
+import { createFirestoreCodeTaskSystemStatusRepository } from '../../infra/firestore/codeTaskSystemStatusRepository.js';
 import { createFirestoreMergeQueueWatchRepository } from '../../infra/firestore/mergeQueueWatchRepository.js';
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
 import { createTaskGroupSummaryFirestoreRepository } from '../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
@@ -34,6 +35,7 @@ import type { GitHubWebhookAuditEventRepository } from '../../domain/repositorie
 import type { GitHubEventLogEntryRepository } from '../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { TurnMetricsRepository } from '../../domain/repositories/turnMetricsRepository.js';
 import type { DispatchRetryRepository } from '../../domain/repositories/dispatchRetryRepository.js';
+import type { CodeTaskSystemStatusRepository } from '../../domain/repositories/codeTaskSystemStatusRepository.js';
 import type { MergeQueueWatchRepository } from '../../domain/repositories/mergeQueueWatchRepository.js';
 import type { EventDecisionRepository } from '../../domain/repositories/eventDecisionRepository.js';
 import type { ExecutionMemoryRepository } from '../../domain/repositories/executionMemoryRepository.js';
@@ -58,6 +60,7 @@ export interface RepositoryServices {
   gitHubEventLogEntryRepo: GitHubEventLogEntryRepository;
   turnMetricsRepo: TurnMetricsRepository;
   dispatchRetryRepo: DispatchRetryRepository;
+  codeTaskSystemStatusRepo: CodeTaskSystemStatusRepository;
   mergeQueueWatchRepo: MergeQueueWatchRepository;
   eventDecisionRepo: EventDecisionRepository;
   executionMemoryRepo: ExecutionMemoryRepository;
@@ -94,6 +97,7 @@ export function createRepositoryServices(deps: RepositoryFactoryDeps): Repositor
     gitHubEventLogEntryRepo: createFirestoreGitHubEventLogEntryRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
+    codeTaskSystemStatusRepo: createFirestoreCodeTaskSystemStatusRepository({ firestore, logger }),
     mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
     eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
     executionMemoryRepo: createFirestoreExecutionMemoryRepository({ firestore, logger }),

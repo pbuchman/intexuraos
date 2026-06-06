@@ -359,7 +359,7 @@ export class TaskDispatcher {
       };
     }
 
-    this.logForwarder.registerTask(task.taskId, task.webhookSecret);
+    this.logForwarder.registerTask(task.taskId, task.webhookSecret, task.webhookUrl);
     this.runningCountBox.value++;
     // `ok: true` here means startup recovery took ownership of the accepted resume.
     // Worker startup may still fail, in which case resumeTaskWithUserMessage finalizes the task.

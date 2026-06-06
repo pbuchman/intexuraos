@@ -53,6 +53,7 @@ import type { BootstrapEnvConfig } from './env-config.js';
 import { logWorkerAuthStartupStatus } from './api-key-validator.js';
 import { readRepoGitConfig } from './git-identity.js';
 import { ensureDirectoryExists } from './fs-utils.js';
+import type { ProviderApiKeyHealth } from '../types/api.js';
 
 const DOCKER_NETWORK_NAME = 'code-worker-net';
 const TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
@@ -79,6 +80,7 @@ export interface WiredServices {
   heartbeatManager: HeartbeatManager;
   workerAuthRegistry: WorkerAuthRegistry;
   isolationProvider: IsolationProvider;
+  providerApiKeys: Record<string, ProviderApiKeyHealth>;
 }
 
 /**
@@ -246,6 +248,14 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     OPENROUTER_API_KEY: env.openRouterApiKey,
   };
 
+  const providerApiKeys: Record<string, ProviderApiKeyHealth> = {
+    MINIMAX_API_KEY: { configured: env.minimaxApiKey.trim() !== '' },
+    MIMO_API_KEY: { configured: env.mimoApiKey.trim() !== '' },
+    DASHSCOPE_API_KEY: { configured: env.dashscopeApiKey.trim() !== '' },
+    KIMI_API_KEY: { configured: env.kimiApiKey.trim() !== '' },
+    OPENROUTER_API_KEY: { configured: env.openRouterApiKey.trim() !== '' },
+  };
+
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
 
   const isolationConfig: IsolationConfig = {
@@ -387,6 +397,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     heartbeatManager,
     workerAuthRegistry,
     isolationProvider,
+    providerApiKeys,
   };
 }
 /* v8 ignore stop @preserve */

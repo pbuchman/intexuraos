@@ -8020,7 +8020,11 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
-      expect(mockLogForwarder.registerTask).toHaveBeenCalledWith('adopt-task-1', 'secret-123');
+      expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
+        'adopt-task-1',
+        'secret-123',
+        task.webhookUrl
+      );
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'adopt-task-1',
@@ -8289,7 +8293,8 @@ describe('TaskDispatcher', () => {
       expect(dispatcher.getRunningCount()).toBe(1);
       expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
         'recover-resume-task-1',
-        'secret-123'
+        'secret-123',
+        task.webhookUrl
       );
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -11876,6 +11881,7 @@ describe('TaskDispatcher', () => {
             taskId: string;
             status: string;
             completedAt: Date;
+            webhookUrl: string;
             error?: { code: string; message: string };
             result?: { prUrl?: string; branch?: string; summary?: string };
           }
@@ -11885,6 +11891,7 @@ describe('TaskDispatcher', () => {
       expect(commitArg.taskId).toBe('status-commit-ok');
       expect(commitArg.status).toBe('completed');
       expect(commitArg.completedAt).toBeInstanceOf(Date);
+      expect(commitArg.webhookUrl).toBe(task.webhookUrl);
       expect(commitArg.error).toBeUndefined();
       expect(commitArg.result).toEqual({
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',

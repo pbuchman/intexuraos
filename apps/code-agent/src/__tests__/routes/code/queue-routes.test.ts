@@ -17,12 +17,13 @@ describe('queueRoutes plugin', () => {
     expect(typeof queueRoutes).toBe('function');
   });
 
-  it('registers /code/queue and /internal/drain-queue', async () => {
+  it('registers /code/queue, /code/system-status, and /internal/drain-queue', async () => {
     const app = Fastify();
     await app.register(queueRoutes, { jwtValidator: async () => undefined });
     await app.ready();
 
     expect(app.hasRoute({ method: 'GET', url: '/queue' })).toBe(true);
+    expect(app.hasRoute({ method: 'GET', url: '/system-status' })).toBe(true);
     expect(app.hasRoute({ method: 'POST', url: '/internal/drain-queue' })).toBe(true);
 
     await app.close();

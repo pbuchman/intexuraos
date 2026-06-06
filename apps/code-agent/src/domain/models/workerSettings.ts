@@ -156,6 +156,22 @@ export type WorkerHealthState =
   | TunnelDownState
   | UnknownState;
 
+export type WorkerAuthProvider = 'claude' | 'codex';
+
+export interface WorkerAuthStatusDetails {
+  status: 'active' | 'expired' | 'not_configured';
+  authMode?: string | null;
+  refreshSupported?: boolean;
+  expiresAt?: string;
+  expiresInMinutes?: number;
+  subscriptionType?: string;
+  message?: string;
+}
+
+export interface ProviderApiKeyStatus {
+  configured: boolean;
+}
+
 /**
  * Worker is healthy and responding.
  */
@@ -165,6 +181,10 @@ export interface HealthyState {
   capacity: number;
   running: number;
   available: number;
+  workerAuths: Record<WorkerAuthProvider, WorkerAuthStatusDetails>;
+  providerApiKeys: Record<string, ProviderApiKeyStatus>;
+  dockerHealthy: boolean;
+  diskHealthy: boolean;
   responseTimeMs: number;
 }
 

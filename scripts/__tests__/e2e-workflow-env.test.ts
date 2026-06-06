@@ -24,6 +24,9 @@ describe('E2E workflow code-agent startup env', () => {
     const startCodeAgentStep = getStartCodeAgentStep(workflow);
 
     expect(startCodeAgentStep).toContain('INTEXURAOS_SERVICE_URL=http://127.0.0.1:8128 \\');
+    expect(startCodeAgentStep).toContain(
+      'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL=http://127.0.0.1:8128 \\'
+    );
     expect(startCodeAgentStep).toContain('INTEXURAOS_WEB_APP_URL=');
   });
 });

@@ -628,6 +628,33 @@ describe('TurnMetricsCollector', () => {
       mockFetch.mockRestore();
     });
 
+    it('publishes to the task-scoped callback base when webhookUrl is provided', async () => {
+      mockReadFile
+        .mockResolvedValueOnce('usage_usec 1000000\n')
+        .mockResolvedValueOnce('1048576\n')
+        .mockResolvedValueOnce('200000 100000\n');
+
+      async function* emptyGlob(): AsyncGenerator<string> {
+        // yield nothing
+      }
+      mockGlob.mockReturnValueOnce(emptyGlob() as never);
+
+      const mockFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+      } as Response);
+
+      await collector.collectAndPublish({
+        ...params,
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+      });
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://intexuraos.cloud/internal/turn-metrics');
+
+      mockFetch.mockRestore();
+    });
+
     it('sets utilization and idle to 0 when wall time is 0', async () => {
       mockReadFile
         .mockResolvedValueOnce('usage_usec 1000000\n')

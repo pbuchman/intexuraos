@@ -554,6 +554,13 @@ describe('Hetzner async edge cutover', () => {
       'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
     );
     expect(hetznerScheduler).toContain('paused      = !var.activate_hetzner_async_consumers');
+    const zombieSweepJob =
+      hetznerScheduler
+        .split('code_tasks_zombie_sweep = {')[1]
+        ?.split('\n    archive_stale_groups = {')[0] ?? '';
+    expect(zombieSweepJob).toContain('path                 = "/internal/code/detect-zombies"');
+    expect(zombieSweepJob).toContain('body                 = null');
+    expect(zombieSweepJob).not.toContain('base64encode("{}")');
     expect(hetznerOutputs).toContain(
       'filter        = subscription.filter == "" ? null : subscription.filter'
     );
@@ -714,6 +721,16 @@ describe('Hetzner secret loader', () => {
     expect(script).not.toContain('INTEXURAOS_MINIMAX_APP_API_KEY');
     expect(script).not.toContain('INTEXURAOS_SENTRY_AUTH_TOKEN');
     expect(script).not.toContain('INTEXURAOS_SSL_PRIVATE_KEY');
+  });
+
+  it('writes the code-agent task callback base URL as non-secret runtime config', () => {
+    const script = readRequired(loadSecretsPath);
+    const terraform = readRequired(terraformDevMainPath);
+
+    expect(script).toContain(
+      'write_env_line "${output_path}" "INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL" "${PUBLIC_ORIGIN}"'
+    );
+    expect(terraform).toContain('INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = local.public_origin');
   });
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {
