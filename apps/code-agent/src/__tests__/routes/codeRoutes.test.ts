@@ -1818,16 +1818,16 @@ describe('codeRoutes', () => {
 
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
-	          'test-worker': {
-	            state: healthyWorkerState({
-	              capacity: 5,
-	              running: 2,
-	              available: 3,
-	              responseTimeMs: 150,
-	            }),
-	            checkedAt: new Date().toISOString(),
-	            stale: false,
-	          },
+          'test-worker': {
+            state: healthyWorkerState({
+              capacity: 5,
+              running: 2,
+              available: 3,
+              responseTimeMs: 150,
+            }),
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
         })
       );
 
@@ -1952,13 +1952,13 @@ describe('codeRoutes', () => {
 
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
-	          'legacy-worker': {
-	            state: healthyWorkerState({
-	              responseTimeMs: 50,
-	            }),
-	            checkedAt: new Date().toISOString(),
-	            stale: false,
-	          },
+          'legacy-worker': {
+            state: healthyWorkerState({
+              responseTimeMs: 50,
+            }),
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
         })
       );
 
@@ -2152,11 +2152,11 @@ describe('codeRoutes', () => {
 
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
-	          'test-worker': {
-	            state: healthyWorkerState(),
-	            checkedAt: oldCheckedAt,
-	            stale: false,
-	          },
+          'test-worker': {
+            state: healthyWorkerState(),
+            checkedAt: oldCheckedAt,
+            stale: false,
+          },
         })
       );
 

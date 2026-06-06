@@ -1,10 +1,12 @@
 /**
  * Migration 107: Composite index for timestamp-range notification pagination,
- * plus code-task dispatch system status security rules.
+ * plus code-task dispatch system status listener index and security rules.
  *
  * Required by call path:
  *   /internal/notifications/group-messages/query -> NotificationRepository.findByUserIdPaginated
  *   filter: app + userId + timestamp range, order: timestamp desc + __name__ desc.
+ *   apps/web/src/hooks/useDispatchQueue -> code_task_system_statuses listener
+ *   filter: userId + status.
  */
 
 export const metadata = {
@@ -26,6 +28,14 @@ export const indexes = [
       { fieldPath: '__name__', order: 'DESCENDING' },
     ],
   },
+  {
+    collectionGroup: 'code_task_system_statuses',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
+    ],
+  },
 ];
 
 export const rules = {
@@ -44,7 +54,9 @@ export const rules = {
 export const collections = ['mobile_notifications', 'code_task_system_statuses'];
 
 export async function up(context) {
-  console.log('  Deploying mobile_notifications timestamp-range pagination composite index...');
+  console.log(
+    '  Deploying mobile_notifications and code_task_system_statuses composite indexes...'
+  );
   await context.deployIndexes();
   console.log('  Deploying code_task_system_statuses security rules...');
   await context.deployRules();

@@ -106,17 +106,38 @@ describe('FirestoreCodeTaskSystemStatusRepository', () => {
       exampleTaskIds: ['task-2'],
       workerNames: ['home-dev'],
     });
-    await statusRepo.resolveActive({
+    await statusRepo.upsertActive({
+      userId: 'user-1',
+      workerType: 'sonnet',
+      reason: 'workers_unreachable',
+      severity: 'critical',
+      message: 'Workers unreachable',
+      remediation: 'Restore worker connectivity',
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-3'],
+      workerNames: ['home-dev'],
+    });
+    const resolved = await statusRepo.resolveActive({
       userId: 'user-1',
       workerType: 'sonnet',
       reasons: ['claude_auth_unavailable'],
     });
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) throw new Error('resolve failed');
+    expect(resolved.value).toBe(1);
 
     const result = await statusRepo.listActiveForUser('user-1');
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('list failed');
-    expect(result.value).toEqual([]);
+    expect(result.value).toMatchObject([
+      {
+        userId: 'user-1',
+        workerType: 'sonnet',
+        reason: 'workers_unreachable',
+        status: 'active',
+      },
+    ]);
   });
 
   it('marks a status as notified', async () => {

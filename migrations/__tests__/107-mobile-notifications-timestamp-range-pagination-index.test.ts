@@ -18,7 +18,7 @@ describe('migration 107 - mobile notifications timestamp range pagination index'
     });
   });
 
-  it('defines the app + userId + timestamp desc + document-name desc index', () => {
+  it('defines indexes for notification pagination and code task system status listeners', () => {
     expect(indexes).toEqual([
       {
         collectionGroup: 'mobile_notifications',
@@ -28,6 +28,14 @@ describe('migration 107 - mobile notifications timestamp range pagination index'
           { fieldPath: 'userId', order: 'ASCENDING' },
           { fieldPath: 'timestamp', order: 'DESCENDING' },
           { fieldPath: '__name__', order: 'DESCENDING' },
+        ],
+      },
+      {
+        collectionGroup: 'code_task_system_statuses',
+        queryScope: 'COLLECTION',
+        fields: [
+          { fieldPath: 'userId', order: 'ASCENDING' },
+          { fieldPath: 'status', order: 'ASCENDING' },
         ],
       },
     ]);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkerConfig, WorkerHealthState } from '../../../domain/models/workerSettings.js';
-import { classifyCodeTaskDispatchability } from '../../../domain/services/codeTaskDispatchBlockers.js';
+import {
+  classifyCodeTaskDispatchability,
+  type CodeTaskDispatchBlockerReason,
+} from '../../../domain/services/codeTaskDispatchBlockers.js';
 
 function worker(name: string, overrides: Partial<WorkerConfig> = {}): WorkerConfig {
   return {
@@ -43,8 +46,58 @@ function orchestratorUnreachable(reason: 'timeout' | 'http-error' = 'timeout'): 
   return { _tag: 'orchestrator-unreachable', healthy: false, reason };
 }
 
+interface BlockedDispatchCase {
+  readonly name: string;
+  readonly workerType: string;
+  readonly workers: readonly WorkerConfig[];
+  readonly health: Record<string, WorkerHealthState>;
+  readonly reason: CodeTaskDispatchBlockerReason;
+}
+
 describe('classifyCodeTaskDispatchability', () => {
-  it.each([
+  const expectedBlockerText: Record<
+    CodeTaskDispatchBlockerReason,
+    { readonly message: string; readonly remediation: string }
+  > = {
+    no_enabled_workers: {
+      message: 'No enabled code-task workers are configured',
+      remediation: 'Enable or add a worker in worker settings',
+    },
+    workers_unreachable: {
+      message: 'No configured workers are reachable',
+      remediation: 'Check worker host connectivity',
+    },
+    workers_at_capacity: {
+      message: 'All capable workers',
+      remediation: 'Wait for a running task to finish',
+    },
+    codex_auth_unavailable: {
+      message: 'No reachable worker has active Codex auth',
+      remediation: 'Refresh Codex/ChatGPT authentication',
+    },
+    claude_auth_unavailable: {
+      message: 'No reachable worker has active Claude auth',
+      remediation: 'Refresh Claude authentication',
+    },
+    provider_auth_unavailable: {
+      message: 'No reachable worker has the provider API key required',
+      remediation: 'Configure the required provider API key',
+    },
+    docker_unavailable: {
+      message: 'No reachable worker has healthy Docker',
+      remediation: 'Inspect Docker health',
+    },
+    disk_unavailable: {
+      message: 'No reachable worker has healthy disk capacity',
+      remediation: 'Free disk space',
+    },
+    unknown_worker_type: {
+      message: 'is not recognized',
+      remediation: 'Select a supported worker type',
+    },
+  };
+
+  const blockedDispatchCases = [
     {
       name: 'no enabled workers',
       workerType: 'codex-xhigh',
@@ -130,7 +183,9 @@ describe('classifyCodeTaskDispatchability', () => {
       health: { 'home-dev': healthy() },
       reason: 'unknown_worker_type',
     },
-  ])('$name -> $reason', ({ workerType, workers, health, reason }) => {
+  ] satisfies BlockedDispatchCase[];
+
+  it.each(blockedDispatchCases)('$name -> $reason', ({ workerType, workers, health, reason }) => {
     const result = classifyCodeTaskDispatchability({
       workerType,
       workers,
@@ -140,8 +195,9 @@ describe('classifyCodeTaskDispatchability', () => {
     expect(result.dispatchable).toBe(false);
     if (result.dispatchable) throw new Error('expected blocker');
     expect(result.reason).toBe(reason);
-    expect(result.message).not.toBe('');
-    expect(result.remediation).not.toBe('');
+    const expectedText = expectedBlockerText[reason];
+    expect(result.message).toContain(expectedText.message);
+    expect(result.remediation).toContain(expectedText.remediation);
   });
 
   it('is dispatchable when at least one enabled worker satisfies runtime, auth, capacity, Docker, and disk requirements', () => {
