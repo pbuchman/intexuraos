@@ -187,7 +187,16 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         /* v8 ignore stop @preserve */
       });
 
-      if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {
+      if (!retryResult.ok) {
+        request.log.error({ error: retryResult.error }, 'Drain retry queue failed');
+        return await reply.fail('INTERNAL_ERROR', retryResult.error.message);
+      }
+
+      const retryHasLocksToCleanup = (retryResult.value.locksToCleanup?.length ?? 0) > 0;
+      if (
+        retryResult.value.action !== 'empty'
+        && (retryResult.value.action !== 'failed' || retryHasLocksToCleanup)
+      ) {
         for (const lock of retryResult.value.locksToCleanup ?? []) {
           await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
         }

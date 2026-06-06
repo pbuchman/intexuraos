@@ -29,6 +29,7 @@ export interface DispatchRetry {
   lastError: string;
   createdAt: Timestamp;
   lastAttemptAt?: Timestamp;
+  processingStartedAt?: Timestamp | null;
   ttlMinutes: number;
 }
 

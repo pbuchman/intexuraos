@@ -227,6 +227,7 @@ describe('codeRoutes', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { return ok(undefined); },
         async update() { return ok(undefined); },
@@ -1483,7 +1484,7 @@ describe('codeRoutes', () => {
       expect(body.error.code).toBe('CONFLICT');
     });
 
-    it('returns 503 when enqueue returns queue_full error', async () => {
+    it('returns a failed task id when enqueue returns queue_full error', async () => {
       setServices({
         ...getServices(),
         taskEnqueueService: {
@@ -1502,13 +1503,14 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(503);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
     });
 
-    it('returns 500 when getSettings fails with Firestore error', async () => {
+    it('returns a failed task id when getSettings fails after task creation', async () => {
       const services = getServices();
       const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
         err({ code: 'internal_error', message: 'Firestore unavailable' })
@@ -1525,15 +1527,28 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual(expect.objectContaining({
+        status: 'failed',
+        codeTaskId: expect.stringMatching(/^task_/),
+      }));
+
+      const taskResult = await services.codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'dispatch_failed',
+          terminal: true,
+        }));
+      }
 
       mockGetSettings.mockRestore();
     });
 
-    it('returns WORKER_NOT_CONFIGURED when user has no enabled workers', async () => {
+    it('returns a failed task id when user has no enabled workers', async () => {
       const services = getServices();
       const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
         ok({
@@ -1564,10 +1579,11 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(424);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
 
       mockGetSettings.mockRestore();
     });
@@ -4388,6 +4404,7 @@ describe('codeRoutes', () => {
       let deleted = false;
       const retryRepo: DispatchRetryRepository = {
         async findOldest() { return ok(expiredEntry); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { deleted = true; return ok(undefined); },
         async update() { return ok(undefined); },
@@ -4411,6 +4428,135 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('expired');
       expect(deleted).toBe(true);
+    });
+
+    it('returns failed retry result when terminal retry failure has locks to clean up', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      const created = await services.codeTaskRepo.create({
+        id: 'task-retry-terminal',
+        userId: 'test-user-id',
+        prompt: 'Retry terminal PR task',
+        sanitizedPrompt: 'Retry terminal PR task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'pending',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-retry-terminal',
+        prNumber: 55,
+      });
+      expect(created.ok).toBe(true);
+
+      const retryEntry: DispatchRetry = {
+        id: 'dr_terminal-1',
+        type: 'new_task',
+        eventId: 'event-terminal-1',
+        repository: 'test/repo',
+        pullRequestNumber: 55,
+        senderLogin: 'tester',
+        taskId: 'task-retry-terminal',
+        userId: 'test-user-id',
+        attempts: 0,
+        maxAttempts: 3,
+        lastError: 'Worker unavailable',
+        createdAt: Timestamp.now(),
+        ttlMinutes: 60,
+      };
+      let deleted = false;
+      const retryRepo: DispatchRetryRepository = {
+        async findOldest() { return ok(retryEntry); },
+        async claimForProcessing() { return ok(true); },
+        async create() { return ok({} as never); },
+        async delete() { deleted = true; return ok(undefined); },
+        async update() { return ok(undefined); },
+      };
+      const listQueuedSpy = vi.spyOn(services.codeTaskRepo, 'listQueuedByAge');
+      setServices({
+        ...services,
+        dispatchRetryRepo: retryRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('failed');
+      expect(body.data.taskId).toBe('task-retry-terminal');
+      expect(deleted).toBe(true);
+      expect(listQueuedSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 when retry queue drain fails before regular queue drain', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      const created = await services.codeTaskRepo.create({
+        id: 'task-retry-persist-failure',
+        userId: 'test-user-id',
+        prompt: 'Retry persistence failure task',
+        sanitizedPrompt: 'Retry persistence failure task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'pending',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-retry-persist-failure',
+      });
+      expect(created.ok).toBe(true);
+      const retryEntry: DispatchRetry = {
+        id: 'dr_persist-failure-1',
+        type: 'new_task',
+        eventId: 'event-persist-failure-1',
+        repository: 'test/repo',
+        pullRequestNumber: 10,
+        senderLogin: 'tester',
+        taskId: 'task-retry-persist-failure',
+        userId: 'test-user-id',
+        attempts: 0,
+        maxAttempts: 3,
+        lastError: 'Worker unavailable',
+        createdAt: Timestamp.now(),
+        ttlMinutes: 60,
+      };
+      const retryRepo: DispatchRetryRepository = {
+        async findOldest() { return ok(retryEntry); },
+        async claimForProcessing() { return ok(true); },
+        async create() { return ok({} as never); },
+        async delete() { return ok(undefined); },
+        async update() { return ok(undefined); },
+      };
+      const listQueuedSpy = vi.spyOn(services.codeTaskRepo, 'listQueuedByAge');
+      vi.spyOn(services.codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'task write failed' }),
+      );
+      setServices({
+        ...services,
+        dispatchRetryRepo: retryRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to persist retry dispatch failure status');
+      expect(listQueuedSpy).not.toHaveBeenCalled();
     });
 
     it('returns 500 when drain use case fails', async () => {

@@ -5,7 +5,7 @@
 /* eslint-disable */
 
 import type { Firestore, Query, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
-import { Timestamp } from '@google-cloud/firestore';
+import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { randomUUID } from 'node:crypto';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
@@ -88,8 +88,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
         {}, 'Failed to create task', true,
       );
     },
-    findById: (taskId) => guarded<CodeTask>(async () => {
-      const doc = await collection.doc(taskId).get();
+    findById: (taskId, options) => guarded<CodeTask>(async () => {
+      const docRef = collection.doc(taskId);
+      const doc = options?.transaction !== undefined
+        ? await options.transaction.get(docRef)
+        : await docRef.get();
       if (!doc.exists) return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
       return ok(fromFirestoreDoc(doc));
     }, { taskId }, 'Failed to find task by id', true),
@@ -268,7 +271,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const docRef = collection.doc(taskId);
         const snap = await txn.get(docRef);
         if (!snap.exists || snap.get('status') !== 'queued') return false;
-        txn.update(docRef, { status: 'dispatched', dispatchedAt: new Date() });
+        txn.update(docRef, {
+          status: 'dispatched',
+          dispatchedAt: new Date(),
+          dispatchStatus: FieldValue.delete(),
+        });
         return true;
       }),
       { taskId },

@@ -50,7 +50,7 @@ export const askAgentRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
                 data: {
                   type: 'object',
                   properties: {
-                    status: { type: 'string', enum: ['submitted'] },
+                    status: { type: 'string', enum: ['submitted', 'failed'] },
                     codeTaskId: { type: 'string' },
                   },
                   required: ['status', 'codeTaskId'],
@@ -103,7 +103,7 @@ export const askAgentRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
                   type: 'object',
                   required: ['code', 'message'],
                   properties: {
-                    code: { type: 'string', enum: ['MISCONFIGURED', 'QUEUE_FULL', 'WORKER_NOT_CONFIGURED'] },
+                    code: { type: 'string', enum: ['MISCONFIGURED'] },
                     message: { type: 'string' },
                   },
                 },
@@ -134,21 +134,19 @@ export const askAgentRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
           includeParams: true,
         });
 
-        const { codeTaskRepo, workerSettingsRepo, taskEnqueueService } = getServices();
+        const { codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier } = getServices();
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
         const result = await startAskAgent(
-          { logger: request.log, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
+          { logger: request.log, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
           { userId, prompt: request.body.prompt },
         );
 
         if (!result.ok) {
           const { error } = result;
-          if (error.code === 'worker_not_configured') return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
           if (error.code === 'duplicate_prompt') return await reply.fail('CONFLICT', error.message);
-          if (error.code === 'queue_full') return await reply.fail('QUEUE_FULL', error.message);
           return await reply.fail('INTERNAL_ERROR', error.message);
         }
 

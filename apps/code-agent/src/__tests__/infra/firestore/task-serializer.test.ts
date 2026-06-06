@@ -361,12 +361,14 @@ describe('buildUpdateData', () => {
       cancelNonceExpiresAt: null,
       implementationTaskId: null,
       fanOutChildTaskIds: null,
-    });
+      dispatchStatus: null,
+    } as UpdateTaskInput);
     expect(data['error']).toBeInstanceOf(FieldValue);
     expect(data['cancelNonce']).toBeInstanceOf(FieldValue);
     expect(data['cancelNonceExpiresAt']).toBeInstanceOf(FieldValue);
     expect(data['implementationTaskId']).toBeInstanceOf(FieldValue);
     expect(data['fanOutChildTaskIds']).toBeInstanceOf(FieldValue);
+    expect(data['dispatchStatus']).toBeInstanceOf(FieldValue);
   });
 
   it('passes non-null values through for nullable fields', () => {
@@ -376,12 +378,28 @@ describe('buildUpdateData', () => {
       cancelNonceExpiresAt: '2025-01-01',
       implementationTaskId: 'task_impl',
       fanOutChildTaskIds: ['task_a', 'task_b'],
-    });
+      dispatchStatus: {
+        state: 'waiting',
+        reason: 'workers_at_capacity',
+        terminal: false,
+        severity: 'warning',
+        message: 'All workers are busy.',
+        remediation: 'Wait for capacity.',
+        workerNames: ['home-dev'],
+        firstSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:00:00.000Z')),
+        lastSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:05:00.000Z')),
+        nextAction: 'will_retry_automatically',
+      },
+    } as UpdateTaskInput);
     expect(data['error']).toEqual({ code: 'X', message: 'oops' });
     expect(data['cancelNonce']).toBe('abcd');
     expect(data['cancelNonceExpiresAt']).toBe('2025-01-01');
     expect(data['implementationTaskId']).toBe('task_impl');
     expect(data['fanOutChildTaskIds']).toEqual(['task_a', 'task_b']);
+    expect(data['dispatchStatus']).toEqual(expect.objectContaining({
+      reason: 'workers_at_capacity',
+      nextAction: 'will_retry_automatically',
+    }));
   });
 
   it('sets every scalar field when provided', () => {

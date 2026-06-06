@@ -4,13 +4,14 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createFakeFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import type { Firestore } from '@google-cloud/firestore';
+import { Timestamp, type Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import { createFirestoreDispatchRetryRepository } from '../../../infra/firestore/dispatchRetryRepository.js';
 import type { CreateDispatchRetryInput } from '../../../domain/models/dispatchRetry.js';
 
 describe('FirestoreDispatchRetryRepository', () => {
   let repo: ReturnType<typeof createFirestoreDispatchRetryRepository>;
+  let fakeFirestore: Firestore;
 
   const sampleInput: CreateDispatchRetryInput = {
     type: 'new_task',
@@ -27,7 +28,7 @@ describe('FirestoreDispatchRetryRepository', () => {
   };
 
   beforeEach(() => {
-    const fakeFirestore = createFakeFirestore() as unknown as Firestore;
+    fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
     const logger = pino({ level: 'silent' });
     repo = createFirestoreDispatchRetryRepository({ logger });
@@ -123,6 +124,171 @@ describe('FirestoreDispatchRetryRepository', () => {
       if (findResult.value === null) return;
       expect(findResult.value.attempts).toBe(1);
       expect(findResult.value.lastError).toBe('network_error: timeout');
+    });
+  });
+
+  describe('claimForProcessing', () => {
+    it('claims an unprocessed retry entry and exposes processingStartedAt', async () => {
+      const createResult = await repo.create(sampleInput);
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const claimResult = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date(Date.now() - 5 * 60 * 1000),
+      );
+
+      expect(claimResult.ok).toBe(true);
+      if (!claimResult.ok) return;
+      expect(claimResult.value).toBe(true);
+
+      const findResult = await repo.findOldest();
+      expect(findResult.ok).toBe(true);
+      if (!findResult.ok || findResult.value === null) return;
+      expect(findResult.value.processingStartedAt).toBeDefined();
+    });
+
+    it('does not claim an entry that was processed recently', async () => {
+      const createResult = await repo.create(sampleInput);
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const firstClaim = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date(Date.now() - 5 * 60 * 1000),
+      );
+      expect(firstClaim.ok).toBe(true);
+
+      const secondClaim = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date(Date.now() - 5 * 60 * 1000),
+      );
+
+      expect(secondClaim.ok).toBe(true);
+      if (!secondClaim.ok) return;
+      expect(secondClaim.value).toBe(false);
+    });
+
+    it('reclaims an entry whose processing timestamp is stale', async () => {
+      const createResult = await repo.create(sampleInput);
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const updateResult = await repo.update(createResult.value.id, {
+        attempts: 1,
+        lastAttemptAt: new Date('2025-01-01T00:00:00Z'),
+        lastError: 'previous attempt',
+        processingStartedAt: new Date('2025-01-01T00:00:00Z'),
+      });
+      expect(updateResult.ok).toBe(true);
+
+      const claimResult = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date('2025-01-01T00:01:00Z'),
+      );
+
+      expect(claimResult.ok).toBe(true);
+      if (!claimResult.ok) return;
+      expect(claimResult.value).toBe(true);
+    });
+
+    it('handles Firestore Timestamp processing leases', async () => {
+      const createResult = await repo.create(sampleInput);
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      await fakeFirestore
+        .collection('dispatch_retries')
+        .doc(createResult.value.id)
+        .update({
+          processingStartedAt: Timestamp.fromDate(new Date('2025-01-01T00:00:00Z')),
+        });
+
+      const claimResult = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date('2025-01-01T00:01:00Z'),
+      );
+
+      expect(claimResult.ok).toBe(true);
+      if (!claimResult.ok) return;
+      expect(claimResult.value).toBe(true);
+    });
+
+    it('claims entries with invalid processing timestamps', async () => {
+      const createResult = await repo.create(sampleInput);
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      await fakeFirestore
+        .collection('dispatch_retries')
+        .doc(createResult.value.id)
+        .update({
+          processingStartedAt: { toDate: 'not-a-function' },
+        });
+
+      const claimResult = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date('2025-01-01T00:01:00Z'),
+      );
+
+      expect(claimResult.ok).toBe(true);
+      if (!claimResult.ok) return;
+      expect(claimResult.value).toBe(true);
+    });
+
+    it('claims entries when toDate does not return a Date', async () => {
+      const createResult = await repo.create(sampleInput);
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      await fakeFirestore
+        .collection('dispatch_retries')
+        .doc(createResult.value.id)
+        .update({
+          processingStartedAt: { toDate: () => 'not-a-date' },
+        });
+
+      const claimResult = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date('2025-01-01T00:01:00Z'),
+      );
+
+      expect(claimResult.ok).toBe(true);
+      if (!claimResult.ok) return;
+      expect(claimResult.value).toBe(true);
+    });
+
+    it('claims entries with primitive invalid processing timestamps', async () => {
+      const createResult = await repo.create(sampleInput);
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      await fakeFirestore
+        .collection('dispatch_retries')
+        .doc(createResult.value.id)
+        .update({
+          processingStartedAt: 'not-a-timestamp',
+        });
+
+      const claimResult = await repo.claimForProcessing(
+        createResult.value.id,
+        new Date('2025-01-01T00:01:00Z'),
+      );
+
+      expect(claimResult.ok).toBe(true);
+      if (!claimResult.ok) return;
+      expect(claimResult.value).toBe(true);
+    });
+
+    it('returns false when the retry entry is missing', async () => {
+      const claimResult = await repo.claimForProcessing(
+        'dr_missing',
+        new Date(Date.now() - 5 * 60 * 1000),
+      );
+
+      expect(claimResult.ok).toBe(true);
+      if (!claimResult.ok) return;
+      expect(claimResult.value).toBe(false);
     });
   });
 
@@ -242,6 +408,7 @@ describe('FirestoreDispatchRetryRepository', () => {
       expect(findResult.value.userId).toBe('user_456');
       expect(findResult.value.message).toBe('a message');
       expect(findResult.value.lastAttemptAt).toBeDefined();
+      expect(findResult.value.processingStartedAt).toBeUndefined();
     });
 
     it('findOldest omits optional fields when not present in stored data', async () => {

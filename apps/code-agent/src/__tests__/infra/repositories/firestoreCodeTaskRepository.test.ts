@@ -4091,6 +4091,20 @@ describe('firestoreCodeTaskRepository', () => {
       const created = await repo.create(createTaskInput({ id: 'task-claim' }));
       expect(created.ok).toBe(true);
       if (!created.ok) return;
+      await repo.update('task-claim', {
+        dispatchStatus: {
+          state: 'waiting',
+          reason: 'workers_unreachable',
+          terminal: false,
+          severity: 'warning',
+          message: 'Workers are temporarily unreachable.',
+          remediation: 'The scheduler will retry automatically.',
+          workerNames: ['home-mac'],
+          firstSeenAt: Timestamp.now(),
+          lastSeenAt: Timestamp.now(),
+          nextAction: 'will_retry_automatically',
+        },
+      });
 
       const result = await repo.claimForDispatch('task-claim');
 
@@ -4103,6 +4117,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!after.ok) return;
       expect(after.value.status).toBe('dispatched');
       expect(after.value.dispatchedAt).toBeDefined();
+      expect(after.value.dispatchStatus).toBeUndefined();
     });
 
     it('returns false when task is already dispatched', async () => {

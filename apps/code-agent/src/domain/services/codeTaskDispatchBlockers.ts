@@ -99,7 +99,11 @@ function blocker(
 }
 
 function hasRequiredAuth(auth: CodeTaskAuthRequirement, health: HealthyWorker['health']): boolean {
-  if (auth.kind === 'codex') return health.workerAuths.codex.status === 'active';
+  if (auth.kind === 'codex') {
+    const codexAuth = health.workerAuths.codex;
+    return codexAuth.status === 'active'
+      || (codexAuth.status === 'expired' && codexAuth.refreshSupported === true);
+  }
   if (auth.kind === 'claude') return health.workerAuths.claude.status === 'active';
   return health.providerApiKeys[auth.envVar]?.configured === true;
 }

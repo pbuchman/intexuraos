@@ -9,6 +9,7 @@ import type { Timestamp } from '@google-cloud/firestore';
 import type {
   AgentType,
   CodeTask,
+  CodeTaskDispatchStatus,
   DispatchSchedule,
   ExecutionMemoryContext,
   ExecutionMemoryPostRun,
@@ -40,6 +41,8 @@ export type ExecutionMemoryPostRunCreateInput = Omit<
 export type DispatchScheduleCreateInput = Omit<DispatchSchedule, 'notBeforeAt'> & {
   notBeforeAt: Date | Timestamp;
 };
+
+export type CodeTaskDispatchStatusCreateInput = CodeTaskDispatchStatus;
 
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
@@ -99,6 +102,7 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   result?: CodeTask['result'];
   error?: CodeTask['error'] | null;
+  dispatchStatus?: CodeTaskDispatchStatusCreateInput | null;
   statusSummary?: CodeTask['statusSummary'];
   workerLocation?: string;
   callbackReceived?: boolean;
@@ -171,7 +175,10 @@ export interface CodeTaskRepository {
    */
   create(input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>>;
 
-  findById(taskId: string): Promise<Result<CodeTask, RepositoryError>>;
+  findById(
+    taskId: string,
+    options?: { transaction?: FirebaseFirestore.Transaction }
+  ): Promise<Result<CodeTask, RepositoryError>>;
 
   findByIdForUser(
     taskId: string,

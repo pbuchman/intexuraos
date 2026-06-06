@@ -618,7 +618,7 @@ describe('WhatsAppNotifier', () => {
   });
 
   describe('notifyTaskDispatchBlocked', () => {
-    it('sends an actionable dispatch blocker notification with a queue link', async () => {
+    it('sends an actionable dispatch blocker notification with a task link when a task id is present', async () => {
       const notifier = createWhatsAppNotifier({
         ...createMockConfig(),
         webAppUrl: 'https://dev.intexuraos.cloud/',
@@ -641,8 +641,8 @@ describe('WhatsAppNotifier', () => {
         expect.objectContaining({
           userId: 'user-123',
           ctaUrl: {
-            displayText: 'View Dispatch Queue',
-            url: 'https://dev.intexuraos.cloud/#/code-tasks/dispatch-queue',
+            displayText: 'View Task',
+            url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',
           },
           important: true,
         })

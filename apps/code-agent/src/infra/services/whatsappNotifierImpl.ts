@@ -470,10 +470,13 @@ Please check worker availability and retry manually if needed.`;
       userId: string,
       info: TaskDispatchBlockedNotificationInfo
     ): Promise<Result<void, NotificationError>> {
+      const ctaUrl = info.exampleTaskId !== undefined
+        ? { displayText: 'View Task', url: buildTaskUrl(info.exampleTaskId, webAppUrl) }
+        : { displayText: 'View Dispatch Queue', url: buildDispatchQueueUrl(webAppUrl) };
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message: formatTaskDispatchBlockedMessage(info),
-        ctaUrl: { displayText: 'View Dispatch Queue', url: buildDispatchQueueUrl(webAppUrl) },
+        ctaUrl,
         important: true,
       });
 

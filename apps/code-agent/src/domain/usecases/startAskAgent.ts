@@ -11,6 +11,15 @@ import { randomUUID } from 'node:crypto';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
+import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
+import { classifyCodeTaskDispatchability } from '../services/codeTaskDispatchBlockers.js';
+import {
+  buildDispatchStatusForProblem,
+  dispatchFailureProblem,
+  dispatchProblemFromBlocker,
+  notifyDispatchProblemForTask,
+  taskErrorFromDispatchStatus,
+} from '../services/codeTaskDispatchProblems.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
@@ -21,14 +30,12 @@ export interface StartAskAgentRequest {
 }
 
 export interface StartAskAgentResult {
-  status: 'submitted';
+  status: 'submitted' | 'failed';
   codeTaskId: string;
 }
 
 export type StartAskAgentErrorCode =
-  | 'worker_not_configured'
   | 'duplicate_prompt'
-  | 'queue_full'
   | 'internal_error';
 
 export interface StartAskAgentError {
@@ -41,13 +48,14 @@ export interface StartAskAgentDeps {
   codeTaskRepo: CodeTaskRepository;
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
+  whatsappNotifier: WhatsAppNotifier;
 }
 
 export async function startAskAgent(
   deps: StartAskAgentDeps,
   request: StartAskAgentRequest,
 ): Promise<Result<StartAskAgentResult, StartAskAgentError>> {
-  const { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService } = deps;
+  const { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier } = deps;
   const { userId, prompt } = request;
 
   // 1. Sanitize prompt
@@ -95,7 +103,33 @@ export async function startAskAgent(
   const settingsResult = await workerSettingsRepo.getSettings(userId);
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
-    return err({ code: 'internal_error', message: 'Failed to fetch worker settings' });
+    const problem = dispatchFailureProblem({
+      message: 'Task could not be dispatched because worker settings could not be loaded.',
+      remediation: 'Retry this task after worker settings are available.',
+    });
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const updateResult = await codeTaskRepo.update(task.id, {
+      status: 'failed',
+      error: taskErrorFromDispatchStatus(dispatchStatus),
+      dispatchStatus,
+    });
+    if (!updateResult.ok) {
+      logger.error({ taskId: task.id, error: updateResult.error }, 'Failed to fail ask-agent task after worker settings lookup failed');
+      return err({ code: 'internal_error', message: 'Failed to persist dispatch failure status' });
+    }
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier,
+      codeTaskRepo,
+      logger,
+      affectedTaskCount: 1,
+    });
+    return ok({
+      status: 'failed',
+      codeTaskId: task.id,
+    });
   }
 
   const settings = settingsResult.value;
@@ -103,9 +137,34 @@ export async function startAskAgent(
 
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured for ask-agent');
-    return err({
-      code: 'worker_not_configured',
-      message: 'Please configure your workers in Settings before submitting tasks',
+    const dispatchability = classifyCodeTaskDispatchability({
+      workerType: task.workerType,
+      workers: enabledWorkers,
+      healthByWorkerName: {},
+    }) as Extract<ReturnType<typeof classifyCodeTaskDispatchability>, { dispatchable: false }>;
+    const problem = dispatchProblemFromBlocker(dispatchability);
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const updateResult = await codeTaskRepo.update(task.id, {
+      status: 'failed',
+      error: taskErrorFromDispatchStatus(dispatchStatus),
+      dispatchStatus,
+    });
+    if (!updateResult.ok) {
+      logger.error({ taskId: task.id, error: updateResult.error }, 'Failed to fail ask-agent task after no enabled workers');
+      return err({ code: 'internal_error', message: 'Failed to persist dispatch failure status' });
+    }
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier,
+      codeTaskRepo,
+      logger,
+      affectedTaskCount: 1,
+    });
+    return ok({
+      status: 'failed',
+      codeTaskId: task.id,
     });
   }
 
@@ -117,7 +176,10 @@ export async function startAskAgent(
 
   if (!enqueueResult.ok) {
     if (enqueueResult.error.code === 'queue_full') {
-      return err({ code: 'queue_full', message: enqueueResult.error.message });
+      return ok({
+        status: 'failed',
+        codeTaskId: task.id,
+      });
     }
     return err({ code: 'internal_error', message: enqueueResult.error.message });
   }

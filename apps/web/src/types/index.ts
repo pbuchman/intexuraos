@@ -932,10 +932,48 @@ export interface CodeTaskError {
   code: string;
   message: string;
   remediation?: {
+    action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';
     retryAfter?: number;
     manualSteps?: string;
     supportLink?: string;
   };
+}
+
+export type CodeTaskDispatchStatusReason =
+  | 'no_enabled_workers'
+  | 'workers_unreachable'
+  | 'workers_at_capacity'
+  | 'codex_auth_unavailable'
+  | 'claude_auth_unavailable'
+  | 'provider_auth_unavailable'
+  | 'docker_unavailable'
+  | 'disk_unavailable'
+  | 'unknown_worker_type'
+  | 'worker_unavailable'
+  | 'worker_busy'
+  | 'at_capacity'
+  | 'network_error'
+  | 'dispatch_failed'
+  | 'invalid_response'
+  | 'queue_full'
+  | 'queue_timeout'
+  | 'retry_expired'
+  | 'retry_exhausted'
+  | 'missing_pr_branch'
+  | 'scheduled_wait'
+  | 'active_task_blocked';
+
+export interface CodeTaskDispatchStatus {
+  state: 'waiting' | 'blocked' | 'terminal';
+  reason: CodeTaskDispatchStatusReason;
+  terminal: boolean;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  nextAction: 'will_retry_automatically' | 'retry_after_fix' | 'wait_until_scheduled' | 'wait_for_active_task';
 }
 
 export interface CodeTaskExecutionMemoryMatch {
@@ -1020,13 +1058,14 @@ export interface CodeTask {
     lastCommentAt: string | null;
   };
   prNumber?: number;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
   implementationTaskId?: string;
   fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'merge_conflict';
   result?: CodeTaskResult;
   error?: CodeTaskError;
+  dispatchStatus?: CodeTaskDispatchStatus;
   executionMemoryContext?: CodeTaskExecutionMemoryContext;
   executionMemoryPostRun?: CodeTaskExecutionMemoryPostRun;
   /**
@@ -1066,7 +1105,7 @@ export interface SubmitCodeTaskRequest {
  * Response from submitting a code task
  */
 export interface SubmitCodeTaskResponse {
-  status: 'submitted';
+  status: 'submitted' | 'failed';
   codeTaskId: string;
 }
 
@@ -1074,7 +1113,7 @@ export interface SubmitCodeTaskResponse {
  * Response from POST /code/ask-agent/start
  */
 export interface AskAgentStartResponse {
-  status: 'submitted';
+  status: 'submitted' | 'failed';
   codeTaskId: string;
 }
 

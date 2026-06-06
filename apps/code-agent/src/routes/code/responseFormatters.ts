@@ -4,7 +4,12 @@
  * Converts domain Firestore entities to JSON-serializable API responses.
  * Extracted from codeRoutes.ts as part of INT-1430 route split.
  */
-import type { AgentType, CodeTask, WorkerType } from '../../domain/models/codeTask.js';
+import type {
+  AgentType,
+  CodeTask,
+  CodeTaskDispatchStatus,
+  WorkerType,
+} from '../../domain/models/codeTask.js';
 import type { ExecutionMemoryType } from '../../domain/models/executionMemory.js';
 
 /**
@@ -82,11 +87,13 @@ function taskToApiResponse(task: {
     code: string;
     message: string;
     remediation?: {
+      action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';
       retryAfter?: number;
       manualSteps?: string;
       supportLink?: string;
     };
   };
+  dispatchStatus?: CodeTaskDispatchStatus;
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
   completedAt?: unknown;
@@ -136,10 +143,15 @@ function taskToApiResponse(task: {
     code: string;
     message: string;
     remediation?: {
+      action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';
       retryAfter?: number;
       manualSteps?: string;
       supportLink?: string;
     };
+  };
+  dispatchStatus?: Omit<CodeTaskDispatchStatus, 'firstSeenAt' | 'lastSeenAt' | 'notifiedReasons'> & {
+    firstSeenAt: string;
+    lastSeenAt: string;
   };
   executionMemoryContext?: {
     status: 'none' | 'matched' | 'error';
@@ -228,6 +240,9 @@ function taskToApiResponse(task: {
   const executionMemoryPostRun = task.executionMemoryPostRun !== undefined
     ? buildExecutionMemoryPostRun(task.executionMemoryPostRun)
     : undefined;
+  const dispatchStatus = task.dispatchStatus !== undefined
+    ? serializeDispatchStatus(task.dispatchStatus)
+    : undefined;
 
   return {
     id: task.id,
@@ -257,8 +272,29 @@ function taskToApiResponse(task: {
     ...(task.followUpReason !== undefined && { followUpReason: task.followUpReason }),
     ...(task.result !== undefined && { result: task.result }),
     ...(task.error !== undefined && { error: task.error }),
+    ...(dispatchStatus !== undefined && { dispatchStatus }),
     ...(executionMemoryContext !== undefined && { executionMemoryContext }),
     ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
+  };
+}
+
+function serializeDispatchStatus(
+  dispatchStatus: CodeTaskDispatchStatus,
+): Omit<CodeTaskDispatchStatus, 'firstSeenAt' | 'lastSeenAt' | 'notifiedReasons'> & {
+  firstSeenAt: string;
+  lastSeenAt: string;
+} {
+  return {
+    state: dispatchStatus.state,
+    reason: dispatchStatus.reason,
+    terminal: dispatchStatus.terminal,
+    severity: dispatchStatus.severity,
+    message: dispatchStatus.message,
+    remediation: dispatchStatus.remediation,
+    workerNames: dispatchStatus.workerNames,
+    firstSeenAt: timestampToIso(dispatchStatus.firstSeenAt) ?? '',
+    lastSeenAt: timestampToIso(dispatchStatus.lastSeenAt) ?? '',
+    nextAction: dispatchStatus.nextAction,
   };
 }
 
