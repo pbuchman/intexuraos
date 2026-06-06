@@ -25,6 +25,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     webhookVerifySecret: 'webhook',
     orchestratorSecret: 'orch',
     serviceUrl: 'http://code-agent',
+    codeTaskCallbackBaseUrl: 'http://callbacks',
     webAppUrl: 'https://dev.intexuraos.cloud',
     userServiceUrl: 'http://user-service',
     openRouterAppApiKey: '',
@@ -53,11 +54,14 @@ describe('initServices', () => {
     // Non-optional required properties
     expect(c.firestore).toBeDefined();
     expect(c.logger).toBeDefined();
+    expect(c.codeTaskCallbackBaseUrl).toBe('http://callbacks');
+    expect(c.codeTaskSystemStatusRepo).toBeDefined();
     expect(c.codeTaskRepo).toBeDefined();
     expect(c.logChunkRepo).toBeDefined();
     expect(c.logLineRepo).toBeDefined();
     expect(c.taskDispatcher).toBeDefined();
     expect(c.whatsappNotifier).toBeDefined();
+    expect(c.codeTaskDispatchStatusService).toBeDefined();
     expect(c.actionsAgentClient).toBeDefined();
     expect(c.linearAgentClient).toBeDefined();
     expect(c.linearIssueService).toBeDefined();

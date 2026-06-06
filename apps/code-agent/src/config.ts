@@ -39,6 +39,7 @@ export interface Config {
   tokenEncryptionKey: string;
   orchestratorSecret: string;
   serviceUrl: string;
+  codeTaskCallbackBaseUrl: string;
   webAppUrl: string;
   githubWebhookSecret: string;
   userServiceUrl: string;
@@ -71,6 +72,9 @@ export function loadConfig(): Config {
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? ''; // validated in REQUIRED_ENV
+  const codeTaskCallbackBaseUrl = (
+    process.env['INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL'] ?? serviceUrl
+  ).replace(/\/+$/, '');
   const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
   const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
   const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
@@ -97,6 +101,7 @@ export function loadConfig(): Config {
     webhookVerifySecret,
     orchestratorSecret,
     serviceUrl,
+    codeTaskCallbackBaseUrl,
     webAppUrl,
     tokenEncryptionKey,
     githubWebhookSecret,

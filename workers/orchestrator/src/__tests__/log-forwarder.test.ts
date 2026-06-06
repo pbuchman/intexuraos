@@ -191,6 +191,38 @@ describe('LogForwarder', () => {
       expect(capturedHeaders?.['X-Request-Signature']).toBe(expectedSignature);
     });
 
+    it('uses the task webhook base for task-scoped log uploads when provided', async () => {
+      let capturedUrl: string | undefined;
+
+      mockFetch.mockImplementation(async (url: string) => {
+        capturedUrl = url;
+        return {
+          ok: true,
+          json: async () => ({ received: true }),
+        } as Response;
+      });
+
+      const forwarder = new LogForwarder(
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+        mockLogger
+      );
+
+      const logFile = join(logBasePath, 'task-callback-base.log');
+      forwarder.registerTask(
+        'task-callback-base',
+        webhookSecret,
+        'https://intexuraos.cloud/internal/webhooks/task-complete'
+      );
+      forwarder.startForwarding('task-callback-base', logFile);
+
+      writeFileSync(logFile, 'Prod task content\n');
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await forwarder.stopForwarding('task-callback-base');
+
+      expect(capturedUrl).toBe('https://intexuraos.cloud/internal/logs');
+    });
+
     it('should include correct payload format', async () => {
       let capturedBody: string | undefined;
 

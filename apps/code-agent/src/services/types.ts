@@ -16,6 +16,7 @@ import type { LogChunkRepository } from '../domain/repositories/logChunkReposito
 import type { LogLineRepository } from '../domain/repositories/logLineRepository.js';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
+import type { CodeTaskDispatchStatusService } from '../domain/services/codeTaskDispatchStatusService.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
@@ -38,6 +39,7 @@ import type { WebhookRulesService } from '../domain/services/gitHubWebhookRules.
 import type { WebhookDispatchService } from '../domain/services/gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../domain/repositories/eventDecisionRepository.js';
 import type { DispatchRetryRepository } from '../domain/repositories/dispatchRetryRepository.js';
+import type { CodeTaskSystemStatusRepository } from '../domain/repositories/codeTaskSystemStatusRepository.js';
 import type { UnifiedEvaluator } from '../domain/services/unifiedEvaluator.js';
 import type { GitHubAgentError } from '../domain/usecases/githubAgent.js';
 import type {
@@ -57,6 +59,7 @@ export interface ServiceContainer {
   firestore: Firestore;
   logger: Logger;
   serviceUrl?: string;
+  codeTaskCallbackBaseUrl?: string;
   codeTaskRepo: CodeTaskRepository;
   logChunkRepo: LogChunkRepository;
   logLineRepo: LogLineRepository;
@@ -88,6 +91,7 @@ export interface ServiceContainer {
   // INT-744: Unified Webhook Evaluator
   eventDecisionRepo: EventDecisionRepository;
   dispatchRetryRepo: DispatchRetryRepository;
+  codeTaskSystemStatusRepo?: CodeTaskSystemStatusRepository;
   unifiedEvaluator: UnifiedEvaluator;
   prTriagePublisher: PRTriagePublisher;
   mergeConflictDetector: MergeConflictDetector;
@@ -98,9 +102,10 @@ export interface ServiceContainer {
   executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;
   executionMemoryEmbeddingClient?: EmbeddingClient;
   usageServiceClient?: UsageServiceClient;
-  // The two fields below are optional so existing `setServices({fakes})` call
+  // The fields below are optional so existing `setServices({fakes})` call
   // sites in tests don't need updating when these services are added to the
   // container. Production code paths always populate them via `initServices()`.
+  codeTaskDispatchStatusService?: CodeTaskDispatchStatusService;
   groupSummaryRepo?: TaskGroupSummaryRepository;
   createRemediationTaskFn?: (
     logger: Logger,
@@ -121,6 +126,7 @@ export interface ServiceConfig {
   webhookVerifySecret: string;
   orchestratorSecret: string;
   serviceUrl: string;
+  codeTaskCallbackBaseUrl: string;
   webAppUrl: string;
   userServiceUrl: string;
   // GitHub Agent (INT-743)

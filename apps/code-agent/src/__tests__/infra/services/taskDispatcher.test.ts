@@ -17,6 +17,25 @@ import { createTaskDispatcherService } from '../../../infra/services/taskDispatc
 import { generateNonce, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
 import { generateWebhookSecret } from '../../../domain/utils/secrets.js';
 
+const HEALTHY_WORKER_DETAILS = {
+  workerAuths: {
+    claude: { status: 'active' },
+    codex: { status: 'active' },
+  },
+  providerApiKeys: {
+    MINIMAX_API_KEY: { configured: true },
+    MIMO_API_KEY: { configured: true },
+    DASHSCOPE_API_KEY: { configured: true },
+    KIMI_API_KEY: { configured: true },
+    OPENROUTER_API_KEY: { configured: true },
+  },
+  dockerHealthy: true,
+  diskHealthy: true,
+} satisfies Pick<
+  Extract<WorkerHealthState, { _tag: 'healthy' }>,
+  'workerAuths' | 'providerApiKeys' | 'dockerHealthy' | 'diskHealthy'
+>;
+
 /**
  * Create a mock WorkerHealthProbe with optional overrides.
  * Default: all workers report healthy with 3 available slots.
@@ -32,6 +51,7 @@ function createMockHealthProbe(
       running: 2,
       available: 3,
       responseTimeMs: 50,
+      ...HEALTHY_WORKER_DETAILS,
     } satisfies WorkerHealthState),
     probeAllWorkers: vi.fn().mockImplementation(
       async (workers: WorkerSettingsConfig[]): Promise<Record<string, WorkerHealthState>> => {
@@ -44,6 +64,7 @@ function createMockHealthProbe(
             running: 2,
             available: 3,
             responseTimeMs: 50,
+            ...HEALTHY_WORKER_DETAILS,
           };
         }
         return results;
@@ -160,6 +181,7 @@ describe('taskDispatcherImpl', () => {
               running: 0,
               available: 5,
               responseTimeMs: 50,
+              ...HEALTHY_WORKER_DETAILS,
             },
           };
         }
@@ -470,6 +492,71 @@ describe('taskDispatcherImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('at_capacity');
       }
+    });
+
+    it('returns Codex auth blocker metadata before attempting worker dispatch', async () => {
+      const codexAuthUnavailable = {
+        ...HEALTHY_WORKER_DETAILS,
+        workerAuths: {
+          claude: { status: 'active' },
+          codex: { status: 'expired' },
+        },
+      } satisfies Pick<
+        Extract<WorkerHealthState, { _tag: 'healthy' }>,
+        'workerAuths' | 'providerApiKeys' | 'dockerHealthy' | 'diskHealthy'
+      >;
+      const mockProbe = createMockHealthProbe({
+        probeAllWorkers: vi.fn().mockResolvedValue({
+          'home-mac': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 0,
+            available: 5,
+            responseTimeMs: 50,
+            ...codexAuthUnavailable,
+          },
+          'cloud-vm': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 0,
+            available: 5,
+            responseTimeMs: 50,
+            ...codexAuthUnavailable,
+          },
+        } satisfies Record<string, WorkerHealthState>),
+      });
+      const service = createTaskDispatcherService({
+        ...baseDeps,
+        workerHealthProbe: mockProbe,
+      });
+
+      const result = await service.dispatch({
+        taskId: 'task-codex-auth',
+        prompt: 'Test codex auth',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'codex-xhigh',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          code: 'worker_unavailable',
+          blocker: {
+            reason: 'codex_auth_unavailable',
+            workerNames: ['home-mac', 'cloud-vm'],
+          },
+        });
+      }
+      expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
     });
 
     it('returns error when worker rejects task', async () => {
@@ -1392,7 +1479,10 @@ describe('taskDispatcherImpl', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('worker_unavailable');
-        expect(result.error.message).toContain('No workers configured for this user');
+        expect(result.error).toMatchObject({
+          message: 'No enabled code-task workers are configured for opus.',
+          blocker: { reason: 'no_enabled_workers' },
+        });
       }
     });
 
@@ -1693,6 +1783,7 @@ describe('taskDispatcherImpl', () => {
             running: 4,
             available: 1,
             responseTimeMs: 50,
+            ...HEALTHY_WORKER_DETAILS,
           },
           'cloud-vm': {
             _tag: 'healthy',
@@ -1701,6 +1792,7 @@ describe('taskDispatcherImpl', () => {
             running: 1,
             available: 4,
             responseTimeMs: 50,
+            ...HEALTHY_WORKER_DETAILS,
           },
         } satisfies Record<string, WorkerHealthState>),
       });
@@ -1751,6 +1843,7 @@ describe('taskDispatcherImpl', () => {
             running: 2,
             available: 3,
             responseTimeMs: 50,
+            ...HEALTHY_WORKER_DETAILS,
           },
           'cloud-vm': {
             _tag: 'healthy',
@@ -1759,6 +1852,7 @@ describe('taskDispatcherImpl', () => {
             running: 2,
             available: 3,
             responseTimeMs: 50,
+            ...HEALTHY_WORKER_DETAILS,
           },
         } satisfies Record<string, WorkerHealthState>),
       });
@@ -1810,6 +1904,7 @@ describe('taskDispatcherImpl', () => {
             running: 1,
             available: 4,
             responseTimeMs: 50,
+            ...HEALTHY_WORKER_DETAILS,
           },
         } satisfies Record<string, WorkerHealthState>),
       });
@@ -1888,7 +1983,10 @@ describe('taskDispatcherImpl', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('worker_unavailable');
-        expect(result.error.message).toBe('All worker health probes failed');
+        expect(result.error).toMatchObject({
+          message: 'No configured workers are reachable for opus.',
+          blocker: { reason: 'workers_unreachable', workerNames: ['home-mac', 'cloud-vm'] },
+        });
       }
 
       // No dispatch attempt should be made
@@ -1917,6 +2015,7 @@ describe('taskDispatcherImpl', () => {
             running: 0,
             available: 3,
             responseTimeMs: 30,
+            ...HEALTHY_WORKER_DETAILS,
           },
         } satisfies Record<string, WorkerHealthState>),
       });

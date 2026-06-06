@@ -96,7 +96,11 @@ describe('Routes', () => {
       mockLogger,
       undefined,
       workerAuthRegistry,
-      isolationProvider
+      isolationProvider,
+      {
+        MINIMAX_API_KEY: { configured: true },
+        DASHSCOPE_API_KEY: { configured: false },
+      }
     );
     await app.ready();
   });
@@ -733,6 +737,10 @@ describe('Routes', () => {
         status: 'active',
         authMode: 'chatgpt',
         refreshSupported: true,
+      });
+      expect(json.providerApiKeys).toEqual({
+        MINIMAX_API_KEY: { configured: true },
+        DASHSCOPE_API_KEY: { configured: false },
       });
     });
 

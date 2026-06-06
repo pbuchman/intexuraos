@@ -1360,6 +1360,7 @@ export class CompletionPipeline {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
       completedAt: task.completedAt !== undefined ? new Date(task.completedAt) : new Date(),
       /* v8 ignore stop @preserve */
+      webhookUrl: task.webhookUrl,
       ...(payload.error !== undefined && {
         error: { code: payload.error.code, message: payload.error.message },
       }),

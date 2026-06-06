@@ -2,6 +2,7 @@ import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import { loadConfig } from '../../config.js';
+import { buildTaskCompleteWebhookUrl } from '../../domain/services/codeTaskCallbackUrls.js';
 import { GET_TASK_DISPATCH_METADATA_SCHEMA } from './schemas.js';
 
 /**
@@ -26,7 +27,7 @@ export const taskAdminRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
       }
 
       const { taskId } = request.params;
-      const { codeTaskRepo, serviceUrl } = getServices();
+      const { codeTaskRepo, codeTaskCallbackBaseUrl } = getServices();
 
       const findResult = await codeTaskRepo.findById(taskId);
       if (!findResult.ok) {
@@ -46,7 +47,7 @@ export const taskAdminRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
         linearIssueId: task.linearIssueId ?? null,
         webhookSecret: task.webhookSecret ?? null,
         prNumber: task.prNumber ?? null,
-        webhookUrl: `${serviceUrl ?? loadConfig().serviceUrl}/internal/webhooks/task-complete`,
+        webhookUrl: buildTaskCompleteWebhookUrl(codeTaskCallbackBaseUrl ?? loadConfig().codeTaskCallbackBaseUrl),
         continuationPrBranch: task.prBranch ?? null,
         trackingCommentId: task.trackingCommentId ?? null,
       });

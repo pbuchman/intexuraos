@@ -172,6 +172,7 @@ HEADER
   write_env_line "${output_path}" "INTEXURAOS_PUBLIC_ORIGIN" "${PUBLIC_ORIGIN}"
   write_env_line "${output_path}" "INTEXURAOS_WEB_APP_URL" "${PUBLIC_ORIGIN}"
   write_env_line "${output_path}" "INTEXURAOS_WEB_URL" "${PUBLIC_ORIGIN}"
+  write_env_line "${output_path}" "INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL" "${PUBLIC_ORIGIN}"
   write_env_line "${output_path}" "NODE_ENV" "production"
 }
 

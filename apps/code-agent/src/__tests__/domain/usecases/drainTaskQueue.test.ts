@@ -20,6 +20,7 @@ import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type { CodeTaskDispatchStatusService } from '../../../domain/services/codeTaskDispatchStatusService.js';
 import {
   drainTaskQueue,
   _resetDrainGuard,
@@ -62,10 +63,12 @@ vi.mock('../../../config.js', () => ({
   loadConfig: (): {
     queue: { maxSize: number; ttlMinutes: number };
     serviceUrl: string;
+    codeTaskCallbackBaseUrl: string;
     executionMemoryEnabled: boolean;
   } => ({
     queue: { maxSize: 50, ttlMinutes: 1440 },
     serviceUrl: 'https://code-agent.test',
+    codeTaskCallbackBaseUrl: 'https://callback.test',
     executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
 }));
@@ -107,6 +110,7 @@ describe('drainTaskQueue', () => {
   let mockTaskEnqueueService: {
     enqueue: ReturnType<typeof vi.fn>;
   };
+  let mockDispatchStatusService: CodeTaskDispatchStatusService;
   let mockUserServiceClient: {
     getLlmClient: ReturnType<typeof vi.fn>;
   };
@@ -165,6 +169,11 @@ describe('drainTaskQueue', () => {
       enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 0 })),
     };
 
+    mockDispatchStatusService = {
+      recordDispatchBlocked: vi.fn().mockResolvedValue(undefined),
+      resolveDispatchBlockers: vi.fn().mockResolvedValue(undefined),
+    };
+
     mockUserServiceClient = {
       getLlmClient: vi.fn().mockResolvedValue(ok({ generate: vi.fn() })),
     };
@@ -216,6 +225,7 @@ describe('drainTaskQueue', () => {
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainTaskQueueDeps['workerSettingsRepo'],
       taskEnqueueService: mockTaskEnqueueService as unknown as DrainTaskQueueDeps['taskEnqueueService'],
       orchestratorSecret: 'test-orchestrator-secret',
+      codeTaskDispatchStatusService: mockDispatchStatusService,
       userServiceClient: mockUserServiceClient as never,
     };
   }
@@ -870,6 +880,41 @@ describe('drainTaskQueue', () => {
     }
   });
 
+  it('records a dispatch system status when user has no enabled workers', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings([{ ...workerConfig, enabled: false }]);
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockDispatchStatusService.recordDispatchBlocked).toHaveBeenCalledWith({
+      userId: 'user-456',
+      workerType: 'auto',
+      blocker: expect.objectContaining({
+        dispatchable: false,
+        reason: 'no_enabled_workers',
+      }),
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-123'],
+    });
+  });
+
+  it('keeps queued task busy when no enabled workers exist and dispatch status service is omitted', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings([{ ...workerConfig, enabled: false }]);
+    const deps = createDeps();
+    delete (deps as Partial<DrainTaskQueueDeps>).codeTaskDispatchStatusService;
+
+    const result = await drainTaskQueue(deps);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'still_busy', taskId: 'task-123' });
+    }
+    expect(mockDispatchStatusService.recordDispatchBlocked).not.toHaveBeenCalled();
+  });
+
   it('returns still_busy when dispatch fails (workers busy)', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -887,6 +932,35 @@ describe('drainTaskQueue', () => {
     if (result.ok) {
       expect(result.value).toEqual({ action: 'still_busy', taskId: 'task-123' });
     }
+  });
+
+  it('records dispatch system status when dispatcher returns blocker metadata', async () => {
+    const task = createMockTask({ workerType: 'codex-xhigh' });
+    const blocker = {
+      dispatchable: false as const,
+      reason: 'codex_auth_unavailable' as const,
+      severity: 'critical' as const,
+      message: 'No reachable worker has active Codex auth for codex-xhigh.',
+      remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+      workerNames: ['home-mac'],
+    };
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      err({ code: 'worker_unavailable', message: blocker.message, blocker })
+    );
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockDispatchStatusService.recordDispatchBlocked).toHaveBeenCalledWith({
+      userId: 'user-456',
+      workerType: 'codex-xhigh',
+      blocker,
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-123'],
+    });
   });
 
   it('fails task when dispatch returns permanent error', async () => {
@@ -979,6 +1053,31 @@ describe('drainTaskQueue', () => {
 
     // Verify notification sent
     expect(mockWhatsappNotifier.notifyTaskStarted).toHaveBeenCalledWith('user-456', updatedTask);
+    expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith({
+      userId: 'user-456',
+      workerType: 'auto',
+    });
+  });
+
+  it('dispatches successfully when dispatch status service is omitted', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched', workerLocation: 'home-mac' })));
+    const deps = createDeps();
+    delete (deps as Partial<DrainTaskQueueDeps>).codeTaskDispatchStatusService;
+
+    const result = await drainTaskQueue(deps);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+    }
+    expect(mockDispatchStatusService.resolveDispatchBlockers).not.toHaveBeenCalled();
   });
 
   it('dispatches with correct webhook URL and task fields', async () => {
@@ -1000,7 +1099,7 @@ describe('drainTaskQueue', () => {
       repository: 'pbuchman/intexuraos',
       baseBranch: 'development',
       workerType: 'auto',
-      webhookUrl: 'https://code-agent.test/internal/webhooks/task-complete',
+      webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
       webhookSecret: 'webhook-secret-123',
       traceId: 'trace-789',
       workerCredentials: {

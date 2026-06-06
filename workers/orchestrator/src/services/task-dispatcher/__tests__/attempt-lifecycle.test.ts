@@ -74,6 +74,11 @@ describe('AttemptLifecycle', () => {
       };
       await al.executeTaskSetup(request, () => 'pbuchman/intexuraos');
       expect(worktreeManager.createWorktree).toHaveBeenCalled();
+      expect(harness.ctx.logForwarder.registerTask).toHaveBeenCalledWith(
+        'setup-1',
+        'sec',
+        'http://wh'
+      );
       expect(harness.ctx.startWorkerAttempt).toHaveBeenCalled();
       // INT-1585: timers are now invoked with the per-task `task.timeoutMs`
       // override (undefined here because no timeoutHours was supplied).

@@ -231,6 +231,12 @@ describe('codeRoutes branch coverage', () => {
         async delete() { return ok(undefined); },
         async update() { return ok(undefined); },
       },
+      codeTaskSystemStatusRepo: {
+        upsertActive: vi.fn().mockResolvedValue(ok({} as never)),
+        listActiveForUser: vi.fn().mockResolvedValue(ok([])),
+        resolveActive: vi.fn().mockResolvedValue(ok(0)),
+        markNotified: vi.fn().mockResolvedValue(ok(undefined)),
+      },
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
       taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,

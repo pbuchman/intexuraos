@@ -123,7 +123,7 @@ locals {
       schedule             = "*/5 * * * *"
       time_zone            = "UTC"
       path                 = "/internal/code/detect-zombies"
-      body                 = base64encode("{}")
+      body                 = null
       headers              = {}
       retry_count          = 1
       max_retry_duration   = "60s"

@@ -32,6 +32,7 @@ describe('createRepositoryServices', () => {
     const repos = createRepositoryServices({ firestore, logger });
 
     expect(repos.groupSummaryRepo).toBeDefined();
+    expect(repos.codeTaskSystemStatusRepo).toBeDefined();
     expect(repos.codeTaskRepo).toBeDefined();
     expect(repos.logChunkRepo).toBeDefined();
     expect(repos.logLineRepo).toBeDefined();

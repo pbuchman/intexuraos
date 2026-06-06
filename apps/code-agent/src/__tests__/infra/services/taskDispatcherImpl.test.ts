@@ -9,9 +9,28 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 import type { TaskDispatcherDeps } from '../../../domain/services/taskDispatcher.js';
+import type { WorkerHealthState } from '../../../domain/models/workerSettings.js';
 import type { Logger } from '@intexuraos/common-core';
 
 const WORKER_URL = 'https://test-worker.example.com';
+const HEALTHY_WORKER_DETAILS = {
+  workerAuths: {
+    claude: { status: 'active' },
+    codex: { status: 'active' },
+  },
+  providerApiKeys: {
+    MINIMAX_API_KEY: { configured: true },
+    MIMO_API_KEY: { configured: true },
+    DASHSCOPE_API_KEY: { configured: true },
+    KIMI_API_KEY: { configured: true },
+    OPENROUTER_API_KEY: { configured: true },
+  },
+  dockerHealthy: true,
+  diskHealthy: true,
+} satisfies Pick<
+  Extract<WorkerHealthState, { _tag: 'healthy' }>,
+  'workerAuths' | 'providerApiKeys' | 'dockerHealthy' | 'diskHealthy'
+>;
 
 const workerCredentials = {
   url: WORKER_URL,
@@ -289,6 +308,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
       });
 
@@ -340,6 +360,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
       });
 
@@ -392,6 +413,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
       });
 
@@ -445,6 +467,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
       });
 
@@ -486,6 +509,71 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
+  describe('dispatch blocker metadata', () => {
+    const baseRequest = {
+      taskId: 'task-blocked',
+      prompt: 'Fix CI',
+      systemPromptHash: 'hash-123',
+      repository: 'test/repo',
+      baseBranch: 'main',
+      workerType: 'opus' as const,
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret',
+      linearIssueLabels: [],
+      hasChildren: false,
+    };
+
+    it('returns a no-enabled-workers blocker when no worker credentials are configured', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      const result = await service.dispatch({
+        ...baseRequest,
+        workerCredentials: { workers: [] },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.blocker?.reason).toBe('no_enabled_workers');
+      }
+    });
+
+    it('returns at_capacity when every capable worker is full', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 2,
+          available: 0,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      const result = await service.dispatch({
+        ...baseRequest,
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('at_capacity');
+        expect(result.error.blocker?.reason).toBe('workers_at_capacity');
+      }
+    });
+  });
+
   describe('failedWorkerLocation filtering', () => {
     const WORKER_B_URL = 'https://worker-b.example.com';
 
@@ -511,6 +599,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
         'worker-b': {
           _tag: 'healthy',
@@ -519,6 +608,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
       });
 
@@ -569,6 +659,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
       });
 
@@ -611,6 +702,7 @@ describe('taskDispatcherImpl', () => {
           running: 0,
           available: 2,
           responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
         },
       });
 

@@ -7,6 +7,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { CodeTask, TaskError } from '../models/codeTask.js';
+import type { CodeTaskDispatchBlockerReason } from './codeTaskDispatchBlockers.js';
 
 /**
  * Possible errors during notification sending.
@@ -14,6 +15,16 @@ import type { CodeTask, TaskError } from '../models/codeTask.js';
 export interface NotificationError {
   code: 'notification_failed';
   message?: string;
+}
+
+export interface TaskDispatchBlockedNotificationInfo {
+  readonly workerType: string;
+  readonly reason: CodeTaskDispatchBlockerReason;
+  readonly affectedTaskCount: number;
+  readonly exampleTaskId?: string;
+  readonly message: string;
+  readonly remediation: string;
+  readonly workerNames: readonly string[];
 }
 
 /**
@@ -138,6 +149,18 @@ export interface WhatsAppNotifier {
   notifyDispatchRetryExhausted(
     userId: string,
     info: { repository: string; pullRequestNumber: number; lastError: string }
+  ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when code tasks cannot be dispatched to any capable worker.
+   *
+   * @param userId - User ID to send notification to
+   * @param info - Dispatch blocker details for the affected worker type
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskDispatchBlocked(
+    userId: string,
+    info: TaskDispatchBlockedNotificationInfo
   ): Promise<Result<void, NotificationError>>;
 
   /**

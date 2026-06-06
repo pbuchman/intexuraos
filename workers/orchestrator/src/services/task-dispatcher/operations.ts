@@ -74,7 +74,7 @@ export async function adoptTask(
   }
 
   // Register with log forwarder
-  ctx.logForwarder.registerTask(task.taskId, task.webhookSecret);
+  ctx.logForwarder.registerTask(task.taskId, task.webhookSecret, task.webhookUrl);
 
   // Start worker attempt with continueSession: true
   const startResult = await ctx.startWorkerAttempt(task, {
@@ -276,7 +276,7 @@ export async function sendMessage(
     // Register secret BEFORE any appendOrchestratorTaskLog calls, because
     // appendChunk creates a ForwardingState that captures the webhook secret
     // at creation time and never refreshes it.
-    ctx.logForwarder.registerTask(taskId, task.webhookSecret);
+    ctx.logForwarder.registerTask(taskId, task.webhookSecret, task.webhookUrl);
 
     ctx.appendOrchestratorTaskLog(taskId, 'Resuming task with user message');
     /* v8 ignore start -- source-map: ternary inside function argument misattributed by v8; truncation branch covered by test but not tracked by coverage @preserve */

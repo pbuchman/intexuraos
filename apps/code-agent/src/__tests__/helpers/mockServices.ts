@@ -12,6 +12,7 @@ import { createFirestoreLogChunkRepository } from '../../infra/firestore/firesto
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
+import { createCodeTaskDispatchStatusService } from '../../domain/services/codeTaskDispatchStatusService.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { ok, err } from '@intexuraos/common-core';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
@@ -39,6 +40,7 @@ import { createWebhookMessageBuilder } from '../../domain/services/gitHubMessage
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from '../../routes/webhooks/github.js';
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
 import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/dispatchRetryRepository.js';
+import { createFirestoreCodeTaskSystemStatusRepository } from '../../infra/firestore/codeTaskSystemStatusRepository.js';
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 import { createTaskEnqueueService } from '../../infra/services/taskEnqueueServiceImpl.js';
@@ -80,6 +82,19 @@ export const mockWorkerHealthProbe: WorkerHealthProbe = {
       capacity: 1,
       running: 0,
       available: 1,
+      workerAuths: {
+        claude: { status: 'active' },
+        codex: { status: 'active' },
+      },
+      providerApiKeys: {
+        MINIMAX_API_KEY: { configured: true },
+        MIMO_API_KEY: { configured: true },
+        DASHSCOPE_API_KEY: { configured: true },
+        KIMI_API_KEY: { configured: true },
+        OPENROUTER_API_KEY: { configured: true },
+      },
+      dockerHealthy: true,
+      diskHealthy: true,
       responseTimeMs: 50,
     };
   },
@@ -182,11 +197,18 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     logger,
     codeTaskRepo,
   });
+  const codeTaskSystemStatusRepo = createFirestoreCodeTaskSystemStatusRepository({ firestore: fakeFirestore, logger });
+  const codeTaskDispatchStatusService = createCodeTaskDispatchStatusService({
+    statusRepo: codeTaskSystemStatusRepo,
+    whatsappNotifier,
+    logger,
+  });
 
   const container: ServiceContainer = {
     firestore: fakeFirestore,
     logger,
     serviceUrl: 'http://localhost:8080',
+    codeTaskCallbackBaseUrl: 'http://localhost:8080',
     codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({
       firestore: fakeFirestore,
@@ -201,6 +223,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       workerHealthProbe: mockWorkerHealthProbe,
     }),
     whatsappNotifier,
+    codeTaskDispatchStatusService,
     actionsAgentClient,
     linearAgentClient,
     statusMirrorService: createStatusMirrorService({
@@ -268,6 +291,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     dispatchService: dispatchService,
     eventDecisionRepo: eventDecisionRepo,
     dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
+    codeTaskSystemStatusRepo,
     unifiedEvaluator: createUnifiedEvaluator({
       webhookRules,
       dispatchService,

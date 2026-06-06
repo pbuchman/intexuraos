@@ -6,7 +6,7 @@ import type { IsolationProvider } from './services/isolation/types.js';
 import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
 import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
-import type { CreateTaskRequest } from './types/api.js';
+import type { CreateTaskRequest, ProviderApiKeyHealth } from './types/api.js';
 import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
 
 interface TaskParams {
@@ -57,7 +57,8 @@ export function registerRoutes(
   logger: Logger,
   getStatus?: () => OrchestratorStatus,
   workerAuthRegistry?: WorkerAuthRegistry,
-  isolationProvider?: IsolationProvider
+  isolationProvider?: IsolationProvider,
+  providerApiKeys: Record<string, ProviderApiKeyHealth> = {}
 ): void {
   const nonceCache: NonceCache = {};
 
@@ -321,6 +322,7 @@ export function registerRoutes(
       available: capacity - running,
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
       workerAuths,
+      providerApiKeys,
       dockerHealthy: healthDetails.docker,
       diskHealthy: healthDetails.disk,
     });

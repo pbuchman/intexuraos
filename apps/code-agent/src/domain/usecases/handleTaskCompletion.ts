@@ -892,6 +892,11 @@ export async function handleTaskCompletion(
             linearAgentClient: services.linearAgentClient,
             whatsappNotifier: services.whatsappNotifier,
             workerSettingsRepo: services.workerSettingsRepo,
+            /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchStatusService @preserve */
+            ...(services.codeTaskDispatchStatusService !== undefined && {
+              codeTaskDispatchStatusService: services.codeTaskDispatchStatusService,
+            }),
+            /* v8 ignore stop @preserve */
             taskEnqueueService: services.taskEnqueueService,
             orchestratorSecret: loadConfig().orchestratorSecret,
             executionMemory: {

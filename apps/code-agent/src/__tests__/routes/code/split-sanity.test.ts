@@ -101,6 +101,7 @@ describe('routes/code split (INT-1430) sanity', () => {
       'POST /internal/code/submit-phase2',
       // queue-routes
       'GET /queue',
+      'GET /system-status',
       'POST /internal/drain-queue',
       // ask-agent-routes
       'POST /ask-agent/start',

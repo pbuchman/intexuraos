@@ -249,10 +249,16 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
 
   it('falls back to configured serviceUrl when services do not provide one', async () => {
     process.env['INTEXURAOS_SERVICE_URL'] = 'https://configured-code-agent.example';
+    process.env['INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL'] =
+      'https://configured-callbacks.example';
 
     const services = getServices();
-    const { serviceUrl: _unusedServiceUrl, ...servicesWithoutServiceUrl } = services;
-    setServices(servicesWithoutServiceUrl);
+    const {
+      serviceUrl: _unusedServiceUrl,
+      codeTaskCallbackBaseUrl: _unusedCallbackBaseUrl,
+      ...servicesWithoutUrls
+    } = services;
+    setServices(servicesWithoutUrls);
 
     const task = await createTask();
 
@@ -266,7 +272,31 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
 
     const body = JSON.parse(response.body) as { webhookUrl: string };
     expect(body.webhookUrl).toBe(
-      'https://configured-code-agent.example/internal/webhooks/task-complete'
+      'https://configured-callbacks.example/internal/webhooks/task-complete'
+    );
+  });
+
+  it('uses service callback base over public serviceUrl when both are configured', async () => {
+    const services = getServices();
+    setServices({
+      ...services,
+      serviceUrl: 'https://intexuraos.cloud/api/code',
+      codeTaskCallbackBaseUrl: 'https://intexuraos.cloud',
+    });
+
+    const task = await createTask();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/tasks/${task.id}/dispatch-metadata`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = JSON.parse(response.body) as { webhookUrl: string };
+    expect(body.webhookUrl).toBe(
+      'https://intexuraos.cloud/internal/webhooks/task-complete'
     );
   });
 });
