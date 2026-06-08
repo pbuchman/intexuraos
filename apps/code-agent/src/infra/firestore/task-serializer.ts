@@ -271,6 +271,10 @@ export function buildUpdateData(input: UpdateTaskInput): Record<string, unknown>
   if (input.error !== undefined) {
     updateData['error'] = input.error === null ? FieldValue.delete() : input.error;
   }
+  if (input.dispatchStatus !== undefined) {
+    updateData['dispatchStatus'] =
+      input.dispatchStatus === null ? FieldValue.delete() : input.dispatchStatus;
+  }
   if (input.statusSummary !== undefined) {
     updateData['statusSummary'] = input.statusSummary;
   }

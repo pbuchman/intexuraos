@@ -30,6 +30,15 @@ export interface DispatchRetryRepository {
   >;
 
   /**
+   * Claim a retry entry for processing across scheduler replicas.
+   * Returns false when the entry is missing or already claimed recently.
+   */
+  claimForProcessing(
+    id: string,
+    staleBefore: Date,
+  ): Promise<Result<boolean, DispatchRetryRepositoryError>>;
+
+  /**
    * Delete a retry entry by ID.
    */
   delete(
@@ -45,6 +54,7 @@ export interface DispatchRetryRepository {
       attempts: number;
       lastAttemptAt: Date;
       lastError: string;
+      processingStartedAt?: Date | null;
     },
   ): Promise<Result<void, DispatchRetryRepositoryError>>;
 }

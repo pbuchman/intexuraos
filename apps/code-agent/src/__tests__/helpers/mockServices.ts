@@ -163,6 +163,9 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     taskEnqueueService: createTaskEnqueueService({
       logger,
       codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
+      whatsappNotifier: createWhatsAppNotifier({
+        whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
+      }),
     }),
     whatsappNotifier: createWhatsAppNotifier({
       whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
@@ -196,11 +199,11 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
   const taskEnqueueService = createTaskEnqueueService({
     logger,
     codeTaskRepo,
+    whatsappNotifier,
   });
   const codeTaskSystemStatusRepo = createFirestoreCodeTaskSystemStatusRepository({ firestore: fakeFirestore, logger });
   const codeTaskDispatchStatusService = createCodeTaskDispatchStatusService({
     statusRepo: codeTaskSystemStatusRepo,
-    whatsappNotifier,
     logger,
   });
 

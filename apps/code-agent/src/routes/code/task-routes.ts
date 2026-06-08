@@ -33,9 +33,18 @@ import { loadConfig } from '../../config.js';
 import type { TaskStatus, WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerConfig, WorkerHealthState, WorkerHealthStatus } from '../../domain/models/workerSettings.js';
 import type { DispatchScheduleCreateInput } from '../../domain/repositories/codeTaskRepository.js';
+import { classifyCodeTaskDispatchability } from '../../domain/services/codeTaskDispatchBlockers.js';
+import {
+  buildDispatchStatusForProblem,
+  dispatchFailureProblem,
+  dispatchProblemFromBlocker,
+  notifyDispatchProblemForTask,
+  taskErrorFromDispatchStatus,
+} from '../../domain/services/codeTaskDispatchProblems.js';
 import { taskToApiResponse, inFlightRequests } from './responseFormatters.js';
 import {
   codeTaskSchema,
+  dispatchStatusSchema,
   linearIssueForDisplaySchema,
   workerTypeSchema,
   executionMemoryContextSchema,
@@ -1457,7 +1466,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 data: {
                   type: 'object',
                   properties: {
-                    status: { type: 'string', enum: ['submitted'] },
+                    status: { type: 'string', enum: ['submitted', 'failed'] },
                     codeTaskId: { type: 'string' },
                   },
                   required: ['status', 'codeTaskId'],
@@ -1573,7 +1582,15 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           includeParams: true,
         });
 
-        const { codeTaskRepo, linearIssueService, workerSettingsRepo, taskEnqueueService } = getServices();
+        const {
+          codeTaskRepo,
+          linearIssueService,
+          workerSettingsRepo,
+          taskEnqueueService,
+          whatsappNotifier,
+          codeTaskDispatchStatusService,
+          logger: serviceLogger,
+        } = getServices();
         const body = request.body as {
           prompt: string;
           workerType?: WorkerType;
@@ -1710,7 +1727,33 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const settingsResult = await workerSettingsRepo.getSettings(userId);
         if (!settingsResult.ok) {
           request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
-          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch worker settings');
+          const problem = dispatchFailureProblem({
+            message: 'Task could not be dispatched because worker settings could not be loaded.',
+            remediation: 'Retry this task after worker settings are available.',
+          });
+          const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+          const failUpdate = await codeTaskRepo.update(task.id, {
+            status: 'failed',
+            error: taskErrorFromDispatchStatus(dispatchStatus),
+            dispatchStatus,
+          });
+          if (!failUpdate.ok) {
+            request.log.error({ taskId: task.id, error: failUpdate.error }, 'Failed to mark task failed after worker settings lookup failed');
+            return await reply.fail('INTERNAL_ERROR', failUpdate.error.message);
+          }
+          await notifyDispatchProblemForTask({
+            task,
+            dispatchStatus,
+            problem,
+            whatsappNotifier,
+            codeTaskRepo,
+            logger: serviceLogger,
+            affectedTaskCount: 1,
+          });
+          return await reply.ok({
+            status: 'failed',
+            codeTaskId: task.id,
+          });
         }
 
         const settings = settingsResult.value;
@@ -1722,7 +1765,54 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         // Fail if no workers configured
         if (enabledWorkers.length === 0) {
           request.log.warn({ userId }, 'User has no workers configured');
-          return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
+          const dispatchability = classifyCodeTaskDispatchability({
+            workerType: task.workerType,
+            workers: enabledWorkers,
+            healthByWorkerName: {},
+          }) as Extract<ReturnType<typeof classifyCodeTaskDispatchability>, { dispatchable: false }>;
+          if (codeTaskDispatchStatusService !== undefined) {
+            try {
+              await codeTaskDispatchStatusService.recordDispatchBlocked({
+                userId,
+                workerType: task.workerType,
+                blocker: dispatchability,
+                affectedTaskCount: 1,
+                exampleTaskIds: [task.id],
+              });
+            } catch (error) {
+              request.log.warn(
+                { taskId: task.id, reason: dispatchability.reason, error },
+                'Failed to record code task dispatch blocker status during submit'
+              );
+            }
+          }
+          const problem = dispatchProblemFromBlocker(dispatchability);
+          const dispatchStatus = buildDispatchStatusForProblem({
+            task,
+            problem,
+          });
+          const failUpdate = await codeTaskRepo.update(task.id, {
+            status: 'failed',
+            error: taskErrorFromDispatchStatus(dispatchStatus),
+            dispatchStatus,
+          });
+          if (!failUpdate.ok) {
+            request.log.error({ taskId: task.id, error: failUpdate.error }, 'Failed to mark task failed after no enabled workers');
+            return await reply.fail('INTERNAL_ERROR', failUpdate.error.message);
+          }
+          await notifyDispatchProblemForTask({
+            task,
+            dispatchStatus,
+            problem,
+            whatsappNotifier,
+            codeTaskRepo,
+            logger: serviceLogger,
+            affectedTaskCount: 1,
+          });
+          return await reply.ok({
+            status: 'failed',
+            codeTaskId: task.id,
+          });
         }
 
         // Enqueue task for dispatch (INT-949)
@@ -1733,7 +1823,10 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         if (!enqueueResult.ok) {
           if (enqueueResult.error.code === 'queue_full') {
-            return await reply.fail('QUEUE_FULL', enqueueResult.error.message);
+            return await reply.ok({
+              status: 'failed',
+              codeTaskId: task.id,
+            });
           }
           return await reply.fail('INTERNAL_ERROR', enqueueResult.error.message);
         }
@@ -1984,7 +2077,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       nullable: true,
                     },
                     prNumber: { type: 'number', nullable: true },
-                    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
+                    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'] },
                     implementationTaskId: { type: 'string' },
                     parentTaskId: { type: 'string' },
                     followUpReason: { type: 'string' },
@@ -2022,10 +2115,12 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                             retryAfter: { type: 'number', nullable: true },
                             manualSteps: { type: 'string', nullable: true },
                             supportLink: { type: 'string', nullable: true },
+                            action: { type: 'string', nullable: true },
                           },
                         },
                       },
                     },
+                    dispatchStatus: dispatchStatusSchema,
                     executionMemoryContext: executionMemoryContextSchema,
                     executionMemoryPostRun: executionMemoryPostRunSchema,
                     statusSummary: { type: 'object', nullable: true },

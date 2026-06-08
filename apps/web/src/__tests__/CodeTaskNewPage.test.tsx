@@ -613,3 +613,29 @@ describe('CodeTaskNewPage - per-task timeout (INT-1585)', () => {
     expect(payload['timeoutHours']).toBe(8);
   });
 });
+
+describe('CodeTaskNewPage - immediate failed task responses', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('navigates to the task page when submit returns a failed task id', async () => {
+    vi.mocked(submitCodeTask).mockResolvedValueOnce({
+      status: 'failed',
+      codeTaskId: 'task-failed-123',
+    } as never);
+    render(<CodeTaskNewPage />);
+
+    const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'task that cannot dispatch' } });
+
+    const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+    fireEvent.click(submitButtons[0] as HTMLElement);
+    fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/code-tasks/task-failed-123');
+    });
+  });
+});

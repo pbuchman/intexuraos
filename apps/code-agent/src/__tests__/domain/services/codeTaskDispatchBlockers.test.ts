@@ -122,14 +122,14 @@ describe('classifyCodeTaskDispatchability', () => {
       reason: 'workers_at_capacity',
     },
     {
-      name: 'codex auth unavailable',
+      name: 'codex auth unavailable when expired auth is not refreshable',
       workerType: 'codex-xhigh',
       workers: [worker('home-dev')],
       health: {
         'home-dev': healthy({
           workerAuths: {
             claude: { status: 'active' },
-            codex: { status: 'expired', message: 'Codex token expired' },
+            codex: { status: 'expired', refreshSupported: false, message: 'Codex token expired' },
           },
         }),
       },
@@ -218,6 +218,26 @@ describe('classifyCodeTaskDispatchability', () => {
     expect(result).toEqual({
       dispatchable: true,
       workerNames: ['ready'],
+    });
+  });
+
+  it('is dispatchable for Codex when expired auth can be refreshed by the worker', () => {
+    const result = classifyCodeTaskDispatchability({
+      workerType: 'codex-xhigh',
+      workers: [worker('refreshable-codex')],
+      healthByWorkerName: {
+        'refreshable-codex': healthy({
+          workerAuths: {
+            claude: { status: 'active' },
+            codex: { status: 'expired', refreshSupported: true, message: 'refresh available' },
+          },
+        }),
+      },
+    });
+
+    expect(result).toEqual({
+      dispatchable: true,
+      workerNames: ['refreshable-codex'],
     });
   });
 

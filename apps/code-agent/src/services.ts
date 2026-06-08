@@ -75,7 +75,6 @@ export function initServices(config: ServiceConfig): void {
   });
   const codeTaskDispatchStatusService = createCodeTaskDispatchStatusService({
     statusRepo: repos.codeTaskSystemStatusRepo,
-    whatsappNotifier,
     logger,
   });
   const linearIssueService = createLinearIssueService({ linearAgentClient, logger });
@@ -113,7 +112,11 @@ export function initServices(config: ServiceConfig): void {
     // The original dispatched all edited bot comments without payload inspection.
   ]);
 
-  const taskEnqueueService = createTaskEnqueueService({ logger: logger.child({ service: 'task-enqueue' }), codeTaskRepo: repos.codeTaskRepo });
+  const taskEnqueueService = createTaskEnqueueService({
+    logger: logger.child({ service: 'task-enqueue' }),
+    codeTaskRepo: repos.codeTaskRepo,
+    whatsappNotifier,
+  });
 
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
     logger, gitHubPRClient, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo, codeTaskRepo: repos.codeTaskRepo,

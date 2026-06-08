@@ -120,6 +120,38 @@ const executionMemoryPostRunSchema = {
   required: ['status', 'attempts', 'generatedMemoryIds'],
 } as const;
 
+const dispatchStatusSchema = {
+  type: 'object',
+  nullable: true,
+  properties: {
+    state: { type: 'string', enum: ['waiting', 'blocked', 'terminal'] },
+    reason: { type: 'string' },
+    terminal: { type: 'boolean' },
+    severity: { type: 'string', enum: ['info', 'warning', 'critical'] },
+    message: { type: 'string' },
+    remediation: { type: 'string' },
+    workerNames: { type: 'array', items: { type: 'string' } },
+    firstSeenAt: { type: 'string', format: 'date-time' },
+    lastSeenAt: { type: 'string', format: 'date-time' },
+    nextAction: {
+      type: 'string',
+      enum: ['will_retry_automatically', 'retry_after_fix', 'wait_until_scheduled', 'wait_for_active_task'],
+    },
+  },
+  required: [
+    'state',
+    'reason',
+    'terminal',
+    'severity',
+    'message',
+    'remediation',
+    'workerNames',
+    'firstSeenAt',
+    'lastSeenAt',
+    'nextAction',
+  ],
+} as const;
+
 // Response schema for created task
 const codeTaskSchema = {
   type: 'object',
@@ -150,7 +182,7 @@ const codeTaskSchema = {
       ...linearIssueForDisplaySchema,
       nullable: true,
     },
-    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
+    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'] },
     prNumber: { type: 'number', nullable: true },
     implementationTaskId: { type: 'string' },
     fanOutChildTaskIds: { type: 'array', items: { type: 'string' } },
@@ -177,19 +209,21 @@ const codeTaskSchema = {
       type: 'object',
       nullable: true,
       properties: {
-        code: { type: 'string' },
-        message: { type: 'string' },
-        remediation: {
-          type: 'object',
-          nullable: true,
-          properties: {
-            retryAfter: { type: 'number', nullable: true },
-            manualSteps: { type: 'string', nullable: true },
-            supportLink: { type: 'string', nullable: true },
+            code: { type: 'string' },
+            message: { type: 'string' },
+            remediation: {
+              type: 'object',
+              nullable: true,
+              properties: {
+                action: { type: 'string', enum: ['retry', 'wait', 'fix_code', 'contact_support', 'retry_smaller'], nullable: true },
+                retryAfter: { type: 'number', nullable: true },
+                manualSteps: { type: 'string', nullable: true },
+                supportLink: { type: 'string', nullable: true },
+              },
+            },
           },
         },
-      },
-    },
+    dispatchStatus: dispatchStatusSchema,
     executionMemoryContext: executionMemoryContextSchema,
     executionMemoryPostRun: executionMemoryPostRunSchema,
   },
@@ -217,5 +251,6 @@ export {
   workerTypeSchema,
   executionMemoryContextSchema,
   executionMemoryPostRunSchema,
+  dispatchStatusSchema,
   codeTaskSchema,
 };

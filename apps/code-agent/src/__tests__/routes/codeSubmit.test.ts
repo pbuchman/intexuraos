@@ -33,6 +33,7 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { CodeTaskDispatchStatusService } from '../../domain/services/codeTaskDispatchStatusService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
@@ -51,6 +52,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
+import { createTaskEnqueueService } from '../../infra/services/taskEnqueueServiceImpl.js';
 
 describe('POST /code/submit', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -59,6 +61,7 @@ describe('POST /code/submit', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let taskEnqueueService: TaskEnqueueService;
+  let codeTaskDispatchStatusService: CodeTaskDispatchStatusService;
   let logChunkRepo: LogChunkRepository;
 
   beforeEach(async () => {
@@ -90,6 +93,10 @@ describe('POST /code/submit', () => {
 
     taskEnqueueService = {
       enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })),
+    };
+    codeTaskDispatchStatusService = {
+      recordDispatchBlocked: vi.fn().mockResolvedValue(undefined),
+      resolveDispatchBlockers: vi.fn().mockResolvedValue(undefined),
     };
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -131,6 +138,7 @@ describe('POST /code/submit', () => {
       codeTaskRepo,
       taskDispatcher,
       whatsappNotifier,
+      codeTaskDispatchStatusService,
       logChunkRepo,
       logLineRepo,
       actionsAgentClient,
@@ -197,6 +205,7 @@ describe('POST /code/submit', () => {
       logLineRepo: LogLineRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      codeTaskDispatchStatusService: CodeTaskDispatchStatusService;
       linearAgentClient: LinearAgentClient;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -612,20 +621,24 @@ describe('POST /code/submit', () => {
   });
 
   describe('error handling', () => {
-    it('returns 503 when enqueue returns queue_full error', async () => {
-      const linearService = getServices().linearIssueService;
-      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+    it('returns a failed task id when enqueue returns queue_full error', async () => {
+      const services = getServices();
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Fix the bug',
         linearIssueLabels: [],
         hasChildren: false,
         linearFallback: false,
       });
-
-      // Mock enqueue to return queue_full error
-      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
-        err({ code: 'queue_full', message: 'Queue is full (11/10). Please try again later.' })
-      );
+      vi.spyOn(codeTaskRepo, 'countQueued').mockResolvedValueOnce(ok(50));
+      setServices({
+        ...services,
+        taskEnqueueService: createTaskEnqueueService({
+          logger,
+          codeTaskRepo,
+          whatsappNotifier: services.whatsappNotifier,
+        }),
+      });
 
       const response = await app.inject({
         method: 'POST',
@@ -634,10 +647,209 @@ describe('POST /code/submit', () => {
         payload: { prompt: 'Fix the bug' },
       });
 
-      expect(response.statusCode).toBe(503);
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.error).toEqual(expect.objectContaining({
+          code: 'dispatch_blocked_queue_full',
+          message: expect.stringContaining('queue is full'),
+        }));
+        const dispatchStatus = (taskResult.value as { dispatchStatus?: unknown }).dispatchStatus;
+        expect(dispatchStatus).toEqual(expect.objectContaining({
+          state: 'terminal',
+          reason: 'queue_full',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }));
+      }
+    });
+
+    it('returns a failed task id when the user has no enabled workers', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug without workers' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.error).toEqual(expect.objectContaining({
+          code: 'dispatch_blocked_no_enabled_workers',
+        }));
+        const dispatchStatus = (taskResult.value as { dispatchStatus?: unknown }).dispatchStatus;
+        expect(dispatchStatus).toEqual(expect.objectContaining({
+          state: 'terminal',
+          reason: 'no_enabled_workers',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }));
+      }
+    });
+
+    it('returns a failed task id when worker settings fetch fails after task creation', async () => {
+      const services = getServices();
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'read failed' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug while settings read is down' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual(expect.objectContaining({
+        status: 'failed',
+        codeTaskId: expect.stringMatching(/^task_/),
+      }));
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.error).toEqual(expect.objectContaining({
+          code: 'dispatch_blocked_dispatch_failed',
+        }));
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'dispatch_failed',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }));
+      }
+    });
+
+    it('returns 500 when settings-fetch failure status cannot be persisted', async () => {
+      const services = getServices();
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'read failed' }),
+      );
+      vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug while settings and writes are down' },
+      });
+
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('write failed');
+    });
+
+    it('still fails the created task when dispatch status recording throws', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      vi.mocked(codeTaskDispatchStatusService.recordDispatchBlocked).mockRejectedValueOnce(
+        new Error('status repo unavailable')
+      );
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug while status recording is down' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual(expect.objectContaining({
+        status: 'failed',
+        codeTaskId: expect.stringMatching(/^task_/),
+      }));
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'no_enabled_workers',
+          terminal: true,
+        }));
+      }
+    });
+
+    it('returns 500 when no-worker task failure persistence fails', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug without workers while writes are down' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('write failed');
     });
 
     it('returns 500 when enqueue returns internal_error', async () => {

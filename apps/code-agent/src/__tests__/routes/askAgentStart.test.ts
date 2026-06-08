@@ -342,7 +342,7 @@ describe('POST /code/ask-agent/start', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('returns WORKER_NOT_CONFIGURED when no workers are enabled', async () => {
+    it('returns a failed task id when no workers are enabled', async () => {
       // Use a different user that has no workers configured
       mockedJwtVerify.mockResolvedValueOnce({
         payload: { sub: 'user-with-no-workers', email: 'noworkers@example.com' },
@@ -361,8 +361,43 @@ describe('POST /code/ask-agent/start', () => {
       });
 
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+    });
+
+    it('returns a failed task id when worker settings fetch fails after task creation', async () => {
+      vi.spyOn(getServices().workerSettingsRepo, 'getSettings').mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'read failed' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Ask something while settings are unavailable',
+        },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'dispatch_failed',
+          terminal: true,
+        }));
+      }
     });
 
     it('returns CONFLICT when duplicate prompt is detected', async () => {
@@ -394,7 +429,7 @@ describe('POST /code/ask-agent/start', () => {
       expect(body.error.code).toBe('CONFLICT');
     });
 
-    it('returns QUEUE_FULL when task queue is full', async () => {
+    it('returns a failed task id when task queue is full', async () => {
       vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
         err({ code: 'queue_full', message: 'Task queue is full' }),
       );
@@ -411,8 +446,10 @@ describe('POST /code/ask-agent/start', () => {
       });
 
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
     });
 
     it('returns INTERNAL_ERROR when enqueue fails with unexpected error', async () => {

@@ -189,6 +189,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { return ok(undefined); },
         async update() { return ok(undefined); },

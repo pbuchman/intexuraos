@@ -6,8 +6,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { CodeTask, TaskError } from '../models/codeTask.js';
-import type { CodeTaskDispatchBlockerReason } from './codeTaskDispatchBlockers.js';
+import type { CodeTask, CodeTaskDispatchStatusReason, TaskError } from '../models/codeTask.js';
 
 /**
  * Possible errors during notification sending.
@@ -19,7 +18,7 @@ export interface NotificationError {
 
 export interface TaskDispatchBlockedNotificationInfo {
   readonly workerType: string;
-  readonly reason: CodeTaskDispatchBlockerReason;
+  readonly reason: CodeTaskDispatchStatusReason;
   readonly affectedTaskCount: number;
   readonly exampleTaskId?: string;
   readonly message: string;
