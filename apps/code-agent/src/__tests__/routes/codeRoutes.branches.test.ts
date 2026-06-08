@@ -55,7 +55,7 @@ const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 import { buildServer } from '../../server.js';
 import { resetServices, setServices, getServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import type { Firestore } from '@google-cloud/firestore';
+import { Timestamp, type Firestore } from '@google-cloud/firestore';
 import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
@@ -227,6 +227,7 @@ describe('codeRoutes branch coverage', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { return ok(undefined); },
         async update() { return ok(undefined); },
@@ -348,7 +349,22 @@ describe('codeRoutes branch coverage', () => {
         implementationTaskId: 'impl-task-1',
         fanOutChildTaskIds: ['child-task-1', 'child-task-2'],
         error: { code: 'WORKER_ERROR', message: 'Worker crashed' },
-      });
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'dispatch_failed',
+          terminal: true,
+          severity: 'critical',
+          message: 'Worker rejected the dispatch request.',
+          remediation: 'Fix worker dispatch handling, then retry.',
+          workerNames: ['home-dev'],
+          firstSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:00:00.000Z')),
+          lastSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:01:00.000Z')),
+          nextAction: 'retry_after_fix',
+          notifiedReasons: {
+            dispatch_failed: Timestamp.fromDate(new Date('2026-06-05T12:02:00.000Z')),
+          },
+        },
+      } as Parameters<typeof repo.update>[1]);
 
       const response = await server.inject({
         method: 'GET',
@@ -368,6 +384,14 @@ describe('codeRoutes branch coverage', () => {
       expect(task.followUpReason).toBe('retry');
       expect(task.error).toBeDefined();
       expect(task.error.code).toBe('WORKER_ERROR');
+      expect(task.dispatchStatus).toEqual(expect.objectContaining({
+        state: 'terminal',
+        reason: 'dispatch_failed',
+        terminal: true,
+        firstSeenAt: '2026-06-05T12:00:00.000Z',
+        lastSeenAt: '2026-06-05T12:01:00.000Z',
+      }));
+      expect(task.dispatchStatus.notifiedReasons).toBeUndefined();
       expect(task.linearIssueId).toBe('INT-100');
       expect(task.prNumber).toBe(42);
       expect(task.agentType).toBe('planning');
@@ -470,6 +494,18 @@ describe('codeRoutes branch coverage', () => {
           status: 'running',
           dedupKey: 'dedup',
           callbackReceived: false,
+          dispatchStatus: {
+            state: 'waiting',
+            reason: 'worker_unavailable',
+            terminal: false,
+            severity: 'warning',
+            message: 'Worker unavailable.',
+            remediation: 'Wait for worker recovery.',
+            workerNames: [],
+            firstSeenAt: { seconds: 789 } as never,
+            lastSeenAt: { seconds: 790 } as never,
+            nextAction: 'will_retry_automatically',
+          },
           // Pass objects without toDate() to trigger timestampToIso returning undefined
           createdAt: { seconds: 123 } as never,
           updatedAt: { seconds: 456 } as never,
@@ -489,6 +525,8 @@ describe('codeRoutes branch coverage', () => {
       // Both should fall back to '' since timestampToIso returns undefined
       expect(body.data.createdAt).toBe('');
       expect(body.data.updatedAt).toBe('');
+      expect(body.data.dispatchStatus.firstSeenAt).toBe('');
+      expect(body.data.dispatchStatus.lastSeenAt).toBe('');
     });
   });
 
@@ -1818,7 +1856,7 @@ describe('codeRoutes branch coverage', () => {
   // POST /code/submit - settings null triggers ?? [] fallback (line 1292)
   // ============================================================
   describe('POST /code/submit no worker settings', () => {
-    it('returns WORKER_NOT_CONFIGURED when user has no worker settings', async () => {
+    it('returns a failed task id when user has no worker settings', async () => {
       // Override workerSettingsRepo to return null (no settings)
       const mockWorkerSettingsRepo = {
         ...getServices().workerSettingsRepo,
@@ -1834,11 +1872,11 @@ describe('codeRoutes branch coverage', () => {
         payload: { prompt: 'Fix the bug' },
       });
 
-      // With null settings, enabledWorkers = settings?.workers.filter() ?? [] = []
-      // Then enabledWorkers.length === 0 triggers WORKER_NOT_CONFIGURED (HTTP 424)
-      expect(response.statusCode).toBe(424);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
     });
   });
 
@@ -2553,7 +2591,7 @@ describe('codeRoutes branch coverage', () => {
   // POST /code/submit - enqueue queue_full error (line 1317)
   // ============================================================
   describe('POST /code/submit queue_full error', () => {
-    it('returns QUEUE_FULL when enqueue service returns queue_full', async () => {
+    it('returns a failed task id when enqueue service returns queue_full', async () => {
       setServices({
         ...getServices(),
         taskEnqueueService: {
@@ -2571,8 +2609,11 @@ describe('codeRoutes branch coverage', () => {
         payload: { prompt: 'Fix the bug' },
       });
 
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
     });
   });
 

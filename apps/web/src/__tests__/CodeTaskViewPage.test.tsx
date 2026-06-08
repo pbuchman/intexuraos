@@ -197,6 +197,67 @@ describe('CodeTaskViewPage', () => {
     });
   });
 
+  describe('dispatch status', () => {
+    it('shows retry prognosis and remediation for a queued dispatch blocker', () => {
+      const task = {
+        ...createTask({ status: 'queued' }),
+        dispatchStatus: {
+          state: 'waiting',
+          reason: 'workers_at_capacity',
+          terminal: false,
+          severity: 'warning',
+          message: 'All capable workers for codex are currently at capacity.',
+          remediation: 'Wait for a running task to finish or add worker capacity.',
+          workerNames: ['home-dev'],
+          firstSeenAt: '2026-06-05T12:00:00.000Z',
+          lastSeenAt: '2026-06-05T12:05:00.000Z',
+          nextAction: 'will_retry_automatically',
+        },
+      } as CodeTask;
+      mockUseTaskView.mockReturnValue(createTaskViewState(task));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.getByText('Dispatch Waiting')).toBeInTheDocument();
+      expect(screen.getByText('All capable workers for codex are currently at capacity.')).toBeInTheDocument();
+      expect(screen.getByText(/This task will retry automatically/)).toBeInTheDocument();
+      expect(screen.getByText(/Wait for a running task to finish/)).toBeInTheDocument();
+      expect(screen.getByText(/home-dev/)).toBeInTheDocument();
+    });
+
+    it('shows terminal dispatch remediation on failed tasks', () => {
+      const task = {
+        ...createTask({
+          status: 'failed',
+          error: {
+            code: 'dispatch_blocked_no_enabled_workers',
+            message: 'No enabled code-task workers are configured for codex.',
+          },
+        }),
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'no_enabled_workers',
+          terminal: true,
+          severity: 'critical',
+          message: 'No enabled code-task workers are configured for codex.',
+          remediation: 'Enable or add a worker in worker settings, then retry dispatch.',
+          workerNames: [],
+          firstSeenAt: '2026-06-05T12:00:00.000Z',
+          lastSeenAt: '2026-06-05T12:00:00.000Z',
+          nextAction: 'retry_after_fix',
+        },
+      } as CodeTask;
+      mockUseTaskView.mockReturnValue(createTaskViewState(task));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.getByText('Dispatch Failed')).toBeInTheDocument();
+      expect(screen.getAllByText('No enabled code-task workers are configured for codex.').length).toBeGreaterThan(0);
+      expect(screen.getByText(/Fix the blocker, then retry this task/)).toBeInTheDocument();
+      expect(screen.getByText(/Enable or add a worker/)).toBeInTheDocument();
+    });
+  });
+
   describe('Merge button (isMergeable)', () => {
     it('does NOT show Merge button for a planning-origin reviewed task without ready-to-merge label', () => {
       mockUseTaskView.mockReturnValue(createTaskViewState(

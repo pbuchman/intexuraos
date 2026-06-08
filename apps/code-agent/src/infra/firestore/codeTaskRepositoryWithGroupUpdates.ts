@@ -28,17 +28,18 @@ export function withGroupUpdates(
       return result;
     },
 
-    update: async (taskId, input): ReturnType<CodeTaskRepository['update']> => {
+    update: async (taskId, input, options): ReturnType<CodeTaskRepository['update']> => {
       // Only read old task if status is changing — saves the extra Firestore read
       // on heartbeat updates, workerLocation updates, etc.
+      const shouldUpdateGroupSummary = input.status !== undefined && options?.transaction === undefined;
       let oldTaskResult;
-      if (input.status !== undefined) {
+      if (shouldUpdateGroupSummary) {
         oldTaskResult = await inner.findById(taskId);
       }
 
-      const result = await inner.update(taskId, input);
+      const result = await inner.update(taskId, input, options);
 
-      if (result.ok && input.status !== undefined && oldTaskResult?.ok === true && result.value.agentType !== 'ask_agent') {
+      if (result.ok && shouldUpdateGroupSummary && oldTaskResult?.ok === true && result.value.agentType !== 'ask_agent') {
         void groupSummaryRepo.updateAfterStatusChange(oldTaskResult.value, result.value).catch((error: unknown) => {
           logger.warn({ error, taskId }, 'Group summary update failed after status change');
         });

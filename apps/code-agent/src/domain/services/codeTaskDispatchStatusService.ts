@@ -1,9 +1,6 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskSystemStatusRepository } from '../repositories/codeTaskSystemStatusRepository.js';
-import type { WhatsAppNotifier } from './whatsappNotifier.js';
 import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
-
-const DEFAULT_RESEND_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
 
@@ -27,17 +24,7 @@ export interface CodeTaskDispatchStatusService {
 
 export interface CodeTaskDispatchStatusServiceDeps {
   readonly statusRepo: CodeTaskSystemStatusRepository;
-  readonly whatsappNotifier: WhatsAppNotifier;
   readonly logger: Logger;
-  readonly now?: () => Date;
-  readonly resendIntervalMs?: number;
-}
-
-function shouldNotify(lastNotifiedAt: Date | undefined, now: Date, resendIntervalMs: number): boolean {
-  if (lastNotifiedAt === undefined) {
-    return true;
-  }
-  return now.getTime() - lastNotifiedAt.getTime() >= resendIntervalMs;
 }
 
 export function createCodeTaskDispatchStatusService(
@@ -45,10 +32,7 @@ export function createCodeTaskDispatchStatusService(
 ): CodeTaskDispatchStatusService {
   const {
     statusRepo,
-    whatsappNotifier,
     logger,
-    now = (): Date => new Date(),
-    resendIntervalMs = DEFAULT_RESEND_INTERVAL_MS,
   } = deps;
 
   return {
@@ -70,32 +54,7 @@ export function createCodeTaskDispatchStatusService(
         return;
       }
 
-      const status = upsertResult.value;
-      const notificationTime = now();
-      if (!shouldNotify(status.lastNotifiedAt, notificationTime, resendIntervalMs)) {
-        return;
-      }
-
-      const exampleTaskId = input.exampleTaskIds[0];
-      const notifyResult = await whatsappNotifier.notifyTaskDispatchBlocked(input.userId, {
-        workerType: input.workerType,
-        reason: input.blocker.reason,
-        affectedTaskCount: input.affectedTaskCount,
-        ...(exampleTaskId !== undefined && { exampleTaskId }),
-        message: input.blocker.message,
-        remediation: input.blocker.remediation,
-        workerNames: input.blocker.workerNames,
-      });
-
-      if (!notifyResult.ok) {
-        logger.warn({ error: notifyResult.error, statusId: status.id }, 'Failed to notify user about code task dispatch blocker');
-        return;
-      }
-
-      const markResult = await statusRepo.markNotified(status.id, notificationTime);
-      if (!markResult.ok) {
-        logger.warn({ error: markResult.error, statusId: status.id }, 'Failed to mark code task dispatch blocker as notified');
-      }
+      return;
     },
 
     async resolveDispatchBlockers(input: ResolveCodeTaskDispatchBlockersInput): Promise<void> {

@@ -9,9 +9,10 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import { Timestamp } from '@google-cloud/firestore';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { CodeTask } from '../models/codeTask.js';
+import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -20,15 +21,24 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import type { CodeTaskDispatchStatusService } from '../services/codeTaskDispatchStatusService.js';
 import {
   classifyCodeTaskDispatchability,
-  type CodeTaskDispatchability,
 } from '../services/codeTaskDispatchBlockers.js';
+import {
+  buildDispatchStatusForProblem,
+  dispatchProblemFromBlocker,
+  dispatchProblemFromError,
+  missingPrBranchDispatchProblem,
+  notifyDispatchProblemForTask,
+  queueTimeoutDispatchProblem,
+  taskErrorFromDispatchStatus,
+  type DispatchBlocker,
+  type DispatchProblem,
+} from '../services/codeTaskDispatchProblems.js';
 import { loadConfig } from '../../config.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
-import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import { buildTaskCompleteWebhookUrl } from '../services/codeTaskCallbackUrls.js';
@@ -57,12 +67,160 @@ function groupTasksByPR(tasks: CodeTask[]): Map<string, CodeTask[]> {
   return groups;
 }
 
-type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
-
 function findAffectedDispatchTasks(candidates: readonly CodeTask[], task: CodeTask): CodeTask[] {
   return candidates.filter(
     (candidate) => candidate.userId === task.userId && candidate.workerType === task.workerType
   );
+}
+
+function buildWaitingDispatchStatus(
+  task: CodeTask,
+  input: {
+    reason: 'scheduled_wait' | 'active_task_blocked';
+    message: string;
+    remediation: string;
+    nextAction: Extract<CodeTaskDispatchStatus['nextAction'], 'wait_until_scheduled' | 'wait_for_active_task'>;
+  }
+): CodeTaskDispatchStatus {
+  const now = Timestamp.fromDate(new Date());
+  return {
+    state: 'waiting',
+    reason: input.reason,
+    terminal: false,
+    severity: 'info',
+    message: input.message,
+    remediation: input.remediation,
+    workerNames: [],
+    firstSeenAt: task.dispatchStatus?.reason === input.reason ? task.dispatchStatus.firstSeenAt : now,
+    lastSeenAt: now,
+    nextAction: input.nextAction,
+    ...(task.dispatchStatus?.notifiedReasons !== undefined && {
+      notifiedReasons: task.dispatchStatus.notifiedReasons,
+    }),
+  };
+}
+
+async function recordScheduledWaitStatus(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo'>,
+  task: CodeTask,
+  notBeforeAt: Date
+): Promise<void> {
+  const updateResult = await deps.codeTaskRepo.update(task.id, {
+    dispatchStatus: buildWaitingDispatchStatus(task, {
+      reason: 'scheduled_wait',
+      message: `Task is scheduled for dispatch at ${notBeforeAt.toISOString()}.`,
+      remediation: 'The scheduler will dispatch this task automatically once the scheduled time arrives.',
+      nextAction: 'wait_until_scheduled',
+    }),
+  });
+  if (!updateResult.ok) {
+    deps.logger.warn(
+      { taskId: task.id, notBeforeAt: notBeforeAt.toISOString(), error: updateResult.error },
+      'Failed to persist scheduled dispatch wait status'
+    );
+  }
+}
+
+async function recordActiveTaskWaitStatus(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo'>,
+  task: CodeTask,
+  input:
+    | { activeTaskId?: string | undefined; queuedAt?: Date; scope: 'pr' }
+    | { activeTaskId?: string | undefined; queuedAt?: Date; scope: 'linear_issue'; linearIssueId: string }
+): Promise<void> {
+  const message = input.scope === 'pr'
+    ? `Another task is already dispatched or running for PR #${String(task.prNumber)}.`
+    : `Another task is already dispatched or running for Linear issue ${input.linearIssueId}.`;
+  const updateResult = await deps.codeTaskRepo.update(task.id, {
+    ...(input.queuedAt !== undefined && { queuedAt: input.queuedAt }),
+    dispatchStatus: buildWaitingDispatchStatus(task, {
+      reason: 'active_task_blocked',
+      message,
+      remediation: 'The scheduler will retry this task automatically after the active task finishes.',
+      nextAction: 'wait_for_active_task',
+    }),
+  });
+  if (!updateResult.ok) {
+    deps.logger.warn(
+      { taskId: task.id, activeTaskId: input.activeTaskId, error: updateResult.error },
+      input.scope === 'pr'
+        ? 'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt'
+        : 'Failed to persist active-task dispatch wait status'
+    );
+  }
+}
+
+async function failTaskForDispatchProblem(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier'>,
+  task: CodeTask,
+  problem: DispatchProblem,
+  affectedTaskCount: number,
+): Promise<Result<void, DrainTaskQueueError>> {
+  const dispatchStatus = buildDispatchStatusForProblem({
+    task,
+    problem,
+  });
+  const failUpdateResult = await deps.codeTaskRepo.update(task.id, {
+    status: 'failed',
+    error: taskErrorFromDispatchStatus(dispatchStatus),
+    dispatchStatus,
+  });
+  if (!failUpdateResult.ok) {
+    deps.logger.error(
+      { taskId: task.id, reason: problem.reason, error: failUpdateResult.error },
+      'Failed to persist failed status during dispatch blocker handling'
+    );
+    return err({
+      code: 'internal_error',
+      message: 'Failed to persist dispatch failure status',
+    });
+  }
+  await notifyDispatchProblemForTask({
+    task,
+    dispatchStatus,
+    problem,
+    whatsappNotifier: deps.whatsappNotifier,
+    codeTaskRepo: deps.codeTaskRepo,
+    logger: deps.logger,
+    affectedTaskCount,
+  });
+  return ok(undefined);
+}
+
+async function rollbackTaskForRecoverableDispatchProblem(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier'>,
+  task: CodeTask,
+  problem: DispatchProblem,
+  affectedTaskCount: number,
+): Promise<Result<void, DrainTaskQueueError>> {
+  const dispatchStatus = buildDispatchStatusForProblem({
+    task,
+    problem,
+  });
+  const rollbackResult = await deps.codeTaskRepo.update(task.id, {
+    status: 'queued',
+    dispatchStatus,
+  });
+  if (!rollbackResult.ok) {
+    deps.logger.warn(
+      { taskId: task.id, error: rollbackResult.error },
+      'Failed to roll back claim after retryable dispatch error',
+    );
+    return err({
+      code: 'internal_error',
+      message: 'Failed to persist recoverable dispatch status',
+    });
+  }
+  await notifyDispatchProblemForTask({
+    task,
+    dispatchStatus,
+    problem,
+    whatsappNotifier: deps.whatsappNotifier,
+    codeTaskRepo: deps.codeTaskRepo,
+    logger: deps.logger,
+    affectedTaskCount,
+  });
+  return ok(undefined);
 }
 
 async function recordDispatchBlockedForTask(
@@ -269,6 +427,7 @@ export async function drainTaskQueue(
         if (nextEligibleAt === undefined || notBeforeDate.getTime() < nextEligibleAt.getTime()) {
           nextEligibleAt = notBeforeDate;
         }
+        await recordScheduledWaitStatus({ logger, codeTaskRepo }, candidate, notBeforeDate);
         logger.info(
           {
             taskId: candidate.id,
@@ -292,14 +451,12 @@ export async function drainTaskQueue(
             activeTaskId: prActiveResult.value.taskId,
           }, 'Skipping queued task — dispatched/running task exists for same PR');
 
-          // Reset TTL so PR-lock-blocked time does not count toward expiry
-          const resetResult = await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
-          if (!resetResult.ok) {
-            logger.warn(
-              { taskId: candidate.id, error: resetResult.error },
-              'Failed to reset queuedAt for PR-locked task — TTL clock continues from original queuedAt',
-            );
-          }
+          // Reset TTL so PR-lock-blocked time does not count toward expiry.
+          await recordActiveTaskWaitStatus(
+            { logger, codeTaskRepo },
+            candidate,
+            { queuedAt: new Date(), scope: 'pr', activeTaskId: prActiveResult.value.taskId }
+          );
 
           continue;
         }
@@ -323,6 +480,11 @@ export async function drainTaskQueue(
             },
             'Deferring review — another task on the same Linear issue is dispatched/running',
           );
+          await recordActiveTaskWaitStatus(
+            { logger, codeTaskRepo },
+            candidate,
+            { scope: 'linear_issue', linearIssueId: candidate.linearIssueId, activeTaskId: siblingResult.value.taskId }
+          );
           continue;
         }
       }
@@ -341,13 +503,30 @@ export async function drainTaskQueue(
 
       if (now - effectiveEligibleAt.getTime() > ttlMs) {
         logger.warn({ taskId: candidate.id, queuedAt }, 'Queued task expired');
-        await codeTaskRepo.update(candidate.id, {
+        const timeoutMessage = `Task expired in queue after ${String(config.queue.ttlMinutes)} minutes. Workers were still busy.`;
+        const timeoutProblem = queueTimeoutDispatchProblem({
+          message: timeoutMessage,
+          remediation: 'Retry this task after worker capacity is available.',
+        });
+        const dispatchStatus = buildDispatchStatusForProblem({
+          task: candidate,
+          problem: timeoutProblem,
+        });
+        const timeoutUpdateResult = await codeTaskRepo.update(candidate.id, {
           status: 'failed',
           error: {
             code: 'queue_timeout',
-            message: `Task expired in queue after ${String(config.queue.ttlMinutes)} minutes. Workers were still busy.`,
+            message: timeoutMessage,
           },
+          dispatchStatus,
         });
+        if (!timeoutUpdateResult.ok) {
+          logger.error(
+            { taskId: candidate.id, error: timeoutUpdateResult.error },
+            'Failed to mark task failed after queue timeout'
+          );
+          return err({ code: 'internal_error', message: 'Failed to persist queue timeout status' });
+        }
 
         const locksToCleanup = buildLockCleanups(candidate);
 
@@ -362,10 +541,15 @@ export async function drainTaskQueue(
           }
         }
 
-        const notifyResult = await whatsappNotifier.notifyTaskQueueExpired(candidate.userId, candidate);
-        if (!notifyResult.ok) {
-          logger.warn({ taskId: candidate.id, error: notifyResult.error }, 'Failed to send queue expired notification');
-        }
+        await notifyDispatchProblemForTask({
+          task: candidate,
+          dispatchStatus,
+          problem: timeoutProblem,
+          whatsappNotifier,
+          codeTaskRepo,
+          logger,
+          affectedTaskCount: 1,
+        });
 
         return ok({ action: 'expired', taskId: candidate.id, locksToCleanup });
       }
@@ -401,13 +585,12 @@ export async function drainTaskQueue(
 
     // Step 3: Fetch user's CURRENT worker settings
     const settingsResult = await workerSettingsRepo.getSettings(task.userId);
-    if (!settingsResult.ok || settingsResult.value === null) {
+    if (!settingsResult.ok) {
       logger.error({ userId: task.userId }, 'Failed to fetch worker settings for drain');
       return err({ code: 'internal_error', message: 'Failed to fetch worker settings' });
     }
 
-    const settings = settingsResult.value;
-    const enabledWorkers = settings.workers.filter((w) => w.enabled);
+    const enabledWorkers = settingsResult.value?.workers.filter((w) => w.enabled) ?? [];
 
     if (enabledWorkers.length === 0) {
       const dispatchability = classifyCodeTaskDispatchability({
@@ -415,12 +598,30 @@ export async function drainTaskQueue(
         workers: enabledWorkers,
         healthByWorkerName: {},
       }) as DispatchBlocker;
+      const claimResult = await codeTaskRepo.claimForDispatch(task.id);
+      if (!claimResult.ok) {
+        logger.error({ taskId: task.id, error: claimResult.error }, 'Failed to claim task for dispatch');
+        return ok({ action: 'still_busy', taskId: task.id });
+      }
+      if (!claimResult.value) {
+        logger.info({ taskId: task.id }, 'Skipped — claimed by another instance or no longer queued');
+        return ok({ action: 'still_busy', taskId: task.id });
+      }
       await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchability);
+      const failResult = await failTaskForDispatchProblem(
+        deps,
+        task,
+        dispatchProblemFromBlocker(dispatchability),
+        findAffectedDispatchTasks(activeCandidates, task).length,
+      );
+      if (!failResult.ok) {
+        return err(failResult.error);
+      }
       logger.warn(
         { userId: task.userId, taskId: task.id, reason: 'no_enabled_workers' },
-        'Drain blocked: user has no enabled workers — task stays queued until workers are configured or TTL expires',
+        'Drain blocked: user has no enabled workers — task failed immediately',
       );
-      return ok({ action: 'still_busy', taskId: task.id });
+      return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
     }
 
     const workerCredentials: DispatchWorkerCredentials = {
@@ -578,16 +779,32 @@ export async function drainTaskQueue(
     // these agents read code from the worktree and would silently check out the base branch
     // instead of the PR head, producing wrong review findings or fixing the wrong code.
     if (task.prNumber !== undefined && task.prBranch === undefined && (agentType === 'review' || agentType === 'remediation')) {
+      const problem = missingPrBranchDispatchProblem({
+        agentType,
+        prNumber: task.prNumber,
+      });
+      const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
       logger.error(
         { taskId: task.id, prNumber: task.prNumber, agentType },
         'Review/remediation task has prNumber but no prBranch — refusing to dispatch on base branch'
       );
-      await codeTaskRepo.update(task.id, {
+      const updateResult = await codeTaskRepo.update(task.id, {
         status: 'failed',
-        error: {
-          code: 'MISSING_PR_BRANCH',
-          message: `prBranch required for ${agentType} task (PR #${String(task.prNumber)})`,
-        },
+        error: taskErrorFromDispatchStatus(dispatchStatus),
+        dispatchStatus,
+      });
+      if (!updateResult.ok) {
+        logger.error({ taskId: task.id, error: updateResult.error }, 'Failed to mark task failed after missing PR branch');
+        return err({ code: 'internal_error', message: 'Failed to persist dispatch failure status' });
+      }
+      await notifyDispatchProblemForTask({
+        task,
+        dispatchStatus,
+        problem,
+        whatsappNotifier,
+        codeTaskRepo,
+        logger,
+        affectedTaskCount: 1,
       });
       return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
     }
@@ -641,40 +858,36 @@ export async function drainTaskQueue(
 
     if (!dispatchResult.ok) {
       const dispatchError = dispatchResult.error;
+      const dispatchProblem = dispatchProblemFromError(dispatchError);
 
-      // Transient codes (at_capacity, worker_unavailable, network_error) keep
-      // the task queued. Do NOT reset queuedAt — TTL is measured from queuedAt
-      // and resetting would defeat the queue.ttlMinutes bound.
-      if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.code)) {
-        if (dispatchError.blocker !== undefined) {
-          await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchError.blocker);
-        }
+      if (dispatchError.blocker !== undefined) {
+        await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchError.blocker);
+      }
+
+      // Recoverable dispatch problems keep the task queued. Do NOT reset
+      // queuedAt — TTL is measured from queuedAt and resetting would defeat
+      // the queue.ttlMinutes bound.
+      if (!dispatchProblem.terminal) {
         logger.info(
           { taskId: task.id, error: dispatchError, retryable: dispatchError.code !== 'at_capacity' },
           'Dispatch transient/retryable, task remains queued',
         );
-        // Roll the claim back so the next drain cycle can re-claim. dispatchedAt
-        // is intentionally left set as a "last attempted" marker.
-        const rollbackResult = await codeTaskRepo.update(task.id, { status: 'queued' });
+        const rollbackResult = await rollbackTaskForRecoverableDispatchProblem(
+          deps,
+          task,
+          dispatchProblem,
+          findAffectedDispatchTasks(activeCandidates, task).length,
+        );
         if (!rollbackResult.ok) {
-          logger.warn(
-            { taskId: task.id, error: rollbackResult.error },
-            'Failed to roll back claim after retryable dispatch error',
-          );
+          return err(rollbackResult.error);
         }
         return ok({ action: 'still_busy', taskId: task.id });
       }
 
       logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
-      const failUpdateResult = await codeTaskRepo.update(task.id, {
-        status: 'failed',
-        error: {
-          code: dispatchError.code,
-          message: `Drain dispatch failed: ${dispatchError.message}`,
-        },
-      });
-      if (!failUpdateResult.ok) {
-        logger.error({ taskId: task.id, error: failUpdateResult.error }, 'Failed to persist failed status during drain');
+      const failResult = await failTaskForDispatchProblem(deps, task, dispatchProblem, 1);
+      if (!failResult.ok) {
+        return err(failResult.error);
       }
 
       const locksToCleanup = buildLockCleanups(task);
@@ -696,6 +909,7 @@ export async function drainTaskQueue(
       workerLocation: dispatchResult.value.workerLocation,
       cancelNonce,
       cancelNonceExpiresAt,
+      dispatchStatus: null,
     });
 
     if (updateResult.ok) {

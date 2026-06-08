@@ -18,6 +18,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { RepositoryError } from '../../../domain/repositories/codeTaskRepository.js';
+import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 import { TaskEnqueueServiceImpl } from '../../../infra/services/taskEnqueueServiceImpl.js';
 
 // Mock config
@@ -37,6 +38,9 @@ describe('TaskEnqueueServiceImpl', () => {
     findById: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+  };
+  let mockWhatsappNotifier: {
+    notifyTaskDispatchBlocked: ReturnType<typeof vi.fn>;
   };
 
   function createMockTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -76,6 +80,9 @@ describe('TaskEnqueueServiceImpl', () => {
       countQueued: vi.fn(),
       update: vi.fn(),
     };
+    mockWhatsappNotifier = {
+      notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)),
+    };
   });
 
   afterEach(() => {
@@ -86,6 +93,7 @@ describe('TaskEnqueueServiceImpl', () => {
     return new TaskEnqueueServiceImpl({
       logger: mockLogger,
       codeTaskRepo: mockCodeTaskRepo as never,
+      whatsappNotifier: mockWhatsappNotifier as never as WhatsAppNotifier,
     });
   }
 
@@ -120,7 +128,7 @@ describe('TaskEnqueueServiceImpl', () => {
     }
   });
 
-  it('returns queue_full error and marks task as failed when queue reaches maxSize', async () => {
+  it('returns queue_full error, marks task failed with dispatch status, and notifies when queue reaches maxSize', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
     mockCodeTaskRepo.countQueued.mockResolvedValue(ok(50)); // >= maxSize of 50
@@ -137,8 +145,48 @@ describe('TaskEnqueueServiceImpl', () => {
     // Verify task was marked as failed
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
       status: 'failed',
-      error: expect.objectContaining({ code: 'queue_full' }),
+      error: expect.objectContaining({ code: 'dispatch_blocked_queue_full' }),
+      dispatchStatus: expect.objectContaining({
+        state: 'terminal',
+        reason: 'queue_full',
+        terminal: true,
+        nextAction: 'retry_after_fix',
+      }),
     }));
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
+      workerType: 'opus',
+      reason: 'queue_full',
+      affectedTaskCount: 1,
+      exampleTaskId: 'task-123',
+    }));
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+      dispatchStatus: expect.objectContaining({
+        notifiedReasons: expect.objectContaining({
+          queue_full: expect.any(Timestamp),
+        }),
+      }),
+    });
+    expect(mockCodeTaskRepo.update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockWhatsappNotifier.notifyTaskDispatchBlocked.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('returns internal_error and does not notify when queue-full task failure persistence fails', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(50));
+    mockCodeTaskRepo.update.mockResolvedValue(
+      err({ code: 'FIRESTORE_ERROR', message: 'write failed' } satisfies RepositoryError),
+    );
+
+    const service = createService();
+    const result = await service.enqueue({ taskId: 'task-123', userId: 'user-456' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+    }
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
   });
 
   it('sets queuedAt timestamp on the task', async () => {
@@ -285,7 +333,7 @@ describe('TaskEnqueueServiceImpl', () => {
       }
     });
 
-    it('marks all batch tasks failed when the queue is already full', async () => {
+    it('marks all batch tasks failed with dispatch status and notifies each task when the queue is already full', async () => {
       mockCodeTaskRepo.findById
         .mockResolvedValueOnce(ok(createMockTask({ id: 'task-1' })))
         .mockResolvedValueOnce(ok(createMockTask({ id: 'task-2' })));
@@ -299,14 +347,62 @@ describe('TaskEnqueueServiceImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('queue_full');
       }
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(2);
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(4);
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
         'task-1',
         expect.objectContaining({
           status: 'failed',
-          error: expect.objectContaining({ code: 'queue_full' }),
+          error: expect.objectContaining({ code: 'dispatch_blocked_queue_full' }),
+          dispatchStatus: expect.objectContaining({
+            reason: 'queue_full',
+          }),
         }),
       );
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', {
+        dispatchStatus: expect.objectContaining({
+          notifiedReasons: expect.objectContaining({
+            queue_full: expect.any(Timestamp),
+          }),
+        }),
+      });
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-2', {
+        dispatchStatus: expect.objectContaining({
+          notifiedReasons: expect.objectContaining({
+            queue_full: expect.any(Timestamp),
+          }),
+        }),
+      });
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledTimes(2);
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenNthCalledWith(1, 'user-456', expect.objectContaining({
+        reason: 'queue_full',
+        affectedTaskCount: 2,
+        exampleTaskId: 'task-1',
+      }));
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenNthCalledWith(2, 'user-456', expect.objectContaining({
+        reason: 'queue_full',
+        affectedTaskCount: 2,
+        exampleTaskId: 'task-2',
+      }));
+    });
+
+    it('returns internal_error and stops batch queue-full handling when task failure persistence fails', async () => {
+      mockCodeTaskRepo.findById
+        .mockResolvedValueOnce(ok(createMockTask({ id: 'task-1' })))
+        .mockResolvedValueOnce(ok(createMockTask({ id: 'task-2' })));
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(50));
+      mockCodeTaskRepo.update.mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'write failed' } satisfies RepositoryError),
+      );
+
+      const service = createService();
+      const result = await service.enqueueMany({ taskIds: ['task-1', 'task-2'], userId: 'user-456' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(1);
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
     });
 
     it('logs a warning and keeps original task when queuedAt update fails during batch enqueue', async () => {

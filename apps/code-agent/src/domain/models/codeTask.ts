@@ -169,6 +169,44 @@ export interface TaskError {
   };
 }
 
+export type CodeTaskDispatchStatusReason =
+  | 'no_enabled_workers'
+  | 'workers_unreachable'
+  | 'workers_at_capacity'
+  | 'codex_auth_unavailable'
+  | 'claude_auth_unavailable'
+  | 'provider_auth_unavailable'
+  | 'docker_unavailable'
+  | 'disk_unavailable'
+  | 'unknown_worker_type'
+  | 'worker_unavailable'
+  | 'worker_busy'
+  | 'at_capacity'
+  | 'network_error'
+  | 'dispatch_failed'
+  | 'invalid_response'
+  | 'queue_full'
+  | 'queue_timeout'
+  | 'retry_expired'
+  | 'retry_exhausted'
+  | 'missing_pr_branch'
+  | 'scheduled_wait'
+  | 'active_task_blocked';
+
+export interface CodeTaskDispatchStatus {
+  state: 'waiting' | 'blocked' | 'terminal';
+  reason: CodeTaskDispatchStatusReason;
+  terminal: boolean;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  firstSeenAt: Timestamp;
+  lastSeenAt: Timestamp;
+  nextAction: 'will_retry_automatically' | 'retry_after_fix' | 'wait_until_scheduled' | 'wait_for_active_task';
+  notifiedReasons?: Partial<Record<CodeTaskDispatchStatusReason, Timestamp>>;
+}
+
 /**
  * Status summary for UI when logs unavailable.
  * Design reference: Lines 1017-1041
@@ -234,6 +272,7 @@ export interface CodeTask {
   // Results
   result?: TaskResult;
   error?: TaskError;
+  dispatchStatus?: CodeTaskDispatchStatus;
 
   // Timestamps
   createdAt: Timestamp;
