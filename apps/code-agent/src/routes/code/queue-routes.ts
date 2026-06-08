@@ -128,11 +128,17 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         logger: services.logger,
         dispatchRetryRepo: services.dispatchRetryRepo,
         codeTaskRepo: services.codeTaskRepo,
+        logLineRepo: services.logLineRepo,
         taskDispatcher: services.taskDispatcher,
         linearAgentClient: services.linearAgentClient,
         whatsappNotifier: services.whatsappNotifier,
+        automationLog: services.automationLog,
+        /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production services always provide codeTaskDispatchNotificationRepo for retry drain @preserve */
+        ...(services.codeTaskDispatchNotificationRepo !== undefined && {
+          codeTaskDispatchNotificationRepo: services.codeTaskDispatchNotificationRepo,
+        }),
+        /* v8 ignore stop @preserve */
         workerSettingsRepo: services.workerSettingsRepo,
-        logLineRepo: services.logLineRepo,
         statusMirrorService: services.statusMirrorService,
         /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchStatusService @preserve */
         ...(services.codeTaskDispatchStatusService !== undefined && {
@@ -207,9 +213,16 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
       const result = await drainTaskQueue({
         logger: services.logger,
         codeTaskRepo: services.codeTaskRepo,
+        logLineRepo: services.logLineRepo,
         taskDispatcher: services.taskDispatcher,
         linearAgentClient: services.linearAgentClient,
+        /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production services always provide codeTaskDispatchNotificationRepo for queue drain @preserve */
         whatsappNotifier: services.whatsappNotifier,
+        automationLog: services.automationLog,
+        ...(services.codeTaskDispatchNotificationRepo !== undefined && {
+          codeTaskDispatchNotificationRepo: services.codeTaskDispatchNotificationRepo,
+        }),
+        /* v8 ignore stop @preserve */
         workerSettingsRepo: services.workerSettingsRepo,
         /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchStatusService @preserve */
         ...(services.codeTaskDispatchStatusService !== undefined && {

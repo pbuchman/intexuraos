@@ -59,7 +59,16 @@ describe('workerOpsRoutes (sub-plugin)', () => {
       dispatchSigningSecret: 'signing',
     });
 
-    nock('https://mac-worker.example.com').get('/health').reply(200, { status: 'ok' });
+    nock('https://mac-worker.example.com').get('/health').reply(200, {
+      status: 'ready',
+      capacity: 2,
+      running: 0,
+      available: 2,
+      workerAuths: {},
+      providerApiKeys: {},
+      dockerHealthy: true,
+      diskHealthy: true,
+    });
 
     const response = await app.inject({
       method: 'POST',
@@ -75,6 +84,41 @@ describe('workerOpsRoutes (sub-plugin)', () => {
     expect(body.success).toBe(true);
     expect(body.data.testStatus).toBe('success');
     expect(body.data.testMessage).toBe('Connection successful');
+  });
+
+  it('POST /code/worker-settings/workers/:name/test reports failure for legacy /health contract', async () => {
+    const { workerSettingsRepo } = getServices();
+    await workerSettingsRepo.addWorker('test-user-id', {
+      name: 'home-mac',
+      url: 'https://mac-worker.example.com',
+      cfAccessClientId: 'id',
+      cfAccessClientSecret: 'secret',
+      dispatchSigningSecret: 'signing',
+    });
+
+    nock('https://mac-worker.example.com').get('/health').reply(200, {
+      status: 'ready',
+      capacity: 2,
+      running: 0,
+      available: 2,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/worker-settings/workers/home-mac/test',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { testStatus: string; testMessage: string };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.testStatus).toBe('failure');
+    expect(body.data.testMessage).toBe(
+      'Health response missing worker capability details: workerAuths, providerApiKeys, dockerHealthy, diskHealthy'
+    );
   });
 
   it('POST /code/worker-settings/workers/:name/test returns 404 for unknown worker', async () => {

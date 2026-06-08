@@ -133,6 +133,39 @@ const dispatchStatusSchema = {
     workerNames: { type: 'array', items: { type: 'string' } },
     firstSeenAt: { type: 'string', format: 'date-time' },
     lastSeenAt: { type: 'string', format: 'date-time' },
+    lastAttemptAt: { type: 'string', format: 'date-time', nullable: true },
+    attemptCount: { type: 'number', nullable: true },
+    expiresAt: { type: 'string', format: 'date-time', nullable: true },
+    terminalCause: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        reason: { type: 'string' },
+        message: { type: 'string' },
+        remediation: { type: 'string' },
+        workerNames: { type: 'array', items: { type: 'string' } },
+        lastSeenAt: { type: 'string', format: 'date-time' },
+      },
+      required: ['reason', 'message', 'remediation', 'workerNames', 'lastSeenAt'],
+    },
+    workerHealthDetails: {
+      type: 'array',
+      nullable: true,
+      items: {
+        type: 'object',
+        properties: {
+          workerName: { type: 'string' },
+          tag: { type: 'string' },
+          healthy: { type: 'boolean' },
+          reason: { type: 'string', nullable: true },
+          error: { type: 'string', nullable: true },
+          code: { type: 'string', nullable: true },
+          missingFields: { type: 'array', items: { type: 'string' }, nullable: true },
+          contractMismatch: { type: 'boolean', nullable: true },
+        },
+        required: ['workerName', 'tag', 'healthy'],
+      },
+    },
     nextAction: {
       type: 'string',
       enum: ['will_retry_automatically', 'retry_after_fix', 'wait_until_scheduled', 'wait_for_active_task'],
@@ -168,7 +201,7 @@ const codeTaskSchema = {
     traceId: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled'],
+      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled', 'archived'],
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },

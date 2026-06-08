@@ -270,7 +270,7 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35 UTC** -- Implementation dispatched | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
+        '**14:35 UTC** -- Implementation queued | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
       );
     });
 
@@ -286,39 +286,39 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35 UTC** -- Implementation dispatched | opus | [View task](https://dev.intexuraos.cloud/#/code-tasks/task_abc123)'
+        '**14:35 UTC** -- Implementation queued | opus | [View task](https://dev.intexuraos.cloud/#/code-tasks/task_abc123)'
       );
     });
 
     it('renders review agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'review' });
-      expect(result).toContain('Review dispatched |');
-      expect(result).not.toContain('Review dispatched:');
+      expect(result).toContain('Review queued |');
+      expect(result).not.toContain('Review queued:');
       expect(result).toContain('[View task]');
     });
 
     it('renders remediation agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'remediation' });
-      expect(result).toContain('Remediation dispatched |');
-      expect(result).not.toContain('Remediation dispatched:');
+      expect(result).toContain('Remediation queued |');
+      expect(result).not.toContain('Remediation queued:');
       expect(result).toContain('[View task]');
     });
 
     it('renders plan agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'planning' });
-      expect(result).toContain('Plan dispatched |');
-      expect(result).not.toContain('Plan dispatched:');
+      expect(result).toContain('Plan queued |');
+      expect(result).not.toContain('Plan queued:');
       expect(result).toContain('[View task]');
     });
 
     it('renders PR agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'pull_request' });
-      expect(result).toContain('PR dispatched |');
-      expect(result).not.toContain('PR dispatched:');
+      expect(result).toContain('PR queued |');
+      expect(result).not.toContain('PR queued:');
       expect(result).toContain('[View task]');
     });
   });
@@ -390,8 +390,33 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('<details>');
+      expect(result).toContain('<summary>Details</summary>');
       expect(result).toContain('Rate limit exceeded');
       expect(result).toContain('RATE_LIMIT');
+    });
+
+    it('renders structured dispatch failure with task link, remediation, workers, and log lines', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_dispatch_failed',
+        taskId: 'task_abc123',
+        workerType: 'codex-xhigh',
+        agentType: 'review',
+        reason: 'worker_health_contract_mismatch',
+        message: 'Configured workers responded with an incompatible health contract.',
+        remediation: 'Restart the worker orchestrator.',
+        workerNames: ['home-dev'],
+        terminal: true,
+        logLines: ['Health response missing providerApiKeys'],
+      };
+
+      const result = renderEvent(event);
+
+      expect(result).toContain('**14:35 UTC** -- **Dispatch failed** | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123) | codex-xhigh | worker_health_contract_mismatch');
+      expect(result).toContain('Configured workers responded with an incompatible health contract.');
+      expect(result).toContain('Remediation: Restart the worker orchestrator.');
+      expect(result).toContain('Workers: home-dev');
+      expect(result).toContain('- Health response missing providerApiKeys');
     });
 
     it('renders without errorCode when missing', () => {
@@ -405,6 +430,34 @@ describe('renderEvent', () => {
       expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('Unknown error');
       expect(result).not.toContain('Code:');
+    });
+
+    it('renders a compact dispatch failure when no details are present', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_dispatch_failed',
+        reason: 'workers_unreachable',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- **Dispatch failed** | workers_unreachable');
+    });
+  });
+
+  describe('task_failed', () => {
+    it('renders agent-specific runtime failure label', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_failed',
+        taskId: 'task_abc123',
+        agentType: 'review',
+        error: 'Worker failed after start',
+      };
+
+      const result = renderEvent(event);
+
+      expect(result).toContain('**14:35 UTC** -- **Review failed**');
+      expect(result).toContain('Worker failed after start');
     });
   });
 

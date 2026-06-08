@@ -46,6 +46,16 @@ function orchestratorUnreachable(reason: 'timeout' | 'http-error' = 'timeout'): 
   return { _tag: 'orchestrator-unreachable', healthy: false, reason };
 }
 
+function contractMismatch(missingFields: string[] = ['providerApiKeys']): WorkerHealthState {
+  return {
+    _tag: 'unknown',
+    healthy: false,
+    error: 'Health response missing worker capability details',
+    contractMismatch: true,
+    missingFields,
+  };
+}
+
 interface BlockedDispatchCase {
   readonly name: string;
   readonly workerType: string;
@@ -95,6 +105,10 @@ describe('classifyCodeTaskDispatchability', () => {
       message: 'is not recognized',
       remediation: 'Select a supported worker type',
     },
+    worker_health_contract_mismatch: {
+      message: 'responded with an incompatible health contract',
+      remediation: 'Deploy or restart the worker orchestrator',
+    },
   };
 
   const blockedDispatchCases = [
@@ -113,6 +127,15 @@ describe('classifyCodeTaskDispatchability', () => {
         'home-dev': orchestratorUnreachable(),
       },
       reason: 'workers_unreachable',
+    },
+    {
+      name: 'worker health contract mismatch',
+      workerType: 'codex-xhigh',
+      workers: [worker('home-dev')],
+      health: {
+        'home-dev': contractMismatch(['providerApiKeys']),
+      },
+      reason: 'worker_health_contract_mismatch',
     },
     {
       name: 'all healthy workers at capacity',
@@ -219,6 +242,68 @@ describe('classifyCodeTaskDispatchability', () => {
       dispatchable: true,
       workerNames: ['ready'],
     });
+  });
+
+  it('keeps tunnel-down and timeout failures recoverable as workers_unreachable', () => {
+    const tunnelResult = classifyCodeTaskDispatchability({
+      workerType: 'codex-xhigh',
+      workers: [worker('tunnel-worker')],
+      healthByWorkerName: {
+        'tunnel-worker': { _tag: 'tunnel-down', healthy: false, reason: 'dns-failed' },
+      },
+    });
+    const timeoutResult = classifyCodeTaskDispatchability({
+      workerType: 'codex-xhigh',
+      workers: [worker('timeout-worker')],
+      healthByWorkerName: {
+        'timeout-worker': orchestratorUnreachable('timeout'),
+      },
+    });
+
+    expect(tunnelResult).toEqual(expect.objectContaining({
+      dispatchable: false,
+      reason: 'workers_unreachable',
+      severity: 'critical',
+    }));
+    expect(timeoutResult).toEqual(expect.objectContaining({
+      dispatchable: false,
+      reason: 'workers_unreachable',
+      severity: 'critical',
+    }));
+  });
+
+  it('is dispatchable when a healthy capable worker exists beside contract-mismatched workers', () => {
+    const result = classifyCodeTaskDispatchability({
+      workerType: 'codex-xhigh',
+      workers: [worker('legacy'), worker('ready')],
+      healthByWorkerName: {
+        legacy: contractMismatch(),
+        ready: healthy(),
+      },
+    });
+
+    expect(result).toEqual({
+      dispatchable: true,
+      workerNames: ['ready'],
+    });
+  });
+
+  it('returns terminal contract mismatch when every enabled worker has mismatched health', () => {
+    const result = classifyCodeTaskDispatchability({
+      workerType: 'codex-xhigh',
+      workers: [worker('legacy-a'), worker('legacy-b')],
+      healthByWorkerName: {
+        'legacy-a': contractMismatch(['providerApiKeys']),
+        'legacy-b': contractMismatch(['workerAuths', 'providerApiKeys']),
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      dispatchable: false,
+      reason: 'worker_health_contract_mismatch',
+      severity: 'critical',
+      workerNames: ['legacy-a', 'legacy-b'],
+    }));
   });
 
   it('is dispatchable for Codex when expired auth can be refreshed by the worker', () => {

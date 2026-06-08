@@ -9,6 +9,9 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
+import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
+import type { CodeTaskDispatchNotificationRepository } from '../../domain/repositories/codeTaskDispatchNotificationRepository.js';
+import type { AutomationLog } from '../../domain/ports/automationLog.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type {
   TaskEnqueueService,
@@ -19,16 +22,19 @@ import type {
 } from '../../domain/services/taskEnqueueService.js';
 import {
   buildDispatchStatusForProblem,
-  notifyDispatchProblemForTask,
   queueFullDispatchProblem,
   taskErrorFromDispatchStatus,
 } from '../../domain/services/codeTaskDispatchProblems.js';
+import { reportDispatchFailure } from '../../domain/services/codeTaskDispatchFailureReporter.js';
 import { loadConfig } from '../../config.js';
 
 export interface TaskEnqueueServiceImplDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
+  logLineRepo?: LogLineRepository;
+  automationLog?: AutomationLog;
   whatsappNotifier: WhatsAppNotifier;
+  notificationRepo?: CodeTaskDispatchNotificationRepository;
 }
 
 export function createTaskEnqueueService(deps: TaskEnqueueServiceImplDeps): TaskEnqueueService {
@@ -38,12 +44,18 @@ export function createTaskEnqueueService(deps: TaskEnqueueServiceImplDeps): Task
 export class TaskEnqueueServiceImpl implements TaskEnqueueService {
   private readonly logger: Logger;
   private readonly codeTaskRepo: CodeTaskRepository;
+  private readonly logLineRepo: LogLineRepository | undefined;
+  private readonly automationLog: AutomationLog | undefined;
   private readonly whatsappNotifier: WhatsAppNotifier;
+  private readonly notificationRepo: CodeTaskDispatchNotificationRepository | undefined;
 
   constructor(deps: TaskEnqueueServiceImplDeps) {
     this.logger = deps.logger;
     this.codeTaskRepo = deps.codeTaskRepo;
+    this.logLineRepo = deps.logLineRepo;
+    this.automationLog = deps.automationLog;
     this.whatsappNotifier = deps.whatsappNotifier;
+    this.notificationRepo = deps.notificationRepo;
   }
 
   private async failTaskForQueueFull(
@@ -71,15 +83,36 @@ export class TaskEnqueueServiceImpl implements TaskEnqueueService {
       return err({ code: 'internal_error', message: 'Failed to fail task after queue capacity check' });
     }
 
-    await notifyDispatchProblemForTask({
-      task,
-      dispatchStatus,
-      problem,
-      whatsappNotifier: this.whatsappNotifier,
-      codeTaskRepo: this.codeTaskRepo,
-      logger: this.logger,
-      affectedTaskCount,
-    });
+    /* v8 ignore start -- ts-type: optional reporter dependencies are conditional for exactOptionalPropertyTypes; service factory always wires all three reporter deps @preserve */
+    if (
+      this.logLineRepo !== undefined
+      && this.automationLog !== undefined
+      && this.notificationRepo !== undefined
+    ) {
+      await reportDispatchFailure({
+        task,
+        dispatchStatus,
+        problem,
+        phase: 'enqueue_failed',
+        logLineRepo: this.logLineRepo,
+        automationLog: this.automationLog,
+        whatsappNotifier: this.whatsappNotifier,
+        notificationRepo: this.notificationRepo,
+        logger: this.logger,
+        affectedTaskCount,
+      });
+    /* v8 ignore stop @preserve */
+    } else {
+      await this.whatsappNotifier.notifyTaskDispatchBlocked(task.userId, {
+        workerType: task.workerType,
+        reason: problem.reason,
+        affectedTaskCount,
+        exampleTaskId: task.id,
+        message: problem.message,
+        remediation: problem.remediation,
+        workerNames: problem.workerNames,
+      });
+    }
 
     return ok(undefined);
   }

@@ -8,6 +8,7 @@ import type { WorkerConfig, WorkerHealthState } from '../models/workerSettings.j
 export type CodeTaskDispatchBlockerReason =
   | 'no_enabled_workers'
   | 'workers_unreachable'
+  | 'worker_health_contract_mismatch'
   | 'workers_at_capacity'
   | 'codex_auth_unavailable'
   | 'claude_auth_unavailable'
@@ -57,6 +58,10 @@ function blocker(
     workers_unreachable: {
       message: `No configured workers are reachable for ${label}.`,
       remediation: 'Check worker host connectivity, tunnel routing, and orchestrator service health.',
+    },
+    worker_health_contract_mismatch: {
+      message: `Configured workers for ${label} responded with an incompatible health contract.`,
+      remediation: 'Deploy or restart the worker orchestrator so /health includes the required capability fields, then retry this task.',
     },
     workers_at_capacity: {
       message: `All capable workers for ${label} are currently at capacity.`,
@@ -135,6 +140,12 @@ export function classifyCodeTaskDispatchability(
   });
 
   if (healthyWorkers.length === 0) {
+    const enabledHealthStates = enabled.map((worker) => healthByWorkerName[worker.name]);
+    const hasHealthContractMismatch = enabledHealthStates.length > 0
+      && enabledHealthStates.every((health) => health?._tag === 'unknown' && health.contractMismatch === true);
+    if (hasHealthContractMismatch) {
+      return blocker('worker_health_contract_mismatch', workerType, enabled.map((worker) => worker.name));
+    }
     return blocker('workers_unreachable', workerType, enabled.map((worker) => worker.name));
   }
 

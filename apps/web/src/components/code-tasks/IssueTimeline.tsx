@@ -44,7 +44,7 @@ function getActionLabel(task: CodeTask): string {
     if (status === 'implemented') return 'Execution completed';
     if (status === 'failed') return 'Execution failed';
     if (status === 'running') return 'Execution running';
-    if (status === 'dispatched') return 'Execution dispatched';
+    if (status === 'dispatched') return 'Execution started';
     if (status === 'queued') return 'Execution queued';
   }
 
@@ -52,7 +52,7 @@ function getActionLabel(task: CodeTask): string {
     if (status === 'planned') return 'Planning completed';
     if (status === 'failed') return 'Planning failed';
     if (status === 'running') return 'Planning running';
-    if (status === 'dispatched') return 'Planning dispatched';
+    if (status === 'dispatched') return 'Planning started';
     if (status === 'queued') return 'Planning queued';
   }
 
@@ -60,7 +60,7 @@ function getActionLabel(task: CodeTask): string {
     if (status === 'implemented') return 'PR Task completed';
     if (status === 'failed') return 'PR Task failed';
     if (status === 'running') return 'PR Task running';
-    if (status === 'dispatched') return 'PR Task dispatched';
+    if (status === 'dispatched') return 'PR Task started';
     if (status === 'queued') return 'PR Task queued';
   }
 
@@ -68,7 +68,7 @@ function getActionLabel(task: CodeTask): string {
     if (status === 'reviewed') return 'Review completed';
     if (status === 'failed') return 'Review failed';
     if (status === 'running') return 'Review running';
-    if (status === 'dispatched') return 'Review dispatched';
+    if (status === 'dispatched') return 'Review started';
     if (status === 'queued') return 'Review queued';
   }
 
@@ -76,7 +76,7 @@ function getActionLabel(task: CodeTask): string {
     if (status === 'implemented') return 'Remediation completed';
     if (status === 'failed') return 'Remediation failed';
     if (status === 'running') return 'Remediation running';
-    if (status === 'dispatched') return 'Remediation dispatched';
+    if (status === 'dispatched') return 'Remediation started';
     if (status === 'queued') return 'Remediation queued';
   }
 

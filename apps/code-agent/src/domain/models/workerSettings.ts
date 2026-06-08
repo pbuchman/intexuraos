@@ -215,6 +215,19 @@ export interface UnknownState {
   _tag: 'unknown';
   healthy: false;
   error: string;
+  contractMismatch?: boolean;
+  missingFields?: string[];
+}
+
+export interface WorkerHealthDiagnostic {
+  workerName: string;
+  tag: WorkerHealthState['_tag'];
+  healthy: boolean;
+  reason?: string;
+  error?: string;
+  code?: string;
+  missingFields?: string[];
+  contractMismatch?: boolean;
 }
 
 /**

@@ -289,7 +289,7 @@ describe('drainTaskQueue', () => {
       status: 'failed',
       error: {
         code: 'queue_timeout',
-        message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
+        message: 'Task expired in queue after 1440 minutes before a worker could start.',
       },
       dispatchStatus: expect.objectContaining({
         state: 'terminal',
@@ -304,13 +304,6 @@ describe('drainTaskQueue', () => {
       reason: 'queue_timeout',
       exampleTaskId: 'task-123',
     }));
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
-      dispatchStatus: expect.objectContaining({
-        notifiedReasons: expect.objectContaining({
-          queue_timeout: expect.any(Timestamp),
-        }),
-      }),
-    });
   });
 
   it('returns internal_error and does not notify when queue timeout failure cannot be persisted', async () => {
@@ -950,16 +943,41 @@ describe('drainTaskQueue', () => {
       affectedTaskCount: 1,
       exampleTaskId: 'task-123',
     }));
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
-      dispatchStatus: expect.objectContaining({
-        notifiedReasons: expect.objectContaining({
-          no_enabled_workers: expect.any(Timestamp),
-        }),
-      }),
-    });
     expect(mockCodeTaskRepo.update.mock.invocationCallOrder[0]).toBeLessThan(
       mockWhatsappNotifier.notifyTaskDispatchBlocked.mock.invocationCallOrder[0] ?? 0,
     );
+  });
+
+  it('fails all queued tasks affected by a terminal no-worker blocker', async () => {
+    const task1 = createMockTask({ id: 'task-1', workerType: 'opus' });
+    const task2 = createMockTask({ id: 'task-2', workerType: 'opus' });
+    const unaffected = createMockTask({ id: 'task-3', workerType: 'sonnet' });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task1, task2, unaffected]));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(task1));
+    setupWorkerSettings([{ ...workerConfig, enabled: false }]);
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', expect.objectContaining({
+      status: 'failed',
+      dispatchStatus: expect.objectContaining({ reason: 'no_enabled_workers' }),
+    }));
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-2', expect.objectContaining({
+      status: 'failed',
+      dispatchStatus: expect.objectContaining({ reason: 'no_enabled_workers' }),
+    }));
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith('task-3', expect.anything());
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
+      reason: 'no_enabled_workers',
+      affectedTaskCount: 2,
+      exampleTaskId: 'task-1',
+    }));
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
+      reason: 'no_enabled_workers',
+      affectedTaskCount: 2,
+      exampleTaskId: 'task-2',
+    }));
   });
 
   it('records a dispatch system status when user has no enabled workers', async () => {
@@ -1146,17 +1164,54 @@ describe('drainTaskQueue', () => {
       affectedTaskCount: 1,
       exampleTaskId: 'task-123',
     }));
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
-      dispatchStatus: expect.objectContaining({
-        notifiedReasons: expect.objectContaining({
-          workers_at_capacity: expect.any(Timestamp),
-        }),
-      }),
-    });
   });
 
-  it('suppresses repeated WhatsApp notifications for the same task and dispatch reason', async () => {
-    const notifiedAt = Timestamp.fromDate(new Date('2026-06-05T12:00:00.000Z'));
+  it('marks all queued tasks affected by a recoverable worker blocker as waiting', async () => {
+    const task1 = createMockTask({ id: 'task-1', workerType: 'codex-xhigh' });
+    const task2 = createMockTask({ id: 'task-2', workerType: 'codex-xhigh' });
+    const unaffected = createMockTask({ id: 'task-3', workerType: 'opus' });
+    const blocker = {
+      dispatchable: false as const,
+      reason: 'workers_at_capacity' as const,
+      severity: 'warning' as const,
+      message: 'All capable workers for codex-xhigh are currently at capacity.',
+      remediation: 'Wait for a running task to finish or add worker capacity.',
+      workerNames: ['home-mac'],
+    };
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task1, task2, unaffected]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      err({ code: 'at_capacity', message: blocker.message, blocker }),
+    );
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', expect.objectContaining({
+      status: 'queued',
+      dispatchStatus: expect.objectContaining({ reason: 'workers_at_capacity' }),
+    }));
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-2', expect.objectContaining({
+      status: 'queued',
+      dispatchStatus: expect.objectContaining({ reason: 'workers_at_capacity' }),
+    }));
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith('task-3', expect.objectContaining({
+      dispatchStatus: expect.objectContaining({ reason: 'workers_at_capacity' }),
+    }));
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
+      reason: 'workers_at_capacity',
+      affectedTaskCount: 2,
+      exampleTaskId: 'task-1',
+    }));
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
+      reason: 'workers_at_capacity',
+      affectedTaskCount: 2,
+      exampleTaskId: 'task-2',
+    }));
+  });
+
+  it('preserves firstSeenAt while updating a repeated dispatch reason', async () => {
+    const firstSeenAt = Timestamp.fromDate(new Date('2026-06-05T12:00:00.000Z'));
     const task = {
       ...createMockTask({
       workerType: 'codex-xhigh',
@@ -1169,12 +1224,9 @@ describe('drainTaskQueue', () => {
         message: 'All capable workers for codex-xhigh are currently at capacity.',
         remediation: 'Wait for a running task to finish or add worker capacity.',
         workerNames: ['home-mac'],
-        firstSeenAt: notifiedAt,
-        lastSeenAt: notifiedAt,
+        firstSeenAt,
+        lastSeenAt: firstSeenAt,
         nextAction: 'will_retry_automatically',
-        notifiedReasons: {
-          workers_at_capacity: notifiedAt,
-        },
       },
     } as CodeTask;
     const blocker = {
@@ -1195,13 +1247,15 @@ describe('drainTaskQueue', () => {
 
     await drainTaskQueue(createDeps());
 
-    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
+      reason: 'workers_at_capacity',
+      exampleTaskId: 'task-123',
+    }));
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
       status: 'queued',
       dispatchStatus: expect.objectContaining({
-        notifiedReasons: {
-          workers_at_capacity: notifiedAt,
-        },
+        reason: 'workers_at_capacity',
+        firstSeenAt,
       }),
     }));
   });
@@ -2216,7 +2270,7 @@ describe('drainTaskQueue', () => {
         status: 'failed',
         error: {
           code: 'queue_timeout',
-          message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
+          message: 'Task expired in queue after 1440 minutes before a worker could start.',
         },
         dispatchStatus: expect.objectContaining({
           state: 'terminal',
@@ -3380,7 +3434,6 @@ describe('drainTaskQueue', () => {
     it('preserves scheduled wait firstSeenAt and notification ledger when the task is still waiting', async () => {
       const now = Date.now();
       const firstSeenAt = Timestamp.fromDate(new Date(now - 30 * 60 * 1000));
-      const notifiedAt = Timestamp.fromDate(new Date(now - 29 * 60 * 1000));
       const task = createMockTask({
         id: 'scheduled-task',
         queuedAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
@@ -3400,9 +3453,6 @@ describe('drainTaskQueue', () => {
           firstSeenAt,
           lastSeenAt: firstSeenAt,
           nextAction: 'wait_until_scheduled',
-          notifiedReasons: {
-            queue_full: notifiedAt,
-          },
         },
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -3415,9 +3465,6 @@ describe('drainTaskQueue', () => {
         dispatchStatus: expect.objectContaining({
           reason: 'scheduled_wait',
           firstSeenAt,
-          notifiedReasons: {
-            queue_full: notifiedAt,
-          },
         }),
       });
     });
@@ -3590,7 +3637,7 @@ describe('drainTaskQueue', () => {
         status: 'failed',
         error: {
           code: 'queue_timeout',
-          message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
+          message: 'Task expired in queue after 1440 minutes before a worker could start.',
         },
         dispatchStatus: expect.objectContaining({
           state: 'terminal',
@@ -3601,10 +3648,9 @@ describe('drainTaskQueue', () => {
       });
     });
 
-    it('preserves queue timeout firstSeenAt and notification ledger when timeout was already recorded', async () => {
+    it('preserves queue timeout firstSeenAt when timeout was already recorded', async () => {
       const now = Date.now();
       const firstSeenAt = Timestamp.fromDate(new Date(now - 2 * 60 * 60 * 1000));
-      const notifiedAt = Timestamp.fromDate(new Date(now - 90 * 60 * 1000));
       const task = createMockTask({
         id: 'stale-queued',
         queuedAt: Timestamp.fromDate(new Date(now - 25 * 60 * 60 * 1000)),
@@ -3619,9 +3665,6 @@ describe('drainTaskQueue', () => {
           firstSeenAt,
           lastSeenAt: firstSeenAt,
           nextAction: 'retry_after_fix',
-          notifiedReasons: {
-            no_enabled_workers: notifiedAt,
-          },
         },
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -3635,9 +3678,6 @@ describe('drainTaskQueue', () => {
         dispatchStatus: expect.objectContaining({
           reason: 'queue_timeout',
           firstSeenAt,
-          notifiedReasons: {
-            no_enabled_workers: notifiedAt,
-          },
         }),
       }));
     });

@@ -1195,7 +1195,7 @@ describe('WhatsAppNotifier', () => {
       expect(result.ok).toBe(true);
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('⏰ Fix login bug');
-      expect(callArgs.message).toContain('Workers were still busy');
+      expect(callArgs.message).toContain('timed out before a worker could start');
       expect(callArgs.correlationId).toBe('trace-123');
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View Progress',

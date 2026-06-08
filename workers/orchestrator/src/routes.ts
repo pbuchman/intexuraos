@@ -316,6 +316,7 @@ export function registerRoutes(
     /* v8 ignore stop @preserve */
 
     reply.send({
+      healthContractVersion: 1,
       status: getStatus?.() ?? 'ready',
       capacity,
       running,

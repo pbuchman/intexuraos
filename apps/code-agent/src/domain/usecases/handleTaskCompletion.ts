@@ -888,9 +888,16 @@ export async function handleTaskCompletion(
           await drainTaskQueue({
             logger,
             codeTaskRepo: services.codeTaskRepo,
+            logLineRepo: services.logLineRepo,
             taskDispatcher: services.taskDispatcher,
             linearAgentClient: services.linearAgentClient,
             whatsappNotifier: services.whatsappNotifier,
+            automationLog: services.automationLog,
+            /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchNotificationRepo @preserve */
+            ...(services.codeTaskDispatchNotificationRepo !== undefined && {
+              codeTaskDispatchNotificationRepo: services.codeTaskDispatchNotificationRepo,
+            }),
+            /* v8 ignore stop @preserve */
             workerSettingsRepo: services.workerSettingsRepo,
             /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchStatusService @preserve */
             ...(services.codeTaskDispatchStatusService !== undefined && {

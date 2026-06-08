@@ -1,5 +1,4 @@
 import { Timestamp } from '@google-cloud/firestore';
-import { ok } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
   CodeTask,
@@ -21,6 +20,7 @@ export interface DispatchProblem {
   remediation: string;
   workerNames: string[];
   terminal: boolean;
+  terminalCause?: CodeTaskDispatchStatus['terminalCause'];
 }
 
 export interface BuildDispatchStatusInput {
@@ -102,15 +102,41 @@ export function queueFullDispatchProblem(message: string): DispatchProblem {
 export function queueTimeoutDispatchProblem(input: {
   message: string;
   remediation: string;
+  terminalCause?: CodeTaskDispatchStatus['terminalCause'];
+  workerNames?: string[];
 }): DispatchProblem {
   return {
     reason: 'queue_timeout',
     severity: 'critical',
     message: input.message,
     remediation: input.remediation,
-    workerNames: [],
+    workerNames: input.workerNames ?? [],
     terminal: true,
+    ...(input.terminalCause !== undefined && { terminalCause: input.terminalCause }),
   };
+}
+
+export function queueTimeoutDispatchProblemFromTask(task: CodeTask, ttlMinutes: number): DispatchProblem {
+  const previous = task.dispatchStatus;
+  if (previous !== undefined && previous.reason !== 'queue_timeout') {
+    return queueTimeoutDispatchProblem({
+      message: `Task expired in queue after ${String(ttlMinutes)} minutes while blocked by ${previous.reason}: ${previous.message}`,
+      remediation: previous.remediation,
+      workerNames: previous.workerNames,
+      terminalCause: {
+        reason: previous.reason,
+        message: previous.message,
+        remediation: previous.remediation,
+        workerNames: previous.workerNames,
+        lastSeenAt: previous.lastSeenAt,
+      },
+    });
+  }
+
+  return queueTimeoutDispatchProblem({
+    message: `Task expired in queue after ${String(ttlMinutes)} minutes before a worker could start.`,
+    remediation: 'Retry this task after worker capacity is available.',
+  });
 }
 
 export function dispatchFailureProblem(input: {
@@ -141,14 +167,25 @@ export function missingPrBranchDispatchProblem(input: {
   };
 }
 
-export function retryExpiredDispatchProblem(ttlMinutes: number): DispatchProblem {
+export function retryExpiredDispatchProblem(input: {
+  ttlMinutes: number;
+  attempts: number;
+  lastError: string;
+}): DispatchProblem {
   return {
     reason: 'retry_expired',
     severity: 'critical',
-    message: `Dispatch retry expired after ${String(ttlMinutes)} minutes`,
+    message: `Dispatch retry expired after ${String(input.ttlMinutes)} minutes and ${String(input.attempts)} attempts: ${input.lastError}`,
     remediation: 'Fix the dispatch blocker, then retry this task.',
     workerNames: [],
     terminal: true,
+    terminalCause: {
+      reason: 'dispatch_failed',
+      message: input.lastError,
+      remediation: 'Fix the underlying dispatch error, then retry this task.',
+      workerNames: [],
+      lastSeenAt: Timestamp.now(),
+    },
   };
 }
 
@@ -160,6 +197,13 @@ export function retryExhaustedDispatchProblem(attempts: number, lastError: strin
     remediation: 'Fix the dispatch blocker, then retry this task.',
     workerNames: [],
     terminal: true,
+    terminalCause: {
+      reason: 'dispatch_failed',
+      message: lastError,
+      remediation: 'Fix the underlying dispatch error, then retry this task.',
+      workerNames: [],
+      lastSeenAt: Timestamp.now(),
+    },
   };
 }
 
@@ -180,12 +224,6 @@ export function taskErrorFromDispatchStatus(dispatchStatus: CodeTaskDispatchStat
   };
 }
 
-function existingNotifiedReasons(
-  task: CodeTask
-): Partial<Record<CodeTaskDispatchStatusReason, Timestamp>> {
-  return task.dispatchStatus?.notifiedReasons ?? {};
-}
-
 function firstSeenAtForReason(
   task: CodeTask,
   reason: CodeTaskDispatchStatusReason,
@@ -198,7 +236,6 @@ export function buildDispatchStatusForProblem(
   input: BuildDispatchStatusInput
 ): CodeTaskDispatchStatus {
   const now = Timestamp.fromDate(input.now ?? new Date());
-  const notifiedReasons = existingNotifiedReasons(input.task);
 
   return {
     state: input.problem.terminal ? 'terminal' : 'waiting',
@@ -211,71 +248,13 @@ export function buildDispatchStatusForProblem(
     firstSeenAt: firstSeenAtForReason(input.task, input.problem.reason, now),
     lastSeenAt: now,
     nextAction: nextActionForDispatchProblem(input.problem),
-    ...(Object.keys(notifiedReasons).length > 0 && { notifiedReasons }),
+    ...(input.problem.terminalCause !== undefined && { terminalCause: input.problem.terminalCause }),
   };
 }
 
 export async function notifyDispatchProblemForTask(
   input: NotifyDispatchProblemForTaskInput
 ): Promise<void> {
-  const notifiedReasons = input.dispatchStatus.notifiedReasons ?? {};
-  if (notifiedReasons[input.problem.reason] !== undefined) {
-    return;
-  }
-
-  const nextNotifiedReasons = {
-    ...notifiedReasons,
-    [input.problem.reason]: Timestamp.fromDate(input.now ?? new Date()),
-  };
-
-  const nextDispatchStatus: CodeTaskDispatchStatus = {
-    ...input.dispatchStatus,
-    notifiedReasons: nextNotifiedReasons,
-  };
-
-  const reserveResult = input.codeTaskRepo.runInTransaction !== undefined
-    ? await input.codeTaskRepo.runInTransaction(async (transaction) => {
-        const currentResult = await input.codeTaskRepo.findById(input.task.id, { transaction });
-        if (!currentResult.ok) {
-          return currentResult;
-        }
-        const currentStatus = currentResult.value.dispatchStatus;
-        if (currentStatus?.reason !== input.problem.reason) {
-          return ok({ shouldNotify: false });
-        }
-        if (currentStatus.notifiedReasons?.[input.problem.reason] !== undefined) {
-          return ok({ shouldNotify: false });
-        }
-        const updateResult = await input.codeTaskRepo.update(input.task.id, {
-          dispatchStatus: {
-            ...currentStatus,
-            notifiedReasons: {
-              ...(currentStatus.notifiedReasons ?? {}),
-              [input.problem.reason]: nextNotifiedReasons[input.problem.reason],
-            },
-          },
-        }, { transaction });
-        if (!updateResult.ok) {
-          return updateResult;
-        }
-        return ok({ shouldNotify: true });
-      })
-    : await input.codeTaskRepo.update(input.task.id, {
-        dispatchStatus: nextDispatchStatus,
-      }).then((updateResult) => updateResult.ok ? ok({ shouldNotify: true }) : updateResult);
-
-  if (!reserveResult.ok) {
-    input.logger.warn(
-      { taskId: input.task.id, reason: input.problem.reason, error: reserveResult.error },
-      'Failed to persist code task dispatch notification ledger'
-    );
-    return;
-  }
-
-  if (!reserveResult.value.shouldNotify) {
-    return;
-  }
-
   const notifyResult = await input.whatsappNotifier.notifyTaskDispatchBlocked(input.task.userId, {
     workerType: input.task.workerType,
     reason: input.problem.reason,

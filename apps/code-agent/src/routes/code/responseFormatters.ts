@@ -12,6 +12,26 @@ import type {
 } from '../../domain/models/codeTask.js';
 import type { ExecutionMemoryType } from '../../domain/models/executionMemory.js';
 
+interface SerializedDispatchStatus {
+  state: CodeTaskDispatchStatus['state'];
+  reason: CodeTaskDispatchStatus['reason'];
+  terminal: boolean;
+  severity: CodeTaskDispatchStatus['severity'];
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  nextAction: CodeTaskDispatchStatus['nextAction'];
+  lastAttemptAt?: string;
+  attemptCount?: number;
+  expiresAt?: string;
+  terminalCause?: Omit<NonNullable<CodeTaskDispatchStatus['terminalCause']>, 'lastSeenAt'> & {
+    lastSeenAt: string;
+  };
+  workerHealthDetails?: CodeTaskDispatchStatus['workerHealthDetails'];
+}
+
 /**
  * Track in-flight health-probe requests per user for deduplication.
  *
@@ -149,10 +169,7 @@ function taskToApiResponse(task: {
       supportLink?: string;
     };
   };
-  dispatchStatus?: Omit<CodeTaskDispatchStatus, 'firstSeenAt' | 'lastSeenAt' | 'notifiedReasons'> & {
-    firstSeenAt: string;
-    lastSeenAt: string;
-  };
+  dispatchStatus?: SerializedDispatchStatus;
   executionMemoryContext?: {
     status: 'none' | 'matched' | 'error';
     applicationId?: string;
@@ -280,10 +297,8 @@ function taskToApiResponse(task: {
 
 function serializeDispatchStatus(
   dispatchStatus: CodeTaskDispatchStatus,
-): Omit<CodeTaskDispatchStatus, 'firstSeenAt' | 'lastSeenAt' | 'notifiedReasons'> & {
-  firstSeenAt: string;
-  lastSeenAt: string;
-} {
+): SerializedDispatchStatus {
+  const terminalCause = dispatchStatus.terminalCause;
   return {
     state: dispatchStatus.state,
     reason: dispatchStatus.reason,
@@ -295,6 +310,33 @@ function serializeDispatchStatus(
     firstSeenAt: timestampToIso(dispatchStatus.firstSeenAt) ?? '',
     lastSeenAt: timestampToIso(dispatchStatus.lastSeenAt) ?? '',
     nextAction: dispatchStatus.nextAction,
+    ...(dispatchStatus.lastAttemptAt !== undefined && {
+      /* v8 ignore start -- ts-type: Timestamp union can include malformed values; nullish fallback is defensive and API tests cover valid timestamps @preserve */
+      lastAttemptAt: timestampToIso(dispatchStatus.lastAttemptAt) ?? '',
+      /* v8 ignore stop @preserve */
+    }),
+    /* v8 ignore start -- ts-type: optional attemptCount spread for exactOptionalPropertyTypes; absence is represented by omitting the property @preserve */
+    ...(dispatchStatus.attemptCount !== undefined && { attemptCount: dispatchStatus.attemptCount }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional expiresAt spread for exactOptionalPropertyTypes; malformed Timestamp fallback is defensive and valid timestamps are covered @preserve */
+    ...(dispatchStatus.expiresAt !== undefined && {
+      expiresAt: timestampToIso(dispatchStatus.expiresAt) ?? '',
+    }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional terminalCause spread for exactOptionalPropertyTypes; malformed Timestamp fallback is defensive and valid terminal cause serialization is covered @preserve */
+    ...(terminalCause !== undefined && {
+      terminalCause: {
+        reason: terminalCause.reason,
+        message: terminalCause.message,
+        remediation: terminalCause.remediation,
+        workerNames: terminalCause.workerNames,
+        lastSeenAt: timestampToIso(terminalCause.lastSeenAt) ?? '',
+      },
+    }),
+    /* v8 ignore stop @preserve */
+    ...(dispatchStatus.workerHealthDetails !== undefined && {
+      workerHealthDetails: dispatchStatus.workerHealthDetails,
+    }),
   };
 }
 

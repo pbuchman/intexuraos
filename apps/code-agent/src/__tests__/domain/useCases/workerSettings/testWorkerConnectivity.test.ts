@@ -80,11 +80,25 @@ describe('testWorkerConnectivity use case', () => {
     }
   });
 
-  it('records success when health endpoint returns 200', async () => {
+  it('records success when health endpoint returns dispatch-compatible health', async () => {
     const repo = makeRepo({
       getWorkerByName: vi.fn().mockResolvedValue(ok(sampleWorker)),
     });
-    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        status: 'ready',
+        capacity: 2,
+        running: 0,
+        available: 2,
+        workerAuths: {},
+        providerApiKeys: {},
+        dockerHealthy: true,
+        diskHealthy: true,
+      }),
+    });
     const useCase = createTestWorkerConnectivityUseCase({
       workerSettingsRepo: repo,
       logger,
@@ -113,6 +127,67 @@ describe('testWorkerConnectivity use case', () => {
         },
       })
     );
+  });
+
+  it('records failure when HTTP 200 health lacks dispatch capability fields', async () => {
+    const repo = makeRepo({
+      getWorkerByName: vi.fn().mockResolvedValue(ok(sampleWorker)),
+    });
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        status: 'ready',
+        capacity: 2,
+        running: 0,
+        available: 2,
+      }),
+    });
+    const useCase = createTestWorkerConnectivityUseCase({
+      workerSettingsRepo: repo,
+      logger,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    const result = await useCase({ userId: 'u1', workerName: 'home-mac' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.testStatus).toBe('failure');
+      expect(result.value.testMessage).toBe(
+        'Health response missing worker capability details: workerAuths, providerApiKeys, dockerHealthy, diskHealthy'
+      );
+    }
+    expect(repo.updateTestResult).toHaveBeenCalledWith('u1', 'home-mac', {
+      status: 'failure',
+      message: 'Health response missing worker capability details: workerAuths, providerApiKeys, dockerHealthy, diskHealthy',
+    });
+  });
+
+  it('records invalid health response when HTTP 200 body is not an object', async () => {
+    const repo = makeRepo({
+      getWorkerByName: vi.fn().mockResolvedValue(ok(sampleWorker)),
+    });
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => 'ready',
+    });
+    const useCase = createTestWorkerConnectivityUseCase({
+      workerSettingsRepo: repo,
+      logger,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    const result = await useCase({ userId: 'u1', workerName: 'home-mac' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.testStatus).toBe('failure');
+      expect(result.value.testMessage).toBe('Invalid health response format');
+    }
   });
 
   it('records failure for non-2xx responses with status message', async () => {
@@ -165,7 +240,21 @@ describe('testWorkerConnectivity use case', () => {
     });
     const globalFetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as Response);
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          status: 'ready',
+          capacity: 2,
+          running: 0,
+          available: 2,
+          workerAuths: {},
+          providerApiKeys: {},
+          dockerHealthy: true,
+          diskHealthy: true,
+        }),
+      } as Response);
     const useCase = createTestWorkerConnectivityUseCase({ workerSettingsRepo: repo, logger });
 
     const result = await useCase({ userId: 'u1', workerName: 'home-mac' });

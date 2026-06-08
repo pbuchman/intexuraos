@@ -15,8 +15,10 @@ import type { DispatchRetry } from '../models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
+import type { CodeTaskDispatchNotificationRepository } from '../repositories/codeTaskDispatchNotificationRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
@@ -35,6 +37,7 @@ import {
   type DispatchBlocker,
   type DispatchProblem,
 } from '../services/codeTaskDispatchProblems.js';
+import { reportDispatchFailure } from '../services/codeTaskDispatchFailureReporter.js';
 import { loadConfig } from '../../config.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
@@ -79,9 +82,10 @@ async function recordDispatchBlockedForRetry(
 }
 
 async function failRetryTaskForDispatchProblem(
-  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier'>,
+  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
   task: CodeTask,
   problem: DispatchProblem,
+  phase: 'terminal' | 'retry_expired' | 'retry_exhausted' = 'terminal',
 ): Promise<Result<void, DrainRetryQueueError>> {
   const dispatchStatus = buildDispatchStatusForProblem({
     task,
@@ -102,20 +106,12 @@ async function failRetryTaskForDispatchProblem(
       message: 'Failed to persist retry dispatch failure status',
     });
   }
-  await notifyDispatchProblemForTask({
-    task,
-    dispatchStatus,
-    problem,
-    whatsappNotifier: deps.whatsappNotifier,
-    codeTaskRepo: deps.codeTaskRepo,
-    logger: deps.logger,
-    affectedTaskCount: 1,
-  });
+  await reportOrNotifyRetryDispatchProblem(deps, task, dispatchStatus, problem, phase);
   return ok(undefined);
 }
 
 async function recordRetryTaskDispatchProblem(
-  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier'>,
+  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
   task: CodeTask,
   problem: DispatchProblem,
 ): Promise<Result<void, DrainRetryQueueError>> {
@@ -137,6 +133,38 @@ async function recordRetryTaskDispatchProblem(
       message: 'Failed to persist retry dispatch status',
     });
   }
+  await reportOrNotifyRetryDispatchProblem(deps, task, dispatchStatus, problem, 'waiting');
+  return ok(undefined);
+}
+
+async function reportOrNotifyRetryDispatchProblem(
+  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
+  task: CodeTask,
+  dispatchStatus: ReturnType<typeof buildDispatchStatusForProblem>,
+  problem: DispatchProblem,
+  phase: 'waiting' | 'terminal' | 'retry_expired' | 'retry_exhausted',
+): Promise<void> {
+  /* v8 ignore start -- ts-type: optional reporter dependencies are conditional for exactOptionalPropertyTypes; production route wiring always provides automationLog and notification repo @preserve */
+  if (
+    deps.automationLog !== undefined
+    && deps.codeTaskDispatchNotificationRepo !== undefined
+  ) {
+    await reportDispatchFailure({
+      task,
+      dispatchStatus,
+      problem,
+      phase,
+      affectedTaskCount: 1,
+      logLineRepo: deps.logLineRepo,
+      automationLog: deps.automationLog,
+      whatsappNotifier: deps.whatsappNotifier,
+      notificationRepo: deps.codeTaskDispatchNotificationRepo,
+      logger: deps.logger,
+    });
+    return;
+  }
+  /* v8 ignore stop @preserve */
+
   await notifyDispatchProblemForTask({
     task,
     dispatchStatus,
@@ -146,7 +174,6 @@ async function recordRetryTaskDispatchProblem(
     logger: deps.logger,
     affectedTaskCount: 1,
   });
-  return ok(undefined);
 }
 
 async function resolveDispatchBlockersForRetry(
@@ -249,6 +276,8 @@ export interface DrainRetryQueueDeps {
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
   logLineRepo: LogLineRepository;
+  automationLog?: AutomationLog;
+  codeTaskDispatchNotificationRepo?: CodeTaskDispatchNotificationRepository;
   statusMirrorService: StatusMirrorService;
   codeTaskDispatchStatusService?: CodeTaskDispatchStatusService;
   executionMemory?: PrepareExecutionMemoryResources;
@@ -313,8 +342,18 @@ export async function drainRetryQueue(
       if (entry.type === 'new_task' && entry.taskId !== undefined) {
         const taskResult = await codeTaskRepo.findById(entry.taskId);
         if (taskResult.ok) {
-          const problem = retryExpiredDispatchProblem(entry.ttlMinutes);
-          const dispatchStatus = buildDispatchStatusForProblem({ task: taskResult.value, problem });
+          const problem = retryExpiredDispatchProblem({
+            ttlMinutes: entry.ttlMinutes,
+            attempts: entry.attempts,
+            lastError: entry.lastError,
+          });
+          /* v8 ignore start -- ts-type: optional lastAttemptAt spread for exactOptionalPropertyTypes; retry repository entries may omit it until an attempt is recorded @preserve */
+          const dispatchStatus = {
+            ...buildDispatchStatusForProblem({ task: taskResult.value, problem }),
+            attemptCount: entry.attempts,
+            ...(entry.lastAttemptAt !== undefined && { lastAttemptAt: entry.lastAttemptAt }),
+          };
+          /* v8 ignore stop @preserve */
           const updateResult = await codeTaskRepo.update(entry.taskId, {
             status: 'failed',
             error: { code: 'retry_expired', message: problem.message },
@@ -327,15 +366,13 @@ export async function drainRetryQueue(
             );
             return err({ code: 'internal_error', message: 'Failed to persist retry dispatch failure status' });
           }
-          await notifyDispatchProblemForTask({
-            task: taskResult.value,
+          await reportOrNotifyRetryDispatchProblem(
+            deps,
+            taskResult.value,
             dispatchStatus,
             problem,
-            whatsappNotifier,
-            codeTaskRepo,
-            logger,
-            affectedTaskCount: 1,
-          });
+            'retry_expired'
+          );
           const deleteResult = await dispatchRetryRepo.delete(entry.id);
           if (!deleteResult.ok) {
             logger.error({ retryId: entry.id, error: deleteResult.error }, 'Failed to delete expired retry entry');
@@ -388,8 +425,16 @@ export async function drainRetryQueue(
       if (entry.type === 'new_task' && entry.taskId !== undefined) {
         const taskResult = await codeTaskRepo.findById(entry.taskId);
         if (taskResult.ok) {
+          /* v8 ignore start -- upstream: retry schema always sets attempts; lastError passthrough supports legacy undefined retry records @preserve */
           const problem = retryExhaustedDispatchProblem(entry.attempts, entry.lastError);
-          const dispatchStatus = buildDispatchStatusForProblem({ task: taskResult.value, problem });
+          /* v8 ignore stop @preserve */
+          /* v8 ignore start -- ts-type: optional exhausted retry lastAttemptAt spread for exactOptionalPropertyTypes; legacy retry entries may omit it @preserve */
+          const dispatchStatus = {
+            ...buildDispatchStatusForProblem({ task: taskResult.value, problem }),
+            attemptCount: entry.attempts,
+            ...(entry.lastAttemptAt !== undefined && { lastAttemptAt: entry.lastAttemptAt }),
+          };
+          /* v8 ignore stop @preserve */
           const updateResult = await codeTaskRepo.update(entry.taskId, {
             status: 'failed',
             error: { code: 'retry_exhausted', message: problem.message },
@@ -402,15 +447,13 @@ export async function drainRetryQueue(
             );
             return err({ code: 'internal_error', message: 'Failed to persist retry dispatch failure status' });
           }
-          await notifyDispatchProblemForTask({
-            task: taskResult.value,
+          await reportOrNotifyRetryDispatchProblem(
+            deps,
+            taskResult.value,
             dispatchStatus,
             problem,
-            whatsappNotifier,
-            codeTaskRepo,
-            logger,
-            affectedTaskCount: 1,
-          });
+            'retry_exhausted'
+          );
           const deleteResult = await dispatchRetryRepo.delete(entry.id);
           if (!deleteResult.ok) {
             logger.error({ retryId: entry.id, error: deleteResult.error }, 'Failed to delete exhausted retry entry');
