@@ -728,9 +728,11 @@ describe('Hetzner secret loader', () => {
     const terraform = readRequired(terraformDevMainPath);
 
     expect(script).toContain(
-      'write_env_line "${output_path}" "INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL" "${PUBLIC_ORIGIN}"'
+      'write_env_line "${output_path}" "INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL" "${PUBLIC_ORIGIN}/api/code"'
     );
-    expect(terraform).toContain('INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = local.public_origin');
+    expect(terraform).toContain(
+      'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = "${local.public_origin}/api/code"'
+    );
   });
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {

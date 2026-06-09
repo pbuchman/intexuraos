@@ -296,7 +296,7 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
 
     const body = JSON.parse(response.body) as { webhookUrl: string };
     expect(body.webhookUrl).toBe(
-      'https://intexuraos.cloud/internal/webhooks/task-complete'
+      'https://intexuraos.cloud/api/code/internal/webhooks/task-complete'
     );
   });
 });

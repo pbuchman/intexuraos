@@ -41,6 +41,7 @@ export class WebhookClient {
     taskId: string;
   }): Promise<Result<void, WebhookError>> {
     const { url, secret, payload, taskId } = params;
+    const normalizedUrl = normalizeInternalCallbackUrl(url);
 
     // Serialize payload to JSON
     const rawJsonBody = JSON.stringify(payload);
@@ -49,14 +50,14 @@ export class WebhookClient {
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = signPayload(rawJsonBody, secret, timestamp);
 
-    this.logger.info({ taskId, url, payload }, 'Sending webhook');
+    this.logger.info({ taskId, url: normalizedUrl, payload }, 'Sending webhook');
 
     // Attempt delivery with retries
     let lastError: WebhookError | null = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        await this.deliver(url, rawJsonBody, signature, timestamp);
-        this.logger.info({ taskId, url }, 'Webhook delivered successfully');
+        await this.deliver(normalizedUrl, rawJsonBody, signature, timestamp);
+        this.logger.info({ taskId, url: normalizedUrl }, 'Webhook delivered successfully');
         return { ok: true, value: undefined };
       } catch (error) {
         lastError = this.classifyError(error);
@@ -88,7 +89,7 @@ export class WebhookClient {
 
     // All retries failed - add to pending queue
     await this.addToPendingQueue({
-      url,
+      url: normalizedUrl,
       secret,
       payload,
       taskId,

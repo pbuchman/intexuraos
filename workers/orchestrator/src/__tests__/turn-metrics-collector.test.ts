@@ -650,7 +650,7 @@ describe('TurnMetricsCollector', () => {
       });
 
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe('https://intexuraos.cloud/internal/turn-metrics');
+      expect(url).toBe('https://intexuraos.cloud/api/code/internal/turn-metrics');
 
       mockFetch.mockRestore();
     });
