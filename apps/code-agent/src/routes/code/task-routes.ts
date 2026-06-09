@@ -79,6 +79,9 @@ interface WorkerStatusResponse {
     responseTimeMs?: number;
     reason?: string;
     code?: string;
+    error?: string;
+    missingFields?: string[];
+    contractMismatch?: boolean;
   } | null;
   checkedAt: string | null;
   stale: boolean;
@@ -127,6 +130,12 @@ function formatWorkerStatus(
     if (state.code !== undefined) {
       details.code = state.code;
     }
+  } else if (state?._tag === 'unknown') {
+    details = {
+      error: state.error,
+      ...(state.missingFields !== undefined && { missingFields: state.missingFields }),
+      ...(state.contractMismatch !== undefined && { contractMismatch: state.contractMismatch }),
+    };
   }
 
   return {
@@ -2577,6 +2586,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                               responseTimeMs: { type: 'number' },
                               reason: { type: 'string' },
                               code: { type: 'string' },
+                              error: { type: 'string' },
+                              missingFields: { type: 'array', items: { type: 'string' } },
+                              contractMismatch: { type: 'boolean' },
                             },
                           },
                           checkedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -2738,6 +2750,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                               responseTimeMs: { type: 'number' },
                               reason: { type: 'string' },
                               code: { type: 'string' },
+                              error: { type: 'string' },
+                              missingFields: { type: 'array', items: { type: 'string' } },
+                              contractMismatch: { type: 'boolean' },
                             },
                           },
                           checkedAt: { type: 'string', format: 'date-time', nullable: true },

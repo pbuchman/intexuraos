@@ -24,6 +24,7 @@ import { createFirestoreMergeQueueWatchRepository } from '../../infra/firestore/
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
 import { createTaskGroupSummaryFirestoreRepository } from '../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import { createFirestorePRAutomationCommentRepository } from '../../infra/firestore/prAutomationCommentRepository.js';
+import { createFirestoreCodeTaskDispatchNotificationRepository } from '../../infra/firestore/firestoreCodeTaskDispatchNotificationRepository.js';
 import { withGroupUpdates } from '../../infra/firestore/codeTaskRepositoryWithGroupUpdates.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
@@ -42,6 +43,7 @@ import type { ExecutionMemoryRepository } from '../../domain/repositories/execut
 import type { ExecutionMemoryApplicationRepository } from '../../domain/repositories/executionMemoryApplicationRepository.js';
 import type { TaskGroupSummaryRepository } from '../../domain/ports/taskGroupSummaryRepository.js';
 import type { PRAutomationCommentRepository } from '../../domain/ports/prAutomationCommentRepository.js';
+import type { CodeTaskDispatchNotificationRepository } from '../../domain/repositories/codeTaskDispatchNotificationRepository.js';
 
 export interface RepositoryFactoryDeps {
   firestore: Firestore;
@@ -65,6 +67,7 @@ export interface RepositoryServices {
   eventDecisionRepo: EventDecisionRepository;
   executionMemoryRepo: ExecutionMemoryRepository;
   executionMemoryApplicationRepo: ExecutionMemoryApplicationRepository;
+  codeTaskDispatchNotificationRepo: CodeTaskDispatchNotificationRepository;
   /**
    * Consumed only by `automationLog` composition in `services.ts`; intentionally
    * not placed on `ServiceContainer` because no other module depends on it.
@@ -102,6 +105,7 @@ export function createRepositoryServices(deps: RepositoryFactoryDeps): Repositor
     eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
     executionMemoryRepo: createFirestoreExecutionMemoryRepository({ firestore, logger }),
     executionMemoryApplicationRepo: createFirestoreExecutionMemoryApplicationRepository({ firestore, logger }),
+    codeTaskDispatchNotificationRepo: createFirestoreCodeTaskDispatchNotificationRepository({ firestore, logger }),
     prAutomationCommentRepo: createFirestorePRAutomationCommentRepository({ logger }),
   };
 }

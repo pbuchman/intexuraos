@@ -62,6 +62,17 @@ const getStatusDisplay = (worker: WorkerStatus): {
     };
   }
 
+  if (worker.details?.contractMismatch === true) {
+    const missing = worker.details.missingFields?.join(', ');
+    return {
+      text: missing !== undefined && missing !== ''
+        ? `Health contract mismatch: ${missing}`
+        : 'Health contract mismatch',
+      color: 'bg-red-500',
+      icon: '🔴',
+    };
+  }
+
   return {
     text: 'Unknown status',
     color: 'bg-gray-400',

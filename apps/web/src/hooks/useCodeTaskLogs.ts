@@ -46,7 +46,7 @@ export function useCodeTaskLogs(taskId: string): CodeTaskLogsState {
 
   const getAccessTokenRef = useRef(getAccessToken);
   getAccessTokenRef.current = getAccessToken;
-  const lastStatusRef = useRef<string | null>(null);
+  const lastTaskRefreshKeyRef = useRef<string | null>(null);
 
   const refreshTask = useCallback(async (): Promise<CodeTask | null> => {
     if (taskId === '') return null;
@@ -65,7 +65,7 @@ export function useCodeTaskLogs(taskId: string): CodeTaskLogsState {
         const data = await refreshTask();
         if (cancelled) return;
         setTask(data);
-        lastStatusRef.current = data?.status ?? null;
+        lastTaskRefreshKeyRef.current = data !== null ? taskRefreshKeyFromTask(data) : null;
       } catch (err) {
         if (cancelled) return;
         setError(getErrorMessage(err, 'Failed to load code task'));
@@ -109,12 +109,13 @@ export function useCodeTaskLogs(taskId: string): CodeTaskLogsState {
             taskRef,
             (snapshot) => {
               if (cancelState.cancelled || !snapshot.exists()) return;
-              const nextStatus = snapshot.data()['status'];
-              if (typeof nextStatus === 'string' && nextStatus !== lastStatusRef.current) {
-                lastStatusRef.current = nextStatus;
+              const nextKey = taskRefreshKeyFromSnapshotData(snapshot.data());
+              if (nextKey !== null && nextKey !== lastTaskRefreshKeyRef.current) {
+                lastTaskRefreshKeyRef.current = nextKey;
                 void refreshTask().then((data) => {
                   if (!cancelState.cancelled) {
                     setTask(data);
+                    lastTaskRefreshKeyRef.current = data !== null ? taskRefreshKeyFromTask(data) : null;
                   }
                 }).catch((err: unknown) => {
                   if (!cancelState.cancelled) {
@@ -239,4 +240,42 @@ export function useCodeTaskLogs(taskId: string): CodeTaskLogsState {
     refreshTask,
     setTaskState: setTask,
   };
+}
+
+function taskRefreshKeyFromTask(task: CodeTask): string {
+  return [
+    task.status,
+    task.updatedAt,
+    task.dispatchStatus?.reason ?? '',
+    task.dispatchStatus?.lastSeenAt ?? '',
+  ].join('|');
+}
+
+function taskRefreshKeyFromSnapshotData(data: Record<string, unknown>): string | null {
+  const status = data['status'];
+  if (typeof status !== 'string') return null;
+  const updatedAt = snapshotTimestampToKey(data['updatedAt']);
+  const dispatchStatus = data['dispatchStatus'];
+  const dispatchReason = typeof dispatchStatus === 'object' && dispatchStatus !== null
+    && 'reason' in dispatchStatus && typeof dispatchStatus.reason === 'string'
+    ? dispatchStatus.reason
+    : '';
+  const dispatchLastSeenAt = typeof dispatchStatus === 'object' && dispatchStatus !== null
+    && 'lastSeenAt' in dispatchStatus
+    ? snapshotTimestampToKey(dispatchStatus.lastSeenAt)
+    : '';
+  return [status, updatedAt, dispatchReason, dispatchLastSeenAt].join('|');
+}
+
+function snapshotTimestampToKey(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'object'
+    && value !== null
+    && 'toDate' in value
+    && typeof value.toDate === 'function'
+  ) {
+    return (value.toDate() as Date).toISOString();
+  }
+  return '';
 }

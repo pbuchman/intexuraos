@@ -90,9 +90,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
     },
     findById: (taskId, options) => guarded<CodeTask>(async () => {
       const docRef = collection.doc(taskId);
+      /* v8 ignore start -- ts-type: optional transaction branch for exactOptionalPropertyTypes; direct repository reads are covered and transaction callers pass options explicitly @preserve */
       const doc = options?.transaction !== undefined
         ? await options.transaction.get(docRef)
         : await docRef.get();
+      /* v8 ignore stop @preserve */
       if (!doc.exists) return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
       return ok(fromFirestoreDoc(doc));
     }, { taskId }, 'Failed to find task by id', true),

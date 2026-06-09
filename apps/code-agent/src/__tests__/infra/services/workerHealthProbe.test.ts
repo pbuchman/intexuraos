@@ -113,7 +113,7 @@ describe('WorkerHealthProbe', () => {
       });
     });
 
-    it('treats legacy health responses without blocker details as unknown', async () => {
+    it('treats legacy health responses without blocker details as a contract mismatch', async () => {
       mockedFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -131,6 +131,49 @@ describe('WorkerHealthProbe', () => {
         _tag: 'unknown',
         healthy: false,
         error: 'Health response missing worker capability details',
+        contractMismatch: true,
+        missingFields: ['workerAuths', 'providerApiKeys', 'dockerHealthy', 'diskHealthy'],
+      });
+    });
+
+    it('reports only missing capability fields in stable order for partial health responses', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'ready',
+          capacity: 2,
+          running: 1,
+          available: 1,
+          workerAuths: {},
+          dockerHealthy: true,
+        }),
+      } as Response);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toEqual({
+        _tag: 'unknown',
+        healthy: false,
+        error: 'Health response missing worker capability details',
+        contractMismatch: true,
+        missingFields: ['providerApiKeys', 'diskHealthy'],
+      });
+    });
+
+    it('keeps invalid non-capacity shapes as unknown non-contract failures', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'ready', providerApiKeys: {} }),
+      } as Response);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toEqual({
+        _tag: 'unknown',
+        healthy: false,
+        error: 'Invalid health response format',
       });
     });
 

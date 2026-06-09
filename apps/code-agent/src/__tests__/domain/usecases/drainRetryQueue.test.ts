@@ -648,12 +648,20 @@ describe('drainRetryQueue', () => {
     expect(result.value.action).toBe('expired');
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
       status: 'failed',
-      error: { code: 'retry_expired', message: 'Dispatch retry expired after 10 minutes' },
+      error: {
+        code: 'retry_expired',
+        message: 'Dispatch retry expired after 10 minutes and 0 attempts: worker_unavailable',
+      },
       dispatchStatus: expect.objectContaining({
         state: 'terminal',
         reason: 'retry_expired',
         terminal: true,
         nextAction: 'retry_after_fix',
+        attemptCount: 0,
+        terminalCause: expect.objectContaining({
+          reason: 'dispatch_failed',
+          message: 'worker_unavailable',
+        }),
       }),
     }));
     expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
@@ -664,13 +672,6 @@ describe('drainRetryQueue', () => {
       reason: 'retry_expired',
       exampleTaskId: 'task_xyz',
     }));
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', {
-      dispatchStatus: expect.objectContaining({
-        notifiedReasons: expect.objectContaining({
-          retry_expired: expect.any(Timestamp),
-        }),
-      }),
-    });
     expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
   });
 
@@ -737,6 +738,11 @@ describe('drainRetryQueue', () => {
         reason: 'retry_exhausted',
         terminal: true,
         nextAction: 'retry_after_fix',
+        attemptCount: 3,
+        terminalCause: expect.objectContaining({
+          reason: 'dispatch_failed',
+          message: 'worker_unavailable',
+        }),
       }),
     }));
     expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
@@ -747,13 +753,6 @@ describe('drainRetryQueue', () => {
       reason: 'retry_exhausted',
       exampleTaskId: 'task_xyz',
     }));
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', {
-      dispatchStatus: expect.objectContaining({
-        notifiedReasons: expect.objectContaining({
-          retry_exhausted: expect.any(Timestamp),
-        }),
-      }),
-    });
     expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
   });
 
@@ -1366,13 +1365,6 @@ describe('drainRetryQueue', () => {
         reason: 'no_enabled_workers',
         exampleTaskId: 'task_xyz',
       }));
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', {
-        dispatchStatus: expect.objectContaining({
-          notifiedReasons: expect.objectContaining({
-            no_enabled_workers: expect.any(Timestamp),
-          }),
-        }),
-      });
     });
 
     it('returns internal_error when retry entry cannot be deleted after no enabled workers', async () => {
@@ -1536,13 +1528,6 @@ describe('drainRetryQueue', () => {
         affectedTaskCount: 1,
         exampleTaskId: 'task_xyz',
       }));
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', {
-        dispatchStatus: expect.objectContaining({
-          notifiedReasons: expect.objectContaining({
-            workers_at_capacity: expect.any(Timestamp),
-          }),
-        }),
-      });
     });
 
     it('returns internal_error and does not increment attempts when recoverable dispatch status persistence fails', async () => {

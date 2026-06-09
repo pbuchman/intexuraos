@@ -17,6 +17,16 @@ import type { UseCaseLogger } from '../../ports/useCaseLogger.js';
  * Kept in sync with the previous inline handler behavior.
  */
 export const WORKER_HEALTH_CHECK_TIMEOUT_MS = 10_000;
+const REQUIRED_HEALTH_FIELDS = [
+  'status',
+  'capacity',
+  'running',
+  'available',
+  'workerAuths',
+  'providerApiKeys',
+  'dockerHealthy',
+  'diskHealthy',
+] as const;
 
 export interface TestWorkerConnectivityDeps {
   workerSettingsRepo: WorkerSettingsRepository;
@@ -80,8 +90,16 @@ export function createTestWorkerConnectivityUseCase(
       });
 
       if (response.ok) {
-        testStatus = 'success';
-        testMessage = 'Connection successful';
+        const health = await response.json();
+        const missingFields = missingDispatchHealthFields(health);
+        if (missingFields.length === 0) {
+          testStatus = 'success';
+          testMessage = 'Connection successful';
+        } else if (hasLegacyCapacityHealth(health)) {
+          testMessage = `Health response missing worker capability details: ${missingFields.join(', ')}`;
+        } else {
+          testMessage = 'Invalid health response format';
+        }
       } else {
         testMessage = `HTTP ${String(response.status)}: ${response.statusText}`;
       }
@@ -100,4 +118,38 @@ export function createTestWorkerConnectivityUseCase(
 
     return ok({ testStatus, testMessage, lastTestedAt });
   };
+}
+
+function hasLegacyCapacityHealth(data: unknown): boolean {
+  return (
+    typeof data === 'object'
+    && data !== null
+    && 'status' in data
+    && data.status === 'ready'
+    && 'capacity' in data
+    && typeof data.capacity === 'number'
+    && 'running' in data
+    && typeof data.running === 'number'
+    && 'available' in data
+    && typeof data.available === 'number'
+  );
+}
+
+function missingDispatchHealthFields(data: unknown): string[] {
+  if (typeof data !== 'object' || data === null) {
+    return [...REQUIRED_HEALTH_FIELDS];
+  }
+  const record = data as Record<string, unknown>;
+  return REQUIRED_HEALTH_FIELDS.filter((field) => {
+    if (!(field in record)) return true;
+    const value = record[field];
+    if (field === 'status') return value !== 'ready';
+    if (field === 'capacity' || field === 'running' || field === 'available') {
+      return typeof value !== 'number';
+    }
+    if (field === 'dockerHealthy' || field === 'diskHealthy') {
+      return typeof value !== 'boolean';
+    }
+    return typeof value !== 'object' || value === null;
+  });
 }

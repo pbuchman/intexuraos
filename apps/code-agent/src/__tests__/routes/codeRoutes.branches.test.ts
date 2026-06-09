@@ -359,10 +359,25 @@ describe('codeRoutes branch coverage', () => {
           workerNames: ['home-dev'],
           firstSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:00:00.000Z')),
           lastSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:01:00.000Z')),
-          nextAction: 'retry_after_fix',
-          notifiedReasons: {
-            dispatch_failed: Timestamp.fromDate(new Date('2026-06-05T12:02:00.000Z')),
+          lastAttemptAt: Timestamp.fromDate(new Date('2026-06-05T12:02:00.000Z')),
+          attemptCount: 3,
+          expiresAt: Timestamp.fromDate(new Date('2026-06-05T12:03:00.000Z')),
+          terminalCause: {
+            reason: 'worker_health_contract_mismatch',
+            message: 'Worker health response is missing capability fields.',
+            remediation: 'Deploy the compatible worker health endpoint.',
+            workerNames: ['home-dev'],
+            lastSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:04:00.000Z')),
           },
+          workerHealthDetails: [{
+            workerName: 'home-dev',
+            tag: 'unknown',
+            healthy: false,
+            contractMismatch: true,
+            missingFields: ['workerAuths'],
+            error: 'Health response missing worker capability details',
+          }],
+          nextAction: 'retry_after_fix',
         },
       } as Parameters<typeof repo.update>[1]);
 
@@ -390,8 +405,19 @@ describe('codeRoutes branch coverage', () => {
         terminal: true,
         firstSeenAt: '2026-06-05T12:00:00.000Z',
         lastSeenAt: '2026-06-05T12:01:00.000Z',
+        lastAttemptAt: '2026-06-05T12:02:00.000Z',
+        attemptCount: 3,
+        expiresAt: '2026-06-05T12:03:00.000Z',
+        terminalCause: expect.objectContaining({
+          reason: 'worker_health_contract_mismatch',
+          lastSeenAt: '2026-06-05T12:04:00.000Z',
+        }),
+        workerHealthDetails: [expect.objectContaining({
+          workerName: 'home-dev',
+          contractMismatch: true,
+          missingFields: ['workerAuths'],
+        })],
       }));
-      expect(task.dispatchStatus.notifiedReasons).toBeUndefined();
       expect(task.linearIssueId).toBe('INT-100');
       expect(task.prNumber).toBe(42);
       expect(task.agentType).toBe('planning');
