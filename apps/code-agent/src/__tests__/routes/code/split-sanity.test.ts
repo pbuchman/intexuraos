@@ -135,4 +135,81 @@ describe('routes/code split (INT-1430) sanity', () => {
     };
     expect(timestampToIso(badTs)).toBeUndefined();
   });
+
+  it('taskToApiResponse serializes callback success and malformed callback timestamps defensively', () => {
+    const timestamp = { toDate: (): Date => new Date('2026-06-09T12:00:00.000Z') };
+    const response = taskToApiResponse({
+      id: 'task_123',
+      userId: 'user-123',
+      prompt: 'Fix issue',
+      sanitizedPrompt: 'Fix issue',
+      systemPromptHash: 'hash',
+      workerType: 'opus',
+      workerLocation: 'home-dev',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace-123',
+      status: 'running',
+      dedupKey: 'dedup',
+      callbackReceived: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      callbackState: {
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+        owner: 'prod',
+        configuredAt: {} as never,
+        lastSuccessAt: timestamp as never,
+        lastSuccessEndpoint: 'status',
+        lastFailure: {
+          endpoint: 'logs',
+          status: 401,
+          message: 'Internal auth failed',
+          occurredAt: {} as never,
+        },
+      },
+    });
+
+    expect(response.callbackState).toEqual({
+      webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+      callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+      owner: 'prod',
+      configuredAt: '',
+      lastSuccessAt: '2026-06-09T12:00:00.000Z',
+      lastSuccessEndpoint: 'status',
+      lastFailure: {
+        endpoint: 'logs',
+        status: 401,
+        message: 'Internal auth failed',
+        occurredAt: '',
+      },
+    });
+
+    const fallbackResponse = taskToApiResponse({
+      id: 'task_456',
+      userId: 'user-123',
+      prompt: 'Fix issue',
+      sanitizedPrompt: 'Fix issue',
+      systemPromptHash: 'hash',
+      workerType: 'opus',
+      workerLocation: 'home-dev',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace-456',
+      status: 'running',
+      dedupKey: 'dedup-2',
+      callbackReceived: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      callbackState: {
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+        owner: 'prod',
+        configuredAt: timestamp as never,
+        lastSuccessAt: {} as never,
+      },
+    });
+
+    expect(fallbackResponse.callbackState?.lastSuccessAt).toBe('');
+  });
 });

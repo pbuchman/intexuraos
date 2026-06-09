@@ -1361,6 +1361,7 @@ export class CompletionPipeline {
       completedAt: task.completedAt !== undefined ? new Date(task.completedAt) : new Date(),
       /* v8 ignore stop @preserve */
       webhookUrl: task.webhookUrl,
+      webhookSecret: task.webhookSecret,
       ...(payload.error !== undefined && {
         error: { code: payload.error.code, message: payload.error.message },
       }),

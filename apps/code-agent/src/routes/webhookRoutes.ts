@@ -1,17 +1,16 @@
 /**
  * Webhook routes for the code-agent service.
  *
- * Route handlers are intentionally thin: they parse bodies, validate internal
- * auth + HMAC signatures, and delegate all domain logic to use cases under
+ * Route handlers are intentionally thin: they parse bodies, validate task
+ * HMAC signatures, and delegate all domain logic to use cases under
  * `domain/usecases/`. Shared helpers live in `domain/services/webhookHelpers.ts`.
  * JSON schemas live in `webhookRouteSchemas.ts`.
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import { extractOrGenerateTraceId, type ErrorCode } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import { validateWebhookSignature, validateOrchestratorSignature } from '../infra/webhookValidation.js';
-import { loadConfig } from '../config.js';
+import { validateWebhookSignature } from '../infra/webhookValidation.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import type { TaskFormatterEntry } from '../domain/services/webhookHelpers.js';
 import {
@@ -23,6 +22,7 @@ import {
   recordTurnMetrics,
   type StoreLogChunksBody,
 } from '../domain/usecases/recordTaskEvent.js';
+import { recordTaskCallbackSuccess } from '../domain/usecases/recordTaskCallbackState.js';
 import {
   taskCompleteWebhookSchema,
   logChunkUploadSchema,
@@ -59,12 +59,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest<{ Body: TaskCompleteWebhookBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, { message: 'Received request to POST /internal/webhooks/task-complete' });
 
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for task-complete webhook');
-        return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
-      }
-
       const signatureResult = await validateWebhookSignature(request, { getWebhookSecret: resolveTaskWebhookSecret });
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed');
@@ -85,6 +79,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (outcome.kind === 'fail') {
         return await reply.fail(outcome.code as ErrorCode, outcome.message);
       }
+      await recordTaskCallbackSuccess(request.body.taskId, 'task_complete', request.log);
       // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
       return await reply.send({ received: true });
     },
@@ -96,12 +91,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     { schema: logChunkUploadSchema },
     async (request: FastifyRequest<{ Body: LogChunkUploadBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, { message: 'Received request to POST /internal/logs' });
-
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for log chunk upload');
-        return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
-      }
 
       const signatureResult = await validateWebhookSignature(request, { getWebhookSecret: resolveTaskWebhookSecret });
       if (!signatureResult.ok) {
@@ -123,6 +112,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (outcome.kind === 'fail') {
         return await reply.fail(outcome.code as ErrorCode, outcome.message);
       }
+      await recordTaskCallbackSuccess(request.body.taskId, 'logs', request.log);
       // @allow-raw-send: external webhook callback - orchestrator expects ACK with acknowledged sequences
       return await reply.send({
         received: true,
@@ -139,18 +129,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest<{ Body: TurnMetrics }>, reply: FastifyReply) => {
       logIncomingRequest(request, { message: 'Received request to POST /internal/turn-metrics' });
 
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for turn-metrics');
-        return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
-      }
-
-      const signatureResult = validateOrchestratorSignature(request, {
-        orchestratorSecret: loadConfig().orchestratorSecret,
-      });
+      const signatureResult = await validateWebhookSignature(request, { getWebhookSecret: resolveTaskWebhookSecret });
       if (!signatureResult.ok) {
-        request.log.warn({ error: signatureResult.error }, 'Orchestrator signature validation failed for turn-metrics');
-        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+        request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed for turn-metrics');
+        // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
+        return await reply.status(401).send({
+          success: false,
+          error: { code: signatureResult.error.code.toUpperCase(), message: signatureResult.error.message },
+        });
       }
 
       const outcome = await recordTurnMetrics(getServices().logger, {
@@ -161,6 +147,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (outcome.kind === 'fail') {
         return await reply.fail(outcome.code as ErrorCode, outcome.message);
       }
+      await recordTaskCallbackSuccess(request.body.taskId, 'turn_metrics', request.log);
       // @allow-raw-send: internal webhook callback - orchestrator expects { received: true }
       return await reply.send({ received: true });
     },

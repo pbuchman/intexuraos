@@ -239,6 +239,32 @@ export interface StatusSummary {
   updatedAt: Timestamp;
 }
 
+export type CodeTaskCallbackOwner = 'dev' | 'prod' | 'custom';
+
+export type CodeTaskCallbackEndpoint =
+  | 'logs'
+  | 'task_event'
+  | 'task_complete'
+  | 'status'
+  | 'turn_metrics';
+
+export interface CodeTaskCallbackFailure {
+  endpoint: CodeTaskCallbackEndpoint;
+  status?: number;
+  message: string;
+  occurredAt: Timestamp;
+}
+
+export interface CodeTaskCallbackState {
+  webhookUrl: string;
+  callbackBaseUrl: string;
+  owner: CodeTaskCallbackOwner;
+  configuredAt: Timestamp;
+  lastSuccessAt?: Timestamp;
+  lastSuccessEndpoint?: CodeTaskCallbackEndpoint;
+  lastFailure?: CodeTaskCallbackFailure;
+}
+
 /**
  * Main CodeTask document structure.
  * Design reference: Lines 1996-2021
@@ -305,6 +331,7 @@ export interface CodeTask {
   // Webhook state
   callbackReceived: boolean;
   webhookSecret?: string;     // Per-task secret for HMAC signature validation (design lines 1634-1636)
+  callbackState?: CodeTaskCallbackState;
 
   // Heartbeat for zombie detection
   lastHeartbeat?: Timestamp;   // Last heartbeat received from orchestrator (INT-372)

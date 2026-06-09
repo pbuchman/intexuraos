@@ -33,6 +33,7 @@ export async function collectTurnMetrics(
       startedAt: task.startedAt,
       completedAt: new Date().toISOString(),
       webhookUrl: task.webhookUrl,
+      webhookSecret: task.webhookSecret,
     });
   } catch (error) {
     logger.error(

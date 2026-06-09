@@ -75,6 +75,7 @@ describe('collectTurnMetrics', () => {
         attempt: 2,
         startedAt: task.startedAt,
         webhookUrl: task.webhookUrl,
+        webhookSecret: task.webhookSecret,
       })
     );
   });
