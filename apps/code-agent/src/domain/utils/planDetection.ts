@@ -47,3 +47,40 @@ export function evaluatePlanFiles(files: { filename: string }[]): RuleOutcome {
 
   return { action: 'needs_triage', reason: 'NOT_PLAN_ONLY_PR' };
 }
+
+/**
+ * Check if a filename is documentation content that should receive a
+ * documentation review when the PR contains no implementation files.
+ */
+export function isDocumentationFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  if (isPlanFile(filename)) return true;
+  if (lower.startsWith('docs/') && /\.(md|mdx|rst|adoc|txt)$/.test(lower)) return true;
+  return /(^|\/)(readme|changelog|contributing|architecture|runbook|adr)[^/]*\.(md|mdx|rst|adoc|txt)$/.test(lower);
+}
+
+/**
+ * Evaluate PR files for deterministic review dispatch.
+ *
+ * - Plan-only PRs keep the existing plan_review behavior.
+ * - Docs-only non-plan PRs dispatch documentation review.
+ * - Mixed docs/code PRs still go through LLM triage for multi-scope review.
+ */
+export function evaluateReviewFiles(files: { filename: string }[]): RuleOutcome {
+  const planResult = evaluatePlanFiles(files);
+  if (planResult.action === 'dispatch') return planResult;
+
+  if (files.length === 0) {
+    return { action: 'needs_triage', reason: 'NO_FILES_TO_EVALUATE' };
+  }
+
+  if (files.every((f) => isDocumentationFile(f.filename))) {
+    return {
+      action: 'dispatch',
+      reason: 'DOCUMENTATION_ONLY_PR',
+      context: { reviewType: 'documentation' },
+    };
+  }
+
+  return { action: 'needs_triage', reason: 'NOT_REVIEW_ONLY_PR' };
+}

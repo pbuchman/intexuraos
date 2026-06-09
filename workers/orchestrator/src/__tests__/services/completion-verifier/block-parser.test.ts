@@ -595,6 +595,28 @@ describe('coerceFields', () => {
     expect(data['memory_usage_summary']).toBe('');
   });
 
+  it('accepts Linear issue none for pull request agent completion', () => {
+    const record = {
+      pr: 'https://github.com/x/y/pull/1',
+      ci_evidence: 'pnpm run ci:tracked successful',
+      linear_issue: 'none',
+      comment_replied: 'yes',
+      tracking_comment_id: '12345',
+      tracking_comment: 'updated',
+      total_pr_comments_posted: '1',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'none',
+      memory_usage_summary: 'none',
+      summary: '* Addressed PR feedback without a Linear issue.',
+    };
+
+    const { data, missingRequired, warnings } = coerceFields(record, AGENT_CONTRACTS.pull_request);
+
+    expect(missingRequired).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(data['linear_issue']).toBe('');
+  });
+
   it('reports missing required fields when absent', () => {
     const record = { outcome: 'implemented', summary: 'ok' }; // no pr
     const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);

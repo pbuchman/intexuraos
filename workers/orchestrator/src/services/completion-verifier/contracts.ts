@@ -237,7 +237,13 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
     fields: [
       { name: 'pr', alias: ['PR', 'gh_pr_url'], kind: 'url', required: true },
       { name: 'ci_evidence', alias: ['CI evidence'], kind: 'string', required: true },
-      { name: 'linear_issue', alias: ['Linear issue'], kind: 'url', required: true },
+      {
+        name: 'linear_issue',
+        alias: ['Linear issue'],
+        kind: 'url',
+        required: false,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
       {
         name: 'comment_replied',
         alias: ['Comment replied'],

@@ -44,9 +44,11 @@ describe('contracts — canonical field table', () => {
         expect(c.fields.map((f) => f.name)).toContain('parallel_breakdown_proof');
         expect(c.fields.map((f) => f.name)).toContain('clarification_message');
       } else if (agent === 'pull_request') {
+        const linearIssueField = c.fields.find((f) => f.name === 'linear_issue');
         expect(requiredNames).toContain('pr');
         expect(requiredNames).toContain('ci_evidence');
-        expect(requiredNames).toContain('linear_issue');
+        expect(linearIssueField?.required).toBe(false);
+        expect(linearIssueField?.emptyAliases).toContain('none');
         expect(requiredNames).toContain('comment_replied');
         expect(requiredNames).toContain('tracking_comment_id');
         expect(requiredNames).toContain('tracking_comment');

@@ -6,8 +6,8 @@ import { describe, it, expect } from 'vitest';
 import { githubAgentPrompt } from '../../../domain/prompts/githubAgentPrompt.js';
 
 describe('githubAgentPrompt', () => {
-  it('has version 5.2.0', () => {
-    expect(githubAgentPrompt.version).toBe('5.2.0');
+  it('has version 6.0.0', () => {
+    expect(githubAgentPrompt.version).toBe('6.0.0');
   });
 
   describe('PR section', () => {
@@ -89,6 +89,42 @@ describe('githubAgentPrompt', () => {
       expect(result).toContain('test_quality');
       expect(result).toContain('false positives');
       expect(result).toContain('v8 ignore');
+    });
+
+    it('contains documentation review guidance and does not tell docs-only PRs to skip', () => {
+      const result = githubAgentPrompt.build({
+        repository: 'owner/repo',
+        prNumber: 1,
+        prTitle: 'docs update',
+        prBody: 'body',
+        action: 'opened',
+        senderLogin: 'user',
+        eventType: 'pull_request',
+        files: [{ filename: 'README.md', status: 'modified', additions: 3, deletions: 1 }],
+      });
+
+      expect(result).toContain('documentation');
+      expect(result).toContain('Docs-only PR');
+      expect(result).toContain('request_review({"review_type":"documentation"})');
+      expect(result).not.toContain('documentation-only change, no code to review');
+    });
+
+    it('describes existing review scopes with dispatch criteria', () => {
+      const result = githubAgentPrompt.build({
+        repository: 'owner/repo',
+        prNumber: 1,
+        prTitle: 'feature',
+        prBody: 'body',
+        action: 'opened',
+        senderLogin: 'user',
+        eventType: 'pull_request',
+        files: [],
+      });
+
+      expect(result).toContain('source files or implementation behavior');
+      expect(result).toContain('auth, authorization, secrets, tokens, user input');
+      expect(result).toContain('cross-service');
+      expect(result).toContain('false positives');
     });
 
     it('includes Example 4 showing test-heavy PR dispatch', () => {
