@@ -146,7 +146,7 @@ describe('renderEvent', () => {
       expect(result).toBeNull();
     });
 
-    it('renders cost, reasoning, and tool calls for llm_triage skip', () => {
+    it('renders reasoning and tool calls for llm_triage skip without cost', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'skipped',
@@ -160,7 +160,7 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Skipped** | NO_ACTION_NEEDED');
       expect(result).toContain('<details>');
-      expect(result).toContain('Triage cost: $0.042');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('This is a documentation-only change.');
       expect(result).toContain('- `readFile(README.md)`');
       expect(result).toContain('- `getDiff()`');
@@ -191,7 +191,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Triage cost: $0.010');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('Trivial change.');
       // No tool calls section when array is empty
       expect(result).not.toContain('Tool calls');
@@ -216,7 +216,7 @@ describe('renderEvent', () => {
       expect(result).not.toContain('->');
       expect(result).not.toContain('**Dispatching review**');
       expect(result).toContain('<details>');
-      expect(result).toContain('Triage cost: $0.123');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('Complex PR needs thorough review.');
       expect(result).toContain('- `readFile(src/index.ts)`');
       expect(result).toContain('- `getDiff()`');
@@ -899,13 +899,13 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Skipped** | LOW_PRIORITY');
       expect(result).toContain('Rule: PriorityRule');
-      expect(result).toContain('Triage cost: $0.033');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('This is a minor formatting change.');
       expect(result).toContain('- `getDiff()`');
       expect(result).toContain('- `readFile(package.json)`');
     });
 
-    it('formats cost with 3 decimal places', () => {
+    it('omits cost from triage dispatch details', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_dispatch',
@@ -916,7 +916,8 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Triage cost: $1.000');
+      expect(result).not.toContain('Triage cost');
+      expect(result).toContain('Expensive.');
     });
   });
 
