@@ -52,6 +52,10 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.qwen.model).toBe('qwen3.5-plus');
   });
 
+  it('routes mimo-pro to MiMo Pro 2.5 provider model id', () => {
+    expect(WORKER_TYPES['mimo-pro'].model).toBe('mimo-v2.5-pro');
+  });
+
   it('routes kimi to native Kimi Code API using stable coding model with thinking enabled', () => {
     expect(WORKER_TYPES.kimi.runtime).toBe('claude');
     expect(WORKER_TYPES.kimi.apiBaseUrl).toBe('https://api.kimi.com/coding');

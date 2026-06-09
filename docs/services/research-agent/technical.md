@@ -368,7 +368,7 @@ Research Agent reports usage to `llm-usage-service` for all models it invokes. M
 - Claude Sonnet 4.6, Claude Opus 4.6 (Anthropic via OpenRouter)
 - Gemini 3.1 Pro, Gemini 2.5 Flash, Gemini 3 Flash Preview (Google via OpenRouter)
 - GPT-5.4, GPT-5.4 Mini (OpenAI via OpenRouter)
-- MiMo V2 Pro (Xiaomi)
+- MiMo V2.5 Pro (Xiaomi)
 - GLM 5 Turbo (Z.ai)
 
 **Fast model** (title generation, context inference, input validation):

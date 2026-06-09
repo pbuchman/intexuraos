@@ -59,7 +59,7 @@ const OPENROUTER_MODEL_NAMES: Record<string, string> = {
   'google/gemini-2.5-flash': 'Gemini 2.5 Flash',
   'openai/gpt-5.4': 'GPT-5.4',
   'openai/gpt-5.4-mini': 'GPT-5.4 Mini',
-  'xiaomi/mimo-v2-pro': 'MiMo V2 Pro',
+  'xiaomi/mimo-v2.5-pro': 'MiMo V2.5 Pro',
   'z-ai/glm-5-turbo': 'GLM 5 Turbo',
 };
 
@@ -85,7 +85,7 @@ describe('resolveOpenRouterModelName', () => {
     expect(resolveOpenRouterModelName('anthropic/claude-sonnet-4.6')).toBe('Claude Sonnet 4.6');
     expect(resolveOpenRouterModelName('openai/gpt-5.4')).toBe('GPT-5.4');
     expect(resolveOpenRouterModelName('qwen/qwen3.5-plus-02-15')).toBe('Qwen 3.5 Plus');
-    expect(resolveOpenRouterModelName('xiaomi/mimo-v2-pro')).toBe('MiMo V2 Pro');
+    expect(resolveOpenRouterModelName('xiaomi/mimo-v2.5-pro')).toBe('MiMo V2.5 Pro');
   });
 
   it('returns raw ID for unknown models', () => {

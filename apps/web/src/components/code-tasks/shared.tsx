@@ -12,7 +12,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   opus: 'Opus',
   sonnet: 'Sonnet',
   minimax: 'Minimax',
-  'mimo-pro': 'MiMo Pro',
+  'mimo-pro': 'MiMo Pro 2.5',
   glm: 'GLM',
   qwen: 'Qwen',
   kimi: 'Kimi',

@@ -113,7 +113,7 @@ INFO: Repository validation passed
 INFO: Code worker auth active { expiresInMinutes: 210, subscriptionType: 'max' }
 INFO: Codex worker auth active { authMode: 'chatgpt', expiresInMinutes: 190 }
 INFO: Completion verification configuration { completionMaxAttempts: 3, verifier: '...' }
-INFO: Agent compliance validator configuration { complianceValidatorModel: 'xiaomi/mimo-v2-pro' }
+INFO: Agent compliance validator configuration { complianceValidatorModel: 'xiaomi/mimo-v2.5-pro' }
 INFO: Orchestrator HTTP server started { port: 8199 }
 INFO: No interrupted tasks to recover
 INFO: Starting heartbeat manager { intervalMs: 600000 }
@@ -169,7 +169,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo), `glm`, `qwen` (Alibaba Cloud DashScope), `kimi` (Kimi Code), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
+The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo Pro 2.5), `glm`, `qwen` (Alibaba Cloud DashScope), `kimi` (Kimi Code), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
 
 ```bash
 BODY='{
@@ -308,7 +308,7 @@ curl -X POST http://localhost:8199/tasks/ask-001/message ...
 
 ### Step 8: Submit a task with mimo-pro
 
-For cost-effective execution via Xiaomi MiMo:
+For cost-effective execution via Xiaomi MiMo Pro 2.5:
 
 ```bash
 BODY='{

@@ -191,7 +191,7 @@ The following items improved quality and capability since v3.5.0:
 - **Docker RFC3339 timestamp stripping** — Fixed log formatter to properly strip Docker-prepended RFC3339 timestamps (INT-1411)
 - **User default model for execution memory** — Configurable validation model chain replaces hardcoded Gemini (INT-1371)
 - **Gemini client usage mapping** — Validation model clients use HttpWebhookUsageSink for cost tracking (INT-1369)
-- **mimo-pro worker type** — Xiaomi MiMo as a new execution backend
+- **mimo-pro worker type** — Xiaomi MiMo Pro 2.5 as a new execution backend
 - **test_quality review scope** — Fifth review type covering test quality analysis
 - **Inactivity restart tracking** — `inactivityRestartCount` persisted for observability
 - **retriedFrom field** — Declared in CreateTaskRequestSchema for retry chain tracking

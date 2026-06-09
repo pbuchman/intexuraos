@@ -37,7 +37,7 @@
 - Docker RFC3339 timestamp stripping fix (INT-1411)
 - User default model for execution memory replacing hardcoded Gemini (INT-1371)
 - Gemini client usage mapping for user model standardization (INT-1369)
-- mimo-pro worker type (Xiaomi MiMo)
+- mimo-pro worker type (Xiaomi MiMo Pro 2.5)
 - test_quality review scope
 - Inactivity restart tracking (inactivityRestartCount)
 - retriedFrom field declared in CreateTaskRequestSchema

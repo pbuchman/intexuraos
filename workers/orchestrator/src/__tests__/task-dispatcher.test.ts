@@ -5995,7 +5995,7 @@ describe('TaskDispatcher', () => {
 
     const mockComplianceResult: ComplianceValidationResult = {
       report: null,
-      model: 'xiaomi/mimo-v2-pro',
+      model: 'xiaomi/mimo-v2.5-pro',
       promptVersion: '1.0.0',
       costUsd: 0.05,
       transcriptTooLong: false,

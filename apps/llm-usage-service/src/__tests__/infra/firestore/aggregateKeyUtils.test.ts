@@ -95,14 +95,14 @@ describe('aggregateKeyUtils', () => {
     describe('source.client slash safety', () => {
       it('produces an id with no "/" even when source.client contains slashes', () => {
         const event = createTestEvent({
-          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2.5-pro', environment: 'dev' },
         });
         expect(computeAggregateId(event)).not.toMatch(/\//);
       });
 
       it('is deterministic for the same input', () => {
         const event = createTestEvent({
-          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2.5-pro', environment: 'dev' },
         });
         expect(computeAggregateId(event)).toBe(computeAggregateId(event));
       });
