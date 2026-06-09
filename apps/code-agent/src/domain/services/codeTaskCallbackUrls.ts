@@ -2,6 +2,7 @@ const TASK_COMPLETE_PATH = '/internal/webhooks/task-complete';
 const TASK_EVENT_PATH = '/internal/webhooks/task-event';
 const PUBLIC_CODE_AGENT_PATH = '/api/code';
 const PUBLIC_CALLBACK_HOSTS = new Set(['intexuraos.cloud', 'dev.intexuraos.cloud']);
+type CallbackOwner = 'dev' | 'prod' | 'custom';
 
 function stripTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
@@ -30,6 +31,17 @@ function normalizePublicCallbackBaseUrl(baseUrl: string): string {
 
 export function normalizeCallbackBaseUrl(baseUrl: string): string {
   return normalizePublicCallbackBaseUrl(stripTrailingSlashes(baseUrl));
+}
+
+export function classifyCallbackOwner(baseUrl: string): CallbackOwner {
+  try {
+    const parsed = new URL(baseUrl);
+    if (parsed.hostname === 'dev.intexuraos.cloud') return 'dev';
+    if (parsed.hostname === 'intexuraos.cloud') return 'prod';
+    return 'custom';
+  } catch {
+    return 'custom';
+  }
 }
 
 export function buildInternalCallbackUrl(baseUrl: string, path: string): string {

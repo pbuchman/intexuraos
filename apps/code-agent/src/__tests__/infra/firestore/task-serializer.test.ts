@@ -420,6 +420,18 @@ describe('buildUpdateData', () => {
       requiresReReview: true,
       prUrlValidationFailed: true,
       prUrlValidationErrors: ['bad'],
+      callbackState: {
+        webhookUrl: 'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://dev.intexuraos.cloud/api/code',
+        owner: 'dev',
+        configuredAt: new Date('2026-06-09T14:44:12.000Z'),
+        lastFailure: {
+          endpoint: 'status',
+          status: 401,
+          message: 'Unauthorized',
+          occurredAt: new Date('2026-06-09T14:47:40.000Z'),
+        },
+      },
     };
     const data = buildUpdateData(input);
     expect(data['status']).toBe('running');
@@ -434,6 +446,32 @@ describe('buildUpdateData', () => {
     expect(data['requiresReReview']).toBe(true);
     expect(data['prUrlValidationFailed']).toBe(true);
     expect(data['prUrlValidationErrors']).toEqual(['bad']);
+    expect(data['callbackState']).toEqual(expect.objectContaining({
+      webhookUrl: 'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete',
+      callbackBaseUrl: 'https://dev.intexuraos.cloud/api/code',
+      owner: 'dev',
+      configuredAt: expect.any(Timestamp),
+      lastFailure: expect.objectContaining({
+        endpoint: 'status',
+        status: 401,
+        message: 'Unauthorized',
+        occurredAt: expect.any(Timestamp),
+      }),
+    }));
+  });
+
+  it('falls back to a generated callbackState configuredAt timestamp for malformed update input', () => {
+    const data = buildUpdateData({
+      callbackState: {
+        webhookUrl: 'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://dev.intexuraos.cloud/api/code',
+        owner: 'dev',
+        configuredAt: 'not-a-date',
+      },
+    } as unknown as UpdateTaskInput);
+
+    const callbackState = data['callbackState'] as { configuredAt: Timestamp };
+    expect(callbackState.configuredAt).toBeInstanceOf(Timestamp);
   });
 
   it('serializes executionMemoryContext/PostRun when provided', () => {

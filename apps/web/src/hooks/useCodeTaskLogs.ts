@@ -248,6 +248,9 @@ function taskRefreshKeyFromTask(task: CodeTask): string {
     task.updatedAt,
     task.dispatchStatus?.reason ?? '',
     task.dispatchStatus?.lastSeenAt ?? '',
+    task.callbackState?.configuredAt ?? '',
+    task.callbackState?.lastSuccessAt ?? '',
+    task.callbackState?.lastFailure?.occurredAt ?? '',
   ].join('|');
 }
 
@@ -264,7 +267,32 @@ function taskRefreshKeyFromSnapshotData(data: Record<string, unknown>): string |
     && 'lastSeenAt' in dispatchStatus
     ? snapshotTimestampToKey(dispatchStatus.lastSeenAt)
     : '';
-  return [status, updatedAt, dispatchReason, dispatchLastSeenAt].join('|');
+  const callbackState = data['callbackState'];
+  const callbackConfiguredAt = typeof callbackState === 'object' && callbackState !== null
+    && 'configuredAt' in callbackState
+    ? snapshotTimestampToKey(callbackState.configuredAt)
+    : '';
+  const callbackLastSuccessAt = typeof callbackState === 'object' && callbackState !== null
+    && 'lastSuccessAt' in callbackState
+    ? snapshotTimestampToKey(callbackState.lastSuccessAt)
+    : '';
+  const callbackLastFailure = typeof callbackState === 'object' && callbackState !== null
+    && 'lastFailure' in callbackState
+    ? callbackState.lastFailure
+    : undefined;
+  const callbackLastFailureAt = typeof callbackLastFailure === 'object' && callbackLastFailure !== null
+    && 'occurredAt' in callbackLastFailure
+    ? snapshotTimestampToKey(callbackLastFailure.occurredAt)
+    : '';
+  return [
+    status,
+    updatedAt,
+    dispatchReason,
+    dispatchLastSeenAt,
+    callbackConfiguredAt,
+    callbackLastSuccessAt,
+    callbackLastFailureAt,
+  ].join('|');
 }
 
 function snapshotTimestampToKey(value: unknown): string {

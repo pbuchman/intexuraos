@@ -10,6 +10,7 @@ import type {
   AgentType,
   CodeTask,
   CodeTaskDispatchStatus,
+  CodeTaskCallbackState,
   DispatchSchedule,
   ExecutionMemoryContext,
   ExecutionMemoryPostRun,
@@ -43,6 +44,15 @@ export type DispatchScheduleCreateInput = Omit<DispatchSchedule, 'notBeforeAt'> 
 };
 
 export type CodeTaskDispatchStatusCreateInput = CodeTaskDispatchStatus;
+
+export type CodeTaskCallbackStateCreateInput =
+  Omit<CodeTaskCallbackState, 'configuredAt' | 'lastSuccessAt' | 'lastFailure'> & {
+    configuredAt: Date | Timestamp;
+    lastSuccessAt?: Date | Timestamp;
+    lastFailure?: Omit<NonNullable<CodeTaskCallbackState['lastFailure']>, 'occurredAt'> & {
+      occurredAt: Date | Timestamp;
+    };
+  };
 
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
@@ -106,6 +116,7 @@ export interface UpdateTaskInput {
   statusSummary?: CodeTask['statusSummary'];
   workerLocation?: string;
   callbackReceived?: boolean;
+  callbackState?: CodeTaskCallbackStateCreateInput;
   queuedAt?: Date;               // When task entered queue (INT-619)
   dispatchedAt?: Date;
   completedAt?: Date;

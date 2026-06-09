@@ -1043,6 +1043,21 @@ export interface CodeTaskExecutionMemoryPostRun {
   completedAt?: string;
 }
 
+export interface CodeTaskCallbackState {
+  webhookUrl: string;
+  callbackBaseUrl: string;
+  owner: 'dev' | 'prod' | 'custom';
+  configuredAt: string;
+  lastSuccessAt?: string;
+  lastSuccessEndpoint?: 'logs' | 'task_event' | 'task_complete' | 'status' | 'turn_metrics';
+  lastFailure?: {
+    endpoint: 'logs' | 'task_event' | 'task_complete' | 'status' | 'turn_metrics';
+    status?: number;
+    message: string;
+    occurredAt: string;
+  };
+}
+
 /**
  * Code task from code-agent
  */
@@ -1060,6 +1075,7 @@ export interface CodeTask {
   status: CodeTaskStatus;
   dedupKey: string;
   callbackReceived: boolean;
+  callbackState?: CodeTaskCallbackState;
   createdAt: string;
   updatedAt: string;
   dispatchedAt?: string;

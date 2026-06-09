@@ -5,15 +5,16 @@
  * to the unified PR automation log. Best-effort — failures are logged
  * but never block the caller.
  *
- * Auth: X-Internal-Auth + HMAC-SHA256 per-task webhook signature.
+ * Auth: HMAC-SHA256 per-task webhook signature.
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import { validateWebhookSignature } from '../../infra/webhookValidation.js';
 import type { AutomationEvent } from '../../domain/ports/automationLog.js';
 import type { AgentType } from '../../domain/models/codeTask.js';
+import { recordTaskCallbackSuccess } from '../../domain/usecases/recordTaskCallbackState.js';
 
 // ---------------------------------------------------------------------------
 // Request types
@@ -136,14 +137,7 @@ export const taskEventRoute: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to POST /internal/webhooks/task-event',
       });
 
-      // Step 1: Validate internal auth
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for task-event webhook');
-        return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
-      }
-
-      // Step 2: Validate webhook HMAC signature (per-task secret)
+      // Step 1: Validate webhook HMAC signature (per-task secret)
       const signatureResult = await validateWebhookSignature(request, {
         getWebhookSecret: async (taskId) => {
           const { codeTaskRepo } = getServices();
@@ -158,14 +152,14 @@ export const taskEventRoute: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
-      // Step 3: Validate request body (taskId non-empty guaranteed by validateWebhookSignature)
+      // Step 2: Validate request body (taskId non-empty guaranteed by validateWebhookSignature)
       const { taskId, event } = request.body;
 
       if (!VALID_EVENTS.has(event as TaskEventType)) {
         return await reply.fail('INVALID_REQUEST', `Unknown event type: ${event}`);
       }
 
-      // Step 4: Look up task to get repository and prNumber
+      // Step 3: Look up task to get repository and prNumber
       const { codeTaskRepo, automationLog, logger } = getServices();
 
       const taskResult = await codeTaskRepo.findById(taskId);
@@ -183,7 +177,7 @@ export const taskEventRoute: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.send({ received: true });
       }
 
-      // Step 5: Map and record the event (best-effort)
+      // Step 4: Map and record the event (best-effort)
       const prRef = { repository: task.repository, prNumber: task.prNumber };
       const automationEvent = mapToAutomationEvent(request.body, task.agentType);
 
@@ -195,6 +189,8 @@ export const taskEventRoute: FastifyPluginCallback = (fastify, _opts, done) => {
           'Task-event webhook: failed to record automation event'
         );
       }
+
+      await recordTaskCallbackSuccess(taskId, 'task_event', request.log);
 
       // @allow-raw-send: orchestrator contract requires simple acknowledgment
       return await reply.send({ received: true });

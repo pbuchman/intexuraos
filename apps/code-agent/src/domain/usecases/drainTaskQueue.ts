@@ -45,7 +45,11 @@ import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfte
 import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
-import { buildTaskCompleteWebhookUrl } from '../services/codeTaskCallbackUrls.js';
+import {
+  buildTaskCompleteWebhookUrl,
+  classifyCallbackOwner,
+  normalizeCallbackBaseUrl,
+} from '../services/codeTaskCallbackUrls.js';
 import {
   prepareExecutionMemoryContext,
   toDispatchExecutionMemoryContext,
@@ -966,17 +970,25 @@ export async function drainTaskQueue(
     // set them transactionally before the network call.
     const cancelNonce = generateCancelNonce();
     const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
+    const callbackBaseUrl = normalizeCallbackBaseUrl(config.codeTaskCallbackBaseUrl);
+    const now = new Date();
 
     const updateResult = await codeTaskRepo.update(task.id, {
       // Seed lastHeartbeat at dispatch so findZombieTasks (which uses a Firestore
       // inequality filter on lastHeartbeat) can sweep tasks that crash/fail
       // before the worker ever sends its first real heartbeat. Without this,
       // the field would be missing and the inequality filter would exclude the doc forever.
-      lastHeartbeat: new Date(),
+      lastHeartbeat: now,
       workerLocation: dispatchResult.value.workerLocation,
       cancelNonce,
       cancelNonceExpiresAt,
       dispatchStatus: null,
+      callbackState: {
+        webhookUrl,
+        callbackBaseUrl,
+        owner: classifyCallbackOwner(callbackBaseUrl),
+        configuredAt: now,
+      },
     });
 
     if (updateResult.ok) {
