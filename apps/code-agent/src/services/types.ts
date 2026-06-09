@@ -54,6 +54,7 @@ import type { AutomationLog } from '../domain/ports/automationLog.js';
 import type { TaskEnqueueService } from '../domain/services/taskEnqueueService.js';
 import type { MergeQueueWatchRepository } from '../domain/repositories/mergeQueueWatchRepository.js';
 import type { TaskGroupSummaryRepository } from '../domain/ports/taskGroupSummaryRepository.js';
+import type { CodeTaskDispatchNotificationRepository } from '../domain/repositories/codeTaskDispatchNotificationRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -97,6 +98,7 @@ export interface ServiceContainer {
   mergeConflictDetector: MergeConflictDetector;
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
+  codeTaskDispatchNotificationRepo?: CodeTaskDispatchNotificationRepository;
   mergeQueueWatchRepo: MergeQueueWatchRepository;
   executionMemoryRepo?: ExecutionMemoryRepository;
   executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;

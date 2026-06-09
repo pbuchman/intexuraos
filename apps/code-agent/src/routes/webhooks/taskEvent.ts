@@ -76,6 +76,7 @@ function mapToAutomationEvent(body: TaskEventWebhookBody, agentType?: AgentType)
         error: body.error?.message ?? 'Unknown error',
         ...(body.error?.code !== undefined && { errorCode: body.error.code }),
         ...(body.duration !== undefined && { duration: body.duration }),
+        ...(agentType !== undefined && { agentType }),
       };
     case 'task_interrupted':
       return {

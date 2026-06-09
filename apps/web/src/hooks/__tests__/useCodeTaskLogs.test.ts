@@ -197,6 +197,75 @@ describe('useCodeTaskLogs', () => {
     });
   });
 
+  it('refreshes active task when dispatch status changes without a status change', async () => {
+    const taskSnapshotHandler: { current?: (value: TaskSnapshotValue) => void } = {};
+
+    mockGetCodeTask
+      .mockResolvedValueOnce(createTask({
+        status: 'queued',
+        updatedAt: '2026-03-06T12:05:00.000Z',
+        dispatchStatus: {
+          state: 'waiting',
+          reason: 'workers_unreachable',
+          terminal: false,
+          severity: 'warning',
+          message: 'No workers reachable',
+          remediation: 'Wait for retry',
+          workerNames: ['home-dev'],
+          firstSeenAt: '2026-03-06T12:00:00.000Z',
+          lastSeenAt: '2026-03-06T12:05:00.000Z',
+          nextAction: 'will_retry_automatically',
+        },
+      }))
+      .mockResolvedValueOnce(createTask({
+        status: 'queued',
+        updatedAt: '2026-03-06T12:06:00.000Z',
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'worker_health_contract_mismatch',
+          terminal: true,
+          severity: 'critical',
+          message: 'Health response missing worker capability details',
+          remediation: 'Restart worker',
+          workerNames: ['home-dev'],
+          firstSeenAt: '2026-03-06T12:00:00.000Z',
+          lastSeenAt: '2026-03-06T12:06:00.000Z',
+          nextAction: 'retry_after_fix',
+        },
+      }));
+    mockOnSnapshot
+      .mockImplementationOnce((_ref: unknown, onNext: (value: TaskSnapshotValue) => void): ReturnType<typeof vi.fn> => {
+        taskSnapshotHandler.current = onNext;
+        return vi.fn();
+      })
+      .mockImplementationOnce((): ReturnType<typeof vi.fn> => vi.fn());
+
+    const { result } = renderHook(() => useCodeTaskLogs('task-123'));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      taskSnapshotHandler.current?.({
+        exists: () => true,
+        data: () => ({
+          status: 'queued',
+          updatedAt: '2026-03-06T12:06:00.000Z',
+          dispatchStatus: {
+            reason: 'worker_health_contract_mismatch',
+            lastSeenAt: '2026-03-06T12:06:00.000Z',
+          },
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockGetCodeTask).toHaveBeenCalledTimes(2);
+    });
+    expect(result.current.task?.dispatchStatus?.reason).toBe('worker_health_contract_mismatch');
+  });
+
   it('marks listener unhealthy when a live listener errors', async () => {
     let taskErrorHandler: ((error: Error) => void) | undefined;
 

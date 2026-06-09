@@ -295,7 +295,7 @@ locals {
   retired_cloud_run_push_audience = local.retired_cloud_run_push_endpoint
 
   hetzner_runtime_env_vars = {
-    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = local.public_origin
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = "${local.public_origin}/api/code"
   }
 
   hetzner_runtime_secret_names = toset([

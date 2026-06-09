@@ -49,6 +49,19 @@ import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockSer
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 
+function dispatchCompatibleHealth(): Record<string, unknown> {
+  return {
+    status: 'ready',
+    capacity: 2,
+    running: 0,
+    available: 2,
+    workerAuths: {},
+    providerApiKeys: {},
+    dockerHealthy: true,
+    diskHealthy: true,
+  };
+}
+
 describe('Worker Settings Routes', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -268,7 +281,7 @@ describe('Worker Settings Routes', () => {
       // Mock the health endpoint for worker test
       nock('https://tested-worker.example.com')
         .get('/health')
-        .reply(200, { status: 'ok' });
+        .reply(200, dispatchCompatibleHealth());
 
       // Test the worker to populate testStatus/testMessage/lastTestedAt
       await app.inject({
@@ -1007,7 +1020,7 @@ describe('Worker Settings Routes', () => {
     it('should test connectivity and update result on success', async () => {
       nock('https://mac-worker.example.com')
         .get('/health')
-        .reply(200, { status: 'ok' });
+        .reply(200, dispatchCompatibleHealth());
 
       const response = await app.inject({
         method: 'POST',
@@ -1042,7 +1055,7 @@ describe('Worker Settings Routes', () => {
 
       nock('https://null-worker.example.com')
         .get('/health')
-        .reply(200, { status: 'ok' });
+        .reply(200, dispatchCompatibleHealth());
 
       mockedJwtVerify.mockResolvedValueOnce({
         payload: { sub: null, email: 'test@example.com' },

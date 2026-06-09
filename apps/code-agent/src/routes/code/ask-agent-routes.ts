@@ -134,13 +134,32 @@ export const askAgentRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
           includeParams: true,
         });
 
-        const { codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier } = getServices();
+        const {
+          codeTaskRepo,
+          workerSettingsRepo,
+          taskEnqueueService,
+          whatsappNotifier,
+          logLineRepo,
+          automationLog,
+          codeTaskDispatchNotificationRepo,
+        } = getServices();
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
         const result = await startAskAgent(
-          { logger: request.log, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
+          {
+            logger: request.log,
+            codeTaskRepo,
+            workerSettingsRepo,
+            taskEnqueueService,
+            whatsappNotifier,
+            logLineRepo,
+            automationLog,
+            /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production services always provide codeTaskDispatchNotificationRepo @preserve */
+            ...(codeTaskDispatchNotificationRepo !== undefined && { codeTaskDispatchNotificationRepo }),
+            /* v8 ignore stop @preserve */
+          },
           { userId, prompt: request.body.prompt },
         );
 

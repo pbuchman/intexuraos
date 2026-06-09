@@ -6,32 +6,42 @@ import {
 } from '../../../domain/services/codeTaskCallbackUrls.js';
 
 describe('code task callback URLs', () => {
-  it('builds canonical prod internal callback URLs without the public API prefix', () => {
-    const baseUrl = 'https://intexuraos.cloud/';
-
-    expect(buildTaskCompleteWebhookUrl(baseUrl)).toBe(
-      'https://intexuraos.cloud/internal/webhooks/task-complete'
+  it('builds routable prod callback URLs through the public code-agent API prefix', () => {
+    expect(buildTaskCompleteWebhookUrl('https://intexuraos.cloud/')).toBe(
+      'https://intexuraos.cloud/api/code/internal/webhooks/task-complete'
     );
-    expect(buildTaskEventWebhookUrl(baseUrl)).toBe(
-      'https://intexuraos.cloud/internal/webhooks/task-event'
+    expect(buildTaskEventWebhookUrl('https://intexuraos.cloud')).toBe(
+      'https://intexuraos.cloud/api/code/internal/webhooks/task-event'
     );
   });
 
-  it('preserves dev callback base paths when the ingress still uses /api/code', () => {
+  it('builds routable dev callback URLs through the public code-agent API prefix', () => {
+    expect(buildTaskCompleteWebhookUrl('https://dev.intexuraos.cloud')).toBe(
+      'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete'
+    );
+  });
+
+  it('preserves already-canonical public callback bases', () => {
     expect(
-      buildInternalCallbackUrl('https://dev.intexuraos.cloud/api/code/', '/internal/logs')
-    ).toBe('https://dev.intexuraos.cloud/api/code/internal/logs');
+      buildInternalCallbackUrl('https://intexuraos.cloud/api/code/', '/internal/logs')
+    ).toBe('https://intexuraos.cloud/api/code/internal/logs');
+  });
+
+  it('preserves public callback bases with explicit non-code-agent paths', () => {
+    expect(
+      buildInternalCallbackUrl('https://intexuraos.cloud/custom-callbacks/', '/internal/logs')
+    ).toBe('https://intexuraos.cloud/custom-callbacks/internal/logs');
   });
 
   it('adds a leading slash when building callback paths', () => {
     expect(
-      buildInternalCallbackUrl('https://intexuraos.cloud', 'internal/logs')
-    ).toBe('https://intexuraos.cloud/internal/logs');
+      buildInternalCallbackUrl('https://callback.test', 'internal/logs')
+    ).toBe('https://callback.test/internal/logs');
   });
 
-  it('rejects prod callback URLs that would target /api/code/internal', () => {
-    expect(() =>
-      buildTaskCompleteWebhookUrl('https://intexuraos.cloud/api/code')
-    ).toThrow('/api/code/internal');
+  it('preserves localhost direct internal callback URLs', () => {
+    expect(buildTaskCompleteWebhookUrl('http://localhost:8128')).toBe(
+      'http://localhost:8128/internal/webhooks/task-complete'
+    );
   });
 });

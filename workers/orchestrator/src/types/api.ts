@@ -46,6 +46,7 @@ export interface CreateTaskRequest {
 
 // GET /health response
 export interface HealthResponse {
+  healthContractVersion: 1;
   status: OrchestratorStatus;
   capacity: number;
   running: number;

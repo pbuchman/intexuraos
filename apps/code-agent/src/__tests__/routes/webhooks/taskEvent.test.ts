@@ -498,6 +498,15 @@ describe('POST /internal/webhooks/task-event', () => {
   // -----------------------------------------------------------------------
 
   it('records task_failed event', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      id: TASK_ID,
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-123',
+      status: 'running',
+      agentType: 'review',
+      webhookSecret: generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID),
+    }));
     const body = {
       taskId: 'task-abc',
       event: 'task_failed',
@@ -515,6 +524,7 @@ describe('POST /internal/webhooks/task-event', () => {
       error: 'Worker timed out',
       errorCode: 'TIMEOUT',
       duration: 300000,
+      agentType: 'review',
     });
   });
 

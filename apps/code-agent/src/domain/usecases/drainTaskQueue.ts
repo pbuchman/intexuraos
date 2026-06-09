@@ -14,8 +14,11 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { LogLineRepository } from '../repositories/logLineRepository.js';
+import type { CodeTaskDispatchNotificationRepository } from '../repositories/codeTaskDispatchNotificationRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { CodeTaskDispatchStatusService } from '../services/codeTaskDispatchStatusService.js';
@@ -28,11 +31,12 @@ import {
   dispatchProblemFromError,
   missingPrBranchDispatchProblem,
   notifyDispatchProblemForTask,
-  queueTimeoutDispatchProblem,
+  queueTimeoutDispatchProblemFromTask,
   taskErrorFromDispatchStatus,
   type DispatchBlocker,
   type DispatchProblem,
 } from '../services/codeTaskDispatchProblems.js';
+import { reportDispatchFailure } from '../services/codeTaskDispatchFailureReporter.js';
 import { loadConfig } from '../../config.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
@@ -151,10 +155,11 @@ async function recordActiveTaskWaitStatus(
 }
 
 async function failTaskForDispatchProblem(
-  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier'>,
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
   task: CodeTask,
   problem: DispatchProblem,
   affectedTaskCount: number,
+  phase: 'terminal' | 'timeout' = 'terminal',
 ): Promise<Result<void, DrainTaskQueueError>> {
   const dispatchStatus = buildDispatchStatusForProblem({
     task,
@@ -175,20 +180,34 @@ async function failTaskForDispatchProblem(
       message: 'Failed to persist dispatch failure status',
     });
   }
-  await notifyDispatchProblemForTask({
-    task,
-    dispatchStatus,
-    problem,
-    whatsappNotifier: deps.whatsappNotifier,
-    codeTaskRepo: deps.codeTaskRepo,
-    logger: deps.logger,
-    affectedTaskCount,
-  });
+  await reportOrNotifyDispatchProblem(deps, task, dispatchStatus, problem, affectedTaskCount, phase);
+  return ok(undefined);
+}
+
+async function failAffectedTasksForDispatchProblem(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
+  tasks: readonly CodeTask[],
+  problem: DispatchProblem,
+  phase: 'terminal' | 'timeout' = 'terminal',
+): Promise<Result<void, DrainTaskQueueError>> {
+  const affectedTaskCount = tasks.length;
+  for (const affectedTask of tasks) {
+    const failResult = await failTaskForDispatchProblem(
+      deps,
+      affectedTask,
+      problem,
+      affectedTaskCount,
+      phase,
+    );
+    if (!failResult.ok) {
+      return failResult;
+    }
+  }
   return ok(undefined);
 }
 
 async function rollbackTaskForRecoverableDispatchProblem(
-  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier'>,
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
   task: CodeTask,
   problem: DispatchProblem,
   affectedTaskCount: number,
@@ -211,6 +230,60 @@ async function rollbackTaskForRecoverableDispatchProblem(
       message: 'Failed to persist recoverable dispatch status',
     });
   }
+  await reportOrNotifyDispatchProblem(deps, task, dispatchStatus, problem, affectedTaskCount, 'waiting');
+  return ok(undefined);
+}
+
+async function rollbackAffectedTasksForRecoverableDispatchProblem(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
+  tasks: readonly CodeTask[],
+  problem: DispatchProblem,
+): Promise<Result<void, DrainTaskQueueError>> {
+  const affectedTaskCount = tasks.length;
+  for (const affectedTask of tasks) {
+    const rollbackResult = await rollbackTaskForRecoverableDispatchProblem(
+      deps,
+      affectedTask,
+      problem,
+      affectedTaskCount,
+    );
+    if (!rollbackResult.ok) {
+      return rollbackResult;
+    }
+  }
+  return ok(undefined);
+}
+
+async function reportOrNotifyDispatchProblem(
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
+  task: CodeTask,
+  dispatchStatus: CodeTaskDispatchStatus,
+  problem: DispatchProblem,
+  affectedTaskCount: number,
+  phase: 'waiting' | 'terminal' | 'timeout',
+): Promise<void> {
+  /* v8 ignore start -- ts-type: optional reporter dependencies are conditional for exactOptionalPropertyTypes; production queue routes always provide all three deps @preserve */
+  if (
+    deps.logLineRepo !== undefined
+    && deps.automationLog !== undefined
+    && deps.codeTaskDispatchNotificationRepo !== undefined
+  ) {
+    await reportDispatchFailure({
+      task,
+      dispatchStatus,
+      problem,
+      phase,
+      affectedTaskCount,
+      logLineRepo: deps.logLineRepo,
+      automationLog: deps.automationLog,
+      whatsappNotifier: deps.whatsappNotifier,
+      notificationRepo: deps.codeTaskDispatchNotificationRepo,
+      logger: deps.logger,
+    });
+    return;
+  }
+  /* v8 ignore stop @preserve */
+
   await notifyDispatchProblemForTask({
     task,
     dispatchStatus,
@@ -220,7 +293,6 @@ async function rollbackTaskForRecoverableDispatchProblem(
     logger: deps.logger,
     affectedTaskCount,
   });
-  return ok(undefined);
 }
 
 async function recordDispatchBlockedForTask(
@@ -296,6 +368,9 @@ export interface DrainTaskQueueDeps {
   taskDispatcher: TaskDispatcherService;
   linearAgentClient: LinearAgentClient;
   whatsappNotifier: WhatsAppNotifier;
+  logLineRepo?: LogLineRepository;
+  automationLog?: AutomationLog;
+  codeTaskDispatchNotificationRepo?: CodeTaskDispatchNotificationRepository;
   workerSettingsRepo: WorkerSettingsRepository;
   codeTaskDispatchStatusService?: CodeTaskDispatchStatusService;
   taskEnqueueService: TaskEnqueueService;
@@ -503,11 +578,7 @@ export async function drainTaskQueue(
 
       if (now - effectiveEligibleAt.getTime() > ttlMs) {
         logger.warn({ taskId: candidate.id, queuedAt }, 'Queued task expired');
-        const timeoutMessage = `Task expired in queue after ${String(config.queue.ttlMinutes)} minutes. Workers were still busy.`;
-        const timeoutProblem = queueTimeoutDispatchProblem({
-          message: timeoutMessage,
-          remediation: 'Retry this task after worker capacity is available.',
-        });
+        const timeoutProblem = queueTimeoutDispatchProblemFromTask(candidate, config.queue.ttlMinutes);
         const dispatchStatus = buildDispatchStatusForProblem({
           task: candidate,
           problem: timeoutProblem,
@@ -516,7 +587,7 @@ export async function drainTaskQueue(
           status: 'failed',
           error: {
             code: 'queue_timeout',
-            message: timeoutMessage,
+            message: timeoutProblem.message,
           },
           dispatchStatus,
         });
@@ -541,15 +612,14 @@ export async function drainTaskQueue(
           }
         }
 
-        await notifyDispatchProblemForTask({
-          task: candidate,
+        await reportOrNotifyDispatchProblem(
+          deps,
+          candidate,
           dispatchStatus,
-          problem: timeoutProblem,
-          whatsappNotifier,
-          codeTaskRepo,
-          logger,
-          affectedTaskCount: 1,
-        });
+          timeoutProblem,
+          1,
+          'timeout'
+        );
 
         return ok({ action: 'expired', taskId: candidate.id, locksToCleanup });
       }
@@ -607,12 +677,12 @@ export async function drainTaskQueue(
         logger.info({ taskId: task.id }, 'Skipped — claimed by another instance or no longer queued');
         return ok({ action: 'still_busy', taskId: task.id });
       }
+      const affectedTasks = findAffectedDispatchTasks(activeCandidates, task);
       await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchability);
-      const failResult = await failTaskForDispatchProblem(
+      const failResult = await failAffectedTasksForDispatchProblem(
         deps,
-        task,
+        affectedTasks,
         dispatchProblemFromBlocker(dispatchability),
-        findAffectedDispatchTasks(activeCandidates, task).length,
       );
       if (!failResult.ok) {
         return err(failResult.error);
@@ -797,15 +867,7 @@ export async function drainTaskQueue(
         logger.error({ taskId: task.id, error: updateResult.error }, 'Failed to mark task failed after missing PR branch');
         return err({ code: 'internal_error', message: 'Failed to persist dispatch failure status' });
       }
-      await notifyDispatchProblemForTask({
-        task,
-        dispatchStatus,
-        problem,
-        whatsappNotifier,
-        codeTaskRepo,
-        logger,
-        affectedTaskCount: 1,
-      });
+      await reportOrNotifyDispatchProblem(deps, task, dispatchStatus, problem, 1, 'terminal');
       return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
     }
 
@@ -872,11 +934,13 @@ export async function drainTaskQueue(
           { taskId: task.id, error: dispatchError, retryable: dispatchError.code !== 'at_capacity' },
           'Dispatch transient/retryable, task remains queued',
         );
-        const rollbackResult = await rollbackTaskForRecoverableDispatchProblem(
+        const affectedTasks = dispatchError.blocker !== undefined
+          ? findAffectedDispatchTasks(activeCandidates, task)
+          : [task];
+        const rollbackResult = await rollbackAffectedTasksForRecoverableDispatchProblem(
           deps,
-          task,
+          affectedTasks,
           dispatchProblem,
-          findAffectedDispatchTasks(activeCandidates, task).length,
         );
         if (!rollbackResult.ok) {
           return err(rollbackResult.error);
@@ -885,7 +949,10 @@ export async function drainTaskQueue(
       }
 
       logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
-      const failResult = await failTaskForDispatchProblem(deps, task, dispatchProblem, 1);
+      const affectedTasks = dispatchError.blocker !== undefined
+        ? findAffectedDispatchTasks(activeCandidates, task)
+        : [task];
+      const failResult = await failAffectedTasksForDispatchProblem(deps, affectedTasks, dispatchProblem);
       if (!failResult.ok) {
         return err(failResult.error);
       }

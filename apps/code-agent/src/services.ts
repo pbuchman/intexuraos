@@ -115,7 +115,10 @@ export function initServices(config: ServiceConfig): void {
   const taskEnqueueService = createTaskEnqueueService({
     logger: logger.child({ service: 'task-enqueue' }),
     codeTaskRepo: repos.codeTaskRepo,
+    logLineRepo: repos.logLineRepo,
+    automationLog,
     whatsappNotifier,
+    notificationRepo: repos.codeTaskDispatchNotificationRepo,
   });
 
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
@@ -177,6 +180,7 @@ export function initServices(config: ServiceConfig): void {
     dispatchService, eventDecisionRepo: repos.eventDecisionRepo, dispatchRetryRepo: repos.dispatchRetryRepo,
     codeTaskSystemStatusRepo: repos.codeTaskSystemStatusRepo,
     unifiedEvaluator, prTriagePublisher, mergeConflictDetector, automationLog, taskEnqueueService,
+    codeTaskDispatchNotificationRepo: repos.codeTaskDispatchNotificationRepo,
     mergeQueueWatchRepo: repos.mergeQueueWatchRepo, executionMemoryRepo: repos.executionMemoryRepo,
     executionMemoryApplicationRepo: repos.executionMemoryApplicationRepo,
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),

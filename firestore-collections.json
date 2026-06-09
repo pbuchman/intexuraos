@@ -189,6 +189,11 @@
       "description": "Durable user-visible system statuses for code-task dispatch blockers",
       "scanPaths": ["apps/code-agent/src/infra/firestore"]
     },
+    "code_task_dispatch_notifications": {
+      "owner": "code-agent",
+      "description": "Durable dispatch-failure notification ledger keyed by task, channel, reason, and phase",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
+    },
     "pr_automation_comments": {
       "owner": "code-agent",
       "description": "PR automation comment tracking for unified PR log (one doc per PR, keyed by repository:prNumber)"

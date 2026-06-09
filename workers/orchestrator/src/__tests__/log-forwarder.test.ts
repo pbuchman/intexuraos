@@ -211,7 +211,7 @@ describe('LogForwarder', () => {
       forwarder.registerTask(
         'task-callback-base',
         webhookSecret,
-        'https://intexuraos.cloud/internal/webhooks/task-complete'
+        'https://intexuraos.cloud/api/code/internal/webhooks/task-complete'
       );
       forwarder.startForwarding('task-callback-base', logFile);
 
@@ -220,7 +220,7 @@ describe('LogForwarder', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
       await forwarder.stopForwarding('task-callback-base');
 
-      expect(capturedUrl).toBe('https://intexuraos.cloud/internal/logs');
+      expect(capturedUrl).toBe('https://intexuraos.cloud/api/code/internal/logs');
     });
 
     it('should include correct payload format', async () => {
