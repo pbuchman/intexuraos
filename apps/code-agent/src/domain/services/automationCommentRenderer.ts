@@ -142,9 +142,6 @@ function renderSkipped(
   if (event.ruleName !== undefined) {
     details.push(`Rule: ${event.ruleName}`);
   }
-  if (event.cost !== undefined) {
-    details.push(`Triage cost: ${formatCost(event.cost)}`);
-  }
   if (event.reasoning !== undefined) {
     details.push('', event.reasoning);
   }
@@ -170,8 +167,7 @@ function renderTriageDispatch(
     : `**${ts}** -- Triage → dispatching task`;
 
   const details: string[] = [];
-  details.push(`Triage cost: ${formatCost(event.cost)}`);
-  details.push('', event.reasoning);
+  details.push(event.reasoning);
   if (event.toolCalls.length > 0) {
     details.push('', '**Tool calls:**', ...event.toolCalls.map((tc) => `- \`${tc}\``));
   }
@@ -392,10 +388,6 @@ function formatDuration(ms: number): string {
     return `${String(minutes)}m ${String(seconds)}s`;
   }
   return `${String(seconds)}s`;
-}
-
-function formatCost(dollars: number): string {
-  return `$${dollars.toFixed(3)}`;
 }
 
 function extractPrNumber(prUrl: string): string {
