@@ -256,6 +256,49 @@ describe('CodeTaskViewPage', () => {
       expect(screen.getByText(/Fix the blocker, then retry this task/)).toBeInTheDocument();
       expect(screen.getByText(/Enable or add a worker/)).toBeInTheDocument();
     });
+
+    it('shows terminal cause and worker health diagnostics', () => {
+      const task = {
+        ...createTask({ status: 'failed' }),
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'queue_timeout',
+          terminal: true,
+          severity: 'critical',
+          message: 'Task expired in queue after 1440 minutes while blocked by worker_health_contract_mismatch.',
+          remediation: 'Restart worker.',
+          workerNames: ['home-dev'],
+          firstSeenAt: '2026-06-05T12:00:00.000Z',
+          lastSeenAt: '2026-06-05T12:05:00.000Z',
+          lastAttemptAt: '2026-06-05T12:04:00.000Z',
+          nextAction: 'retry_after_fix',
+          terminalCause: {
+            reason: 'worker_health_contract_mismatch',
+            message: 'Health response missing worker capability details',
+            remediation: 'Restart orchestrator',
+            workerNames: ['home-dev'],
+            lastSeenAt: '2026-06-05T12:04:00.000Z',
+          },
+          workerHealthDetails: [
+            {
+              workerName: 'home-dev',
+              tag: 'unknown',
+              healthy: false,
+              error: 'Health response missing worker capability details',
+              missingFields: ['providerApiKeys'],
+              contractMismatch: true,
+            },
+          ],
+        },
+      } as CodeTask;
+      mockUseTaskView.mockReturnValue(createTaskViewState(task));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.getByText(/Final cause: worker_health_contract_mismatch/)).toBeInTheDocument();
+      expect(screen.getByText(/home-dev: unknown/)).toHaveTextContent('providerApiKeys');
+      expect(screen.getByText(/Last attempt:/)).toBeInTheDocument();
+    });
   });
 
   describe('Merge button (isMergeable)', () => {

@@ -19,6 +19,16 @@ import type {
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 
 const PROBE_TIMEOUT_MS = 5000;
+const REQUIRED_HEALTH_FIELDS = [
+  'status',
+  'capacity',
+  'running',
+  'available',
+  'workerAuths',
+  'providerApiKeys',
+  'dockerHealthy',
+  'diskHealthy',
+] as const;
 
 /**
  * Helper type for building tunnel-down state with optional code.
@@ -127,10 +137,13 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       }
 
       if (this.isLegacyCapacityHealth(data)) {
+        const missingFields = this.missingHealthFields(data);
         return {
           _tag: 'unknown',
           healthy: false,
           error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields,
         };
       }
 
@@ -246,6 +259,30 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       'available' in data &&
       typeof data.available === 'number'
     );
+  }
+
+  private missingHealthFields(data: unknown): string[] {
+    /* v8 ignore start -- ts-type: typeof/null narrowing fallback is defensive for malformed upstream JSON; object health response branches are covered @preserve */
+    if (typeof data !== 'object' || data === null) {
+      return [...REQUIRED_HEALTH_FIELDS];
+    }
+    /* v8 ignore stop @preserve */
+    const record = data as Record<string, unknown>;
+
+    return REQUIRED_HEALTH_FIELDS.filter((field) => {
+      if (!(field in record)) {
+        return true;
+      }
+      const value = record[field];
+      if (field === 'status') return value !== 'ready';
+      if (field === 'capacity' || field === 'running' || field === 'available') {
+        return typeof value !== 'number';
+      }
+      if (field === 'dockerHealthy' || field === 'diskHealthy') {
+        return typeof value !== 'boolean';
+      }
+      return typeof value !== 'object' || value === null;
+    });
   }
 }
 

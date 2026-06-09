@@ -418,7 +418,7 @@ Queued. Position: ${String(position)}`;
       const idPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
       const message = `⏰ ${idPrefix}${title}
 
-Workers were still busy and the task timed out. Please retry when workers are available.`;
+The task timed out before a worker could start. Open the task for the recorded dispatch blocker and retry guidance.`;
 
       const result = await whatsappPublisher.publishSendMessage({
         userId,

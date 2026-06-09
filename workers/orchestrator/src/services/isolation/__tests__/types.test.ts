@@ -24,6 +24,9 @@ describe('WORKER_TYPES configuration', () => {
     for (const [workerType, config] of Object.entries(WORKER_TYPES)) {
       const capability = capabilities[workerType];
       expect(capability, `${workerType} missing shared capability metadata`).toBeDefined();
+      if (capability === undefined) {
+        throw new Error(`${workerType} missing shared capability metadata`);
+      }
       expect(capability.runtimeFamily === 'codex' ? 'codex' : 'claude').toBe(config.runtime);
       if (capability.auth.kind === 'api_key') {
         expect(config.apiKeyEnvVar).toBe(capability.auth.envVar);

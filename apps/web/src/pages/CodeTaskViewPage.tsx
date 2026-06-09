@@ -227,6 +227,10 @@ const MemoTaskHeader = memo(TaskHeader);
 const MemoLogStream = memo(LogStream);
 const MemoNextSteps = memo(NextSteps);
 const MemoTaskActions = memo(TaskActions);
+function formatDispatchTimestamp(value: string): string {
+  return new Date(value).toLocaleString();
+}
+
 const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task: CodeTask }): React.JSX.Element | null {
   const dispatchStatus = task.dispatchStatus;
   if (dispatchStatus === undefined) return null;
@@ -244,6 +248,13 @@ const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task
   const workerText = dispatchStatus.workerNames.length > 0
     ? `Workers: ${dispatchStatus.workerNames.join(', ')}`
     : null;
+  const timeText = [
+    `First seen: ${formatDispatchTimestamp(dispatchStatus.firstSeenAt)}`,
+    `Last seen: ${formatDispatchTimestamp(dispatchStatus.lastSeenAt)}`,
+    dispatchStatus.lastAttemptAt !== undefined ? `Last attempt: ${formatDispatchTimestamp(dispatchStatus.lastAttemptAt)}` : null,
+  ].filter((value): value is string => value !== null).join(' | ');
+  const terminalCause = dispatchStatus.terminalCause;
+  const healthDetails = dispatchStatus.workerHealthDetails ?? [];
 
   return (
     <Card className={`mb-6 ${isTerminal ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30' : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30'}`}>
@@ -270,6 +281,21 @@ const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task
           {workerText !== null ? (
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{workerText}</p>
           ) : null}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{timeText}</p>
+          {terminalCause !== undefined ? (
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              Final cause: {terminalCause.reason} - {terminalCause.message}
+            </p>
+          ) : null}
+          {healthDetails.map((detail) => (
+            <p key={`${detail.workerName}-${detail.tag}`} className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              {detail.workerName}: {detail.tag}
+              {detail.error !== undefined ? ` - ${detail.error}` : ''}
+              {detail.missingFields !== undefined && detail.missingFields.length > 0
+                ? ` (${detail.missingFields.join(', ')})`
+                : ''}
+            </p>
+          ))}
         </div>
       </div>
     </Card>

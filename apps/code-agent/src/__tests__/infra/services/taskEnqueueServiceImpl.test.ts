@@ -159,13 +159,7 @@ describe('TaskEnqueueServiceImpl', () => {
       affectedTaskCount: 1,
       exampleTaskId: 'task-123',
     }));
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
-      dispatchStatus: expect.objectContaining({
-        notifiedReasons: expect.objectContaining({
-          queue_full: expect.any(Timestamp),
-        }),
-      }),
-    });
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(1);
     expect(mockCodeTaskRepo.update.mock.invocationCallOrder[0]).toBeLessThan(
       mockWhatsappNotifier.notifyTaskDispatchBlocked.mock.invocationCallOrder[0] ?? 0,
     );
@@ -347,7 +341,7 @@ describe('TaskEnqueueServiceImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('queue_full');
       }
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(4);
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(2);
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
         'task-1',
         expect.objectContaining({
@@ -358,20 +352,16 @@ describe('TaskEnqueueServiceImpl', () => {
           }),
         }),
       );
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', {
-        dispatchStatus: expect.objectContaining({
-          notifiedReasons: expect.objectContaining({
-            queue_full: expect.any(Timestamp),
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'task-2',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({ code: 'dispatch_blocked_queue_full' }),
+          dispatchStatus: expect.objectContaining({
+            reason: 'queue_full',
           }),
         }),
-      });
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-2', {
-        dispatchStatus: expect.objectContaining({
-          notifiedReasons: expect.objectContaining({
-            queue_full: expect.any(Timestamp),
-          }),
-        }),
-      });
+      );
       expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledTimes(2);
       expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenNthCalledWith(1, 'user-456', expect.objectContaining({
         reason: 'queue_full',

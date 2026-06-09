@@ -21,6 +21,8 @@ export interface DispatchProblem {
   remediation: string;
   workerNames: string[];
   terminal: boolean;
+  terminalCause?: CodeTaskDispatchStatus['terminalCause'];
+  workerHealthDetails?: CodeTaskDispatchStatus['workerHealthDetails'];
 }
 
 export interface BuildDispatchStatusInput {
@@ -64,6 +66,7 @@ export function dispatchProblemFromBlocker(blocker: DispatchBlocker): DispatchPr
     remediation: blocker.remediation,
     workerNames: blocker.workerNames,
     terminal: isTerminalDispatchBlockerReason(blocker.reason),
+    ...(blocker.workerHealthDetails !== undefined && { workerHealthDetails: blocker.workerHealthDetails }),
   };
 }
 
@@ -102,15 +105,41 @@ export function queueFullDispatchProblem(message: string): DispatchProblem {
 export function queueTimeoutDispatchProblem(input: {
   message: string;
   remediation: string;
+  terminalCause?: CodeTaskDispatchStatus['terminalCause'];
+  workerNames?: string[];
 }): DispatchProblem {
   return {
     reason: 'queue_timeout',
     severity: 'critical',
     message: input.message,
     remediation: input.remediation,
-    workerNames: [],
+    workerNames: input.workerNames ?? [],
     terminal: true,
+    ...(input.terminalCause !== undefined && { terminalCause: input.terminalCause }),
   };
+}
+
+export function queueTimeoutDispatchProblemFromTask(task: CodeTask, ttlMinutes: number): DispatchProblem {
+  const previous = task.dispatchStatus;
+  if (previous !== undefined && previous.reason !== 'queue_timeout') {
+    return queueTimeoutDispatchProblem({
+      message: `Task expired in queue after ${String(ttlMinutes)} minutes while blocked by ${previous.reason}: ${previous.message}`,
+      remediation: previous.remediation,
+      workerNames: previous.workerNames,
+      terminalCause: {
+        reason: previous.reason,
+        message: previous.message,
+        remediation: previous.remediation,
+        workerNames: previous.workerNames,
+        lastSeenAt: previous.lastSeenAt,
+      },
+    });
+  }
+
+  return queueTimeoutDispatchProblem({
+    message: `Task expired in queue after ${String(ttlMinutes)} minutes before a worker could start.`,
+    remediation: 'Retry this task after worker capacity is available.',
+  });
 }
 
 export function dispatchFailureProblem(input: {
@@ -141,14 +170,25 @@ export function missingPrBranchDispatchProblem(input: {
   };
 }
 
-export function retryExpiredDispatchProblem(ttlMinutes: number): DispatchProblem {
+export function retryExpiredDispatchProblem(input: {
+  ttlMinutes: number;
+  attempts: number;
+  lastError: string;
+}): DispatchProblem {
   return {
     reason: 'retry_expired',
     severity: 'critical',
-    message: `Dispatch retry expired after ${String(ttlMinutes)} minutes`,
+    message: `Dispatch retry expired after ${String(input.ttlMinutes)} minutes and ${String(input.attempts)} attempts: ${input.lastError}`,
     remediation: 'Fix the dispatch blocker, then retry this task.',
     workerNames: [],
     terminal: true,
+    terminalCause: {
+      reason: 'dispatch_failed',
+      message: input.lastError,
+      remediation: 'Fix the underlying dispatch error, then retry this task.',
+      workerNames: [],
+      lastSeenAt: Timestamp.now(),
+    },
   };
 }
 
@@ -160,6 +200,13 @@ export function retryExhaustedDispatchProblem(attempts: number, lastError: strin
     remediation: 'Fix the dispatch blocker, then retry this task.',
     workerNames: [],
     terminal: true,
+    terminalCause: {
+      reason: 'dispatch_failed',
+      message: lastError,
+      remediation: 'Fix the underlying dispatch error, then retry this task.',
+      workerNames: [],
+      lastSeenAt: Timestamp.now(),
+    },
   };
 }
 
@@ -180,18 +227,18 @@ export function taskErrorFromDispatchStatus(dispatchStatus: CodeTaskDispatchStat
   };
 }
 
-function existingNotifiedReasons(
-  task: CodeTask
-): Partial<Record<CodeTaskDispatchStatusReason, Timestamp>> {
-  return task.dispatchStatus?.notifiedReasons ?? {};
-}
-
 function firstSeenAtForReason(
   task: CodeTask,
   reason: CodeTaskDispatchStatusReason,
   now: Timestamp
 ): Timestamp {
   return task.dispatchStatus?.reason === reason ? task.dispatchStatus.firstSeenAt : now;
+}
+
+function existingNotifiedReasons(
+  task: CodeTask
+): Partial<Record<CodeTaskDispatchStatusReason, Timestamp>> {
+  return task.dispatchStatus?.notifiedReasons ?? {};
 }
 
 export function buildDispatchStatusForProblem(
@@ -211,6 +258,8 @@ export function buildDispatchStatusForProblem(
     firstSeenAt: firstSeenAtForReason(input.task, input.problem.reason, now),
     lastSeenAt: now,
     nextAction: nextActionForDispatchProblem(input.problem),
+    ...(input.problem.terminalCause !== undefined && { terminalCause: input.problem.terminalCause }),
+    ...(input.problem.workerHealthDetails !== undefined && { workerHealthDetails: input.problem.workerHealthDetails }),
     ...(Object.keys(notifiedReasons).length > 0 && { notifiedReasons }),
   };
 }

@@ -8,10 +8,14 @@
 import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { randomUUID } from 'node:crypto';
+import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { LogLineRepository } from '../repositories/logLineRepository.js';
+import type { CodeTaskDispatchNotificationRepository } from '../repositories/codeTaskDispatchNotificationRepository.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 import { classifyCodeTaskDispatchability } from '../services/codeTaskDispatchBlockers.js';
 import {
   buildDispatchStatusForProblem,
@@ -19,7 +23,9 @@ import {
   dispatchProblemFromBlocker,
   notifyDispatchProblemForTask,
   taskErrorFromDispatchStatus,
+  type DispatchProblem,
 } from '../services/codeTaskDispatchProblems.js';
+import { reportDispatchFailure } from '../services/codeTaskDispatchFailureReporter.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
@@ -49,13 +55,16 @@ export interface StartAskAgentDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
   whatsappNotifier: WhatsAppNotifier;
+  logLineRepo?: LogLineRepository;
+  automationLog?: AutomationLog;
+  codeTaskDispatchNotificationRepo?: CodeTaskDispatchNotificationRepository;
 }
 
 export async function startAskAgent(
   deps: StartAskAgentDeps,
   request: StartAskAgentRequest,
 ): Promise<Result<StartAskAgentResult, StartAskAgentError>> {
-  const { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier } = deps;
+  const { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService } = deps;
   const { userId, prompt } = request;
 
   // 1. Sanitize prompt
@@ -117,15 +126,7 @@ export async function startAskAgent(
       logger.error({ taskId: task.id, error: updateResult.error }, 'Failed to fail ask-agent task after worker settings lookup failed');
       return err({ code: 'internal_error', message: 'Failed to persist dispatch failure status' });
     }
-    await notifyDispatchProblemForTask({
-      task,
-      dispatchStatus,
-      problem,
-      whatsappNotifier,
-      codeTaskRepo,
-      logger,
-      affectedTaskCount: 1,
-    });
+    await reportOrNotifyAskDispatchProblem(deps, task, dispatchStatus, problem);
     return ok({
       status: 'failed',
       codeTaskId: task.id,
@@ -153,15 +154,7 @@ export async function startAskAgent(
       logger.error({ taskId: task.id, error: updateResult.error }, 'Failed to fail ask-agent task after no enabled workers');
       return err({ code: 'internal_error', message: 'Failed to persist dispatch failure status' });
     }
-    await notifyDispatchProblemForTask({
-      task,
-      dispatchStatus,
-      problem,
-      whatsappNotifier,
-      codeTaskRepo,
-      logger,
-      affectedTaskCount: 1,
-    });
+    await reportOrNotifyAskDispatchProblem(deps, task, dispatchStatus, problem);
     return ok({
       status: 'failed',
       codeTaskId: task.id,
@@ -189,5 +182,44 @@ export async function startAskAgent(
   return ok({
     status: 'submitted',
     codeTaskId: task.id,
+  });
+}
+
+async function reportOrNotifyAskDispatchProblem(
+  deps: StartAskAgentDeps,
+  task: CodeTask,
+  dispatchStatus: CodeTaskDispatchStatus,
+  problem: DispatchProblem,
+): Promise<void> {
+  /* v8 ignore start -- ts-type: optional reporter dependencies are conditional for exactOptionalPropertyTypes; ask-agent route wiring always provides all three deps @preserve */
+  if (
+    deps.logLineRepo !== undefined
+    && deps.automationLog !== undefined
+    && deps.codeTaskDispatchNotificationRepo !== undefined
+  ) {
+    await reportDispatchFailure({
+      task,
+      dispatchStatus,
+      problem,
+      phase: 'terminal',
+      affectedTaskCount: 1,
+      logLineRepo: deps.logLineRepo,
+      automationLog: deps.automationLog,
+      whatsappNotifier: deps.whatsappNotifier,
+      notificationRepo: deps.codeTaskDispatchNotificationRepo,
+      logger: deps.logger,
+    });
+    return;
+  }
+  /* v8 ignore stop @preserve */
+
+  await notifyDispatchProblemForTask({
+    task,
+    dispatchStatus,
+    problem,
+    whatsappNotifier: deps.whatsappNotifier,
+    codeTaskRepo: deps.codeTaskRepo,
+    logger: deps.logger,
+    affectedTaskCount: 1,
   });
 }

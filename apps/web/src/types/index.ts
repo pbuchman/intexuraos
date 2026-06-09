@@ -942,6 +942,7 @@ export interface CodeTaskError {
 export type CodeTaskDispatchStatusReason =
   | 'no_enabled_workers'
   | 'workers_unreachable'
+  | 'worker_health_contract_mismatch'
   | 'workers_at_capacity'
   | 'codex_auth_unavailable'
   | 'claude_auth_unavailable'
@@ -974,6 +975,26 @@ export interface CodeTaskDispatchStatus {
   firstSeenAt: string;
   lastSeenAt: string;
   nextAction: 'will_retry_automatically' | 'retry_after_fix' | 'wait_until_scheduled' | 'wait_for_active_task';
+  lastAttemptAt?: string;
+  attemptCount?: number;
+  expiresAt?: string;
+  terminalCause?: {
+    reason: CodeTaskDispatchStatusReason;
+    message: string;
+    remediation: string;
+    workerNames: string[];
+    lastSeenAt: string;
+  };
+  workerHealthDetails?: {
+    workerName: string;
+    tag: string;
+    healthy: boolean;
+    reason?: string;
+    error?: string;
+    code?: string;
+    missingFields?: string[];
+    contractMismatch?: boolean;
+  }[];
 }
 
 export interface CodeTaskExecutionMemoryMatch {
@@ -1170,6 +1191,9 @@ export interface WorkerStatusDetails {
   responseTimeMs?: number;
   reason?: string;
   code?: string;
+  error?: string;
+  missingFields?: string[];
+  contractMismatch?: boolean;
 }
 
 /**

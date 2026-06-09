@@ -4,10 +4,12 @@ import {
   type CodeTaskAuthRequirement,
 } from '@intexuraos/code-task-domain';
 import type { WorkerConfig, WorkerHealthState } from '../models/workerSettings.js';
+import type { WorkerHealthDiagnostic } from '../models/workerSettings.js';
 
 export type CodeTaskDispatchBlockerReason =
   | 'no_enabled_workers'
   | 'workers_unreachable'
+  | 'worker_health_contract_mismatch'
   | 'workers_at_capacity'
   | 'codex_auth_unavailable'
   | 'claude_auth_unavailable'
@@ -25,6 +27,7 @@ export type CodeTaskDispatchability =
       message: string;
       remediation: string;
       workerNames: string[];
+      workerHealthDetails?: WorkerHealthDiagnostic[];
     };
 
 export interface ClassifyCodeTaskDispatchabilityInput {
@@ -45,7 +48,8 @@ function enabledWorkers(workers: readonly WorkerConfig[]): WorkerConfig[] {
 function blocker(
   reason: CodeTaskDispatchBlockerReason,
   workerType: string,
-  workerNames: string[]
+  workerNames: string[],
+  workerHealthDetails?: WorkerHealthDiagnostic[]
 ): CodeTaskDispatchability {
   const label = workerType;
   const severity = reason === 'workers_at_capacity' ? 'warning' : 'critical';
@@ -57,6 +61,10 @@ function blocker(
     workers_unreachable: {
       message: `No configured workers are reachable for ${label}.`,
       remediation: 'Check worker host connectivity, tunnel routing, and orchestrator service health.',
+    },
+    worker_health_contract_mismatch: {
+      message: `Configured workers for ${label} responded with an incompatible health contract.`,
+      remediation: 'Deploy or restart the worker orchestrator so /health includes the required capability fields, then retry this task.',
     },
     workers_at_capacity: {
       message: `All capable workers for ${label} are currently at capacity.`,
@@ -95,7 +103,55 @@ function blocker(
     message: text.message,
     remediation: text.remediation,
     workerNames,
+    ...(workerHealthDetails !== undefined && workerHealthDetails.length > 0 && { workerHealthDetails }),
   };
+}
+
+export function healthDiagnostic(
+  worker: WorkerConfig,
+  health: WorkerHealthState | undefined
+): WorkerHealthDiagnostic | undefined {
+  if (health === undefined) {
+    return undefined;
+  }
+
+  const diagnostic: WorkerHealthDiagnostic = {
+    workerName: worker.name,
+    tag: health._tag,
+    healthy: health.healthy,
+  };
+
+  if (health._tag === 'orchestrator-unreachable' || health._tag === 'tunnel-down') {
+    diagnostic.reason = health.reason;
+    if (health.code !== undefined) {
+      diagnostic.code = health.code;
+    }
+  }
+
+  if (health._tag === 'unknown') {
+    diagnostic.error = health.error;
+    if (health.missingFields !== undefined) {
+      diagnostic.missingFields = health.missingFields;
+    }
+    if (health.contractMismatch !== undefined) {
+      diagnostic.contractMismatch = health.contractMismatch;
+    }
+  }
+
+  return diagnostic;
+}
+
+export function healthDiagnostics(
+  workers: readonly WorkerConfig[],
+  healthByWorkerName: Record<string, WorkerHealthState>
+): WorkerHealthDiagnostic[] {
+  return workers.flatMap((worker) => {
+    const diagnostic = healthDiagnostic(worker, healthByWorkerName[worker.name]);
+    if (diagnostic === undefined) {
+      return [];
+    }
+    return [diagnostic];
+  });
 }
 
 function hasRequiredAuth(auth: CodeTaskAuthRequirement, health: HealthyWorker['health']): boolean {
@@ -135,7 +191,23 @@ export function classifyCodeTaskDispatchability(
   });
 
   if (healthyWorkers.length === 0) {
-    return blocker('workers_unreachable', workerType, enabled.map((worker) => worker.name));
+    const enabledHealthStates = enabled.map((worker) => healthByWorkerName[worker.name]);
+    const hasHealthContractMismatch = enabledHealthStates.length > 0
+      && enabledHealthStates.every((health) => health?._tag === 'unknown' && health.contractMismatch === true);
+    if (hasHealthContractMismatch) {
+      return blocker(
+        'worker_health_contract_mismatch',
+        workerType,
+        enabled.map((worker) => worker.name),
+        healthDiagnostics(enabled, healthByWorkerName)
+      );
+    }
+    return blocker(
+      'workers_unreachable',
+      workerType,
+      enabled.map((worker) => worker.name),
+      healthDiagnostics(enabled, healthByWorkerName)
+    );
   }
 
   /* v8 ignore start -- ts-type: every current code-task worker capability requires Docker, so the ternary false branch cannot execute until future non-Docker workers exist @preserve */

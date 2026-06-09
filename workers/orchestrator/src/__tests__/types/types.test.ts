@@ -66,6 +66,7 @@ describe('Orchestrator Types', () => {
 
     it('validates HealthResponse structure', () => {
       const health: HealthResponse = {
+        healthContractVersion: 1,
         status: 'ready',
         capacity: 5,
         running: 2,

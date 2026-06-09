@@ -612,7 +612,7 @@ describe('Automation log integration flows', () => {
     });
   });
 
-  // --- Flows 14+15: Review dispatched ---
+  // --- Flows 14+15: Review queued ---
 
   describe('review dispatched (flows 14+15)', () => {
     it('records triage_dispatch and creates review task for pull_request ready_for_review without triage_failed', async () => {

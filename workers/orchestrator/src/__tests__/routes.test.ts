@@ -722,6 +722,7 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json).toMatchObject({
+        healthContractVersion: 1,
         status: 'ready',
         capacity: 5,
         running: 0,
