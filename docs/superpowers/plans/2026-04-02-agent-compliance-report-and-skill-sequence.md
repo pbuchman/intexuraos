@@ -4,7 +4,7 @@
 
 **Goal:** Replace the markdown-based Deep Validation Report with a structured JSON Agent Compliance Report via OpenRouter, and update the execution agent skill sequence to resolve the `executing-plans` / `subagent-driven-development` conflict and the `simplify` / `requesting-code-review` redundancy.
 
-**Architecture:** The orchestrator's `execution-deep-validator.ts` is rewritten to use `@intexuraos/infra-openrouter` with `xiaomi/mimo-v2-pro` (configurable). The LLM returns structured JSON validated by Zod with a repair-prompt fallback. Reports are sent to code-agent via a new dedicated webhook endpoint and stored in Firestore as a subcollection of `code_tasks`. GitHub PR comments are rendered from the structured JSON for consistent formatting. The execution system prompt and completion verifier schema are updated to mandate `subagent-driven-development` as the first skill and remove `/simplify` as a separate step.
+**Architecture:** The orchestrator's `execution-deep-validator.ts` is rewritten to use `@intexuraos/infra-openrouter` with `xiaomi/mimo-v2.5-pro` (configurable). The LLM returns structured JSON validated by Zod with a repair-prompt fallback. Reports are sent to code-agent via a new dedicated webhook endpoint and stored in Firestore as a subcollection of `code_tasks`. GitHub PR comments are rendered from the structured JSON for consistent formatting. The execution system prompt and completion verifier schema are updated to mandate `subagent-driven-development` as the first skill and remove `/simplify` as a separate step.
 
 **Tech Stack:** TypeScript, Zod, `@intexuraos/infra-openrouter`, OpenRouter API (OpenAI-compatible), Firestore, `gh` CLI for PR comments.
 
@@ -496,7 +496,7 @@ Follow the pattern from `apps/research-agent/src/infra/llm/InputValidationAdapte
 Verify that the function produces consistent markdown tables from a structured report. The output should have:
 - `@ignore` prefix
 - `### Agent Compliance Report — IntexuraOS` heading
-- `**Cost:** $X.XX` and `**Model:** xiaomi/mimo-v2-pro`
+- `**Cost:** $X.XX` and `**Model:** xiaomi/mimo-v2.5-pro`
 - Tables for each section with emoji severity indicators
 
 - [ ] **Step 10: Implement `renderComplianceMarkdown`**
@@ -659,7 +659,7 @@ const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
 const agentComplianceValidator = openRouterApiKey !== ''
   ? new OrchestratorAgentComplianceValidator(logger, {
       openRouterApiKey,
-      model: process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2-pro',
+      model: process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2.5-pro',
       pricing: {
         inputPricePerMillion: 1.0,
         outputPricePerMillion: 3.0,

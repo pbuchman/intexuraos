@@ -142,6 +142,20 @@ deploy_runtime() {
   fi
 }
 
+verify_non_404_route() {
+  local route_path="$1"
+  local status=""
+
+  status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 15 \
+    --request POST \
+    --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}" \
+    "https://${PUBLIC_DOMAIN}${route_path}")"
+
+  if [[ "${status}" == "404" ]]; then
+    fail "Code-agent callback route returned 404: ${route_path}"
+  fi
+}
+
 verify_deployment() {
   run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/healthz >/dev/null'
   curl --fail --silent --show-error --max-time 15 \
@@ -153,6 +167,7 @@ verify_deployment() {
   curl --fail --silent --show-error --max-time 15 \
     --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}" \
     "https://${PUBLIC_DOMAIN}/api/settings/health" >/dev/null
+  verify_non_404_route "/api/code/internal/logs"
 }
 
 main() {

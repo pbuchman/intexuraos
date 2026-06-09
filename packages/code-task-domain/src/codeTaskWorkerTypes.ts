@@ -71,7 +71,7 @@ export const CODE_TASK_WORKER_CAPABILITIES: Record<CodeTaskWorkerType, CodeTaskW
   },
   'mimo-pro': {
     workerType: 'mimo-pro',
-    displayName: 'Mimo Pro',
+    displayName: 'MiMo Pro 2.5',
     runtimeFamily: 'provider',
     auth: { kind: 'api_key', envVar: 'MIMO_API_KEY' },
     requiresDocker: true,

@@ -38,11 +38,11 @@ You can run one orchestrator or several, each on different hardware, each in a d
 
 ### Run Tasks Across Multiple AI Runtimes
 
-The orchestrator supports worker type presets spanning multiple AI providers and runtimes. Claude-backed types (auto, opus, sonnet) use Anthropic's models via OAuth. Third-party model types (minimax, mimo-pro, glm, qwen, kimi, openrouter-free) route through MiniMax, Xiaomi MiMo, Alibaba Cloud DashScope, Kimi Code, or OpenRouter APIs. Codex-backed types (codex, codex-xhigh) use OpenAI's Codex runtime with ChatGPT device-auth. Each worker type carries its own API base URL, model identifier, and effort level — the orchestrator resolves the correct credentials, runtime adapter, and log processor automatically.
+The orchestrator supports worker type presets spanning multiple AI providers and runtimes. Claude-backed types (auto, opus, sonnet) use Anthropic's models via OAuth. Third-party model types (minimax, mimo-pro, glm, qwen, kimi, openrouter-free) route through MiniMax, Xiaomi MiMo Pro 2.5, Alibaba Cloud DashScope, Kimi Code, or OpenRouter APIs. Codex-backed types (codex, codex-xhigh) use OpenAI's Codex runtime with ChatGPT device-auth. Each worker type carries its own API base URL, model identifier, and effort level — the orchestrator resolves the correct credentials, runtime adapter, and log processor automatically.
 
 Codex tasks produce human-readable logs through a dedicated log processor that formats streaming output differently from Claude sessions. The orchestrator handles auth lifecycle independently for each runtime — Claude uses OAuth with automatic token refresh, Codex uses ChatGPT device-auth with periodic revalidation. Both auth states are exposed on the health endpoint so operators know at a glance which runtimes are ready.
 
-**Example:** A team routes complex architectural tasks through `opus` (high-effort Claude) for its deep reasoning, uses `codex-xhigh` for tasks that benefit from Codex's code generation strengths, runs `mimo-pro` for cost-effective execution via Xiaomi MiMo, and falls back to `openrouter-free` for lightweight triage or zero-cost prototyping. All run through the same orchestrator, same verification pipeline, same compliance checks — the worker type selection is the only difference.
+**Example:** A team routes complex architectural tasks through `opus` (high-effort Claude) for its deep reasoning, uses `codex-xhigh` for tasks that benefit from Codex's code generation strengths, runs `mimo-pro` for cost-effective execution via Xiaomi MiMo Pro 2.5, and falls back to `openrouter-free` for lightweight triage or zero-cost prototyping. All run through the same orchestrator, same verification pipeline, same compliance checks — the worker type selection is the only difference.
 
 ### Verify Every Result with a Cross-Model Pipeline
 
@@ -118,7 +118,7 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 
 - **Your code, your hardware** — Source code never leaves your network; outbound data is limited to task status, logs, and performance metrics
 - **Cross-model trust boundary** — Claude or Codex writes the code, a configurable validation model chain verifies the result, an independent LLM audits the full transcript, deterministic rules enforce what no model can be trusted to check — no model ever grades its own work
-- **Worker type presets** — Anthropic (auto, opus, sonnet), MiniMax, Xiaomi MiMo (mimo-pro), Alibaba Cloud DashScope (GLM, Qwen), Kimi Code, OpenRouter free tier, and Codex (standard and xhigh) — all through a single orchestrator
+- **Worker type presets** — Anthropic (auto, opus, sonnet), MiniMax, Xiaomi MiMo Pro 2.5 (mimo-pro), Alibaba Cloud DashScope (GLM, Qwen), Kimi Code, OpenRouter free tier, and Codex (standard and xhigh) — all through a single orchestrator
 - **Autonomous remediation loop** — Review findings trigger automatic fix, re-review, and verification without human intervention, crossing LLM boundaries at each step
 - **Five review scopes** — code_quality, security, architecture, plan_review, and test_quality — each targeting a specific dimension of pull request quality
 - **Execution memory** — Past patterns, pitfalls, and verified approaches are injected into future tasks with a simplified verification pipeline, preventing repeated mistakes and building institutional knowledge

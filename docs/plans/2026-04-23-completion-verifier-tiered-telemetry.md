@@ -746,7 +746,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://token-plan-sgp.xiaomimimo.com/anthropic',
     apiKeyEnvVar: 'MIMO_API_KEY',
-    model: 'mimo-v2-pro',
+    model: 'mimo-v2.5-pro',
     telemetryExpectation: 'optional',
   },
   glm: {

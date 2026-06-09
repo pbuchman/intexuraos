@@ -28,13 +28,13 @@ Production research-agent logs:
 - At `2026-05-05T07:56:01.241393Z`, immediately before final save, research-agent logged:
   `[4.3.5] Aggregate usage: inputTokens=74183, outputTokens=16992, costUsd=0.000000 (llm=0.000000, synth=0.000000, aux=0.000000, source=0.000000, add=0.000000)`.
 - The same research had successful nonzero-token calls:
-  `gemini-2.5-pro` 3,051 tokens, `gpt-5.4` 35,439 tokens, `or:minimax/minimax-m2.7` 17,462 tokens, `or:xiaomi/mimo-v2-pro` 17,204 tokens.
+  `gemini-2.5-pro` 3,051 tokens, `gpt-5.4` 35,439 tokens, `or:minimax/minimax-m2.7` 17,462 tokens, `or:xiaomi/mimo-v2.5-pro` 17,204 tokens.
 
 Production `llm_usage_events` in the same user/time window:
 - 14 events scanned from `2026-05-05T07:52:00Z` to `2026-05-05T07:57:00Z`.
 - Total billed cost: `$0.472707`.
 - Research web-search rows billed:
-  `xiaomi/mimo-v2-pro = 0.041410`, `gemini-2.5-pro = 0.069291`, `gpt-5.4 = 0.227935`, `minimax/m2.7 = 0.028381`.
+  `xiaomi/mimo-v2.5-pro = 0.041410`, `gemini-2.5-pro = 0.069291`, `gpt-5.4 = 0.227935`, `minimax/m2.7 = 0.028381`.
 - Synthesis billed: `research-synthesis = 0.058243`.
 - Synthesis context inference billed: `research-synthesis-context-inference = 0.015596`.
 - Image prompt generation billed: `image-thumbnail-prompt = 0.017825`.
