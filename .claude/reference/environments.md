@@ -79,6 +79,19 @@ Code tasks are forwarded from **both dev and prod** to one of two development ma
 
 **Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field contains a user-configured string (e.g., `"mac-dev"`, `"office-pc"`) — read whatever value is stored; it is not a fixed hostname.
 
+## Code Task Worker Location vs Environment Ownership
+
+**Orchestrator is deployment-independent.** A code task may run on `home-dev`, `mac-dev`, or another worker machine for either dev or prod. `workerLocation` answers "which machine is executing this task"; it does NOT answer "which environment owns this task."
+
+The owning environment is carried by the task callback URLs:
+
+| Owner | Canonical callback base                 |
+| ----- | --------------------------------------- |
+| dev   | `https://dev.intexuraos.cloud/api/code` |
+| prod  | `https://intexuraos.cloud/api/code`     |
+
+For task logs, lifecycle events, turn metrics, status updates, and completion callbacks, orchestrator MUST use the task-provided `webhookUrl` to derive sibling callback URLs. It MUST NOT infer callback destination from hostname, `workerLocation`, or its own fallback `INTEXURAOS_CODE_AGENT_URL` when `webhookUrl` is present.
+
 ## Forbidden Assumptions
 
 - "This is local" — WRONG. There is NO local. Only dev or prod.
