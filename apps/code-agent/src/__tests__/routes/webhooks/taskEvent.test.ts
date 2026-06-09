@@ -84,6 +84,12 @@ describe('POST /internal/webhooks/task-event', () => {
         userId: 'user-123',
         status: 'running',
         webhookSecret: generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID),
+        callbackState: {
+          webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+          callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+          owner: 'prod',
+          configuredAt: new Date('2026-06-09T14:00:00.000Z'),
+        },
       })),
       create: vi.fn(),
       findByIdForUser: vi.fn(),
@@ -161,10 +167,13 @@ describe('POST /internal/webhooks/task-event', () => {
   });
 
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  function sendTaskEvent(body: object, overrides?: { token?: string; skipSignature?: boolean }) {
-    const headers: Record<string, string> = {
-      'X-Internal-Auth': overrides?.token ?? INTERNAL_AUTH_TOKEN,
-    };
+  function sendTaskEvent(body: object, overrides?: { token?: string | null; skipSignature?: boolean }) {
+    const headers: Record<string, string> = {};
+    if (overrides?.token === undefined) {
+      headers['X-Internal-Auth'] = INTERNAL_AUTH_TOKEN;
+    } else if (overrides.token !== null) {
+      headers['X-Internal-Auth'] = overrides.token;
+    }
 
     if (overrides?.skipSignature !== true) {
       const bodyTaskId = (body as { taskId?: string }).taskId ?? '';
@@ -186,22 +195,33 @@ describe('POST /internal/webhooks/task-event', () => {
   // Authentication
   // -----------------------------------------------------------------------
 
-  it('rejects request without X-Internal-Auth header', async () => {
+  it('rejects request without signature headers', async () => {
     const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
-    const perTaskSecret = generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID);
-    const { timestamp, signature } = generateSignature(body, perTaskSecret);
 
     const response = await app.inject({
       method: 'POST',
       url: '/internal/webhooks/task-event',
-      headers: {
-        'X-Request-Timestamp': timestamp,
-        'X-Request-Signature': signature,
-      },
       payload: body,
     });
 
     expect(response.statusCode).toBe(401);
+  });
+
+  it('accepts a valid task signature without environment-scoped internal auth', async () => {
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
+    const response = await sendTaskEvent(body, { token: null });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockAutomationLog.record).toHaveBeenCalledOnce();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+      TASK_ID,
+      expect.objectContaining({
+        callbackState: expect.objectContaining({
+          lastSuccessEndpoint: 'task_event',
+          lastSuccessAt: expect.any(Date),
+        }),
+      })
+    );
   });
 
   it('rejects request with invalid webhook signature', async () => {

@@ -185,6 +185,35 @@ const dispatchStatusSchema = {
   ],
 } as const;
 
+const callbackStateSchema = {
+  type: 'object',
+  properties: {
+    webhookUrl: { type: 'string' },
+    callbackBaseUrl: { type: 'string' },
+    owner: { type: 'string', enum: ['dev', 'prod', 'custom'] },
+    configuredAt: { type: 'string', format: 'date-time' },
+    lastSuccessAt: { type: 'string', format: 'date-time' },
+    lastSuccessEndpoint: {
+      type: 'string',
+      enum: ['logs', 'task_event', 'task_complete', 'status', 'turn_metrics'],
+    },
+    lastFailure: {
+      type: 'object',
+      properties: {
+        endpoint: {
+          type: 'string',
+          enum: ['logs', 'task_event', 'task_complete', 'status', 'turn_metrics'],
+        },
+        status: { type: 'number' },
+        message: { type: 'string' },
+        occurredAt: { type: 'string', format: 'date-time' },
+      },
+      required: ['endpoint', 'message', 'occurredAt'],
+    },
+  },
+  required: ['webhookUrl', 'callbackBaseUrl', 'owner', 'configuredAt'],
+} as const;
+
 // Response schema for created task
 const codeTaskSchema = {
   type: 'object',
@@ -205,6 +234,7 @@ const codeTaskSchema = {
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },
+    callbackState: callbackStateSchema,
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
     dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -285,5 +315,6 @@ export {
   executionMemoryContextSchema,
   executionMemoryPostRunSchema,
   dispatchStatusSchema,
+  callbackStateSchema,
   codeTaskSchema,
 };

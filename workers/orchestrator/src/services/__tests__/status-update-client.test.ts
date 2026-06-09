@@ -8,6 +8,7 @@ import { StatusUpdateClient, type StatusUpdateClientConfig } from '../status-upd
 const codeAgentUrl = 'http://code-agent.test';
 const orchestratorSecret = 'orchestrator-secret-xyz';
 const internalAuthToken = 'internal-auth-token';
+const taskWebhookSecret = 'task-webhook-secret-xyz';
 
 interface LogCall {
   level: string;
@@ -134,6 +135,41 @@ describe('StatusUpdateClient', () => {
       .update(`${String(capturedTimestamp)}.${String(capturedBody)}`)
       .digest('hex');
 
+    expect(capturedSignature).toBe(expected);
+    expect(nock.isDone()).toBe(true);
+  });
+
+  it('uses the per-task webhook secret for task callback status signatures', async () => {
+    let capturedBody: string | undefined;
+    let capturedTimestamp: string | undefined;
+    let capturedSignature: string | undefined;
+
+    nock(codeAgentUrl)
+      .patch('/internal/code-tasks/task_task_secret/status', (body) => {
+        capturedBody = JSON.stringify(body);
+        return true;
+      })
+      .reply(function () {
+        capturedTimestamp = this.req.headers['x-request-timestamp'] as string | undefined;
+        capturedSignature = this.req.headers['x-request-signature'] as string | undefined;
+        return [200, { success: true }];
+      });
+
+    const { client } = makeClient();
+    const result = await client.commit({
+      taskId: 'task_task_secret',
+      status: 'completed',
+      completedAt: new Date('2026-04-17T10:00:00.000Z'),
+      webhookSecret: taskWebhookSecret,
+    } as Parameters<StatusUpdateClient['commit']>[0] & { webhookSecret: string });
+
+    expect(result).toEqual({ ok: true });
+    expect(capturedTimestamp).toMatch(/^\d+$/);
+    expect(capturedSignature).toMatch(/^[a-f0-9]{64}$/);
+
+    const expected = createHmac('sha256', taskWebhookSecret)
+      .update(`${String(capturedTimestamp)}.${String(capturedBody)}`)
+      .digest('hex');
     expect(capturedSignature).toBe(expected);
     expect(nock.isDone()).toBe(true);
   });

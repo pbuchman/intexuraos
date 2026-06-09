@@ -379,6 +379,18 @@ describe('codeRoutes branch coverage', () => {
           }],
           nextAction: 'retry_after_fix',
         },
+        callbackState: {
+          webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+          callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+          owner: 'prod',
+          configuredAt: new Date('2026-06-05T12:06:00.000Z'),
+          lastFailure: {
+            endpoint: 'logs',
+            status: 401,
+            message: 'Internal authentication failed',
+            occurredAt: new Date('2026-06-05T12:07:00.000Z'),
+          },
+        },
       } as Parameters<typeof repo.update>[1]);
 
       const response = await server.inject({
@@ -417,6 +429,18 @@ describe('codeRoutes branch coverage', () => {
           contractMismatch: true,
           missingFields: ['workerAuths'],
         })],
+      }));
+      expect(task.callbackState).toEqual(expect.objectContaining({
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+        owner: 'prod',
+        configuredAt: '2026-06-05T12:06:00.000Z',
+        lastFailure: expect.objectContaining({
+          endpoint: 'logs',
+          status: 401,
+          message: 'Internal authentication failed',
+          occurredAt: '2026-06-05T12:07:00.000Z',
+        }),
       }));
       expect(task.linearIssueId).toBe('INT-100');
       expect(task.prNumber).toBe(42);

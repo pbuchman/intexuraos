@@ -8386,7 +8386,7 @@ describe('POST /internal/logs', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('rejects logs without internal auth header', async () => {
+  it('accepts logs signed with the task secret without internal auth header', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
       prompt: 'Fix the bug',
@@ -8427,9 +8427,10 @@ describe('POST /internal/logs', () => {
       payload,
     });
 
-    expect(response.statusCode).toBe(401);
+    expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
-    expect(body.error.code).toBe('UNAUTHORIZED');
+    expect(body.received).toBe(true);
+    expect(body.acknowledgedSequences).toEqual([1]);
   });
 
   it('returns UNKNOWN_TASK when findById fails during HMAC secret lookup for logs (L1387)', async () => {
@@ -11429,8 +11430,21 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
 
   it('returns 500 when turnMetricsRepo.store fails', async () => {
     vi.spyOn(getServices().turnMetricsRepo, 'store').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'fail' }));
+    await getServices().codeTaskRepo.create({
+      id: 'task_123',
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_metrics_store_fail',
+      webhookSecret: 'test-webhook-secret',
+    });
     const payload = { taskId: 'task_123', attempt: 1, timestamp: new Date().toISOString() };
-    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orch-secret');
+    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/turn-metrics', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(500);
   });
@@ -11439,6 +11453,19 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
     const services = getServices();
     const storeSpy = vi.spyOn(services.turnMetricsRepo, 'store').mockResolvedValue(ok(undefined));
     const lineSpy = vi.spyOn(services.logLineRepo, 'storeBatch').mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'fail' }));
+    await services.codeTaskRepo.create({
+      id: 'task_123',
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_metrics_lines_fail',
+      webhookSecret: 'test-webhook-secret',
+    });
     const payload = {
       taskId: 'task_123', attempt: 1, timestamp: new Date().toISOString(),
       cpuTimeSeconds: 10, cpuCores: 4, peakMemoryMB: 512, wallTimeSeconds: 15,
@@ -11446,7 +11473,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       totalInputTokens: 1000, totalOutputTokens: 500, totalCacheReadTokens: 200,
       totalCacheCreationTokens: 100, apiCallCount: 5, cpuUtilizationPercent: 50, idlePercent: 10,
     };
-    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orch-secret');
+    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/turn-metrics', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
     storeSpy.mockRestore();

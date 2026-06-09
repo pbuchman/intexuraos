@@ -18,12 +18,14 @@ import type {
 import { withSchemaVersion, type SchemaVersionedFields } from '@intexuraos/infra-firestore';
 import type {
   CodeTask,
+  CodeTaskCallbackState,
   DispatchSchedule,
   ExecutionMemoryContext,
   ExecutionMemoryPostRun,
 } from '../../domain/models/codeTask.js';
 import type {
   CreateTaskInput,
+  CodeTaskCallbackStateCreateInput,
   DispatchScheduleCreateInput,
   ExecutionMemoryContextCreateInput,
   ExecutionMemoryPostRunCreateInput,
@@ -143,6 +145,33 @@ export function serializeDispatchSchedule(
     ...(input.sourceText !== undefined && { sourceText: input.sourceText }),
     ...(input.derivedFromTaskId !== undefined && {
       derivedFromTaskId: input.derivedFromTaskId,
+    }),
+  };
+}
+
+export function serializeCallbackState(
+  input: CodeTaskCallbackStateCreateInput
+): CodeTaskCallbackState {
+  const configuredAt = toTimestamp(input.configuredAt) ?? Timestamp.fromDate(new Date());
+  const lastSuccessAt = toTimestamp(input.lastSuccessAt);
+  const lastFailureOccurredAt = toTimestamp(input.lastFailure?.occurredAt);
+
+  return {
+    webhookUrl: input.webhookUrl,
+    callbackBaseUrl: input.callbackBaseUrl,
+    owner: input.owner,
+    configuredAt,
+    ...(lastSuccessAt !== undefined && { lastSuccessAt }),
+    ...(input.lastSuccessEndpoint !== undefined && {
+      lastSuccessEndpoint: input.lastSuccessEndpoint,
+    }),
+    ...(input.lastFailure !== undefined && lastFailureOccurredAt !== undefined && {
+      lastFailure: {
+        endpoint: input.lastFailure.endpoint,
+        ...(input.lastFailure.status !== undefined && { status: input.lastFailure.status }),
+        message: input.lastFailure.message,
+        occurredAt: lastFailureOccurredAt,
+      },
     }),
   };
 }
@@ -283,6 +312,9 @@ export function buildUpdateData(input: UpdateTaskInput): Record<string, unknown>
   }
   if (input.callbackReceived !== undefined) {
     updateData['callbackReceived'] = input.callbackReceived;
+  }
+  if (input.callbackState !== undefined) {
+    updateData['callbackState'] = serializeCallbackState(input.callbackState);
   }
   if (input.queuedAt !== undefined) {
     updateData['queuedAt'] = Timestamp.fromDate(input.queuedAt);

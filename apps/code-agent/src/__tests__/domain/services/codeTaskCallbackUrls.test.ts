@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildInternalCallbackUrl,
+  classifyCallbackOwner,
   buildTaskCompleteWebhookUrl,
   buildTaskEventWebhookUrl,
+  normalizeCallbackBaseUrl,
 } from '../../../domain/services/codeTaskCallbackUrls.js';
 
 describe('code task callback URLs', () => {
@@ -43,5 +45,11 @@ describe('code task callback URLs', () => {
     expect(buildTaskCompleteWebhookUrl('http://localhost:8128')).toBe(
       'http://localhost:8128/internal/webhooks/task-complete'
     );
+  });
+
+  it('classifies callback ownership from normalized callback bases', () => {
+    expect(classifyCallbackOwner(normalizeCallbackBaseUrl('https://dev.intexuraos.cloud'))).toBe('dev');
+    expect(classifyCallbackOwner(normalizeCallbackBaseUrl('https://intexuraos.cloud'))).toBe('prod');
+    expect(classifyCallbackOwner('https://callback.test')).toBe('custom');
   });
 });

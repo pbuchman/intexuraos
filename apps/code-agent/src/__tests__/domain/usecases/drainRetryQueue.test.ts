@@ -816,6 +816,11 @@ describe('drainRetryQueue', () => {
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
         dispatchStatus: null,
         workerLocation: 'home-mac',
+        callbackState: expect.objectContaining({
+          webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
+          callbackBaseUrl: 'https://callback.test',
+          owner: 'custom',
+        }),
       }));
       expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
         expect.objectContaining({
