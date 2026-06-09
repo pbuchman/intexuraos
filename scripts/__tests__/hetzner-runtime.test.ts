@@ -93,7 +93,11 @@ describe('Hetzner nginx runtime config', () => {
 
     for (const service of manifest.services) {
       const upstream = upstreamName(service.name);
-      expect(config, service.apiPath).toContain(`location ${service.apiPath}/`);
+      if (service.name === 'code-agent') {
+        expect(config, service.apiPath).toContain(`location ^~ ${service.apiPath}/`);
+      } else {
+        expect(config, service.apiPath).toContain(`location ${service.apiPath}/`);
+      }
       expect(config, service.apiPath).toContain(`proxy_pass http://${upstream}/;`);
     }
 
@@ -116,6 +120,15 @@ describe('Hetzner nginx runtime config', () => {
     expect(config).not.toContain('/api/cron/');
     expect(config).not.toContain('/api/hellscript/');
     expect(config).not.toContain('data_insights_agent');
+  });
+
+  it('routes canonical code-agent internal callbacks before the public internal deny rule', () => {
+    const config = readRequired(nginxConfigPath);
+
+    expect(config).toContain('location ^~ /api/code/ { proxy_pass http://code_agent/; }');
+    expect(config.indexOf('location ^~ /api/code/')).toBeLessThan(
+      config.indexOf('location ~ ^/api/[a-z0-9-]+/internal(?:/|$)')
+    );
   });
 
   it('does not forward browser credentials to retained public GCS buckets', () => {
@@ -279,6 +292,9 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain(
       'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh'
     );
+    expect(script).toContain('verify_non_404_route');
+    expect(script).toContain('"/api/code/internal/logs"');
+    expect(script).toContain('Code-agent callback route returned 404');
     expect(script.indexOf('scripts/observability/install-grafana-alloy.sh')).toBeGreaterThan(
       script.indexOf('scripts/hetzner/load-secrets.sh')
     );
