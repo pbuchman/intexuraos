@@ -40,3 +40,9 @@ The monorepo has three deployment modes: Cloud Run apps, Cloud Functions workers
 - `linearIssueTitle`, `linearIssueUrl`, `linearIssueType`, `linearIssueLabels`, and `linearFallback` MUST NOT be stored on `CodeTask` or returned from code-agent task APIs as denormalized task fields.
 - Any code path that needs Linear display data MUST REPLACE stored task-field reads with live hydration through `linearAgentClient`.
 - When an API endpoint changes its task payload, update the route schema, endpoint tests, web types, API client, and consumer pages/hooks in the same change.
+
+## Code Task Callback Model
+
+Code-agent owns callback URL generation when it creates or drains a task. Orchestrator owns execution only. This keeps orchestrator independent from deployment environments and lets any worker machine execute tasks for any code-agent instance.
+
+Public dev/prod callback URLs are externally routable through nginx and MUST use `/api/code/internal/...`. Direct `/internal/...` callback URLs are valid only for localhost/test or explicitly host-local service URLs.

@@ -37,6 +37,8 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Rules:** Apps can't import other apps. Routes use `getServices()`. Service communication via `/internal/{resource-name}` with `X-Internal-Auth`. All endpoints MUST use `logIncomingRequest()`. Pub/Sub: HTTP push only (no pull). Use cases MUST accept `logger: Logger`. Firestore: one collection owner per service, cross-service via HTTP, registry: `firestore-collections.json`. Migrations: IMMUTABLE — create new to fix bugs. Multi-field queries need composite indexes in `migrations/*.mjs`.
 
+**Code Task Callback Ownership:** Orchestrator is deployment-independent. `workerLocation` is only the machine executing the task, never the task's dev/prod owner. The task's `webhookUrl` determines the owning code-agent environment, and public dev/prod callbacks MUST use `/api/code/internal/...`. Reference: `.claude/reference/environments.md`, `.claude/reference/architecture.md`
+
 **Apps & Packages:** Apps: `getServices()`, `getFirestore()`, `INTEXURAOS_*` env vars, `validateRequiredEnv()`. New service: `/create-service`. Packages: `common-*` (leaf), `infra-*` (wrappers), no domain logic. Pub/Sub publishers MUST extend `BasePubSubPublisher`, topic names from env vars.
 
 **Env Vars (services):** Three locations required: (1) `apps/<service>/src/index.ts` `REQUIRED_ENV`, (2) `terraform/environments/dev/main.tf`, (3) `ecosystem.config.cjs`. Reference: `.claude/reference/env-vars-patterns.md`.

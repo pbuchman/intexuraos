@@ -85,7 +85,7 @@ describe('StatusUpdateClient', () => {
     const taskCallbackOrigin = 'https://intexuraos.cloud';
 
     nock(taskCallbackOrigin)
-      .patch('/internal/code-tasks/task_prod/status')
+      .patch('/api/code/internal/code-tasks/task_prod/status')
       .reply(200, { success: true });
 
     const { client } = makeClient();
@@ -93,7 +93,7 @@ describe('StatusUpdateClient', () => {
       taskId: 'task_prod',
       status: 'failed',
       completedAt: new Date('2026-04-17T10:00:00.000Z'),
-      webhookUrl: 'https://intexuraos.cloud/internal/webhooks/task-complete',
+      webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
     });
 
     expect(result).toEqual({ ok: true });

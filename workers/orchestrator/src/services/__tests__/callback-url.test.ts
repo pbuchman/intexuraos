@@ -6,21 +6,19 @@ import {
 } from '../callback-url.js';
 
 describe('task callback URLs', () => {
-  it('derives the canonical prod callback base from a task webhook URL', () => {
+  it('derives prod callback base from canonical public API callback URL', () => {
     expect(
       deriveCallbackBaseUrl(
-        'https://intexuraos.cloud/internal/webhooks/task-complete',
+        'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
         'http://localhost:8128'
       )
-    ).toBe('https://intexuraos.cloud');
+    ).toBe('https://intexuraos.cloud/api/code');
   });
 
-  it('normalizes stale prod /api/code/internal callback URLs to canonical internal URLs', () => {
+  it('normalizes legacy prod root-internal callback URLs to public API callback URLs', () => {
     expect(
-      normalizeInternalCallbackUrl(
-        'https://intexuraos.cloud/api/code/internal/webhooks/task-complete'
-      )
-    ).toBe('https://intexuraos.cloud/internal/webhooks/task-complete');
+      normalizeInternalCallbackUrl('https://intexuraos.cloud/internal/webhooks/task-complete')
+    ).toBe('https://intexuraos.cloud/api/code/internal/webhooks/task-complete');
   });
 
   it.each([
@@ -29,9 +27,15 @@ describe('task callback URLs', () => {
     'webhooks/task-complete',
     'webhooks/task-event',
     'code-tasks/task-123/status',
-  ])('normalizes recognized prod internal callback path %s', (path) => {
-    expect(normalizeInternalCallbackUrl(`https://intexuraos.cloud/api/code/internal/${path}`)).toBe(
-      `https://intexuraos.cloud/internal/${path}`
+  ])('normalizes recognized prod root-internal callback path %s', (path) => {
+    expect(normalizeInternalCallbackUrl(`https://intexuraos.cloud/internal/${path}`)).toBe(
+      `https://intexuraos.cloud/api/code/internal/${path}`
+    );
+  });
+
+  it('normalizes legacy dev root-internal callback URLs to public API callback URLs', () => {
+    expect(normalizeInternalCallbackUrl('https://dev.intexuraos.cloud/internal/logs')).toBe(
+      'https://dev.intexuraos.cloud/api/code/internal/logs'
     );
   });
 
@@ -43,7 +47,19 @@ describe('task callback URLs', () => {
     ).toBe('https://intexuraos.cloud/api/code/internal/not-a-worker-callback');
   });
 
-  it('preserves dev callback URLs that legitimately include /api/code/internal', () => {
+  it('does not normalize unrecognized prod root-internal callback paths', () => {
+    expect(
+      normalizeInternalCallbackUrl('https://intexuraos.cloud/internal/not-a-worker-callback')
+    ).toBe('https://intexuraos.cloud/internal/not-a-worker-callback');
+  });
+
+  it('preserves canonical public API callback URLs', () => {
+    expect(normalizeInternalCallbackUrl('https://intexuraos.cloud/api/code/internal/logs')).toBe(
+      'https://intexuraos.cloud/api/code/internal/logs'
+    );
+  });
+
+  it('preserves dev callback URLs that already include /api/code/internal', () => {
     expect(
       normalizeInternalCallbackUrl(
         'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete'
@@ -54,11 +70,11 @@ describe('task callback URLs', () => {
   it('builds task-scoped internal callback URLs from the webhook base', () => {
     expect(
       buildTaskCallbackUrl(
-        'https://intexuraos.cloud/internal/webhooks/task-complete',
+        'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
         'http://localhost:8128',
         '/internal/logs'
       )
-    ).toBe('https://intexuraos.cloud/internal/logs');
+    ).toBe('https://intexuraos.cloud/api/code/internal/logs');
   });
 
   it('falls back to static code-agent URL when the task webhook URL is not usable', () => {
@@ -85,10 +101,10 @@ describe('task callback URLs', () => {
   it('adds a leading slash to task callback paths', () => {
     expect(
       buildTaskCallbackUrl(
-        'https://intexuraos.cloud/internal/webhooks/task-complete',
+        'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
         'http://localhost:8128',
         'internal/turn-metrics'
       )
-    ).toBe('https://intexuraos.cloud/internal/turn-metrics');
+    ).toBe('https://intexuraos.cloud/api/code/internal/turn-metrics');
   });
 });
