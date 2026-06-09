@@ -26,18 +26,6 @@ const phases = [
     ],
   },
   {
-    name: 'Tests',
-    parallel: false,
-    commands: [
-      {
-        name: 'test:coverage',
-        run: 'pnpm run test:coverage',
-        saveTo: 'scripts/test-results/test-output.txt',
-      },
-      { name: 'test-stdout', script: 'verify-test-stdout.mjs' },
-    ],
-  },
-  {
     name: 'Static Validation',
     parallel: true,
     failFast: true,
@@ -66,7 +54,7 @@ const phases = [
       { name: 'envelope', script: 'verify-envelope.mjs' },
       { name: 'reply-send', script: 'verify-reply-send.mjs' },
       { name: 'sentry-logging', script: 'verify-sentry-logging.mjs' },
-      { name: 'v8-ignore', script: 'verify-v8-ignore.mjs' },
+      { name: 'v8-ignore', run: 'node scripts/verify-v8-ignore.mjs --skip-coverage-data' },
       { name: 'web-service-manifest', script: 'verify-web-service-manifest.mjs' },
       { name: 'service-wiring', script: 'verify-service-wiring.mjs' },
       { name: 'route-resource-names', script: 'verify-route-resource-names.mjs' },
@@ -75,6 +63,22 @@ const phases = [
       { name: 'llm-architecture', run: 'npx tsx scripts/verify-llm-architecture.ts' },
       { name: 'web-env-lockstep', run: 'node scripts/ci/check-web-env-lockstep.cjs' },
     ],
+  },
+  {
+    name: 'Tests',
+    parallel: false,
+    commands: [
+      {
+        name: 'test:coverage',
+        run: 'node scripts/run-sharded-coverage.mjs --shards=3',
+      },
+      { name: 'test-stdout', script: 'verify-test-stdout.mjs' },
+    ],
+  },
+  {
+    name: 'Coverage Validation',
+    parallel: false,
+    commands: [{ name: 'v8-ignore:coverage', script: 'verify-v8-ignore.mjs' }],
   },
   {
     name: 'Build & Format',

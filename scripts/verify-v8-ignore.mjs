@@ -1062,6 +1062,8 @@ function verifyOneToOneMapping(coverageData, comments) {
 // ============================================================================
 
 async function main() {
+  const skipCoverageData = process.argv.includes('--skip-coverage-data');
+
   // Check for --help flag
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log('v8 Ignore Comment Validator');
@@ -1080,6 +1082,8 @@ async function main() {
     console.log('');
     console.log('Flags:');
     console.log('  --all           Show all uncovered branches (not just first 50)');
+    console.log('  --skip-coverage-data');
+    console.log('                  Skip coverage/coverage-final.json cross-checks');
     console.log('');
     console.log('Rules:');
     console.log('  - Every start must have a matching stop in the same file');
@@ -1134,7 +1138,7 @@ async function main() {
   const coveragePath = resolve(ROOT_DIR, 'coverage/coverage-final.json');
   let coverageErrors = [];
 
-  if (existsSync(coveragePath)) {
+  if (!skipCoverageData && existsSync(coveragePath)) {
     const coverageData = JSON.parse(readFileSync(coveragePath, 'utf8'));
     coverageErrors = validateCoverage(Array.from(validComments), coverageData);
   }
@@ -1142,7 +1146,7 @@ async function main() {
   // Phase E: Report missing comments
   let missingReport = [];
 
-  if (existsSync(coveragePath)) {
+  if (!skipCoverageData && existsSync(coveragePath)) {
     const coverageData = JSON.parse(readFileSync(coveragePath, 'utf8'));
     missingReport = reportMissingComments(coverageData, comments);
   }
@@ -1150,7 +1154,7 @@ async function main() {
   // Phase E-1: Report exempted branches (for visibility)
   let exemptedReport = [];
 
-  if (existsSync(coveragePath)) {
+  if (!skipCoverageData && existsSync(coveragePath)) {
     const coverageData = JSON.parse(readFileSync(coveragePath, 'utf8'));
     exemptedReport = reportExemptedBranches(coverageData, comments);
   }
@@ -1161,7 +1165,7 @@ async function main() {
     stats: { totalBlocks: 0, totalUncoveredBranches: 0, totalExemptedBranches: 0 },
   };
 
-  if (existsSync(coveragePath)) {
+  if (!skipCoverageData && existsSync(coveragePath)) {
     const coverageData = JSON.parse(readFileSync(coveragePath, 'utf8'));
     mappingResult = verifyOneToOneMapping(coverageData, comments);
   }
@@ -1185,6 +1189,9 @@ async function main() {
   console.log(
     `  ${blockCount} exclusion blocks (lines within blocks are not tracked by v8 coverage)`
   );
+  if (skipCoverageData) {
+    console.log('  Coverage data checks skipped');
+  }
 
   if (allErrors.length > 0) {
     console.log(`\n❌ ${allErrors.length} error(s) found:\n`);
