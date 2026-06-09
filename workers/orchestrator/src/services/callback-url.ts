@@ -1,6 +1,7 @@
 const INTERNAL_MARKER = '/internal/';
-const PROD_HOST = 'intexuraos.cloud';
-const PROD_PUBLIC_INTERNAL_PREFIX = '/api/code/internal/';
+const PUBLIC_CODE_AGENT_PREFIX = '/api/code';
+const PUBLIC_INTERNAL_PREFIX = `${PUBLIC_CODE_AGENT_PREFIX}/internal/`;
+const PUBLIC_CALLBACK_HOSTS = new Set(['intexuraos.cloud', 'dev.intexuraos.cloud']);
 
 function stripTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
@@ -16,16 +17,24 @@ function isRecognizedInternalCallbackPath(pathname: string): boolean {
 
 export function normalizeInternalCallbackUrl(url: string): string {
   const parsed = new URL(url);
-  if (parsed.hostname !== PROD_HOST || !parsed.pathname.startsWith(PROD_PUBLIC_INTERNAL_PREFIX)) {
+
+  if (!PUBLIC_CALLBACK_HOSTS.has(parsed.hostname)) {
     return url;
   }
 
-  const normalizedPath = `/internal/${parsed.pathname.slice(PROD_PUBLIC_INTERNAL_PREFIX.length)}`;
-  if (!isRecognizedInternalCallbackPath(normalizedPath)) {
+  if (parsed.pathname.startsWith(PUBLIC_INTERNAL_PREFIX)) {
     return url;
   }
 
-  parsed.pathname = normalizedPath;
+  if (!parsed.pathname.startsWith(INTERNAL_MARKER)) {
+    return url;
+  }
+
+  if (!isRecognizedInternalCallbackPath(parsed.pathname)) {
+    return url;
+  }
+
+  parsed.pathname = `${PUBLIC_CODE_AGENT_PREFIX}${parsed.pathname}`;
   return parsed.toString();
 }
 
