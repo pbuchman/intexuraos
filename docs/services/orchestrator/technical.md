@@ -214,7 +214,7 @@ Mapped the Gemini client for user model standardization. The validation model cl
 
 ### Worker Type Addition: mimo-pro
 
-Added `mimo-pro` worker type routing through Xiaomi MiMo's Anthropic-compatible API at `token-plan-sgp.xiaomimimo.com/anthropic` with model `mimo-v2-pro`. Uses a dedicated `MIMO_API_KEY` credential validated at startup.
+Added `mimo-pro` worker type routing through Xiaomi MiMo Pro 2.5's Anthropic-compatible API at `token-plan-sgp.xiaomimimo.com/anthropic` with model `mimo-v2.5-pro`. Uses a dedicated `MIMO_API_KEY` credential validated at startup.
 
 ### Review Scope Addition: test_quality
 
@@ -462,7 +462,7 @@ Performs post-completion transcript analysis for execution tasks:
 - Reads session transcripts via `readSessionTranscript()` from JSONL files
 - Formats transcripts into numbered `MSG-NNN` format via `formatTranscript()`
 - Builds compliance prompts comparing agent claims (from `ExecutionAgentData`) against transcript evidence
-- Sends the prompt to an independent LLM via OpenRouter (configurable model, default: `xiaomi/mimo-v2-pro`)
+- Sends the prompt to an independent LLM via OpenRouter (configurable model, default: `xiaomi/mimo-v2.5-pro`)
 - Validates the response against `AgentComplianceReportSchema` (Zod) with auto-repair on parse failure
 - Report covers: claim verification (CI called? PR created? commit count? summary accurate?), contract compliance (skills invoked? correct order? code reviewer dispatched?), anomaly detection (fabrication, hallucination, protocol violation), execution metrics
 - Posts formatted PR comments via `gh pr comment` with severity indicators (Critical, Warning, Minor, Pass)
@@ -640,7 +640,7 @@ Collects per-task resource and token metrics after completion:
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
 | `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | (Gemini default)                   |
 | `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | (empty — disables compliance)      |
-| `INTEXURAOS_COMPLIANCE_MODEL`               | No       | `xiaomi/mimo-v2-pro`               |
+| `INTEXURAOS_COMPLIANCE_MODEL`               | No       | `xiaomi/mimo-v2.5-pro`               |
 | `INTEXURAOS_REPOSITORY_PATH`                | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`                | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`        | No       | `3`                                |

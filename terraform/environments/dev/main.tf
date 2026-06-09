@@ -537,7 +537,7 @@ module "secret_manager" {
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
     "INTEXURAOS_GUEST_SESSION_SECRET"   = "HS256 secret used to sign chat-agent guest session JWTs (at least 32 bytes of entropy)"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
-    "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro API key for orchestrator worker containers"
+    "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro 2.5 API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
     "INTEXURAOS_KIMI_APP_API_KEY"       = "Kimi Code API key for orchestrator kimi worker containers"

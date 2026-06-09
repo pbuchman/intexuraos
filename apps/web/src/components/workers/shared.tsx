@@ -5,7 +5,7 @@ export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; de
   opus: { name: 'Opus', description: 'Anthropic\'s most capable model for complex reasoning and coding tasks' },
   sonnet: { name: 'Sonnet', description: 'Anthropic\'s daily coding model with the best balance of speed and intelligence' },
   minimax: { name: 'MiniMax', description: 'MiniMax\'s coding and agent model with strong reasoning at lower cost' },
-  'mimo-pro': { name: 'MiMo Pro', description: 'Xiaomi\'s MiMo reasoning model via Anthropic-compatible API' },
+  'mimo-pro': { name: 'MiMo Pro 2.5', description: 'Xiaomi\'s MiMo Pro 2.5 reasoning model via Anthropic-compatible API' },
   glm: { name: 'GLM', description: 'Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks' },
   qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
   kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },

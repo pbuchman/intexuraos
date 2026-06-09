@@ -1530,6 +1530,16 @@ describe('DockerProvider', () => {
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
     });
 
+    it('sets ANTHROPIC_MODEL for mimo-pro worker', async () => {
+      const config = createTestConfig({ workerType: 'mimo-pro' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=mimo-v2.5-pro');
+    });
+
     it('sets OpenRouter env vars for openrouter-free worker', async () => {
       const config = createTestConfig({ workerType: 'openrouter-free' });
       await sharedCredsProvider.createWorker(config);

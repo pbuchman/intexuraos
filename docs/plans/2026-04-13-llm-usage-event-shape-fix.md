@@ -16,7 +16,7 @@ These are the bugs being fixed. Each was confirmed against production logs, Fire
 
 | #   | Symptom                                                                             | Root Cause                                                                                                              | File:Line                                                                            |
 | --- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| 1   | Recurring 500 on `/internal/webhooks/usage-events` (20:03:17, 20:54:16)             | `source.client = "xiaomi/mimo-v2-pro"` propagates into Firestore aggregate doc-ID; `/` makes the path-segment count odd | `packages/llm-pricing/src/buildUsageEvent.ts:46`                                     |
+| 1   | Recurring 500 on `/internal/webhooks/usage-events` (20:03:17, 20:54:16)             | `source.client = "xiaomi/mimo-v2.5-pro"` propagates into Firestore aggregate doc-ID; `/` makes the path-segment count odd | `packages/llm-pricing/src/buildUsageEvent.ts:46`                                     |
 | 2   | Sync throw kills the request; aggregate lost                                        | `db.collection(C).doc(id)` is **outside** the try/catch                                                                 | `apps/llm-usage-service/src/infra/firestore/firestoreUsageAggregateRepository.ts:15` |
 | 3   | User dashboard shows zero usage even when user-initiated calls happen               | `owner.type` hardcoded to `'system'` for every event                                                                    | `packages/llm-pricing/src/buildUsageEvent.ts:42`                                     |
 | 4   | OpenRouter cost computed via static allowlist instead of API-reported value         | `extractUsage` hardcodes `undefined` for `providerCost`                                                                 | `packages/infra-openrouter/src/client.ts:160`                                        |
@@ -533,7 +533,7 @@ In `packages/infra-openrouter/src/__tests__/client.test.ts`, add:
 
       const client = createOpenRouterClient({
         apiKey: 'test',
-        model: 'xiaomi/mimo-v2-pro',
+        model: 'xiaomi/mimo-v2.5-pro',
         userId: 'test-user',
         pricing: { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true },
         logger: fakeLogger,
@@ -557,7 +557,7 @@ In `packages/infra-openrouter/src/__tests__/client.test.ts`, add:
       //   usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 }   // NO cost field
       const client = createOpenRouterClient({
         apiKey: 'test',
-        model: 'xiaomi/mimo-v2-pro',
+        model: 'xiaomi/mimo-v2.5-pro',
         userId: 'test-user',
         pricing: { inputPricePerMillion: 1, outputPricePerMillion: 2 },
         logger: fakeLogger,
@@ -576,7 +576,7 @@ In `packages/infra-openrouter/src/__tests__/client.test.ts`, add:
       // Faked response body for research: same shape with usage.cost = 0.011
       const client = createOpenRouterClient({
         apiKey: 'test',
-        model: 'xiaomi/mimo-v2-pro',
+        model: 'xiaomi/mimo-v2.5-pro',
         userId: 'test-user',
         pricing: { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true },
         logger: fakeLogger,
@@ -926,8 +926,8 @@ const baseEvent: UsageEvent = {
   receivedAt: '2026-04-13T20:00:00.001Z',
   ingress: 'orchestrator_webhook',
   owner: { type: 'system', id: 'sys-1' },
-  source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
-  request: { provider: 'openrouter', model: 'xiaomi/mimo-v2-pro', operation: 'generate', success: true, durationMs: 0 },
+  source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2.5-pro', environment: 'dev' },
+  request: { provider: 'openrouter', model: 'xiaomi/mimo-v2.5-pro', operation: 'generate', success: true, durationMs: 0 },
   usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cachedTokens: 0, reasoningTokens: 0, thinkingTokens: 0, webSearchCalls: 0, groundingEnabled: false, imageCount: 0 },
   cost: { billedUsd: 0, providerReportedUsd: null, calculatedUsd: 0, pricingSource: 'calculated' },
   correlation: { requestId: null, traceId: null, taskId: null, researchId: null, attempt: null, sessionId: null },
@@ -961,7 +961,7 @@ describe('computeAggregateId — slash safety', () => {
 pnpm --filter @intexuraos/llm-usage-service test aggregateKeyUtils.test.ts
 ```
 
-Expected: First test FAILS (id contains the raw `xiaomi/mimo-v2-pro`).
+Expected: First test FAILS (id contains the raw `xiaomi/mimo-v2.5-pro`).
 
 - [ ] **Step 3: Update `computeAggregateId` to hash `source.client`**
 
