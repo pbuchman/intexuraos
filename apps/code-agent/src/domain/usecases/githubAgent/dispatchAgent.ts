@@ -16,7 +16,7 @@ import { githubAgentPrompt } from '../../prompts/githubAgentPrompt.js';
 import { resolveLoginForTaskCreation } from '../../services/gitHubDispatchService.js';
 import { isReviewCommandComment, normalizeReviewWorkerType, SUPPORTED_REVIEW_WORKER_TYPES } from '../../utils/reviewTriage.js';
 import { buildTriageRepairMessage } from '../../validation/buildTriageRepairMessage.js';
-import { evaluatePlanFiles } from '../../utils/planDetection.js';
+import { evaluateReviewFiles } from '../../utils/planDetection.js';
 import { LLM_TOOL_REVIEW_TYPES } from '../../constants/reviewTypes.js';
 
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
@@ -105,13 +105,6 @@ export async function dispatchPRAgent(
 
   const accessToken = tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok
 
-  const toolCallingResult = await deps.resolveToolCallingClient(resolvedUser.userId);
-  if (!toolCallingResult.ok) {
-    logger.warn({ userId: resolvedUser.userId, error: toolCallingResult.error }, 'GitHub Agent: failed to resolve tool calling client');
-    return { ok: false, error: toolCallingResult.error };
-  }
-  const toolCallingClient = toolCallingResult.value;
-
   // Fetch PR files
   const filesResult = await gitHubPRClient.getPullRequestFiles(accessToken, owner, repo, event.pullRequestNumber);
   if (!filesResult.ok) {
@@ -121,22 +114,31 @@ export async function dispatchPRAgent(
 
   const files = filesResult.value; // @allow-result-access -- narrowed by !filesResult.ok
 
-  // Deterministic plan-only PR detection — no LLM triage needed
-  const planResult = evaluatePlanFiles(files);
-  if (planResult.action === 'dispatch') {
+  // Deterministic review-only PR detection - no LLM triage needed
+  const reviewFileResult = evaluateReviewFiles(files);
+  if (reviewFileResult.action === 'dispatch') {
+    const reviewType = reviewFileResult.context?.['reviewType'] === 'documentation' ? 'documentation' : 'plan_review';
+    const label = reviewType === 'plan_review' ? 'Plan-only' : 'Documentation-only';
     logger.info(
-      { repository: event.repository, prNumber: event.pullRequestNumber, fileCount: files.length },
-      'Plan-only PR detected — dispatching plan_review without LLM triage'
+      { repository: event.repository, prNumber: event.pullRequestNumber, fileCount: files.length, reviewType },
+      `${label} PR detected - dispatching ${reviewType} without LLM triage`
     );
     return {
       ok: true,
       value: {
         kind: 'deterministic',
-        triage: { action: 'request_review', reviewTypes: ['plan_review'] },
-        reasoning: 'Plan-only PR detected — deterministic dispatch to plan_review',
+        triage: { action: 'request_review', reviewTypes: [reviewType] },
+        reasoning: `${label} PR detected - deterministic dispatch to ${reviewType}`,
       },
     };
   }
+
+  const toolCallingResult = await deps.resolveToolCallingClient(resolvedUser.userId);
+  if (!toolCallingResult.ok) {
+    logger.warn({ userId: resolvedUser.userId, error: toolCallingResult.error }, 'GitHub Agent: failed to resolve tool calling client');
+    return { ok: false, error: toolCallingResult.error };
+  }
+  const toolCallingClient = toolCallingResult.value;
 
   // Build tools for PR triage — state object avoids no-unnecessary-condition
   // lint errors since TypeScript doesn't narrow object properties across callbacks.
@@ -147,14 +149,14 @@ export async function dispatchPRAgent(
   const tools: ToolDefinition[] = [
     {
       name: 'request_review',
-      description: 'Request a code review for this pull request. Call once per review type needed.',
+      description: 'Request a pull request review. Use code_quality for implementation behavior, security for auth/secrets/input risk, architecture for cross-service design, test_quality for test behavior, and documentation for docs accuracy or docs-only PRs. Call once per review type needed.',
       parameters: {
         type: 'object',
         properties: {
           review_type: {
             type: 'string',
             enum: [...LLM_TOOL_REVIEW_TYPES],
-            description: 'The type of review to request',
+            description: 'Review scope to request: code_quality, security, architecture, test_quality, or documentation',
           },
         },
         required: ['review_type'],
@@ -174,7 +176,7 @@ export async function dispatchPRAgent(
     },
     {
       name: 'skip',
-      description: 'Skip this event. Use when the PR is trivial (non-plan docs, config, auto-generated).',
+      description: 'Skip this PR only when it is not reviewable or is trivial/generated metadata. Do not skip documentation-only PRs; those use documentation review.',
       parameters: {
         type: 'object',
         properties: {
@@ -289,14 +291,14 @@ export async function dispatchCommentAgent(
   if (isReviewCommand) {
     tools.push({
       name: 'request_review',
-      description: 'Request a review for this @review comment. Call once per review type, always with a worker type.',
+      description: 'Request a review for this @review comment. Use code_quality, security, architecture, test_quality, or documentation based on the requested scope. Call once per review type.',
       parameters: {
         type: 'object',
         properties: {
           review_type: {
             type: 'string',
             enum: [...LLM_TOOL_REVIEW_TYPES],
-            description: 'The review scope to request',
+            description: 'Review scope to request: code_quality, security, architecture, test_quality, or documentation',
           },
           worker_type: {
             type: 'string',

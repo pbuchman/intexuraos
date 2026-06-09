@@ -189,6 +189,22 @@ describe('reviewPrompt', () => {
 
     expect(prompt).not.toContain('### Execution Memory Context');
   });
+
+  it('includes documentation review scope and per-type structure when requested', () => {
+    const prompt = reviewPrompt.build({
+      taskId: 'task-review-docs',
+      linearIssueLabels: [],
+      agentType: 'review',
+      reviewTypes: ['documentation'],
+    });
+
+    expect(prompt).toContain('**documentation**');
+    expect(prompt).toContain('documentation accuracy');
+    expect(prompt).toContain('docs against the implementation');
+    expect(prompt).toContain('### Documentation');
+    expect(prompt).toContain('## Automated Code Review — documentation');
+    expect(prompt).not.toContain('### 🔍 Code Quality');
+  });
 });
 
 describe('buildExecutionMemorySection acknowledgment and reporting', () => {
@@ -344,6 +360,38 @@ describe('pullRequestPrompt', () => {
 
     expect(prompt).not.toContain('### Execution Memory Context');
   });
+
+  it('does not require or invent a Linear issue when none is associated', () => {
+    const prompt = pullRequestPrompt.build({
+      taskId: 'task-pr-no-linear',
+      linearIssueLabels: [],
+      agentType: 'pull_request',
+    });
+
+    expect(prompt).toContain('No Linear issue is associated');
+    expect(prompt).toContain(
+      'Linear issue: <full Linear URL, or "none" when no Linear issue is associated>'
+    );
+    expect(prompt).not.toContain('mcp__linear__get_issue');
+    expect(prompt).not.toContain('INT-XXX');
+    expect(prompt).not.toContain('https://linear.app/pbuchman/issue/undefined');
+  });
+
+  it('uses the real Linear identifier when a pull request task has one', () => {
+    const prompt = pullRequestPrompt.build({
+      taskId: 'task-pr-linear',
+      linearIssueLabels: [],
+      agentType: 'pull_request',
+      linearIssueId: 'INT-123',
+      linearIssueTitle: 'Fix docs review dispatch',
+    });
+
+    expect(prompt).toContain("mcp__linear__get_issue({ id: 'INT-123' })");
+    expect(prompt).toContain(
+      '[INT-123 Fix docs review dispatch](https://linear.app/pbuchman/issue/INT-123)'
+    );
+    expect(prompt).not.toContain('INT-XXX');
+  });
 });
 
 describe('askAgentPrompt', () => {
@@ -364,12 +412,12 @@ describe('askAgentPrompt', () => {
 });
 
 describe('prompt versions', () => {
-  it('reviewPrompt version is 10.0.1', () => {
-    expect(reviewPrompt.version).toBe('10.0.1');
+  it('reviewPrompt version is 11.0.0', () => {
+    expect(reviewPrompt.version).toBe('11.0.0');
   });
 
-  it('pullRequestPrompt version is 5.0.1', () => {
-    expect(pullRequestPrompt.version).toBe('5.0.1');
+  it('pullRequestPrompt version is 6.0.0', () => {
+    expect(pullRequestPrompt.version).toBe('6.0.0');
   });
 });
 

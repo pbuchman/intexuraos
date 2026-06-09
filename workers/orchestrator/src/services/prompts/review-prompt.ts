@@ -23,6 +23,9 @@ const REVIEW_TYPE_SECTIONS: Record<string, string> = {
   test_quality: `### 🧪 Test Quality
 **Verdict:** Thorough / Minor gaps / Needs rework
 - Finding 1...`,
+  documentation: `### Documentation
+**Verdict:** Accurate / Minor gaps / Needs correction
+- Finding 1...`,
 };
 
 function buildReviewStructureSection(reviewTypes: string[] | undefined): string {
@@ -72,7 +75,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '10.0.1',
+  version: '11.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -117,6 +120,7 @@ You have been dispatched to review a pull request. The review types requested ar
 - **security**: Injection vulnerabilities (SQL, XSS, command), authentication/authorization issues, secrets exposure, OWASP top 10
 - **architecture**: Separation of concerns, dependency direction, API design, scalability, coupling/cohesion
 - **plan_review**: Plan document validation. Read the plan file carefully. Validate task decomposition, TDD discipline, file path accuracy, missing steps. Validate against the codebase: do referenced files exist? Do patterns match? Are interfaces correct? Flag over-engineering, missing error handling, incorrect assumptions about existing code. Do NOT review for code_quality/security/architecture — there is no code to review.
+- **documentation**: documentation accuracy and usability review. Compare docs against the implementation, current repository paths, commands, APIs, configuration, screenshots/examples, and project terminology. Flag obsolete instructions, missing prerequisites, broken links, misleading claims, undocumented behavior changes, internal contradictions, and docs that would cause a reader to do the wrong thing. Do NOT invent code_quality/security/architecture findings when only documentation was requested.
 - **test_quality**: Comprehensive test quality review. Analyze ALL test files in the PR across these categories:
 
   **(1) False Positives** — Tests that pass but fail to verify actual behavior:
