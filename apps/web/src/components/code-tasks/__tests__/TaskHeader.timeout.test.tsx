@@ -44,4 +44,30 @@ describe('TaskHeader custom timeout badge (INT-1585)', () => {
     render(<TaskHeader task={createTask()} workerStatusTag={null} />);
     expect(screen.queryByText(/Custom timeout/)).not.toBeInTheDocument();
   });
+
+  it('renders callback owner and failure diagnostics when present', () => {
+    render(
+      <TaskHeader
+        task={createTask({
+          callbackReceived: false,
+          callbackState: {
+            webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+            callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+            owner: 'prod',
+            configuredAt: '2026-06-09T14:44:12.000Z',
+            lastFailure: {
+              endpoint: 'logs',
+              status: 401,
+              message: 'Internal authentication failed',
+              occurredAt: '2026-06-09T14:47:40.000Z',
+            },
+          },
+        } as Partial<CodeTask>)}
+        workerStatusTag={null}
+      />,
+    );
+
+    expect(screen.getByText('Callback: prod')).toBeInTheDocument();
+    expect(screen.getByText('Callback failed: logs 401')).toBeInTheDocument();
+  });
 });

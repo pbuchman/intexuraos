@@ -1358,6 +1358,12 @@ describe('drainTaskQueue', () => {
       cancelNonce: 'abcd1234',
       cancelNonceExpiresAt: expect.any(String),
       dispatchStatus: null,
+      callbackState: expect.objectContaining({
+        webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://callback.test',
+        owner: 'custom',
+        configuredAt: expect.any(Date),
+      }),
     });
 
     // Verify notification sent
@@ -1424,6 +1430,13 @@ describe('drainTaskQueue', () => {
       hasChildren: false,
       agentType: 'planning',
     });
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
+      callbackState: expect.objectContaining({
+        webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://callback.test',
+        owner: 'custom',
+      }),
+    }));
   });
 
   it('forwards continuation PR metadata and archives the original task after queued retry dispatch', async () => {

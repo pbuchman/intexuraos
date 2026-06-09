@@ -44,6 +44,7 @@ import {
 import { taskToApiResponse, inFlightRequests } from './responseFormatters.js';
 import {
   codeTaskSchema,
+  callbackStateSchema,
   dispatchStatusSchema,
   linearIssueForDisplaySchema,
   workerTypeSchema,
@@ -2130,6 +2131,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       },
                     },
                     dispatchStatus: dispatchStatusSchema,
+                    callbackState: callbackStateSchema,
                     executionMemoryContext: executionMemoryContextSchema,
                     executionMemoryPostRun: executionMemoryPostRunSchema,
                     statusSummary: { type: 'object', nullable: true },

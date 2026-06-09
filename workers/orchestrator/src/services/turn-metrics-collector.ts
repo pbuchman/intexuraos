@@ -82,6 +82,7 @@ export class TurnMetricsCollector {
     startedAt: string;
     completedAt: string;
     webhookUrl?: string;
+    webhookSecret?: string;
   }): Promise<void> {
     try {
       const cgroupPath = `/sys/fs/cgroup/system.slice/docker-${params.containerId}.scope`;
@@ -132,7 +133,7 @@ export class TurnMetricsCollector {
         idlePercent: Math.round(idlePercent * 100) / 100,
       };
 
-      await this.publish(metrics, params.webhookUrl);
+      await this.publish(metrics, params.webhookUrl, params.webhookSecret);
 
       this.logger.info(
         {
@@ -331,13 +332,16 @@ export class TurnMetricsCollector {
     };
   }
 
-  private async publish(metrics: TurnMetrics, webhookUrl: string | undefined): Promise<void> {
+  private async publish(
+    metrics: TurnMetrics,
+    webhookUrl: string | undefined,
+    webhookSecret: string | undefined
+  ): Promise<void> {
     const body = JSON.stringify(metrics);
     const timestamp = Math.floor(Date.now() / 1000);
     const message = `${String(timestamp)}.${body}`;
-    const signature = createHmac('sha256', this.config.orchestratorSecret)
-      .update(message)
-      .digest('hex');
+    const signatureSecret = webhookSecret ?? this.config.orchestratorSecret;
+    const signature = createHmac('sha256', signatureSecret).update(message).digest('hex');
 
     const url = buildTaskCallbackUrl(
       webhookUrl,

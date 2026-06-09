@@ -51,7 +51,11 @@ import {
   type PrepareExecutionMemoryResources,
 } from './prepareExecutionMemoryContext.js';
 import { isStaleTaskError } from '../services/gitHubDispatchService.js';
-import { buildTaskCompleteWebhookUrl } from '../services/codeTaskCallbackUrls.js';
+import {
+  buildTaskCompleteWebhookUrl,
+  classifyCallbackOwner,
+  normalizeCallbackBaseUrl,
+} from '../services/codeTaskCallbackUrls.js';
 import type { SendTaskMessageErrorCode } from './sendTaskMessage.js';
 
 const RETRY_PROCESSING_LEASE_MS = 5 * 60 * 1000;
@@ -786,17 +790,25 @@ async function handleNewTaskRetry(
 
   const cancelNonce = generateCancelNonce();
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
+  const callbackBaseUrl = normalizeCallbackBaseUrl(config.codeTaskCallbackBaseUrl);
+  const now = new Date();
 
   const updateResult = await codeTaskRepo.update(entry.taskId, {
     // Seed lastHeartbeat at dispatch so findZombieTasks (which uses a Firestore
     // inequality filter on lastHeartbeat) can sweep tasks that crash/fail
     // before the worker ever sends its first real heartbeat. Without this,
     // the field would be missing and the inequality filter would exclude the doc forever.
-    lastHeartbeat: new Date(),
+    lastHeartbeat: now,
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
     dispatchStatus: null,
+    callbackState: {
+      webhookUrl,
+      callbackBaseUrl,
+      owner: classifyCallbackOwner(callbackBaseUrl),
+      configuredAt: now,
+    },
   });
 
   if (!updateResult.ok) {

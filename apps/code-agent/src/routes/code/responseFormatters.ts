@@ -7,6 +7,7 @@
 import type {
   AgentType,
   CodeTask,
+  CodeTaskCallbackState,
   CodeTaskDispatchStatus,
   WorkerType,
 } from '../../domain/models/codeTask.js';
@@ -30,6 +31,18 @@ interface SerializedDispatchStatus {
     lastSeenAt: string;
   };
   workerHealthDetails?: CodeTaskDispatchStatus['workerHealthDetails'];
+}
+
+interface SerializedCallbackState {
+  webhookUrl: string;
+  callbackBaseUrl: string;
+  owner: CodeTaskCallbackState['owner'];
+  configuredAt: string;
+  lastSuccessAt?: string;
+  lastSuccessEndpoint?: CodeTaskCallbackState['lastSuccessEndpoint'];
+  lastFailure?: Omit<NonNullable<CodeTaskCallbackState['lastFailure']>, 'occurredAt'> & {
+    occurredAt: string;
+  };
 }
 
 /**
@@ -114,6 +127,7 @@ function taskToApiResponse(task: {
     };
   };
   dispatchStatus?: CodeTaskDispatchStatus;
+  callbackState?: CodeTaskCallbackState;
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
   completedAt?: unknown;
@@ -170,6 +184,7 @@ function taskToApiResponse(task: {
     };
   };
   dispatchStatus?: SerializedDispatchStatus;
+  callbackState?: SerializedCallbackState;
   executionMemoryContext?: {
     status: 'none' | 'matched' | 'error';
     applicationId?: string;
@@ -260,6 +275,9 @@ function taskToApiResponse(task: {
   const dispatchStatus = task.dispatchStatus !== undefined
     ? serializeDispatchStatus(task.dispatchStatus)
     : undefined;
+  const callbackState = task.callbackState !== undefined
+    ? serializeCallbackState(task.callbackState)
+    : undefined;
 
   return {
     id: task.id,
@@ -290,8 +308,35 @@ function taskToApiResponse(task: {
     ...(task.result !== undefined && { result: task.result }),
     ...(task.error !== undefined && { error: task.error }),
     ...(dispatchStatus !== undefined && { dispatchStatus }),
+    ...(callbackState !== undefined && { callbackState }),
     ...(executionMemoryContext !== undefined && { executionMemoryContext }),
     ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
+  };
+}
+
+function serializeCallbackState(callbackState: CodeTaskCallbackState): SerializedCallbackState {
+  const lastFailure = callbackState.lastFailure;
+  return {
+    webhookUrl: callbackState.webhookUrl,
+    callbackBaseUrl: callbackState.callbackBaseUrl,
+    owner: callbackState.owner,
+    configuredAt: timestampToIso(callbackState.configuredAt) ?? '',
+    ...(callbackState.lastSuccessAt !== undefined && {
+      /* v8 ignore start -- ts-type: persisted callbackState.lastSuccessAt is a Timestamp; empty fallback only defends malformed legacy documents @preserve */
+      lastSuccessAt: timestampToIso(callbackState.lastSuccessAt) ?? '',
+      /* v8 ignore stop @preserve */
+    }),
+    ...(callbackState.lastSuccessEndpoint !== undefined && {
+      lastSuccessEndpoint: callbackState.lastSuccessEndpoint,
+    }),
+    ...(lastFailure !== undefined && {
+      lastFailure: {
+        endpoint: lastFailure.endpoint,
+        ...(lastFailure.status !== undefined && { status: lastFailure.status }),
+        message: lastFailure.message,
+        occurredAt: timestampToIso(lastFailure.occurredAt) ?? '',
+      },
+    }),
   };
 }
 

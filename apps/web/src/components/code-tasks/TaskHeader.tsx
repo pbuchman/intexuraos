@@ -60,6 +60,9 @@ export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JS
       : undefined;
 
   const prUrl = getTaskMergeUrl(task);
+  const callbackFailureText = task.callbackState?.lastFailure !== undefined
+    ? `Callback failed: ${task.callbackState.lastFailure.endpoint} ${task.callbackState.lastFailure.status !== undefined ? String(task.callbackState.lastFailure.status) : ''}`.trim()
+    : null;
 
   return (
     <div className="mb-6">
@@ -135,6 +138,23 @@ export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JS
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
             <Clock className="h-3 w-3" aria-hidden="true" />
             Custom timeout: {String(task.timeoutHours)}h
+          </span>
+        ) : null}
+        {task.callbackState !== undefined ? (
+          <span
+            className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+            title={task.callbackState.callbackBaseUrl}
+          >
+            Callback: {task.callbackState.owner}
+          </span>
+        ) : null}
+        {callbackFailureText !== null && task.callbackState?.lastFailure !== undefined ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300"
+            title={`${task.callbackState.lastFailure.message} (${formatDateTime(task.callbackState.lastFailure.occurredAt)})`}
+          >
+            <AlertCircle className="h-3 w-3" aria-hidden="true" />
+            {callbackFailureText}
           </span>
         ) : null}
         {task.linearIssue?.state !== undefined ? (
