@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Release'
+  short_description: 'Prepare IntexuraOS releases'
+  default_prompt: 'Use $release to prepare an IntexuraOS release with release data triage, docs, changelog, version updates, and GitHub release notes.'
