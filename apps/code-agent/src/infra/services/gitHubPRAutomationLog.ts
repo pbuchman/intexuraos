@@ -22,7 +22,11 @@ import type {
 } from '../../domain/ports/automationLog.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { PRAutomationCommentRepository } from '../../domain/ports/prAutomationCommentRepository.js';
-import { renderHeader, renderEvent } from '../../domain/services/automationCommentRenderer.js';
+import {
+  dispatchFailureIdempotencyMarker,
+  renderHeader,
+  renderEvent,
+} from '../../domain/services/automationCommentRenderer.js';
 import { parseOwnerRepo } from '../../domain/utils/parseOwnerRepo.js';
 
 export interface GitHubPRAutomationLogDeps {
@@ -95,7 +99,7 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
       if (existing === undefined) {
         return await createNewComment(token, owner, repo, prRef, eventLine, timestamp, effectiveUserId);
       }
-      return await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, prRef, existing.eventCount, timestamp);
+      return await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, event, prRef, existing.eventCount, timestamp);
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       logger.warn(
@@ -151,15 +155,27 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
       return automationLogFailure(postResult.error.message);
     }
 
-    await prAutomationCommentRepo.create({
-      repository: prRef.repository,
-      prNumber: prRef.prNumber,
-      commentId: postResult.value.commentId,
-      tokenUserId: effectiveUserId,
-      eventCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    try {
+      await prAutomationCommentRepo.create({
+        repository: prRef.repository,
+        prNumber: prRef.prNumber,
+        commentId: postResult.value.commentId,
+        tokenUserId: effectiveUserId,
+        eventCount: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (error) {
+      logger.warn(
+        {
+          repository: prRef.repository,
+          prNumber: prRef.prNumber,
+          commentId: postResult.value.commentId,
+          error: getErrorMessage(error),
+        },
+        'Automation log: posted new PR comment but failed to save comment record'
+      );
+    }
     return ok(undefined);
   }
 
@@ -169,6 +185,7 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
     repo: string,
     commentId: number,
     eventLine: string,
+    event: AutomationEvent,
     prRef: PRRef,
     currentEventCount: number,
     now: string
@@ -181,6 +198,14 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
         'Automation log: failed to GET existing comment for append'
       );
       return automationLogFailure(getResult.error.message);
+    }
+
+    if (isDuplicateIdempotentEvent(getResult.value.body, event)) {
+      logger.info(
+        { repository: prRef.repository, prNumber: prRef.prNumber, commentId },
+        'Automation log: skipping duplicate idempotent event'
+      );
+      return ok(undefined);
     }
 
     const updatedBody = getResult.value.body + '\n\n' + eventLine;
@@ -199,5 +224,12 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
       updatedAt: now,
     });
     return ok(undefined);
+  }
+
+  function isDuplicateIdempotentEvent(existingBody: string, event: AutomationEvent): boolean {
+    if (event.type !== 'task_dispatch_failed' || event.idempotencyKey === undefined || event.idempotencyKey === '') {
+      return false;
+    }
+    return existingBody.includes(dispatchFailureIdempotencyMarker(event.idempotencyKey));
   }
 }

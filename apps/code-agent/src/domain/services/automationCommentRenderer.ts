@@ -225,9 +225,23 @@ function renderTaskDispatchFailed(
     details.push('', '**Log excerpt:**', ...event.logLines.map((line) => `- ${line}`));
   }
   if (details.length === 0) {
-    return summaryParts.join(' | ');
+    return withIdempotencyMarker(summaryParts.join(' | '), event);
   }
-  return summaryParts.join(' | ') + '\n' + wrapDetails('Details', details.join('\n'));
+  return withIdempotencyMarker(summaryParts.join(' | ') + '\n' + wrapDetails('Details', details.join('\n')), event);
+}
+
+function withIdempotencyMarker(
+  rendered: string,
+  event: Extract<AutomationEvent, { type: 'task_dispatch_failed' }>
+): string {
+  if (event.idempotencyKey === undefined || event.idempotencyKey === '') {
+    return rendered;
+  }
+  return `${rendered}\n${dispatchFailureIdempotencyMarker(event.idempotencyKey)}`;
+}
+
+export function dispatchFailureIdempotencyMarker(idempotencyKey: string): string {
+  return `<!-- intexuraos:task_dispatch_failed:${idempotencyKey} -->`;
 }
 
 function renderTaskCompleted(

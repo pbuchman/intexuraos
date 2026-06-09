@@ -305,5 +305,37 @@ describe('Header', () => {
       const headerButton = screen.getByTitle('Worker status');
       expect(headerButton.querySelector('.bg-yellow-500')).not.toBeNull();
     });
+
+    it('shows contract mismatch details for unknown worker health', () => {
+      mockUsePWA.mockReturnValue(defaultPWAValue);
+      mockUseWorkersStatus.mockReturnValue({
+        ...defaultWorkersStatusValue,
+        status: {
+          workers: [
+            {
+              name: 'vm-worker',
+              url: 'https://vm.example.com',
+              priority: 1,
+              enabled: true,
+              healthy: false,
+              checkedAt: '2024-01-01T00:00:00Z',
+              status: 'unknown' as const,
+              details: {
+                error: 'Health response missing worker capability details',
+                contractMismatch: true,
+                missingFields: ['providerApiKeys'],
+              },
+              stale: false,
+            },
+          ],
+          stale: false,
+        },
+      });
+
+      render(<Header />);
+
+      fireEvent.click(screen.getByTitle('Worker status'));
+      expect(screen.getByText('Health contract mismatch: providerApiKeys')).toBeInTheDocument();
+    });
   });
 });

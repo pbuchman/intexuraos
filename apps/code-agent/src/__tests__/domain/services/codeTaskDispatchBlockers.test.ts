@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { WorkerConfig, WorkerHealthState } from '../../../domain/models/workerSettings.js';
 import {
   classifyCodeTaskDispatchability,
+  healthDiagnostic,
+  healthDiagnostics,
   type CodeTaskDispatchBlockerReason,
 } from '../../../domain/services/codeTaskDispatchBlockers.js';
 
@@ -304,6 +306,116 @@ describe('classifyCodeTaskDispatchability', () => {
       severity: 'critical',
       workerNames: ['legacy-a', 'legacy-b'],
     }));
+  });
+
+  it('includes safe worker health diagnostics for contract mismatches', () => {
+    const result = classifyCodeTaskDispatchability({
+      workerType: 'codex-xhigh',
+      workers: [worker('legacy-a'), worker('legacy-b')],
+      healthByWorkerName: {
+        'legacy-a': contractMismatch(['providerApiKeys']),
+        'legacy-b': contractMismatch(['workerAuths', 'providerApiKeys']),
+      },
+    });
+
+    expect(result.dispatchable).toBe(false);
+    if (result.dispatchable) throw new Error('expected blocker');
+    expect(result.workerHealthDetails).toEqual([
+      {
+        workerName: 'legacy-a',
+        tag: 'unknown',
+        healthy: false,
+        error: 'Health response missing worker capability details',
+        contractMismatch: true,
+        missingFields: ['providerApiKeys'],
+      },
+      {
+        workerName: 'legacy-b',
+        tag: 'unknown',
+        healthy: false,
+        error: 'Health response missing worker capability details',
+        contractMismatch: true,
+        missingFields: ['workerAuths', 'providerApiKeys'],
+      },
+    ]);
+  });
+
+  it('includes safe worker health diagnostics for unreachable workers and skips missing health', () => {
+    const result = classifyCodeTaskDispatchability({
+      workerType: 'codex-xhigh',
+      workers: [worker('tunnel-worker'), worker('missing-health')],
+      healthByWorkerName: {
+        'tunnel-worker': {
+          _tag: 'tunnel-down',
+          healthy: false,
+          reason: 'cf-error',
+          code: 'CF_521',
+        },
+      },
+    });
+
+    expect(result.dispatchable).toBe(false);
+    if (result.dispatchable) throw new Error('expected blocker');
+    expect(result.reason).toBe('workers_unreachable');
+    expect(result.workerHealthDetails).toEqual([
+      {
+        workerName: 'tunnel-worker',
+        tag: 'tunnel-down',
+        healthy: false,
+        reason: 'cf-error',
+        code: 'CF_521',
+      },
+    ]);
+  });
+
+  it('maps individual health diagnostics without leaking credentials', () => {
+    expect(healthDiagnostic(worker('missing-health'), undefined)).toBeUndefined();
+    expect(healthDiagnostic(worker('orchestrator-worker'), {
+      _tag: 'orchestrator-unreachable',
+      healthy: false,
+      reason: 'http-error',
+      code: '503',
+    })).toEqual({
+      workerName: 'orchestrator-worker',
+      tag: 'orchestrator-unreachable',
+      healthy: false,
+      reason: 'http-error',
+      code: '503',
+    });
+    expect(healthDiagnostic(worker('timeout-worker'), orchestratorUnreachable('timeout'))).toEqual({
+      workerName: 'timeout-worker',
+      tag: 'orchestrator-unreachable',
+      healthy: false,
+      reason: 'timeout',
+    });
+    expect(healthDiagnostic(worker('ready'), healthy())).toEqual({
+      workerName: 'ready',
+      tag: 'healthy',
+      healthy: true,
+    });
+    expect(healthDiagnostic(worker('unknown-basic'), {
+      _tag: 'unknown',
+      healthy: false,
+      error: 'unexpected shape',
+    })).toEqual({
+      workerName: 'unknown-basic',
+      tag: 'unknown',
+      healthy: false,
+      error: 'unexpected shape',
+    });
+    expect(healthDiagnostics(
+      [worker('missing-health'), worker('legacy')],
+      { legacy: contractMismatch(['workerAuths']) }
+    )).toEqual([
+      {
+        workerName: 'legacy',
+        tag: 'unknown',
+        healthy: false,
+        error: 'Health response missing worker capability details',
+        contractMismatch: true,
+        missingFields: ['workerAuths'],
+      },
+    ]);
   });
 
   it('is dispatchable for Codex when expired auth can be refreshed by the worker', () => {

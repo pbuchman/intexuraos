@@ -2144,6 +2144,77 @@ describe('codeRoutes', () => {
       mockGetHealthStatuses.mockRestore();
     });
 
+    it('returns unknown worker contract mismatch details', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'test-worker': {
+            state: {
+              _tag: 'unknown',
+              healthy: false,
+              error: 'Health response missing worker capability details',
+              contractMismatch: true,
+              missingFields: ['providerApiKeys'],
+            },
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        healthy: false,
+        status: 'unknown',
+        details: {
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['providerApiKeys'],
+        },
+      });
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
     it('returns stale=true when health status is older than 60 seconds', async () => {
       const services = getServices();
       const oldCheckedAt = new Date(Date.now() - 120_000).toISOString(); // 2 minutes ago
@@ -3264,6 +3335,59 @@ describe('codeRoutes', () => {
       expect(body.data.workers[0].status).toBe('unknown');
       expect(body.data.workers[0].healthy).toBe(false);
       expect(body.data.workers[0].details).toBeNull();
+    });
+
+    it('should return unknown contract mismatch details from refreshed probe results', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['providerApiKeys'],
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        healthy: false,
+        status: 'unknown',
+        details: {
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['providerApiKeys'],
+        },
+        stale: false,
+      });
     });
 
     it('should return orchestrator-unreachable with code in details', async () => {

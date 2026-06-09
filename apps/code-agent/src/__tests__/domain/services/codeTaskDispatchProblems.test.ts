@@ -118,6 +118,47 @@ describe('codeTaskDispatchProblems', () => {
     );
   });
 
+  it('copies blocker worker health diagnostics into dispatch status', () => {
+    const problem = dispatchProblemFromError({
+      code: 'worker_unavailable',
+      message: 'Configured workers for codex-xhigh responded with an incompatible health contract.',
+      blocker: {
+        dispatchable: false,
+        reason: 'worker_health_contract_mismatch',
+        severity: 'critical',
+        message: 'Configured workers for codex-xhigh responded with an incompatible health contract.',
+        remediation: 'Deploy or restart the worker orchestrator so /health includes the required capability fields, then retry this task.',
+        workerNames: ['legacy-a'],
+        workerHealthDetails: [
+          {
+            workerName: 'legacy-a',
+            tag: 'unknown',
+            healthy: false,
+            error: 'Health response missing worker capability details',
+            contractMismatch: true,
+            missingFields: ['providerApiKeys'],
+          },
+        ],
+      },
+    });
+    const status = buildDispatchStatusForProblem({
+      task: createTask(),
+      problem,
+      now: new Date('2026-06-06T11:00:00.000Z'),
+    });
+
+    expect(status.workerHealthDetails).toEqual([
+      {
+        workerName: 'legacy-a',
+        tag: 'unknown',
+        healthy: false,
+        error: 'Health response missing worker capability details',
+        contractMismatch: true,
+        missingFields: ['providerApiKeys'],
+      },
+    ]);
+  });
+
   it('preserves the previous blocker as queue timeout terminal cause', () => {
     const lastSeenAt = Timestamp.fromDate(new Date('2026-06-06T10:10:00.000Z'));
     const task = createTask({

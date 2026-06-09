@@ -1191,6 +1191,9 @@ export interface WorkerStatusDetails {
   responseTimeMs?: number;
   reason?: string;
   code?: string;
+  error?: string;
+  missingFields?: string[];
+  contractMismatch?: boolean;
 }
 
 /**

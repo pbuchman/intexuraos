@@ -419,6 +419,20 @@ describe('renderEvent', () => {
       expect(result).toContain('- Health response missing providerApiKeys');
     });
 
+    it('renders a hidden idempotency marker when provided', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_dispatch_failed',
+        taskId: 'task_abc123',
+        reason: 'worker_health_contract_mismatch',
+        idempotencyKey: 'task_abc123:terminal:worker_health_contract_mismatch',
+      };
+
+      const result = renderEvent(event);
+
+      expect(result).toContain('<!-- intexuraos:task_dispatch_failed:task_abc123:terminal:worker_health_contract_mismatch -->');
+    });
+
     it('renders without errorCode when missing', () => {
       useFakeTime();
       const event: AutomationEvent = {

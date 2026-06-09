@@ -1,7 +1,7 @@
 import { Timestamp } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
+import type { CodeTask, CodeTaskDispatchStatus, CodeTaskDispatchStatusReason } from '../models/codeTask.js';
 import type { FormattedLogLine } from '../models/logLine.js';
 import type {
   CodeTaskDispatchNotificationChannel,
@@ -27,10 +27,46 @@ export interface ReportDispatchFailureInput {
   now?: Date;
 }
 
-function dispatchLogLine(
-  input: Pick<ReportDispatchFailureInput, 'problem' | 'dispatchStatus' | 'affectedTaskCount' | 'now'>
-): FormattedLogLine {
-  const now = input.now ?? new Date();
+const DISPATCH_PHASE_SEQUENCE_SLOT: Record<CodeTaskDispatchNotificationPhase, number> = {
+  waiting: 0,
+  terminal: 1,
+  timeout: 2,
+  retry_expired: 3,
+  retry_exhausted: 4,
+  enqueue_failed: 5,
+};
+
+const DISPATCH_REASON_SEQUENCE_SLOT: Record<CodeTaskDispatchStatusReason, number> = {
+  no_enabled_workers: 0,
+  workers_unreachable: 1,
+  worker_health_contract_mismatch: 2,
+  workers_at_capacity: 3,
+  codex_auth_unavailable: 4,
+  claude_auth_unavailable: 5,
+  provider_auth_unavailable: 6,
+  docker_unavailable: 7,
+  disk_unavailable: 8,
+  unknown_worker_type: 9,
+  worker_unavailable: 10,
+  worker_busy: 11,
+  at_capacity: 12,
+  network_error: 13,
+  dispatch_failed: 14,
+  invalid_response: 15,
+  queue_full: 16,
+  queue_timeout: 17,
+  retry_expired: 18,
+  retry_exhausted: 19,
+  missing_pr_branch: 20,
+  scheduled_wait: 21,
+  active_task_blocked: 22,
+};
+
+const DISPATCH_REASON_SEQUENCE_WIDTH = 100;
+
+function dispatchLogText(
+  input: Pick<ReportDispatchFailureInput, 'problem' | 'dispatchStatus' | 'affectedTaskCount'>
+): string {
   const stateLabel = input.dispatchStatus.terminal ? 'failed' : 'waiting';
   const workers = input.problem.workerNames.length > 0
     ? ` Workers: ${input.problem.workerNames.join(', ')}.`
@@ -38,15 +74,27 @@ function dispatchLogLine(
   const affected = input.affectedTaskCount > 1
     ? ` Affected queued tasks: ${String(input.affectedTaskCount)}.`
     : '';
+  return `[dispatch:${stateLabel}] ${input.problem.reason}: ${input.problem.message} Remediation: ${input.problem.remediation}.${workers}${affected}`;
+}
+
+function dispatchLogLine(
+  input: Pick<ReportDispatchFailureInput, 'problem' | 'dispatchStatus' | 'phase' | 'affectedTaskCount' | 'now'>
+): FormattedLogLine {
+  const now = input.now ?? new Date();
+  const firstSeenAtMs = input.dispatchStatus.firstSeenAt.toDate().getTime();
   return {
-    sequence: now.getTime() * 1000,
+    sequence: firstSeenAtMs * 1000 + dispatchSequenceSuffix(input.phase, input.problem.reason),
     timestamp: Timestamp.fromDate(now),
-    text: `[dispatch:${stateLabel}] ${input.problem.reason}: ${input.problem.message} Remediation: ${input.problem.remediation}.${workers}${affected}`,
+    text: dispatchLogText(input),
   };
 }
 
-function logLinesForAutomation(line: FormattedLogLine): string[] {
-  return [line.text];
+function dispatchSequenceSuffix(
+  phase: CodeTaskDispatchNotificationPhase,
+  reason: CodeTaskDispatchStatusReason
+): number {
+  return DISPATCH_PHASE_SEQUENCE_SLOT[phase] * DISPATCH_REASON_SEQUENCE_WIDTH
+    + DISPATCH_REASON_SEQUENCE_SLOT[reason];
 }
 
 async function withLedger(
@@ -97,9 +145,10 @@ async function withLedger(
 }
 
 export async function reportDispatchFailure(input: ReportDispatchFailureInput): Promise<void> {
-  const logLine = dispatchLogLine(input);
+  const automationLogLines = [dispatchLogText(input)];
 
   await withLedger(input, 'task_log', async () => {
+    const logLine = dispatchLogLine(input);
     const result = await input.logLineRepo.storeBatch(input.task.id, [logLine]);
     if (!result.ok) {
       throw new Error(result.error.message);
@@ -120,7 +169,8 @@ export async function reportDispatchFailure(input: ReportDispatchFailureInput): 
         workerNames: input.problem.workerNames,
         terminal: input.problem.terminal,
         errorCode: `dispatch_blocked_${input.problem.reason}`,
-        logLines: logLinesForAutomation(logLine),
+        idempotencyKey: `${input.task.id}:${input.phase}:${input.problem.reason}`,
+        logLines: automationLogLines,
       };
       const prRef = { repository: input.task.repository, prNumber };
       if (input.automationLog.recordWithResult !== undefined) {

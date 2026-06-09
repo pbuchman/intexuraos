@@ -78,6 +78,7 @@ export type AutomationEvent =
       workerNames?: string[];
       terminal?: boolean;
       errorCode?: string;
+      idempotencyKey?: string;
       logLines?: string[];
       error?: string;
     }

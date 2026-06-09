@@ -9,9 +9,54 @@ import type {
 } from '../../domain/repositories/codeTaskDispatchNotificationRepository.js';
 
 const COLLECTION = 'code_task_dispatch_notifications';
+export const DISPATCH_NOTIFICATION_RETRY_AFTER_MS = 5 * 60 * 1000;
 
 function notificationId(input: ReserveDispatchNotificationInput): string {
   return `${input.taskId}:${input.channel}:${input.reason}:${input.phase}`;
+}
+
+interface TimestampLike {
+  toDate(): Date;
+}
+
+function hasToDate(value: unknown): value is TimestampLike {
+  if (typeof value !== 'object') {
+    return false;
+  }
+  if (value === null) {
+    return false;
+  }
+  const candidate = value as { toDate?: unknown };
+  return typeof candidate.toDate === 'function';
+}
+
+export function timestampMillis(value: unknown): number | undefined {
+  if (hasToDate(value)) {
+    return value.toDate().getTime();
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+  return parsed;
+}
+
+export function isRetryableExistingReservation(data: Record<string, unknown> | undefined, nowMs: number): boolean {
+  if (data === undefined) {
+    return true;
+  }
+  const status = data['status'];
+  if (status === 'delivered') return false;
+  if (status !== 'reserved' && status !== 'failed') return true;
+  const updatedAtMs = timestampMillis(data['updatedAt']);
+  if (updatedAtMs !== undefined) {
+    return nowMs - updatedAtMs > DISPATCH_NOTIFICATION_RETRY_AFTER_MS;
+  }
+  return true;
 }
 
 export interface FirestoreCodeTaskDispatchNotificationRepositoryDeps {
@@ -37,9 +82,10 @@ export class FirestoreCodeTaskDispatchNotificationRepository implements CodeTask
         const ref = this.firestore.collection(COLLECTION).doc(id);
         const snapshot = await transaction.get(ref);
         const now = Timestamp.fromDate(new Date());
+        const nowMs = Date.now();
         if (snapshot.exists) {
           const data = snapshot.data();
-          if (data?.['status'] === 'delivered' || data?.['status'] === 'reserved') {
+          if (!isRetryableExistingReservation(data, nowMs)) {
             return false;
           }
           transaction.set(ref, withSchemaVersion({

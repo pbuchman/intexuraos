@@ -2,6 +2,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
 import { describe, expect, it, vi } from 'vitest';
 import type { CodeTask, CodeTaskDispatchStatus } from '../../../domain/models/codeTask.js';
+import type { FormattedLogLine } from '../../../domain/models/logLine.js';
 import type { DispatchProblem } from '../../../domain/services/codeTaskDispatchProblems.js';
 import { reportDispatchFailure } from '../../../domain/services/codeTaskDispatchFailureReporter.js';
 import type { CodeTaskDispatchNotificationRepository } from '../../../domain/repositories/codeTaskDispatchNotificationRepository.js';
@@ -38,6 +39,14 @@ function makeProblem(): DispatchProblem {
     remediation: 'Deploy or restart the worker orchestrator, then retry this task.',
     workerNames: ['worker-a'],
     terminal: true,
+  };
+}
+
+function makeProblemWithReason(reason: DispatchProblem['reason'], terminal: boolean): DispatchProblem {
+  return {
+    ...makeProblem(),
+    reason,
+    terminal,
   };
 }
 
@@ -87,7 +96,7 @@ describe('reportDispatchFailure', () => {
     const problem = makeProblem();
     const dispatchStatus = makeDispatchStatus(problem);
     const notificationRepo = makeNotificationRepo();
-    const storeBatch = vi.fn(async () => ok(undefined));
+    const storeBatch = vi.fn(async (_taskId: string, _lines: FormattedLogLine[]) => ok(undefined));
     const record = vi.fn(async () => undefined);
     const recordWithResult = vi.fn(async () => ok(undefined));
     const notifyTaskDispatchBlocked = vi.fn(async () => ok(undefined));
@@ -118,6 +127,7 @@ describe('reportDispatchFailure', () => {
         taskId: task.id,
         reason: problem.reason,
         terminal: true,
+        idempotencyKey: 'task_1:terminal:worker_health_contract_mismatch',
         logLines: [expect.stringContaining('worker_health_contract_mismatch')],
       }),
       task.userId
@@ -129,6 +139,155 @@ describe('reportDispatchFailure', () => {
       exampleTaskId: task.id,
     }));
     expect(notificationRepo.markDelivered).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps PR automation log excerpt when the task log was already delivered', async () => {
+    const task = makeTask();
+    const problem = makeProblem();
+    const dispatchStatus = makeDispatchStatus(problem);
+    const storeBatch = vi.fn(async () => ok(undefined));
+    const recordWithResult = vi.fn(async () => ok(undefined));
+    const notificationRepo: CodeTaskDispatchNotificationRepository = {
+      reserve: vi.fn(async (input) => {
+        const id = `${input.taskId}:${input.channel}:${input.reason}:${input.phase}`;
+        return ok({ reserved: input.channel !== 'task_log', id });
+      }),
+      markDelivered: vi.fn(async () => ok(undefined)),
+      markFailed: vi.fn(async () => ok(undefined)),
+    };
+
+    await reportDispatchFailure({
+      task,
+      problem,
+      dispatchStatus,
+      phase: 'terminal',
+      affectedTaskCount: 2,
+      logLineRepo: { storeBatch, listRecent: vi.fn(async () => ok([])) },
+      automationLog: { record: vi.fn(async () => undefined), recordWithResult },
+      whatsappNotifier: { notifyTaskDispatchBlocked: vi.fn(async () => ok(undefined)) } as never,
+      notificationRepo,
+      logger: { warn: vi.fn() } as never,
+      now: new Date('2026-06-08T10:00:00.000Z'),
+    });
+
+    expect(storeBatch).not.toHaveBeenCalled();
+    expect(recordWithResult).toHaveBeenCalledWith(
+      { repository: 'owner/repo', prNumber: 123 },
+      expect.objectContaining({
+        logLines: [expect.stringContaining('worker_health_contract_mismatch')],
+      }),
+      task.userId
+    );
+  });
+
+  it('uses a stable synthetic task-log sequence when a stale reservation retries', async () => {
+    const task = makeTask();
+    delete task.prNumber;
+    const problem = makeProblem();
+    const dispatchStatus = makeDispatchStatus(problem);
+    const storeBatch = vi.fn(async (_taskId: string, _lines: FormattedLogLine[]) => ok(undefined));
+    const notificationRepo = makeNotificationRepo();
+
+    await reportDispatchFailure({
+      task,
+      problem,
+      dispatchStatus,
+      phase: 'terminal',
+      affectedTaskCount: 1,
+      logLineRepo: { storeBatch, listRecent: vi.fn(async () => ok([])) },
+      automationLog: { record: vi.fn(async () => undefined) },
+      whatsappNotifier: { notifyTaskDispatchBlocked: vi.fn(async () => ok(undefined)) } as never,
+      notificationRepo,
+      logger: { warn: vi.fn() } as never,
+      now: new Date('2026-06-08T10:00:00.000Z'),
+    });
+    await reportDispatchFailure({
+      task,
+      problem,
+      dispatchStatus,
+      phase: 'terminal',
+      affectedTaskCount: 1,
+      logLineRepo: { storeBatch, listRecent: vi.fn(async () => ok([])) },
+      automationLog: { record: vi.fn(async () => undefined) },
+      whatsappNotifier: { notifyTaskDispatchBlocked: vi.fn(async () => ok(undefined)) } as never,
+      notificationRepo,
+      logger: { warn: vi.fn() } as never,
+      now: new Date('2026-06-08T10:05:00.000Z'),
+    });
+
+    const firstLines = storeBatch.mock.calls[0]?.[1];
+    const secondLines = storeBatch.mock.calls[1]?.[1];
+    expect(firstLines?.[0]?.sequence).toBe(secondLines?.[0]?.sequence);
+  });
+
+  it('uses distinct synthetic task-log sequences for different dispatch reason and phase pairs', async () => {
+    const task = makeTask();
+    delete task.prNumber;
+    const terminalProblem = makeProblemWithReason('no_enabled_workers', true);
+    const waitingProblem = makeProblemWithReason('claude_auth_unavailable', false);
+    const storeBatch = vi.fn(async (_taskId: string, _lines: FormattedLogLine[]) => ok(undefined));
+    const notificationRepo = makeNotificationRepo();
+
+    await reportDispatchFailure({
+      task,
+      problem: terminalProblem,
+      dispatchStatus: makeDispatchStatus(terminalProblem),
+      phase: 'terminal',
+      affectedTaskCount: 1,
+      logLineRepo: { storeBatch, listRecent: vi.fn(async () => ok([])) },
+      automationLog: { record: vi.fn(async () => undefined) },
+      whatsappNotifier: { notifyTaskDispatchBlocked: vi.fn(async () => ok(undefined)) } as never,
+      notificationRepo,
+      logger: { warn: vi.fn() } as never,
+      now: new Date('2026-06-08T10:00:00.000Z'),
+    });
+    await reportDispatchFailure({
+      task,
+      problem: waitingProblem,
+      dispatchStatus: makeDispatchStatus(waitingProblem),
+      phase: 'waiting',
+      affectedTaskCount: 1,
+      logLineRepo: { storeBatch, listRecent: vi.fn(async () => ok([])) },
+      automationLog: { record: vi.fn(async () => undefined) },
+      whatsappNotifier: { notifyTaskDispatchBlocked: vi.fn(async () => ok(undefined)) } as never,
+      notificationRepo,
+      logger: { warn: vi.fn() } as never,
+      now: new Date('2026-06-08T10:00:00.000Z'),
+    });
+
+    const firstLines = storeBatch.mock.calls[0]?.[1];
+    const secondLines = storeBatch.mock.calls[1]?.[1];
+    expect(firstLines?.[0]?.sequence).not.toBe(secondLines?.[0]?.sequence);
+  });
+
+  it('orders late dispatch logs after existing task logs by dispatch firstSeenAt', async () => {
+    const task = makeTask();
+    delete task.prNumber;
+    const problem = makeProblem();
+    const dispatchStatus = {
+      ...makeDispatchStatus(problem),
+      firstSeenAt: Timestamp.fromDate(new Date('2026-06-08T10:05:00.000Z')),
+      lastSeenAt: Timestamp.fromDate(new Date('2026-06-08T10:05:00.000Z')),
+    };
+    const storeBatch = vi.fn(async (_taskId: string, _lines: FormattedLogLine[]) => ok(undefined));
+
+    await reportDispatchFailure({
+      task,
+      problem,
+      dispatchStatus,
+      phase: 'terminal',
+      affectedTaskCount: 1,
+      logLineRepo: { storeBatch, listRecent: vi.fn(async () => ok([])) },
+      automationLog: { record: vi.fn(async () => undefined) },
+      whatsappNotifier: { notifyTaskDispatchBlocked: vi.fn(async () => ok(undefined)) } as never,
+      notificationRepo: makeNotificationRepo(),
+      logger: { warn: vi.fn() } as never,
+      now: new Date('2026-06-08T10:05:00.000Z'),
+    });
+
+    const storedLines = storeBatch.mock.calls[0]?.[1];
+    const existingLogSequence = new Date('2026-06-08T10:04:00.000Z').getTime() * 1000 + 999;
+    expect(storedLines?.[0]?.sequence).toBeGreaterThan(existingLogSequence);
   });
 
   it('writes waiting log text without optional workers or affected count', async () => {

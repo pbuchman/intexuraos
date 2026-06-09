@@ -21,6 +21,7 @@ export interface DispatchProblem {
   workerNames: string[];
   terminal: boolean;
   terminalCause?: CodeTaskDispatchStatus['terminalCause'];
+  workerHealthDetails?: CodeTaskDispatchStatus['workerHealthDetails'];
 }
 
 export interface BuildDispatchStatusInput {
@@ -64,6 +65,7 @@ export function dispatchProblemFromBlocker(blocker: DispatchBlocker): DispatchPr
     remediation: blocker.remediation,
     workerNames: blocker.workerNames,
     terminal: isTerminalDispatchBlockerReason(blocker.reason),
+    ...(blocker.workerHealthDetails !== undefined && { workerHealthDetails: blocker.workerHealthDetails }),
   };
 }
 
@@ -249,6 +251,7 @@ export function buildDispatchStatusForProblem(
     lastSeenAt: now,
     nextAction: nextActionForDispatchProblem(input.problem),
     ...(input.problem.terminalCause !== undefined && { terminalCause: input.problem.terminalCause }),
+    ...(input.problem.workerHealthDetails !== undefined && { workerHealthDetails: input.problem.workerHealthDetails }),
   };
 }
 
