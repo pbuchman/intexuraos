@@ -149,12 +149,12 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
   },
   // Xiaomi
   {
-    id: 'xiaomi/mimo-v2-pro',
-    name: 'MiMo V2 Pro',
+    id: 'xiaomi/mimo-v2.5-pro',
+    name: 'MiMo V2.5 Pro',
     provider: 'Xiaomi',
     contextLength: 1_000_000,
-    promptPerToken: '0.000001',
-    completionPerToken: '0.000003',
+    promptPerToken: '0.000000435',
+    completionPerToken: '0.00000087',
   },
   // Z.ai
   {

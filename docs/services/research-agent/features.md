@@ -20,7 +20,7 @@ Submit a single research prompt and Research Agent dispatches it simultaneously 
 
 Users with an OpenRouter API key gain access to 15 curated frontier models spanning 10 providers — Qwen, MiniMax, xAI (Grok), Moonshot (Kimi), Anthropic, Google, OpenAI, Xiaomi, and Z.ai — through a single key. The `GET /openrouter/models` endpoint returns the full allowlist with live pricing fetched from OpenRouter's catalog API. Models are selected in the frontend and routed through the same parallel research pipeline as native providers. Allowlist enforcement at execution time prevents unauthorized model access, and fallback pricing ensures cost tracking works even when live catalog data is unavailable.
 
-**Example:** A user configures one OpenRouter API key and immediately gains access to Grok 4.20 Beta, Kimi K2.5, MiMo V2 Pro, and GPT-5.4 — models not available through direct provider keys. All appear in the model selector with live per-token pricing, and research dispatches them through the same parallel pipeline as Google or Anthropic models.
+**Example:** A user configures one OpenRouter API key and immediately gains access to Grok 4.20 Beta, Kimi K2.5, MiMo V2.5 Pro, and GPT-5.4 — models not available through direct provider keys. All appear in the model selector with live per-token pricing, and research dispatches them through the same parallel pipeline as Google or Anthropic models.
 
 ### Context-Aware Research Pipeline
 

@@ -9,6 +9,8 @@ import {
 } from '../allowlist.js';
 import { LlmModels } from '@intexuraos/llm-contract';
 
+const LEGACY_MIMO_MODEL_ID = 'xiaomi/mimo-' + 'v2-pro';
+
 describe('allowlist', () => {
   describe('OPENROUTER_ALLOWED_MODELS', () => {
     it('has exactly 15 entries', () => {
@@ -66,12 +68,14 @@ describe('allowlist', () => {
       expect(isAllowedModel('anthropic/claude-sonnet-4.6')).toBe(true);
       expect(isAllowedModel('x-ai/grok-4.1-fast')).toBe(true);
       expect(isAllowedModel('openai/gpt-5.4')).toBe(true);
+      expect(isAllowedModel('xiaomi/mimo-v2.5-pro')).toBe(true);
     });
 
     it('returns false for unknown model IDs', () => {
       expect(isAllowedModel('unknown/model')).toBe(false);
       expect(isAllowedModel(LlmModels.Gemini25Pro)).toBe(false);
       expect(isAllowedModel('')).toBe(false);
+      expect(isAllowedModel(LEGACY_MIMO_MODEL_ID)).toBe(false);
     });
 
     it('returns false for or: prefixed IDs (expecting raw ID)', () => {
@@ -95,6 +99,8 @@ describe('allowlist', () => {
       expect(ids.split(', ')).toHaveLength(15);
       expect(ids).toContain('anthropic/claude-sonnet-4.6');
       expect(ids).toContain('x-ai/grok-4.1-fast');
+      expect(ids).toContain('xiaomi/mimo-v2.5-pro');
+      expect(ids).not.toContain(LEGACY_MIMO_MODEL_ID);
     });
   });
 
@@ -140,6 +146,15 @@ describe('allowlist', () => {
       // Grok 4.20 Beta has 2M context — should NOT fall back to 102400
       const result = buildModelInfo(getEntry('x-ai/grok-4.20-beta'));
       expect(result.contextLength).toBe(2_000_000);
+    });
+
+    it('exposes MiMo Pro 2.5 metadata and fallback pricing', () => {
+      const result = buildModelInfo(getEntry('xiaomi/mimo-v2.5-pro'));
+      expect(result.name).toBe('MiMo V2.5 Pro');
+      expect(result.provider).toBe('Xiaomi');
+      expect(result.contextLength).toBe(1_000_000);
+      expect(result.pricing.inputPricePerMillion).toBe(0.435);
+      expect(result.pricing.outputPricePerMillion).toBe(0.87);
     });
   });
 });

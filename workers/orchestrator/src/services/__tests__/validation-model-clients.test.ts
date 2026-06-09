@@ -57,9 +57,9 @@ describe('parseValidationModels', () => {
   });
 
   it('parses single openrouter model', () => {
-    const result = parseValidationModels('or:xiaomi/mimo-v2-pro');
+    const result = parseValidationModels('or:xiaomi/mimo-v2.5-pro');
     expect(result).toEqual([
-      { provider: 'openrouter', modelId: 'or:xiaomi/mimo-v2-pro', rawId: 'xiaomi/mimo-v2-pro' },
+      { provider: 'openrouter', modelId: 'or:xiaomi/mimo-v2.5-pro', rawId: 'xiaomi/mimo-v2.5-pro' },
     ]);
   });
 
