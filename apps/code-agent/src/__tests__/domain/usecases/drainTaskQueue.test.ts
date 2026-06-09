@@ -3434,6 +3434,7 @@ describe('drainTaskQueue', () => {
     it('preserves scheduled wait firstSeenAt and notification ledger when the task is still waiting', async () => {
       const now = Date.now();
       const firstSeenAt = Timestamp.fromDate(new Date(now - 30 * 60 * 1000));
+      const notifiedAt = Timestamp.fromDate(new Date(now - 20 * 60 * 1000));
       const task = createMockTask({
         id: 'scheduled-task',
         queuedAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
@@ -3453,6 +3454,9 @@ describe('drainTaskQueue', () => {
           firstSeenAt,
           lastSeenAt: firstSeenAt,
           nextAction: 'wait_until_scheduled',
+          notifiedReasons: {
+            queue_full: notifiedAt,
+          },
         },
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -3465,6 +3469,9 @@ describe('drainTaskQueue', () => {
         dispatchStatus: expect.objectContaining({
           reason: 'scheduled_wait',
           firstSeenAt,
+          notifiedReasons: {
+            queue_full: notifiedAt,
+          },
         }),
       });
     });

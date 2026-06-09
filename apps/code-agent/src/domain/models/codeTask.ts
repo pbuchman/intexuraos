@@ -225,6 +225,7 @@ export interface CodeTaskDispatchStatus {
     missingFields?: string[];
     contractMismatch?: boolean;
   }[];
+  notifiedReasons?: Partial<Record<CodeTaskDispatchStatusReason, Timestamp>>;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { Timestamp } from '@google-cloud/firestore';
+import { ok } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
   CodeTask,
@@ -234,10 +235,17 @@ function firstSeenAtForReason(
   return task.dispatchStatus?.reason === reason ? task.dispatchStatus.firstSeenAt : now;
 }
 
+function existingNotifiedReasons(
+  task: CodeTask
+): Partial<Record<CodeTaskDispatchStatusReason, Timestamp>> {
+  return task.dispatchStatus?.notifiedReasons ?? {};
+}
+
 export function buildDispatchStatusForProblem(
   input: BuildDispatchStatusInput
 ): CodeTaskDispatchStatus {
   const now = Timestamp.fromDate(input.now ?? new Date());
+  const notifiedReasons = existingNotifiedReasons(input.task);
 
   return {
     state: input.problem.terminal ? 'terminal' : 'waiting',
@@ -252,12 +260,71 @@ export function buildDispatchStatusForProblem(
     nextAction: nextActionForDispatchProblem(input.problem),
     ...(input.problem.terminalCause !== undefined && { terminalCause: input.problem.terminalCause }),
     ...(input.problem.workerHealthDetails !== undefined && { workerHealthDetails: input.problem.workerHealthDetails }),
+    ...(Object.keys(notifiedReasons).length > 0 && { notifiedReasons }),
   };
 }
 
 export async function notifyDispatchProblemForTask(
   input: NotifyDispatchProblemForTaskInput
 ): Promise<void> {
+  const notifiedReasons = input.dispatchStatus.notifiedReasons ?? {};
+  if (notifiedReasons[input.problem.reason] !== undefined) {
+    return;
+  }
+
+  const nextNotifiedReasons = {
+    ...notifiedReasons,
+    [input.problem.reason]: Timestamp.fromDate(input.now ?? new Date()),
+  };
+
+  const nextDispatchStatus: CodeTaskDispatchStatus = {
+    ...input.dispatchStatus,
+    notifiedReasons: nextNotifiedReasons,
+  };
+
+  const reserveResult = input.codeTaskRepo.runInTransaction !== undefined
+    ? await input.codeTaskRepo.runInTransaction(async (transaction) => {
+        const currentResult = await input.codeTaskRepo.findById(input.task.id, { transaction });
+        if (!currentResult.ok) {
+          return currentResult;
+        }
+        const currentStatus = currentResult.value.dispatchStatus;
+        if (currentStatus?.reason !== input.problem.reason) {
+          return ok({ shouldNotify: false });
+        }
+        if (currentStatus.notifiedReasons?.[input.problem.reason] !== undefined) {
+          return ok({ shouldNotify: false });
+        }
+        const updateResult = await input.codeTaskRepo.update(input.task.id, {
+          dispatchStatus: {
+            ...currentStatus,
+            notifiedReasons: {
+              ...(currentStatus.notifiedReasons ?? {}),
+              [input.problem.reason]: nextNotifiedReasons[input.problem.reason],
+            },
+          },
+        }, { transaction });
+        if (!updateResult.ok) {
+          return updateResult;
+        }
+        return ok({ shouldNotify: true });
+      })
+    : await input.codeTaskRepo.update(input.task.id, {
+        dispatchStatus: nextDispatchStatus,
+      }).then((updateResult) => updateResult.ok ? ok({ shouldNotify: true }) : updateResult);
+
+  if (!reserveResult.ok) {
+    input.logger.warn(
+      { taskId: input.task.id, reason: input.problem.reason, error: reserveResult.error },
+      'Failed to persist code task dispatch notification ledger'
+    );
+    return;
+  }
+
+  if (!reserveResult.value.shouldNotify) {
+    return;
+  }
+
   const notifyResult = await input.whatsappNotifier.notifyTaskDispatchBlocked(input.task.userId, {
     workerType: input.task.workerType,
     reason: input.problem.reason,

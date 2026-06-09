@@ -98,6 +98,9 @@ function buildWaitingDispatchStatus(
     firstSeenAt: task.dispatchStatus?.reason === input.reason ? task.dispatchStatus.firstSeenAt : now,
     lastSeenAt: now,
     nextAction: input.nextAction,
+    ...(task.dispatchStatus?.notifiedReasons !== undefined && {
+      notifiedReasons: task.dispatchStatus.notifiedReasons,
+    }),
   };
 }
 

@@ -72,6 +72,7 @@ describe('codeTaskDispatchProblems', () => {
 
   it('preserves firstSeenAt for repeated recoverable problems', () => {
     const firstSeenAt = Timestamp.fromDate(new Date('2026-06-06T09:00:00.000Z'));
+    const notifiedAt = Timestamp.fromDate(new Date('2026-06-06T09:30:00.000Z'));
     const problem: DispatchProblem = {
       reason: 'worker_unavailable',
       severity: 'warning',
@@ -92,6 +93,9 @@ describe('codeTaskDispatchProblems', () => {
         firstSeenAt,
         lastSeenAt: firstSeenAt,
         nextAction: 'will_retry_automatically',
+        notifiedReasons: {
+          worker_unavailable: notifiedAt,
+        },
       },
     });
 
@@ -102,6 +106,7 @@ describe('codeTaskDispatchProblems', () => {
     });
 
     expect(status.firstSeenAt).toBe(firstSeenAt);
+    expect(status.notifiedReasons).toEqual({ worker_unavailable: notifiedAt });
     expect(taskErrorFromDispatchStatus(status).remediation).toEqual(expect.objectContaining({
       action: 'wait',
     }));
@@ -215,7 +220,7 @@ describe('codeTaskDispatchProblems', () => {
     const task = createTask();
     const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
     const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
-    const codeTaskRepo = { update: vi.fn() };
+    const codeTaskRepo = { update: vi.fn().mockResolvedValue(ok(createTask())) };
 
     await notifyDispatchProblemForTask({
       task,
@@ -236,7 +241,254 @@ describe('codeTaskDispatchProblems', () => {
       remediation: 'Try again later.',
       workerNames: [],
     });
+    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+      dispatchStatus: expect.objectContaining({
+        notifiedReasons: expect.objectContaining({
+          queue_full: expect.any(Timestamp),
+        }),
+      }),
+    });
+  });
+
+  it('does not resend WhatsApp notifications for a reason already in the task ledger', async () => {
+    const problem: DispatchProblem = {
+      reason: 'queue_full',
+      severity: 'critical',
+      message: 'Queue is full.',
+      remediation: 'Try again later.',
+      workerNames: [],
+      terminal: true,
+    };
+    const task = createTask({
+      dispatchStatus: {
+        state: 'terminal',
+        reason: 'queue_full',
+        terminal: true,
+        severity: 'critical',
+        message: 'Queue is full.',
+        remediation: 'Try again later.',
+        workerNames: [],
+        firstSeenAt: Timestamp.fromDate(new Date('2026-06-06T09:00:00.000Z')),
+        lastSeenAt: Timestamp.fromDate(new Date('2026-06-06T09:00:00.000Z')),
+        nextAction: 'retry_after_fix',
+        notifiedReasons: {
+          queue_full: Timestamp.fromDate(new Date('2026-06-06T09:01:00.000Z')),
+        },
+      },
+    });
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
+    const codeTaskRepo = { update: vi.fn().mockResolvedValue(ok(createTask())) };
+
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier: whatsappNotifier as never,
+      codeTaskRepo: codeTaskRepo as never,
+      logger: createLogger(),
+      affectedTaskCount: 1,
+    });
+
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
     expect(codeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('does not notify when transactional ledger persistence sees a changed status', async () => {
+    const problem: DispatchProblem = {
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'All workers are busy.',
+      remediation: 'Wait for a worker.',
+      workerNames: ['home-mac'],
+      terminal: false,
+    };
+    const task = createTask();
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const transaction = {};
+    const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
+    const codeTaskRepo = {
+      runInTransaction: vi.fn(async (operation: (tx: never) => unknown) => await operation(transaction as never)),
+      findById: vi.fn().mockResolvedValue(ok(createTask())),
+      update: vi.fn(),
+    };
+
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier: whatsappNotifier as never,
+      codeTaskRepo: codeTaskRepo as never,
+      logger: createLogger(),
+      affectedTaskCount: 1,
+    });
+
+    expect(codeTaskRepo.findById).toHaveBeenCalledWith('task-123', { transaction });
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+  });
+
+  it('skips transactional ledger write when current dispatch status already recorded the notification', async () => {
+    const notifiedAt = Timestamp.fromDate(new Date('2026-06-06T10:20:00.000Z'));
+    const problem: DispatchProblem = {
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'All workers are busy.',
+      remediation: 'Wait for a worker.',
+      workerNames: ['home-mac'],
+      terminal: false,
+    };
+    const task = createTask();
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const currentTask = createTask({
+      dispatchStatus: {
+        ...dispatchStatus,
+        notifiedReasons: {
+          workers_at_capacity: notifiedAt,
+        },
+      },
+    });
+    const transaction = {};
+    const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
+    const codeTaskRepo = {
+      runInTransaction: vi.fn(async (operation: (tx: never) => unknown) => await operation(transaction as never)),
+      findById: vi.fn().mockResolvedValue(ok(currentTask)),
+      update: vi.fn(),
+    };
+
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier: whatsappNotifier as never,
+      codeTaskRepo: codeTaskRepo as never,
+      logger: createLogger(),
+      affectedTaskCount: 1,
+    });
+
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+  });
+
+  it('reserves transactional ledger before sending WhatsApp notification', async () => {
+    const problem: DispatchProblem = {
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'All workers are busy.',
+      remediation: 'Wait for a worker.',
+      workerNames: ['home-mac'],
+      terminal: false,
+    };
+    const task = createTask();
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const currentTask = createTask({
+      dispatchStatus,
+    });
+    const transaction = {};
+    const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
+    const codeTaskRepo = {
+      runInTransaction: vi.fn(async (operation: (tx: never) => unknown) => await operation(transaction as never)),
+      findById: vi.fn().mockResolvedValue(ok(currentTask)),
+      update: vi.fn().mockResolvedValue(ok(currentTask)),
+    };
+
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier: whatsappNotifier as never,
+      codeTaskRepo: codeTaskRepo as never,
+      logger: createLogger(),
+      affectedTaskCount: 1,
+      now: new Date('2026-06-06T10:30:00.000Z'),
+    });
+
+    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+      dispatchStatus: expect.objectContaining({
+        notifiedReasons: expect.objectContaining({
+          workers_at_capacity: Timestamp.fromDate(new Date('2026-06-06T10:30:00.000Z')),
+        }),
+      }),
+    }, { transaction });
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs and does not send when transactional ledger update fails', async () => {
+    const problem: DispatchProblem = {
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'All workers are busy.',
+      remediation: 'Wait for a worker.',
+      workerNames: ['home-mac'],
+      terminal: false,
+    };
+    const task = createTask();
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const currentTask = createTask({
+      dispatchStatus,
+    });
+    const logger = createLogger();
+    const transaction = {};
+    const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
+    const codeTaskRepo = {
+      runInTransaction: vi.fn(async (operation: (tx: never) => unknown) => await operation(transaction as never)),
+      findById: vi.fn().mockResolvedValue(ok(currentTask)),
+      update: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' })),
+    };
+
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier: whatsappNotifier as never,
+      codeTaskRepo: codeTaskRepo as never,
+      logger,
+      affectedTaskCount: 1,
+    });
+
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-123', reason: 'workers_at_capacity' }),
+      'Failed to persist code task dispatch notification ledger',
+    );
+  });
+
+  it('logs when transactional ledger persistence cannot read the current task', async () => {
+    const problem: DispatchProblem = {
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'All workers are busy.',
+      remediation: 'Wait for a worker.',
+      workerNames: ['home-mac'],
+      terminal: false,
+    };
+    const task = createTask();
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const logger = createLogger();
+    const transaction = {};
+    const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
+    const codeTaskRepo = {
+      runInTransaction: vi.fn(async (operation: (tx: never) => unknown) => await operation(transaction as never)),
+      findById: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'read failed' })),
+      update: vi.fn(),
+    };
+
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier: whatsappNotifier as never,
+      codeTaskRepo: codeTaskRepo as never,
+      logger,
+      affectedTaskCount: 1,
+    });
+
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-123', reason: 'workers_at_capacity' }),
+      'Failed to persist code task dispatch notification ledger',
+    );
   });
 
   it('logs when WhatsApp notification fails', async () => {
@@ -254,7 +506,7 @@ describe('codeTaskDispatchProblems', () => {
     const whatsappNotifier = {
       notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(err({ code: 'publish_failed', message: 'pubsub down' })),
     };
-    const codeTaskRepo = { update: vi.fn() };
+    const codeTaskRepo = { update: vi.fn().mockResolvedValue(ok(createTask())) };
 
     await notifyDispatchProblemForTask({
       task,
@@ -266,11 +518,59 @@ describe('codeTaskDispatchProblems', () => {
       affectedTaskCount: 1,
     });
 
-    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+      dispatchStatus: expect.objectContaining({
+        notifiedReasons: expect.objectContaining({
+          workers_at_capacity: expect.any(Timestamp),
+        }),
+      }),
+    });
     expect(whatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 'task-123', reason: 'workers_at_capacity' }),
       'Failed to notify user about code task dispatch blocker',
+    );
+  });
+
+  it('logs and does not send when notification ledger persistence fails', async () => {
+    const problem: DispatchProblem = {
+      reason: 'dispatch_failed',
+      severity: 'critical',
+      message: 'Dispatch failed.',
+      remediation: 'Fix dispatch.',
+      workerNames: [],
+      terminal: true,
+    };
+    const task = createTask();
+    const dispatchStatus = buildDispatchStatusForProblem({ task, problem });
+    const logger = createLogger();
+    const whatsappNotifier = { notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)) };
+    const codeTaskRepo = {
+      update: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' })),
+    };
+
+    await notifyDispatchProblemForTask({
+      task,
+      dispatchStatus,
+      problem,
+      whatsappNotifier: whatsappNotifier as never,
+      codeTaskRepo: codeTaskRepo as never,
+      logger,
+      affectedTaskCount: 1,
+      now: new Date('2026-06-06T10:15:00.000Z'),
+    });
+
+    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+      dispatchStatus: expect.objectContaining({
+        notifiedReasons: expect.objectContaining({
+          dispatch_failed: Timestamp.fromDate(new Date('2026-06-06T10:15:00.000Z')),
+        }),
+      }),
+    });
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-123', reason: 'dispatch_failed' }),
+      'Failed to persist code task dispatch notification ledger',
     );
   });
 });
