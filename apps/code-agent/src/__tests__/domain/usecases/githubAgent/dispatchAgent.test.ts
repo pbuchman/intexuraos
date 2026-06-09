@@ -288,6 +288,29 @@ describe('dispatchPRAgent', () => {
     }
   });
 
+  it('short-circuits for docs-only non-plan PR with documentation review', async () => {
+    const prClient = createFakeGitHubPRClient();
+    vi.mocked(prClient.getPullRequestFiles).mockResolvedValue(ok([
+      { filename: 'README.md', status: 'modified', additions: 12, deletions: 3 },
+      { filename: 'docs/services/code-agent/technical.md', status: 'modified', additions: 20, deletions: 4 },
+    ]));
+    const resolveToolCallingClient = vi.fn().mockResolvedValue(ok(createFakeToolCallingClient()));
+    const deps = createDeps({ gitHubPRClient: prClient, resolveToolCallingClient });
+    const event = createFakePREvent();
+
+    const result = await dispatchPRAgent(deps, event, 'intexuraos', 'intexuraos');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.kind).toBe('deterministic');
+      if (result.value.kind === 'deterministic') {
+        expect(result.value.triage).toEqual({ action: 'request_review', reviewTypes: ['documentation'] });
+        expect(result.value.reasoning).toContain('Documentation-only PR');
+      }
+    }
+    expect(resolveToolCallingClient).not.toHaveBeenCalled();
+  });
+
   it('returns LLM_FAILED when LLM call fails', async () => {
     const toolClient: ToolCallingClient = {
       async run(): ReturnType<ToolCallingClient['run']> {

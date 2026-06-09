@@ -11,7 +11,7 @@ import {
   GitHubWebhookRules,
   CIFailureRule,
 } from '../../../domain/services/gitHubWebhookRules.js';
-import { isPlanFile, evaluatePlanFiles } from '../../../domain/utils/planDetection.js';
+import { isPlanFile, evaluatePlanFiles, evaluateReviewFiles } from '../../../domain/utils/planDetection.js';
 
 import { describe, it, expect } from 'vitest';
 
@@ -898,6 +898,57 @@ describe('GitHubWebhookRules', () => {
         expect(result).toEqual({
           action: 'needs_triage',
           reason: 'NO_FILES_TO_EVALUATE',
+        });
+      });
+    });
+
+    describe('evaluateReviewFiles', () => {
+      it('returns dispatch with documentation for docs-only non-plan PR', () => {
+        const files = [
+          { filename: 'README.md' },
+          { filename: 'docs/services/code-agent/technical.md' },
+        ];
+        const result = evaluateReviewFiles(files);
+
+        expect(result).toEqual({
+          action: 'dispatch',
+          reason: 'DOCUMENTATION_ONLY_PR',
+          context: { reviewType: 'documentation' },
+        });
+      });
+
+      it('keeps plan_review precedence for plan-only PRs', () => {
+        const files = [
+          { filename: 'docs/superpowers/plans/feature-plan.md' },
+        ];
+        const result = evaluateReviewFiles(files);
+
+        expect(result).toEqual({
+          action: 'dispatch',
+          reason: 'PLAN_ONLY_PR',
+          context: { reviewType: 'plan_review' },
+        });
+      });
+
+      it('returns needs_triage for empty files array', () => {
+        const result = evaluateReviewFiles([]);
+
+        expect(result).toEqual({
+          action: 'needs_triage',
+          reason: 'NO_FILES_TO_EVALUATE',
+        });
+      });
+
+      it('returns needs_triage for mixed docs and code', () => {
+        const files = [
+          { filename: 'docs/services/code-agent/technical.md' },
+          { filename: 'apps/code-agent/src/index.ts' },
+        ];
+        const result = evaluateReviewFiles(files);
+
+        expect(result).toEqual({
+          action: 'needs_triage',
+          reason: 'NOT_REVIEW_ONLY_PR',
         });
       });
     });

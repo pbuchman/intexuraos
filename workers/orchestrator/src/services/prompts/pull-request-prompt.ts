@@ -9,7 +9,7 @@ import {
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '5.0.1',
+  version: '6.0.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -20,6 +20,33 @@ export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
       modelName,
       trackingCommentId,
     } = params;
+
+    const linearContextSection =
+      linearIssueId !== undefined
+        ? `### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANY work, you MUST read the Linear issue AND all its comments:
+
+1. Read the issue: \`mcp__linear__get_issue({ id: '${linearIssueId}' })\`
+2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
+   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
+   - Read comments from NEWEST to OLDEST. Comments may contain:
+     - User clarifications answering questions from previous runs
+     - Additional context or updated requirements
+     - Answers to "unclear" flags from prior planning attempts
+     - Follow-up instructions or corrections
+3. The issue description + ALL comments together form your complete input. Do NOT ignore any comment.
+4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
+
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.`
+        : `### Context
+
+No Linear issue is associated with this pull-request feedback task. Do NOT call Linear tools and do NOT invent a Linear issue ID. Use the PR review, PR comments, issue comments, repository context, and task prompt as the complete input.`;
+
+    const prDescriptionLinearLine =
+      linearIssueId !== undefined
+        ? `- Linear: [${linearIssueId}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId})\n`
+        : '';
 
     return `[SYSTEM CONTEXT]
 You are an IntexuraOS code worker running in Docker isolation.
@@ -36,22 +63,7 @@ You are a senior software architect working on codebase improvements in Intexura
 
 This task was triggered by a PR comment/review event. Gather all feedback, implement changes if needed, push to the existing PR branch, and reply to the comment.
 
-### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
-
-Before doing ANY work, you MUST read the Linear issue AND all its comments:
-
-1. Read the issue: \`mcp__linear__get_issue({ id: '<linearIssueId>' })\`
-2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
-   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
-   - Read comments from NEWEST to OLDEST. Comments may contain:
-     - User clarifications answering questions from previous runs
-     - Additional context or updated requirements
-     - Answers to "unclear" flags from prior planning attempts
-     - Follow-up instructions or corrections
-3. The issue description + ALL comments together form your complete input. Do NOT ignore any comment.
-4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
-
-**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+${linearContextSection}
 ${buildExecutionMemorySection(params.executionMemoryContext)}
 
 ### Ignore Bot-Directed Comments
@@ -70,7 +82,7 @@ When the user mentions reviews, comments, suggestions, or feedback, you MUST sea
 All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient — issue comments often contain critical feedback that does not appear in the review thread. Skipping any source means missing feedback.
 
 ### PR Description Update (MANDATORY — never skip, never restructure)
-- Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
+${prDescriptionLinearLine}
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 - Worker Type: \`${workerType ?? WORKER_TYPE_FALLBACK}\`
 - Model: \`${modelName ?? 'default'}\`
@@ -128,7 +140,7 @@ Your LAST message must include exactly this block:
 PULL_REQUEST_AGENT_FINAL:
 - PR: <full GitHub PR URL>
 - CI evidence: pnpm run ci:tracked successful
-- Linear issue: <full Linear URL>
+- Linear issue: <full Linear URL, or "none" when no Linear issue is associated>
 - Comment replied: <yes|no>
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
