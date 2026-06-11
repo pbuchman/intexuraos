@@ -293,10 +293,10 @@ describe('messageRepository', () => {
       const result = await findByWaMessageId('user-123', 'wamid.existing');
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value !== null) {
-        expect(result.value.id).toBe(saved.value.id);
-        expect(result.value.waMessageId).toBe('wamid.existing');
-      }
+      if (!result.ok) throw new Error('Expected ok result');
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe(saved.value.id);
+      expect(result.value?.waMessageId).toBe('wamid.existing');
     });
 
     it('returns null when the WhatsApp message id belongs to another user', async () => {
