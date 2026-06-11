@@ -61,10 +61,14 @@ class TestWebhookEventRepository implements WhatsAppWebhookEventRepository {
     const updated: WhatsAppWebhookEvent = {
       ...existing,
       status,
-      failureDetails: metadata.failureDetails,
       retryable: status === 'failed' ? (metadata.retryable ?? false) : false,
       processedAt: new Date().toISOString(),
     };
+    if (metadata.failureDetails !== undefined) {
+      updated.failureDetails = metadata.failureDetails;
+    } else {
+      delete updated.failureDetails;
+    }
     this.events.set(eventId, updated);
     return Promise.resolve(ok(updated));
   }
@@ -116,14 +120,14 @@ function createProcessWebhookEventUseCase(
   handler: ProcessHandler
 ): ProcessWebhookEventUseCase {
   return {
-    execute: async (_payload, savedEvent): Promise<ProcessWebhookEventResult> => {
+    execute: async (_payload: unknown, savedEvent: { id: string }): Promise<ProcessWebhookEventResult> => {
       const event = repository.events.get(savedEvent.id);
       if (event === undefined) {
         throw new Error(`Event ${savedEvent.id} missing from test repository`);
       }
       return await handler(event, repository);
     },
-  } as ProcessWebhookEventUseCase;
+  } as unknown as ProcessWebhookEventUseCase;
 }
 
 describe('RetryPendingWebhookEventsUseCase', () => {
