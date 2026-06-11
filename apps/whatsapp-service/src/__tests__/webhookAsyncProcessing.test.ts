@@ -2043,6 +2043,74 @@ describe('Webhook async processing', () => {
       expect(commandEvents.length).toBe(0);
     });
 
+    it('rejects retry-pending requests without internal scheduler auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/webhooks/retry-pending',
+        payload: {
+          eventIds: ['event-retry-link'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('rejects invalid retry-pending request bodies after internal scheduler auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/webhooks/retry-pending',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
+        },
+        payload: [],
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('accepts a null scheduler body for retry-pending requests', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/webhooks/retry-pending',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
+        },
+        payload: 'null',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toMatchObject({
+        processed: 0,
+        skipped: 0,
+        failed: 0,
+        total: 0,
+      });
+    });
+
     it('retries a pending webhook event by exact id and publishes command.ingest', async () => {
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
