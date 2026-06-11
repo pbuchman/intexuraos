@@ -124,7 +124,14 @@ export {
 export {
   ProcessWebhookEventUseCase,
   type ProcessWebhookEventDeps,
+  type ProcessWebhookEventResult,
 } from './usecases/processWebhookEventUseCase.js';
+
+export {
+  RetryPendingWebhookEventsUseCase,
+  type RetryPendingWebhookEventsInput,
+  type RetryPendingWebhookEventsResult,
+} from './usecases/retryPendingWebhookEvents.js';
 
 export {
   shouldDeliverMessage,

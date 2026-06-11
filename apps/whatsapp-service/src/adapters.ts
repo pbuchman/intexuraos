@@ -29,7 +29,9 @@ import {
   deleteMessage,
   disconnectUserMapping,
   findById,
+  findByWaMessageId,
   findPendingByUserAndPhone,
+  findRetryableWebhookEvents,
   findPhoneByUserId,
   findUserByPhoneNumber,
   findVerificationById,
@@ -67,6 +69,7 @@ export class WebhookEventRepositoryAdapter implements WhatsAppWebhookEventReposi
     metadata: {
       ignoredReason?: IgnoredReason;
       failureDetails?: string;
+      retryable?: boolean;
       inboxNoteId?: string;
     }
   ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
@@ -75,6 +78,13 @@ export class WebhookEventRepositoryAdapter implements WhatsAppWebhookEventReposi
 
   async getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, WhatsAppError>> {
     return await getWebhookEvent(eventId);
+  }
+
+  async findRetryableEvents(options: {
+    olderThan: string;
+    limit: number;
+  }): Promise<Result<WhatsAppWebhookEvent[], WhatsAppError>> {
+    return await findRetryableWebhookEvents(options);
   }
 }
 
@@ -140,6 +150,13 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
     messageId: string
   ): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
     return await findById(userId, messageId);
+  }
+
+  async findByWaMessageId(
+    userId: string,
+    waMessageId: string
+  ): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
+    return await findByWaMessageId(userId, waMessageId);
   }
 
   async updateTranscription(

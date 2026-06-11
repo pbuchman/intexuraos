@@ -78,6 +78,19 @@ locals {
       min_backoff_duration = "5s"
       max_backoff_duration = "30s"
     }
+    retry_pending_whatsapp_webhooks = {
+      job_name             = "intexuraos-retry-pending-whatsapp-webhooks-prod-hetzner"
+      description          = "Retry persisted WhatsApp webhook events stuck before async processing via Hetzner edge"
+      schedule             = "*/5 * * * *"
+      time_zone            = "UTC"
+      path                 = "/internal/whatsapp/webhooks/retry-pending"
+      body                 = null
+      headers              = {}
+      retry_count          = 1
+      max_retry_duration   = "60s"
+      min_backoff_duration = "5s"
+      max_backoff_duration = "30s"
+    }
     drain_task_queue = {
       job_name             = "intexuraos-drain-task-queue-prod-hetzner"
       description          = "Drain queued code tasks when workers become available via Hetzner edge"

@@ -53,14 +53,14 @@ describe('Webhook async processing', () => {
    * Helper to trigger webhook processing via Pub/Sub endpoint.
    * The webhook handler publishes to Pub/Sub, so we simulate the push by calling the endpoint.
    */
-  async function triggerWebhookProcessing(): Promise<void> {
+  async function triggerWebhookProcessing(): Promise<number | null> {
     const events = ctx.eventPublisher.getWebhookProcessEvents();
     if (events.length === 0) {
-      return;
+      return null;
     }
     const event = events[events.length - 1];
     if (event === undefined) {
-      return;
+      return null;
     }
 
     const pubsubPayload = {
@@ -72,7 +72,7 @@ describe('Webhook async processing', () => {
       subscription: 'test-subscription',
     };
 
-    await ctx.app.inject({
+    const response = await ctx.app.inject({
       method: 'POST',
       url: '/internal/whatsapp/pubsub/process-webhook',
       headers: {
@@ -81,6 +81,8 @@ describe('Webhook async processing', () => {
       },
       payload: JSON.stringify(pubsubPayload),
     });
+
+    return response.statusCode;
   }
 
   describe('processWebhookAsync', () => {
@@ -822,15 +824,54 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await triggerWebhookProcessing();
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('failed');
       expect(events[0]?.failureDetails).toContain('Failed to save message');
+      expect(events[0]?.retryable).toBe(true);
 
       // No message should be stored
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(0);
+    });
+
+    it('marks event as retryable when existing message lookup fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      ctx.messageRepository.setFailFindByWaMessageId(true);
+
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Failed to look up existing message');
+      expect(events[0]?.retryable).toBe(true);
+
       const messages = ctx.messageRepository.getAll();
       expect(messages.length).toBe(0);
     });
@@ -864,13 +905,15 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await triggerWebhookProcessing();
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(200);
 
       // Event should be persisted (save happens before the error)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
       // Status is now FAILED - the catch block updates status to prevent stuck events
       expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.retryable).toBe(false);
     });
   });
 
@@ -1959,7 +2002,7 @@ describe('Webhook async processing', () => {
       expect(commandEvents.length).toBe(0);
     });
 
-    it('handles command.ingest publish failure gracefully', async () => {
+    it('marks webhook failed and returns retryable status when command.ingest publish fails', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1984,16 +2027,244 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Trigger async processing
-      await triggerWebhookProcessing();
+      const processingStatus = await triggerWebhookProcessing();
 
-      // command.ingest failure is non-fatal — event still completes
+      expect(processingStatus).toBe(500);
+
+      // command.ingest failure is fatal for bookmark creation, so the webhook remains retryable
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('completed');
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Failed to publish command ingest');
+      expect(events[0]?.retryable).toBe(true);
 
       // No command ingest events were published (publisher failed)
       const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
       expect(commandEvents.length).toBe(0);
+    });
+
+    it('retries a pending webhook event by exact id and publishes command.ingest', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createWebhookPayload();
+      ctx.webhookEventRepository.setEvent({
+        id: 'event-retry-link',
+        payload,
+        signatureValid: true,
+        receivedAt: '2020-01-01T00:00:00.000Z',
+        phoneNumberId: '123456789012345',
+        status: 'pending',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/webhooks/retry-pending',
+        headers: {
+          'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
+        },
+        payload: {
+          eventIds: ['event-retry-link'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toMatchObject({
+        processed: 1,
+        skipped: 0,
+        failed: 0,
+        total: 1,
+      });
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
+      expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
+      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+    });
+
+    it('drains old pending webhook events when the scheduler posts an empty body', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createWebhookPayload();
+      ctx.webhookEventRepository.setEvent({
+        id: 'event-scheduler-empty-body',
+        payload,
+        signatureValid: true,
+        receivedAt: '2020-01-01T00:00:00.000Z',
+        phoneNumberId: '123456789012345',
+        status: 'pending',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/webhooks/retry-pending',
+        headers: {
+          'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toMatchObject({
+        processed: 1,
+        skipped: 0,
+        failed: 0,
+        total: 1,
+      });
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
+      expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
+      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+    });
+
+    it('reuses an existing WhatsApp message row when replaying a webhook', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createWebhookPayload();
+      ctx.messageRepository.setMessage({
+        id: 'existing-message',
+        userId: testUserId,
+        waMessageId: 'wamid.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+        fromNumber: senderPhone,
+        toNumber: '15551234567',
+        text: 'Hello, World!',
+        mediaType: 'text',
+        timestamp: '1234567890',
+        receivedAt: '2026-06-10T07:18:52.951Z',
+        webhookEventId: 'event-previous-attempt',
+      });
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
+      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+    });
+
+    it('drains old failed webhook events when the scheduler posts an empty body', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createWebhookPayload();
+      ctx.webhookEventRepository.setEvent({
+        id: 'event-scheduler-failed-empty-body',
+        payload,
+        signatureValid: true,
+        receivedAt: '2020-01-01T00:00:00.000Z',
+        phoneNumberId: '123456789012345',
+        status: 'failed',
+        failureDetails: 'Failed to publish command ingest: transient Pub/Sub error',
+        retryable: true,
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/webhooks/retry-pending',
+        headers: {
+          'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toMatchObject({
+        processed: 1,
+        skipped: 0,
+        failed: 0,
+        total: 1,
+      });
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
+      expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
+      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+    });
+
+    it('does not automatically retry old failed non-bookmark webhook events', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createAudioWebhookPayload();
+      ctx.webhookEventRepository.setEvent({
+        id: 'event-scheduler-audio-failed-empty-body',
+        payload,
+        signatureValid: true,
+        receivedAt: '2020-01-01T00:00:00.000Z',
+        phoneNumberId: '123456789012345',
+        status: 'failed',
+        failureDetails: 'Failed to publish audio stored event: transient Pub/Sub error',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/webhooks/retry-pending',
+        headers: {
+          'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data).toMatchObject({
+        processed: 0,
+        skipped: 0,
+        failed: 0,
+        total: 0,
+      });
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('failed');
+      expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(0);
+      expect(ctx.eventPublisher.getAudioStoredEvents()).toHaveLength(0);
     });
   });
 
@@ -3182,10 +3453,12 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Event should still be completed (command ingest failure is logged, not thrown)
+      // Event should fail so Pub/Sub can retry bookmark-producing command ingestion
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('completed');
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Failed to publish command ingest');
+      expect(events[0]?.retryable).toBe(true);
 
       // No command ingest events should be published (publish failed)
       const commandEvents = ctx.eventPublisher.getCommandIngestEvents();

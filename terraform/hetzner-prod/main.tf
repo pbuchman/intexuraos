@@ -88,6 +88,7 @@ locals {
     "/internal/whatsapp/pubsub/process-webhook"         = "whatsapp-service"
     "/internal/whatsapp/pubsub/send-message"            = "whatsapp-service"
     "/internal/whatsapp/pubsub/transcription-completed" = "whatsapp-service"
+    "/internal/whatsapp/webhooks/retry-pending"         = "whatsapp-service"
   }
 }
 

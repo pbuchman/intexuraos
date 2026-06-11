@@ -70,9 +70,11 @@ const configSchema = z.object({
 
   /**
    * Pub/Sub topic for commands ingest events.
-   * Optional - commands-agent integration.
+   * Required: WhatsApp text messages must reach commands-agent to become bookmarks.
    */
-  commandsIngestTopic: z.string().optional(),
+  commandsIngestTopic: z
+    .string()
+    .min(1, 'INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC is required'),
 
   /**
    * Pub/Sub topic for send message events.
@@ -171,6 +173,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
     'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC',
     'INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC',
+    'INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC',
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',

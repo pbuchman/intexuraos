@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "108",
+  "lastReservedId": "110",
   "entries": [
     {
       "id": "001",
@@ -540,6 +540,16 @@
       "id": "108",
       "name": "code-task-system-statuses-active-listener-index",
       "checksum": "sha256:56a6ccef03564b5d9adaaa47a96fbae5bdb9c0384cf4ec8b52f93ef6f859d0c7"
+    },
+    {
+      "id": "109",
+      "name": "mimo-v25-pro-model-migration",
+      "checksum": "sha256:b581ad9d577aa9dfe1b880a6abc70909d61d0766d90f1ce9c1509795feb8b28d"
+    },
+    {
+      "id": "110",
+      "name": "whatsapp-webhook-retry-indexes",
+      "checksum": "sha256:71172362d85eb9b83bb165aa398d23f19c3f8b9629864fa87d6ef631fd3de632"
     }
   ]
 }
