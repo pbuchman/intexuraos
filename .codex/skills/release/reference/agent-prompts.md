@@ -1,6 +1,8 @@
 # Agent Prompt Reference
 
-These prompts replace the old release-specific external agent definitions. Execute them in the current Codex session with the default model unless the user explicitly requests delegated or parallel agent work.
+These prompts replace the old release-specific external agent definitions. Use them as Codex subagent task prompts by default, following `reference/subagent-execution.md`.
+
+When subagent tools are unavailable, execute the same prompts in the current session with the default model.
 
 ---
 

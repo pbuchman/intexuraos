@@ -2,7 +2,29 @@
 
 **Trigger:** User calls `$release`, `$release --skip-docs`, or `$release --phase N`.
 
-Run this workflow in the current Codex session using the default model. Use Codex subagents only if the user explicitly asks for delegated or parallel agent work.
+Run this workflow with subagent-driven execution first. Use `reference/subagent-execution.md` before Phase 1. Fall back to current-session execution only when Codex subagent tools are unavailable.
+
+---
+
+## Phase 0: Subagent-Driven Release Plan
+
+Before release operations:
+
+1. Verify whether Codex subagent tools are available.
+2. Read `reference/subagent-execution.md`.
+3. Create a short release execution plan using the `superpowers:subagent-driven-development` pattern.
+4. Keep controller-owned work in the controller session.
+5. Identify bounded subagent tasks and reasoning efforts for this release.
+
+Do not create git worktrees. This repo forbids worktrees in `.claude/CLAUDE.md`.
+
+If subagent tools are unavailable, report:
+
+```text
+Subagent tools are unavailable; falling back to current-session release execution.
+```
+
+Then execute all referenced prompts in the current session with the default model.
 
 ---
 
@@ -86,6 +108,15 @@ Use `reference/semver-analysis.md`:
 
 Do not build the changelog until prioritization is parsed.
 
+For larger releases or fresh `.prerelease-data.md` generation, delegate triage using `reference/subagent-execution.md`:
+
+- `Commit Grouper`: explorer, `reasoning_effort: medium`
+- `Change Classifier`: explorer, `reasoning_effort: high`
+- `Netting Detector`: explorer, `reasoning_effort: xhigh`
+- `Summary Writer`: explorer, `reasoning_effort: high`
+
+These triage tasks are sequential because each step consumes the prior output. The controller appends approved generated sections to `.prerelease-data.md`.
+
 ### 1.7 Single Prioritization Touchpoint
 
 Only features are shown in the prioritizer. Notable changes and minor fixes are automatically included in the changelog.
@@ -157,7 +188,7 @@ For each service in `MODIFIED_SERVICES`, build a release context from Phase 1:
 
 Omit skip-priority features and minor fixes.
 
-For each service, execute `reference/agent-prompts.md` section `## Service Scribe` in the current Codex session with:
+For each service, dispatch a `worker` subagent using `reference/agent-prompts.md` section `## Service Scribe` with `reasoning_effort: medium`; use `high` for broad changes or newly added services:
 
 ```text
 Generate documentation for <service-name>.
@@ -165,13 +196,15 @@ Generate documentation for <service-name>.
 <release-context-block>
 ```
 
-After each service update, execute `## Doc Validator` from `reference/agent-prompts.md` against that service. Log validation summaries. Do not block the release solely on missing coverage unless the validator finds critical hallucinations or active contradictions.
+Give each service-doc worker a disjoint write scope under `docs/services/<service>/`. Tell the worker not to edit changelog, package versions, release notes, README, website, or git state.
+
+After each service update, dispatch an `explorer` subagent using `## Doc Validator` from `reference/agent-prompts.md` with `reasoning_effort: high`. Log validation summaries. Do not block the release solely on missing coverage unless the validator finds critical hallucinations or active contradictions.
 
 ---
 
 ## Phase 3: High-Level Docs
 
-Execute `reference/agent-prompts.md` section `## Docs Updater` in the current Codex session with:
+Dispatch a `worker` subagent using `reference/agent-prompts.md` section `## Docs Updater` with `reasoning_effort: high`:
 
 ```text
 Version: vX.Y.Z
@@ -187,13 +220,15 @@ The prompt updates `docs/overview.md`, verifies README badges, and checks `docs/
 
 Skip edits if no high-priority features affect high-level docs.
 
+Write scope: `docs/overview.md`, README badges only, and `docs/services/index.md`. Do not edit changelog, package versions, release notes, website, or git state.
+
 ---
 
 ## Phase 4: README Update
 
 Read `README.md` and `templates/readme-whats-new.md`.
 
-Generate the README "What's New" section from highlighted or high-priority feature items:
+Dispatch a `worker` subagent with `reasoning_effort: high` to generate the README "What's New" section from highlighted or high-priority feature items:
 
 - use user comments first
 - fall back to triage summaries
@@ -202,6 +237,8 @@ Generate the README "What's New" section from highlighted or high-priority featu
 
 For patch and minor releases, append new tiles to the current major-version section and update its version header. For major releases, create a new section and move prior major-version highlights into history.
 
+Write scope: `README.md` only. The controller reviews the diff before Phase 5.
+
 ---
 
 ## Phase 5: Website Improvements
@@ -209,6 +246,8 @@ For patch and minor releases, append new tiles to the current major-version sect
 Target file: `apps/web/src/pages/HomePage.tsx`.
 
 Skip only when there are zero high-priority features.
+
+Dispatch a `worker` subagent with `reasoning_effort: high`. Write scope: `apps/web/src/pages/HomePage.tsx` only.
 
 Required changes:
 
@@ -220,6 +259,8 @@ Required changes:
 - for major releases, add version history using the marketing slogan when provided
 
 Use existing React, Tailwind, motion, and `lucide-react` patterns in the file.
+
+After the website worker returns, the controller reviews the diff and verifies that website and README content do not present migrations, refactors, or moved functionality as new features.
 
 ---
 
@@ -280,6 +321,8 @@ pnpm run ci:tracked
 
 This must pass completely before committing. If it fails, fix every failure and rerun.
 
+The controller owns the CI gate. For bounded CI failures, dispatch a `worker` subagent with `reasoning_effort: high`; escalate to `xhigh` after repeated failure. Give the worker the failing output and a narrow write scope. The controller reruns `pnpm run ci:tracked`.
+
 ### 6.5 Refresh RAG Embeddings
 
 Skip when `--skip-docs` is used.
@@ -306,6 +349,8 @@ Verify before staging:
 - modified service docs contain recent changes when Phase 2 ran
 - website and README do not present migrations or refactors as new features
 - documented endpoints and version numbers are grounded in code or tags
+
+Before committing, dispatch a final `explorer` subagent with `reasoning_effort: xhigh` as Final Release Auditor. It must check the planned release artifacts against `reference/subagent-execution.md`, this workflow, and `.claude/CLAUDE.md`. Fix all critical findings before staging.
 
 ### 6.7 Commit and PR to Development
 
