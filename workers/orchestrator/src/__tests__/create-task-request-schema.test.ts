@@ -97,6 +97,31 @@ describe('CreateTaskRequestSchema — retriedFrom', () => {
   });
 });
 
+describe('CreateTaskRequestSchema — reviewTypes', () => {
+  const baseRequest = {
+    taskId: 'task_00000000-0000-0000-0000-0000000000c1',
+    workerType: 'mimo-pro',
+    prompt: 'Review PR documentation and code quality',
+    webhookUrl: 'https://intexuraos.cloud/api/code/internal/task-hook',
+    webhookSecret: 'sec',
+    linearIssueLabels: [],
+    hasChildren: false,
+    agentType: 'review',
+  } as const;
+
+  it('accepts documentation review type from code-agent review dispatch', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      ...baseRequest,
+      reviewTypes: ['documentation', 'architecture', 'code_quality'],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.reviewTypes).toEqual(['documentation', 'architecture', 'code_quality']);
+    }
+  });
+});
+
 describe('CreateTaskRequestSchema — timeoutHours (INT-1585)', () => {
   const baseRequest = {
     taskId: 'task_00000000-0000-0000-0000-0000000000b1',
