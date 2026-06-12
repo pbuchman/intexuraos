@@ -16,6 +16,7 @@ A working integration that:
 - Creates and manages saved filter presets
 - Reads AI-generated WhatsApp group digests
 - Triggers a manual digest regeneration
+- Understands which internal digest evidence endpoints Fishing Assistant consumes
 
 ---
 
@@ -400,7 +401,23 @@ Returns 404 if not found, 403 if the notification belongs to another user.
 
 ---
 
-## Part 7: Handle Errors (3 minutes)
+## Part 7: Fishing Assistant Evidence Context (3 minutes)
+
+Fishing Assistant does not call the public digest browsing endpoints directly. It uses internal client methods backed by:
+
+- `POST /internal/notifications/digest-subscriptions/list`
+- `POST /internal/notifications/digests/query`
+- `POST /internal/notifications/digests/get`
+- `POST /internal/notifications/digest-state/get`
+- `POST /internal/notifications/group-messages/query`
+
+Those routes require `X-Internal-Auth` and verify that the requested user owns the hard-coded digest subscription before returning data. The chat retrieval path lists digest groups, queries persisted digest Markdown, and queries cleaned group messages in parallel for the requested date range.
+
+Do not use these routes from a browser or mobile automation client. They are service-to-service endpoints for Fishing Assistant and other internal consumers.
+
+---
+
+## Part 8: Handle Errors (3 minutes)
 
 ### Missing Signature Header
 
@@ -476,6 +493,7 @@ All endpoints return a standardized response contract:
 | 403 on DELETE                   | You do not own that notification                        |
 | Digest 404                      | No digest exists for that group/date; run one first     |
 | Digest lockSkipped              | Another digest run is in progress; wait and retry       |
+| Fishing Assistant has no digest evidence | Confirm the user has a matching `DIGEST_SUBSCRIPTIONS` entry and that digests or matching group messages exist for the requested date range |
 
 ---
 
@@ -547,4 +565,4 @@ Now that you understand the basics:
 1. Configure Tasker or Automate on your Android device to forward notifications to the webhook endpoint
 2. Read the [Technical Reference](technical.md) for full API details and domain model documentation
 3. Explore the digest pipeline endpoints to browse AI-generated WhatsApp group summaries
-4. Check the internal query endpoint for building data aggregation pipelines
+4. Check the internal query and digest evidence endpoints for building data aggregation pipelines

@@ -9,7 +9,7 @@
 | Attribute | Value                                                                                             |
 | --------- | ------------------------------------------------------------------------------------------------- |
 | Name      | bookmarks-agent                                                                                   |
-| Version   | 3.6.0                                                                                             |
+| Version   | 3.7.0                                                                                             |
 | Port      | 8124                                                                                              |
 | Role      | Link Intelligence Service                                                                         |
 | Goal      | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
@@ -284,6 +284,8 @@ interface Bookmark {
    b. GET /:existingBookmarkId to retrieve existing bookmark
 ```
 
+Use this same pattern when a WhatsApp bookmark command is replayed after webhook recovery. Recovery may repeat the service-to-service create call, and bookmarks-agent intentionally treats the same userId+url as an existing bookmark rather than creating another record.
+
 ### Pattern 3: Find Failed Enrichments and Retry
 
 ```
@@ -347,7 +349,7 @@ WhatsApp message delivered to user (bypasses notification level filter)
 
 ## Integration Notes
 
-### From actions-agent
+### From WhatsApp and actions-agent
 
 When processing a `link` action from WhatsApp:
 
@@ -367,6 +369,8 @@ const response = await fetch(`${BOOKMARKS_AGENT_URL}/internal/bookmarks`, {
 });
 ```
 
+For recovered WhatsApp webhook processing, callers should keep the bookmarked URL stable across retries. bookmarks-agent only de-duplicates by `userId` and `url`; `sourceId` is stored for provenance but is not the duplicate key.
+
 ### WhatsApp Delivery Message Format
 
 After AI summarization, the service publishes a WhatsApp message with `important: true`:
@@ -385,4 +389,4 @@ The title line is omitted if no title is available. `correlationId` is `bookmark
 
 ---
 
-**Last updated:** 2026-04-22 (v3.6.0 documentation refresh)
+**Last updated:** 2026-06-12 (v3.7.0 service-doc refresh)

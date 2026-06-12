@@ -1,6 +1,6 @@
 # Bookmarks Agent — Technical Debt
 
-**Last Updated:** 2026-04-22
+**Last Updated:** 2026-06-12
 **Analysis Run:** [2026-04-22 documentation-runs.md entry](../../documentation-runs.md)
 
 ---
@@ -141,6 +141,10 @@ if (!publishResult.ok) {
 
 The `important: true` flag ensures that when delivery succeeds, the message is never suppressed by the user's notification level preference.
 
+### WhatsApp Bookmark Recovery Boundary
+
+WhatsApp webhook retry and scheduler behavior lives in whatsapp-service. bookmarks-agent participates by keeping bookmark creation idempotent for recovery replays: `createBookmark` checks `userId+url` before insert and returns `DUPLICATE_URL` with `existingBookmarkId` when a replayed command targets an existing bookmark. This service does not use WhatsApp message IDs or `sourceId` as the duplicate key.
+
 ### Event Ordering
 
 The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub topics. This ensures:
@@ -177,7 +181,14 @@ The public `POST /` endpoint does not trigger enrichment — only the internal `
 | INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
 | —       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
 
-### Recent Improvements (v3.5.0–v3.6.0)
+### Recent Improvements (v3.6.0–v3.7.0)
+
+| Improvement                                      | Description                                                                                                 | Date       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------- |
+| WhatsApp bookmark recovery integration (INT-1662) | Replayed WhatsApp bookmark commands rely on bookmarks-agent duplicate detection to recover existing records | 2026-06-11 |
+| Mobile bookmark rows (INT-1662)                  | Web bookmark rows now preserve title and URL width on mobile screens while showing the updated date inline  | 2026-06-11 |
+
+### Previous Improvements (v3.5.0–v3.6.0)
 
 | Improvement                          | Description                                                                                           | Date       |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------- |

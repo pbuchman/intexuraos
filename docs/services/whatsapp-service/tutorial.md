@@ -332,7 +332,23 @@ Audio messages follow an event-driven flow:
 
 Subscribe to `command.ingest` events with `sourceType: 'whatsapp_voice'` to receive the final text. No other integration needed.
 
-### Scenario E: Transient vs Permanent Send Failures
+The `whatsapp.audio.stored` publish is part of the audio use case. If that publish fails, whatsapp-service marks the persisted webhook event as `failed` instead of `completed`, so the dispatch failure remains visible for recovery.
+
+### Scenario E: Bookmark Capture Recovery
+
+Text messages that become bookmarks depend on `command.ingest`. If command publishing fails or a webhook remains pending after async processing stalls, whatsapp-service can replay persisted webhook events through `POST /internal/whatsapp/webhooks/retry-pending`.
+
+```json
+{
+  "limit": 50,
+  "olderThanSeconds": 120,
+  "dryRun": true
+}
+```
+
+Use `eventIds` when replaying known webhook event IDs. Without `eventIds`, the endpoint selects old `pending` events and `failed` events marked `retryable: true`. Replayed text events reuse an existing WhatsApp message by `waMessageId` when present, then republish `command.ingest`.
+
+### Scenario F: Transient vs Permanent Send Failures
 
 When sending messages via Pub/Sub, whatsapp-service classifies errors:
 
@@ -341,7 +357,7 @@ When sending messages via Pub/Sub, whatsapp-service classifies errors:
 
 If your service needs to know about delivery failures, monitor the send-message handler logs. WhatsApp API errors are logged with `SKIP_SENTRY_KEY` to avoid Sentry quota exhaustion.
 
-### Scenario F: Notification Importance Best Practices
+### Scenario G: Notification Importance Best Practices
 
 When publishing `SendMessageEvent`, decide whether to set `important: true`:
 
@@ -370,6 +386,9 @@ If the user's notification level is `all` (the default), the `important` flag ha
 | "Reaction not processed"      | Emoji reactions are ignored; use buttons or text replies only         |
 | "Button title truncated"      | WhatsApp limits button titles to 20 characters                        |
 | "CTA button not showing"      | Ensure `buttons` and `ctaUrl` are not both provided in the same event |
+| "CTA link opens 404"          | Use canonical public paths such as `/api/code/...`, not doubled service segments |
+| "Bookmark from WhatsApp missing" | Check `whatsapp_webhook_events` for `pending` or `failed` with `retryable: true`, then use retry-pending |
+| "Voice note never transcribed" | Check for failed webhook events with `audio_publish_failed` logs or failed `whatsapp.audio.stored` publish details |
 | "401 on internal endpoint"    | Use `X-Internal-Auth` header or ensure OIDC push subscription config  |
 | "Rate limited on verify"      | Wait for 60s cooldown or 1-hour window to reset                       |
 
@@ -420,6 +439,7 @@ Examples:
 | `command.ingest`               | Published | Regular message for processing        |
 | `whatsapp.audio.stored`        | Published | Audio ready for transcription         |
 | `srt.transcription.completed`  | Consume   | Transcription result from srt-service |
+| retry-pending webhook recovery | Internal  | Replay pending/retryable webhooks     |
 
 ### Response Types Reference
 

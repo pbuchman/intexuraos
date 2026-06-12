@@ -59,6 +59,7 @@ interface UsageEventInput {
     webSearchCalls: number;
     groundingEnabled: boolean;
     imageCount: number;
+    imageSize?: '1024x1024' | '1536x1024' | '1024x1536';
   };
   cost: {
     providerReportedUsd: number | null;
@@ -79,6 +80,12 @@ interface UsageEventInput {
 **Output Schema:**
 
 ```typescript
+interface ApiOk<T> {
+  success: true;
+  data: T;
+  diagnostics?: { requestId: string; durationMs: number };
+}
+
 interface IngestResponse {
   accepted: number;
   duplicates: number;
@@ -107,7 +114,11 @@ interface IngestResponse {
 }
 
 // Response
-{ "accepted": 1, "duplicates": 0, "rejected": [] }
+{
+  "success": true,
+  "data": { "accepted": 1, "duplicates": 0, "rejected": [] },
+  "diagnostics": { "requestId": "req-http-1", "durationMs": 12 }
+}
 ```
 
 ### Query Aggregated Usage
@@ -126,12 +137,14 @@ interface UsageQueryRequest {
     ownerTypes?: ('user' | 'system')[];
     ownerIds?: string[];
     services?: string[];
+    components?: string[];
+    clients?: string[];
     providers?: string[];
     models?: string[];
     operations?: string[];
     success?: boolean;
   };
-  groupBy?: Array<'day' | 'owner.type' | 'owner.id' | 'source.service' | 'source.component' | 'source.client' | 'request.provider' | 'request.model' | 'request.operation' | 'request.success'>;
+  groupBy?: Array<'day' | 'owner.type' | 'owner.id' | 'source.service' | 'source.component' | 'source.client' | 'request.provider' | 'request.model' | 'request.operation' | 'request.promptType' | 'request.success'>;
   sortBy?: { field: string; direction: 'asc' | 'desc' };
   limit?: number; // default 100, max 500
 }
@@ -163,6 +176,27 @@ interface AggregateMetrics {
   imageCount: number;
 }
 ```
+
+Successful HTTP responses are wrapped as `ApiOk<UsageQueryResponse>`.
+
+### Summarize Research Cost
+
+**Endpoint:** `POST /internal/usage/research-cost-summary`
+**Auth:** `X-Internal-Auth: Bearer <token>`
+
+**When to use:** After or during a research workflow, to report LLM usage cost for one `researchId`.
+
+**Input Schema:**
+
+```typescript
+interface ResearchCostSummaryRequest {
+  researchId: string;
+  owner?: { type: 'user' | 'system'; id: string };
+  timeRange?: { from: string; to: string };
+}
+```
+
+**Output Shape:** Successful HTTP responses are wrapped as `ApiOk<ResearchCostSummaryResponse>`. The response data contains `researchId`, optional request guards, `totals: AggregateMetrics`, ordered `rows`, and `diagnostics.missingAttribution` with `count`, `costUsd`, and `eventIds`. Missing-attribution diagnostics are populated only when both `owner` and `timeRange` are supplied.
 
 ### List Usage Events
 
@@ -202,12 +236,13 @@ interface PricingResponse {
 }
 ```
 
+Successful HTTP responses are wrapped as `ApiOk<PricingResponse>`.
+
 ## Constraints
 
 **Do NOT:**
 
 - Send events with `schemaVersion: 1` — only `schemaVersion: 2` is accepted on input
-- Use `request.promptType` as a `groupBy` field in aggregate queries — it is not an allowed dimension
 - Assume pricing is immediately available after writing — the cache has a 5-minute TTL
 - Send webhook events without HMAC signature — the endpoint rejects unsigned requests
 
@@ -216,6 +251,8 @@ interface PricingResponse {
 - Pricing data must be seeded via `POST /internal/pricing` before cost calculation works
 - Events must have unique `eventId` values — duplicates are silently counted, not stored twice
 - Orchestrator webhook events must have `source.service === 'orchestrator'` and `source.workerLocation` set
+- Image generation events should include `usage.imageSize` when the provider/request exposes dimensions; otherwise image pricing falls back to `1024x1024`
+- Unknown model behavior depends on `NODE_ENV`: production stores the event with `pricingSource: "missing"` and `billedUsd: 0`, while non-production rejects the event and throws after the batch loop
 
 ## Usage Patterns
 
@@ -233,13 +270,22 @@ interface PricingResponse {
 ### Pattern 2: Dashboard Data Fetch
 
 ```
-1. POST /query with desired groupBy dimensions and time range
+1. POST /query with desired groupBy dimensions and time range, including request.promptType when prompt-level cost is needed
 2. Render rows as chart/table data
 3. Use totals for summary metrics
 4. For drill-down: POST /events/list with matching filters
 ```
 
-### Pattern 3: Pricing Bootstrap
+### Pattern 3: Research Cost Summary
+
+```
+1. Ensure each research LLM event carries correlation.researchId
+2. POST /internal/usage/research-cost-summary with researchId and optional owner/timeRange guards
+3. Use totals for the research cost summary
+4. Inspect diagnostics.missingAttribution when expected rows are absent
+```
+
+### Pattern 4: Pricing Bootstrap
 
 ```
 1. At service boot: GET /internal/pricing to fetch all provider pricing
@@ -262,7 +308,7 @@ None. This service is a data sink — it receives events but does not publish to
 
 ## Dependencies
 
-| Service    | Why Needed                          | Failure Behavior                                     |
-| ---------- | ----------------------------------- | ---------------------------------------------------- |
-| Firestore  | Event storage and aggregation       | 500 errors on all data operations                    |
-| Pricing DB | Cost calculation for pending events | Events stored with `billedUsd: 0` and warning logged |
+| Service    | Why Needed                          | Failure Behavior                                                                             |
+| ---------- | ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| Firestore  | Event storage and aggregation       | 500 errors on all data operations                                                            |
+| Pricing DB | Cost calculation for pending events | Repository/cache failures reject the event; missing production model pricing stores zero cost |

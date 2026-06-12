@@ -15,7 +15,7 @@
 
 ### Step 1: Start the service
 
-The service runs on port 8128 in local development. Start it via the ecosystem config:
+The dev service process runs on port 8128. Start it via the ecosystem config:
 
 ```bash
 pnpm run dev:code-agent
@@ -122,6 +122,27 @@ curl -X POST http://localhost:8128/submit \
   }'
 ```
 
+You can also schedule an execution task for later dispatch and set a per-task timeout override:
+
+```bash
+curl -X POST http://localhost:8128/submit \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "prompt": "Run the long migration test repair",
+    "workerType": "auto",
+    "taskMode": "execution",
+    "scheduledDispatch": {
+      "localDateTime": "2026-06-13T22:00",
+      "timezone": "Europe/Warsaw",
+      "notBeforeAt": "2026-06-13T20:00:00.000Z"
+    },
+    "timeoutHours": 8
+  }'
+```
+
+`scheduledDispatch` is accepted only for execution tasks and `notBeforeAt` must be a future ISO timestamp. `timeoutHours` must be an integer from 1 to 12; omit it to use the orchestrator default.
+
 Expected response:
 
 ```json
@@ -148,11 +169,11 @@ The task progresses through statuses: `queued` -> `dispatched` -> `running` -> `
 ### Step 3: List your tasks via issue groups
 
 ```bash
-curl "http://localhost:8128/issue-groups?status=active&limit=10" \
+curl "http://localhost:8128/issue-groups?groupStatus=active&limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-Tasks are grouped by Linear issue. Each group shows an aggregated status (active, needs-action, done, failed, archived), pipeline progress, and the latest task details. You can filter by group status and sort by `linear-id`, `pr-number`, `dispatched`, or `last-updated`.
+Tasks are grouped by Linear issue. Each group shows an aggregated status (active, needs-action, done, failed, archived), pipeline progress, and the latest task details. You can filter with `groupStatus` and sort with `sortBy=linear-id`, `sortBy=pr-number`, `sortBy=dispatched`, or `sortBy=last-updated`.
 
 For the flat task list (legacy):
 
@@ -361,7 +382,7 @@ curl -X POST http://localhost:8128/submit \
   }'
 ```
 
-Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`. If the linked Linear issue has a label matching a worker type, that label overrides the request. Different agent types (planning, execution, review, remediation) can be independently tuned to use different worker types via worker settings.
+Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `mimo-pro` (MiMo Pro 2.5), `glm`, `qwen`, `kimi`, `codex`, `codex-xhigh`, and `openrouter-free`. If the linked Linear issue has a label matching a worker type, that label overrides the request. Different agent types (planning, execution, review, remediation) can be independently tuned to use different worker types via worker settings.
 
 ### Query the GitHub event decision log
 
@@ -431,9 +452,10 @@ curl -X POST http://localhost:8128/internal/code/process \
 | Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m         |
 | `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides                |
 | Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server        |
+| Callback owner/failure shown on task   | Worker callbacks are reaching the wrong owner or failing HMAC/routing | Check task `callbackState` and verify public callbacks use `/api/code/internal/...` |
 | `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                         |
 | GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings        |
-| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 24 hours in queue                    |
+| Task queued but never dispatched      | Scheduled wait, worker capacity, or worker health blocker | Check `/queue` or `/system-status`; queued tasks expose dispatch status and next action |
 | Review task not dispatching           | Workers at capacity                               | Review tasks queue like regular tasks — they dispatch when a worker frees up |
 | Merge queue watch not merging PRs     | CI checks pending or PRs have conflicts           | Check PR status on GitHub; the queue merges one PR per tick when checks pass |
 | Cannot create watch for `main`        | Main branch is blocked as merge queue target      | Use `development` or another non-blocked branch as the base branch           |
@@ -497,11 +519,11 @@ View grouped tasks and filter by status:
 
 ```bash
 # List active groups
-curl "http://localhost:8128/issue-groups?status=active&limit=5" \
+curl "http://localhost:8128/issue-groups?groupStatus=active&limit=5" \
   -H "Authorization: Bearer <jwt>"
 
 # List groups needing attention
-curl "http://localhost:8128/issue-groups?status=needs-action&limit=5" \
+curl "http://localhost:8128/issue-groups?groupStatus=needs-action&limit=5" \
   -H "Authorization: Bearer <jwt>"
 ```
 

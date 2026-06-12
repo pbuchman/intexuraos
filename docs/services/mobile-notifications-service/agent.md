@@ -18,6 +18,160 @@
 
 ## Capabilities
 
+### List Digest Subscriptions (Internal)
+
+**Endpoint:** `POST /internal/notifications/digest-subscriptions/list`
+
+**When to use:** When Fishing Assistant or another internal consumer needs to discover which digest groups are available for a user before querying digest evidence.
+
+**Auth:** `X-Internal-Auth` header with shared secret
+
+**Input Schema:**
+
+```typescript
+interface ListDigestSubscriptionsInput {
+  userId: string;
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface ListDigestSubscriptionsOutput {
+  items: Array<{
+    groupKey: string;
+    displayName: string;
+  }>;
+}
+```
+
+### Query Digest Evidence (Internal)
+
+**Endpoint:** `POST /internal/notifications/digests/query`
+
+**When to use:** When Fishing Assistant needs persisted daily digest summaries as evidence over a date range.
+
+**Auth:** `X-Internal-Auth` header with shared secret
+
+**Input Schema:**
+
+```typescript
+interface QueryDigestEvidenceInput {
+  userId: string;
+  groupKey: string;
+  dateFrom: string; // YYYY-MM-DD
+  dateTo: string;   // YYYY-MM-DD
+  terms?: string[];
+  limit?: number;   // 1-100, default 30
+  cursor?: string;
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface QueryDigestEvidenceOutput {
+  items: DigestEvidenceItem[];
+  truncated: boolean;
+  nextCursor?: string;
+}
+
+interface DigestEvidenceItem {
+  groupKey: string;
+  date: string;
+  title: string;
+  summaryMarkdown: string;
+  messageCount: number;
+}
+```
+
+### Get Digest Evidence (Internal)
+
+**Endpoint:** `POST /internal/notifications/digests/get`
+
+**When to use:** When an internal consumer needs one digest evidence item by exact group and date.
+
+**Auth:** `X-Internal-Auth` header with shared secret. Returns 404 if no digest exists for that date.
+
+**Input Schema:**
+
+```typescript
+interface GetDigestEvidenceInput {
+  userId: string;
+  groupKey: string;
+  date: string; // YYYY-MM-DD
+}
+```
+
+**Output Schema:** `DigestEvidenceItem`
+
+### Get Latest Digest State (Internal)
+
+**Endpoint:** `POST /internal/notifications/digest-state/get`
+
+**When to use:** When Fishing Assistant needs the latest group state context for a digest group.
+
+**Auth:** `X-Internal-Auth` header with shared secret. Returns 404 if no state exists.
+
+**Input Schema:**
+
+```typescript
+interface GetDigestStateInput {
+  userId: string;
+  groupKey: string;
+}
+```
+
+**Output Schema:** `GetDigestStateResponse` with `identityLedger`, `moderatorEvents`, `openThreads`, and `recentSummaryDates`.
+
+### Query Group Messages (Internal)
+
+**Endpoint:** `POST /internal/notifications/group-messages/query`
+
+**When to use:** When Fishing Assistant needs cleaned WhatsApp messages as supporting evidence, especially for questions that require more detail than the daily digest.
+
+**Auth:** `X-Internal-Auth` header with shared secret
+
+**Input Schema:**
+
+```typescript
+interface QueryGroupMessagesInput {
+  userId: string;
+  groupKey: string;
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  terms?: string[];
+  limit?: number; // 1-500, default 100
+  cursor?: string;
+}
+```
+
+Call with either `date` or `dateFrom`/`dateTo`, not both.
+
+**Output Schema:**
+
+```typescript
+interface QueryGroupMessagesOutput {
+  messages: GroupMessageEvidence[];
+  totalRaw: number;
+  totalCleaned: number;
+  returned: number;
+  truncated: boolean;
+  nextCursor?: string;
+}
+
+interface GroupMessageEvidence {
+  messageRef: string;
+  groupKey: string;
+  date: string;
+  postTimeSec: number;
+  senderLabel?: string | null;
+  text: string;
+  quote: string;
+}
+```
+
 ### Query Notifications (Internal)
 
 **Endpoint:** `POST /internal/mobile-notifications/query`
@@ -440,6 +594,8 @@ interface CreateSavedFilterInput {
 **Do NOT:**
 
 - Call the internal query endpoint without `X-Internal-Auth` header — returns 401
+- Query digest evidence for a `(userId, groupKey)` pair that is not present in `DIGEST_SUBSCRIPTIONS` — returns 400
+- Call `POST /internal/notifications/group-messages/query` with both `date` and `dateFrom`/`dateTo` — returns 400
 - Expect the plaintext signature after the initial `POST /connect` response — it is never re-shown
 - Send notifications without the `X-Mobile-Notifications-Signature` header — returns 400
 - Call `GET /filters` expecting 404 for new users — returns empty arrays instead
@@ -450,7 +606,7 @@ interface CreateSavedFilterInput {
 
 - User must be authenticated (Bearer JWT) for all public endpoints
 - Device must have a valid active signature for webhook ingestion
-- Internal auth token for `POST /internal/mobile-notifications/query` and `POST /internal/notifications/digest/run`
+- Internal auth token for `POST /internal/mobile-notifications/query`, `POST /internal/notifications/digest/run`, and Fishing Assistant digest evidence routes
 - OIDC token or internal auth for `POST /internal/notifications/digest/run-yesterday`
 - Digest subscription must exist for the (userId, groupKey) pair
 
@@ -502,6 +658,15 @@ For fishing digest language fixes, regenerate the affected date range after depl
 4. On completion, browse digests via Pattern 4
 ```
 
+### Pattern 6: Fishing Assistant Evidence Retrieval
+
+```
+1. Call POST /internal/notifications/digest-subscriptions/list for the user
+2. For each returned groupKey, call POST /internal/notifications/digests/query with date range and optional terms
+3. In parallel, call POST /internal/notifications/group-messages/query for supporting message evidence
+4. Use returned digest and message evidence as citation sources
+```
+
 ---
 
 ## Events Published
@@ -537,4 +702,4 @@ For fishing digest language fixes, regenerate the affected date range after depl
 
 ---
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-06-12
