@@ -111,15 +111,12 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     mediaCleanupTopic: config.mediaCleanupTopic,
     audioStoredTopic: config.audioStoredTopic,
     approvalReplyTopic: config.approvalReplyTopic,
+    commandsIngestTopic: config.commandsIngestTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
   };
-  if (config.commandsIngestTopic !== undefined) {
-    (serviceConfig as { commandsIngestTopic?: string }).commandsIngestTopic =
-      config.commandsIngestTopic;
-  }
   if (config.webhookProcessTopic !== undefined) {
     (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =
       config.webhookProcessTopic;

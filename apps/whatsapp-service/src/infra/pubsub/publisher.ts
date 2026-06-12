@@ -28,8 +28,10 @@ export interface GcpPubSubPublisherConfig {
    * Required: triggers actions-agent to process approval/rejection of pending actions.
    */
   approvalReplyTopic: string;
-  /** Optional: commands-agent integration; safe to leave unset in dev. */
-  commandsIngestTopic?: string;
+  /**
+   * Required: commands-agent turns WhatsApp text commands into bookmark records.
+   */
+  commandsIngestTopic: string;
   /** Optional: webhook async-processing fanout; safe to leave unset in dev. */
   webhookProcessTopic?: string;
   logger: Logger;
@@ -42,7 +44,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   private readonly mediaCleanupTopic: string;
   private readonly audioStoredTopic: string;
   private readonly approvalReplyTopic: string;
-  private readonly commandsIngestTopic: string | null;
+  private readonly commandsIngestTopic: string;
   private readonly webhookProcessTopic: string | null;
 
   constructor(config: GcpPubSubPublisherConfig) {
@@ -60,10 +62,14 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     if (config.approvalReplyTopic === undefined || config.approvalReplyTopic === '') {
       throw new Error('approvalReplyTopic is required');
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
+    if (config.commandsIngestTopic === undefined || config.commandsIngestTopic === '') {
+      throw new Error('commandsIngestTopic is required');
+    }
     this.mediaCleanupTopic = config.mediaCleanupTopic;
     this.audioStoredTopic = config.audioStoredTopic;
     this.approvalReplyTopic = config.approvalReplyTopic;
-    this.commandsIngestTopic = config.commandsIngestTopic ?? null;
+    this.commandsIngestTopic = config.commandsIngestTopic;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;
   }
 
@@ -78,7 +84,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   }
 
   async publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToOptionalTopic(
+    const result = await this.publishToTopic(
       this.commandsIngestTopic,
       event,
       { externalId: event.externalId },

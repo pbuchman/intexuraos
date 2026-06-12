@@ -27,6 +27,7 @@ export interface WhatsAppWebhookEvent {
   status: WebhookProcessingStatus;
   ignoredReason?: IgnoredReason;
   failureDetails?: string;
+  retryable?: boolean;
   inboxNoteId?: string;
   processedAt?: string;
 }
@@ -67,6 +68,7 @@ export async function updateWebhookEventStatus(
   metadata: {
     ignoredReason?: IgnoredReason;
     failureDetails?: string;
+    retryable?: boolean;
     inboxNoteId?: string;
   }
 ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
@@ -77,6 +79,7 @@ export async function updateWebhookEventStatus(
     const update: Partial<WhatsAppWebhookEvent> = {
       status,
       processedAt: new Date().toISOString(),
+      retryable: status === 'failed' ? (metadata.retryable ?? false) : false,
     };
 
     if (metadata.ignoredReason !== undefined) update.ignoredReason = metadata.ignoredReason;
@@ -108,6 +111,43 @@ export async function getWebhookEvent(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to get webhook event: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+export async function findRetryableWebhookEvents(options: {
+  olderThan: string;
+  limit: number;
+}): Promise<Result<WhatsAppWebhookEvent[], WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    const pendingSnapshot = await db
+      .collection(WHATSAPP_EVENTS_COLLECTION)
+      .where('status', '==', 'pending')
+      .where('receivedAt', '<', options.olderThan)
+      .orderBy('receivedAt', 'asc')
+      .limit(options.limit)
+      .get();
+
+    const failedSnapshot = await db
+      .collection(WHATSAPP_EVENTS_COLLECTION)
+      .where('status', '==', 'failed')
+      .where('retryable', '==', true)
+      .where('receivedAt', '<', options.olderThan)
+      .orderBy('receivedAt', 'asc')
+      .limit(options.limit)
+      .get();
+
+    const events = [...pendingSnapshot.docs, ...failedSnapshot.docs]
+      .map((doc) => doc.data() as WhatsAppWebhookEvent)
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+      .slice(0, options.limit);
+
+    return ok(events);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to find retryable webhook events: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }

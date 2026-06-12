@@ -52,6 +52,21 @@ export interface ProcessWebhookEventDeps {
   eventPublisher: EventPublisherPort;
 }
 
+export interface ProcessWebhookEventFailure {
+  ok: false;
+  retryable: boolean;
+  failureDetails: string;
+}
+
+export type ProcessWebhookEventResult = ProcessWebhookEventFailure | undefined;
+
+class RetryableWebhookProcessingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RetryableWebhookProcessingError';
+  }
+}
+
 /**
  * Use case for processing WhatsApp webhook events asynchronously.
  */
@@ -62,7 +77,11 @@ export class ProcessWebhookEventUseCase {
    * Process webhook event synchronously.
    * Validates user mapping and routes to appropriate usecase.
    */
-  async execute(payload: WebhookPayload, savedEvent: { id: string }, logger: Logger): Promise<void> {
+  async execute(
+    payload: WebhookPayload,
+    savedEvent: { id: string },
+    logger: Logger
+  ): Promise<ProcessWebhookEventResult> {
     const { webhookEventRepository, userMappingRepository } = this.deps;
 
     logger.info({ eventId: savedEvent.id }, 'Starting asynchronous webhook processing');
@@ -329,6 +348,17 @@ export class ProcessWebhookEventUseCase {
         logger
       );
     } catch (error) {
+      if (error instanceof RetryableWebhookProcessingError) {
+        logger.error(
+          {
+            eventId: savedEvent.id,
+            error: error.message,
+          },
+          'Retryable webhook processing failure'
+        );
+        return { ok: false, retryable: true, failureDetails: error.message };
+      }
+
       logger.error(
         {
           eventId: savedEvent.id,
@@ -339,8 +369,15 @@ export class ProcessWebhookEventUseCase {
       // Update event status so it's not stuck in 'pending' forever
       await this.deps.webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
         failureDetails: `Unexpected error: ${getErrorMessage(error)}`,
+        retryable: false,
       });
+      return {
+        ok: false,
+        retryable: false,
+        failureDetails: `Unexpected error: ${getErrorMessage(error)}`,
+      };
     }
+    return undefined;
   }
 
   /**
@@ -644,28 +681,52 @@ export class ProcessWebhookEventUseCase {
     }
     /* v8 ignore stop @preserve */
 
-    // Save message to Firestore
-    const saveResult = await messageRepository.saveMessage(messageToSave);
-
-    if (!saveResult.ok) {
+    const existingMessageResult = await messageRepository.findByWaMessageId(userId, waMessageId);
+    if (!existingMessageResult.ok) {
       logger.error(
-        { error: saveResult.error, eventId: savedEvent.id },
-        'Failed to save message'
+        { error: existingMessageResult.error, eventId: savedEvent.id, waMessageId },
+        'Failed to look up existing message by WhatsApp message ID'
       );
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-        failureDetails: `Failed to save message: ${saveResult.error.message}`,
+        failureDetails: `Failed to look up existing message: ${existingMessageResult.error.message}`,
+        retryable: true,
       });
-      return;
+      throw new RetryableWebhookProcessingError(
+        `Failed to look up existing message: ${existingMessageResult.error.message}`
+      );
     }
 
-    const savedMessage = saveResult.value;
+    let savedMessage = existingMessageResult.value;
+
+    if (savedMessage === null) {
+      const saveResult = await messageRepository.saveMessage(messageToSave);
+
+      if (!saveResult.ok) {
+        logger.error(
+          { error: saveResult.error, eventId: savedEvent.id },
+          'Failed to save message'
+        );
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+          failureDetails: `Failed to save message: ${saveResult.error.message}`,
+          retryable: true,
+        });
+        throw new RetryableWebhookProcessingError(
+          `Failed to save message: ${saveResult.error.message}`
+        );
+      }
+
+      savedMessage = saveResult.value;
+    } else {
+      logger.info(
+        { eventId: savedEvent.id, userId, messageId: savedMessage.id, waMessageId },
+        'Reusing existing text message for webhook replay'
+      );
+    }
 
     logger.info(
       { eventId: savedEvent.id, userId, messageId: savedMessage.id },
       'Text message saved to database'
     );
-
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 
     // Check if this is a reply to another message (potential approval response)
     const replyContext = extractReplyContext(payload);
@@ -776,10 +837,16 @@ export class ProcessWebhookEventUseCase {
       });
 
       if (!commandPublishResult.ok) {
+        const failureDetails = `Failed to publish command ingest: ${commandPublishResult.error.message}`;
         logger.error(
           { eventId: savedEvent.id, error: commandPublishResult.error },
           'Failed to publish command ingest event'
         );
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+          failureDetails,
+          retryable: true,
+        });
+        throw new RetryableWebhookProcessingError(failureDetails);
       }
     }
 
@@ -803,6 +870,7 @@ export class ProcessWebhookEventUseCase {
       'Text message processing completed successfully'
     );
 
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
     await this.markMessageAsRead(payload, savedEvent, logger);
   }
 

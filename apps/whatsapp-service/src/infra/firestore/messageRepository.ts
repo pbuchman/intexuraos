@@ -180,6 +180,33 @@ export async function findById(
   }
 }
 
+export async function findByWaMessageId(
+  userId: string,
+  waMessageId: string
+): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('userId', '==', userId)
+      .where('waMessageId', '==', waMessageId)
+      .limit(1)
+      .get();
+
+    const doc = snapshot.docs[0];
+    if (doc === undefined) {
+      return ok(null);
+    }
+
+    return ok(doc.data() as WhatsAppMessage);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to find message by WhatsApp id: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 /**
  * Update message transcription state.
  */

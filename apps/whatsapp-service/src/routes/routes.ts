@@ -15,6 +15,7 @@
  * GET    /whatsapp/preferences        → ./preferencesRoutes.ts
  * PUT    /whatsapp/preferences        → ./preferencesRoutes.ts
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
+ * POST   /internal/whatsapp/webhooks/retry-pending → ./internalRoutes.ts
  * ─────────────────────────────────────────────────────────────
  */
 
