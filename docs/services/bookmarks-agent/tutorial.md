@@ -158,6 +158,24 @@ The message is marked as important, so it will always be delivered regardless of
 
 **Checkpoint:** Your bookmark should have `ogFetchStatus: "processed"` and a non-null `aiSummary`.
 
+### Step 2.4: Verify replay recovery behavior
+
+If WhatsApp webhook recovery replays the same bookmark command, the internal create call should not create a second bookmark. Repeat the Step 2.1 request with the same `userId` and `url`:
+
+```bash
+curl -X POST http://localhost:8124/internal/bookmarks \
+  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "url": "https://example.com/interesting-article",
+    "source": "whatsapp",
+    "sourceId": "wamid.HBgNMTIzNDU2Nzg5MA=="
+  }'
+```
+
+Expected result: `409 CONFLICT` with `error.details.existingBookmarkId`. That ID is the bookmark the replay should use for recovery.
+
 ---
 
 ## Part 3: List and Filter Bookmarks (5 minutes)
@@ -299,7 +317,7 @@ The proxy:
 | Auth failed                | 401 Unauthorized            | Check token validity                               |
 | Bookmark not found         | 404 error                   | Verify bookmark ID and user ownership              |
 | Invalid URL                | 400 error                   | Ensure URL is valid HTTP/HTTPS format              |
-| Duplicate bookmark         | 409 Conflict                | URL already exists for user                        |
+| Duplicate bookmark         | 409 Conflict                | Use `error.details.existingBookmarkId`             |
 | Metadata fetch failed      | `ogFetchStatus: failed`     | Site may block scraping; try force-refresh         |
 | No WhatsApp notification   | Summary saved, no message   | Check WhatsApp connection in user-service          |
 | Enrichment never completes | `ogFetchStatus: pending`    | Check Pub/Sub subscription health                  |

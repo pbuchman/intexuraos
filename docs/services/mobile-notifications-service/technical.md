@@ -121,6 +121,17 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 | Removed 5-batch cap in title filter           | Title filter now iterates through all matching batches                                                    | INT-1398, PR #1843        |
 | Notification message filter + dedup           | Added filterAndDedupeNotifications utility for cleaning raw notifications                                 | INT-1395, PR #1844        |
 
+### v3.7.0 — Fishing Assistant Digest Evidence Support
+
+The service now exposes digest-subscription, digest-evidence, latest-state, and cleaned group-message internal endpoints consumed by `fishing-assistant-service` through `@intexuraos/internal-clients`.
+
+| Change                                      | Description                                                                                                                         | Reference                  |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Notification evidence routes                | Added internal routes for digest subscription listing, digest querying, digest lookup, latest group state lookup, and group messages | Commit `879c0811f`         |
+| Fishing Assistant history retrieval support | Extended group-message querying with date ranges, term filtering, cursor handling, and larger raw scan support                      | INT-1628, PR #2091         |
+| Digest output language preservation         | Subscription `outputLanguage` is passed through regeneration and evidence Markdown labels, preserving the configured Polish output   | INT-1618, commit `a42cfbc9a` |
+| Notification digest UI copy                 | Digest-ready WhatsApp CTA text is English: `View Full Digest`                                                                       | Commit `eb8bbc673`         |
+
 ### Previous (pre-v3.5.0)
 
 | Commit    | Change                                                    | Date       |
@@ -171,6 +182,11 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 | ------ | ---------------------------------------------- | ------------------------------------------------ | --------------------- |
 | POST   | `/internal/notifications/digest/run`           | Run digest for (userId, groupKey, date)          | Internal token        |
 | POST   | `/internal/notifications/digest/run-yesterday` | Run digest for all subscriptions (CET yesterday) | OIDC / Internal token |
+| POST   | `/internal/notifications/digest-subscriptions/list` | List digest groups owned by a user          | Internal token        |
+| POST   | `/internal/notifications/digests/query`        | Query digest evidence by date range              | Internal token        |
+| POST   | `/internal/notifications/digests/get`          | Get one digest evidence item by date             | Internal token        |
+| POST   | `/internal/notifications/digest-state/get`     | Get latest group state for a digest group        | Internal token        |
+| POST   | `/internal/notifications/group-messages/query` | Query cleaned WhatsApp group messages            | Internal token        |
 
 ### Internal
 
@@ -234,6 +250,109 @@ interface QueryNotificationsBody {
 ```
 
 Internal response maps `text` to `body` and `receivedAt` to `timestamp` for compatibility with consumers.
+
+## Fishing Assistant Evidence Endpoints
+
+These routes are internal-only and require `X-Internal-Auth`. Each route verifies the requested `(userId, groupKey)` against `DIGEST_SUBSCRIPTIONS` before returning digest or group-message data.
+
+### List Digest Subscriptions
+
+`POST /internal/notifications/digest-subscriptions/list`
+
+```typescript
+interface SubscriptionListBody {
+  userId: string;
+}
+
+interface SubscriptionListResponse {
+  items: Array<{
+    groupKey: string;
+    displayName: string; // currently the groupKey
+  }>;
+}
+```
+
+### Query Digest Evidence
+
+`POST /internal/notifications/digests/query`
+
+```typescript
+interface DigestQueryBody {
+  userId: string;
+  groupKey: string;
+  dateFrom: string; // YYYY-MM-DD
+  dateTo: string;   // YYYY-MM-DD
+  terms?: string[];
+  limit?: number;   // 1-100, default 30
+  cursor?: string;
+}
+
+interface DigestEvidenceItem {
+  groupKey: string;
+  date: string;
+  title: string;
+  summaryMarkdown: string;
+  messageCount: number;
+}
+```
+
+The route reads persisted digests from `notification_daily_digests`, formats each summary as Markdown using the subscription `outputLanguage`, filters against optional lowercase search terms, and returns `{ items, truncated, nextCursor? }`.
+
+### Get Digest Evidence
+
+`POST /internal/notifications/digests/get`
+
+```typescript
+interface DigestGetBody {
+  userId: string;
+  groupKey: string;
+  date: string; // YYYY-MM-DD
+}
+```
+
+Returns one `DigestEvidenceItem` or a 404 response when no digest exists for the requested date.
+
+### Get Latest Digest State
+
+`POST /internal/notifications/digest-state/get`
+
+```typescript
+interface DigestStateGetBody {
+  userId: string;
+  groupKey: string;
+}
+```
+
+Returns the latest persisted `GroupState` for the subscription, or a 404 response when no state exists.
+
+### Query Group Messages
+
+`POST /internal/notifications/group-messages/query`
+
+```typescript
+interface GroupMessagesQueryBody {
+  userId: string;
+  groupKey: string;
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  terms?: string[];
+  limit?: number; // 1-500, default 100
+  cursor?: string;
+}
+
+interface GroupMessageEvidence {
+  messageRef: string;
+  groupKey: string;
+  date: string;
+  postTimeSec: number;
+  senderLabel?: string | null;
+  text: string;
+  quote: string;
+}
+```
+
+Callers provide either `date` or `dateFrom`/`dateTo`. The route computes Europe/Warsaw day bounds, scans WhatsApp notifications matching the subscription `groupTitlePrefix`, cleans and deduplicates them through `filterAndDedupeNotifications`, applies optional term matching to message text, and returns `{ messages, totalRaw, totalCleaned, returned, truncated, nextCursor? }`. Raw scanning is capped at 5,000 notifications per request; page cursors preserve both upstream notification cursor and matched-message offset.
 
 ## Domain Models
 
@@ -342,6 +461,8 @@ Day boundaries are computed using `Europe/Warsaw` timezone (CET/CEST). The `cetD
 
 `filterAndDedupeNotifications` removes meta-rows (e.g., "3 new messages"), drops entries with invalid `postTime`, and deduplicates by (sender, text) within a 90-second window.
 
+The Fishing Assistant group-message endpoint reuses the same cleaning path, so chat evidence and digest generation operate over the same normalized WhatsApp notification shape.
+
 ### Backfill Chaining
 
 Backfill processes dates sequentially via self-referential HTTP calls. Each completed day triggers the next via `POST /internal/notifications/digest/run` with a `chainNext` payload. Progress is tracked in `notification_digest_backfill_runs`.
@@ -379,6 +500,7 @@ After changing digest prompt language behavior, rerun the affected date range th
 | Service               | Endpoint                             | Purpose                        |
 | --------------------- | ------------------------------------ | ------------------------------ |
 | Self (backfill chain) | `/internal/notifications/digest/run` | Sequential day-by-day backfill |
+| fishing-assistant-service | `/internal/notifications/digest-subscriptions/list`, `/internal/notifications/digests/query`, `/internal/notifications/digests/get`, `/internal/notifications/digest-state/get`, `/internal/notifications/group-messages/query` | Digest history and raw-message evidence retrieval |
 
 ## Configuration
 
@@ -461,7 +583,7 @@ apps/mobile-notifications-service/src/
     notificationRoutes.ts  # GET /, DELETE /:id
     filterRoutes.ts        # GET/POST/DELETE /filters/...
     webhookRoutes.ts       # POST /webhooks
-    internalRoutes.ts      # POST /internal/mobile-notifications/query
+    internalRoutes.ts      # Internal notification query and Fishing Assistant digest evidence routes
     digestRoutes.ts        # All digest endpoints (internal + user-facing + backfill)
     digestSchemas.ts       # Request/response schemas for digest routes
     schemas.ts             # OpenAPI schema definitions

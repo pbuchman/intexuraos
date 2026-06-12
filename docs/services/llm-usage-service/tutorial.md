@@ -11,7 +11,8 @@
 A working integration that:
 
 - Ingests LLM usage events from an internal service
-- Queries aggregated usage data grouped by provider and model
+- Queries aggregated usage data grouped by provider, model, and prompt type
+- Requests a research-run cost summary by `researchId`
 - Retrieves individual event details with full correlation data
 
 ---
@@ -206,7 +207,7 @@ curl -X POST http://localhost:8080/query \
       "from": "2026-04-01T00:00:00.000Z",
       "to": "2026-04-30T23:59:59.999Z"
     },
-    "groupBy": ["request.provider", "request.model"],
+    "groupBy": ["request.provider", "request.model", "request.promptType"],
     "sortBy": { "field": "costUsd", "direction": "desc" },
     "limit": 20
   }'
@@ -222,7 +223,8 @@ curl -X POST http://localhost:8080/query \
       {
         "group": {
           "request.provider": "anthropic",
-          "request.model": "claude-sonnet-4-20250514"
+          "request.model": "claude-sonnet-4-20250514",
+          "request.promptType": "research-synthesis"
         },
         "metrics": {
           "calls": 1,
@@ -240,6 +242,24 @@ curl -X POST http://localhost:8080/query \
 ```
 
 **Checkpoint:** The aggregated query returns rows grouped by your specified dimensions with summed metrics and overall totals.
+
+### Step 3.4: Summarize a Research Run
+
+```bash
+curl -X POST http://localhost:8080/internal/usage/research-cost-summary \
+  -H "X-Internal-Auth: Bearer $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "researchId": "res_tutorial_001",
+    "owner": { "type": "user", "id": "user-123" },
+    "timeRange": {
+      "from": "2026-04-22T00:00:00.000Z",
+      "to": "2026-04-22T23:59:59.999Z"
+    }
+  }'
+```
+
+**Expected response:** `totals` with calls, tokens, image count, and cost; `rows` with each correlated usage event; and `diagnostics.missingAttribution` for owner/time-range matching events that were not linked to any `researchId`.
 
 ---
 
@@ -288,7 +308,7 @@ Note: The pricing cache has a 5-minute TTL. New pricing takes effect for ingesti
 | "400 Invalid request" on ingest              | Check `schemaVersion: 2` and all required fields are present              |
 | Cost shows as `0` after ingestion            | Verify pricing exists for the provider/model via `GET /internal/pricing`  |
 | Aggregate query returns empty rows           | Aggregates are keyed by date — ensure the time range covers event dates   |
-| "Invalid groupBy field: request.promptType"  | `promptType` is not an allowed groupBy dimension                          |
+| Prompt type appears as `__missing__` in query rows | The source event did not include `request.promptType`                     |
 
 ---
 
@@ -307,7 +327,7 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** Ingest an event with `pricingSource: "provider_reported"` and `providerReportedUsd: 0.05` — verify the stored event uses the provider-reported cost instead of calculating it
-2. **Medium:** Query usage grouped by `day` and `request.operation` for the last 7 days, sorted by `totalTokens` descending
+2. **Medium:** Query usage grouped by `day`, `request.operation`, and `request.promptType` for the last 7 days, sorted by `totalTokens` descending
 3. **Hard:** Ingest 5 events with different providers and models, then write a query that identifies which provider has the highest cost-per-call ratio
 
 <details>
@@ -349,7 +369,7 @@ curl -X POST http://localhost:8080/query \
       "from": "2026-04-15T00:00:00.000Z",
       "to": "2026-04-22T23:59:59.999Z"
     },
-    "groupBy": ["day", "request.operation"],
+    "groupBy": ["day", "request.operation", "request.promptType"],
     "sortBy": { "field": "totalTokens", "direction": "desc" }
   }'
 ```

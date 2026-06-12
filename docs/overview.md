@@ -1,6 +1,6 @@
 # IntexuraOS
 
-An AI-native personal operating system — 20 specialized agents that turn your voice notes, messages, and ideas into research, code, calendar events, and organized work, all from WhatsApp and a single web dashboard.
+An AI-native personal operating system — 23 app services that turn your voice notes, messages, and ideas into research, code, calendar events, and organized work, all from WhatsApp and a single web dashboard.
 
 ## The Vision
 
@@ -36,6 +36,8 @@ You have two interfaces into IntexuraOS: WhatsApp and a web dashboard. Between t
 
 **[Chat Agent](services/chat-agent/features.md)** is your guide to the platform itself. Ask it how anything works, and it answers from up-to-date documentation with linked source citations. Then act on what you learned — describe a new command in natural language, confirm it, and the system creates it. No forms, no field navigation. Guest access works without an account, so anyone can explore before signing up.
 
+**[Fishing Assistant](services/fishing-assistant-service/features.md)** is a grounded chat for fishing knowledge. Ask questions against your saved fishing pages, WhatsApp digest summaries, and recent group-message context; the service retrieves supporting evidence, validates citations before storing answers, and keeps chat history so follow-up questions retain context. Knowledge-base evidence is prioritized when available, while digest and raw-message evidence fill in recent mobile context.
+
 ### Capture and Organize Your Thoughts
 
 Every message you send enters through one front door and reaches the right specialist without you choosing a category, opening a menu, or filling out a form.
@@ -66,7 +68,7 @@ You review a draft before anything runs — the refined prompt, selected models,
 
 **[Your Dashboard](services/web/features.md)** is the observation deck. Code tasks stream their output in real time — color-coded lines showing every file read, every test run, every tool invocation — with a redesigned issue-centric grouped task view that surfaces design documents, worker model selection, and task lifecycle at a glance. All PR automation actions are visible in a unified log. Action items, approval gates, and research reviews surface in a single inbox. Your Linear board, calendar, todos, notes, bookmarks, and notification history are each one tap away. The floating chat assistant is available on every page.
 
-**[App Settings Service](services/app-settings-service/features.md)** shows you what every AI interaction costs. Current pricing for all four providers, broken down by model. Your personal usage split by month, model, and call type — with dollar costs displayed so you know exactly where your AI spend goes. The service verifies that every registered model has pricing data before it starts, so the numbers are never stale or incomplete.
+**[LLM Usage Service](services/llm-usage-service/features.md)** shows you what every AI interaction costs. Usage can be grouped by model, call type, prompt type, source service, and provider, with research-run cost summaries that include per-event rows, totals, image counts, and missing-attribution diagnostics. Image generation metadata and OpenRouter model identifiers are preserved, so usage dashboards can explain both text and image spend without collapsing everything into one total.
 
 ### Connect Your Tools and Data
 
@@ -84,7 +86,7 @@ You review a draft before anything runs — the refined prompt, selected models,
 
 **[VM Lifecycle](services/vm-lifecycle/features.md)** manages the dedicated machine that runs your coding agents. It starts every weekday morning, verifies the orchestrator and workers are ready to accept work — not just that the operating system booted — and shuts down every night. Before powering off, it checks for active coding tasks and waits up to ten minutes for them to finish. Your work is never interrupted mid-flight, and the machine stops billing the moment it is no longer needed.
 
-**[Log Cleanup](services/log-cleanup/features.md)** sweeps out old execution logs every night in controlled batches. Database queries stay fast, storage costs stay flat, and no one ever has to think about log retention. If a nightly run fails, the next one catches what was missed.
+**Log Cleanup** sweeps out old execution logs every night in controlled batches. Database queries stay fast, storage costs stay flat, and no one ever has to think about log retention. If a nightly run fails, the next one catches what was missed.
 
 **[API Docs Hub](services/api-docs-hub/features.md)** collects the technical documentation for all backend services into a single interactive reference. One URL, one dropdown, always current. If you are building on top of IntexuraOS or want to understand how services communicate, this is the starting point.
 

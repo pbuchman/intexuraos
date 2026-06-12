@@ -1,6 +1,6 @@
 # LLM Usage Service — Technical Debt
 
-**Last Updated:** 2026-04-22
+**Last Updated:** 2026-06-12
 **Analysis Run:** [2026-04-22 entry](../../documentation-runs.md)
 
 ---
@@ -19,7 +19,6 @@
 
 ## Future Plans
 
-- Propagate `request.promptType` to daily aggregates so it can be used as a `groupBy` dimension in aggregate queries (currently tracked only on raw events)
 - Support date-range scoped Firestore `.count()` when in-memory filters are active (currently returns `-1` sentinel)
 - Add rate limiting to public endpoints
 - Support pagination on the aggregate query endpoint (currently returns all matching rows up to `limit`)
@@ -86,6 +85,7 @@ None identified.
 | Date       | Issue                                                      | Resolution                                             |
 | ---------- | ---------------------------------------------------------- | ------------------------------------------------------ |
 | 2026-04-22 | `request.promptType` groupBy returned 500                  | Rejected at validation layer (INT-1422)                |
+| 2026-05-05 | `request.promptType` was unavailable in aggregate grouping | Added prompt-type aggregate dimension and query support |
 | 2026-04-20 | Slash in `source.client` caused invalid Firestore doc path | SHA-256 hash on client field in aggregate key          |
 | 2026-04-18 | OpenRouter cost not calculated correctly                   | Added OpenRouter to cost calculation service           |
 | 2026-04-17 | SchemaVersion v1 accepted on input endpoint                | Enforced discriminated union (`schemaVersion: 2` only) |

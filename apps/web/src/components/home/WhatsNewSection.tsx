@@ -1,19 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import {
-  BellOff,
-  Brain,
-  CheckCircle2,
-  DollarSign,
-  Flag,
-  MessageSquare,
-  RefreshCw,
-  Settings,
-  Smartphone,
-  SplitSquareVertical,
-  Tags,
-  Workflow,
-} from 'lucide-react';
+import { DollarSign, MessageSquare } from 'lucide-react';
 
 interface FeatureEntry {
   title: string;
@@ -28,9 +15,9 @@ interface FeatureEntry {
 export function WhatsNewSection(): React.JSX.Element {
   const features: FeatureEntry[] = [
     {
-      title: 'WhatsApp Group Digests',
+      title: 'Fishing Assistant Chat',
       description:
-        'End-to-end pipeline turns WhatsApp group messages into AI-generated daily digest summaries.',
+        'Chat with Fishing Assistant, keep conversation history, and get answers grounded in RAG knowledge with citation checks.',
       icon: MessageSquare,
       borderColor: 'border-emerald-200',
       bgGradient: 'bg-gradient-to-br from-emerald-50 to-white',
@@ -38,114 +25,14 @@ export function WhatsNewSection(): React.JSX.Element {
       iconColor: 'text-emerald-700',
     },
     {
-      title: 'Centralized LLM Pricing',
+      title: 'LLM Cost Visibility',
       description:
-        'Single shared pricing package replaces duplicated definitions across 9 services.',
+        'Usage, research cost, image billing, and prompt-type reports are clearer and more accurate.',
       icon: DollarSign,
       borderColor: 'border-cyan-200',
       bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
       iconBg: 'bg-cyan-100',
       iconColor: 'text-cyan-700',
-    },
-    {
-      title: 'Notification Importance Filter',
-      description:
-        'Suppress low-priority WhatsApp notifications with an importance level filter.',
-      icon: BellOff,
-      borderColor: 'border-purple-200',
-      bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
-      iconBg: 'bg-purple-100',
-      iconColor: 'text-purple-700',
-    },
-    {
-      title: 'LLM Model Fallback',
-      description:
-        'Primary and fallback default model selection with automatic retry when primary is unavailable.',
-      icon: RefreshCw,
-      borderColor: 'border-blue-200',
-      bgGradient: 'bg-gradient-to-br from-blue-50 to-white',
-      iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-700',
-    },
-    {
-      title: 'Prompt Type Tracking',
-      description:
-        'End-to-end tracking through the LLM call stack shows which prompt drove each usage entry.',
-      icon: Tags,
-      borderColor: 'border-violet-200',
-      bgGradient: 'bg-gradient-to-br from-violet-50 to-white',
-      iconBg: 'bg-violet-100',
-      iconColor: 'text-violet-700',
-    },
-    {
-      title: 'Task Mode Selector',
-      description:
-        'Explicitly choose between planning and execution mode when starting a task.',
-      icon: SplitSquareVertical,
-      borderColor: 'border-amber-200',
-      bgGradient: 'bg-gradient-to-br from-amber-50 to-white',
-      iconBg: 'bg-amber-100',
-      iconColor: 'text-amber-700',
-    },
-    {
-      title: 'PWA Resilience',
-      description:
-        'Improved Progressive Web App stability on Android HyperOS.',
-      icon: Smartphone,
-      borderColor: 'border-green-200',
-      bgGradient: 'bg-gradient-to-br from-green-50 to-white',
-      iconBg: 'bg-green-100',
-      iconColor: 'text-green-700',
-    },
-    {
-      title: 'Pub/Sub PR Triage',
-      description:
-        'PR triage processing moved to Pub/Sub push so it no longer blocks the main request path.',
-      icon: Workflow,
-      borderColor: 'border-rose-200',
-      bgGradient: 'bg-gradient-to-br from-rose-50 to-white',
-      iconBg: 'bg-rose-100',
-      iconColor: 'text-rose-700',
-    },
-    {
-      title: 'Robust Task Finalization',
-      description:
-        'Dedicated status endpoint ensures code tasks complete correctly instead of stalling.',
-      icon: CheckCircle2,
-      borderColor: 'border-indigo-200',
-      bgGradient: 'bg-gradient-to-br from-indigo-50 to-white',
-      iconBg: 'bg-indigo-100',
-      iconColor: 'text-indigo-700',
-    },
-    {
-      title: 'Issue Group Importance',
-      description:
-        'Mark issue groups as high-priority with an important flag.',
-      icon: Flag,
-      borderColor: 'border-orange-200',
-      bgGradient: 'bg-gradient-to-br from-orange-50 to-white',
-      iconBg: 'bg-orange-100',
-      iconColor: 'text-orange-700',
-    },
-    {
-      title: 'Execution Memory Simplification',
-      description:
-        'Simplified pipeline reduces complexity and improves orchestrator maintainability.',
-      icon: Brain,
-      borderColor: 'border-teal-200',
-      bgGradient: 'bg-gradient-to-br from-teal-50 to-white',
-      iconBg: 'bg-teal-100',
-      iconColor: 'text-teal-700',
-    },
-    {
-      title: 'Agent Model Inheritance',
-      description:
-        'Code agent inherits user default LLM model settings instead of using hardcoded model.',
-      icon: Settings,
-      borderColor: 'border-sky-200',
-      bgGradient: 'bg-gradient-to-br from-sky-50 to-white',
-      iconBg: 'bg-sky-100',
-      iconColor: 'text-sky-700',
     },
   ];
 
@@ -166,13 +53,13 @@ export function WhatsNewSection(): React.JSX.Element {
             </a>
           </div>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            v3.6.0 —{' '}
+            v3.7.0 —{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              12 new capabilities.
+              assistant chat, clearer costs.
             </span>
           </h2>
           <p className="text-lg leading-relaxed text-neutral-600">
-            WhatsApp Group Digests, Centralized LLM Pricing, Notification Importance Filter, and more.
+            Fishing Assistant chat and richer LLM billing insight lead this release.
           </p>
         </div>
 
