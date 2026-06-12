@@ -1,6 +1,6 @@
 # Mobile Notifications Service
 
-Your phone's notifications, inside the platform — captured, structured, and ready for analysis alongside everything else. Now with AI-generated daily digests that distill WhatsApp group chatter into actionable summaries.
+Your phone's notifications, inside the platform — captured, structured, and ready for analysis alongside everything else. Now with AI-generated daily digests that distill WhatsApp group chatter into actionable summaries and provide Fishing Assistant with grounded digest and message history.
 
 ## The Problem
 
@@ -23,6 +23,12 @@ The real value emerges when you combine notifications with the platform's analys
 Subscribe to a WhatsApp group, and every morning an AI-generated digest lands in your WhatsApp. The LLM reads the day's messages, tracks conversation threads, identifies moderator posts, spots activity outliers, and produces a headline-and-bullets summary. Each digest builds on persistent group state — the AI remembers who is who, which threads are open, and what was discussed yesterday.
 
 **Example:** A fishing community group sends 200 messages a day. Instead of scrolling, you receive a digest with a headline like "New tournament rules announced; debate on catch limits continues" followed by 3-7 bullet points covering the key topics, plus a link to the full digest in the web app.
+
+### Fishing Assistant Evidence
+
+Fishing Assistant can ask this service which digest groups a user is subscribed to, search persisted digest summaries, retrieve the latest group state, and query cleaned WhatsApp group messages by date range. That lets the chat answer questions from both curated daily summaries and supporting message history, while keeping subscription ownership and raw notification access inside mobile-notifications-service.
+
+**Example:** You ask the Fishing Assistant what the fishing group discussed about a lake between two dates. The assistant lists your digest subscriptions, searches matching digests and cleaned group messages, and cites the returned digest or message evidence in its answer.
 
 ### One-Time Connection, Continuous Capture
 
@@ -69,6 +75,7 @@ Notification data is not locked inside this service. The platform's analysis too
 - Multi-app filtering — filter by any combination of app, source, or title keyword
 - Saved presets — name and save filter configurations you use repeatedly
 - AI-ready data — structured for direct use by the platform's analysis and visualization tools
+- Fishing Assistant support — internal digest evidence endpoints expose only owned digest subscriptions, summaries, state, and cleaned group messages
 - Ownership controls — delete individual notifications at any time; only owners access their own data
 
 ## Limitations
@@ -80,6 +87,7 @@ Notification data is not locked inside this service. The platform's analysis too
 - Single active connection — only one device credential is active per user at a time
 - Digest subscriptions are hard-coded — adding a new WhatsApp group requires a code change (no self-service yet)
 - Digest pipeline is CET-anchored — day boundaries are computed in the Europe/Warsaw timezone
+- Fishing Assistant evidence is digest-subscription scoped — users without a matching hard-coded subscription receive no digest or group-message evidence from this service
 
 ---
 

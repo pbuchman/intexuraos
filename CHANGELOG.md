@@ -1,5 +1,69 @@
 # Changelog
 
+## 3.7.0
+
+### Added
+
+- Fishing Assistant chat, UI, RAG foundation, conversation history, mobile fixes, citation validation, and knowledge-base reliability improvements (INT-1588)
+- Richer LLM usage, research cost, image billing, and prompt-type reporting for more accurate cost visibility (INT-1591, INT-1592, INT-1593, INT-1594, INT-1595)
+- Scheduled dispatch support for code tasks (INT-1468)
+- Custom code task timeout controls for longer-running automation (INT-1585)
+- More reliable WhatsApp voice transcription dispatch through hardened Pub/Sub handling (INT-1451)
+- WhatsApp bookmark recovery and mobile bookmark rows for easier bookmark follow-up from mobile flows (INT-1662)
+- MiMo Pro 2.5 support across code tasks, usage reporting, and orchestrator model handling (INT-1655)
+- Gemini 3 Flash support for the GitHub agent execution path (INT-1630)
+- Grafana Cloud PM2 log dashboards for production operations visibility (INT-1648)
+
+### Changed
+
+- Production deployment moved to the Hetzner migration path with updated deployment wiring (INT-1637)
+- Public API resource paths now use normalized service routing
+- Runtime dependency alignment and dead-code checks now include follow-up runtime manifest repairs (INT-1558, INT-1599, INT-1600, INT-1601)
+- LLM and AI stack internals now use common worker migration and completed PromptBuilder migration work (INT-1547, INT-1586, INT-1587)
+- Package documentation and source-export policy enforcement were refreshed (INT-1559)
+- Pub/Sub package structure was slimmed down to reduce unnecessary package surface area (INT-1556)
+- Web app frontend foundation was refactored for code-splitting, SRP, env lockstep, and tests (INT-1534)
+- Common domain packages now make task and Linear domain contracts more reusable (INT-1555)
+- Backend app bootstrap and routing are more consistent across services (INT-1529)
+- Transcription ACK/DLQ contracts and Pub/Sub DLQ policy documentation were updated (INT-1549, INT-1553, INT-1554, INT-1563)
+- Release automation, Codex release skills, commit-push workflows, and documentation review dispatch were refreshed (INT-1654, INT-1656, INT-1663)
+
+### Fixed
+
+- Code task dispatch status recovery, callback routing, callback diagnostics, and environment ownership preservation (INT-1650, INT-1652, INT-1657)
+- WhatsApp notification links pointing to localhost in dev (INT-1638)
+- Digest regeneration language and notification digest UI translation (INT-1608, INT-1618)
+- Code task group visibility in filtered and open-PR views (INT-1423, INT-1606, INT-1613)
+- Code-worker pnpm bootstrap failures (INT-1612)
+- Ready-for-review and Hetzner PR triage handling (INT-1603, INT-1646)
+- Firestore registry and index reconciliation
+- Home-dev Pub/Sub aliases for WhatsApp webhooks
+- Production environment references now match the single-project reality
+- Audio upload bucket name mismatch in dev config
+- Claude runtime footer and Codex telemetry leakage in task summaries (INT-1631, INT-1642)
+- Mobile chat response overflow (INT-1620)
+- LLM review suppression when the latest origin task failed (INT-1577)
+- Continuation PR base-branch fallback behavior (INT-1575)
+- Runtime rate-limit phrase preservation (INT-1576)
+
+### Improved
+
+- Service-to-service clients and internal auth hardening across the monorepo (INT-1531)
+- Shared HTTP server behavior and redaction cleanup across services (INT-1557)
+- Guest chat rate-limit hardening (INT-1520)
+- Metrics, request logging, Terraform alerts, and code task failure metrics (INT-1568, INT-1581)
+- Code-worker relocation and PR webhook repair for more reliable code automation infrastructure (INT-1552)
+- LLM duration capture and Sentry dependency coverage after netting out retired tracing-provider work (INT-1564)
+- Deterministic agent final parsing and completion verifier JSON handling (INT-1470, INT-1560)
+- Code-worker supply-chain hardening (INT-1524)
+- Firestore data-layer reliability and native TTL retention, including rollout cleanup (INT-1532, INT-1582, INT-1583)
+- Orchestrator shell-injection hardening with contract recovery merged into the parent change (INT-1483, INT-1570)
+- Cloud Build worker and trigger configuration, including the multi-arch timeout follow-up (INT-1614, INT-1641)
+
+### Removed
+
+- Retired tracing vendor runtime integration as the final netted telemetry state for this release
+
 ## 3.6.0
 
 ### Added

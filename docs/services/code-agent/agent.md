@@ -11,11 +11,11 @@
 | Goal      | Accept task requests, dispatch to workers, and return pull request URLs   |
 
 ```yaml
-version: 3.6.0
+version: 3.7.0
 port: 8128
 framework: fastify
 runtime: node22
-deploy: cloud-run
+deploy: pm2-nginx
 collections:
   - code_tasks (subcollections: logs, log_lines, log_entries, turn_metrics)
   - user_spend
@@ -33,6 +33,8 @@ collections:
   - user_group_counts
   - execution_memories
   - execution_memory_applications
+  - code_task_system_statuses
+  - code_task_dispatch_notifications
 ```
 
 ## Capabilities
@@ -50,13 +52,13 @@ interface ProcessCodeActionRequest {
   actionId: string;
   approvalEventId: string;
   userId: string;
-  prompt: string;
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
-  linearIssueId?: string;
-  repository?: string;
-  baseBranch?: string;
-  traceId?: string;
-  source?: 'whatsapp' | 'web';
+  payload: {
+    prompt: string;
+    workerType?: 'auto' | 'opus' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+    linearIssueId?: string;
+    repository?: string;
+    baseBranch?: string;
+  };
 }
 ```
 
@@ -81,9 +83,11 @@ interface ProcessCodeActionResponse {
   "actionId": "action-uuid",
   "approvalEventId": "approval-uuid",
   "userId": "auth0|user-id",
-  "prompt": "Implement cursor-based pagination for bookmarks",
-  "workerType": "auto",
-  "linearIssueId": "INT-500"
+  "payload": {
+    "prompt": "Implement cursor-based pagination for bookmarks",
+    "workerType": "auto",
+    "linearIssueId": "INT-500"
+  }
 }
 
 // Response
@@ -116,8 +120,6 @@ interface InternalSubmitRequest {
   prompt: string;
   workerType?: WorkerType;
   linearIssueId?: string;
-  repository?: string;
-  baseBranch?: string;
 }
 ```
 
@@ -232,14 +234,16 @@ interface ActiveTaskCheckResponse {
 
 ```typescript
 interface IssueGroupsQuery {
-  status?: 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
-  sort?: 'linear-id' | 'pr-number' | 'dispatched' | 'last-updated';
+  groupStatus?: 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
+  sortBy?: 'linear-id' | 'pr-number' | 'dispatched' | 'last-updated';
   limit?: number;  // default 20, max 100
   cursor?: string;
 }
 
 type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 ```
+
+The route subtracts phantom summaries with no displayable tasks (archived-only or `ask_agent`-only groups) before returning badge counts.
 
 ### Toggle Issue Group Important Flag
 
@@ -272,6 +276,101 @@ interface UpdateTaskStatusBody {
 // No side effects — Linear/WhatsApp/GitHub labelling stays on the task-complete webhook.
 // Auth: X-Internal-Auth + HMAC-SHA256 signature over raw request body.
 ```
+
+### Dispatch Scheduling and Timeout
+
+**Endpoint:** `POST /submit`
+
+**When to use:** Web UI task submission that should dispatch later or run with a custom task timeout
+
+```typescript
+interface SubmitCodeTaskRequest {
+  prompt: string;
+  workerType?: WorkerType;
+  linearIssueId?: string;
+  taskMode?: 'planning' | 'execution';
+  scheduledDispatch?: {
+    localDateTime: string;
+    timezone: string;
+    notBeforeAt: string; // ISO 8601, must be future
+  };
+  timeoutHours?: number; // integer, 1-12
+}
+```
+
+**Constraints:**
+- `scheduledDispatch` is accepted only when the effective task mode is execution.
+- Queue drain skips scheduled tasks until `notBeforeAt`.
+- Queue TTL is measured from `max(queuedAt, notBeforeAt)`.
+- `timeoutHours` is optional; omitted means the orchestrator default is used.
+
+### Dispatch Status Diagnostics
+
+**Endpoints:**
+- `GET /queue` - queued tasks plus active system statuses
+- `GET /system-status` - active dispatch system statuses for the authenticated user
+
+```typescript
+interface CodeTaskDispatchStatus {
+  state: 'waiting' | 'blocked' | 'terminal';
+  reason:
+    | 'no_enabled_workers'
+    | 'workers_unreachable'
+    | 'worker_health_contract_mismatch'
+    | 'workers_at_capacity'
+    | 'codex_auth_unavailable'
+    | 'claude_auth_unavailable'
+    | 'provider_auth_unavailable'
+    | 'docker_unavailable'
+    | 'disk_unavailable'
+    | 'unknown_worker_type'
+    | 'worker_unavailable'
+    | 'worker_busy'
+    | 'at_capacity'
+    | 'network_error'
+    | 'dispatch_failed'
+    | 'queue_full'
+    | 'queue_timeout'
+    | 'retry_expired'
+    | 'retry_exhausted'
+    | 'missing_pr_branch'
+    | 'scheduled_wait'
+    | 'active_task_blocked';
+  terminal: boolean;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  nextAction:
+    | 'will_retry_automatically'
+    | 'retry_after_fix'
+    | 'wait_until_scheduled'
+    | 'wait_for_active_task';
+}
+```
+
+### Callback Diagnostics
+
+Code-agent records callback state on tasks after dispatch and callback success/failure:
+
+```typescript
+interface CodeTaskCallbackState {
+  webhookUrl: string;
+  callbackBaseUrl: string;
+  owner: 'dev' | 'prod' | 'custom';
+  configuredAt: Timestamp;
+  lastSuccessAt?: Timestamp;
+  lastSuccessEndpoint?: 'logs' | 'task_event' | 'task_complete' | 'status' | 'turn_metrics';
+  lastFailure?: {
+    endpoint: 'logs' | 'task_event' | 'task_complete' | 'status' | 'turn_metrics';
+    status?: number;
+    message: string;
+    occurredAt: Timestamp;
+  };
+}
+```
+
+Public dev/prod callback bases normalize to `/api/code`; public callbacks therefore use `/api/code/internal/...`. Callback owner is derived from the task callback URL, not from `workerLocation`.
 
 ### Linear Issue Context Proxy
 
@@ -363,7 +462,7 @@ interface UnifiedEvaluator {
 // - SenderWhitelistRule: only ALLOWED_BOTS + repo owner
 // - SkipPrefixRule: ignores @claude, @codex, @ignore prefixes
 
-// Step 2: LLM triage (Gemini tool calling, only if needs_triage)
+// Step 2: LLM triage (OpenRouter Gemini 3 Flash Preview tool calling, only if needs_triage)
 interface GitHubAgentEvalResult {
   action: 'skip' | 'request_review' | 'dispatch';
   reason?: string;
@@ -375,9 +474,9 @@ interface GitHubAgentEvalResult {
 // Triage output is validated against Zod schemas (TriageSkipSchema, TriageReviewSchema).
 // Invalid output triggers automatic repair prompt via buildTriageRepairMessage.
 // LLM retries once with failed response as corrective context.
-// GitHub Agent uses per-user resolveToolCallingClient: tries user's own Google API key
-// first, falls back to platform INTEXURAOS_GEMINI_APP_API_KEY. Only activates when a
-// valid key is available.
+// GitHub Agent uses per-user resolveToolCallingClient: tries the user's own OpenRouter
+// key first, falls back to platform INTEXURAOS_OPENROUTER_APP_API_KEY. The model is
+// OpenRouterToolCallingModels.Gemini3FlashPreview.
 
 // PR triage runs asynchronously via Pub/Sub push subscription (INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC).
 // The webhook publishes a PRTriageEvent and returns immediately; the push handler evaluates.
@@ -435,7 +534,7 @@ interface CreateRemediationTaskResult {
 //   decomposition_pattern, planning_decision, review_finding
 
 // Feature-flagged: requires INTEXURAOS_EXECUTION_MEMORY_ENABLED=true
-// Requires both INTEXURAOS_GEMINI_APP_API_KEY and INTEXURAOS_OPENAI_APP_API_KEY
+// Requires INTEXURAOS_OPENAI_APP_API_KEY for embeddings and an LLM client for generation/evaluation
 // Only eligible for execution and planning agent types (isMemoryEligibleAgent)
 ```
 
@@ -876,7 +975,14 @@ Authorization: Bearer <auth0-jwt>
 
 {
   "prompt": "Add error handling to the login flow",
-  "workerType": "opus"
+  "workerType": "opus",
+  "taskMode": "execution",
+  "scheduledDispatch": {
+    "localDateTime": "2026-06-13T22:00",
+    "timezone": "Europe/Warsaw",
+    "notBeforeAt": "2026-06-13T20:00:00.000Z"
+  },
+  "timeoutHours": 8
 }
 
 -> 200: { "success": true, "data": { "status": "submitted", "codeTaskId": "uuid" } }
@@ -918,7 +1024,7 @@ Authorization: Bearer <auth0-jwt>
 ### List issue groups
 
 ```
-GET /issue-groups?status=active&sort=last-updated&limit=20
+GET /issue-groups?groupStatus=active&sortBy=last-updated&limit=20
 Authorization: Bearer <auth0-jwt>
 
 -> 200: { "success": true, "data": { "groups": [...], "nextCursor": "cursor-id", "counts": { "active": 5, "needsAction": 2, ... } } }
@@ -1056,8 +1162,8 @@ All errors follow the IntexuraOS contract:
 | GitHub API    | `POST /repos/{owner}/{repo}/issues/{number}/comments` | Automation log comment     |
 | GitHub API    | `PUT /repos/{owner}/{repo}/pulls/{number}/merge`      | Merge queue auto-merge     |
 | GitHub API    | `GET /repos/{owner}/{repo}/commits/{sha}/status`      | CI check status            |
-| Gemini API    | Tool-calling inference                                | PR triage evaluation       |
-| Gemini API    | Text generation                                       | Memory distillation/eval   |
+| OpenRouter API | Tool-calling inference                                | PR triage evaluation       |
+| Configured LLM client | Text generation                                | Memory distillation/eval   |
 | OpenAI API    | Embeddings                                            | Memory vector embedding    |
 
 ### Outgoing Pub/Sub
