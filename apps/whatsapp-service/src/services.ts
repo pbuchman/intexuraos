@@ -40,7 +40,7 @@ export interface ServiceConfig {
   mediaCleanupTopic: string;
   audioStoredTopic: string;
   approvalReplyTopic: string;
-  commandsIngestTopic?: string;
+  commandsIngestTopic: string;
   webhookProcessTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
@@ -54,11 +54,9 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
     mediaCleanupTopic: config.mediaCleanupTopic,
     audioStoredTopic: config.audioStoredTopic,
     approvalReplyTopic: config.approvalReplyTopic,
+    commandsIngestTopic: config.commandsIngestTopic,
     logger: createAppLogger({ name: 'whatsapp-pubsub-publisher' }),
   };
-  if (config.commandsIngestTopic !== undefined) {
-    pubsubConfig.commandsIngestTopic = config.commandsIngestTopic;
-  }
   if (config.webhookProcessTopic !== undefined) {
     pubsubConfig.webhookProcessTopic = config.webhookProcessTopic;
   }

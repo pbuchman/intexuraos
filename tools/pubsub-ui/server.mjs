@@ -69,7 +69,7 @@ async function forwardToServiceEndpoint(topicName, message) {
   const endpoint = TOPIC_ENDPOINTS[topicName];
   if (!endpoint) {
     console.log(`[PubSub UI] No endpoint configured for topic: ${topicName}`);
-    return;
+    return true;
   }
 
   try {
@@ -86,7 +86,13 @@ async function forwardToServiceEndpoint(topicName, message) {
     console.log(`[PubSub UI] │  Endpoint: ${endpoint}`);
     console.log(`[PubSub UI] │  Message ID: ${message.id}`);
     console.log(`[PubSub UI] │  Data size: ${message.data.length} bytes`);
-    console.log(`[PubSub UI] │  Auth token (full): ${INTEXURAOS_INTERNAL_AUTH_TOKEN}`);
+    console.log(
+      `[PubSub UI] │  Auth token: ${
+        INTEXURAOS_INTERNAL_AUTH_TOKEN
+          ? '***' + INTEXURAOS_INTERNAL_AUTH_TOKEN.slice(-4)
+          : 'NOT SET'
+      }`
+    );
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -103,16 +109,19 @@ async function forwardToServiceEndpoint(topicName, message) {
       if (responseBody) {
         console.log(`[PubSub UI]    Body:`, responseBody);
       }
+      return true;
     } else {
       const errorBody = await response.text();
       console.error(`[PubSub UI] └─ ERROR: ${response.status} ${response.statusText}`);
       if (errorBody) {
         console.error(`[PubSub UI]    Body:`, errorBody);
       }
+      return false;
     }
   } catch (error) {
     console.error(`[PubSub UI] └─ EXCEPTION: ${error.message}`);
     console.error(`[PubSub UI]    Stack:`, error.stack);
+    return false;
   }
 }
 
@@ -170,9 +179,13 @@ async function setupTopicsAndSubscriptions() {
           event,
         });
 
-        await forwardToServiceEndpoint(topicName, message);
+        const forwarded = await forwardToServiceEndpoint(topicName, message);
 
-        message.ack();
+        if (forwarded) {
+          message.ack();
+        } else {
+          message.nack();
+        }
       });
 
       subscription.on('error', (error) => {

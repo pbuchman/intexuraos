@@ -32,6 +32,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     mediaBucket: 'test-media-bucket',
     mediaCleanupTopic: 'test-media-cleanup',
     mediaCleanupSubscription: 'test-media-cleanup-sub',
+    commandsIngestTopic: 'test-commands-ingest',
     audioStoredTopic: 'test-audio-stored',
     approvalReplyTopic: 'test-approval-reply',
     gcpProjectId: 'test-project',

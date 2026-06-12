@@ -45,6 +45,7 @@ export interface WhatsAppWebhookEvent {
   status: WebhookProcessingStatus;
   ignoredReason?: IgnoredReason;
   failureDetails?: string;
+  retryable?: boolean;
   processedAt?: string;
 }
 
@@ -97,9 +98,14 @@ export interface WhatsAppWebhookEventRepository {
     metadata: {
       ignoredReason?: IgnoredReason;
       failureDetails?: string;
+      retryable?: boolean;
     }
   ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>>;
   getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, WhatsAppError>>;
+  findRetryableEvents(options: {
+    olderThan: string;
+    limit: number;
+  }): Promise<Result<WhatsAppWebhookEvent[], WhatsAppError>>;
 }
 
 /**
@@ -135,6 +141,14 @@ export interface WhatsAppMessageRepository {
   findById(
     userId: string,
     messageId: string
+  ): Promise<Result<WhatsAppMessage | null, WhatsAppError>>;
+
+  /**
+   * Find a message by user ID and WhatsApp message ID.
+   */
+  findByWaMessageId(
+    userId: string,
+    waMessageId: string
   ): Promise<Result<WhatsAppMessage | null, WhatsAppError>>;
 
   /**

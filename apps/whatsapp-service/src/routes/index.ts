@@ -12,6 +12,7 @@ import { messageMediaRoutes } from './messageMediaRoutes.js';
 import { preferencesRoutes } from './preferencesRoutes.js';
 import { createPubsubRoutes } from './pubsubRoutes.js';
 import { verificationRoutes } from './verificationRoutes.js';
+import { internalRoutes } from './internalRoutes.js';
 
 /**
  * Creates routes plugin with config.
@@ -27,6 +28,7 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(preferencesRoutes);
     fastify.register(verificationRoutes);
     fastify.register(createPubsubRoutes());
+    fastify.register(internalRoutes);
     done();
   };
 }

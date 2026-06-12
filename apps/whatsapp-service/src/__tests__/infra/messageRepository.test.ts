@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import {
   deleteMessage,
+  findByWaMessageId,
   findById,
   getMessage,
   getMessagesByUser,
@@ -275,6 +276,41 @@ describe('messageRepository', () => {
     });
   });
 
+  describe('findByWaMessageId', () => {
+    it('returns null for non-existent WhatsApp message id', async () => {
+      const result = await findByWaMessageId('user-123', 'wamid.missing');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns the matching message for the same user and WhatsApp message id', async () => {
+      const saved = await saveMessage(createTestMessage({ waMessageId: 'wamid.existing' }));
+      if (!saved.ok) throw new Error('Setup failed');
+
+      const result = await findByWaMessageId('user-123', 'wamid.existing');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('Expected ok result');
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe(saved.value.id);
+      expect(result.value?.waMessageId).toBe('wamid.existing');
+    });
+
+    it('returns null when the WhatsApp message id belongs to another user', async () => {
+      await saveMessage(createTestMessage({ userId: 'other-user', waMessageId: 'wamid.other' }));
+
+      const result = await findByWaMessageId('user-123', 'wamid.other');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+  });
+
   describe('updateTranscription', () => {
     it('updates transcription state', async () => {
       const saved = await saveMessage(
@@ -430,6 +466,18 @@ describe('messageRepository', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
         expect(result.error.message).toContain('Failed to find message');
+      }
+    });
+
+    it('returns error when Firestore fails on findByWaMessageId', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await findByWaMessageId('user-123', 'wamid.test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Failed to find message by WhatsApp id');
       }
     });
 

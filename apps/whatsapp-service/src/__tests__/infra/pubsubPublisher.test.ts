@@ -54,6 +54,7 @@ describe('GcpPubSubPublisher', () => {
       mediaCleanupTopic: 'media-cleanup-topic',
       audioStoredTopic: 'audio-stored-topic',
       approvalReplyTopic: 'approval-reply-topic',
+      commandsIngestTopic: 'commands-ingest-topic',
       logger: pino({ name: 'test', level: 'silent' }),
     });
   });
@@ -87,6 +88,20 @@ describe('GcpPubSubPublisher', () => {
             // Cast: testing the runtime guard for callers that bypass the type system
           } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
       ).toThrow('approvalReplyTopic is required');
+    });
+
+    it('throws when commandsIngestTopic is missing', () => {
+      expect(
+        () =>
+          new GcpPubSubPublisher({
+            projectId: 'test-project',
+            mediaCleanupTopic: 'media-cleanup-topic',
+            audioStoredTopic: 'audio-stored-topic',
+            approvalReplyTopic: 'approval-reply-topic',
+            logger: pino({ name: 'test', level: 'silent' }),
+            // Cast: testing the runtime guard for callers that bypass the type system
+          } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
+      ).toThrow('commandsIngestTopic is required');
     });
   });
 
@@ -131,7 +146,7 @@ describe('GcpPubSubPublisher', () => {
   });
 
   describe('publishCommandIngest', () => {
-    it('skips publish when topic is not configured', async () => {
+    it('publishes to the required command ingest topic', async () => {
       const event = {
         type: 'command.ingest' as const,
         userId: 'user-123',
@@ -144,9 +159,10 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishCommandIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
         externalId: 'wamid.abc',
       });
+      expect(mockPublishToOptionalTopic).not.toHaveBeenCalled();
     });
 
     it('publishes event when topic is configured', async () => {
@@ -171,7 +187,7 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishCommandIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
         externalId: 'wamid.voice123',
       });
     });
@@ -185,7 +201,7 @@ describe('GcpPubSubPublisher', () => {
         commandsIngestTopic: 'commands-ingest-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
-      mockPublishToOptionalTopic.mockResolvedValue({
+      mockPublishToTopic.mockResolvedValue({
         ok: false,
         error: { code: 'PUBLISH_FAILED', message: 'Topic unavailable' },
       });
@@ -231,6 +247,7 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
+        commandsIngestTopic: 'commands-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -257,6 +274,7 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
+        commandsIngestTopic: 'commands-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -367,6 +385,7 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
+        commandsIngestTopic: 'commands-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -392,6 +411,7 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
+        commandsIngestTopic: 'commands-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
