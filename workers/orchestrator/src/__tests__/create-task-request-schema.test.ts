@@ -22,7 +22,7 @@ describe('CreateTaskRequestSchema', () => {
     };
 
     const result = CreateTaskRequestSchema.safeParse({
-      taskId: 'task-memory-context',
+      taskId: 'task_00000000-0000-0000-0000-0000000000a1',
       workerType: 'auto',
       prompt: 'Fix callback logging and route coverage',
       webhookUrl: 'https://example.com/webhook',
@@ -47,7 +47,7 @@ describe('CreateTaskRequestSchema', () => {
     'review_finding',
   ] as const)('accepts memoryType %s', (memoryType) => {
     const result = CreateTaskRequestSchema.safeParse({
-      taskId: `task-memory-type-${memoryType}`,
+      taskId: 'task_00000000-0000-0000-0000-0000000000a2',
       workerType: 'auto',
       prompt: 'Test memory type acceptance',
       webhookUrl: 'https://example.com/webhook',
@@ -81,7 +81,7 @@ describe('CreateTaskRequestSchema', () => {
 describe('CreateTaskRequestSchema — retriedFrom', () => {
   it('accepts retriedFrom and preserves it through parse', () => {
     const result = CreateTaskRequestSchema.safeParse({
-      taskId: 't1',
+      taskId: 'task_00000000-0000-0000-0000-0000000000a3',
       workerType: 'auto',
       prompt: 'p',
       webhookUrl: 'https://example.com/hook',
@@ -93,6 +93,59 @@ describe('CreateTaskRequestSchema — retriedFrom', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.retriedFrom).toBe('task_original_abc');
+    }
+  });
+});
+
+describe('CreateTaskRequestSchema — timeoutHours (INT-1585)', () => {
+  const baseRequest = {
+    taskId: 'task_00000000-0000-0000-0000-0000000000b1',
+    workerType: 'auto',
+    prompt: 'p',
+    webhookUrl: 'https://example.com/hook',
+    webhookSecret: 'sec',
+    linearIssueLabels: [],
+    hasChildren: false,
+  } as const;
+
+  it('accepts integer timeoutHours within [1, 12]', () => {
+    const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, timeoutHours: 8 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timeoutHours).toBe(8);
+    }
+  });
+
+  it('accepts the lower bound (1)', () => {
+    const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, timeoutHours: 1 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts the upper bound (12)', () => {
+    const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, timeoutHours: 12 });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects timeoutHours below MIN', () => {
+    const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, timeoutHours: 0 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects timeoutHours above MAX', () => {
+    const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, timeoutHours: 13 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-integer timeoutHours', () => {
+    const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, timeoutHours: 5.5 });
+    expect(result.success).toBe(false);
+  });
+
+  it('treats absent timeoutHours as valid (backward compat)', () => {
+    const result = CreateTaskRequestSchema.safeParse(baseRequest);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.timeoutHours).toBeUndefined();
     }
   });
 });

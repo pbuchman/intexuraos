@@ -1,11 +1,22 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { type Logger } from '@intexuraos/common-core';
+import { type Logger, IntexuraOSError } from '@intexuraos/common-core';
 
-const execAsync = promisify(exec);
+const defaultExecFileAsync = promisify(execFile);
+
+/**
+ * Argv-form spawn helper signature. Untrusted inputs (branch names, paths)
+ * are passed as literal argv elements, never re-parsed by `/bin/sh`.
+ */
+export type ExecFileFn = (
+  file: string,
+  args: readonly string[],
+  options?: { cwd?: string; timeout?: number }
+) => Promise<{ stdout: string; stderr: string }>;
+
 const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 
 export interface WorktreeManagerConfig {
@@ -18,17 +29,26 @@ const LOCK_TIMEOUT_MS = 10_000;
 
 function assertSafeBranchName(branch: string, branchLabel: string): void {
   if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
-    throw new Error(`Invalid ${branchLabel} branch name: ${branch}`);
+    throw new IntexuraOSError('INVALID_REQUEST', `Invalid ${branchLabel} branch name: ${branch}`);
   }
 }
 
 export class WorktreeManager {
   private gitLock: Promise<void> = Promise.resolve();
+  private readonly execFileFn: ExecFileFn;
 
   constructor(
     private readonly config: WorktreeManagerConfig,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    execFileFn?: ExecFileFn
+  ) {
+    // TODO(INT-1483 follow-up): drop the `as unknown as` once a typed wrapper
+    // around `promisify(execFile)` lands. The cast is necessary today because
+    // node's `promisify` overload set is wider than our argv-only `ExecFileFn`
+    // contract; introducing a thin typed adapter is the right fix but is out
+    // of scope for the shell-injection hardening change.
+    this.execFileFn = execFileFn ?? (defaultExecFileAsync as unknown as ExecFileFn);
+  }
 
   private async withGitLock<T>(fn: () => Promise<T>): Promise<T> {
     let releaseLock: () => void = () => undefined;
@@ -44,7 +64,9 @@ export class WorktreeManager {
       rejectTimeout = reject;
     });
     const timeoutId = setTimeout(() => {
-      rejectTimeout(new Error('Timed out waiting for git lock after 10s'));
+      rejectTimeout(
+        new IntexuraOSError('INTERNAL_ERROR', 'Timed out waiting for git lock after 10s')
+      );
     }, LOCK_TIMEOUT_MS);
 
     try {
@@ -72,7 +94,10 @@ export class WorktreeManager {
 
       // Check if worktree already exists
       if (await this.worktreeExists(taskId)) {
-        throw new Error(`Worktree for task ${taskId} already exists at ${worktreePath}`);
+        throw new IntexuraOSError(
+          'CONFLICT',
+          `Worktree for task ${taskId} already exists at ${worktreePath}`
+        );
       }
 
       try {
@@ -83,12 +108,12 @@ export class WorktreeManager {
         // Without this, worktrees are created from whatever was last fetched at startup
         this.logger.info({ taskId, baseBranch }, 'Fetching base branch before worktree creation');
         try {
-          await execAsync(`git fetch origin "${baseBranch}" --force`, {
+          await this.execFileFn('git', ['fetch', 'origin', baseBranch, '--force'], {
             cwd: this.config.repositoryPath,
           });
           // Sync local branch ref so agents that run `git checkout -b <branch> development`
           // pick up the latest commit instead of a stale local ref
-          await execAsync(`git branch -f "${baseBranch}" "origin/${baseBranch}"`, {
+          await this.execFileFn('git', ['branch', '-f', baseBranch, `origin/${baseBranch}`], {
             cwd: this.config.repositoryPath,
           });
         } catch (fetchError: unknown) {
@@ -102,29 +127,39 @@ export class WorktreeManager {
         // Create worktree with a new branch for the task
         // Using -b creates a local branch, avoiding detached HEAD state
         // which is required for Claude to create commits and PRs
-        let stderr: string;
-        if (continuationPrBranch === undefined) {
-          ({ stderr } = await execAsync(
-            `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
-            {
+        let useContinuation = false;
+        if (continuationPrBranch !== undefined) {
+          try {
+            await this.execFileFn('git', ['fetch', 'origin', continuationPrBranch], {
               cwd: this.config.repositoryPath,
+            });
+            useContinuation = true;
+          } catch (fetchError: unknown) {
+            // PR merged + branch auto-deleted between submission and dispatch:
+            // fall back to base branch instead of failing the task. Network/auth
+            // failures still re-throw so the dispatcher can retry.
+            const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+            if (!message.includes("couldn't find remote ref")) {
+              throw fetchError;
             }
-          ));
-        } else {
-          await execAsync(`git fetch origin "${continuationPrBranch}"`, {
-            cwd: this.config.repositoryPath,
-          });
-          ({ stderr } = await execAsync(
-            `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
-            {
-              cwd: this.config.repositoryPath,
-            }
-          ));
+            this.logger.warn(
+              { taskId, continuationPrBranch, baseBranch },
+              'Continuation PR branch no longer exists on origin (likely merged + deleted) — falling back to base branch'
+            );
+          }
         }
+
+        const addArgs: readonly string[] =
+          useContinuation && continuationPrBranch !== undefined
+            ? ['worktree', 'add', '-B', taskId, worktreePath, `origin/${continuationPrBranch}`]
+            : ['worktree', 'add', '-b', taskId, worktreePath, `origin/${baseBranch}`];
+        const { stderr } = await this.execFileFn('git', addArgs, {
+          cwd: this.config.repositoryPath,
+        });
 
         // git worktree add outputs to stderr even on success
         if (stderr && !stderr.includes('Preparing worktree')) {
-          throw new Error(`Failed to create worktree: ${stderr}`);
+          throw new IntexuraOSError('INTERNAL_ERROR', `Failed to create worktree: ${stderr}`);
         }
 
         // Copy settings.local.json template if provided
@@ -144,7 +179,7 @@ export class WorktreeManager {
         return worktreePath;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to create worktree: ${message}`);
+        throw new IntexuraOSError('INTERNAL_ERROR', `Failed to create worktree: ${message}`);
       }
     });
   }
@@ -155,29 +190,34 @@ export class WorktreeManager {
       this.logger.info({ taskId, worktreePath }, 'Removing worktree');
 
       if (!existsSync(worktreePath)) {
-        throw new Error(`Worktree for task ${taskId} does not exist at ${worktreePath}`);
+        throw new IntexuraOSError(
+          'NOT_FOUND',
+          `Worktree for task ${taskId} does not exist at ${worktreePath}`
+        );
       }
 
       try {
         // Remove worktree using git worktree remove
-        const { stderr } = await execAsync(`git worktree remove "${worktreePath}" --force`, {
-          cwd: this.config.repositoryPath,
-        });
+        const { stderr } = await this.execFileFn(
+          'git',
+          ['worktree', 'remove', worktreePath, '--force'],
+          { cwd: this.config.repositoryPath }
+        );
 
         if (stderr) {
-          throw new Error(`Failed to remove worktree: ${stderr}`);
+          throw new IntexuraOSError('INTERNAL_ERROR', `Failed to remove worktree: ${stderr}`);
         }
         this.logger.info({ taskId }, 'Worktree removed');
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to remove worktree: ${message}`);
+        throw new IntexuraOSError('INTERNAL_ERROR', `Failed to remove worktree: ${message}`);
       }
     });
   }
 
   async listWorktrees(): Promise<string[]> {
     try {
-      const { stdout } = await execAsync('git worktree list --porcelain', {
+      const { stdout } = await this.execFileFn('git', ['worktree', 'list', '--porcelain'], {
         cwd: this.config.repositoryPath,
       });
 
@@ -206,6 +246,117 @@ export class WorktreeManager {
     return existsSync(worktreePath);
   }
 
+  /**
+   * Check if the worktree for a given taskId is registered in the main repo's
+   * worktree metadata (`<repo>/.git/worktrees/<name>/`).
+   *
+   * Returns true when `git worktree list --porcelain` includes the expected
+   * worktree path. Returns false when the metadata directory is missing, which
+   * happens if the orchestrator restarts and something (git maintenance,
+   * external cleanup, systemd tmpfs) drops the `.git/worktrees/<taskId>/`
+   * directory while the worktree itself at `<base>/<taskId>/` survives.
+   *
+   * Design reference: INT-1454.
+   */
+  async isWorktreeRegistered(taskId: string): Promise<boolean> {
+    const worktreePath = join(this.config.worktreeBasePath, taskId);
+    try {
+      const { stdout } = await this.execFileFn('git', ['worktree', 'list', '--porcelain'], {
+        cwd: this.config.repositoryPath,
+      });
+      // Strict equality (not startsWith) so a sibling path like
+      // `${worktreePath}-sibling` cannot false-positive as the same entry.
+      // Trim trailing whitespace defensively in case git ever emits any.
+      for (const line of stdout.split('\n')) {
+        if (line.trimEnd() === `worktree ${worktreePath}`) {
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      this.logger.error(
+        { taskId, error },
+        'Failed to query git worktree list while checking registration'
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Repair a worktree whose on-disk path exists but whose metadata in
+   * `<repo>/.git/worktrees/<name>/` is missing. Delegates to
+   * `git worktree repair <path>`, which regenerates the metadata from the
+   * worktree's `.git` file (canonical git recovery for this situation).
+   *
+   * Throws if the worktree path does not exist on disk (nothing to repair —
+   * the task's work is genuinely lost) or if `git worktree repair` fails.
+   *
+   * Design reference: INT-1454.
+   */
+  async repairWorktree(taskId: string): Promise<void> {
+    await this.withGitLock(async () => {
+      const worktreePath = join(this.config.worktreeBasePath, taskId);
+
+      if (!existsSync(worktreePath)) {
+        throw new IntexuraOSError(
+          'NOT_FOUND',
+          `Cannot repair worktree for task ${taskId}: path ${worktreePath} does not exist on disk`
+        );
+      }
+
+      this.logger.info(
+        { taskId, worktreePath },
+        'Worktree metadata missing on adoption, repairing'
+      );
+
+      try {
+        const { stderr } = await this.execFileFn('git', ['worktree', 'repair', worktreePath], {
+          cwd: this.config.repositoryPath,
+        });
+        // `git worktree repair` prints advisory messages to stderr on success
+        // (e.g. "repair: ..."); treat non-empty stderr as informational unless
+        // it contains a fatal marker.
+        if (stderr.includes('fatal:')) {
+          throw new IntexuraOSError(
+            'INTERNAL_ERROR',
+            `git worktree repair reported fatal error: ${stderr.trim()}`
+          );
+        }
+        this.logger.info({ taskId, worktreePath }, 'Worktree metadata repaired successfully');
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new IntexuraOSError(
+          'INTERNAL_ERROR',
+          `Failed to repair worktree for task ${taskId}: ${message}`
+        );
+      }
+
+      // Diagnostic: log the post-repair HEAD state. `git worktree repair`
+      // regenerates the metadata from the worktree's `.git` file, but if
+      // the local branch ref was also lost, the worktree ends up
+      // HEAD-detached and subsequent commits/pushes by the agent fail
+      // silently. Surface the state so these cases are visible in logs.
+      try {
+        const { stdout } = await this.execFileFn(
+          'git',
+          ['-C', worktreePath, 'symbolic-ref', '--quiet', 'HEAD'],
+          { cwd: this.config.repositoryPath }
+        );
+        const branchRef = stdout.trim();
+        this.logger.info(
+          { taskId, worktreePath, branchRef },
+          'Post-repair HEAD state (attached branch)'
+        );
+      } catch {
+        // symbolic-ref exits non-zero on detached HEAD — this is informational.
+        this.logger.warn(
+          { taskId, worktreePath },
+          'Post-repair worktree is HEAD-detached; commits from the agent may fail until a branch is checked out'
+        );
+      }
+    });
+  }
+
   private async copySettingsLocal(worktreePath: string): Promise<void> {
     const targetPath = join(worktreePath, '.claude', 'settings.local.json');
 
@@ -215,7 +366,7 @@ export class WorktreeManager {
       await writeFile(targetPath, content, 'utf-8');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to copy settings.local.json: ${message}`);
+      throw new IntexuraOSError('INTERNAL_ERROR', `Failed to copy settings.local.json: ${message}`);
     }
   }
 }

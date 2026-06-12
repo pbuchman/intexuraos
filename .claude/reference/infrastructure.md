@@ -28,6 +28,8 @@ gcloud artifacts repositories list --location=europe-central2
 
 **Project ID:** `intexuraos-dev-pbuchman`
 
+**Single project for both environments.** This project is authoritative for resources serving BOTH `dev.intexuraos.cloud` (PM2 on `home-dev`) AND `intexuraos.cloud` (Cloud Run services, Cloud Functions, the GCS bucket that hosts the prod web bundle, Pub/Sub topics, secrets). The `-dev-pbuchman` suffix is legacy and does NOT imply a separate prod project — none exists. Accordingly, the only Terraform environment directory in this repo is `terraform/environments/dev/`, which owns infrastructure for both domains. Do not author a sibling `prod` environment directory unless a future migration introduces a real second project.
+
 **Artifact Registry URL:** `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev`
 
 ---
@@ -144,39 +146,36 @@ The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount
 
 **CI:** `.github/workflows/ci.yml` runs `pnpm run ci` on all branches (lint, typecheck, test, build)
 
-**Deploy:** `.github/workflows/deploy.yml` triggers on push to `development` branch only:
+**Deploy:** `.github/workflows/deploy.yml` automatically deploys production to Hetzner on every push to `development` and also supports manual `workflow_dispatch` target `hetzner-prod`. The Hetzner job uses `scripts/hetzner/github-actions-deploy.sh`, syncs the checked-out commit to `/opt/intexuraos`, refreshes secrets on the VM, rebuilds the web bundle, reloads PM2/nginx, and runs direct-origin health checks.
 
-1. Runs `.github/scripts/smart-dispatch.mjs` to analyze changes
-2. Triggers Cloud Build based on strategy:
-   - **MONOLITH** — Rebuild all (>3 affected OR global change) → `intexuraos-dev-deploy` trigger
-   - **INDIVIDUAL** — Rebuild affected only (≤3) → `<service>` triggers in parallel
-   - **NONE** — No deployable changes, skip
+Required GitHub configuration:
 
-**Manual override:** `workflow_dispatch` with `force_strategy: monolith` to rebuild all
+- Secret: `HETZNER_DEPLOY_SSH_PRIVATE_KEY`
+- Optional variable: `HETZNER_PROD_HOST` (defaults to `162.55.210.48`)
 
-**Global Triggers** (force MONOLITH): `terraform/`, `cloudbuild/cloudbuild.yaml`, `cloudbuild/scripts/`, `pnpm-lock.yaml`, `tsconfig.base.json`
+The same workflow can manually trigger only these retained GCP Cloud Build targets:
+
+- `firestore`
+- `vm-lifecycle`
+- `transcription`
+- `code-worker`
+
+Migrated app/web services do not deploy through GCP Cloud Build or Cloud Run. Hetzner deployment automation is owned by `terraform/hetzner-prod` and the `scripts/hetzner/` runtime scripts.
 
 ### File Locations
 
-| Purpose                  | File                                     |
-| ------------------------ | ---------------------------------------- |
-| CI workflow              | `.github/workflows/ci.yml`               |
-| Deploy workflow          | `.github/workflows/deploy.yml`           |
-| Smart dispatch           | `.github/scripts/smart-dispatch.mjs`     |
-| Main pipeline (all)      | `cloudbuild/cloudbuild.yaml`             |
-| Per-service pipeline     | `apps/<service>/cloudbuild.yaml`         |
-| Deploy scripts           | `cloudbuild/scripts/deploy-<service>.sh` |
-| Trigger definitions (TF) | `terraform/modules/cloud-build/main.tf`  |
+| Purpose                      | File                                    |
+| ---------------------------- | --------------------------------------- |
+| CI workflow                  | `.github/workflows/ci.yml`              |
+| Retained GCP deploy workflow | `.github/workflows/deploy.yml`          |
+| Firestore pipeline           | `cloudbuild/cloudbuild-firestore.yaml`  |
+| Cloud Function pipelines     | `workers/<worker>/cloudbuild.yaml`      |
+| code-worker image pipeline   | `docker/code-worker/cloudbuild.yaml`    |
+| Trigger definitions (TF)     | `terraform/modules/cloud-build/main.tf` |
 
-### Adding a New Service to Cloud Build
+### Adding a New Service Deployment
 
-1. Add build+deploy steps to `cloudbuild/cloudbuild.yaml`
-2. Create `apps/<service>/cloudbuild.yaml`
-3. Create `cloudbuild/scripts/deploy-<service>.sh`
-4. Add to `docker_services` in `terraform/modules/cloud-build/main.tf`
-5. Add to `SERVICES` array in `.github/scripts/smart-dispatch.mjs`
-
-**First deployment:** Service must exist in Terraform before Cloud Build can deploy. Run `./scripts/push-missing-images.sh` for new services.
+Do not add GCP Cloud Run or app/web Cloud Build deployment paths for migrated services. Add runtime wiring to Hetzner infrastructure/scripts instead, and keep retained GCP triggers limited to Firestore, Cloud Functions, and code-worker image rebuilds.
 
 ---
 

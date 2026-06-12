@@ -7,28 +7,41 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import type { WhatsAppNotifier, NotificationError } from '../../domain/services/whatsappNotifier.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
+import type {
+  NotificationError,
+  TaskDispatchBlockedNotificationInfo,
+  WhatsAppNotifier,
+} from '../../domain/services/whatsappNotifier.js';
 import type { CodeTask, TaskError } from '../../domain/models/codeTask.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
+import { buildCodeTaskUrl, normalizeWebAppUrl, resolveConfiguredWebAppUrl } from '../../domain/utils/taskUrls.js';
 
-const APP_BASE_URL = 'https://intexuraos.cloud';
-
-export function buildTaskUrl(taskId: string): string {
-  return `${APP_BASE_URL}/#/code-tasks/${taskId}`;
+export function buildTaskUrl(
+  taskId: string,
+  webAppUrl?: string
+): string {
+  return webAppUrl === undefined
+    ? buildCodeTaskUrl(taskId)
+    : buildCodeTaskUrl(taskId, webAppUrl);
 }
 
-function buildCtaUrl(task: CodeTask): { displayText: string; url: string } {
+function buildDispatchQueueUrl(webAppUrl: string): string {
+  return `${normalizeWebAppUrl(webAppUrl)}/#/code-tasks/dispatch-queue`;
+}
+
+function buildCtaUrl(task: CodeTask, webAppUrl: string): { displayText: string; url: string } {
   const prUrl = task.result?.prUrl;
   if (prUrl !== undefined && prUrl.length > 0) {
     return { displayText: 'View Pull Request', url: prUrl };
   }
-  return { displayText: 'View Progress', url: buildTaskUrl(task.id) };
+  return { displayText: 'View Progress', url: buildCodeTaskUrl(task.id, webAppUrl) };
 }
 
 export interface WhatsAppNotifierConfig {
   whatsappPublisher: WhatsAppSendPublisher;
   linearAgentClient?: LinearAgentClient;
+  webAppUrl?: string;
 }
 
 function summarizeTask(task: CodeTask): string {
@@ -122,11 +135,34 @@ function formatDesignCompleteMessage(
 ${summary}${buttonPrompt}`;
 }
 
+function formatTaskDispatchBlockedMessage(info: TaskDispatchBlockedNotificationInfo): string {
+  const exampleTaskLine = info.exampleTaskId !== undefined
+    ? `\nExample task: ${info.exampleTaskId}`
+    : '';
+  const workersLine = info.workerNames.length > 0
+    ? `\nWorkers: ${info.workerNames.join(', ')}`
+    : '';
+
+  return `⚠️ Code task dispatch blocked
+
+Worker type: ${info.workerType}
+Reason: ${info.reason}
+Affected queued tasks: ${String(info.affectedTaskCount)}${exampleTaskLine}${workersLine}
+
+What went wrong: ${info.message}
+
+Action: ${info.remediation}`;
+}
+
 /**
  * Factory function to create WhatsAppNotifier.
  */
 export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsAppNotifier {
   const { whatsappPublisher, linearAgentClient } = config;
+  const webAppUrl =
+    config.webAppUrl !== undefined && config.webAppUrl.length > 0
+      ? config.webAppUrl
+      : resolveConfiguredWebAppUrl();
 
   return {
     async notifyTaskComplete(
@@ -140,8 +176,9 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const publishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
-        ctaUrl: buildCtaUrl(task),
+        ctaUrl: buildCtaUrl(task, webAppUrl),
         correlationId: task.traceId,
+        important: true,
       };
       if (prUrl !== undefined && prUrl.length > 0) {
         publishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
@@ -170,7 +207,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
         important: true,
       });
@@ -210,9 +247,8 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         userId,
         message,
         buttons,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
-        important: true,
       });
 
       if (!result.ok) {
@@ -248,7 +284,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         userId,
         message,
         buttons,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
         important: true,
       });
@@ -274,7 +310,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const resumedPublishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
-        ctaUrl: buildCtaUrl(task),
+        ctaUrl: buildCtaUrl(task, webAppUrl),
         correlationId: task.traceId,
         important: true,
       };
@@ -360,7 +396,7 @@ Queued. Position: ${String(position)}`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
       });
 
@@ -382,12 +418,12 @@ Queued. Position: ${String(position)}`;
       const idPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
       const message = `⏰ ${idPrefix}${title}
 
-Workers were still busy and the task timed out. Please retry when workers are available.`;
+The task timed out before a worker could start. Open the task for the recorded dispatch blocker and retry guidance.`;
 
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
         important: true,
       });
@@ -417,6 +453,30 @@ Please check worker availability and retry manually if needed.`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        important: true,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyTaskDispatchBlocked(
+      userId: string,
+      info: TaskDispatchBlockedNotificationInfo
+    ): Promise<Result<void, NotificationError>> {
+      const ctaUrl = info.exampleTaskId !== undefined
+        ? { displayText: 'View Task', url: buildTaskUrl(info.exampleTaskId, webAppUrl) }
+        : { displayText: 'View Dispatch Queue', url: buildDispatchQueueUrl(webAppUrl) };
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message: formatTaskDispatchBlockedMessage(info),
+        ctaUrl,
         important: true,
       });
 
@@ -478,7 +538,7 @@ A follow-up fix task has been automatically dispatched.`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(info.retryTaskId) },
+        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(info.retryTaskId, webAppUrl) },
         correlationId: task.traceId,
       });
 
@@ -504,7 +564,7 @@ A follow-up fix task has been automatically dispatched.`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
         important: true,
       });

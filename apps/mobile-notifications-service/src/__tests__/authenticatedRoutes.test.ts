@@ -14,7 +14,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -40,7 +40,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -81,7 +81,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -106,7 +106,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -126,7 +126,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -154,7 +154,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -175,7 +175,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/mobile-notifications/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: { deviceLabel: 'My Phone' },
       });
@@ -195,7 +195,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/mobile-notifications/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -214,7 +214,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/mobile-notifications/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -234,7 +234,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -269,7 +269,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -303,7 +303,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -340,7 +340,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?limit=2',
+        url: '/?limit=2',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -359,7 +359,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -390,7 +390,7 @@ describe('Authenticated Routes', () => {
       // First request with limit to get a cursor
       const firstResponse = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?limit=2',
+        url: '/?limit=2',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -406,7 +406,7 @@ describe('Authenticated Routes', () => {
       if (firstBody.data.nextCursor !== null) {
         const secondResponse = await ctx.app.inject({
           method: 'GET',
-          url: `/mobile-notifications?limit=2&cursor=${encodeURIComponent(firstBody.data.nextCursor)}`,
+          url: `/?limit=2&cursor=${encodeURIComponent(firstBody.data.nextCursor)}`,
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -453,7 +453,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?source=tasker',
+        url: '/?source=tasker',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -513,7 +513,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?app=com.slack',
+        url: '/?app=com.slack',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -573,7 +573,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?source=tasker&app=com.slack',
+        url: '/?source=tasker&app=com.slack',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -635,7 +635,7 @@ describe('Authenticated Routes', () => {
       // Case-insensitive search for "meeting"
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?title=MEETING',
+        url: '/?title=MEETING',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -684,7 +684,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?source=tasker&app=com.slack&title=urgent',
+        url: '/?source=tasker&app=com.slack&title=urgent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -737,7 +737,7 @@ describe('Authenticated Routes', () => {
       // First page with source filter
       const firstResponse = await ctx.app.inject({
         method: 'GET',
-        url: '/mobile-notifications?source=tasker&limit=2',
+        url: '/?source=tasker&limit=2',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -754,7 +754,7 @@ describe('Authenticated Routes', () => {
       if (firstBody.data.nextCursor !== null) {
         const secondResponse = await ctx.app.inject({
           method: 'GET',
-          url: `/mobile-notifications?source=tasker&limit=2&cursor=${encodeURIComponent(firstBody.data.nextCursor)}`,
+          url: `/?source=tasker&limit=2&cursor=${encodeURIComponent(firstBody.data.nextCursor)}`,
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -791,7 +791,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/mobile-notifications/notif-to-delete',
+        url: '/notif-to-delete',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -809,7 +809,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/mobile-notifications/non-existent',
+        url: '/non-existent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -836,7 +836,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/mobile-notifications/other-user-notif',
+        url: '/other-user-notif',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -849,7 +849,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/mobile-notifications/any-notif',
+        url: '/any-notif',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -880,7 +880,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/mobile-notifications/notif-delete-fail',
+        url: '/notif-delete-fail',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -900,7 +900,7 @@ describe('Authenticated Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/mobile-notifications/any-notif',
+        url: '/any-notif',
         headers: { authorization: `Bearer ${token}` },
       });
 

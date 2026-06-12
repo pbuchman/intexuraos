@@ -3,6 +3,7 @@
  * Sends messages using the WhatsApp Business Cloud API.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import { createAppLogger, SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { WhatsAppMessageSender, WhatsAppInteractiveButton } from '../../domain/whatsapp/index.js';
 import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
@@ -118,7 +119,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       // Remove + prefix if present for WhatsApp API
       const normalizedPhone = phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
 
-      const response = await fetch(`${WHATSAPP_API_BASE}/${this.phoneNumberId}/messages`, {
+      const response = await performHttpFetch(`${WHATSAPP_API_BASE}/${this.phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.accessToken}`,

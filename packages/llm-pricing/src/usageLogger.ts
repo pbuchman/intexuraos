@@ -64,6 +64,28 @@ export interface UsageLogParams {
   providerReportedUsd?: number | null;
   /** Semantic identifier for what the prompt was used for (e.g. 'linear-issue-title', 'code-worker-validation') */
   promptType?: string;
+  /**
+   * Wall-clock duration of the LLM call, in milliseconds.
+   *
+   * REQUIRED. Captured by the provider wrapper or computed from a `Date.now()`
+   * checkpoint on the failure path. Forwarded into the structured log line and
+   * to the configured sink so dashboards have per-call latency.
+   */
+  durationMs: number;
+  /**
+   * Optional per-call correlation overrides. Sinks forward these into
+   * the emitted usage event's `correlation` block (alongside any
+   * sink-level overrides such as `taskId` resolved from
+   * `getCorrelationTaskId`). Primary use case: callers that have
+   * per-call context (e.g. orchestrator forwarding `researchId` from the
+   * triggering research record) can opt in without changing the sink wiring.
+   */
+  correlation?: {
+    taskId?: string | null;
+    sessionId?: string | null;
+    requestId?: string | null;
+    researchId?: string | null;
+  };
 }
 
 /**
@@ -179,6 +201,7 @@ export class UsageLogger {
         outputTokens: params.usage.outputTokens,
         totalTokens: params.usage.totalTokens,
         costUsd: params.usage.costUsd,
+        durationMs: params.durationMs,
         success: params.success,
         ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
         ...(params.promptType !== undefined && { promptType: params.promptType }),

@@ -1,5 +1,7 @@
 import { FieldValue, type Firestore } from '@intexuraos/infra-firestore';
 import type { Logger } from 'pino';
+/* eslint-disable no-restricted-imports */
+import { paginatedScan } from '../firestore/paginatedScan.js';
 
 type LegacyExecutionPhase = 'design' | 'execution';
 type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
@@ -14,10 +16,9 @@ interface MigrationDeps {
 }
 
 export async function runAgentRoutingContractMigration({ firestore, logger }: MigrationDeps): Promise<void> {
-  const snapshot = await firestore.collection('code_tasks').get();
   let updatedCount = 0;
 
-  for (const doc of snapshot.docs) {
+  for await (const doc of paginatedScan(firestore.collection('code_tasks'))) {
     const data = doc.data() as {
       status?: string;
       executionPhase?: string;
@@ -63,10 +64,9 @@ export async function runAgentRoutingContractMigration({ firestore, logger }: Mi
 }
 
 export async function assertNoLegacyAgentRoutingContractValues({ firestore, logger }: MigrationDeps): Promise<void> {
-  const snapshot = await firestore.collection('code_tasks').get();
   const offenders: string[] = [];
 
-  for (const doc of snapshot.docs) {
+  for await (const doc of paginatedScan(firestore.collection('code_tasks'))) {
     const data = doc.data() as {
       status?: string;
       executionPhase?: unknown;

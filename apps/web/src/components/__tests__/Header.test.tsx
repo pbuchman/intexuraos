@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Header } from '../Header.js';
 
 // Mock useAuth context
@@ -130,6 +130,7 @@ describe('Header', () => {
           name: 'mac-worker',
           url: 'https://mac.example.com',
           priority: 1,
+          enabled: true,
           healthy: true,
           checkedAt: '2024-01-01T00:00:00Z',
           status: 'healthy' as const,
@@ -144,6 +145,7 @@ describe('Header', () => {
     error: null,
     refresh: vi.fn(),
     refreshStatus: vi.fn(),
+    setWorkerEnabled: vi.fn(),
   };
 
   describe('PWA mode', () => {
@@ -222,6 +224,118 @@ describe('Header', () => {
 
       // Non-PWA keeps the menu item in the DOM for mobile, but hides it at md+.
       expect(screen.getByTestId('workers-status-menu')).toHaveClass('md:hidden');
+    });
+
+    it('shows disabled workers in yellow and toggles only through the worker settings API flow', async () => {
+      const setWorkerEnabled = vi.fn().mockResolvedValue(undefined);
+      mockUsePWA.mockReturnValue(defaultPWAValue);
+      mockUseWorkersStatus.mockReturnValue({
+        ...defaultWorkersStatusValue,
+        setWorkerEnabled,
+        status: {
+          workers: [
+            {
+              name: 'mac-worker',
+              url: 'https://mac.example.com',
+              priority: 1,
+              enabled: false,
+              healthy: false,
+              checkedAt: '2024-01-01T00:00:00Z',
+              status: 'disabled' as const,
+              details: { reason: 'disabled' },
+              stale: false,
+            },
+          ],
+          stale: false,
+        },
+      });
+
+      render(<Header />);
+
+      const headerButton = screen.getByTitle('Worker status');
+      expect(headerButton.querySelector('.bg-yellow-500')).not.toBeNull();
+      fireEvent.click(headerButton);
+
+      expect(screen.getByText('Disabled')).toBeInTheDocument();
+      const toggle = screen.getByRole('switch', { name: 'Enable mac-worker' });
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+      fireEvent.click(toggle);
+
+      await waitFor(() => {
+        expect(setWorkerEnabled).toHaveBeenCalledWith('mac-worker', true);
+      });
+    });
+
+    it('uses yellow aggregate status for degraded mixed worker sets', () => {
+      mockUsePWA.mockReturnValue(defaultPWAValue);
+      mockUseWorkersStatus.mockReturnValue({
+        ...defaultWorkersStatusValue,
+        status: {
+          workers: [
+            {
+              name: 'mac-worker',
+              url: 'https://mac.example.com',
+              priority: 1,
+              enabled: true,
+              healthy: true,
+              checkedAt: '2024-01-01T00:00:00Z',
+              status: 'healthy' as const,
+              details: null,
+              stale: false,
+            },
+            {
+              name: 'vm-worker',
+              url: 'https://vm.example.com',
+              priority: 2,
+              enabled: true,
+              healthy: false,
+              checkedAt: '2024-01-01T00:00:00Z',
+              status: 'unknown' as const,
+              details: null,
+              stale: false,
+            },
+          ],
+          stale: false,
+        },
+      });
+
+      render(<Header />);
+
+      const headerButton = screen.getByTitle('Worker status');
+      expect(headerButton.querySelector('.bg-yellow-500')).not.toBeNull();
+    });
+
+    it('shows contract mismatch details for unknown worker health', () => {
+      mockUsePWA.mockReturnValue(defaultPWAValue);
+      mockUseWorkersStatus.mockReturnValue({
+        ...defaultWorkersStatusValue,
+        status: {
+          workers: [
+            {
+              name: 'vm-worker',
+              url: 'https://vm.example.com',
+              priority: 1,
+              enabled: true,
+              healthy: false,
+              checkedAt: '2024-01-01T00:00:00Z',
+              status: 'unknown' as const,
+              details: {
+                error: 'Health response missing worker capability details',
+                contractMismatch: true,
+                missingFields: ['providerApiKeys'],
+              },
+              stale: false,
+            },
+          ],
+          stale: false,
+        },
+      });
+
+      render(<Header />);
+
+      fireEvent.click(screen.getByTitle('Worker status'));
+      expect(screen.getByText('Health contract mismatch: providerApiKeys')).toBeInTheDocument();
     });
   });
 });

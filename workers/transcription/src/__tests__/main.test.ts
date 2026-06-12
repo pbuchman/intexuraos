@@ -7,12 +7,18 @@ import type { AudioStoredEvent, TranscriptionCompletedEvent } from '../types.js'
 import type { SpeechTranscriptionPort } from '../providers/transcription-provider.js';
 import { ok, err } from '@intexuraos/common-core';
 
+// `child` is unused by transcribeAudio but required by the WorkerLogger
+// contract; returning the same mock keeps any incidental child-logger calls
+// recorded against the same vi.fn() instances.
 const mockLogger = {
   level: 'info',
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  child: vi.fn().mockImplementation(function (this: unknown) {
+    return this;
+  }),
 };
 
 const sampleEvent: AudioStoredEvent = {

@@ -15,13 +15,13 @@ export const COLD_START_EXAMPLE = {
     groupKey: 'grupa-wedkarska-skool',
     messageCount: 83,
     headline:
-      'Michał zapowiedział nagranie nowego filmu w sobotę, a Henryk dołączył jako nowicjusz z problemami dostępowymi.',
+      'Michał announced a new video recording for Saturday, and Henryk joined as a newcomer with access issues.',
     bullets: [
-      'Grzegorz dwukrotnie podbił pytanie o stary film; Michał zapowiedział nagranie nowego w sobotę i publikację na platformie.',
-      'Henryk Kerber (76 l.) został powitany; Robert wyjaśnił mu mechanikę punktów i poziomów na Skool.',
-      'Michał wysłał Henrykowi testową wiadomość, aby zdiagnozować problem z dostępem — brak potwierdzenia rozwiązania.',
-      'Wieczorny luz towarzyski: powitania, żarty, wymiana kawałów.',
-      'Porady: cięty czerwony robak w zanęcie na leszcza; rekomendacje zanęt na lina w chłodnej wodzie.',
+      'Grzegorz bumped the old-video question twice; Michał said he would record a new one on Saturday and publish it on the platform.',
+      'Henryk Kerber (76 y/o) was welcomed; Robert explained Skool points and levels.',
+      'Michał sent Henryk a test message to diagnose the access problem; there was no confirmation that it was fixed.',
+      'Evening social chat: greetings, jokes, and swapping one-liners.',
+      'Advice: chopped red worms in bream ground bait; tench ground-bait recommendations for cold water.',
     ],
     threads: [
       {
@@ -29,9 +29,9 @@ export const COLD_START_EXAMPLE = {
         participants: ['Grzegorz', 'Michał Lotkowski', 'Adrian'],
         resolved: true,
         keyFacts: [
-          'Grzegorz dwukrotnie podbił wcześniejsze pytanie o materiał wideo.',
-          'Michał potwierdził, że stary film jest sprzed roku i zapowiedział nagranie nowego w sobotę oraz wrzucenie na platformę.',
-          'Adrian podziękował za informację.',
+          'Grzegorz bumped the earlier video-material question twice.',
+          'Michał confirmed the old video was from a year ago and said he would record a new one on Saturday and upload it to the platform.',
+          'Adrian thanked him for the information.',
         ],
       },
       {
@@ -39,9 +39,9 @@ export const COLD_START_EXAMPLE = {
         participants: ['Henryk Kerber', 'Ireneusz', 'Mateusz Cichal', 'Robert', 'Zuza'],
         resolved: true,
         keyFacts: [
-          'Henryk przywitał się i zapytał, czy może dołączyć do członków.',
-          'Robert wyjaśnił mechanikę platformy Skool (posty, łapki, punkty, poziomy).',
-          'Członkowie potwierdzili, że Henryk jest już w grupie, i zachęcali do aktywności.',
+          'Henryk introduced himself and asked whether he could join the members.',
+          'Robert explained the Skool mechanics: posts, likes, points, and levels.',
+          'Members confirmed Henryk was already in the group and encouraged him to participate.',
         ],
       },
       {
@@ -49,9 +49,9 @@ export const COLD_START_EXAMPLE = {
         participants: ['Henryk Kerber', 'Mikołaj Eret', 'Michał Lotkowski', 'Mateusz Cichal'],
         resolved: false,
         keyFacts: [
-          'Henryk miał trudności z dostępem do grupy przez WhatsApp lub link ze Skool.',
-          'Michał wysłał testową wiadomość, aby sprawdzić widoczność wpisów.',
-          'Brak jednoznacznego potwierdzenia rozwiązania problemu przez Henryka.',
+          'Henryk had trouble accessing the group through WhatsApp or the Skool link.',
+          'Michał sent a test message to check whether posts were visible.',
+          'Henryk did not clearly confirm that the issue was resolved.',
         ],
       },
     ],
@@ -60,26 +60,26 @@ export const COLD_START_EXAMPLE = {
         time: '09:20',
         topic: 'old-video-request-new-upload-plan',
         summary:
-          'Michał informuje, że stary film jest sprzed roku i zapowiada nagranie nowego w sobotę oraz wrzucenie go na platformę.',
+          'Michał says the old video is from a year ago and announces a new recording on Saturday with publication on the platform.',
       },
       {
         time: '18:24',
         topic: 'whatsapp-access-and-skool-link-confusion',
         summary:
-          'Michał wysyła testową wiadomość do Henryka, aby sprawdzić, czy widzi wpisy i pomóc w rozwiązaniu problemu z dostępem.',
+          'Michał sends Henryk a test message to check whether he can see posts and help resolve the access problem.',
       },
     ],
-    openQuestions: ['Czy Henryk swobodnie korzysta już z platformy WhatsApp/Skool?'],
+    openQuestions: ['Can Henryk now use WhatsApp and Skool without access problems?'],
     activityOutliers: [
       {
         sender: 'Henryk Kerber',
         messageCount: 18,
-        note: 'Nowy uczestnik; liczne pytania i aktywność w kilku wątkach (onboarding, dostęp techniczny, porady wędkarskie).',
+        note: 'New participant with many questions and activity across several threads: onboarding, technical access, and fishing advice.',
       },
       {
         sender: 'Robert',
         messageCount: 12,
-        note: 'Ponadprzeciętna liczba wpisów z poradami dla nowego członka oraz aktywność w czacie wieczornym.',
+        note: 'Above-average message volume with advice for the new member and activity in the evening chat.',
       },
     ],
   },
@@ -94,7 +94,7 @@ export const COLD_START_EXAMPLE = {
         totalMessages: 5,
         activeDays: 1,
         role: 'moderator' as const,
-        notes: 'Zapowiada nowy film, koordynuje pomoc techniczną.',
+        notes: 'Announces the new video and coordinates technical help.',
       },
       {
         sender: 'Henryk Kerber',
@@ -102,7 +102,7 @@ export const COLD_START_EXAMPLE = {
         totalMessages: 18,
         activeDays: 1,
         role: 'newcomer' as const,
-        notes: '76-letni nowy uczestnik; pytania o platformę i porady wędkarskie.',
+        notes: '76-year-old new participant with platform questions and fishing-advice requests.',
       },
       {
         sender: 'Robert',
@@ -116,14 +116,15 @@ export const COLD_START_EXAMPLE = {
       {
         date: '2026-04-08',
         topic: 'old-video-request-new-upload-plan',
-        summary: 'Zapowiedź nagrania nowego filmu w sobotę i publikacji na platformie.',
+        summary:
+          'Announcement of a new video recording on Saturday and publication on the platform.',
       },
     ],
     openThreads: [
       {
         topic: 'whatsapp-access-and-skool-link-confusion',
         openedOn: '2026-04-08',
-        lastSignal: 'Michał wysłał testową wiadomość; brak potwierdzenia od Henryka.',
+        lastSignal: 'Michał sent a test message; Henryk has not confirmed resolution.',
         lastSignalDate: '2026-04-08',
       },
     ],
@@ -142,12 +143,12 @@ export const WITH_CONTEXT_EXAMPLE = {
     groupKey: 'grupa-wedkarska-skool',
     messageCount: 76,
     headline:
-      'Ożywiona dyskusja o fermentowanych zanętach w chłodnej wodzie i poszukiwanie darmowych map głębokości.',
+      'Lively discussion about fermented ground bait in cold water and the search for free depth maps.',
     bullets: [
-      'Grzegorz szukał darmowej aplikacji z mapami głębokości; ADAM12 polecił płatną Fish Deeper, Mateusz zaznaczył, że dany staw nie jest zeskanowany.',
-      'Hubert zakwestionował sens fermentu w połowie kwietnia; Mateusz sprostował, że fermentacja zachodzi też w niższych temperaturach, a dyfuzja zapachów jest wolniejsza.',
-      'Ireneusz podał link do odpowiedniej lekcji na platformie — wątek domknięty.',
-      'Hubert kilkukrotnie prosił Michała o prywatną odpowiedź na Skool — bez reakcji.',
+      'Grzegorz looked for a free depth-map app; ADAM12 recommended the paid Fish Deeper app, and Mateusz noted the pond was not scanned.',
+      'Hubert questioned whether ferment makes sense in mid-April; Mateusz clarified that fermentation still happens at lower temperatures, while scent diffusion is slower.',
+      'Ireneusz shared a link to the relevant lesson on the platform, closing the thread.',
+      'Hubert repeatedly asked Michał for a private Skool reply, with no reaction.',
     ],
     threads: [
       {
@@ -155,10 +156,10 @@ export const WITH_CONTEXT_EXAMPLE = {
         participants: ['Grzegorz', 'R', 'ADAM12', 'Mateusz Cichal'],
         resolved: false,
         keyFacts: [
-          'Grzegorz szukał darmowej aplikacji z mapami głębokości jezior.',
-          'R zaoferował Lowrance Hook z GPS, ale bez map (tylko ślad).',
-          'ADAM12 polecił płatną (niedrogą) aplikację Fish Deeper.',
-          'Mateusz zauważył, że dany staw nie jest zeskanowany w Deeperze.',
+          'Grzegorz looked for a free app with lake depth maps.',
+          'R offered a Lowrance Hook with GPS but no maps, only a track.',
+          'ADAM12 recommended the paid but inexpensive Fish Deeper app.',
+          'Mateusz noted that the specific pond had not been scanned in Deeper.',
         ],
       },
       {
@@ -173,10 +174,10 @@ export const WITH_CONTEXT_EXAMPLE = {
         ],
         resolved: true,
         keyFacts: [
-          'Hubert wyraził wątpliwość, czy ferment w połowie kwietnia jest naturalny i skuteczny.',
-          'Mateusz sprostował, że fermentacja zachodzi także w niższych temperaturach, a dyfuzja zapachów w zimnej wodzie jest wolniejsza.',
-          'Hubert przyznał, że pomylił kwestie i wskazał na wolniejsze trawienie węglowodanów w zimnej wodzie.',
-          'Ireneusz podał link do odpowiedniej lekcji na platformie.',
+          'Hubert questioned whether ferment in mid-April is natural and effective.',
+          'Mateusz clarified that fermentation also occurs at lower temperatures and scent diffusion in cold water is slower.',
+          'Hubert acknowledged he had mixed up issues and pointed to slower carbohydrate digestion in cold water.',
+          'Ireneusz shared a link to the relevant lesson on the platform.',
         ],
       },
       {
@@ -184,26 +185,26 @@ export const WITH_CONTEXT_EXAMPLE = {
         participants: ['Hubert Frąckowiak'],
         resolved: false,
         keyFacts: [
-          'Hubert kilkukrotnie poprosił Michała o prywatną odpowiedź na Skool.',
-          'Prośba pozostała bez potwierdzenia w wątku.',
+          'Hubert repeatedly asked Michał for a private reply on Skool.',
+          'The request was not acknowledged in the thread.',
         ],
       },
     ],
     moderatorPosts: [],
     openQuestions: [
-      'Czy istnieje darmowa aplikacja z mapami głębokości dla łowiska Grzegorza?',
-      'Czy Michał odpowie Hubertowi prywatnie na Skool?',
+      "Is there a free depth-map app for Grzegorz's fishing spot?",
+      'Will Michał reply privately to Hubert on Skool?',
     ],
     activityOutliers: [
       {
         sender: 'Hubert Frąckowiak',
         messageCount: 14,
-        note: 'Aktywny w długiej dyskusji o fermencie i wielokrotne prośby o kontakt prywatny.',
+        note: 'Active in the long ferment discussion and made repeated requests for private contact.',
       },
       {
         sender: 'Grzegorz',
         messageCount: 11,
-        note: 'Wiele wiadomości z pytaniami, zdjęciami i opisami łowienia oraz zanęt.',
+        note: 'Many messages with questions, photos, and descriptions of fishing and ground bait.',
       },
     ],
   },
@@ -218,7 +219,7 @@ export const WITH_CONTEXT_EXAMPLE = {
         totalMessages: 5,
         activeDays: 1,
         role: 'moderator' as const,
-        notes: 'Brak aktywności moderatorskiej dziś; oczekuje odpowiedzi do Huberta.',
+        notes: 'No moderator activity today; Hubert is waiting for a reply.',
       },
       {
         sender: 'Hubert Frąckowiak',
@@ -226,27 +227,28 @@ export const WITH_CONTEXT_EXAMPLE = {
         totalMessages: 35,
         activeDays: 2,
         role: 'member' as const,
-        notes: 'Aktywność wzrostowa; częste prośby o kontakt prywatny do moderatora.',
+        notes: 'Rising activity; frequent requests for private contact with the moderator.',
       },
     ],
     moderatorEvents: [
       {
         date: '2026-04-08',
         topic: 'old-video-request-new-upload-plan',
-        summary: 'Zapowiedź nagrania nowego filmu w sobotę i publikacji na platformie.',
+        summary:
+          'Announcement of a new video recording on Saturday and publication on the platform.',
       },
     ],
     openThreads: [
       {
         topic: 'free-depth-maps-apps-and-deeper-availability',
         openedOn: '2026-04-11',
-        lastSignal: 'Mateusz: dany staw nie jest zeskanowany w Deeperze.',
+        lastSignal: 'Mateusz: the specific pond has not been scanned in Deeper.',
         lastSignalDate: '2026-04-11',
       },
       {
         topic: 'request-private-reply-from-michal',
         openedOn: '2026-04-11',
-        lastSignal: 'Hubert ponawia prośbę bez odpowiedzi.',
+        lastSignal: 'Hubert repeats the request without an answer.',
         lastSignalDate: '2026-04-11',
       },
     ],

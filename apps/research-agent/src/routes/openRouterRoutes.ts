@@ -96,7 +96,7 @@ async function fetchOpenRouterCatalog(
 
 export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /research/openrouter/models
-  fastify.get('/research/openrouter/models', async (request, reply) => {
+  fastify.get('/openrouter/models', async (request, reply) => {
     logIncomingRequest(request, {
       message: 'Received request to GET /research/openrouter/models',
     });

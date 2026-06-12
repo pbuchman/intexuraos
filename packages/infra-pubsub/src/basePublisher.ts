@@ -6,6 +6,7 @@ import { PubSub, type Topic } from '@google-cloud/pubsub';
 import { type Logger } from 'pino';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { PublishError } from './types.js';
+import { getRequestContext } from './requestContextShim.js';
 
 /**
  * Configuration for BasePubSubPublisher.
@@ -37,26 +38,23 @@ export abstract class BasePubSubPublisher {
   /**
    * Publish an event to a Pub/Sub topic.
    *
-   * @param topicName - The topic to publish to, or null to skip
+   * Use this for REQUIRED topics — the calling subclass must validate the topic
+   * is configured at construction time. The signature is `string` (not nullable)
+   * to make misconfiguration impossible at the type level. If a topic is genuinely
+   * optional, use {@link publishToOptionalTopic} instead.
+   *
+   * @param topicName - The topic to publish to (required, non-null)
    * @param event - The event payload (will be JSON serialized)
    * @param context - Additional context for logging (e.g., { messageId, userId })
    * @param eventDescription - Human-readable description for logs (e.g., "media cleanup")
    * @returns Result indicating success or failure
    */
   protected async publishToTopic(
-    topicName: string | null,
+    topicName: string,
     event: unknown,
     context: PublishContext,
     eventDescription: string
   ): Promise<Result<void, PublishError>> {
-    if (topicName === null) {
-      this.logger.debug(
-        { ...context, event },
-        `Topic not configured, skipping ${eventDescription}`
-      );
-      return ok(undefined);
-    }
-
     try {
       const topic = this.getTopic(topicName);
       const data = Buffer.from(JSON.stringify(event));
@@ -66,7 +64,9 @@ export abstract class BasePubSubPublisher {
         `Publishing ${eventDescription} event to Pub/Sub`
       );
 
-      await topic.publishMessage({ data });
+      const attributes = buildPublishAttributes();
+
+      await topic.publishMessage({ data, attributes });
 
       this.logger.info(
         { topic: topicName, ...context },
@@ -84,6 +84,38 @@ export abstract class BasePubSubPublisher {
 
       return err(this.mapError(topicName, errorMessage));
     }
+  }
+
+  /**
+   * Publish an event to a Pub/Sub topic that may not be configured.
+   *
+   * Use this only for genuinely OPTIONAL topics where a `null` topic name is
+   * an expected, valid runtime state (e.g., a fire-and-forget integration that
+   * has not been wired up in this environment). Skips the publish and returns
+   * success when `topicName` is `null`. For required topics, use
+   * {@link publishToTopic} so misconfiguration cannot silently no-op.
+   *
+   * @param topicName - The topic to publish to, or `null` to skip
+   * @param event - The event payload (will be JSON serialized)
+   * @param context - Additional context for logging
+   * @param eventDescription - Human-readable description for logs
+   * @returns Result indicating success or failure (skip is success)
+   */
+  protected async publishToOptionalTopic(
+    topicName: string | null,
+    event: unknown,
+    context: PublishContext,
+    eventDescription: string
+  ): Promise<Result<void, PublishError>> {
+    if (topicName === null) {
+      this.logger.debug(
+        { ...context, event },
+        `Topic not configured, skipping ${eventDescription}`
+      );
+      return ok(undefined);
+    }
+
+    return await this.publishToTopic(topicName, event, context, eventDescription);
   }
 
   /**
@@ -121,4 +153,27 @@ export abstract class BasePubSubPublisher {
       message: `Failed to publish message: ${errorMessage}`,
     };
   }
+}
+
+/**
+ * Build the Pub/Sub message attributes for an outbound publish.
+ *
+ * Always sets `publisher-service` (from `INTEXURAOS_SERVICE_NAME`, falling back
+ * to `'unknown'`). When a {@link RequestContext} is active, propagates
+ * `x-request-id` and `x-correlation-id` so downstream subscribers can
+ * extract them via `extractCorrelation`.
+ */
+function buildPublishAttributes(): Record<string, string> {
+  const serviceName = process.env['INTEXURAOS_SERVICE_NAME'];
+  const attributes: Record<string, string> = {
+    'publisher-service': serviceName !== undefined && serviceName !== '' ? serviceName : 'unknown',
+  };
+
+  const ctx = getRequestContext();
+  if (ctx !== undefined) {
+    attributes['x-request-id'] = ctx.requestId;
+    attributes['x-correlation-id'] = ctx.correlationId;
+  }
+
+  return attributes;
 }

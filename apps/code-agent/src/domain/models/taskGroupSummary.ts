@@ -11,6 +11,8 @@ import type { GroupStatus } from '../issueGrouping/types.js';
 export interface TaskGroupSummary {
   userId: string;
   linearIssueId: string | null;
+  linearIssueNumber: number | null;
+  linearIssueSortKey: number;
   /** linearIssueId when present, otherwise `standalone_{taskId}` */
   groupKey: string;
 

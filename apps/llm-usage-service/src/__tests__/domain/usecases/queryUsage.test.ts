@@ -3,6 +3,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 import { queryUsage } from '../../../domain/usecases/queryUsage.js';
 import { FakeUsageAggregateRepository } from '../../fakeUsageAggregateRepository.js';
 import type { DailyUsageAggregate } from '../../../domain/models/dailyAggregate.js';
+import { MISSING_PROMPT_TYPE_SENTINEL } from '../../../domain/models/dailyAggregate.js';
 
 function createTestAggregate(overrides?: Partial<DailyUsageAggregate>): DailyUsageAggregate {
   return {
@@ -17,6 +18,7 @@ function createTestAggregate(overrides?: Partial<DailyUsageAggregate>): DailyUsa
     provider: LlmProviders.Anthropic,
     model: 'claude-sonnet-4-20250514',
     operation: 'generate',
+    promptType: MISSING_PROMPT_TYPE_SENTINEL,
     success: true,
     calls: 10,
     costUsd: 0.05,
@@ -105,7 +107,20 @@ describe('queryUsage', () => {
     }
   });
 
-  it('rejects request.promptType as a groupBy field (DailyUsageAggregate does not track promptType)', async () => {
+  it('groups results by request.promptType', async () => {
+    aggregateRepo.addAggregate(createTestAggregate({
+      aggregateId: 'agg-plan',
+      promptType: 'plan-analysis',
+      calls: 4,
+      costUsd: 0.04,
+    }));
+    aggregateRepo.addAggregate(createTestAggregate({
+      aggregateId: 'agg-summary',
+      promptType: 'summary',
+      calls: 2,
+      costUsd: 0.02,
+    }));
+
     const result = await queryUsage(
       { logger, usageAggregateRepository: aggregateRepo },
       {
@@ -114,9 +129,46 @@ describe('queryUsage', () => {
       },
     );
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('INVALID_GROUP_BY');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            group: { 'request.promptType': 'plan-analysis' },
+            metrics: expect.objectContaining({ calls: 4, costUsd: 0.04 }),
+          }),
+          expect.objectContaining({
+            group: { 'request.promptType': 'summary' },
+            metrics: expect.objectContaining({ calls: 2, costUsd: 0.02 }),
+          }),
+        ]),
+      );
+      expect(result.value.totals.calls).toBe(6);
+    }
+  });
+
+  it('groups missing request.promptType values with a deterministic sentinel', async () => {
+    aggregateRepo.addAggregate(createTestAggregate({
+      aggregateId: 'agg-missing',
+      promptType: MISSING_PROMPT_TYPE_SENTINEL,
+      calls: 3,
+    }));
+
+    const result = await queryUsage(
+      { logger, usageAggregateRepository: aggregateRepo },
+      {
+        timeRange: { from: '2026-04-10T00:00:00Z', to: '2026-04-10T23:59:59Z' },
+        groupBy: ['request.promptType'],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.rows).toHaveLength(1);
+      expect(result.value.rows[0]?.group).toEqual({
+        'request.promptType': MISSING_PROMPT_TYPE_SENTINEL,
+      });
+      expect(result.value.rows[0]?.metrics.calls).toBe(3);
     }
   });
 

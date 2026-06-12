@@ -37,6 +37,7 @@ export INTEXURAOS_USER_SERVICE_URL=http://localhost:8110
 export INTEXURAOS_NOTION_SERVICE_URL=http://localhost:8112
 export INTEXURAOS_WHATSAPP_SERVICE_URL=http://localhost:8113
 export INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=http://localhost:8114
+export INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL=http://localhost:8119
 export INTEXURAOS_RESEARCH_AGENT_URL=http://localhost:8116
 export INTEXURAOS_COMMANDS_AGENT_URL=http://localhost:8117
 export INTEXURAOS_ACTIONS_AGENT_URL=http://localhost:8118
@@ -54,7 +55,7 @@ export INTEXURAOS_HELLSCRIPT_AGENT_URL=http://localhost:8131
 # GCS BUCKETS
 # =============================================================================
 # Required for media storage (uses real GCP buckets)
-export INTEXURAOS_WHATSAPP_MEDIA_BUCKET=intexuraos-whatsapp-media
+export INTEXURAOS_WHATSAPP_MEDIA_BUCKET=intexuraos-whatsapp-media-dev
 export INTEXURAOS_IMAGE_BUCKET=intexuraos-images
 
 # =============================================================================
@@ -64,14 +65,15 @@ export INTEXURAOS_IMAGE_BUCKET=intexuraos-images
 # Start with: pnpm run emulators:start
 # The pubsub-ui container bridges emulator messages to local service endpoints.
 
-# Required by whatsapp-service for media cleanup events
-export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC=media-cleanup
-export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=media-cleanup-sub
+# Required by whatsapp-service for media cleanup events.
+# Keep in sync with tools/pubsub-ui/server.mjs aliases.
+export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC=whatsapp-media-cleanup
+export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=whatsapp-media-cleanup-push
 
 # Required for WhatsApp message sending via Pub/Sub
 # research-agent publishes, whatsapp-service subscribes
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC=whatsapp-send-message
-export INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION=whatsapp-send-message-sub
+export INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION=whatsapp-send-message-push
 
 # Required for todos processing (todos-agent publishes and subscribes)
 export INTEXURAOS_TODOS_PROCESSING_TOPIC=todos-processing

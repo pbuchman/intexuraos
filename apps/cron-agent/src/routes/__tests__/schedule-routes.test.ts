@@ -177,7 +177,7 @@ describe('Schedule Routes', () => {
     it('returns 200 with services list', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/services',
+        url: '/services',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -204,7 +204,7 @@ describe('Schedule Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/services',
+        url: '/services',
       });
 
       expect(response.statusCode).toBe(401);
@@ -215,7 +215,7 @@ describe('Schedule Routes', () => {
     it('returns 200 with schedules list', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -232,7 +232,7 @@ describe('Schedule Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules',
+        url: '/schedules',
       });
 
       expect(response.statusCode).toBe(401);
@@ -241,7 +241,7 @@ describe('Schedule Routes', () => {
     it('passes status filter to manager', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules?status=active,paused',
+        url: '/schedules?status=active,paused',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -251,7 +251,7 @@ describe('Schedule Routes', () => {
     it('passes limit query param', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules?limit=5',
+        url: '/schedules?limit=5',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -261,7 +261,7 @@ describe('Schedule Routes', () => {
     it('passes cursor query param', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules?cursor=abc',
+        url: '/schedules?cursor=abc',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -289,7 +289,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules?limit=500',
+        url: '/schedules?limit=500',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -317,7 +317,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -327,7 +327,7 @@ describe('Schedule Routes', () => {
     it('rejects invalid limit query param', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules?limit=abc',
+        url: '/schedules?limit=abc',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -349,7 +349,7 @@ describe('Schedule Routes', () => {
     it('returns 201 on success', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: validBody,
       });
@@ -363,7 +363,7 @@ describe('Schedule Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         payload: validBody,
       });
 
@@ -373,7 +373,7 @@ describe('Schedule Routes', () => {
     it('returns 400 when body missing required fields', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: { name: 'Test' },
       });
@@ -384,7 +384,7 @@ describe('Schedule Routes', () => {
     it('returns 400 when name is empty string', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: { ...validBody, name: '' },
       });
@@ -395,7 +395,7 @@ describe('Schedule Routes', () => {
     it('returns 400 when action services is empty array', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: {
           ...validBody,
@@ -409,7 +409,7 @@ describe('Schedule Routes', () => {
     it('defaults preferredTools to empty array when omitted from create', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: {
           name: 'No tools',
@@ -448,7 +448,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: {
           ...validBody,
@@ -468,7 +468,7 @@ describe('Schedule Routes', () => {
     it('passes timezone when provided', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: { ...validBody, timezone: 'America/New_York' },
       });
@@ -479,7 +479,7 @@ describe('Schedule Routes', () => {
     it('defaults timezone to UTC when not provided', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: validBody,
       });
@@ -502,7 +502,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: validBody,
       });
@@ -525,7 +525,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules',
+        url: '/schedules',
         headers: { authorization: AUTH_HEADER },
         payload: validBody,
       });
@@ -538,7 +538,7 @@ describe('Schedule Routes', () => {
     it('returns 200 with schedule', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -551,7 +551,7 @@ describe('Schedule Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -574,7 +574,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules/nonexistent',
+        url: '/schedules/nonexistent',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -599,7 +599,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -623,7 +623,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -635,7 +635,7 @@ describe('Schedule Routes', () => {
     it('returns 200 on success', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { name: 'Updated Name' },
       });
@@ -648,7 +648,7 @@ describe('Schedule Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         payload: { name: 'Updated' },
       });
 
@@ -658,7 +658,7 @@ describe('Schedule Routes', () => {
     it('returns 400 when status value is invalid', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { status: 'invalid_status' },
       });
@@ -683,7 +683,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/nonexistent',
+        url: '/schedules/nonexistent',
         headers: { authorization: AUTH_HEADER },
         payload: { name: 'Updated' },
       });
@@ -709,7 +709,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { name: 'Updated' },
       });
@@ -720,7 +720,7 @@ describe('Schedule Routes', () => {
     it('accepts update with schedule field', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { schedule: 'Every 5 minutes' },
       });
@@ -731,7 +731,7 @@ describe('Schedule Routes', () => {
     it('accepts update with action field', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: {
           action: {
@@ -748,7 +748,7 @@ describe('Schedule Routes', () => {
     it('defaults preferredTools to empty array when omitted from update action', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: {
           action: { services: ['code-agent'], instruction: 'new task' },
@@ -761,7 +761,7 @@ describe('Schedule Routes', () => {
     it('accepts update with timezone field', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { timezone: 'America/New_York' },
       });
@@ -772,7 +772,7 @@ describe('Schedule Routes', () => {
     it('accepts update with status paused', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { status: 'paused' },
       });
@@ -783,7 +783,7 @@ describe('Schedule Routes', () => {
     it('accepts update with status active', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { status: 'active' },
       });
@@ -794,7 +794,7 @@ describe('Schedule Routes', () => {
     it('accepts update with status deleted', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { status: 'deleted' },
       });
@@ -819,7 +819,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: {
           action: {
@@ -850,7 +850,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { name: 'Updated' },
       });
@@ -861,7 +861,7 @@ describe('Schedule Routes', () => {
     it('returns 400 when name is empty string', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
         payload: { name: '' },
       });
@@ -874,7 +874,7 @@ describe('Schedule Routes', () => {
     it('returns 200 on success', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -887,7 +887,7 @@ describe('Schedule Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -910,7 +910,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/cron/schedules/nonexistent',
+        url: '/schedules/nonexistent',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -935,7 +935,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -959,7 +959,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -983,7 +983,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/cron/schedules/schedule-1',
+        url: '/schedules/schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -995,7 +995,7 @@ describe('Schedule Routes', () => {
     it('returns 200 on success', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules/schedule-1/trigger',
+        url: '/schedules/schedule-1/trigger',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -1007,7 +1007,7 @@ describe('Schedule Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules/schedule-1/trigger',
+        url: '/schedules/schedule-1/trigger',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1030,7 +1030,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules/nonexistent/trigger',
+        url: '/schedules/nonexistent/trigger',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -1055,7 +1055,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules/schedule-1/trigger',
+        url: '/schedules/schedule-1/trigger',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -1079,7 +1079,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules/schedule-1/trigger',
+        url: '/schedules/schedule-1/trigger',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -1103,7 +1103,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules/schedule-1/trigger',
+        url: '/schedules/schedule-1/trigger',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -1128,7 +1128,7 @@ describe('Schedule Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/cron/schedules/schedule-1/trigger',
+        url: '/schedules/schedule-1/trigger',
         headers: { authorization: AUTH_HEADER },
       });
 

@@ -1,0 +1,19 @@
+PLANNING_AGENT_FINAL:
+- Outcome: planned
+- superpowers_writing_plans_used: 1
+- Linear issue: https://linear.app/pbuchman/issue/INT-1460/investigate-cause-of-failures-in-recent-code-tasks
+- Complex task: 0
+- Plan doc: 1
+- Subtask URLs: 
+- Plan PR: https://github.com/pbuchman/intexuraos/pull/1919
+- Parallel breakdown proof: 
+- Clarification message: 
+- memory_ids_used: mem_63ab692e-3837-4530-9d2f-fd403fd67242,mem_8356c7f4-b2c1-4e8a-9e17-07490d79396b
+- memory_ids_rejected: mem_23165d03-1f43-4ae1-8cfd-dcd4b647f0fb
+- memory_usage_summary: Memory [3] drove the PLAN-DOC classification (multi-point incident investigation with log evidence) and the enumeration of all 8 affected tasks with lifecycle evidence; memory [2] shaped the fix proposal to short-circuit on a successful TaskResult rather than let doomed classifications persist — the INT-1455 author is the same pattern owner and memory [1] (verifying an existing fix) did not apply because the task is about a new regression.
+- Summary:
+  * Task asked to investigate the cause of the recent code-task failure spike and propose a fix plan.
+  * Outcome: PLAN-DOC — single orchestrator bug across 3 interconnected logic points, documented rather than split across services.
+  * 8 affected tasks identified, all with `WORKER_INFRA_FAILURE: empty_transcript` after PR #1913 merged 2026-04-23T17:44:16Z.
+  * Root cause: `classifyAttempt` scans `getWorkerLogs()` for `[claude]`/`[tool]` prefixes that are produced in-process and never written to the inspected source; tests passed only because fixtures injected the prefix.
+  * Artifacts produced: `docs/plans/INT-1460-investigation.md` (3-task TDD fix plan), Linear issue updated in place with original description archived as a comment, planning PR #1919 opened on `plan/int-1460-code-task-failures` targeting `development`.

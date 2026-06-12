@@ -6,9 +6,8 @@ import {
   reviewPrompt,
   remediationPrompt,
   pullRequestPrompt,
-  buildSystemPrompt,
+  systemPrompt,
 } from '../services/system-prompt.js';
-import { REVIEW_SCHEMA } from '../services/completion-verifier.js';
 
 describe('executionPrompt', () => {
   it('renders non-finite execution memory scores without toFixed formatting', () => {
@@ -89,12 +88,12 @@ describe('buildSystemPrompt (review agent)', () => {
   };
 
   it('includes needs_remediation field in REVIEW_AGENT_FINAL block', () => {
-    const prompt = buildSystemPrompt(baseParams);
+    const prompt = systemPrompt.build(baseParams);
     expect(prompt).toContain('needs_remediation');
   });
 
   it('REVIEW_AGENT_FINAL block contains needs_remediation between gh_actions_status and Summary', () => {
-    const prompt = buildSystemPrompt(baseParams);
+    const prompt = systemPrompt.build(baseParams);
     const ghActionsIdx = prompt.indexOf('gh_actions_status');
     const needsRemIdx = prompt.indexOf('needs_remediation');
     const summaryIdx = prompt.lastIndexOf('Summary:');
@@ -106,7 +105,7 @@ describe('buildSystemPrompt (review agent)', () => {
   });
 
   it('needs_remediation definition excludes operational/manual verification steps', () => {
-    const prompt = buildSystemPrompt(baseParams);
+    const prompt = systemPrompt.build(baseParams);
     expect(prompt).toContain('post-merge activities');
     expect(prompt).toContain('do NOT count as code remediation');
   });
@@ -189,6 +188,22 @@ describe('reviewPrompt', () => {
     });
 
     expect(prompt).not.toContain('### Execution Memory Context');
+  });
+
+  it('includes documentation review scope and per-type structure when requested', () => {
+    const prompt = reviewPrompt.build({
+      taskId: 'task-review-docs',
+      linearIssueLabels: [],
+      agentType: 'review',
+      reviewTypes: ['documentation'],
+    });
+
+    expect(prompt).toContain('**documentation**');
+    expect(prompt).toContain('documentation accuracy');
+    expect(prompt).toContain('docs against the implementation');
+    expect(prompt).toContain('### Documentation');
+    expect(prompt).toContain('## Automated Code Review — documentation');
+    expect(prompt).not.toContain('### 🔍 Code Quality');
   });
 });
 
@@ -345,11 +360,43 @@ describe('pullRequestPrompt', () => {
 
     expect(prompt).not.toContain('### Execution Memory Context');
   });
+
+  it('does not require or invent a Linear issue when none is associated', () => {
+    const prompt = pullRequestPrompt.build({
+      taskId: 'task-pr-no-linear',
+      linearIssueLabels: [],
+      agentType: 'pull_request',
+    });
+
+    expect(prompt).toContain('No Linear issue is associated');
+    expect(prompt).toContain(
+      'Linear issue: <full Linear URL, or "none" when no Linear issue is associated>'
+    );
+    expect(prompt).not.toContain('mcp__linear__get_issue');
+    expect(prompt).not.toContain('INT-XXX');
+    expect(prompt).not.toContain('https://linear.app/pbuchman/issue/undefined');
+  });
+
+  it('uses the real Linear identifier when a pull request task has one', () => {
+    const prompt = pullRequestPrompt.build({
+      taskId: 'task-pr-linear',
+      linearIssueLabels: [],
+      agentType: 'pull_request',
+      linearIssueId: 'INT-123',
+      linearIssueTitle: 'Fix docs review dispatch',
+    });
+
+    expect(prompt).toContain("mcp__linear__get_issue({ id: 'INT-123' })");
+    expect(prompt).toContain(
+      '[INT-123 Fix docs review dispatch](https://linear.app/pbuchman/issue/INT-123)'
+    );
+    expect(prompt).not.toContain('INT-XXX');
+  });
 });
 
 describe('askAgentPrompt', () => {
   it('instructs ask-agent that resumed sessions carry prior turns without naming a specific CLI flag', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       taskId: 'task_test',
       linearIssueLabels: [],
       workerType: 'opus',
@@ -365,43 +412,17 @@ describe('askAgentPrompt', () => {
 });
 
 describe('prompt versions', () => {
-  it('reviewPrompt version is 10.0.0', () => {
-    expect(reviewPrompt.version).toBe('10.0.0');
+  it('reviewPrompt version is 11.0.0', () => {
+    expect(reviewPrompt.version).toBe('11.0.0');
   });
 
-  it('pullRequestPrompt version is 5.0.0', () => {
-    expect(pullRequestPrompt.version).toBe('5.0.0');
+  it('pullRequestPrompt version is 6.0.0', () => {
+    expect(pullRequestPrompt.version).toBe('6.0.0');
   });
 });
 
-describe('REVIEW_SCHEMA', () => {
-  it('accepts review_body and review_inline_comments', () => {
-    const result = REVIEW_SCHEMA.safeParse({
-      gh_pr_url: 'https://github.com/test/repo/pull/1',
-      review_comments_posted: '3',
-      review_types: 'code_quality security',
-      summary: 'Reviewed the PR',
-      review_body: 'Overall looks good with minor issues',
-      review_inline_comments: '[{"path":"src/foo.ts","line":10,"body":"Fix this"}]',
-    });
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    expect(result.data.review_body).toBe('Overall looks good with minor issues');
-    expect(result.data.review_inline_comments).toBe(
-      '[{"path":"src/foo.ts","line":10,"body":"Fix this"}]'
-    );
-  });
-
-  it('defaults review_body and review_inline_comments to empty strings when absent', () => {
-    const result = REVIEW_SCHEMA.safeParse({
-      gh_pr_url: 'https://github.com/test/repo/pull/1',
-      review_comments_posted: '3',
-      review_types: 'code_quality security',
-      summary: 'Reviewed the PR',
-    });
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    expect(result.data.review_body).toBe('');
-    expect(result.data.review_inline_comments).toBe('');
-  });
-});
+// [INT-1470] REVIEW_SCHEMA was deleted with the LLM verifier. The review
+// agent final block no longer emits `review_body` / `review_inline_comments` —
+// those were LLM-invented fields, never in the live review prompt. TaskResult
+// retains optional slots for them for wire back-compat, but the deterministic
+// parser does not read or emit them.

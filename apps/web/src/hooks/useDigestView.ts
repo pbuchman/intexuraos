@@ -60,17 +60,17 @@ export function useDigestView(groupKey: string, date: string): UseDigestViewResu
         setDigest(d.value);
       } else {
         const reason: unknown = d.reason;
-        // 404 means "no digest for that date" — keep digest null without error
+        // 404 means "no digest for that date" - keep digest null without error
         if (reason instanceof ApiError && reason.status === 404) {
           setDigest(null);
         } else {
-          setError(getErrorMessage(reason, 'Nie udało się pobrać podsumowania'));
+          setError(getErrorMessage(reason, 'Failed to load digest'));
         }
       }
       if (s.status === 'fulfilled') {
         setState(s.value);
       } else {
-        // State 404 is expected when digest was never generated — keep null silently
+        // State 404 is expected when digest was never generated - keep null silently
         setState(null);
       }
     } finally {
@@ -96,7 +96,7 @@ export function useDigestView(groupKey: string, date: string): UseDigestViewResu
       }
     } catch (err: unknown) {
       if (isMountedRef.current) {
-        setRegenerateError(getErrorMessage(err, 'Nie udało się wygenerować ponownie'));
+        setRegenerateError(getErrorMessage(err, 'Failed to regenerate digest'));
       }
     } finally {
       if (isMountedRef.current) setRegenerating(false);

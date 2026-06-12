@@ -7,10 +7,11 @@ import pino from 'pino';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import type { TaskEnqueueService } from '../../../domain/services/taskEnqueueService.js';
+import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import { startAskAgent } from '../../../domain/usecases/startAskAgent.js';
 
@@ -27,6 +28,7 @@ describe('startAskAgent', () => {
   let codeTaskRepo: CodeTaskRepository;
   let workerSettingsRepo: WorkerSettingsRepository;
   let taskEnqueueService: TaskEnqueueService;
+  let whatsappNotifier: WhatsAppNotifier;
 
   beforeEach(async () => {
     fakeFirestore = createFakeFirestore();
@@ -46,6 +48,9 @@ describe('startAskAgent', () => {
     taskEnqueueService = {
       enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })),
     };
+    whatsappNotifier = {
+      notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)),
+    } as unknown as WhatsAppNotifier;
 
     // Seed a worker for the test user
     await workerSettingsRepo.addWorker('test-user-id', {
@@ -64,7 +69,7 @@ describe('startAskAgent', () => {
 
   it('submits task successfully on happy path', async () => {
     const result = await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'test-user-id', prompt: 'What is the architecture of this codebase?' },
     );
 
@@ -82,43 +87,87 @@ describe('startAskAgent', () => {
     );
   });
 
-  it('returns worker_not_configured when no workers are set up', async () => {
+  it('returns a failed task id when no workers are set up', async () => {
     // Use a user with no workers
     const result = await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
+      { userId: 'user-with-no-workers', prompt: 'Ask something' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe('failed');
+    const taskResult = await codeTaskRepo.findLatestAskAgentTask('user-with-no-workers');
+    expect(taskResult.ok).toBe(true);
+    if (!taskResult.ok) return;
+    expect(taskResult.value).not.toBeNull();
+    if (taskResult.value === null) return;
+    const task = taskResult.value;
+    expect(task).toEqual(expect.objectContaining({
+      status: 'failed',
+      error: expect.objectContaining({
+        code: 'dispatch_blocked_no_enabled_workers',
+      }),
+      dispatchStatus: expect.objectContaining({
+        state: 'terminal',
+        reason: 'no_enabled_workers',
+        nextAction: 'retry_after_fix',
+      }),
+    }));
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith(
+      'user-with-no-workers',
+      expect.objectContaining({
+        reason: 'no_enabled_workers',
+        exampleTaskId: task.id,
+      }),
+    );
+  });
+
+  it('returns internal_error when no-worker ask-agent task failure cannot be persisted', async () => {
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
+    );
+
+    const result = await startAskAgent(
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'user-with-no-workers', prompt: 'Ask something' },
     );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.code).toBe('worker_not_configured');
+    expect(result.error).toEqual({
+      code: 'internal_error',
+      message: 'Failed to persist dispatch failure status',
+    });
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
   });
 
-  it('returns queue_full when queue is at capacity', async () => {
+  it('returns a failed task id when queue is at capacity', async () => {
     vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
       err({ code: 'queue_full', message: 'Queue is full (50/50)' }),
     );
 
     const result = await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'test-user-id', prompt: 'Ask something' },
     );
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('queue_full');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe('failed');
+    expect(result.value.codeTaskId).toMatch(/^task_/);
   });
 
   it('returns duplicate_prompt when similar prompt was recently submitted', async () => {
     // Submit first task
     await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'test-user-id', prompt: 'Exact same prompt' },
     );
 
     // Submit second task with same prompt
     const result = await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'test-user-id', prompt: 'Exact same prompt' },
     );
 
@@ -133,7 +182,7 @@ describe('startAskAgent', () => {
     );
 
     const result = await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'test-user-id', prompt: 'Ask something new' },
     );
 
@@ -142,7 +191,7 @@ describe('startAskAgent', () => {
     expect(result.error.code).toBe('internal_error');
   });
 
-  it('returns internal_error when worker settings fetch fails', async () => {
+  it('returns a failed task id when worker settings fetch fails after task creation', async () => {
     // Create a mock workerSettingsRepo that fails
     const failingWorkerSettingsRepo: WorkerSettingsRepository = {
       ...workerSettingsRepo,
@@ -150,13 +199,56 @@ describe('startAskAgent', () => {
     };
 
     const result = await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo: failingWorkerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo: failingWorkerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'test-user-id', prompt: 'Ask something else' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe('failed');
+    expect(result.value.codeTaskId).toMatch(/^task_/);
+
+    const taskResult = await codeTaskRepo.findById(result.value.codeTaskId);
+    expect(taskResult.ok).toBe(true);
+    if (!taskResult.ok) return;
+    expect(taskResult.value.status).toBe('failed');
+    expect(taskResult.value.error).toEqual(expect.objectContaining({
+      code: 'dispatch_blocked_dispatch_failed',
+    }));
+    expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+      state: 'terminal',
+      reason: 'dispatch_failed',
+      nextAction: 'retry_after_fix',
+    }));
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith(
+      'test-user-id',
+      expect.objectContaining({
+        reason: 'dispatch_failed',
+        exampleTaskId: result.value.codeTaskId,
+      }),
+    );
+  });
+
+  it('returns internal_error when settings-fetch failure status cannot be persisted', async () => {
+    const failingWorkerSettingsRepo: WorkerSettingsRepository = {
+      ...workerSettingsRepo,
+      getSettings: vi.fn().mockResolvedValue(err({ code: 'internal_error', message: 'Firestore error' })),
+    };
+    vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
+    );
+
+    const result = await startAskAgent(
+      { logger, codeTaskRepo, workerSettingsRepo: failingWorkerSettingsRepo, taskEnqueueService, whatsappNotifier },
+      { userId: 'test-user-id', prompt: 'Ask something with failing persistence' },
     );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.code).toBe('internal_error');
-    expect(result.error.message).toBe('Failed to fetch worker settings');
+    expect(result.error).toEqual({
+      code: 'internal_error',
+      message: 'Failed to persist dispatch failure status',
+    });
+    expect(whatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
   });
 });

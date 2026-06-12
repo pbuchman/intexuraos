@@ -40,7 +40,7 @@ describe('createSynthesisProviders', () => {
     vi.clearAllMocks();
   });
 
-  it('forwards researchId to synthesis providers', () => {
+  it('forwards args to synthesis providers (researchId omitted at this call site)', () => {
     const apiKeys: DecryptedApiKeys = {
       openrouter: 'test-or-key',
       google: 'test-google-key',
@@ -50,9 +50,41 @@ describe('createSynthesisProviders', () => {
       'or:anthropic/claude-sonnet-4.6' as ResearchModel,
       apiKeys,
       'user-123',
-      'research-123',
       mockServices,
       mockLogger as never
+    );
+
+    // researchId is the 5th positional arg and is `undefined` when callers
+    // omit it — adapters fall back to research-call-site overrides.
+    expect(mockCreateSynthesizer).toHaveBeenCalledWith(
+      'or:anthropic/claude-sonnet-4.6',
+      'test-or-key',
+      'user-123',
+      mockLogger,
+      undefined
+    );
+    expect(mockCreateContextInferrer).toHaveBeenCalledWith(
+      LlmModels.Gemini25Flash,
+      'test-google-key',
+      'user-123',
+      mockLogger,
+      undefined
+    );
+  });
+
+  it('threads researchId into synthesizer + contextInferrer factories', () => {
+    const apiKeys: DecryptedApiKeys = {
+      openrouter: 'test-or-key',
+      google: 'test-google-key',
+    };
+
+    createSynthesisProviders(
+      'or:anthropic/claude-sonnet-4.6' as ResearchModel,
+      apiKeys,
+      'user-123',
+      mockServices,
+      mockLogger as never,
+      'research-abc'
     );
 
     expect(mockCreateSynthesizer).toHaveBeenCalledWith(
@@ -60,14 +92,14 @@ describe('createSynthesisProviders', () => {
       'test-or-key',
       'user-123',
       mockLogger,
-      'research-123'
+      'research-abc'
     );
     expect(mockCreateContextInferrer).toHaveBeenCalledWith(
       LlmModels.Gemini25Flash,
       'test-google-key',
       'user-123',
       mockLogger,
-      'research-123'
+      'research-abc'
     );
   });
 
@@ -81,7 +113,6 @@ describe('createSynthesisProviders', () => {
       LlmModels.ClaudeSonnet46,
       apiKeys,
       'user-123',
-      undefined,
       mockServices,
       mockLogger as never
     );
@@ -100,7 +131,6 @@ describe('createSynthesisProviders', () => {
         LlmModels.ClaudeSonnet46,
         apiKeys,
         'user-123',
-        undefined,
         mockServices,
         mockLogger as never
       )
@@ -117,7 +147,6 @@ describe('createSynthesisProviders', () => {
         LlmModels.ClaudeSonnet46,
         apiKeys,
         'user-123',
-        undefined,
         mockServices,
         mockLogger as never
       )
@@ -134,7 +163,6 @@ describe('createSynthesisProviders', () => {
       LlmModels.ClaudeSonnet46,
       apiKeys,
       'user-123',
-      undefined,
       mockServices,
       mockLogger as never
     );
@@ -156,7 +184,6 @@ describe('createSynthesisProviders', () => {
         invalidModel,
         apiKeys,
         'user-123',
-        undefined,
         mockServices,
         mockLogger as never
       )
@@ -175,7 +202,6 @@ describe('createSynthesisProviders', () => {
       validOrModel,
       apiKeys,
       'user-123',
-      undefined,
       mockServices,
       mockLogger as never
     );

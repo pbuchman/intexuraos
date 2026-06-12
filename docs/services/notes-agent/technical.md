@@ -28,7 +28,6 @@ graph TB
     subgraph "Infrastructure"
         Firestore[(Firestore<br>notes collection)]
         Sentry[Sentry]
-        OTel[Dash0 OTel]
     end
 
     Web --> NoteRoutes
@@ -85,7 +84,6 @@ sequenceDiagram
 | `b3f34d85`  | Release v3.1.0                                    | 2026-02-22 |
 | `c8a42105`  | Release v3.0.0                                    | 2026-02-19 |
 | `6063175b`  | Add dev-mode log formatting for PM2 readability   | 2026-02-16 |
-| `a52a6bbc`  | Add Dash0 OpenTelemetry integration               | 2026-02-16 |
 | `d5fbb354`  | Fix start:local to use tsx instead of node        | 2026-02-14 |
 | `45f001c1`  | Switch PM2 ecosystem to pnpm --filter start:local | 2026-02-14 |
 | `c3198407`  | Fix response contract violations (reply.fail)     | 2026-01-30 |
@@ -97,11 +95,11 @@ sequenceDiagram
 
 | Method | Path         | Description        | Auth         | Request Body                                 | Response     |
 | ------ | ------------ | ------------------ | ------------ | -------------------------------------------- | ------------ |
-| GET    | `/notes`     | List user's notes  | Bearer token | —                                            | `Note[]`     |
-| POST   | `/notes`     | Create new note    | Bearer token | `{ title, content, tags, source, sourceId }` | `Note` (201) |
-| GET    | `/notes/:id` | Get specific note  | Bearer token | —                                            | `Note`       |
-| PATCH  | `/notes/:id` | Update note fields | Bearer token | `{ title?, content?, tags? }`                | `Note`       |
-| DELETE | `/notes/:id` | Delete note        | Bearer token | —                                            | `{}`         |
+| GET    | `/`     | List user's notes  | Bearer token | —                                            | `Note[]`     |
+| POST   | `/`     | Create new note    | Bearer token | `{ title, content, tags, source, sourceId }` | `Note` (201) |
+| GET    | `/:id` | Get specific note  | Bearer token | —                                            | `Note`       |
+| PATCH  | `/:id` | Update note fields | Bearer token | `{ title?, content?, tags? }`                | `Note`       |
+| DELETE | `/:id` | Delete note        | Bearer token | —                                            | `{}`         |
 
 **Note:** The public note response does **not** include the `status` field. Status is stored in Firestore but is intentionally omitted from the serialized response (`formatNote` excludes it).
 
@@ -185,7 +183,6 @@ sequenceDiagram
 | ------------------------------ | ------------------------------- |
 | Firestore (`notes` collection) | Note persistence                |
 | Sentry                         | Error tracking                  |
-| Dash0 (OpenTelemetry)          | Distributed tracing and metrics |
 
 ### Internal Services (callers)
 
@@ -203,7 +200,6 @@ sequenceDiagram
 | `@intexuraos/http-server`     | Health checks, env validation               |
 | `@intexuraos/infra-firestore` | Firestore singleton client                  |
 | `@intexuraos/infra-sentry`    | Sentry init, log stream, error handler      |
-| `@intexuraos/infra-otel`      | OpenTelemetry instrumentation               |
 
 ## Configuration
 

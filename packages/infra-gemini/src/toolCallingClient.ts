@@ -19,7 +19,7 @@ import type {
   ToolCallingClient,
   ToolCallingResult,
   ToolDefinition,
-  ToolCallingModel,
+  Gemini25Flash,
 } from '@intexuraos/llm-contract';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
@@ -34,7 +34,7 @@ const DEFAULT_MAX_ITERATIONS = 5;
  */
 export interface ToolCallingClientConfig {
   apiKey: string;
-  model: ToolCallingModel;
+  model: Gemini25Flash;
   userId: string;
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
@@ -50,7 +50,13 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
-  function trackUsage(usage: NormalizedUsage, success: boolean, errorMessage?: string): void {
+  function trackUsage(
+    usage: NormalizedUsage,
+    success: boolean,
+    durationMs: number,
+    errorMessage?: string,
+    promptType?: string
+  ): void {
     void usageLogger.log({
       userId,
       provider: LlmProviders.Google,
@@ -58,7 +64,9 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
       callType: 'tool_calling',
       usage,
       success,
+      durationMs,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -71,6 +79,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         maxIterations = DEFAULT_MAX_ITERATIONS,
         onExhausted,
         repairIterations,
+        promptType,
       } = params;
 
       // Build function declarations (strip `run` callbacks — only schema goes to Gemini)
@@ -92,6 +101,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         toolMap.set(t.name, t);
       }
 
+      const runStart = Date.now();
       let totalToolCalls = 0;
       let iteration = 0;
       let aggregatedUsage: NormalizedUsage = {
@@ -232,7 +242,13 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
             if (finalText === '') {
               // Empty response
-              trackUsage(aggregatedUsage, false, 'Empty response from model');
+              trackUsage(
+                aggregatedUsage,
+                false,
+                Date.now() - runStart,
+                'Empty response from model',
+                promptType
+              );
               return err({
                 code: 'API_ERROR',
                 message: 'Empty response from model',
@@ -256,7 +272,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               'Tool calling: completed'
             );
 
-            trackUsage(aggregatedUsage, true);
+            trackUsage(aggregatedUsage, true, Date.now() - runStart, undefined, promptType);
 
             return ok({
               content: finalText,
@@ -288,7 +304,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         const lastText = lastTextPart?.text ?? '';
 
         if (lastText !== '') {
-          trackUsage(aggregatedUsage, true);
+          trackUsage(aggregatedUsage, true, Date.now() - runStart, undefined, promptType);
 
           return ok({
             content: lastText,
@@ -298,14 +314,20 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
           });
         }
 
-        trackUsage(aggregatedUsage, false, 'Tool calling loop exceeded maxIterations');
+        trackUsage(
+          aggregatedUsage,
+          false,
+          Date.now() - runStart,
+          'Tool calling loop exceeded maxIterations',
+          promptType
+        );
         return err({
           code: 'API_ERROR',
           message: 'Tool calling loop exceeded maxIterations',
         });
       } catch (error: unknown) {
         const errorMsg = getErrorMessage(error);
-        trackUsage(aggregatedUsage, false, errorMsg);
+        trackUsage(aggregatedUsage, false, Date.now() - runStart, errorMsg, promptType);
         return err(mapGeminiError(error));
       }
     },

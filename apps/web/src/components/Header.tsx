@@ -16,6 +16,14 @@ const getStatusDisplay = (worker: WorkerStatus): {
   color: string;
   icon: string;
 } => {
+  if (worker.status === 'disabled' || !worker.enabled) {
+    return {
+      text: 'Disabled',
+      color: 'bg-yellow-500',
+      icon: '🟡',
+    };
+  }
+
   if (worker.status === 'healthy') {
     if (worker.details?.available !== undefined && worker.details.capacity !== undefined) {
       return {
@@ -54,6 +62,17 @@ const getStatusDisplay = (worker: WorkerStatus): {
     };
   }
 
+  if (worker.details?.contractMismatch === true) {
+    const missing = worker.details.missingFields?.join(', ');
+    return {
+      text: missing !== undefined && missing !== ''
+        ? `Health contract mismatch: ${missing}`
+        : 'Health contract mismatch',
+      color: 'bg-red-500',
+      icon: '🔴',
+    };
+  }
+
   return {
     text: 'Unknown status',
     color: 'bg-gray-400',
@@ -64,23 +83,82 @@ const getStatusDisplay = (worker: WorkerStatus): {
 /**
  * Get the Tailwind dot-color class for the aggregate worker health indicator.
  */
-const getWorkersDotColor = (workers: WorkerStatus[]): string =>
-  workers.length === 0
-    ? 'bg-gray-400'
-    : workers.some((w) => w.healthy)
-      ? 'bg-green-500'
-      : 'bg-red-500';
+const getWorkersDotColor = (workers: WorkerStatus[]): string => {
+  if (workers.length === 0) {
+    return 'bg-gray-400';
+  }
+
+  const enabledWorkers = workers.filter((worker) => worker.enabled);
+  const hasEnabledHealthy = enabledWorkers.some((worker) => worker.healthy);
+  const hasEnabledFailure = enabledWorkers.some((worker) => !worker.healthy);
+  const hasDisabledWorker = workers.some((worker) => !worker.enabled || worker.status === 'disabled');
+
+  if (enabledWorkers.length > 0 && !hasEnabledHealthy && hasEnabledFailure) {
+    return 'bg-red-500';
+  }
+
+  if (hasDisabledWorker || hasEnabledFailure) {
+    return 'bg-yellow-500';
+  }
+
+  return hasEnabledHealthy ? 'bg-green-500' : 'bg-gray-400';
+};
+
+function WorkerEnabledSwitch({
+  worker,
+  saving,
+  onToggle,
+}: {
+  worker: WorkerStatus;
+  saving: boolean;
+  onToggle: (worker: WorkerStatus) => void;
+}): React.JSX.Element {
+  const action = worker.enabled ? 'Disable' : 'Enable';
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={worker.enabled}
+      aria-label={`${action} ${worker.name}`}
+      title={`${action} ${worker.name}`}
+      disabled={saving}
+      onMouseDown={(event): void => {
+        event.stopPropagation();
+      }}
+      onClick={(event): void => {
+        event.stopPropagation();
+        onToggle(worker);
+      }}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        worker.enabled ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+          worker.enabled ? 'translate-x-4' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  );
+}
 
 export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
-  const { status: workersStatus, refreshStatus: refreshWorkersStatus, refreshing: isWorkersRefreshing } = useWorkersStatus();
+  const {
+    status: workersStatus,
+    refreshStatus: refreshWorkersStatus,
+    refreshing: isWorkersRefreshing,
+    setWorkerEnabled,
+  } = useWorkersStatus();
   const { pendingCount: prunePendingCount, loading: pruneLoading, error: pruneError } = usePruneCandidateStatus();
   const { resolvedTheme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWorkersOpen, setIsWorkersOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [savingWorkers, setSavingWorkers] = useState<ReadonlySet<string>>(new Set());
+  const [workerToggleError, setWorkerToggleError] = useState<string | null>(null);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const workersRef = useRef<HTMLDivElement>(null);
@@ -130,6 +208,23 @@ export function Header(): React.JSX.Element {
 
   const userName = user?.name ?? user?.email ?? 'User';
   const userPicture = user?.picture;
+
+  const handleWorkerEnabledToggle = (worker: WorkerStatus): void => {
+    const nextEnabled = !worker.enabled;
+    setWorkerToggleError(null);
+    setSavingWorkers((current) => new Set(current).add(worker.name));
+    void setWorkerEnabled(worker.name, nextEnabled)
+      .catch((err: unknown) => {
+        setWorkerToggleError(err instanceof Error ? err.message : 'Failed to update worker');
+      })
+      .finally(() => {
+        setSavingWorkers((current) => {
+          const next = new Set(current);
+          next.delete(worker.name);
+          return next;
+        });
+      });
+  };
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 md:pl-3 md:pr-6">
@@ -206,6 +301,11 @@ export function Header(): React.JSX.Element {
                     </button>
                   )}
                 </div>
+                {workerToggleError !== null ? (
+                  <div className="px-4 py-1 text-xs text-red-600 dark:text-red-400">
+                    {workerToggleError}
+                  </div>
+                ) : null}
 
                 {workersStatus.workers.length === 0 ? (
                   <div className="px-4 py-3">
@@ -232,7 +332,7 @@ export function Header(): React.JSX.Element {
                           key={worker.name}
                           className="flex items-center justify-between px-4 py-2 text-sm"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
                             <span className="text-lg">{display.icon}</span>
                             <div className="flex flex-col">
                               <span className="font-medium text-slate-700 dark:text-slate-200">
@@ -245,8 +345,15 @@ export function Header(): React.JSX.Element {
                               )}
                             </div>
                           </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {display.text}
+                          <div className="ml-3 flex shrink-0 items-center gap-2">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {display.text}
+                            </span>
+                            <WorkerEnabledSwitch
+                              worker={worker}
+                              saving={savingWorkers.has(worker.name)}
+                              onToggle={handleWorkerEnabledToggle}
+                            />
                           </div>
                         </div>
                       );
@@ -390,6 +497,11 @@ export function Header(): React.JSX.Element {
                           </button>
                         )}
                       </div>
+                      {workerToggleError !== null ? (
+                        <div className="px-4 py-1 text-xs text-red-600 dark:text-red-400">
+                          {workerToggleError}
+                        </div>
+                      ) : null}
 
                       {workersStatus.workers.length === 0 ? (
                         <div className="px-4 py-2">
@@ -417,15 +529,22 @@ export function Header(): React.JSX.Element {
                                 key={worker.name}
                                 className="flex items-center justify-between px-4 py-1.5 text-sm"
                               >
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
                                   <span className="text-base">{display.icon}</span>
-                                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                                  <span className="truncate font-medium text-slate-700 dark:text-slate-200">
                                     {worker.name}
                                   </span>
                                 </div>
-                                <span className="text-xs text-slate-500 dark:text-slate-400">
-                                  {display.text}
-                                </span>
+                                <div className="ml-3 flex shrink-0 items-center gap-2">
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                                    {display.text}
+                                  </span>
+                                  <WorkerEnabledSwitch
+                                    worker={worker}
+                                    saving={savingWorkers.has(worker.name)}
+                                    onToggle={handleWorkerEnabledToggle}
+                                  />
+                                </div>
                               </div>
                             );
                           })}

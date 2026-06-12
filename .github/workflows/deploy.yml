@@ -2,257 +2,58 @@ name: Deploy
 
 on:
   push:
-    branches:
-      - development
+    branches: [development]
   workflow_dispatch:
     inputs:
-      force_strategy:
-        description: 'Force a specific strategy'
-        required: false
+      target:
+        description: 'Deployment target'
+        required: true
+        default: hetzner-prod
         type: choice
         options:
-          - 'auto'
-          - 'monolith'
-        default: 'auto'
+          - hetzner-prod
+          - firestore
+          - vm-lifecycle
+          - transcription
+          - code-worker
+      deploy_nginx:
+        description: 'Refresh and reload nginx during Hetzner deployment'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: deploy-${{ github.event_name == 'push' && 'hetzner-prod' || inputs.target }}
+  cancel-in-progress: false
+
 jobs:
-  analyze:
-    name: Analyze Changes
+  deploy-hetzner-prod:
+    name: Deploy Hetzner Production
+    if: ${{ github.event_name == 'push' || inputs.target == 'hetzner-prod' }}
     runs-on: ubuntu-latest
-    outputs:
-      strategy: ${{ steps.dispatch.outputs.strategy }}
-      targets: ${{ steps.dispatch.outputs.targets }}
-      affected_count: ${{ steps.dispatch.outputs.affected_count }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Get base commit
-        id: base
-        run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            BASE_SHA="${{ github.event.before }}"
-            if [[ "$BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
-              BASE_SHA="HEAD~1"
-            fi
-          else
-            BASE_SHA="HEAD~1"
-          fi
-          echo "base_sha=$BASE_SHA" >> $GITHUB_OUTPUT
-          echo "Base SHA: $BASE_SHA"
-
-      - name: Run Smart Dispatch
-        id: dispatch
-        env:
-          BASE_SHA: ${{ steps.base.outputs.base_sha }}
-          HEAD_SHA: ${{ github.sha }}
-        run: node .github/scripts/smart-dispatch.mjs
-
-      - name: Detect Terraform Affected Services
-        run: |
-          echo "═" | tr ' ' '═'
-          echo "  TERRAFORM CHANGE DETECTION"
-          echo "═" | tr ' ' '═'
-          ./scripts/detect-tf-changes.sh "${{ steps.base.outputs.base_sha }}" "${{ github.sha }}" || true
-          echo ""
-
-  check-runner:
-    name: Check Self-Hosted Runner
-    needs: analyze
-    if: needs.analyze.outputs.strategy != 'NONE' || github.event.inputs.force_strategy == 'monolith'
-    runs-on: ubuntu-latest
-    outputs:
-      available: ${{ steps.check.outputs.available }}
-
-    steps:
-      - name: Check runner availability
-        id: check
-        run: |
-          if curl -sf --max-time 5 https://ci.intexuraos.cloud/health 2>/dev/null; then
-            echo "available=true" >> $GITHUB_OUTPUT
-            echo "Self-hosted runner is available"
-          else
-            echo "available=false" >> $GITHUB_OUTPUT
-            echo "Self-hosted runner unavailable, will use Cloud Build"
-          fi
-
-  # ===========================================================================
-  # MONOLITH - Self-Hosted Runner (preferred)
-  # ===========================================================================
-  deploy-monolith-local:
-    name: Deploy All (Local)
-    needs: [analyze, check-runner]
-    if: >-
-      needs.check-runner.outputs.available == 'true' &&
-      (needs.analyze.outputs.strategy == 'MONOLITH' || github.event.inputs.force_strategy == 'monolith')
-    runs-on: [self-hosted, builder]
     timeout-minutes: 45
     env:
-      ARTIFACT_REGISTRY_URL: ${{ vars.ARTIFACT_REGISTRY_URL }}
-      COMMIT_SHA: ${{ github.sha }}
-      REGION: europe-central2
-      ENVIRONMENT: dev
-      FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
-      WORKSPACE_ROOT: ${{ github.workspace }}
-      DOCKER_BUILDKIT: '1'
-      GOOGLE_APPLICATION_CREDENTIALS: ${{ vars.GCP_SA_KEY_PATH }}
+      HETZNER_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_PRIVATE_KEY }}
+      HETZNER_PROD_HOST: ${{ vars.HETZNER_PROD_HOST || '162.55.210.48' }}
+      DEPLOY_NGINX: ${{ github.event_name == 'push' && 'true' || inputs.deploy_nginx }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Authenticate to GCP
-        run: |
-          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
-          gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
+      - name: Deploy via Hetzner runtime scripts
+        run: bash scripts/hetzner/github-actions-deploy.sh
 
-      - name: Setup Node.js (fnm)
-        run: |
-          export PATH="$HOME/.local/share/fnm:$PATH"
-          eval "$(fnm env)"
-          echo "$(dirname $(which node))" >> $GITHUB_PATH
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build TypeScript packages
-        run: pnpm -r build
-
-      - name: Deploy Firestore
-        run: bash cloudbuild/scripts/deploy-firestore.sh
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-
-      - name: Build and push all Docker images
-        run: |
-          bash cloudbuild/scripts/build-push-monitored.sh image-service apps/image-service/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh api-docs-hub apps/api-docs-hub/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh code-worker workers/code-worker/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh notion-service apps/notion-service/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh user-service apps/user-service/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh whatsapp-service apps/whatsapp-service/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh app-settings-service apps/app-settings-service/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh mobile-notifications-service apps/mobile-notifications-service/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh research-agent apps/research-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh notes-agent apps/notes-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh todos-agent apps/todos-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh bookmarks-agent apps/bookmarks-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh calendar-agent apps/calendar-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh linear-agent apps/linear-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh web-agent apps/web-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh code-agent apps/code-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh chat-agent apps/chat-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh cron-agent apps/cron-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh hellscript-agent apps/hellscript-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh llm-usage-service apps/llm-usage-service/Dockerfile &
-          wait
-
-      - name: Build workers
-        run: bash cloudbuild/scripts/build-all-workers.sh
-
-      - name: Deploy Cloud Run services + Cloud Functions
-        run: |
-          SERVICES=(
-            image-service api-docs-hub notion-service user-service whatsapp-service
-            app-settings-service mobile-notifications-service research-agent
-            commands-agent actions-agent notes-agent
-            todos-agent bookmarks-agent calendar-agent linear-agent
-            web-agent code-agent chat-agent cron-agent hellscript-agent
-            llm-usage-service
-          )
-          for svc in "${SERVICES[@]}"; do
-            bash "cloudbuild/scripts/deploy-${svc}.sh" &
-          done
-          bash cloudbuild/scripts/deploy-function.sh vm-lifecycle &
-          bash cloudbuild/scripts/deploy-function.sh log-cleanup &
-          wait
-
-      - name: Fetch web config
-        run: |
-          CLOUD_RUN_SERVICES=(
-            "user-service:USER_SERVICE"
-            "whatsapp-service:WHATSAPP_SERVICE"
-            "notion-service:NOTION_SERVICE"
-            "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
-            "research-agent:RESEARCH_AGENT"
-            "commands-agent:COMMANDS_AGENT"
-            "actions-agent:ACTIONS_AGENT"
-            "notes-agent:NOTES_AGENT"
-            "todos-agent:TODOS_AGENT"
-            "bookmarks-agent:BOOKMARKS_AGENT"
-            "calendar-agent:CALENDAR_AGENT"
-            "chat-agent:CHAT_AGENT"
-            "app-settings-service:APP_SETTINGS_SERVICE"
-            "linear-agent:LINEAR_AGENT"
-            "code-agent:CODE_AGENT"
-            "cron-agent:CRON_AGENT"
-            "hellscript-agent:HELLSCRIPT_AGENT"
-            "llm-usage-service:LLM_USAGE_SERVICE"
-          )
-
-          declare -A SERVICE_URLS
-          for entry in "${CLOUD_RUN_SERVICES[@]}"; do
-            SERVICE_NAME="${entry%%:*}"
-            ENV_SUFFIX="${entry##*:}"
-            URL=$(gcloud run services describe "intexuraos-${SERVICE_NAME}" --region="$REGION" --format='value(status.url)')
-            SERVICE_URLS["INTEXURAOS_${ENV_SUFFIX}_URL"]="$URL"
-            echo "  ${ENV_SUFFIX}: ${URL}"
-          done
-
-          AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
-          AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
-          AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
-          FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
-          FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
-          FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
-          SENTRY_DSN_WEB=$(gcloud secrets versions access latest --secret=INTEXURAOS_SENTRY_DSN_WEB)
-
-          cat > apps/web/.env << EOF
-          INTEXURAOS_AUTH0_DOMAIN=$AUTH0_DOMAIN
-          INTEXURAOS_AUTH0_SPA_CLIENT_ID=$AUTH0_SPA_CLIENT_ID
-          INTEXURAOS_AUTH_AUDIENCE=$AUTH_AUDIENCE
-          INTEXURAOS_FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
-          INTEXURAOS_FIREBASE_API_KEY=$FIREBASE_API_KEY
-          INTEXURAOS_FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
-          INTEXURAOS_SENTRY_DSN_WEB=$SENTRY_DSN_WEB
-          INTEXURAOS_ENVIRONMENT=$ENVIRONMENT
-          EOF
-
-          for key in "${!SERVICE_URLS[@]}"; do
-            echo "${key}=${SERVICE_URLS[$key]}" >> apps/web/.env
-          done
-
-      - name: Build and deploy web
-        run: |
-          pnpm run --filter @intexuraos/web build
-          bash cloudbuild/scripts/deploy-web.sh
-
-  # ===========================================================================
-  # MONOLITH - Cloud Build (fallback)
-  # ===========================================================================
-  deploy-monolith-cloud:
-    name: Deploy All (Cloud Build)
-    needs: [analyze, check-runner]
-    if: >-
-      needs.check-runner.outputs.available != 'true' &&
-      (needs.analyze.outputs.strategy == 'MONOLITH' || github.event.inputs.force_strategy == 'monolith')
+  deploy-retained-gcp:
+    name: Deploy Retained GCP ${{ inputs.target }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target != 'hetzner-prod' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
     steps:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -263,278 +64,56 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Trigger Full Rebuild
+      - name: Trigger retained Cloud Build target
         id: trigger
+        env:
+          TARGET: ${{ inputs.target }}
+          REGION: europe-central2
         run: |
-          echo "Triggering MONOLITH build (all services) via Cloud Build"
-          BUILD_ID=$(gcloud builds triggers run intexuraos-dev-deploy \
-            --branch="${GITHUB_REF_NAME}" \
-            --region=europe-central2 \
-            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}" \
-            --format="value(metadata.build.id)")
-          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
-          echo "Build ID: $BUILD_ID"
+          set -euo pipefail
 
-      - name: Wait for Build Completion
-        timeout-minutes: 45
-        run: |
-          BUILD_ID="${{ steps.trigger.outputs.build_id }}"
-          echo "Waiting for build $BUILD_ID..."
-
-          while true; do
-            STATUS=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(status)")
-            echo "Build status: $STATUS"
-
-            case "$STATUS" in
-              SUCCESS)
-                echo "Build completed successfully"
-                exit 0
-                ;;
-              FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)
-                echo "Build failed with status: $STATUS"
-                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(logUrl)")
-                echo "Logs: $LOGS_URL"
-                exit 1
-                ;;
-              QUEUED|WORKING)
-                sleep 30
-                ;;
-              *)
-                echo "Unknown status: $STATUS"
-                sleep 30
-                ;;
-            esac
-          done
-
-  # ===========================================================================
-  # INDIVIDUAL - Self-Hosted Runner (preferred)
-  # ===========================================================================
-  deploy-individual-local:
-    name: Deploy ${{ matrix.target }} (Local)
-    needs: [analyze, check-runner]
-    if: >-
-      needs.check-runner.outputs.available == 'true' &&
-      needs.analyze.outputs.strategy == 'INDIVIDUAL' &&
-      github.event.inputs.force_strategy != 'monolith'
-    runs-on: [self-hosted, builder]
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        target: ${{ fromJson(needs.analyze.outputs.targets) }}
-    env:
-      ARTIFACT_REGISTRY_URL: ${{ vars.ARTIFACT_REGISTRY_URL }}
-      COMMIT_SHA: ${{ github.sha }}
-      REGION: europe-central2
-      ENVIRONMENT: dev
-      FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
-      WORKSPACE_ROOT: ${{ github.workspace }}
-      DOCKER_BUILDKIT: '1'
-      GOOGLE_APPLICATION_CREDENTIALS: ${{ vars.GCP_SA_KEY_PATH }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Authenticate to GCP
-        run: |
-          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
-          gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
-
-      - name: Setup Node.js (fnm)
-        run: |
-          export PATH="$HOME/.local/share/fnm:$PATH"
-          eval "$(fnm env)"
-          echo "$(dirname $(which node))" >> $GITHUB_PATH
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build TypeScript packages
-        run: pnpm -r build
-
-      - name: Deploy target
-        run: |
-          TARGET="${{ matrix.target }}"
-          echo "Deploying target: $TARGET"
-
-          # Special targets with unique deploy logic
           case "$TARGET" in
-            firestore)
-              echo "Deploying Firestore"
-              bash cloudbuild/scripts/deploy-firestore.sh
-              exit 0
-              ;;
-            web)
-              echo "Deploying web frontend"
-              CLOUD_RUN_SERVICES=(
-                "user-service:USER_SERVICE"
-                "whatsapp-service:WHATSAPP_SERVICE"
-                "notion-service:NOTION_SERVICE"
-                "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
-                "research-agent:RESEARCH_AGENT"
-                "commands-agent:COMMANDS_AGENT"
-                "actions-agent:ACTIONS_AGENT"
-                "notes-agent:NOTES_AGENT"
-                "todos-agent:TODOS_AGENT"
-                "bookmarks-agent:BOOKMARKS_AGENT"
-                "calendar-agent:CALENDAR_AGENT"
-                "chat-agent:CHAT_AGENT"
-                "app-settings-service:APP_SETTINGS_SERVICE"
-                "linear-agent:LINEAR_AGENT"
-                "code-agent:CODE_AGENT"
-                "cron-agent:CRON_AGENT"
-                "hellscript-agent:HELLSCRIPT_AGENT"
-                "llm-usage-service:LLM_USAGE_SERVICE"
-              )
-
-              declare -A SERVICE_URLS
-              for entry in "${CLOUD_RUN_SERVICES[@]}"; do
-                SERVICE_NAME="${entry%%:*}"
-                ENV_SUFFIX="${entry##*:}"
-                URL=$(gcloud run services describe "intexuraos-${SERVICE_NAME}" --region="$REGION" --format='value(status.url)')
-                SERVICE_URLS["INTEXURAOS_${ENV_SUFFIX}_URL"]="$URL"
-              done
-
-              AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
-              AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
-              AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
-              FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
-              FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
-              FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
-              SENTRY_DSN_WEB=$(gcloud secrets versions access latest --secret=INTEXURAOS_SENTRY_DSN_WEB)
-
-              cat > apps/web/.env << EOF
-              INTEXURAOS_AUTH0_DOMAIN=$AUTH0_DOMAIN
-              INTEXURAOS_AUTH0_SPA_CLIENT_ID=$AUTH0_SPA_CLIENT_ID
-              INTEXURAOS_AUTH_AUDIENCE=$AUTH_AUDIENCE
-              INTEXURAOS_FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
-              INTEXURAOS_FIREBASE_API_KEY=$FIREBASE_API_KEY
-              INTEXURAOS_FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
-              INTEXURAOS_SENTRY_DSN_WEB=$SENTRY_DSN_WEB
-              INTEXURAOS_ENVIRONMENT=$ENVIRONMENT
-          EOF
-
-              for key in "${!SERVICE_URLS[@]}"; do
-                echo "${key}=${SERVICE_URLS[$key]}" >> apps/web/.env
-              done
-
-              pnpm run --filter @intexuraos/web build
-              bash cloudbuild/scripts/deploy-web.sh
-              exit 0
+            firestore|vm-lifecycle|transcription|code-worker) ;;
+            *)
+              echo "Unsupported retained GCP target: $TARGET" >&2
+              exit 1
               ;;
           esac
 
-          # Workers with Dockerfiles (build+push only, no Cloud Run deploy)
-          WORKER_DOCKERFILE="workers/$TARGET/Dockerfile"
-          if [[ -f "$WORKER_DOCKERFILE" ]]; then
-            echo "Building and pushing worker image: $TARGET"
-            bash cloudbuild/scripts/build-push-monitored.sh "$TARGET" "$WORKER_DOCKERFILE"
-            exit 0
-          fi
+          BUILD_ID="$(gcloud builds triggers run "$TARGET" \
+            --branch="${GITHUB_REF_NAME:-development}" \
+            --region="$REGION" \
+            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME:-development}" \
+            --format="value(metadata.build.id)")"
 
-          # Workers without Dockerfiles (Cloud Functions)
-          WORKER_DIR="workers/$TARGET"
-          if [[ -d "$WORKER_DIR" ]]; then
-            echo "Deploying Cloud Function: $TARGET"
-            bash cloudbuild/scripts/deploy-function.sh "$TARGET"
-            exit 0
-          fi
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "Triggered $TARGET build: $BUILD_ID"
 
-          # Docker services (Cloud Run) — apps/<target>/Dockerfile
-          DOCKERFILE="apps/$TARGET/Dockerfile"
-          if [[ ! -f "$DOCKERFILE" ]]; then
-            echo "ERROR: Dockerfile not found: $DOCKERFILE"
-            exit 1
-          fi
-
-          bash cloudbuild/scripts/build-push-monitored.sh "$TARGET" "$DOCKERFILE"
-          bash "cloudbuild/scripts/deploy-${TARGET}.sh"
+      - name: Wait for build completion
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-
-  # ===========================================================================
-  # INDIVIDUAL - Cloud Build (fallback)
-  # ===========================================================================
-  deploy-individual-cloud:
-    name: Deploy ${{ matrix.target }} (Cloud Build)
-    needs: [analyze, check-runner]
-    if: >-
-      needs.check-runner.outputs.available != 'true' &&
-      needs.analyze.outputs.strategy == 'INDIVIDUAL' &&
-      github.event.inputs.force_strategy != 'monolith'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target: ${{ fromJson(needs.analyze.outputs.targets) }}
-
-    steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Trigger ${{ matrix.target }}
-        id: trigger
+          BUILD_ID: ${{ steps.trigger.outputs.build_id }}
+          REGION: europe-central2
         run: |
-          echo "Triggering individual build: ${{ matrix.target }}"
-          BUILD_ID=$(gcloud builds triggers run ${{ matrix.target }} \
-            --branch="${GITHUB_REF_NAME}" \
-            --region=europe-central2 \
-            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}" \
-            --format="value(metadata.build.id)")
-          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
-          echo "Build ID: $BUILD_ID"
-
-      - name: Wait for Build Completion
-        timeout-minutes: 15
-        run: |
-          BUILD_ID="${{ steps.trigger.outputs.build_id }}"
-          echo "Waiting for build $BUILD_ID (${{ matrix.target }})..."
+          set -euo pipefail
 
           while true; do
-            STATUS=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(status)")
+            STATUS="$(gcloud builds describe "$BUILD_ID" --region="$REGION" --format="value(status)")"
             echo "Build status: $STATUS"
 
             case "$STATUS" in
               SUCCESS)
-                echo "Build completed successfully"
                 exit 0
                 ;;
               FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)
-                echo "Build failed with status: $STATUS"
-                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(logUrl)")
-                echo "Logs: $LOGS_URL"
+                gcloud builds describe "$BUILD_ID" --region="$REGION" --format="value(logUrl)"
                 exit 1
                 ;;
               QUEUED|WORKING)
                 sleep 30
                 ;;
               *)
-                echo "Unknown status: $STATUS"
+                echo "Unknown build status: $STATUS" >&2
                 sleep 30
                 ;;
             esac
           done
-
-  # ===========================================================================
-  # NO CHANGES
-  # ===========================================================================
-  skip-deploy:
-    name: No Changes to Deploy
-    needs: analyze
-    if: needs.analyze.outputs.strategy == 'NONE' && github.event.inputs.force_strategy != 'monolith'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Report
-        run: |
-          echo "No deployable changes detected"
-          echo "Affected services: ${{ needs.analyze.outputs.affected_count }}"

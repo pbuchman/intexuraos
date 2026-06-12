@@ -33,7 +33,7 @@ Before starting, ensure you have:
 ### Step 1.1: Create a bookmark via the public API
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks \
+curl -X POST http://localhost:8124/ \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -118,7 +118,7 @@ Note the `url` field is the app deep link, not the bookmarked URL. This endpoint
 The enrichment pipeline processes asynchronously. Poll for completion (typically 5–10 seconds):
 
 ```bash
-curl "http://localhost:8124/bookmarks/bookmark_def456" \
+curl "http://localhost:8124/bookmark_def456" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -158,6 +158,24 @@ The message is marked as important, so it will always be delivered regardless of
 
 **Checkpoint:** Your bookmark should have `ogFetchStatus: "processed"` and a non-null `aiSummary`.
 
+### Step 2.4: Verify replay recovery behavior
+
+If WhatsApp webhook recovery replays the same bookmark command, the internal create call should not create a second bookmark. Repeat the Step 2.1 request with the same `userId` and `url`:
+
+```bash
+curl -X POST http://localhost:8124/internal/bookmarks \
+  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "url": "https://example.com/interesting-article",
+    "source": "whatsapp",
+    "sourceId": "wamid.HBgNMTIzNDU2Nzg5MA=="
+  }'
+```
+
+Expected result: `409 CONFLICT` with `error.details.existingBookmarkId`. That ID is the bookmark the replay should use for recovery.
+
 ---
 
 ## Part 3: List and Filter Bookmarks (5 minutes)
@@ -165,7 +183,7 @@ The message is marked as important, so it will always be delivered regardless of
 ### Step 3.1: List all bookmarks
 
 ```bash
-curl "http://localhost:8124/bookmarks" \
+curl "http://localhost:8124/" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -199,7 +217,7 @@ curl "http://localhost:8124/bookmarks?ogFetchStatus=pending" \
 ### Step 4.1: Update bookmark tags
 
 ```bash
-curl -X PATCH http://localhost:8124/bookmarks/bookmark_abc123 \
+curl -X PATCH http://localhost:8124/bookmark_abc123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -210,21 +228,21 @@ curl -X PATCH http://localhost:8124/bookmarks/bookmark_abc123 \
 ### Step 4.2: Archive a bookmark
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks/bookmark_abc123/archive \
+curl -X POST http://localhost:8124/bookmark_abc123/archive \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ### Step 4.3: Unarchive a bookmark
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks/bookmark_abc123/unarchive \
+curl -X POST http://localhost:8124/bookmark_abc123/unarchive \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ### Step 4.4: Delete a bookmark
 
 ```bash
-curl -X DELETE http://localhost:8124/bookmarks/bookmark_abc123 \
+curl -X DELETE http://localhost:8124/bookmark_abc123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -299,7 +317,7 @@ The proxy:
 | Auth failed                | 401 Unauthorized            | Check token validity                               |
 | Bookmark not found         | 404 error                   | Verify bookmark ID and user ownership              |
 | Invalid URL                | 400 error                   | Ensure URL is valid HTTP/HTTPS format              |
-| Duplicate bookmark         | 409 Conflict                | URL already exists for user                        |
+| Duplicate bookmark         | 409 Conflict                | Use `error.details.existingBookmarkId`             |
 | Metadata fetch failed      | `ogFetchStatus: failed`     | Site may block scraping; try force-refresh         |
 | No WhatsApp notification   | Summary saved, no message   | Check WhatsApp connection in user-service          |
 | Enrichment never completes | `ogFetchStatus: pending`    | Check Pub/Sub subscription health                  |
@@ -334,7 +352,7 @@ Test your understanding:
 ### Exercise 1: Custom Tags
 
 ```bash
-curl -X POST http://localhost:8124/bookmarks \
+curl -X POST http://localhost:8124/ \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/tagged", "tags": ["exercise", "test"], "source": "manual", "sourceId": "ex-1"}'
@@ -356,7 +374,7 @@ BOOKMARK_ID=$(echo $RESPONSE | jq -r '.data.id')
 
 # Poll until aiSummary is not null
 while true; do
-  SUMMARY=$(curl -s "http://localhost:8124/bookmarks/$BOOKMARK_ID" \
+  SUMMARY=$(curl -s "http://localhost:8124/$BOOKMARK_ID" \
     -H "Authorization: Bearer YOUR_ACCESS_TOKEN" | jq -r '.data.aiSummary')
   if [ "$SUMMARY" != "null" ]; then
     echo "Summary: $SUMMARY"

@@ -11,12 +11,18 @@ vi.mock('@speechmatics/batch-client', () => ({
 import { createTranscriptionProvider } from '../../providers/provider-factory.js';
 import { SpeechmaticsTranscriptionAdapter } from '../../providers/speechmatics/adapter.js';
 
+// `child` is unused by the provider factory but required by the
+// WorkerLogger contract; returning `this` keeps any incidental child-logger
+// calls recorded against the same vi.fn() instances.
 const mockLogger = {
   level: 'info',
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  child: vi.fn().mockImplementation(function (this: unknown) {
+    return this;
+  }),
 };
 
 describe('createTranscriptionProvider', () => {

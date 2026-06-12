@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildFailureTriagePrompt, parseTriageResponse, FAILURE_TRIAGE_PROMPT_VERSION } from '../../../domain/prompts/failureTriagePrompt.js';
+import { failureTriagePrompt, parseTriageResponse, FAILURE_TRIAGE_PROMPT_VERSION } from '../../../domain/prompts/failureTriagePrompt.js';
 
-describe('buildFailureTriagePrompt', () => {
+describe('failureTriagePrompt', () => {
+  it('has correct metadata', () => {
+    expect(failureTriagePrompt.name).toBe('failure-triage');
+    expect(failureTriagePrompt.description).toContain('retried');
+    expect(failureTriagePrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(failureTriagePrompt.version).toBe(FAILURE_TRIAGE_PROMPT_VERSION);
+  });
+
   it('includes error code in prompt', () => {
-    const prompt = buildFailureTriagePrompt({
+    const prompt = failureTriagePrompt.build({
       errorCode: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
       errorMessage: 'Missing required output fields',
       recentLogLines: ['line 1', 'line 2'],
@@ -16,7 +23,7 @@ describe('buildFailureTriagePrompt', () => {
 
   it('limits log lines to 20', () => {
     const lines = Array.from({ length: 30 }, (_, i) => `line ${String(i)}`);
-    const prompt = buildFailureTriagePrompt({
+    const prompt = failureTriagePrompt.build({
       errorCode: 'TEST_ENFORCEMENT_FAILED',
       errorMessage: 'test',
       recentLogLines: lines,

@@ -14,7 +14,7 @@
 
 ### Impose on Buffer
 
-**Endpoint:** `POST /hellscript/impose`
+**Endpoint:** `POST /impose`
 
 **When to use:** When you need to send a user utterance to a writing buffer. Creates a new buffer if `bufferId` is omitted. The user's LLM client is resolved per-request via user-service.
 
@@ -58,7 +58,7 @@ interface ImposeOutput {
 
 ### List Buffers
 
-**Endpoint:** `GET /hellscript/buffers`
+**Endpoint:** `GET /buffers`
 
 **When to use:** When you need to list all writing buffers for the authenticated user.
 
@@ -79,7 +79,7 @@ interface ListBuffersOutput {
 
 ### Get Buffer Workspace
 
-**Endpoint:** `GET /hellscript/buffers/:id`
+**Endpoint:** `GET /buffers/:id`
 
 **When to use:** When you need the full state of a buffer including events, draft versions, and materialized state.
 
@@ -124,7 +124,7 @@ interface BufferWorkspace {
 
 ### Get Writing Config
 
-**Endpoint:** `GET /hellscript/writing-config`
+**Endpoint:** `GET /writing-config`
 
 **When to use:** When you need to retrieve the user's style instructions across all categories.
 
@@ -141,7 +141,7 @@ interface WritingStyleConfig {
 
 ### Update Style Instructions
 
-**Endpoint:** `PUT /hellscript/writing-config/:category/style`
+**Endpoint:** `PUT /writing-config/:category/style`
 
 **When to use:** When setting or updating style instructions for a specific writing category.
 
@@ -157,10 +157,10 @@ interface StyleInput {
 
 **Endpoints:**
 
-- `GET /hellscript/writing-config/:category/samples` — list samples
-- `POST /hellscript/writing-config/:category/samples` — create sample (max 5 per category)
-- `PUT /hellscript/writing-config/:category/samples/:sampleId` — update sample
-- `DELETE /hellscript/writing-config/:category/samples/:sampleId` — delete sample
+- `GET /writing-config/:category/samples` — list samples
+- `POST /writing-config/:category/samples` — create sample (max 5 per category)
+- `PUT /writing-config/:category/samples/:sampleId` — update sample
+- `DELETE /writing-config/:category/samples/:sampleId` — delete sample
 
 **Create/Update Input Schema:**
 
@@ -205,35 +205,35 @@ interface WritingSample {
 ### Pattern 1: Create and Build a Buffer
 
 ```
-1. POST /hellscript/impose with utterance only (no bufferId) to create buffer
+1. POST /impose with utterance only (no bufferId) to create buffer
 2. Save returned bufferId
-3. POST /hellscript/impose with bufferId + additional utterances
+3. POST /impose with bufferId + additional utterances
 4. Repeat step 3 to accumulate thoughts
 ```
 
 ### Pattern 2: Configure Writing Style
 
 ```
-1. PUT /hellscript/writing-config/:category/style to set style instructions
-2. POST /hellscript/writing-config/:category/samples to add writing samples (up to 5)
+1. PUT /writing-config/:category/style to set style instructions
+2. POST /writing-config/:category/samples to add writing samples (up to 5)
 3. Repeat for each category you want to configure
 ```
 
 ### Pattern 3: Generate and Iterate on Drafts
 
 ```
-1. POST /hellscript/impose with utterance like "write the draft" and category field
+1. POST /impose with utterance like "write the draft" and category field
 2. If action is "category_required", re-send with category field
 3. If action is "update_draft", draft was created — latestDraftVersionId is returned
-4. GET /hellscript/buffers/:id to retrieve draft markdown
+4. GET /buffers/:id to retrieve draft markdown
 5. Add more thoughts, then request another draft for next version
 ```
 
 ### Pattern 4: Workspace Review
 
 ```
-1. GET /hellscript/buffers to list all user buffers
-2. GET /hellscript/buffers/:id for full workspace
+1. GET /buffers to list all user buffers
+2. GET /buffers/:id for full workspace
 3. Inspect state.thoughts, draftVersions, events
 ```
 

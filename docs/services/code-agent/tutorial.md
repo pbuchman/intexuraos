@@ -15,7 +15,7 @@
 
 ### Step 1: Start the service
 
-The service runs on port 8128 in local development. Start it via the ecosystem config:
+The dev service process runs on port 8128. Start it via the ecosystem config:
 
 ```bash
 pnpm run dev:code-agent
@@ -51,7 +51,7 @@ Before you can submit tasks, you need to configure at least one worker. Workers 
 ### Step 1: Add a worker via API
 
 ```bash
-curl -X POST http://localhost:8128/code/worker-settings/workers \
+curl -X POST http://localhost:8128/worker-settings/workers \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -68,7 +68,7 @@ Worker names must be 3-32 characters, lowercase alphanumeric with hyphens.
 ### Step 2: Test connectivity
 
 ```bash
-curl -X POST http://localhost:8128/code/worker-settings/workers/home-mac/test \
+curl -X POST http://localhost:8128/worker-settings/workers/home-mac/test \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -88,7 +88,7 @@ Expected response:
 ### Step 3: Verify settings
 
 ```bash
-curl http://localhost:8128/code/worker-settings \
+curl http://localhost:8128/worker-settings \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -99,7 +99,7 @@ Secrets appear masked in the response (e.g., `"cfAccessClientSecret": "...xyz"`)
 ### Step 1: Submit via the public endpoint
 
 ```bash
-curl -X POST http://localhost:8128/code/submit \
+curl -X POST http://localhost:8128/submit \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -112,7 +112,7 @@ You can explicitly choose between planning and execution mode with the `taskMode
 
 ```bash
 # Skip design phase — go straight to implementation
-curl -X POST http://localhost:8128/code/submit \
+curl -X POST http://localhost:8128/submit \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -121,6 +121,27 @@ curl -X POST http://localhost:8128/code/submit \
     "taskMode": "execution"
   }'
 ```
+
+You can also schedule an execution task for later dispatch and set a per-task timeout override:
+
+```bash
+curl -X POST http://localhost:8128/submit \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "prompt": "Run the long migration test repair",
+    "workerType": "auto",
+    "taskMode": "execution",
+    "scheduledDispatch": {
+      "localDateTime": "2026-06-13T22:00",
+      "timezone": "Europe/Warsaw",
+      "notBeforeAt": "2026-06-13T20:00:00.000Z"
+    },
+    "timeoutHours": 8
+  }'
+```
+
+`scheduledDispatch` is accepted only for execution tasks and `notBeforeAt` must be a future ISO timestamp. `timeoutHours` must be an integer from 1 to 12; omit it to use the orchestrator default.
 
 Expected response:
 
@@ -139,7 +160,7 @@ Note: If you accidentally include a secret in your prompt (e.g., `DB_PASSWORD=s3
 ### Step 2: Check task status
 
 ```bash
-curl http://localhost:8128/code/tasks/<codeTaskId> \
+curl http://localhost:8128/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -148,25 +169,25 @@ The task progresses through statuses: `queued` -> `dispatched` -> `running` -> `
 ### Step 3: List your tasks via issue groups
 
 ```bash
-curl "http://localhost:8128/code/issue-groups?status=active&limit=10" \
+curl "http://localhost:8128/issue-groups?groupStatus=active&limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-Tasks are grouped by Linear issue. Each group shows an aggregated status (active, needs-action, done, failed, archived), pipeline progress, and the latest task details. You can filter by group status and sort by `linear-id`, `pr-number`, `dispatched`, or `last-updated`.
+Tasks are grouped by Linear issue. Each group shows an aggregated status (active, needs-action, done, failed, archived), pipeline progress, and the latest task details. You can filter with `groupStatus` and sort with `sortBy=linear-id`, `sortBy=pr-number`, `sortBy=dispatched`, or `sortBy=last-updated`.
 
 For the flat task list (legacy):
 
 ```bash
-curl "http://localhost:8128/code/tasks?status=running&status=dispatched&limit=10" \
+curl "http://localhost:8128/tasks?status=running&status=dispatched&limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-Note: Tasks with `agentType: 'ask_agent'` are excluded from both listing endpoints. Use `GET /code/ask-agent/active` instead.
+Note: Tasks with `agentType: 'ask_agent'` are excluded from both listing endpoints. Use `GET /ask-agent/active` instead.
 
 ### Step 4: Cancel a running task
 
 ```bash
-curl -X POST http://localhost:8128/code/cancel \
+curl -X POST http://localhost:8128/cancel \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{ "taskId": "<codeTaskId>" }'
@@ -177,7 +198,7 @@ curl -X POST http://localhost:8128/code/cancel \
 ### Step 1: Start an Ask Agent session
 
 ```bash
-curl -X POST http://localhost:8128/code/ask-agent/start \
+curl -X POST http://localhost:8128/ask-agent/start \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -202,7 +223,7 @@ Ask Agent sessions use the Opus model and run as `agentType: 'ask_agent'`. Unlik
 ### Step 2: Check for an active session
 
 ```bash
-curl http://localhost:8128/code/ask-agent/active \
+curl http://localhost:8128/ask-agent/active \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -213,7 +234,7 @@ Returns the most recent non-archived ask-agent task, or `null` if none exists. T
 While the session is running, send additional context or questions:
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<askAgentTaskId>/messages \
+curl -X POST http://localhost:8128/tasks/<askAgentTaskId>/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -226,7 +247,7 @@ curl -X POST http://localhost:8128/code/tasks/<askAgentTaskId>/messages \
 ### Step 1: List available branches
 
 ```bash
-curl "http://localhost:8128/code/merge-queue/branches" \
+curl "http://localhost:8128/merge-queue/branches" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -235,7 +256,7 @@ The response shows available base branches. Branches marked with `blocked: true`
 ### Step 2: Create a merge queue watch
 
 ```bash
-curl -X POST http://localhost:8128/code/merge-queue/watch \
+curl -X POST http://localhost:8128/merge-queue/watch \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -260,7 +281,7 @@ Expected response:
 ### Step 3: Check watch status and merged PRs
 
 ```bash
-curl "http://localhost:8128/code/merge-queue/watches" \
+curl "http://localhost:8128/merge-queue/watches" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -269,14 +290,14 @@ Each watch shows which PRs have been merged, which were skipped (with reasons li
 ### Step 4: View eligible PRs
 
 ```bash
-curl "http://localhost:8128/code/merge-queue/prs" \
+curl "http://localhost:8128/merge-queue/prs" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
 ### Step 5: Cancel a watch
 
 ```bash
-curl -X DELETE "http://localhost:8128/code/merge-queue/watch/<watchId>" \
+curl -X DELETE "http://localhost:8128/merge-queue/watch/<watchId>" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -287,7 +308,7 @@ curl -X DELETE "http://localhost:8128/code/merge-queue/watch/<watchId>" \
 After a task fails, wait for the cool-off period (5 minutes for failed tasks, immediate for cancelled), then retry with optional additional context:
 
 ```bash
-curl -X POST http://localhost:8128/code/retry \
+curl -X POST http://localhost:8128/retry \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -303,7 +324,7 @@ The retry creates a new task linked to the original via the `retriedFrom` field.
 After reviewing a completed task, provide follow-up feedback to create a new task:
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<completedTaskId>/feedback \
+curl -X POST http://localhost:8128/tasks/<completedTaskId>/feedback \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -316,7 +337,7 @@ curl -X POST http://localhost:8128/code/tasks/<completedTaskId>/feedback \
 Send mid-session guidance to a running task (queued for next turn) or resume an ended task with new instructions:
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<taskId>/messages \
+curl -X POST http://localhost:8128/tasks/<taskId>/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -341,7 +362,7 @@ Expected response when task has ended (task resumed):
 After a planning agent task completes (`status: 'planned'`), you can trigger execution agent implementation:
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<plannedTaskId>/implement \
+curl -X POST http://localhost:8128/tasks/<plannedTaskId>/implement \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -352,7 +373,7 @@ Execution agent tasks reuse the original prompt but run in strict execution mode
 You can specify which AI model to use via the `workerType` parameter:
 
 ```bash
-curl -X POST http://localhost:8128/code/submit \
+curl -X POST http://localhost:8128/submit \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
@@ -361,14 +382,14 @@ curl -X POST http://localhost:8128/code/submit \
   }'
 ```
 
-Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`. If the linked Linear issue has a label matching a worker type, that label overrides the request. Different agent types (planning, execution, review, remediation) can be independently tuned to use different worker types via worker settings.
+Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `mimo-pro` (MiMo Pro 2.5), `glm`, `qwen`, `kimi`, `codex`, `codex-xhigh`, and `openrouter-free`. If the linked Linear issue has a label matching a worker type, that label overrides the request. Different agent types (planning, execution, review, remediation) can be independently tuned to use different worker types via worker settings.
 
 ### Query the GitHub event decision log
 
 View the decision log showing how each webhook event was evaluated:
 
 ```bash
-curl "http://localhost:8128/code/github-event-log?limit=20" \
+curl "http://localhost:8128/github-event-log?limit=20" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -379,7 +400,7 @@ Each entry shows the event type, action, repository, and the evaluation outcome 
 Expand any event log entry to view the full GitHub webhook payload:
 
 ```bash
-curl "http://localhost:8128/code/github-event-log/<entryId>/payload" \
+curl "http://localhost:8128/github-event-log/<entryId>/payload" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -423,7 +444,7 @@ curl -X POST http://localhost:8128/internal/code/process \
 
 | Symptom                               | Cause                                             | Fix                                                                          |
 | ------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `worker_not_configured` on submit     | No workers configured or enabled for user         | Add a worker via `POST /code/worker-settings/workers` and enable it          |
+| `worker_not_configured` on submit     | No workers configured or enabled for user         | Add a worker via `POST /worker-settings/workers` and enable it          |
 | `429` rate limit on submit            | Concurrent, hourly, or cost limit exceeded        | Wait for tasks to complete, or wait for the time window to reset             |
 | `409 CONFLICT` on submit              | Deduplication triggered (same prompt in window)   | Wait or modify the prompt                                                    |
 | `validation_error` on submit          | Prompt contains injection patterns                | Remove system override markers or base64 blobs from the prompt               |
@@ -431,13 +452,14 @@ curl -X POST http://localhost:8128/internal/code/process \
 | Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m         |
 | `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides                |
 | Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server        |
+| Callback owner/failure shown on task   | Worker callbacks are reaching the wrong owner or failing HMAC/routing | Check task `callbackState` and verify public callbacks use `/api/code/internal/...` |
 | `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                         |
 | GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings        |
-| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 24 hours in queue                    |
+| Task queued but never dispatched      | Scheduled wait, worker capacity, or worker health blocker | Check `/queue` or `/system-status`; queued tasks expose dispatch status and next action |
 | Review task not dispatching           | Workers at capacity                               | Review tasks queue like regular tasks — they dispatch when a worker frees up |
 | Merge queue watch not merging PRs     | CI checks pending or PRs have conflicts           | Check PR status on GitHub; the queue merges one PR per tick when checks pass |
 | Cannot create watch for `main`        | Main branch is blocked as merge queue target      | Use `development` or another non-blocked branch as the base branch           |
-| Ask Agent task not in task list       | Ask Agent tasks are filtered from list endpoints  | Use `GET /code/ask-agent/active` to retrieve Ask Agent sessions              |
+| Ask Agent task not in task list       | Ask Agent tasks are filtered from list endpoints  | Use `GET /ask-agent/active` to retrieve Ask Agent sessions              |
 
 ## Exercises
 
@@ -447,7 +469,7 @@ Configure a second worker (e.g., `cloud-vm`) and reorder priority so it becomes 
 
 ```bash
 # Add second worker
-curl -X POST http://localhost:8128/code/worker-settings/workers \
+curl -X POST http://localhost:8128/worker-settings/workers \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{
@@ -459,13 +481,13 @@ curl -X POST http://localhost:8128/code/worker-settings/workers \
   }'
 
 # Reorder: cloud-vm first
-curl -X PUT http://localhost:8128/code/worker-settings/priority \
+curl -X PUT http://localhost:8128/worker-settings/priority \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{ "workerNames": ["cloud-vm", "home-mac"] }'
 ```
 
-**Solution verification:** `GET /code/worker-settings` should show `cloud-vm` before `home-mac` in the `workers` array.
+**Solution verification:** `GET /worker-settings` should show `cloud-vm` before `home-mac` in the `workers` array.
 
 ### Exercise 2: Start an Ask Agent session and send follow-up
 
@@ -473,17 +495,17 @@ Start an interactive session and continue the conversation:
 
 ```bash
 # Start session
-curl -X POST http://localhost:8128/code/ask-agent/start \
+curl -X POST http://localhost:8128/ask-agent/start \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{ "prompt": "List all Firestore collections used by code-agent" }'
 
 # Check it is active
-curl http://localhost:8128/code/ask-agent/active \
+curl http://localhost:8128/ask-agent/active \
   -H "Authorization: Bearer <jwt>"
 
 # Send follow-up
-curl -X POST http://localhost:8128/code/tasks/<askAgentTaskId>/messages \
+curl -X POST http://localhost:8128/tasks/<askAgentTaskId>/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{ "message": "Which of those collections have subcollections?" }'
@@ -497,11 +519,11 @@ View grouped tasks and filter by status:
 
 ```bash
 # List active groups
-curl "http://localhost:8128/code/issue-groups?status=active&limit=5" \
+curl "http://localhost:8128/issue-groups?groupStatus=active&limit=5" \
   -H "Authorization: Bearer <jwt>"
 
 # List groups needing attention
-curl "http://localhost:8128/code/issue-groups?status=needs-action&limit=5" \
+curl "http://localhost:8128/issue-groups?groupStatus=needs-action&limit=5" \
   -H "Authorization: Bearer <jwt>"
 ```
 
@@ -510,7 +532,7 @@ curl "http://localhost:8128/code/issue-groups?status=needs-action&limit=5" \
 You can also mark a group as important:
 
 ```bash
-curl -X POST "http://localhost:8128/code/issue-groups/<groupKey>/important" \
+curl -X POST "http://localhost:8128/issue-groups/<groupKey>/important" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{ "important": true }'
@@ -522,7 +544,7 @@ Create a watch and observe the merge queue processing PRs:
 
 ```bash
 # Create watch
-curl -X POST http://localhost:8128/code/merge-queue/watch \
+curl -X POST http://localhost:8128/merge-queue/watch \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{
@@ -532,7 +554,7 @@ curl -X POST http://localhost:8128/code/merge-queue/watch \
   }'
 
 # Check status after a few scheduler ticks
-curl "http://localhost:8128/code/merge-queue/watches" \
+curl "http://localhost:8128/merge-queue/watches" \
   -H "Authorization: Bearer <jwt>"
 ```
 
@@ -555,11 +577,11 @@ Fetch the GitHub event decision log and inspect a raw payload:
 
 ```bash
 # List recent events
-curl "http://localhost:8128/code/github-event-log?limit=10" \
+curl "http://localhost:8128/github-event-log?limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 
 # Pick an entry ID and view its raw webhook payload
-curl "http://localhost:8128/code/github-event-log/<entryId>/payload" \
+curl "http://localhost:8128/github-event-log/<entryId>/payload" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -570,10 +592,10 @@ curl "http://localhost:8128/code/github-event-log/<entryId>/payload" \
 Configure which model is used for automated code reviews when the GitHub Agent does not specify one:
 
 ```bash
-curl -X PATCH http://localhost:8128/code/worker-settings/default-review-worker-type \
+curl -X PATCH http://localhost:8128/worker-settings/default-review-worker-type \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{ "workerType": "sonnet" }'
 ```
 
-**Solution verification:** `GET /code/worker-settings` should show `defaultReviewWorkerType: "sonnet"`.
+**Solution verification:** `GET /worker-settings` should show `defaultReviewWorkerType: "sonnet"`.

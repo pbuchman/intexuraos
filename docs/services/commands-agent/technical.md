@@ -2,7 +2,7 @@
 
 ## Overview
 
-Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt backed by Gemini 2.5 Flash. It receives commands from WhatsApp (via Pub/Sub push) and the PWA (via REST), creates actions through actions-agent, and publishes `action.created` events for downstream processing. LLM usage is tracked via `HttpInternalAuthUsageSink` to llm-usage-service. Runs on Cloud Run with Fastify, Firestore persistence, and Dash0 OpenTelemetry for distributed tracing.
+Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt backed by Gemini 2.5 Flash. It receives commands from WhatsApp (via Pub/Sub push) and the PWA (via REST), creates actions through actions-agent, and publishes `action.created` events for downstream processing. LLM usage is tracked via `HttpInternalAuthUsageSink` to llm-usage-service. Runs on Cloud Run with Fastify and Firestore persistence.
 
 ## Architecture
 
@@ -181,10 +181,10 @@ sequenceDiagram
 
 | Method | Path                   | Description                                   | Auth         |
 | ------ | ---------------------- | --------------------------------------------- | ------------ |
-| GET    | `/commands`            | List user's commands                          | Bearer token |
-| POST   | `/commands`            | Create command from web app                   | Bearer token |
-| DELETE | `/commands/:commandId` | Delete command (received/pending/failed only) | Bearer token |
-| PATCH  | `/commands/:commandId` | Archive classified command                    | Bearer token |
+| GET    | `/`            | List user's commands                          | Bearer token |
+| POST   | `/`            | Create command from web app                   | Bearer token |
+| DELETE | `/:commandId` | Delete command (received/pending/failed only) | Bearer token |
+| PATCH  | `/:commandId` | Archive classified command                    | Bearer token |
 
 ### Internal Endpoints
 
@@ -283,7 +283,6 @@ sequenceDiagram
 | `llm-contract`       | Shared `LlmModels` enum and type contracts              |
 | `internal-clients`   | Shared user-service HTTP client                         |
 | `infra-sentry`       | Sentry-enabled logger factory                           |
-| `infra-otel`         | OpenTelemetry distributed tracing via Dash0             |
 | `infra-pubsub`       | `BasePubSubPublisher` base class                        |
 | `common-http`        | `requireAuth`, `validateInternalAuth`, response helpers |
 | `common-core`        | `Result<T>`, `ok()`, `err()`, `getErrorMessage()`       |
@@ -295,7 +294,6 @@ sequenceDiagram
 | Firestore (`commands` collection)               | Command persistence                                                 |
 | Pub/Sub (via `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`) | Action creation events                                              |
 | Cloud Scheduler                                 | Triggers `/internal/retry-pending` for pending classification retry |
-| Dash0 (via OTLP/HTTP)                           | Distributed tracing and metrics                                     |
 
 ### External APIs
 
@@ -334,7 +332,7 @@ sequenceDiagram
 
 **Pub/Sub push authentication** — Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls. Pub/Sub requests are authenticated by Cloud Run OIDC validation before reaching the handler; direct calls use `X-Internal-Auth`.
 
-**Archive vs delete** — Classified commands can only be archived (`PATCH /commands/:commandId` with `status: "archived"`). Only commands with status `received`, `pending_classification`, or `failed` can be deleted.
+**Archive vs delete** — Classified commands can only be archived (`PATCH /:commandId` with `status: "archived"`). Only commands with status `received`, `pending_classification`, or `failed` can be deleted.
 
 **LLM usage tracking** — The user-service client is wired with `HttpInternalAuthUsageSink` from `llm-pricing`, which reports LLM usage to `llm-usage-service` for cost tracking. This replaced the previous startup pricing fetch from `app-settings-service` (removed in v3.6.0).
 
@@ -343,8 +341,6 @@ sequenceDiagram
 **Response contract** — All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
 
 **Logging** — All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically.
-
-**OpenTelemetry** — The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing exports to Dash0 via OTLP/HTTP when configured. No-op when unset.
 
 **Title length limit** — The Zod schema for classification responses enforces a 200-character maximum on titles. Increased from 50 in v3.3.0 to prevent valid classifications from being discarded when the LLM generates descriptive titles.
 
@@ -387,7 +383,7 @@ apps/commands-agent/src/
     actionsAgent/
       client.ts               # HTTP client for actions-agent
   routes/
-    commandsRoutes.ts         # Public endpoints (GET/POST/DELETE/PATCH /commands)
+    commandsRoutes.ts         # Public endpoints (GET/POST/DELETE/PATCH /)
     internalRoutes.ts         # Internal endpoints (/internal/*)
     helpers/
       internalAuth.ts         # PubSub OIDC and Cloud Scheduler auth strategies

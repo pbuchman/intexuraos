@@ -1,0 +1,23 @@
+{
+  "data": {
+    "outcome": "planned",
+    "superpowers_writing_plans_used": true,
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1452/reduce-whatsapp-notification-noise-by-alerting-only-on-actionable-task",
+    "complex_task": false,
+    "plan_doc": true,
+    "subtask_urls": [],
+    "plan_pr": "https://github.com/pbuchman/intexuraos/pull/1904",
+    "parallel_breakdown_proof": "",
+    "memory_ids_used": [
+      "mem_95dff382-624d-4290-a9aa-f9b548b46004",
+      "mem_9fc64e87-c920-4323-a459-8096fed371b4",
+      "mem_fb5906f4-7300-4f05-8174-5247524dc704"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Memory [1] drove the decision to scope this to a minimal flag change and defer state-dependent classifications; memory [2] kept `notifyTaskResumed` at `important: true` (resumed ≠ started); memory [3] reinforced that user-actionable moments (ready-to-merge, ready-to-code) are the correct \"important\" triggers.",
+    "clarification_message": "",
+    "summary": "* Task: trim WhatsApp \"important\" flag on code-task notifications to fire only on actionable states.\n  * Classified SIMPLE — two flag edits in one impl file (`whatsappNotifierImpl.ts`) plus test updates in its companion test file.\n  * Plan: remove `important: true` from `notifyTaskStarted`, add it to `notifyTaskComplete`; `notifyDesignComplete` already correct; all other notifiers untouched.\n  * Original issue description archived as a Linear comment before the description was rewritten to point at the plan doc.\n  * Artifacts: `docs/plans/INT-1452-evidence.md` committed on branch `plan/int-1452-whatsapp-importance`; PR #1904 open against `development`."
+  },
+  "missingRequired": [],
+  "warnings": []
+}

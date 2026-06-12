@@ -95,9 +95,7 @@ interface IntexuraFastifyReply extends FastifyReply {
 | Variable                         | Read By                                   | Required |
 | -------------------------------- | ----------------------------------------- | -------- |
 | `INTEXURAOS_SENTRY_DSN`          | `isSentryConfigured()`, `sendToSentry()`  | No       |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | `getOtelTransport()` (via `logStream.ts`) | No       |
-| `INTEXURAOS_DASH0_AUTH_TOKEN`    | `getOtelTransport()` (via `logStream.ts`) | No       |
-| `INTEXURAOS_ENVIRONMENT`         | `getOtelTransport()` resource attribute   | No       |
+| `INTEXURAOS_ENVIRONMENT`         | Sentry environment tag                    | No       |
 | `NODE_ENV`                       | `createAppLogger()`, `createLogStream()`  | No       |
 | `LOG_LEVEL`                      | Via `getLogLevel()` from common-core      | No       |
 
@@ -129,7 +127,6 @@ authorization, x-internal-auth, cookie, x-api-key, apikey
   +-- @sentry/node                     (init, captureException, captureMessage, withScope)
   +-- fastify                          (FastifyInstance, FastifyError, FastifyReply)
   +-- pino                             (Logger, multistream, destination, LogDescriptor, transport)
-  +-- pino-opentelemetry-transport     (log forwarding to Dash0 via OTLP)
 ```
 
 ---

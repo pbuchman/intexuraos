@@ -5,7 +5,7 @@
  * with per-user encrypted credentials.
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 
 /**
  * Worker name validation regex.
@@ -156,6 +156,22 @@ export type WorkerHealthState =
   | TunnelDownState
   | UnknownState;
 
+export type WorkerAuthProvider = 'claude' | 'codex';
+
+export interface WorkerAuthStatusDetails {
+  status: 'active' | 'expired' | 'not_configured';
+  authMode?: string | null;
+  refreshSupported?: boolean;
+  expiresAt?: string;
+  expiresInMinutes?: number;
+  subscriptionType?: string;
+  message?: string;
+}
+
+export interface ProviderApiKeyStatus {
+  configured: boolean;
+}
+
 /**
  * Worker is healthy and responding.
  */
@@ -165,6 +181,10 @@ export interface HealthyState {
   capacity: number;
   running: number;
   available: number;
+  workerAuths: Record<WorkerAuthProvider, WorkerAuthStatusDetails>;
+  providerApiKeys: Record<string, ProviderApiKeyStatus>;
+  dockerHealthy: boolean;
+  diskHealthy: boolean;
   responseTimeMs: number;
 }
 
@@ -195,6 +215,19 @@ export interface UnknownState {
   _tag: 'unknown';
   healthy: false;
   error: string;
+  contractMismatch?: boolean;
+  missingFields?: string[];
+}
+
+export interface WorkerHealthDiagnostic {
+  workerName: string;
+  tag: WorkerHealthState['_tag'];
+  healthy: boolean;
+  reason?: string;
+  error?: string;
+  code?: string;
+  missingFields?: string[];
+  contractMismatch?: boolean;
 }
 
 /**

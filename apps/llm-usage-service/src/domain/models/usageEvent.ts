@@ -1,4 +1,4 @@
-import type { LlmProvider } from '@intexuraos/llm-contract';
+import type { ImageSize, LlmProvider } from '@intexuraos/llm-contract';
 
 export const MAX_LIST_LIMIT = 200;
 export const DEFAULT_LIST_LIMIT = 50;
@@ -55,13 +55,14 @@ export interface UsageEvent {
     webSearchCalls: number;
     groundingEnabled: boolean;
     imageCount: number;
+    imageSize?: ImageSize;
   };
 
   cost: {
     billedUsd: number;
     providerReportedUsd: number | null;
     calculatedUsd: number | null;
-    pricingSource: 'provider_reported' | 'calculated' | 'mixed' | 'external';
+    pricingSource: 'provider_reported' | 'calculated' | 'missing' | 'mixed' | 'external';
   };
 
   correlation: {

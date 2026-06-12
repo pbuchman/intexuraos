@@ -1,0 +1,437 @@
+# Action Configuration for IntexuraOS
+# Defines reusable actions and their UI behavior for different action types.
+
+actions:
+  approve:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Research!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'This will create a research draft. Continue?'
+    onSuccess:
+      message: 'Research draft created!'
+      linkLabel: 'View Draft →'
+
+  approve_todo:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Todo!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this todo?'
+    onSuccess:
+      message: 'Todo created!'
+      linkLabel: 'View Todo →'
+
+  approve_note:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Note!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this note?'
+    onSuccess:
+      message: 'Note created!'
+      linkLabel: 'View Note →'
+
+  approve_link:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Bookmark!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Save this link?'
+    onSuccess:
+      message: 'Link saved!'
+      linkLabel: 'View Bookmark →'
+
+  approve_calendar:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Event!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this calendar event?'
+    onSuccess:
+      message: 'Calendar event created!'
+      linkLabel: 'View Event →'
+
+  approve_linear:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Issue!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this Linear issue?'
+    onSuccess:
+      message: 'Linear issue created!'
+      linkLabel: 'View Issue →'
+
+  approve_code:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Code!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this code task?'
+    onSuccess:
+      message: 'Code task created!'
+      linkLabel: 'View Task →'
+
+  retry:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating research draft?'
+    onSuccess:
+      message: 'Research draft created!'
+      linkLabel: 'View Draft →'
+
+  retry_todo:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating todo?'
+    onSuccess:
+      message: 'Todo created!'
+      linkLabel: 'View Todo →'
+
+  retry_note:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating note?'
+    onSuccess:
+      message: 'Note created!'
+      linkLabel: 'View Note →'
+
+  retry_link:
+    endpoint:
+      path: /{actionId}/resolve-duplicate
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      body:
+        action: update
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Update existing bookmark with fresh data?'
+    onSuccess:
+      message: 'Bookmark updated!'
+      linkLabel: 'View Bookmark →'
+
+  retry_calendar:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating calendar event?'
+    onSuccess:
+      message: 'Calendar event created!'
+      linkLabel: 'View Event →'
+
+  retry_linear:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating Linear issue?'
+    onSuccess:
+      message: 'Linear issue created!'
+      linkLabel: 'View Issue →'
+
+  retry_code:
+    endpoint:
+      path: /{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating code task?'
+    onSuccess:
+      message: 'Code task created!'
+      linkLabel: 'View Task →'
+
+  reject:
+    endpoint:
+      path: /{actionId}
+      method: PATCH
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      body:
+        status: rejected
+    ui:
+      label: Reject
+      variant: secondary
+      icon: XCircle
+
+  archive:
+    endpoint:
+      path: /{actionId}
+      method: PATCH
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      body:
+        status: archived
+    ui:
+      label: Archive
+      variant: secondary
+      icon: Archive
+
+  delete:
+    endpoint:
+      path: /{actionId}
+      method: DELETE
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Delete
+      variant: secondary
+      icon: Trash2
+
+types:
+  research:
+    actions:
+      # Approve - only for awaiting_approval
+      - action: approve
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      # Retry - only for failed
+      - action: retry
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      # Reject - only for awaiting_approval
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      # Archive - for completed, failed, rejected (NOT archived or awaiting_approval)
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      # Delete - available for all statuses
+      - action: delete
+
+  todo:
+    actions:
+      - action: approve_todo
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_todo
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  note:
+    actions:
+      - action: approve_note
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_note
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  link:
+    actions:
+      - action: approve_link
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_link
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  calendar:
+    actions:
+      - action: approve_calendar
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_calendar
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  linear:
+    actions:
+      - action: approve_linear
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_linear
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  code:
+    actions:
+      - action: approve_code
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_code
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete

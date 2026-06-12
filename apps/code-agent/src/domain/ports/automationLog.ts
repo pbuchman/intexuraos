@@ -6,11 +6,17 @@
  * (e.g., as a single append-only GitHub PR comment).
  */
 
+import type { Result } from '@intexuraos/common-core';
 import type { AgentType } from '../models/codeTask.js';
 
 export interface PRRef {
   repository: string; // e.g., "pbuchman/intexuraos"
   prNumber: number;
+}
+
+export interface AutomationLogRecordError {
+  code: 'AUTOMATION_LOG_FAILED';
+  message: string;
 }
 
 export type AutomationEvent =
@@ -63,8 +69,18 @@ export type AutomationEvent =
     }
   | {
       type: 'task_dispatch_failed';
-      error: string;
+      taskId?: string;
+      workerType?: string;
+      agentType?: AgentType;
+      reason?: string;
+      message?: string;
+      remediation?: string;
+      workerNames?: string[];
+      terminal?: boolean;
       errorCode?: string;
+      idempotencyKey?: string;
+      logLines?: string[];
+      error?: string;
     }
 
   // Phase 4b: Linear issue linking failure (best-effort, non-blocking)
@@ -98,6 +114,7 @@ export type AutomationEvent =
       error: string;
       errorCode?: string;
       duration?: number;
+      agentType?: AgentType;
     }
   | {
       type: 'task_interrupted';
@@ -143,4 +160,9 @@ export type AutomationEvent =
 
 export interface AutomationLog {
   record(prRef: PRRef, event: AutomationEvent, tokenUserId?: string): Promise<void>;
+  recordWithResult?(
+    prRef: PRRef,
+    event: AutomationEvent,
+    tokenUserId?: string
+  ): Promise<Result<void, AutomationLogRecordError>>;
 }

@@ -1,9 +1,45 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import { z } from 'zod';
-import { stripDockerHeaders } from './log-formatter.js';
-import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
+import {
+  locateFinalBlock,
+  parseKeyValues,
+  coerceFields,
+} from './completion-verifier/block-parser.js';
+import { AGENT_CONTRACTS } from './completion-verifier/contracts.js';
+import { detectEmptyMemoryFields } from './completion-verifier/memory-validation.js';
+import { RESUME_SUMMARY_SCHEMA } from './completion-verifier/schemas.js';
+import { resumeSummaryPrompt } from './completion-verifier/prompt-builder.js';
+import {
+  generateResumeSummaryWithFallback,
+  extractAndParseJson,
+} from './completion-verifier/llm-client.js';
+import { getLast20Lines } from './completion-verifier/transcript.js';
+import type {
+  CompletionVerifierInput,
+  CompletionVerifierVerdict,
+} from './completion-verifier/types.js';
+
+export * from './completion-verifier/contracts.js';
+export * from './completion-verifier/schemas.js';
+export * from './completion-verifier/types.js';
+export * from './completion-verifier/transcript.js';
+export {
+  locateFinalBlock,
+  parseKeyValues,
+  coerceFields,
+} from './completion-verifier/block-parser.js';
+export {
+  detectEmptyMemoryFields,
+  isTelemetryField,
+  partitionMissingFields,
+  TELEMETRY_FIELD_NAMES,
+} from './completion-verifier/memory-validation.js';
+export { resumeSummaryPrompt } from './completion-verifier/prompt-builder.js';
+export {
+  generateResumeSummaryWithFallback,
+  extractAndParseJson,
+} from './completion-verifier/llm-client.js';
 
 const verifierTaskIdStorage = new AsyncLocalStorage<string>();
 
@@ -12,623 +48,87 @@ export function getVerifierTaskId(): string | null {
   return verifierTaskIdStorage.getStore() ?? null;
 }
 
-export type CompletionAgentType =
-  | 'planning'
-  | 'execution'
-  | 'pull_request'
-  | 'review'
-  | 'remediation'
-  | 'ask_agent';
+/**
+ * Deterministic completion verifier.
+ *
+ * 1. Fatal exit codes (137/139) → hard-error immediately.
+ * 2. Locate the agent's AGENT_FINAL block. Absent → hard-error (routes to
+ *    TASK_RUNTIME_HARD_ERROR upstream).
+ * 3. Parse and coerce the block against the agent's contract.
+ * 4. Check injected memories vs the agent's reported memory_ids_*.
+ *
+ * No network calls. No LLM. Returns synchronously.
+ */
+export function verifyCompletion(input: CompletionVerifierInput): CompletionVerifierVerdict {
+  const { transcript, agentType, executionMemoryContext, lastExitCode } = input;
 
-export interface CompletionVerifierInput {
-  taskId: string;
-  attempt: number;
-  maxAttempts: number;
-  agentType: CompletionAgentType;
-  rawLogs: string;
-  /** Exit code of the worker process if known (Docker exit code). When set to
-   *  137 (SIGKILL) or 139 (SIGSEGV), verification short-circuits without
-   *  calling any LLM — used to catch cases where the entrypoint was killed
-   *  externally and never wrote its own exit-code line. */
-  lastExitCode?: number;
-  executionMemoryContext?: ExecutionMemoryPromptContext;
-}
-
-export interface CompletionVerifierTrace {
-  transcript: string;
-  prompt: string;
-  response: string;
-}
-
-export interface CompletionVerifierVerdict {
-  /** True when LLM extraction succeeded and all Zod fields were present — does NOT mean the agent completed its task. */
-  passed: boolean;
-  missingFields: string[];
-  verifierFailure: boolean;
-  agentData?:
-    | PlanningAgentData
-    | ExecutionAgentData
-    | PullRequestAgentData
-    | ReviewAgentData
-    | RemediationAgentData;
-  /** Model name that produced the response. Undefined when no model produced
-   *  content (all generate() calls failed) or when the short-circuit on
-   *  fatal exit codes fires before any model is called. */
-  succeededModelName?: string;
-  trace: CompletionVerifierTrace;
-}
-
-export interface PlanningAgentData {
-  agentType: 'planning';
-  outcome: 'planned' | 'unclear';
-  superpowers_writing_plans: 'used' | 'not used';
-  linear_url: string;
-  is_complex: '0' | '1';
-  has_plan_doc: '0' | '1';
-  subtask_urls: string;
-  pr_url: string;
-  memory_ids_used: string;
-  memory_ids_rejected: string;
-  memory_usage_summary: string;
-  summary: string;
-  unclear_clarification: string;
-}
-
-export interface ExecutionAgentData {
-  agentType: 'execution';
-  outcome: 'implemented' | 'already_completed';
-  superpowers_subagent_driven_dev: 'used' | 'not used';
-  superpowers_requesting_code_review: 'used' | 'not used';
-  gh_pr_url: string;
-  memory_ids_used: string;
-  memory_ids_rejected: string;
-  memory_usage_summary: string;
-  summary: string;
-}
-
-export interface PullRequestAgentData {
-  agentType: 'pull_request';
-  gh_pr_url: string;
-  comments_replied: 'yes' | 'no';
-  tracking_comment_id: string;
-  memory_ids_used: string;
-  memory_ids_rejected: string;
-  memory_usage_summary: string;
-  summary: string;
-}
-
-export interface ReviewAgentData {
-  agentType: 'review';
-  gh_pr_url: string;
-  review_id?: string | undefined;
-  review_comments_posted: string;
-  review_types: string;
-  memory_ids_used: string;
-  memory_ids_rejected: string;
-  memory_usage_summary: string;
-  requirements_tracker_updated: string;
-  gh_actions_status: string;
-  needs_remediation: string;
-  review_body: string;
-  review_inline_comments: string;
-  summary: string;
-}
-
-export interface RemediationAgentData {
-  agentType: 'remediation';
-  outcome: 'implemented' | 'already_completed';
-  gh_pr_url: string;
-  memory_ids_used: string;
-  memory_ids_rejected: string;
-  memory_usage_summary: string;
-  requires_re_review: string;
-  summary: string;
-}
-
-export interface CompletionVerifier {
-  verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict>;
-  describe(): { enabled: boolean; provider?: string; model?: string };
-  extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined>;
-}
-
-export interface CompletionVerifierClients {
-  primaryClient: LlmGenerateClient;
-  fallbackClients: LlmGenerateClient[];
-  /** Display name of primary model for logging (e.g. 'or:google/gemma-4-31b-it:free') */
-  primaryModelName: string;
-  /** Display names for each fallback client, in the same order as fallbackClients.
-   *  If omitted or shorter than fallbackClients, missing entries default to 'fallback-1', 'fallback-2', etc. */
-  fallbackModelNames?: string[];
-}
-
-export const PLANNING_SCHEMA = z
-  .object({
-    outcome: z.enum(['planned', 'unclear']),
-    superpowers_writing_plans: z.enum(['used', 'not used']),
-    linear_url: z.string(),
-    is_complex: z.enum(['0', '1']),
-    has_plan_doc: z.enum(['0', '1']),
-    subtask_urls: z.string(),
-    pr_url: z.string(),
-    memory_ids_used: z.string().optional().default(''),
-    memory_ids_rejected: z.string().optional().default(''),
-    memory_usage_summary: z.string().optional().default(''),
-    summary: z.string(),
-    unclear_clarification: z.string(),
-  })
-  .refine((data) => data.outcome !== 'planned' || data.pr_url !== '', {
-    message: 'pr_url is required when outcome is "planned"',
-    path: ['pr_url'],
-  });
-
-export const EXECUTION_SCHEMA = z
-  .object({
-    outcome: z.enum(['implemented', 'already_completed']),
-    superpowers_subagent_driven_dev: z.enum(['used', 'not used']),
-    superpowers_requesting_code_review: z.enum(['used', 'not used']),
-    gh_pr_url: z.string(),
-    memory_ids_used: z.string(),
-    memory_ids_rejected: z.string(),
-    memory_usage_summary: z.string(),
-    summary: z.string(),
-  })
-  .refine((data) => data.gh_pr_url !== '', {
-    message: 'gh_pr_url is required for all execution outcomes',
-    path: ['gh_pr_url'],
-  });
-
-export const PULL_REQUEST_SCHEMA = z.object({
-  gh_pr_url: z.string(),
-  comments_replied: z.enum(['yes', 'no']),
-  tracking_comment_id: z.string().min(1),
-  memory_ids_used: z.string().optional().default(''),
-  memory_ids_rejected: z.string().optional().default(''),
-  memory_usage_summary: z.string().optional().default(''),
-  summary: z.string(),
-});
-
-export const REVIEW_SCHEMA = z.object({
-  gh_pr_url: z.string(),
-  review_id: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().regex(/^\d+$/, 'review_id must be a numeric string').optional()
-  ),
-  review_comments_posted: z
-    .string()
-    .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
-  review_types: z.string().trim().min(1, 'review_types must not be empty'),
-  memory_ids_used: z.string().optional().default(''),
-  memory_ids_rejected: z.string().optional().default(''),
-  memory_usage_summary: z.string().optional().default(''),
-  requirements_tracker_updated: z.string().optional().default(''),
-  gh_actions_status: z.string().optional().default(''),
-  needs_remediation: z
-    .string()
-    .regex(/^[01]$/)
-    .optional()
-    .default('1'),
-  review_body: z.string().optional().default(''),
-  review_inline_comments: z.string().optional().default(''),
-  summary: z.string(),
-});
-
-export const REMEDIATION_SCHEMA = z
-  .object({
-    outcome: z.enum(['implemented', 'already_completed']),
-    gh_pr_url: z.string(),
-    memory_ids_used: z.string().optional().default(''),
-    memory_ids_rejected: z.string().optional().default(''),
-    memory_usage_summary: z.string().optional().default(''),
-    requires_re_review: z.string().regex(/^[01]$/, 'requires_re_review must be "0" or "1"'),
-    summary: z.string(),
-  })
-  .refine((data) => data.outcome !== 'implemented' || data.gh_pr_url !== '', {
-    message: 'gh_pr_url is required when outcome is "implemented"',
-    path: ['gh_pr_url'],
-  });
-
-export const RESUME_SUMMARY_SCHEMA = z.object({
-  summary: z.string(),
-});
-
-const FATAL_EXIT_CODE_PATTERN =
-  /\[entrypoint\] (?:Claude|Codex) attempt finished with exit code: (137|139)/;
-
-const MIN_MEANINGFUL_TRANSCRIPT_LINES = 5;
-
-const INFRASTRUCTURE_LINE_PREFIXES = ['[orchestrator]', '[hook]', '[entrypoint]', '[system]'];
-
-export function countMeaningfulTranscriptLines(nonEmptyLines: readonly string[]): number {
-  let count = 0;
-  for (const line of nonEmptyLines) {
-    const trimmed = line.trim();
-    if (INFRASTRUCTURE_LINE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) {
-      continue;
-    }
-    count += 1;
-  }
-  return count;
-}
-
-export function detectFatalExitCode(rawLogs: string): number | undefined {
-  // Only search the last 5 lines to avoid false positives from Claude's
-  // stream-json output containing test fixtures or code snippets with the pattern.
-  // The actual [entrypoint] exit line is always near the end of raw logs.
-  const tail = rawLogs.split('\n').slice(-5).join('\n');
-  const match = FATAL_EXIT_CODE_PATTERN.exec(tail);
-  if (match?.[1] !== undefined) {
-    return Number(match[1]);
-  }
-  return undefined;
-}
-
-export function getLast50Lines(rawLogs: string): string {
-  return stripDockerHeaders(rawLogs).split('\n').slice(-50).join('\n');
-}
-
-export function getLast50ClaudeLines(rawLogs: string): string {
-  const lines = stripDockerHeaders(rawLogs).split('\n');
-  const claudeLines = lines.filter((line) => line.startsWith('[claude]'));
-  return claudeLines.slice(-50).join('\n');
-}
-
-export function getLast20Lines(rawLogs: string): string {
-  return stripDockerHeaders(rawLogs).split('\n').slice(-20).join('\n');
-}
-
-function sharedPreamble(): string[] {
-  return [
-    'IMPORTANT RULES:',
-    '- Analyze the transcript from the END toward the beginning. The most recent output takes priority — e.g. pnpm run ci:tracked may have failed and then succeeded; the expected result is the final outcome.',
-    '- The LLM agent delivers its summary in one of the last assistant messages.',
-    '- superpowers_writing_plans: "used" only if the agent explicitly claims it invoked the writing-plans superpowers skill.',
-    '- Linear URL format example (DO NOT copy this URL; extract the real one from the transcript): https://linear.app/example-org/issue/EXAMPLE-1/example-issue-slug',
-    '- GitHub PR URL format example (DO NOT copy this URL; extract the real one from the transcript): https://github.com/example-org/example-repo/pull/999',
-    '',
-  ];
-}
-
-export function buildPlanningPrompt(transcript: string): string {
-  return [
-    'You are a task-completion verifier for the Planning Agent.',
-    'Analyze the transcript below and extract the following fields as JSON.',
-    'Return ONLY a JSON object, no markdown fences.',
-    '',
-    ...sharedPreamble(),
-    'Fields:',
-    '- outcome: "planned" if the agent produced a plan, "unclear" if the agent could not plan',
-    '- superpowers_writing_plans: "used" if the agent invoked the writing-plans skill, "not used" otherwise',
-    '- linear_url: the Linear issue URL — the single issue the agent received as input and edited in-place (string, empty string if not found)',
-    '- is_complex: "1" if the agent created subtasks for parallel execution, "0" otherwise',
-    '- has_plan_doc: "1" if the agent created a plan document in docs/plans/, "0" otherwise',
-    '- subtask_urls: comma-separated Linear issue URLs for all subtasks created (string, empty string if none)',
-    '- pr_url: the GitHub Pull Request URL — REQUIRED for "planned" outcome (ALL planned tasks must produce a PR, including simple ones). Empty string ONLY for "unclear" outcome.',
-    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
-    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
-    '- memory_usage_summary: one-sentence summary of how injected memories influenced the plan, or empty string if none were injected',
-    '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what happened — the LLM agent typically states this clearly as a summary block in its final output',
-    '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
-    '',
-    'Example valid response (placeholder URLs — do NOT copy these; extract real ones from the transcript):',
-    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/example-org/issue/EXAMPLE-1/example-issue-slug","is_complex":"1","has_plan_doc":"1","subtask_urls":"https://linear.app/example-org/issue/EXAMPLE-2/example-subtask-a,https://linear.app/example-org/issue/EXAMPLE-3/example-subtask-b","pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the planning memory to keep the implementation split aligned with prior architecture.","summary":"* Analyzed task requirements\\n* Decided on a complex implementation requiring parallel subtasks\\n* Created 5 child issues covering API endpoints, database schema, and test strategy\\n* Produced a plan PR with the full implementation design","unclear_clarification":""}',
-    '',
-    'Transcript (last 50 lines):',
-    transcript,
-  ].join('\n');
-}
-
-export function buildExecutionPrompt(transcript: string): string {
-  return [
-    'You are a task-completion verifier for the Execution Agent.',
-    'Analyze the transcript below and extract the following fields as JSON.',
-    'Return ONLY a JSON object, no markdown fences.',
-    '',
-    ...sharedPreamble(),
-    'Fields:',
-    '- outcome: "implemented" if the agent created a PR with new code, "already_completed" if the agent determined the work was already done/merged',
-    '- superpowers_subagent_driven_dev: "used" if the agent invoked the subagent-driven-development skill, "not used" otherwise',
-    '- superpowers_requesting_code_review: "used" if the agent invoked the requesting-code-review skill, "not used" otherwise',
-    '- gh_pr_url: the GitHub Pull Request URL — REQUIRED for all execution outcomes (including already_completed). Must not be empty.',
-    '- memory_ids_used: comma-separated memory IDs the agent reported using (string, empty string if none)',
-    '- memory_ids_rejected: comma-separated memory IDs the agent reported rejecting as stale or not applicable (string, empty string if none)',
-    '- memory_usage_summary: one-sentence summary of how the memories helped or why they were rejected (string, empty string if not found)',
-    '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what was implemented — the LLM agent typically states this clearly as a summary block in its final output',
-    '',
-    'Example valid responses (placeholder URLs — do NOT copy these; extract real ones from the transcript):',
-    '{"outcome":"implemented","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"mem_142,mem_155","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the route logging and coverage memories to keep the callback fix aligned with existing verification patterns.","summary":"* Implemented the feature with 3 new API endpoints and updated database schema\\n* CI passed on the first attempt\\n* Created PR targeting the development branch"}',
-    '{"outcome":"already_completed","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"https://github.com/example-org/example-repo/pull/998","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied memory because the codebase already matched the current repo state.","summary":"* Discovered the requested work was already implemented and merged into development\\n* Verified all tests pass and the feature is present in the codebase\\n* Created evidence PR documenting completion"}',
-    '',
-    'Transcript (last 50 lines):',
-    transcript,
-  ].join('\n');
-}
-
-export function buildPullRequestPrompt(transcript: string): string {
-  return [
-    'You are a task-completion verifier for the Pull Request Agent.',
-    'Analyze the transcript below and extract the following fields as JSON.',
-    'Return ONLY a JSON object, no markdown fences.',
-    '',
-    ...sharedPreamble(),
-    'Fields:',
-    '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
-    '- comments_replied: "yes" if the agent replied to PR comments, "no" otherwise',
-    '- tracking_comment_id: the numeric GitHub comment ID from the tracking comment POST response (string, must not be empty)',
-    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
-    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
-    '- memory_usage_summary: one-sentence summary of how injected memories influenced the PR work, or empty string if none were injected',
-    '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what was done — the LLM agent typically states this clearly as a summary block in its final output',
-    '',
-    'Example valid response (placeholder URL — do NOT copy this; extract the real one from the transcript):',
-    '{"gh_pr_url":"https://github.com/example-org/example-repo/pull/999","comments_replied":"yes","tracking_comment_id":"2345678","memory_ids_used":"mem_142","memory_ids_rejected":"","memory_usage_summary":"Used the injected PR memory to keep the replies aligned with existing workflow expectations.","summary":"* Addressed 3 review comments on the PR\\n* Pushed code changes and CI passed\\n* All reviewer feedback resolved"}',
-    '',
-    'Transcript (last 50 lines):',
-    transcript,
-  ].join('\n');
-}
-
-export function buildReviewPrompt(transcript: string): string {
-  return [
-    'You are a task-completion verifier for the Review Agent.',
-    'Analyze the transcript below and extract the following fields as JSON.',
-    'Return ONLY a JSON object, no markdown fences.',
-    '',
-    ...sharedPreamble(),
-    'Fields:',
-    '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
-    '- review_id: numeric review identifier returned by the single POST /reviews API call (string, omit when not found)',
-    '- review_comments_posted: number of review comments posted as a string (e.g., "3")',
-    '- review_types: comma-separated list of review types performed (e.g., "code_quality,security")',
-    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
-    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
-    '- memory_usage_summary: one-sentence summary of how injected memories influenced the review, or empty string if none were injected',
-    '- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available',
-    '- gh_actions_status: GitHub Actions check result (e.g., "all passed", "2 failed", "pending", "not yet triggered")',
-    '- needs_remediation: "0" if the PR is clean or all findings are informational only, "1" if any finding requires code changes. Operational/manual verification steps (deploying migrations, running commands in environments, manual testing in dev/prod) are post-merge activities and do NOT count as code remediation',
-    '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
-    '',
-    'Example valid response (placeholder URL — do NOT copy this; extract the real one from the transcript):',
-    '{"gh_pr_url":"https://github.com/example-org/example-repo/pull/999","review_id":"321654987","review_comments_posted":"3","review_types":"code_quality,security","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the injected review memory to validate the architecture findings against prior incidents.","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"* Reviewed the PR for code quality and security issues\\n* Found 3 issues: missing null check, unused import, and potential XSS vulnerability\\n* All findings posted as inline review comments"}',
-    '',
-    'The review_id must be the numeric GitHub review ID created by the single POST /reviews call, not a comment ID. If the transcript does not contain it, omit review_id instead of inventing or blanking it.',
-    '',
-    'Transcript (last 50 lines):',
-    transcript,
-  ].join('\n');
-}
-
-export function buildRemediationPrompt(transcript: string): string {
-  return [
-    'You are a task-completion verifier for the Remediation Agent.',
-    'Analyze the transcript below and extract the following fields as JSON.',
-    'Return ONLY a JSON object, no markdown fences.',
-    '',
-    ...sharedPreamble(),
-    'Fields:',
-    '- outcome: "implemented" if the agent pushed remediation changes, "already_completed" if it determined the findings were already addressed',
-    '- gh_pr_url: the GitHub Pull Request URL — REQUIRED for "implemented" outcome. Empty string ONLY for "already_completed" outcome.',
-    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
-    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
-    '- memory_usage_summary: one-sentence summary of how injected memories influenced the remediation, or empty string if none were injected',
-    '- requires_re_review: "1" if the agent decided the PR must be re-reviewed after the changes, "0" otherwise',
-    '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the remediation work — the LLM agent typically states this clearly as a summary block in its final output',
-    '',
-    'Example valid responses (placeholder URLs — do NOT copy these; extract real ones from the transcript):',
-    '{"outcome":"implemented","gh_pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the remediation memory to keep the fix scoped to the reviewed invariant.","requires_re_review":"1","summary":"* Addressed review findings on the existing PR branch and updated affected tests\\n* Pushed fixes to the PR\\n* Marked for re-review due to changes in reviewed areas"}',
-    '{"outcome":"already_completed","gh_pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied remediation memory because the fix was already present on the branch.","requires_re_review":"0","summary":"* Verified reported findings were already resolved on the PR branch\\n* No new code changes or push required"}',
-    '',
-    'Transcript (last 50 lines):',
-    transcript,
-  ].join('\n');
-}
-
-export function buildResumeSummaryPrompt(transcript: string): string {
-  return [
-    'You are summarizing the output of a resumed code-worker session.',
-    'Analyze the transcript below and extract a brief summary of what was accomplished.',
-    'Return ONLY a JSON object with a single field, no markdown fences.',
-    '',
-    'Rules:',
-    '- Find the summary the worker stated directly in the last assistant messages.',
-    '- If no explicit summary exists, write 2-4 concise bullet points (markdown *) describing what was accomplished.',
-    '- Keep it concise and factual.',
-    '',
-    'Field:',
-    '- summary: concise bullet-point summary (markdown *, max 4 points) of what the worker accomplished in this resumed session',
-    '',
-    'Example valid response:',
-    '{"summary":"* Fixed the authentication bug by updating the token refresh logic\\n* CI passed after the fix"}',
-    '',
-    'Transcript (last 20 lines):',
-    transcript,
-  ].join('\n');
-}
-
-function selectSchemaAndPrompt(
-  agentType: CompletionAgentType,
-  transcript: string
-): { schema: z.ZodType; prompt: string } {
-  if (agentType === 'planning') {
-    return { schema: PLANNING_SCHEMA, prompt: buildPlanningPrompt(transcript) };
-  }
-  if (agentType === 'execution') {
-    return { schema: EXECUTION_SCHEMA, prompt: buildExecutionPrompt(transcript) };
-  }
-  if (agentType === 'review') {
-    return { schema: REVIEW_SCHEMA, prompt: buildReviewPrompt(transcript) };
-  }
-  if (agentType === 'remediation') {
-    return { schema: REMEDIATION_SCHEMA, prompt: buildRemediationPrompt(transcript) };
-  }
-  return { schema: PULL_REQUEST_SCHEMA, prompt: buildPullRequestPrompt(transcript) };
-}
-
-function getMissingFields(error: z.ZodError): string[] {
-  return error.issues.map((issue) => {
-    const path = issue.path.join('.');
-    /* v8 ignore start -- upstream: extractAndParseJson guarantees object input; empty path unreachable with z.object schemas @preserve */
-    return path !== '' ? path : issue.message;
-    /* v8 ignore stop @preserve */
-  });
-}
-
-function toAgentData(
-  agentType: CompletionAgentType,
-  parsed: unknown
-):
-  | PlanningAgentData
-  | ExecutionAgentData
-  | PullRequestAgentData
-  | ReviewAgentData
-  | RemediationAgentData {
-  if (agentType === 'planning') {
-    const data = parsed as z.infer<typeof PLANNING_SCHEMA>;
-    return { agentType: 'planning', ...data };
-  }
-  if (agentType === 'execution') {
-    const data = parsed as z.infer<typeof EXECUTION_SCHEMA>;
-    return { agentType: 'execution', ...data };
-  }
-  if (agentType === 'review') {
-    const data = parsed as z.infer<typeof REVIEW_SCHEMA>;
-    return { agentType: 'review', ...data };
-  }
-  if (agentType === 'remediation') {
-    const data = parsed as z.infer<typeof REMEDIATION_SCHEMA>;
-    return { agentType: 'remediation', ...data };
-  }
-  const data = parsed as z.infer<typeof PULL_REQUEST_SCHEMA>;
-  return { agentType: 'pull_request', ...data };
-}
-
-function extractAndParseJson(content: string): unknown {
-  const trimmed = content.trim();
-
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return JSON.parse(trimmed) as unknown;
+  if (lastExitCode === 137 || lastExitCode === 139) {
+    return {
+      kind: 'hard-error',
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: `Fatal worker exit code: ${String(lastExitCode)}`,
+    };
   }
 
-  const firstBrace = trimmed.indexOf('{');
-  const lastBrace = trimmed.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)) as unknown;
+  const contract = AGENT_CONTRACTS[agentType];
+  if (contract.marker === '') {
+    // ask_agent or other non-verifying agent — accept trivially.
+    return {
+      kind: 'parsed',
+      data: {},
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [`agent ${agentType} has no contract — verification skipped`],
+    };
   }
 
-  throw new Error('LLM verifier response is not valid JSON');
-}
-
-function normalizeMemoryCsv(value: string): string[] {
-  const trimmed = value.trim();
-  if (trimmed === '' || trimmed.toLowerCase() === 'none') {
-    return [];
+  const block = locateFinalBlock(transcript, contract.marker);
+  if (block === null) {
+    return {
+      kind: 'hard-error',
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: `No ${contract.marker} block in transcript`,
+    };
   }
-  return trimmed
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part !== '');
+
+  const record = parseKeyValues(block);
+  const { data, missingRequired, warnings } = coerceFields(record, contract);
+
+  const telemetryMissing = detectEmptyMemoryFields(agentType, executionMemoryContext, data) ?? [];
+
+  return {
+    kind: 'parsed',
+    data,
+    missingRequired,
+    telemetryMissing,
+    warnings,
+  };
 }
 
 /**
- * Regex builder for the per-memory acknowledgment bullet the worker must emit.
- *
- * The system prompt (see `workers/orchestrator/src/services/system-prompt.ts`
- * `buildExecutionMemorySection`) emits one bullet per injected memory in this
- * exact shape:
- *
- *   - [<index>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because …
- *
- * We match the leading `- [<digits>] <memoryId>` token (allowing an optional
- * log-driver prefix like `[claude] ` that the orchestrator prepends to every
- * worker stdout line) so:
- *  * mentions of the memoryId elsewhere (e.g. `memory_ids_used: <id>`) don't
- *    satisfy the acknowledgment requirement, and
- *  * the legacy `[<memoryId>]` format fails loudly, surfacing any
- *    prompt/verifier drift immediately.
- *
- * Exported so the regression-guard test can pin the verifier against the
- * runtime pattern (not a hand-typed literal that could drift independently).
+ * Injectable clients for the resume-summary LLM helper. Kept alongside
+ * `ResumeSummaryExtractor` because the dispatcher wires them together at
+ * bootstrap, and the helper is the only remaining LLM-backed code path in
+ * the verifier module.
  */
-export function buildMemoryAcknowledgmentPattern(memoryId: string): RegExp {
-  const escaped = memoryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(String.raw`^\s*(?:\[[^\]]+\]\s+)?-\s*\[\d+\]\s+${escaped}\b`, 'm');
+export interface CompletionVerifierClients {
+  primaryClient: LlmGenerateClient;
+  fallbackClients: LlmGenerateClient[];
+  /** Display name of primary model for logging. */
+  primaryModelName: string;
+  /** Display names for each fallback client, in order. */
+  fallbackModelNames?: string[];
 }
 
-interface MemoryReportingValidationResult {
-  /** Hard failures — the verifier must reject this verdict. */
-  failures: string[];
-  /** Soft warnings — log only, do not fail. */
-  softWarnings: string[];
-}
-
-function validateMemoryReporting(
-  rawLogs: string,
-  executionMemoryContext: ExecutionMemoryPromptContext,
-  agentData: {
-    memory_ids_used?: string;
-    memory_ids_rejected?: string;
-    memory_usage_summary?: string;
-  }
-): MemoryReportingValidationResult {
-  const injectedIds = executionMemoryContext.matchedMemories.map((memory) => memory.memoryId);
-  if (injectedIds.length === 0) {
-    return { failures: [], softWarnings: [] };
-  }
-
-  const normalizedLogs = stripDockerHeaders(rawLogs);
-
-  const hasAcknowledgment =
-    normalizedLogs.includes('Execution Memories Received') &&
-    injectedIds.every((memoryId) =>
-      buildMemoryAcknowledgmentPattern(memoryId).test(normalizedLogs)
-    );
-
-  /* v8 ignore start -- schema: Zod schema defaults always provide strings; helper stays optional for structural typing across agent variants @preserve */
-  const usedIds = normalizeMemoryCsv(agentData.memory_ids_used ?? '');
-  const rejectedIds = normalizeMemoryCsv(agentData.memory_ids_rejected ?? '');
-  const summary = (agentData.memory_usage_summary ?? '').trim();
-  /* v8 ignore stop @preserve */
-
-  const injectedSet = new Set(injectedIds);
-  const usedSet = new Set(usedIds);
-  const rejectedSet = new Set(rejectedIds);
-
-  const tripletFailures: string[] = [];
-  if (summary === '') {
-    tripletFailures.push('memory_usage_summary');
-  }
-  if (usedIds.some((memoryId) => !injectedSet.has(memoryId))) {
-    tripletFailures.push('memory_ids_used_invalid');
-  }
-  if (rejectedIds.some((memoryId) => !injectedSet.has(memoryId))) {
-    tripletFailures.push('memory_ids_rejected_invalid');
-  }
-  if (usedIds.some((memoryId) => rejectedSet.has(memoryId))) {
-    tripletFailures.push('memory_ids_overlap');
-  }
-  const unaccountedIds = injectedIds.filter(
-    (memoryId) => !usedSet.has(memoryId) && !rejectedSet.has(memoryId)
-  );
-  if (unaccountedIds.length > 0) {
-    tripletFailures.push('memory_ids_unaccounted');
-  }
-
-  const failures: string[] = [...tripletFailures];
-  const softWarnings: string[] = [];
-  if (!hasAcknowledgment) {
-    if (tripletFailures.length === 0) {
-      softWarnings.push('memory_acknowledgment');
-    } else {
-      failures.push('memory_acknowledgment');
-    }
-  }
-
-  return { failures, softWarnings };
-}
-
-export class OrchestratorCompletionVerifier implements CompletionVerifier {
+/**
+ * Thin wrapper around the resume-summary LLM helper. Kept as a class so the
+ * dispatcher can hold a single injectable reference; the verification path
+ * itself is the sync `verifyCompletion` free function above and does NOT
+ * go through this class.
+ */
+export class ResumeSummaryExtractor {
   private readonly primaryClient: LlmGenerateClient;
   private readonly primaryModelName: string;
-  /** Each fallback client paired with its display model name. */
   private readonly fallbacks: readonly { client: LlmGenerateClient; modelName: string }[];
 
   constructor(
@@ -637,299 +137,15 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   ) {
     this.primaryClient = clients.primaryClient;
     this.primaryModelName = clients.primaryModelName;
-    const fallbackNames = clients.fallbackModelNames ?? [];
+    const names = clients.fallbackModelNames ?? [];
     this.fallbacks = clients.fallbackClients.map((client, i) => ({
       client,
-      modelName: fallbackNames[i] ?? `fallback-${String(i + 1)}`,
+      modelName: names[i] ?? `fallback-${String(i + 1)}`,
     }));
   }
 
   describe(): { enabled: boolean; provider?: string; model?: string } {
-    return {
-      enabled: true,
-      model: this.primaryModelName,
-    };
-  }
-
-  async verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
-    return await verifierTaskIdStorage.run(input.taskId, () => this.doVerify(input));
-  }
-
-  private async doVerify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
-    const transcript = getLast50Lines(input.rawLogs);
-
-    const directExitCode =
-      input.lastExitCode === 137 || input.lastExitCode === 139 ? input.lastExitCode : undefined;
-    const fatalExitCode = directExitCode ?? detectFatalExitCode(input.rawLogs);
-    if (fatalExitCode !== undefined) {
-      this.logger.warn(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-          agentType: input.agentType,
-          exitCode: fatalExitCode,
-          source: directExitCode !== undefined ? 'lastExitCode' : 'rawLogs',
-        },
-        'Fatal exit code detected — skipping completion verification'
-      );
-      return {
-        passed: false,
-        missingFields: [`fatal_exit_code_${String(fatalExitCode)}`],
-        verifierFailure: false,
-        trace: { transcript, prompt: '', response: '' },
-      };
-    }
-
-    const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
-    const meaningfulLines = countMeaningfulTranscriptLines(tLines);
-    if (meaningfulLines < MIN_MEANINGFUL_TRANSCRIPT_LINES) {
-      this.logger.warn(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-          agentType: input.agentType,
-          meaningfulLines,
-        },
-        'Completion verifier: transcript too short, refusing to call LLM'
-      );
-      return {
-        passed: false,
-        missingFields: ['transcript_too_short'],
-        verifierFailure: false,
-        trace: { transcript, prompt: '', response: '' },
-      };
-    }
-
-    const { schema, prompt } = selectSchemaAndPrompt(input.agentType, transcript);
-
-    this.logger.info(
-      {
-        taskId: input.taskId,
-        attempt: input.attempt,
-        maxAttempts: input.maxAttempts,
-        agentType: input.agentType,
-        model: this.primaryModelName,
-        promptChars: prompt.length,
-        transcript: ((): string => {
-          /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess; transcript guard guarantees tLines.length >= MIN_MEANINGFUL_TRANSCRIPT_LINES @preserve */
-          const first = tLines[0] ?? '';
-          const last = tLines[tLines.length - 1] ?? '';
-          /* v8 ignore stop @preserve */
-          return `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
-        })(),
-      },
-      'Completion verifier request'
-    );
-
-    // Try each model (primary + fallbacks) until one produces a valid, parseable response.
-    const allModels: { client: LlmGenerateClient; modelName: string }[] = [
-      { client: this.primaryClient, modelName: this.primaryModelName },
-      ...this.fallbacks,
-    ];
-
-    let lastGeneratedContent = '';
-    let succeededModelName = '';
-    let parseResult: z.SafeParseReturnType<unknown, unknown> | undefined;
-
-    for (const { client, modelName } of allModels) {
-      const result = await client.generate(prompt, { promptType: 'completion-verification' });
-      if (!result.ok) {
-        this.logger.warn(
-          {
-            taskId: input.taskId,
-            attempt: input.attempt,
-            model: modelName,
-            errorCode: result.error.code,
-          },
-          'Completion verifier model call failed, trying next'
-        );
-        continue;
-      }
-
-      const content = result.value.content;
-      lastGeneratedContent = content;
-      succeededModelName = modelName;
-      this.logger.info(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-          model: modelName,
-          responseChars: content.length,
-          response: content,
-        },
-        'Completion verifier response'
-      );
-
-      let rawJson: unknown;
-      try {
-        rawJson = extractAndParseJson(content);
-      } catch (error) {
-        this.logger.warn(
-          {
-            taskId: input.taskId,
-            attempt: input.attempt,
-            model: modelName,
-            response: content,
-            error: getErrorMessage(error),
-          },
-          'Completion verifier response parsing failed, trying next model'
-        );
-        continue;
-      }
-
-      const candidate = schema.safeParse(rawJson);
-      if (!candidate.success) {
-        const fields = getMissingFields(candidate.error);
-        this.logger.warn(
-          {
-            taskId: input.taskId,
-            attempt: input.attempt,
-            model: modelName,
-            missingFields: fields,
-            zodErrors: candidate.error.issues,
-          },
-          'Completion verifier Zod validation failed, trying next model'
-        );
-        parseResult = candidate;
-        continue;
-      }
-
-      // All steps succeeded for this model.
-      parseResult = candidate;
-      break;
-    }
-
-    if (!parseResult?.success) {
-      // No model produced a valid response.
-      if (parseResult !== undefined) {
-        // Last attempt had a schema failure.
-        const missingFields = getMissingFields(parseResult.error);
-        this.logger.error(
-          {
-            taskId: input.taskId,
-            attempt: input.attempt,
-            model: succeededModelName,
-            missingFields,
-          },
-          'Completion verifier: all models failed schema validation'
-        );
-        return {
-          passed: false,
-          missingFields,
-          verifierFailure: false,
-          succeededModelName,
-          trace: { transcript, prompt, response: lastGeneratedContent },
-        };
-      }
-      // All models failed at the generate or parse step.
-      this.logger.error(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-        },
-        'Completion verifier returned no response (all models failed)'
-      );
-      return {
-        passed: false,
-        missingFields: [],
-        verifierFailure: true,
-        trace: { transcript, prompt, response: lastGeneratedContent },
-      };
-    }
-
-    // Enforce non-empty memory fields when memories were injected for any agent type.
-    // The Zod schemas for non-execution agents use .optional().default(''), so Gemini can
-    // return empty strings without triggering a schema error. This post-parse check ensures
-    // that agents which received injected memories must report their memory_ids_used or
-    // memory_ids_rejected fields (at least one must be non-empty).
-    const hasInjectedMemories =
-      input.executionMemoryContext !== undefined &&
-      input.executionMemoryContext.matchedMemories.length > 0;
-
-    if (hasInjectedMemories && input.agentType !== 'execution') {
-      const parsed = parseResult.data as Record<string, unknown>;
-      /* v8 ignore start -- schema: Zod .optional().default('') guarantees value is always a string after parse @preserve */
-      const usedVal =
-        typeof parsed['memory_ids_used'] === 'string' ? parsed['memory_ids_used'] : '';
-      const rejectedVal =
-        typeof parsed['memory_ids_rejected'] === 'string' ? parsed['memory_ids_rejected'] : '';
-      /* v8 ignore stop @preserve */
-      if (usedVal.trim() === '' && rejectedVal.trim() === '') {
-        const emptyMemoryFields = ['memory_ids_used', 'memory_ids_rejected'];
-        this.logger.warn(
-          {
-            taskId: input.taskId,
-            attempt: input.attempt,
-            model: succeededModelName,
-            emptyMemoryFields,
-          },
-          'Memory fields are empty despite memories being injected'
-        );
-        return {
-          passed: false,
-          missingFields: emptyMemoryFields,
-          verifierFailure: false,
-          succeededModelName,
-          trace: { transcript, prompt, response: lastGeneratedContent },
-        };
-      }
-    }
-
-    const agentData = toAgentData(input.agentType, parseResult.data);
-    const memoryValidation: MemoryReportingValidationResult =
-      input.executionMemoryContext !== undefined
-        ? validateMemoryReporting(input.rawLogs, input.executionMemoryContext, agentData)
-        : { failures: [], softWarnings: [] };
-
-    if (memoryValidation.softWarnings.length > 0) {
-      this.logger.warn(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-          model: succeededModelName,
-          softWarnings: memoryValidation.softWarnings,
-        },
-        'Completion verifier memory validation soft warning: triplet consistent, block missing'
-      );
-    }
-
-    if (memoryValidation.failures.length > 0) {
-      this.logger.warn(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-          model: succeededModelName,
-          memoryValidationFailures: memoryValidation.failures,
-        },
-        'Completion verifier memory validation failed'
-      );
-      return {
-        passed: false,
-        missingFields: memoryValidation.failures,
-        verifierFailure: false,
-        succeededModelName,
-        trace: { transcript, prompt, response: lastGeneratedContent },
-      };
-    }
-
-    this.logger.info(
-      {
-        taskId: input.taskId,
-        attempt: input.attempt,
-        model: succeededModelName,
-        agentData,
-      },
-      'Completion verifier parsed verdict'
-    );
-
-    return {
-      passed: true,
-      missingFields: [],
-      verifierFailure: false,
-      agentData,
-      succeededModelName,
-      trace: { transcript, prompt, response: lastGeneratedContent },
-    };
+    return { enabled: true, model: this.primaryModelName };
   }
 
   async extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined> {
@@ -942,83 +158,42 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     taskId: string,
     rawLogs: string
   ): Promise<string | undefined> {
-    const transcript = getLast20Lines(rawLogs);
-    const prompt = buildResumeSummaryPrompt(transcript);
-
-    const generated = await this.generateWithFallback(prompt, taskId);
+    const { logger } = this;
+    const generated = await generateResumeSummaryWithFallback({
+      primaryClient: this.primaryClient,
+      primaryModelName: this.primaryModelName,
+      fallbacks: this.fallbacks,
+      prompt: resumeSummaryPrompt.build({ transcript: getLast20Lines(rawLogs) }),
+      taskId,
+      logger,
+    });
     if (!generated.ok) {
-      this.logger.error(
+      logger.error(
         { taskId, errorCode: generated.error.code },
         'extractResumeSummary: LLM generate failed (all models)'
       );
       return undefined;
     }
-
-    const resumeContent = generated.value.content; // @allow-result-access -- guarded by if (!generated.ok) early return above
     let rawJson: unknown;
     try {
-      rawJson = extractAndParseJson(resumeContent);
+      rawJson = extractAndParseJson(generated.value.content); // @allow-result-access -- guarded by if (!generated.ok) early return above
     } catch (error) {
-      this.logger.error(
+      logger.error(
         { taskId, error: getErrorMessage(error) },
         'extractResumeSummary: JSON parse failed'
       );
       return undefined;
     }
-
     const parseResult = RESUME_SUMMARY_SCHEMA.safeParse(rawJson);
     if (!parseResult.success) {
-      this.logger.error({ taskId }, 'extractResumeSummary: Zod validation failed');
+      logger.error({ taskId }, 'extractResumeSummary: Zod validation failed');
       return undefined;
     }
-
     const { summary } = parseResult.data;
-    this.logger.info(
+    logger.info(
       { taskId, summaryLength: summary.length },
       'extractResumeSummary: summary extracted'
     );
     return summary;
-  }
-
-  private async generateWithFallback(
-    prompt: string,
-    taskId: string
-  ): Promise<Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string }> {
-    const result = await this.primaryClient.generate(prompt, {
-      promptType: 'resume-summary-extraction',
-    });
-    if (result.ok) {
-      return { ...result, modelName: this.primaryModelName };
-    }
-
-    this.logger.warn(
-      {
-        taskId,
-        primaryModel: this.primaryModelName,
-        errorCode: result.error.code,
-        fallbackCount: this.fallbacks.length,
-      },
-      'Primary validation model failed, trying fallbacks'
-    );
-
-    for (const fallback of this.fallbacks) {
-      const fallbackResult = await fallback.client.generate(prompt, {
-        promptType: 'resume-summary-extraction',
-      });
-      if (fallbackResult.ok) {
-        this.logger.info(
-          { taskId, model: fallback.modelName },
-          'Fallback validation model succeeded'
-        );
-        return { ...fallbackResult, modelName: fallback.modelName };
-      }
-      this.logger.warn(
-        { taskId, errorCode: fallbackResult.error.code },
-        'Fallback validation model also failed'
-      );
-    }
-
-    // All failed — return the original primary error
-    return { ...result, modelName: this.primaryModelName };
   }
 }

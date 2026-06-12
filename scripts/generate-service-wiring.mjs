@@ -1,0 +1,251 @@
+#!/usr/bin/env node
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+
+const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
+const ENV_SUFFIX_REGEX = /^[A-Z][A-Z0-9_]+$/;
+const API_PATH_REGEX = /^\/api\/[a-z0-9-]+$/;
+const URL_REGEX = /^https?:\/\/\S+$/;
+
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  let root = resolve(import.meta.dirname, '..');
+  let stdout = false;
+  let publicEnv = false;
+  let publicBaseUrl = 'https://intexuraos.cloud';
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--root') {
+      const next = args[i + 1];
+      if (typeof next !== 'string' || next.length === 0 || next.startsWith('--')) {
+        throw new Error('--root requires a directory argument');
+      }
+      root = resolve(next);
+      i++;
+      continue;
+    }
+    if (args[i] === '--stdout') {
+      stdout = true;
+      continue;
+    }
+    if (args[i] === '--public-env') {
+      publicEnv = true;
+      continue;
+    }
+    if (args[i] === '--base-url') {
+      const next = args[i + 1];
+      if (typeof next !== 'string' || next.length === 0 || next.startsWith('--')) {
+        throw new Error('--base-url requires a URL argument');
+      }
+      if (!URL_REGEX.test(next)) {
+        throw new Error('--base-url requires an absolute http(s) URL');
+      }
+      publicBaseUrl = next;
+      i++;
+    }
+  }
+
+  return { publicBaseUrl, publicEnv, root, stdout };
+}
+
+function stripTrailingSlash(value) {
+  return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+function readRequiredFile(filePath, label) {
+  if (!existsSync(filePath)) {
+    throw new Error(`${label} not found: ${filePath}`);
+  }
+
+  return readFileSync(filePath, 'utf8');
+}
+
+function loadServiceManifest(manifestPath) {
+  let manifest;
+
+  try {
+    manifest = JSON.parse(readRequiredFile(manifestPath, 'Manifest'));
+  } catch (error) {
+    throw new Error(`service-manifest.json is not valid JSON: ${error.message}`);
+  }
+
+  if (!manifest || typeof manifest !== 'object' || !Array.isArray(manifest.services)) {
+    throw new Error('service-manifest.json must have a "services" array');
+  }
+
+  const seenNames = new Set();
+  const seenEnvSuffixes = new Set();
+  const seenApiPaths = new Set();
+
+  manifest.services.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`services[${index}] is not an object`);
+    }
+
+    if (typeof entry.name !== 'string' || !NAME_REGEX.test(entry.name)) {
+      throw new Error(`services[${index}].name must match ${NAME_REGEX}`);
+    }
+    if (typeof entry.envSuffix !== 'string' || !ENV_SUFFIX_REGEX.test(entry.envSuffix)) {
+      throw new Error(`services[${index}].envSuffix must match ${ENV_SUFFIX_REGEX}`);
+    }
+    if (typeof entry.apiPath !== 'string' || !API_PATH_REGEX.test(entry.apiPath)) {
+      throw new Error(`services[${index}].apiPath must match ${API_PATH_REGEX}`);
+    }
+    if (typeof entry.proxyTarget !== 'string' || !URL_REGEX.test(entry.proxyTarget)) {
+      throw new Error(`services[${index}].proxyTarget must be an absolute http(s) URL`);
+    }
+    if (typeof entry.serviceUrl !== 'string' || !URL_REGEX.test(entry.serviceUrl)) {
+      throw new Error(`services[${index}].serviceUrl must be an absolute http(s) URL`);
+    }
+
+    if (seenNames.has(entry.name)) {
+      throw new Error(`Duplicate service name in manifest: ${entry.name}`);
+    }
+    if (seenEnvSuffixes.has(entry.envSuffix)) {
+      throw new Error(`Duplicate envSuffix in manifest: ${entry.envSuffix}`);
+    }
+    if (seenApiPaths.has(entry.apiPath)) {
+      throw new Error(`Duplicate apiPath in manifest: ${entry.apiPath}`);
+    }
+
+    seenNames.add(entry.name);
+    seenEnvSuffixes.add(entry.envSuffix);
+    seenApiPaths.add(entry.apiPath);
+  });
+
+  return manifest;
+}
+
+function normalizeService(entry) {
+  const serviceUrl = stripTrailingSlash(entry.serviceUrl);
+
+  return {
+    ...entry,
+    envVar: `INTEXURAOS_${entry.envSuffix}_URL`,
+    openapiUrl: `${serviceUrl}/openapi.json`,
+  };
+}
+
+function generateServiceWiring(manifest) {
+  const services = manifest.services.map(normalizeService);
+
+  return {
+    services,
+    configEntries: services.map(({ envVar, apiPath, proxyTarget }) => ({
+      envVar,
+      apiPath,
+      proxyTarget,
+    })),
+    proxyEntries: services.map(({ apiPath, proxyTarget }) => ({ apiPath, target: proxyTarget })),
+    commonServiceUrls: services.map(({ envVar, serviceUrl }) => ({ envVar, url: serviceUrl })),
+  };
+}
+
+function writeGeneratedFile(filePath, contents) {
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, contents);
+}
+
+function renderConfigGenerated(wiring) {
+  const rows = wiring.configEntries
+    .map(
+      ({ envVar, apiPath, proxyTarget }) =>
+        `  { envVar: '${envVar}', apiPath: '${apiPath}', proxyTarget: '${proxyTarget}' },`
+    )
+    .join('\n');
+
+  return `// Generated by scripts/generate-service-wiring.mjs. Do not edit by hand.\n\nexport const WEB_SERVICE_URLS = [\n${rows}\n] as const;\n`;
+}
+
+function renderEcosystemGenerated(wiring) {
+  const rows = wiring.commonServiceUrls
+    .map(({ envVar, url }) => `  ${envVar}: '${url}',`)
+    .join('\n');
+
+  return `// Generated by scripts/generate-service-wiring.mjs. Do not edit by hand.\n\nconst COMMON_SERVICE_URLS_GENERATED = {\n${rows}\n};\n\nmodule.exports = { COMMON_SERVICE_URLS_GENERATED };\n`;
+}
+
+function renderTerraformServiceUrls(wiring) {
+  const serviceUrls = Object.fromEntries(
+    wiring.commonServiceUrls
+      .map(({ envVar, url }) => [envVar, url])
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+
+  return `${JSON.stringify({ service_urls: serviceUrls }, null, 2)}\n`;
+}
+
+function renderPublicServiceEnv(wiring, baseUrl) {
+  const normalizedBaseUrl = stripTrailingSlash(baseUrl);
+  return `${wiring.configEntries
+    .map(({ envVar, apiPath }) => `${envVar}=${normalizedBaseUrl}${apiPath}`)
+    .join('\n')}\n`;
+}
+
+function writeServiceWiringArtifacts(root, wiring) {
+  const outputs = [
+    {
+      path: resolve(root, 'apps/web/src/config.generated.ts'),
+      contents: renderConfigGenerated(wiring),
+    },
+    {
+      path: resolve(root, 'ecosystem.generated.cjs'),
+      contents: renderEcosystemGenerated(wiring),
+    },
+    {
+      path: resolve(root, 'terraform/environments/dev/service-urls.auto.tfvars.json'),
+      contents: renderTerraformServiceUrls(wiring),
+    },
+  ];
+
+  for (const output of outputs) {
+    writeGeneratedFile(output.path, output.contents);
+  }
+
+  return outputs.map((output) => output.path);
+}
+
+function main() {
+  try {
+    const { publicBaseUrl, publicEnv, root, stdout } = parseArgs(process.argv);
+    const manifestPath = resolve(root, 'apps/web/service-manifest.json');
+    const manifest = loadServiceManifest(manifestPath);
+    const wiring = generateServiceWiring(manifest);
+    if (publicEnv) {
+      process.stdout.write(renderPublicServiceEnv(wiring, publicBaseUrl));
+      return;
+    }
+    if (stdout) {
+      process.stdout.write(`${JSON.stringify(wiring, null, 2)}\n`);
+      return;
+    }
+
+    const outputPaths = writeServiceWiringArtifacts(root, wiring);
+    process.stdout.write(
+      `Generated service wiring artifacts:\n${outputPaths.map((outputPath) => `- ${outputPath}`).join('\n')}\n`
+    );
+  } catch (error) {
+    console.error(`❌ ${error.message}`);
+    process.exit(1);
+  }
+}
+
+const invokedDirectly =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(import.meta.filename ?? '');
+
+if (invokedDirectly) {
+  main();
+}
+
+export {
+  generateServiceWiring,
+  loadServiceManifest,
+  normalizeService,
+  parseArgs,
+  renderConfigGenerated,
+  renderEcosystemGenerated,
+  renderPublicServiceEnv,
+  renderTerraformServiceUrls,
+  writeServiceWiringArtifacts,
+};

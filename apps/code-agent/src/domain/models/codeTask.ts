@@ -1,4 +1,4 @@
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { Timestamp } from '@google-cloud/firestore';
 import type { ExecutionMemoryType } from './executionMemory.js';
 import type { ExecutionMemoryApplicationCandidate } from './executionMemoryApplication.js';
@@ -131,6 +131,30 @@ export interface ExecutionMemoryPostRun {
 }
 
 /**
+ * Scheduling metadata for deferred dispatch (INT-1468).
+ *
+ * Carries the earliest time a queued task may be dispatched plus provenance for
+ * how that time was derived (user-provided vs. LLM-parsed vs. fallback). The
+ * queue drainer consults `notBeforeAt` to skip tasks still in their wait window.
+ */
+export interface DispatchSchedule {
+  /** Earliest permissible dispatch time. */
+  notBeforeAt: Timestamp;
+  /** Origin of the schedule — user-entered or automatic retry cooloff. */
+  source: 'user_scheduled' | 'retry_cooloff';
+  /** IANA timezone (e.g. 'UTC', 'Europe/Warsaw') used to compute notBeforeAt. */
+  timezone?: string;
+  /** Local-clock representation of notBeforeAt (e.g. '2026-04-24T22:00'). */
+  localDateTime?: string;
+  /** Raw text we parsed the schedule from (e.g. Claude usage-limit message). */
+  sourceText?: string;
+  /** How notBeforeAt was derived. */
+  derivedBy: 'user_input' | 'parser' | 'llm' | 'fallback';
+  /** Task that produced this schedule (set for retry_cooloff chains). */
+  derivedFromTaskId?: string;
+}
+
+/**
  * Task error on failure.
  * Design reference: Lines 1762-1848 (error taxonomy)
  */
@@ -145,6 +169,65 @@ export interface TaskError {
   };
 }
 
+export type CodeTaskDispatchStatusReason =
+  | 'no_enabled_workers'
+  | 'workers_unreachable'
+  | 'worker_health_contract_mismatch'
+  | 'workers_at_capacity'
+  | 'codex_auth_unavailable'
+  | 'claude_auth_unavailable'
+  | 'provider_auth_unavailable'
+  | 'docker_unavailable'
+  | 'disk_unavailable'
+  | 'unknown_worker_type'
+  | 'worker_unavailable'
+  | 'worker_busy'
+  | 'at_capacity'
+  | 'network_error'
+  | 'dispatch_failed'
+  | 'invalid_response'
+  | 'queue_full'
+  | 'queue_timeout'
+  | 'retry_expired'
+  | 'retry_exhausted'
+  | 'missing_pr_branch'
+  | 'scheduled_wait'
+  | 'active_task_blocked';
+
+export interface CodeTaskDispatchStatus {
+  state: 'waiting' | 'blocked' | 'terminal';
+  reason: CodeTaskDispatchStatusReason;
+  terminal: boolean;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  firstSeenAt: Timestamp;
+  lastSeenAt: Timestamp;
+  nextAction: 'will_retry_automatically' | 'retry_after_fix' | 'wait_until_scheduled' | 'wait_for_active_task';
+  lastAttemptAt?: Timestamp;
+  attemptCount?: number;
+  expiresAt?: Timestamp;
+  terminalCause?: {
+    reason: CodeTaskDispatchStatusReason;
+    message: string;
+    remediation: string;
+    workerNames: string[];
+    lastSeenAt: Timestamp;
+  };
+  workerHealthDetails?: {
+    workerName: string;
+    tag: string;
+    healthy: boolean;
+    reason?: string;
+    error?: string;
+    code?: string;
+    missingFields?: string[];
+    contractMismatch?: boolean;
+  }[];
+  notifiedReasons?: Partial<Record<CodeTaskDispatchStatusReason, Timestamp>>;
+}
+
 /**
  * Status summary for UI when logs unavailable.
  * Design reference: Lines 1017-1041
@@ -154,6 +237,32 @@ export interface StatusSummary {
   message: string;          // e.g., "Running tests: 45/100 passed"
   progress?: number;        // 0-100 percentage
   updatedAt: Timestamp;
+}
+
+export type CodeTaskCallbackOwner = 'dev' | 'prod' | 'custom';
+
+export type CodeTaskCallbackEndpoint =
+  | 'logs'
+  | 'task_event'
+  | 'task_complete'
+  | 'status'
+  | 'turn_metrics';
+
+export interface CodeTaskCallbackFailure {
+  endpoint: CodeTaskCallbackEndpoint;
+  status?: number;
+  message: string;
+  occurredAt: Timestamp;
+}
+
+export interface CodeTaskCallbackState {
+  webhookUrl: string;
+  callbackBaseUrl: string;
+  owner: CodeTaskCallbackOwner;
+  configuredAt: Timestamp;
+  lastSuccessAt?: Timestamp;
+  lastSuccessEndpoint?: CodeTaskCallbackEndpoint;
+  lastFailure?: CodeTaskCallbackFailure;
 }
 
 /**
@@ -210,6 +319,7 @@ export interface CodeTask {
   // Results
   result?: TaskResult;
   error?: TaskError;
+  dispatchStatus?: CodeTaskDispatchStatus;
 
   // Timestamps
   createdAt: Timestamp;
@@ -221,6 +331,7 @@ export interface CodeTask {
   // Webhook state
   callbackReceived: boolean;
   webhookSecret?: string;     // Per-task secret for HMAC signature validation (design lines 1634-1636)
+  callbackState?: CodeTaskCallbackState;
 
   // Heartbeat for zombie detection
   lastHeartbeat?: Timestamp;   // Last heartbeat received from orchestrator (INT-372)
@@ -257,4 +368,14 @@ export interface CodeTask {
   // Auto-retry metadata (INT-1375)
   failedWorkerLocation?: string;   // Worker location that failed, to exclude on retry dispatch
   autoRetryAttempt?: number;       // 1-based auto-retry attempt number (max 3)
+
+  // Deferred dispatch metadata (INT-1468)
+  dispatchSchedule?: DispatchSchedule;
+
+  /**
+   * Optional per-task timeout override in hours (1–12).
+   * When undefined, the orchestrator applies its default (5h).
+   * Source of truth: user input on the New Code Task UI (INT-1585).
+   */
+  timeoutHours?: number;
 }

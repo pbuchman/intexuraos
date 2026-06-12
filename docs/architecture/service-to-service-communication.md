@@ -48,6 +48,33 @@ All internal endpoints follow the pattern:
 
 Internal endpoints use HTTP header-based authentication with a shared secret token.
 
+### Recommended client primitive
+
+For all NEW outbound internal calls, use the shared client factory shipped in
+[INT-1531](https://linear.app/pbuchman/issue/INT-1531):
+
+```ts
+import { createInternalHttpClient } from '@intexuraos/internal-clients';
+
+const http = createInternalHttpClient({
+  baseUrl: process.env['INTEXURAOS_NOTES_AGENT_URL'] ?? '',
+  token: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+  logger: request.log,
+  defaultTimeoutMs: 10_000,
+});
+
+const result = await http.request<NoteResponse>({ method: 'POST', path: '/internal/notes', body });
+```
+
+Benefits over hand-rolled `fetch`:
+
+- Sets `X-Internal-Auth`, `Content-Type`, and `X-Request-Id` (read from
+  `AsyncLocalStorage`; see "Request ID propagation" below).
+- AbortController-based timeout with structured `TIMEOUT` error.
+- Auto-unwraps the `{ success, data?, error? }` envelope.
+- Structured error taxonomy: `NETWORK_ERROR`, `API_ERROR`, `TIMEOUT`,
+  `ENVELOPE_ERROR`, `MALFORMED_ENVELOPE`.
+
 ### Header
 
 ```
@@ -59,6 +86,22 @@ X-Internal-Auth: <token>
 ```bash
 INTEXURAOS_INTERNAL_AUTH_TOKEN=<shared-secret>
 ```
+
+For zero-downtime rotation, also accept the previous token via:
+
+```bash
+INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS=<previous-shared-secret>
+```
+
+`validateInternalAuth` accepts EITHER value and returns
+`{ valid: true, tokenUsed: 'current' | 'previous' }` so callers can
+log/alert when the PREVIOUS token is used. See
+[`docs/runbooks/internal-auth-rotation.md`](../runbooks/internal-auth-rotation.md)
+for the quarterly rotation procedure.
+
+The static shared secret is a Phase 1 mechanism; per-service Google OIDC is
+the Phase 2 target — see
+[`docs/architecture/internal-oidc-phase-two.md`](./internal-oidc-phase-two.md).
 
 **Note:** Services should use the `INTEXURAOS_` prefix for consistency. Legacy services may use `INTERNAL_AUTH_TOKEN`.
 
@@ -498,7 +541,7 @@ const llmResult = await client.getLlmClient(userId);
 1. **Service Mesh** - Consider Istio/Linkerd for automatic mTLS
 2. **API Gateway** - Centralized routing and authentication
 3. **Circuit Breakers** - Automatic failover for degraded services
-4. **Distributed Tracing** - OpenTelemetry for request tracing
+4. **Request Correlation** - Preserve request and correlation identifiers across service boundaries
 5. **Rate Limiting** - Protect services from excessive internal traffic
 
 ## References

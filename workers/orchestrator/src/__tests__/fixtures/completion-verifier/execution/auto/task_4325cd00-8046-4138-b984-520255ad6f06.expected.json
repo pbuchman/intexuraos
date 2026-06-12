@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1890",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1422/fix-internal-server-error-when-grouping-events-by-prompt-type-and-date",
+    "review_iterations": 1,
+    "memory_ids_used": [
+      "mem_fe3e97e0-3adc-44ef-9e0b-4ae659de82a6",
+      "mem_1afb45ed-7e6e-44e3-8899-4aa4aae100bc"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Both memories applied directly — the task was exactly an allowlist/lookup-table mismatch (mem_fe3e97e0) and the chosen fix was feature removal over data migration (mem_1afb45ed), since `DailyUsageAggregate` lacks a `promptType` dimension.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (scope: write failing test, remove `'request.promptType'` from backend `ALLOWED_GROUP_BY`, remove `promptType` from frontend `GroupByMode`/`GROUP_BY_MAP`/`GROUP_BY_OPTIONS`/`isGroupByMode`, run CI, commit); spec-compliance reviewer (scope: verify all 6 plan requirements met with zero scope creep); code-quality reviewer via pr-review-toolkit:code-reviewer (scope: TS hygiene, style, test quality, CLAUDE.md adherence); final holistic reviewer via superpowers:code-reviewer (scope: test genuinely exercises bug path, no stale references, migration-safety, commit-message convention).",
+    "skill_sequence_proof": "superpowers:subagent-driven-development skill was invoked first (produced implementer + spec-compliance + code-quality subagents and two commits `ece85903c`, `4e6f8801f` with green `ci:tracked`), then superpowers:requesting-code-review skill was invoked AFTER all implementation commits landed to run the final holistic review that returned APPROVED, then `git push` and `gh pr create` were the last actions.",
+    "failure_reason": "",
+    "summary": "* Removed `'request.promptType'` from backend `ALLOWED_GROUP_BY` and added a regression test that asserts `groupBy: ['request.promptType']` now returns `INVALID_GROUP_BY` instead of crashing (llm-usage-service).\n  * Dropped `promptType` from `GroupByMode` union, `GROUP_BY_MAP`, `GROUP_BY_OPTIONS`, and the `isGroupByMode` localStorage guard in the web app so stale values fall through to `DEFAULT_GROUP_BY`.\n  * Key decision: feature removal over data migration — `DailyUsageAggregate` has no `promptType` dimension, so supporting real grouping is tracked as a follow-up.\n  * `pnpm run ci:tracked` green (15156 tests, typecheck + 22 static checks clean); spec-compliance, code-quality, and final holistic reviews all approved with zero issues.\n  * PR #1890 targeting `development`."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

@@ -73,7 +73,7 @@ describe('Research Export Routes - Unauthenticated', () => {
   it('GET /research/settings/notion returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/research/settings/notion',
+      url: '/settings/notion',
     });
 
     expect(response.statusCode).toBe(401);
@@ -85,7 +85,7 @@ describe('Research Export Routes - Unauthenticated', () => {
   it('POST /research/settings/notion returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/research/settings/notion',
+      url: '/settings/notion',
       payload: {
         researchPageId: 'notion-page-123',
         researchPageTitle: 'Test',
@@ -102,7 +102,7 @@ describe('Research Export Routes - Unauthenticated', () => {
   it('POST /research/settings/notion/validate returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/research/settings/notion/validate',
+      url: '/settings/notion/validate',
       payload: {
         researchPageId: 'abc123',
       },
@@ -214,7 +214,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'GET',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -233,7 +233,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'GET',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -299,7 +299,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'GET',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -366,7 +366,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion/validate',
+        url: '/settings/notion/validate',
         headers: { authorization: `Bearer ${token}` },
         payload: { researchPageId: pageId },
       });
@@ -392,7 +392,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion/validate',
+        url: '/settings/notion/validate',
         headers: { authorization: `Bearer ${token}` },
         payload: { researchPageId: pageId },
       });
@@ -406,7 +406,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion/validate',
+        url: '/settings/notion/validate',
         headers: { authorization: `Bearer ${token}` },
         payload: { researchPageId: 'abc' },
       });
@@ -426,7 +426,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion/validate',
+        url: '/settings/notion/validate',
         headers: { authorization: `Bearer ${token}` },
         payload: { researchPageId: 'gggg1234567890123456789012345678' }, // contains 'g'
       });
@@ -447,7 +447,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion/validate',
+        url: '/settings/notion/validate',
         headers: { authorization: `Bearer ${token}` },
         payload: { researchPageId: pageId },
       });
@@ -468,7 +468,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion/validate',
+        url: '/settings/notion/validate',
         headers: { authorization: `Bearer ${token}` },
         payload: { researchPageId: pageId },
       });
@@ -533,7 +533,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -567,7 +567,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -589,7 +589,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -616,7 +616,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -687,7 +687,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: '/research/settings/notion',
+        url: '/settings/notion',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -783,7 +783,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -804,7 +804,7 @@ describe('Research Export Routes - Authenticated', () => {
       const researchId = 'research-123';
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
       });
 
       expect(response.statusCode).toBe(401);
@@ -818,7 +818,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -854,7 +854,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -886,7 +886,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -924,7 +924,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -962,7 +962,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1005,7 +1005,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1042,7 +1042,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1108,7 +1108,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1174,7 +1174,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1240,7 +1240,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1306,7 +1306,7 @@ describe('Research Export Routes - Authenticated', () => {
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${researchId}/export-notion`,
+        url: `/${researchId}/export-notion`,
         headers: {
           authorization: `Bearer ${token}`,
         },

@@ -1,0 +1,20 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1927",
+    "review_id": "4166429347",
+    "review_comments_posted": 0,
+    "review_types": ["plan_review"],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "pending (Tests 1/3, 2/3, 3/3, Lint, E2E Tests, E2E Isolation in progress; Validation, Type Check, Build & Format, Terraform passed)",
+    "needs_remediation": false,
+    "memory_ids_used": [
+      "mem_7325cc43-2e66-476e-bb49-148b328b2c6e",
+      "mem_174538d5-7eb1-47ac-8954-2e00688624ec"
+    ],
+    "memory_ids_rejected": ["mem_97f34c8e-fb35-4e4c-b474-e7a0e1bcd0b0"],
+    "memory_usage_summary": "Applied memories on clarifying retry delay mechanisms — verified the plan correctly distinguishes scheduler-driven natural delay from fixed-fallback delay with consistent terminology throughout Key Decisions and Cooloff Retry Semantics sections.",
+    "summary": "* Reviewed plan document for INT-1463 (scheduled code task dispatch)\n  * Plan is Ready with minor clarifications needed (sane bounds undefined, \"create if needed\" vague, deps type extension implicit)\n  * All 10 requirements covered with explicit Key Decisions and Task decomposition\n  * File paths verified, config assumptions correct, existing code patterns match\n  * No code changes needed — this is a plan-only PR with informational findings"
+  },
+  "missingRequired": [],
+  "warnings": []
+}

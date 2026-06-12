@@ -8,15 +8,28 @@ import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
 import type { DiscoveredContainer, IsolationProvider } from './services/isolation/types.js';
 import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
+import type { ProviderApiKeyHealth } from './types/api.js';
 import { registerRoutes } from './routes.js';
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { Logger } from '@intexuraos/common-core';
+import { flushAllUsageSinks } from '@intexuraos/llm-pricing';
 
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const WEBHOOK_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-const SHUTDOWN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+/**
+ * INT-1551 §E.8: graceful-shutdown drain budget. Replaces the legacy 10-min
+ * polling loop. The orchestrator currently runs under systemd (Linux home-dev)
+ * or a macOS LaunchAgent; both grant the process at least 32 s before SIGKILL,
+ * which leaves a 2 s safety margin on top of this budget. See
+ * `workers/orchestrator/DEPLOYMENT.md` "Shutdown Behavior" for the contract.
+ *
+ * If the orchestrator is ever moved into PM2 (`ecosystem.config.cjs`), the
+ * matching `kill_timeout` MUST be raised to 32_000+ ms — the default 5_000 ms
+ * is too short for in-flight worker drain to complete.
+ */
+const SHUTDOWN_TIMEOUT_MS = 30_000; // 30 seconds
 
 interface ServiceState {
   status: OrchestratorStatus;
@@ -34,7 +47,15 @@ export async function main(
   heartbeatManager: HeartbeatManager,
   logger: Logger,
   workerAuthRegistry?: WorkerAuthRegistry,
-  isolationProvider?: IsolationProvider
+  isolationProvider?: IsolationProvider,
+  /**
+   * Flush callback returned by `initWorker()` (INT-1565 §S5). Awaited in the
+   * SIGTERM handler to drain Pino + Sentry buffers before `process.exit(0)`.
+   * Optional so tests that build `main()` without bootstrapping the logger
+   * can omit it.
+   */
+  flush?: () => Promise<void>,
+  providerApiKeys?: Record<string, ProviderApiKeyHealth>
 ): Promise<void> {
   const app = fastify({
     logger: false,
@@ -57,12 +78,25 @@ export async function main(
       logger,
       () => getServiceStatus(),
       workerAuthRegistry,
-      isolationProvider
+      isolationProvider,
+      providerApiKeys
     );
 
     await app.listen({ port: config.port, host: '0.0.0.0' });
 
     logger.info({ port: config.port }, 'Orchestrator HTTP server started');
+
+    // INT-1551 §E.7: top-level AbortController threaded down to TaskTimers
+    // and TaskRunner so the shutdown handler can cancel pending timers and
+    // bail out of new attempts. The signal MUST NOT short-circuit normal
+    // operation: if it never aborts, behavior is unchanged.
+    //
+    // Wired BEFORE `runStartupRecovery` so timers scheduled by
+    // `dispatcher.adoptTask`/`recoverPendingResumeTask` register their abort
+    // listeners against this controller; otherwise adopted tasks' timers
+    // would escape SIGTERM cancellation (review I-1).
+    const shutdownController = new AbortController();
+    dispatcher.setShutdownSignal(shutdownController.signal);
 
     // Run startup recovery
     await runStartupRecovery(
@@ -93,6 +127,8 @@ export async function main(
       heartbeatManager,
       logger,
       isolationProvider,
+      shutdownController,
+      ...(flush !== undefined ? { flush } : {}),
     });
 
     logger.info({ message: 'Orchestrator ready' });
@@ -240,9 +276,27 @@ async function runStartupRecovery(
         taskId: task.taskId,
       });
 
-      // Update task status
+      // Update task status. Set `completedAt` so the duration metric
+      // emitted below has a meaningful wall-clock window (computed from
+      // `startedAt` -> `completedAt`); without it `computeTaskDurationMs`
+      // would clamp to 0 even when the task ran for hours before restart.
       task.status = 'interrupted';
+      task.completedAt = new Date().toISOString();
       await statePersistence.save(state);
+
+      // INT-1565 §S5: emit `code_tasks_*` metrics for restart-induced
+      // interruptions so the counter/duration series cover EVERY terminal
+      // transition, not just `finalizeTask()`-driven ones. Wrap in
+      // try/catch identical to the dispatcher's own emit — a metrics
+      // outage must never break startup recovery.
+      try {
+        dispatcher.emitTerminalMetrics(task, 'interrupted');
+      } catch (metricsError) {
+        logger.warn(
+          { taskId: task.taskId, error: metricsError },
+          'metrics emission failed during startup recovery; continuing'
+        );
+      }
 
       logger.info({ taskId: task.taskId }, 'Notified code-agent of interrupted task');
     } catch (error) {
@@ -294,7 +348,18 @@ interface ShutdownHandlers {
   statePersistence: StatePersistence;
   heartbeatManager: HeartbeatManager;
   logger: Logger;
-  isolationProvider: IsolationProvider | undefined;
+  isolationProvider: IsolationProvider | undefined; // @allow-undefined-type -- pre-existing tri-state: shutdown handler differentiates "no provider configured" from "provider with cleanup hooks"
+  /**
+   * INT-1551 §E.7: top-level controller fired before draining in-flight
+   * handlers so `TaskTimers` and `TaskRunner` can cancel pending work.
+   */
+  shutdownController: AbortController;
+  /**
+   * Flush callback from `initWorker()` (INT-1565 §S5). Awaited last so log
+   * lines emitted during shutdown make it to the unified Sentry/OTel sinks.
+   * `undefined` when called by tests that bypass the bootstrap logger.
+   */
+  flush?: () => Promise<void>;
 }
 
 function setupShutdownHandlers(handlers: ShutdownHandlers): void {
@@ -316,20 +381,71 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     handlers.isolationProvider?.stopHealthMonitor?.();
     handlers.heartbeatManager.stop();
 
-    // Wait for running tasks (up to timeout)
-    const startTime = Date.now();
-    while (Date.now() - startTime < SHUTDOWN_TIMEOUT_MS) {
-      const running = handlers.dispatcher.getRunningCount();
-      if (running === 0) {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+    // INT-1551 §E.7: fire the abort signal BEFORE awaiting drain so
+    // dispatcher sub-modules see the signal and start cleaning up pending
+    // timers / refusing new worker startups while we await in-flight work.
+    handlers.shutdownController.abort();
+
+    // INT-1551 §E.7: replace the legacy `getRunningCount()` polling loop
+    // with a Promise.race. `Promise.allSettled` settles only when every
+    // tracked fire-and-forget handler has resolved or rejected; the timeout
+    // arm guarantees we never block longer than `SHUTDOWN_TIMEOUT_MS`.
+    const inFlight = handlers.dispatcher.getInFlightPromises();
+    // The Promise constructor synchronously invokes the executor, so
+    // `setTimeout` runs and assigns `timeoutHandle` before this expression
+    // returns — no `undefined` window exists. The `as` cast tells TypeScript
+    // we have a definite value (avoiding an unreachable narrowing branch).
+    let timeoutHandle!: NodeJS.Timeout;
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeoutHandle = setTimeout(() => {
+        resolve('timeout');
+      }, SHUTDOWN_TIMEOUT_MS);
+    });
+    const winner = await Promise.race([
+      Promise.allSettled(inFlight).then(() => 'drained' as const),
+      timeoutPromise,
+    ]);
+    // Always clear the timer so the process can exit cleanly even if the
+    // drain arm won the race.
+    clearTimeout(timeoutHandle);
+    if (winner === 'timeout') {
+      handlers.logger.warn(
+        { inFlightCount: inFlight.length },
+        'Shutdown timeout reached; forcing exit with in-flight handlers still pending'
+      );
+    } else {
+      handlers.logger.info({ drainedCount: inFlight.length }, 'In-flight handlers drained');
     }
 
-    // Save state
-    await handlers.statePersistence.save(await handlers.statePersistence.load());
-
     handlers.logger.info({ message: 'Orchestrator shutdown complete' });
+
+    // Drain registered LLM usage sinks (HttpWebhookUsageSink) so any events
+    // buffered inside the 500ms batching window during the final
+    // validation-model calls make it to code-agent before exit. The helper
+    // is non-fatal — per-sink failures are logged via `handlers.logger`.
+    try {
+      await flushAllUsageSinks({ logger: handlers.logger });
+    } catch (drainError) {
+      handlers.logger.warn(
+        { err: drainError },
+        'flushAllUsageSinks raised during shutdown; continuing exit'
+      );
+    }
+
+    // INT-1565 §S5: drain Pino + Sentry buffers before exit so the final
+    // shutdown log lines + any inflight error reports make it to the unified
+    // sinks. `flush()` is contracted to never throw, but we still wrap it so
+    // a buggy implementation cannot leave the process hanging on shutdown.
+    if (handlers.flush !== undefined) {
+      try {
+        await handlers.flush();
+      } catch (flushError) {
+        handlers.logger.warn(
+          { err: flushError },
+          'flush() raised during shutdown; continuing exit'
+        );
+      }
+    }
     exit(0);
   };
 

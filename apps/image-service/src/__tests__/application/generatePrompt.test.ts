@@ -64,6 +64,25 @@ describe('createGeneratePromptUseCase', () => {
     );
   });
 
+  it('forwards prompt metadata to prompt generator', async () => {
+    fakeUserClient.setApiKeys({ openai: 'sk-test-key' });
+    const useCase = buildUseCase();
+
+    const result = await useCase({
+      text: 'A blog about cats',
+      model: 'gpt-4.1',
+      userId: 'user-1',
+      promptType: 'image-thumbnail-prompt',
+      correlation: { researchId: 'research-123' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fakeGenerator.lastOptions).toStrictEqual({
+      promptType: 'image-thumbnail-prompt',
+      correlation: { researchId: 'research-123' },
+    });
+  });
+
   it('returns API_KEYS_UNAVAILABLE when user-service fails', async () => {
     fakeUserClient.setFailNext(true);
     const useCase = buildUseCase();

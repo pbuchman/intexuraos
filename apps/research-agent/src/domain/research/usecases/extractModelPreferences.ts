@@ -8,7 +8,7 @@
 import type { Logger } from '@intexuraos/common-core';
 import { getProviderForModel, type LlmProvider, type ResearchModel, LlmModels } from '@intexuraos/llm-contract';
 import {
-  buildModelExtractionPrompt,
+  modelExtractionPrompt,
   parseModelExtractionResponse,
   MODEL_KEYWORDS,
   PROVIDER_DEFAULT_MODELS,
@@ -43,6 +43,7 @@ const RESEARCH_MODELS: ResearchModel[] = [
   LlmModels.Gemini25Flash,
   LlmModels.ClaudeOpus46,
   LlmModels.ClaudeSonnet46,
+  LlmModels.ClaudeSonnet47,
   LlmModels.O4MiniDeepResearch,
   LlmModels.GPT54,
   LlmModels.Sonar,
@@ -58,6 +59,7 @@ const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
   [LlmModels.Gemini25Flash]: 'Gemini 2.5 Flash',
   [LlmModels.ClaudeOpus46]: 'Claude Opus 4.6',
   [LlmModels.ClaudeSonnet46]: 'Claude Sonnet 4.6',
+  [LlmModels.ClaudeSonnet47]: 'Claude Sonnet 4.7',
   [LlmModels.O4MiniDeepResearch]: 'O4 Mini Deep Research',
   [LlmModels.GPT54]: 'GPT 5.4',
   [LlmModels.Sonar]: 'Sonar',
@@ -215,7 +217,7 @@ export async function extractModelPreferences(
   }
 
   // Build the extraction prompt
-  const prompt = buildModelExtractionPrompt({
+  const prompt = modelExtractionPrompt.build({
     userMessage: originalMessage,
     availableModels,
     synthesisModels: SYNTHESIS_MODELS,

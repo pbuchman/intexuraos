@@ -10,11 +10,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
+import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
-import { withGroupUpdates } from '../../../infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
+import { withGroupUpdates } from '../../../infra/firestore/codeTaskRepositoryWithGroupUpdates.js';
 import {
   createFakeTaskGroupSummaryRepository,
   type FakeTaskGroupSummaryRepository,
@@ -66,11 +67,12 @@ function createFakeInnerRepo(): CodeTaskRepository {
     hasActiveTaskForLinearIssue: vi.fn(),
     findZombieTasks: vi.fn(),
     countByUserToday: vi.fn(),
-    findArchivableTasks: vi.fn(),
-    archiveTaskLogs: vi.fn(),
     findByPR: vi.fn(),
+    findRecentTasksByPR: vi.fn(),
     findActiveReviewForPR: vi.fn(),
     hasDispatchedOrRunningForPR: vi.fn(),
+    hasOtherDispatchedOrRunningForLinearIssue: vi.fn(),
+    claimForDispatch: vi.fn(),
     findLatestExecutionTaskByPR: vi.fn(),
     findOriginTaskByPR: vi.fn(),
     findRecentTasksByLinearIssue: vi.fn(),
@@ -206,7 +208,7 @@ describe('withGroupUpdates decorator', () => {
 
       expect(result).toEqual(ok(newTask));
       expect(inner.findById).toHaveBeenCalledWith('task-1');
-      expect(inner.update).toHaveBeenCalledWith('task-1', { status: 'implemented' });
+      expect(inner.update).toHaveBeenCalledWith('task-1', { status: 'implemented' }, undefined);
       await Promise.resolve();
       expect(updateAfterStatusChangeSpy).toHaveBeenCalledWith(oldTask, newTask);
     });
@@ -263,6 +265,21 @@ describe('withGroupUpdates decorator', () => {
 
       await decorated.update('task-1', { status: 'reviewed' });
 
+      await Promise.resolve();
+      expect(updateAfterStatusChangeSpy).not.toHaveBeenCalled();
+    });
+
+    it('passes transaction options through and skips group summary side effects', async () => {
+      const newTask = makeTask({ status: 'failed' });
+      const transaction = {} as FirebaseFirestore.Transaction;
+      vi.mocked(inner.update).mockResolvedValue(ok(newTask));
+      const updateAfterStatusChangeSpy = vi.spyOn(groupSummaryRepo, 'updateAfterStatusChange');
+
+      const result = await decorated.update('task-1', { status: 'failed' }, { transaction });
+
+      expect(result).toEqual(ok(newTask));
+      expect(inner.findById).not.toHaveBeenCalled();
+      expect(inner.update).toHaveBeenCalledWith('task-1', { status: 'failed' }, { transaction });
       await Promise.resolve();
       expect(updateAfterStatusChangeSpy).not.toHaveBeenCalled();
     });

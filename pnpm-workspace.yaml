@@ -2,7 +2,25 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'workers/*'
+  - 'migrations'
   - 'tools/log-server'
   - 'tools/sample-data'
   - 'e2e'
   - 'e2e/mock-claude'
+
+catalog:
+  openai: ^6.15.0
+  fastify: ^5.6.2
+  pino: ^10.1.1
+  zod: ^3.24.1
+  '@google-cloud/firestore': ^7.10.0
+
+onlyBuiltDependencies:
+  - '@firebase/util'
+  - browser-tabs-lock
+  - cpu-features
+  - esbuild
+  - protobufjs
+  - re2
+  - sharp
+  - ssh2

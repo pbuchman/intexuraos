@@ -21,6 +21,7 @@ import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import { ok, err } from '@intexuraos/common-core';
+import * as webhookValidation from '../../../infra/webhookValidation.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,6 +43,7 @@ function sign(
 const ORCHESTRATOR_SECRET = 'test-orchestrator-secret';
 const INTERNAL_AUTH_TOKEN = 'test-internal-token';
 const TASK_ID = 'task-abc';
+const WEBHOOK_SECRET = 'test-task-webhook-secret';
 
 describe('PATCH /internal/code-tasks/:id/status', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -78,6 +80,13 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
           repository: 'pbuchman/intexuraos',
           userId: 'user-123',
           status: 'running',
+          webhookSecret: WEBHOOK_SECRET,
+          callbackState: {
+            webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+            callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+            owner: 'prod',
+            configuredAt: new Date('2026-06-09T14:00:00.000Z'),
+          },
         })
       ),
       update: vi.fn().mockResolvedValue(
@@ -113,7 +122,6 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
       statusMirrorService: {} as never,
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
-      cleanupTaskLogs: {} as never,
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,
@@ -168,17 +176,17 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
   function sendUpdate(
     id: string,
     body: unknown,
-    overrides?: { token?: string; skipSignature?: boolean; badSignature?: boolean }
+    overrides?: { token?: string | null; skipSignature?: boolean; badSignature?: boolean; signatureSecret?: string }
   ) {
-    const { rawBody, timestamp, signature } = sign(body, ORCHESTRATOR_SECRET);
+    const { rawBody, timestamp, signature } = sign(body, overrides?.signatureSecret ?? ORCHESTRATOR_SECRET);
 
     const headers: Record<string, string> = {
       'content-type': 'application/json',
     };
-    if (overrides?.token !== undefined) {
-      headers['x-internal-auth'] = overrides.token;
-    } else if (overrides?.token !== null) {
+    if (overrides?.token === undefined) {
       headers['x-internal-auth'] = INTERNAL_AUTH_TOKEN;
+    } else if (overrides.token !== null) {
+      headers['x-internal-auth'] = overrides.token;
     }
 
     if (overrides?.skipSignature !== true) {
@@ -476,6 +484,106 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
     expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
   });
 
+  it('accepts a terminal status update signed with the task webhook secret without internal auth', async () => {
+    const body = {
+      taskId: TASK_ID,
+      status: 'completed',
+      completedAt: '2026-04-17T12:00:00.000Z',
+      result: { summary: 'Reviewed successfully' },
+    };
+
+    const response = await sendUpdate(TASK_ID, body, {
+      token: null,
+      signatureSecret: WEBHOOK_SECRET,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledOnce();
+    const [, updateFields] = mockCodeTaskRepo.update.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(updateFields['status']).toBe('implemented');
+    expect(updateFields['result']).toEqual({ summary: 'Reviewed successfully' });
+    expect(updateFields['callbackState']).toEqual(
+      expect.objectContaining({
+        callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+        lastSuccessEndpoint: 'status',
+        lastSuccessAt: expect.any(Date),
+      })
+    );
+  });
+
+  it('accepts a task-webhook signed status update with internal auth without trying orchestrator HMAC', async () => {
+    const validateOrchestratorSpy = vi.spyOn(
+      webhookValidation,
+      'validateOrchestratorSignature'
+    );
+    const body = {
+      taskId: TASK_ID,
+      status: 'completed',
+      completedAt: '2026-04-17T12:00:00.000Z',
+      result: { summary: 'Reviewed successfully' },
+    };
+
+    const response = await sendUpdate(TASK_ID, body, {
+      signatureSecret: WEBHOOK_SECRET,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(validateOrchestratorSpy).not.toHaveBeenCalled();
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledOnce();
+  });
+
+  it('returns 401 for task-signed status update when the task has no webhook secret', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(
+      ok({
+        id: TASK_ID,
+        repository: 'pbuchman/intexuraos',
+        userId: 'user-123',
+        status: 'running',
+      })
+    );
+    const body = {
+      taskId: TASK_ID,
+      status: 'failed',
+      completedAt: '2026-04-17T12:00:00.000Z',
+    };
+
+    const response = await sendUpdate(TASK_ID, body, {
+      token: null,
+      signatureSecret: WEBHOOK_SECRET,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when the repository returns a mismatched task id for task-signed auth', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(
+      ok({
+        id: 'task-other',
+        repository: 'pbuchman/intexuraos',
+        userId: 'user-123',
+        status: 'running',
+        webhookSecret: WEBHOOK_SECRET,
+      })
+    );
+    const body = {
+      taskId: TASK_ID,
+      status: 'failed',
+      completedAt: '2026-04-17T12:00:00.000Z',
+    };
+
+    const response = await sendUpdate(TASK_ID, body, {
+      token: null,
+      signatureSecret: WEBHOOK_SECRET,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when HMAC signature is invalid', async () => {
     const body = {
       taskId: TASK_ID,
@@ -520,6 +628,26 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
     const response = await sendUpdate(TASK_ID, body);
 
     expect(response.statusCode).toBe(404);
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when task does not exist and internal auth is absent', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(
+      err({ code: 'NOT_FOUND', message: 'Task not found' })
+    );
+
+    const body = {
+      taskId: TASK_ID,
+      status: 'failed',
+      completedAt: '2026-04-17T12:00:00.000Z',
+    };
+
+    const response = await sendUpdate(TASK_ID, body, {
+      token: null,
+      signatureSecret: WEBHOOK_SECRET,
+    });
+
+    expect(response.statusCode).toBe(401);
     expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
   });
 

@@ -116,4 +116,22 @@ describe('agentRoutingContractMigration', () => {
       'Legacy migration conflict'
     );
   });
+
+  it('scans past the first 500 documents when migrating legacy tasks', async () => {
+    const tasks = firestore.collection('code_tasks');
+
+    for (let i = 0; i < 501; i++) {
+      await tasks.doc(`legacy-${String(i).padStart(3, '0')}`).set({
+        status: 'designed',
+        executionPhase: 'design',
+      });
+    }
+
+    await runAgentRoutingContractMigration({ firestore, logger });
+
+    const finalDoc = await tasks.doc('legacy-500').get();
+    expect(finalDoc.data()?.['status']).toBe('planned');
+    expect(finalDoc.data()?.['agentType']).toBe('planning');
+    expect(finalDoc.data()?.['executionPhase']).toBeUndefined();
+  });
 });

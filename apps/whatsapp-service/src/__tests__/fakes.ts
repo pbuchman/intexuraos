@@ -86,6 +86,7 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
     metadata: {
       ignoredReason?: IgnoredReason;
       failureDetails?: string;
+      retryable?: boolean;
       inboxNoteId?: string;
     }
   ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
@@ -98,6 +99,7 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
       status,
       processedAt: new Date().toISOString(),
       ...metadata,
+      retryable: status === 'failed' ? (metadata.retryable ?? false) : false,
     };
     this.events.set(eventId, updated);
     return Promise.resolve(ok(updated));
@@ -105,6 +107,21 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
 
   getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, WhatsAppError>> {
     return Promise.resolve(ok(this.events.get(eventId) ?? null));
+  }
+
+  findRetryableEvents(options: {
+    olderThan: string;
+    limit: number;
+  }): Promise<Result<WhatsAppWebhookEvent[], WhatsAppError>> {
+    const events = Array.from(this.events.values())
+      .filter(
+        (event) =>
+          (event.status === 'pending' || (event.status === 'failed' && event.retryable === true)) &&
+          event.receivedAt < options.olderThan
+      )
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+      .slice(0, options.limit);
+    return Promise.resolve(ok(events));
   }
 
   getAll(): WhatsAppWebhookEvent[] {
@@ -345,6 +362,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   private shouldThrowOnUpdateTranscription = false;
   private shouldFailUpdateTranscription = false;
   private shouldFailFindById = false;
+  private shouldFailFindByWaMessageId = false;
   private nextCursorToReturn: string | undefined = undefined;
 
   setFailSave(fail: boolean): void {
@@ -377,6 +395,10 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   setFailFindById(fail: boolean): void {
     this.shouldFailFindById = fail;
+  }
+
+  setFailFindByWaMessageId(fail: boolean): void {
+    this.shouldFailFindByWaMessageId = fail;
   }
 
   /**
@@ -472,6 +494,22 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(message));
   }
 
+  findByWaMessageId(
+    userId: string,
+    waMessageId: string
+  ): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
+    if (this.shouldFailFindByWaMessageId) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated findByWaMessageId failure' })
+      );
+    }
+    const message =
+      Array.from(this.messages.values()).find(
+        (candidate) => candidate.userId === userId && candidate.waMessageId === waMessageId
+      ) ?? null;
+    return Promise.resolve(ok(message));
+  }
+
   updateTranscription(
     userId: string,
     messageId: string,
@@ -528,6 +566,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.shouldThrowOnUpdateTranscription = false;
     this.shouldFailUpdateTranscription = false;
     this.shouldFailFindById = false;
+    this.shouldFailFindByWaMessageId = false;
     this.nextCursorToReturn = undefined;
   }
 }

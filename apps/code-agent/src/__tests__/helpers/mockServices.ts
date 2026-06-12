@@ -7,11 +7,12 @@ import { setServices, type ServiceContainer } from '../../services.js';
 import { createFakeFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
+import { createCodeTaskDispatchStatusService } from '../../domain/services/codeTaskDispatchStatusService.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { ok, err } from '@intexuraos/common-core';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
@@ -19,17 +20,16 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { createUserLookupService } from '../../infra/services/userLookupServiceImpl.js';
 import { createGitHubUsernameResolver } from '../../infra/services/gitHubUsernameResolverImpl.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestore/gitHubPRSummariesRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
@@ -40,6 +40,7 @@ import { createWebhookMessageBuilder } from '../../domain/services/gitHubMessage
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from '../../routes/webhooks/github.js';
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
 import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/dispatchRetryRepository.js';
+import { createFirestoreCodeTaskSystemStatusRepository } from '../../infra/firestore/codeTaskSystemStatusRepository.js';
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 import { createTaskEnqueueService } from '../../infra/services/taskEnqueueServiceImpl.js';
@@ -81,6 +82,19 @@ export const mockWorkerHealthProbe: WorkerHealthProbe = {
       capacity: 1,
       running: 0,
       available: 1,
+      workerAuths: {
+        claude: { status: 'active' },
+        codex: { status: 'active' },
+      },
+      providerApiKeys: {
+        MINIMAX_API_KEY: { configured: true },
+        MIMO_API_KEY: { configured: true },
+        DASHSCOPE_API_KEY: { configured: true },
+        KIMI_API_KEY: { configured: true },
+        OPENROUTER_API_KEY: { configured: true },
+      },
+      dockerHealthy: true,
+      diskHealthy: true,
       responseTimeMs: 50,
     };
   },
@@ -149,6 +163,9 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     taskEnqueueService: createTaskEnqueueService({
       logger,
       codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
+      whatsappNotifier: createWhatsAppNotifier({
+        whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
+      }),
     }),
     whatsappNotifier: createWhatsAppNotifier({
       whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
@@ -182,12 +199,19 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
   const taskEnqueueService = createTaskEnqueueService({
     logger,
     codeTaskRepo,
+    whatsappNotifier,
+  });
+  const codeTaskSystemStatusRepo = createFirestoreCodeTaskSystemStatusRepository({ firestore: fakeFirestore, logger });
+  const codeTaskDispatchStatusService = createCodeTaskDispatchStatusService({
+    statusRepo: codeTaskSystemStatusRepo,
+    logger,
   });
 
   const container: ServiceContainer = {
     firestore: fakeFirestore,
     logger,
     serviceUrl: 'http://localhost:8080',
+    codeTaskCallbackBaseUrl: 'http://localhost:8080',
     codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({
       firestore: fakeFirestore,
@@ -202,6 +226,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       workerHealthProbe: mockWorkerHealthProbe,
     }),
     whatsappNotifier,
+    codeTaskDispatchStatusService,
     actionsAgentClient,
     linearAgentClient,
     statusMirrorService: createStatusMirrorService({
@@ -224,16 +249,12 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       }),
       logger,
     }),
-    cleanupTaskLogs: createCleanupTaskLogsUseCase({
+    archiveStaleGroups: createArchiveStaleGroupsUseCase({
       codeTaskRepository: createFirestoreCodeTaskRepository({
         firestore: fakeFirestore,
         logger,
       }),
-      logger,
-    }),
-    archiveStaleGroups: createArchiveStaleGroupsUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore,
+      gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({
         logger,
       }),
       logger,
@@ -273,6 +294,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     dispatchService: dispatchService,
     eventDecisionRepo: eventDecisionRepo,
     dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
+    codeTaskSystemStatusRepo,
     unifiedEvaluator: createUnifiedEvaluator({
       webhookRules,
       dispatchService,

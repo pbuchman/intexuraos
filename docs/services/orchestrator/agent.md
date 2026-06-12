@@ -545,12 +545,13 @@ On startup, the orchestrator:
 | `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
 | `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
+| `INTEXURAOS_KIMI_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_ZAI_APP_API_KEY`                | Yes      | -                                  |
 | `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
 | `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | (Gemini default)                   |
 | `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | (empty — disables compliance)      |
-| `INTEXURAOS_COMPLIANCE_MODEL`               | No       | `xiaomi/mimo-v2-pro`               |
+| `INTEXURAOS_COMPLIANCE_MODEL`               | No       | `xiaomi/mimo-v2.5-pro`               |
 | `INTEXURAOS_REPOSITORY_PATH`                | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`                | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`        | No       | `3`                                |

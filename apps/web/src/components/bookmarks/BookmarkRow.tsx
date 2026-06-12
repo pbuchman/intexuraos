@@ -44,7 +44,10 @@ export function BookmarkRow({
 
   return (
     <div className="group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
-      <div className="grid grid-cols-[40px_1fr_auto_140px_80px] items-center gap-2">
+      <div
+        data-testid="bookmark-row-layout"
+        className="grid grid-cols-[40px_minmax(0,1fr)] items-start gap-2 sm:grid-cols-[40px_minmax(0,1fr)_auto_140px_80px] sm:items-center"
+      >
         {/* Thumbnail */}
         <div className="shrink-0">
           {ogImage !== null && !ogImageError ? (
@@ -73,10 +76,13 @@ export function BookmarkRow({
         </div>
 
         {/* Title + hostname */}
-        <div className="min-w-0">
+        <div data-testid="bookmark-row-main" className="min-w-0">
           <button onClick={onOpen} className="w-full cursor-pointer text-left" type="button">
-            <div className="flex items-center gap-2">
-              <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+            <div data-testid="bookmark-row-title-line" className="flex min-w-0 items-center gap-2">
+              <p
+                data-testid="bookmark-row-title"
+                className="min-w-0 flex-1 truncate font-medium text-slate-900 dark:text-slate-100"
+              >
                 {hasAiSummary ? (
                   <span className="mr-1 inline-flex items-center text-purple-600 dark:text-purple-400">
                     <Sparkles className="mr-0.5 h-3 w-3" />
@@ -91,15 +97,25 @@ export function BookmarkRow({
                 </span>
               ) : null}
             </div>
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+            <p
+              data-testid="bookmark-row-url"
+              className="truncate text-xs text-slate-500 dark:text-slate-400"
+            >
               {getHostname(bookmark.url)}
               {displayDescription !== null ? ` · ${truncateText(displayDescription, 60)}` : null}
+              <span data-testid="bookmark-row-mobile-date" className="sm:hidden">
+                {' · '}
+                {formatDate(bookmark.updatedAt)}
+              </span>
             </p>
           </button>
         </div>
 
         {/* Tags */}
-        <div className="flex shrink-0 items-center gap-1">
+        <div
+          data-testid="bookmark-row-tags"
+          className="col-start-2 flex min-w-0 flex-wrap items-center gap-1 sm:col-start-auto sm:flex-nowrap sm:shrink-0"
+        >
           {bookmark.tags.slice(0, 2).map((tag) => (
             <button
               key={tag}
@@ -120,12 +136,15 @@ export function BookmarkRow({
         </div>
 
         {/* Time */}
-        <div className="text-xs text-slate-400 dark:text-slate-500">
+        <div
+          data-testid="bookmark-row-desktop-date"
+          className="hidden text-xs text-slate-400 dark:text-slate-500 sm:block"
+        >
           {formatDate(bookmark.updatedAt)}
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-1">
+        <div className="hidden items-center justify-end gap-1 sm:flex">
           <a
             href={bookmark.url}
             target="_blank"

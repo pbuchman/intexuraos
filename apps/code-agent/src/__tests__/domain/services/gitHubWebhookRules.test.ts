@@ -11,7 +11,7 @@ import {
   GitHubWebhookRules,
   CIFailureRule,
 } from '../../../domain/services/gitHubWebhookRules.js';
-import { isPlanFile, evaluatePlanFiles } from '../../../domain/utils/planDetection.js';
+import { isPlanFile, evaluatePlanFiles, evaluateReviewFiles } from '../../../domain/utils/planDetection.js';
 
 import { describe, it, expect } from 'vitest';
 
@@ -574,6 +574,14 @@ describe('GitHubWebhookRules', () => {
       expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' });
     });
 
+    it('should dispatch pull_request.ready_for_review by code worker', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, action: 'ready_for_review' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' });
+    });
+
     it('should skip issue_comment.created by code worker', () => {
       const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const, senderLogin: 'intexuraos-code-worker[bot]' };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
@@ -894,6 +902,57 @@ describe('GitHubWebhookRules', () => {
       });
     });
 
+    describe('evaluateReviewFiles', () => {
+      it('returns dispatch with documentation for docs-only non-plan PR', () => {
+        const files = [
+          { filename: 'README.md' },
+          { filename: 'docs/services/code-agent/technical.md' },
+        ];
+        const result = evaluateReviewFiles(files);
+
+        expect(result).toEqual({
+          action: 'dispatch',
+          reason: 'DOCUMENTATION_ONLY_PR',
+          context: { reviewType: 'documentation' },
+        });
+      });
+
+      it('keeps plan_review precedence for plan-only PRs', () => {
+        const files = [
+          { filename: 'docs/superpowers/plans/feature-plan.md' },
+        ];
+        const result = evaluateReviewFiles(files);
+
+        expect(result).toEqual({
+          action: 'dispatch',
+          reason: 'PLAN_ONLY_PR',
+          context: { reviewType: 'plan_review' },
+        });
+      });
+
+      it('returns needs_triage for empty files array', () => {
+        const result = evaluateReviewFiles([]);
+
+        expect(result).toEqual({
+          action: 'needs_triage',
+          reason: 'NO_FILES_TO_EVALUATE',
+        });
+      });
+
+      it('returns needs_triage for mixed docs and code', () => {
+        const files = [
+          { filename: 'docs/services/code-agent/technical.md' },
+          { filename: 'apps/code-agent/src/index.ts' },
+        ];
+        const result = evaluateReviewFiles(files);
+
+        expect(result).toEqual({
+          action: 'needs_triage',
+          reason: 'NOT_REVIEW_ONLY_PR',
+        });
+      });
+    });
+
     describe('isPlanFile', () => {
       it('matches plan file in plans directory', () => {
         expect(isPlanFile('docs/superpowers/plans/2026-03-20-foo.md')).toBe(true);
@@ -1095,6 +1154,25 @@ describe('GitHubWebhookRules', () => {
         new ActionableEventRule(new Set(['bot'])),
       ]);
       const event = { ...mockEvent, isDraft: false, eventType: 'pull_request' as const, action: 'opened' as const };
+      const result = rules.evaluate(event);
+      expect(result.action).toBe('needs_triage');
+      expect(result.reason).toBe('TRIAGE_REQUIRED');
+    });
+
+    it('should allow code worker ready_for_review events through after draft transition', () => {
+      const rules = new GitHubWebhookRules([
+        new CodeWorkerOutputRule(new Set(['bot'])),
+        new DraftPRRule(),
+        new CIFailureRule(),
+        new ActionableEventRule(new Set(['bot'])),
+      ]);
+      const event = {
+        ...mockEvent,
+        isDraft: false,
+        eventType: 'pull_request' as const,
+        action: 'ready_for_review' as const,
+        senderLogin: 'bot',
+      };
       const result = rules.evaluate(event);
       expect(result.action).toBe('needs_triage');
       expect(result.reason).toBe('TRIAGE_REQUIRED');

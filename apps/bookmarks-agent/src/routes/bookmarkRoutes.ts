@@ -135,7 +135,7 @@ function formatBookmark(bookmark: Bookmark): object {
 
 export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get<{ Querystring: ListBookmarksQuery }>(
-    '/bookmarks',
+    '/',
     {
       schema: {
         operationId: 'listBookmarks',
@@ -190,7 +190,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Body: CreateBookmarkBody }>(
-    '/bookmarks',
+    '/',
     {
       schema: {
         operationId: 'createBookmark',
@@ -267,7 +267,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: BookmarkParams }>(
-    '/bookmarks/:id',
+    '/:id',
     {
       schema: {
         operationId: 'getBookmark',
@@ -317,7 +317,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: BookmarkParams; Body: UpdateBookmarkBody }>(
-    '/bookmarks/:id',
+    '/:id',
     {
       schema: {
         operationId: 'updateBookmark',
@@ -377,7 +377,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete<{ Params: BookmarkParams }>(
-    '/bookmarks/:id',
+    '/:id',
     {
       schema: {
         operationId: 'deleteBookmark',
@@ -427,7 +427,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: BookmarkParams }>(
-    '/bookmarks/:id/archive',
+    '/:id/archive',
     {
       schema: {
         operationId: 'archiveBookmark',
@@ -477,7 +477,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: BookmarkParams }>(
-    '/bookmarks/:id/unarchive',
+    '/:id/unarchive',
     {
       schema: {
         operationId: 'unarchiveBookmark',

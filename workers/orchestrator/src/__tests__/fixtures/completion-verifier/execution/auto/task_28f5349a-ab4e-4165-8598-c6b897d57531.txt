@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1906
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1451/investigate-and-resolve-missing-transcriptions-for-whatsapp-voice
+- Review iterations: 2 (per-task spec+quality review after Task 2; final holistic review on full branch — approved with zero Critical/Important issues)
+- execution_memory_ids_used: mem_ea7bfd46-aa91-424c-9eca-015bbcc1fb71,mem_6e516db0-aa2e-4dee-ac44-d1195eaae8d2,mem_acc4d66c-486e-45bf-a28e-5e15c7f9657a
+- execution_memory_ids_rejected: none
+- execution_memory_usage_summary: All three injected memories applied directly — they flagged exactly the silent-publish and null-topic pitfalls this PR fixes, and the atomic-status-update guidance shaped moving the publish before the 'completed' status write.
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: Task 2 implementer (scope: `processAudioMessage.ts` + `processWebhookEventUseCase.ts` + tests; wrote failing tests, moved publish into use case, marked webhook event 'failed' on publish error); Task 2 spec reviewer (scope: verify commit matches plan Task 2 requirements); Task 2 code-quality reviewer (scope: style + invariants + tests); final holistic superpowers:code-reviewer (scope: whole branch across Tasks 2/3/4 — approved).
+- Skill sequence proof: superpowers:subagent-driven-development was invoked first (for Task 2 implementer/spec/quality reviewers, commits 70fa26186 + a1dea58e3); Tasks 3 and 4 followed (commits b6ac63922 and 542759406); superpowers:requesting-code-review was invoked AFTER all four commits landed for the final holistic review. git log order on feature/int-1451: 70fa26186 → a1dea58e3 → b6ac63922 → 542759406, final review ran against HEAD = 542759406.
+- Summary:
+  * Moved `audio.stored` Pub/Sub publish into `ProcessAudioMessageUseCase.execute()` so a publish failure now marks the webhook event `failed` (with `failureDetails` and an `audio_publish_failed` structured log) instead of silently dropping the transcription trigger.
+  * Aligned `ecosystem.config.cjs` whatsapp-service topic fallbacks with Terraform-managed `intexuraos-*-dev` names (was `audio-stored-dev`, `approval-reply`, `commands-ingest`, `whatsapp-webhook-process`, etc. — all non-existent in GCP).
+  * Split `BasePubSubPublisher.publishToTopic` into strict `string` + `publishToOptionalTopic(string | null)` variants; made `audioStoredTopic` and `approvalReplyTopic` non-nullable in `GcpPubSubPublisher` with a runtime guard; migrated bookmarks-agent, actions-agent, commands-agent, and prTriage publishers to the optional helper before narrowing the signature.
+  * Tests: new failure-path tests in `processAudioMessage.test.ts` assert the use case returns `err(...)`, webhook event becomes `failed`, and GCS/Firestore rows are preserved for retry; `webhookAsyncProcessing.test.ts` audio case reasserted for the new `failed` outcome; `pubsubPublisher.test.ts` asserts constructor throws on missing required topics.
+  * CI: `pnpm run ci:tracked` passes (15,226 tests, all 20 static checks); PR https://github.com/pbuchman/intexuraos/pull/1906 open against development.

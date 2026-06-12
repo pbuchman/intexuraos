@@ -19,7 +19,7 @@ export function DigestModeratorPosts({
     <Card className="mb-6">
       <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
         <Megaphone className="h-5 w-5 text-violet-500" />
-        Posty moderatora ({String(posts.length)})
+        Moderator posts ({String(posts.length)})
       </h3>
       <ol className="relative space-y-4 border-l border-slate-200 pl-6 dark:border-slate-700">
         {posts.map((post, i) => (

@@ -12,6 +12,10 @@ import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingReposit
 import { EmbeddingClient } from './infra/llm/embeddingClient.js';
 import { createChatClient } from './infra/llm/chatClient.js';
 import { createGuestRateLimiter, type GuestRateLimiter } from './infra/rateLimit/index.js';
+import {
+  createGuestSessionSigner,
+  type GuestSessionSigner,
+} from './infra/guestSession/index.js';
 import OpenAI from 'openai';
 import type { CreateEmbeddingResponse } from 'openai/resources';
 import type { EmbeddingRepositoryPort } from './domain/models/docChunk.js';
@@ -32,6 +36,7 @@ export interface ServiceContainer {
   readonly logger: Logger;
   readonly guestRateLimiter: GuestRateLimiter;
   readonly guestLlmClient: LlmGenerateClient;
+  readonly guestSessionSigner: GuestSessionSigner;
 }
 
 let container: ServiceContainer | null = null;
@@ -91,6 +96,13 @@ export function initializeServices(): void {
     throw new Error('INTEXURAOS_GEMINI_APP_API_KEY environment variable is required for guest access');
   }
 
+  const guestSessionSecret = process.env['INTEXURAOS_GUEST_SESSION_SECRET'];
+  if (guestSessionSecret === undefined || guestSessionSecret.length < 32) {
+    throw new Error(
+      'INTEXURAOS_GUEST_SESSION_SECRET environment variable is required and must be at least 32 bytes'
+    );
+  }
+
   const logger = createAppLogger({
     name: 'chat-agent',
     level: (process.env['LOG_LEVEL'] ?? 'info') as 'error' | 'info' | 'warn' | 'debug' | 'silent',
@@ -141,5 +153,9 @@ export function initializeServices(): void {
     logger,
     guestRateLimiter: createGuestRateLimiter(),
     guestLlmClient,
+    guestSessionSigner: createGuestSessionSigner({
+      secret: guestSessionSecret,
+      ttlSeconds: 24 * 60 * 60, // 24h
+    }),
   };
 }

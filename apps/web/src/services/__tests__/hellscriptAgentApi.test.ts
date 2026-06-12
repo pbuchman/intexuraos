@@ -50,7 +50,7 @@ describe('hellscriptAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://hellscript-agent.test',
-        '/hellscript/buffers',
+        '/buffers',
         mockAccessToken
       );
       expect(result).toEqual([mockBuffer]);
@@ -81,7 +81,7 @@ describe('hellscriptAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://hellscript-agent.test',
-        '/hellscript/buffers/buf-123',
+        '/buffers/buf-123',
         mockAccessToken
       );
       expect(result).toEqual(mockWorkspace);
@@ -104,7 +104,7 @@ describe('hellscriptAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://hellscript-agent.test',
-        '/hellscript/impose',
+        '/impose',
         mockAccessToken,
         {
           method: 'POST',
@@ -129,7 +129,7 @@ describe('hellscriptAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://hellscript-agent.test',
-        '/hellscript/impose',
+        '/impose',
         mockAccessToken,
         {
           method: 'POST',

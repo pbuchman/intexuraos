@@ -73,6 +73,23 @@ describe('useDispatchQueue', () => {
       tasks: [
         { id: 'task-1', prompt: 'Fix bug', workerType: 'opus', queuedAt: '2026-03-17T10:00:00Z', createdAt: '2026-03-17T09:55:00Z', position: 1 },
       ],
+      systemStatuses: [
+        {
+          id: 'status-1',
+          component: 'code-task-dispatch',
+          status: 'active',
+          severity: 'critical',
+          workerType: 'codex-xhigh',
+          reason: 'codex_auth_unavailable',
+          message: 'No reachable worker has active Codex auth for codex-xhigh.',
+          remediation: 'Refresh Codex authentication on a worker.',
+          affectedTaskCount: 1,
+          exampleTaskIds: ['task-1'],
+          workerNames: ['home-mac'],
+          firstSeenAt: '2026-03-17T10:01:00Z',
+          lastSeenAt: '2026-03-17T10:01:00Z',
+        },
+      ],
       totalQueued: 1,
       maxQueueSize: 10,
     });
@@ -87,6 +104,8 @@ describe('useDispatchQueue', () => {
 
     expect(mockGetDispatchQueue).toHaveBeenCalledWith('test-token');
     expect(result.current.tasks).toHaveLength(1);
+    expect(result.current.systemStatuses).toHaveLength(1);
+    expect(result.current.systemStatuses[0]?.reason).toBe('codex_auth_unavailable');
     expect(result.current.totalQueued).toBe(1);
     expect(result.current.maxQueueSize).toBe(10);
     expect(result.current.error).toBeNull();
@@ -108,6 +127,7 @@ describe('useDispatchQueue', () => {
   it('sets up Firestore real-time listener', async () => {
     mockGetDispatchQueue.mockResolvedValue({
       tasks: [],
+      systemStatuses: [],
       totalQueued: 0,
       maxQueueSize: 10,
     });
@@ -125,9 +145,30 @@ describe('useDispatchQueue', () => {
     expect(mockLimit).toHaveBeenCalledWith(100);
   });
 
+  it('sets up Firestore real-time listener for active system statuses', async () => {
+    mockGetDispatchQueue.mockResolvedValue({
+      tasks: [],
+      systemStatuses: [],
+      totalQueued: 0,
+      maxQueueSize: 10,
+    });
+
+    renderHook(() => useDispatchQueue());
+
+    await waitFor(() => {
+      expect(mockOnSnapshot).toHaveBeenCalledTimes(2);
+    });
+
+    expect(mockCollection).toHaveBeenCalledWith({ name: 'db' }, 'code_task_system_statuses');
+    expect(mockWhere).toHaveBeenCalledWith('userId', '==', 'user-123');
+    expect(mockWhere).toHaveBeenCalledWith('status', '==', 'active');
+    expect(mockLimit).toHaveBeenCalledWith(50);
+  });
+
   it('refetches via API when Firestore snapshot fires', async () => {
     mockGetDispatchQueue.mockResolvedValue({
       tasks: [],
+      systemStatuses: [],
       totalQueued: 0,
       maxQueueSize: 10,
     });
@@ -150,6 +191,7 @@ describe('useDispatchQueue', () => {
     // Simulate a subsequent Firestore snapshot event (actual change)
     mockGetDispatchQueue.mockResolvedValue({
       tasks: [{ id: 'task-2', prompt: 'New task', workerType: 'auto', queuedAt: '2026-03-17T11:00:00Z', createdAt: '2026-03-17T10:55:00Z', position: 1 }],
+      systemStatuses: [],
       totalQueued: 1,
       maxQueueSize: 10,
     });
@@ -161,10 +203,61 @@ describe('useDispatchQueue', () => {
     });
   });
 
+  it('passes through dispatch schedule metadata from the API response unchanged (INT-1468)', async () => {
+    mockGetDispatchQueue.mockResolvedValue({
+      tasks: [
+        {
+          id: 'task-sched',
+          prompt: 'Scheduled task',
+          workerType: 'opus',
+          queuedAt: '2026-04-24T09:00:00Z',
+          createdAt: '2026-04-24T09:00:00Z',
+          position: 1,
+          dispatchEligibleAt: '2026-04-24T22:00:00Z',
+          dispatchScheduleSource: 'user_scheduled',
+          dispatchScheduleText: 'Scheduled by user',
+        },
+        {
+          id: 'task-cooloff',
+          prompt: 'Cooloff retry',
+          workerType: 'opus',
+          queuedAt: '2026-04-24T09:05:00Z',
+          createdAt: '2026-04-24T09:05:00Z',
+          position: 2,
+          dispatchEligibleAt: '2026-04-24T22:00:00Z',
+          dispatchScheduleSource: 'retry_cooloff',
+          dispatchScheduleText: 'Waiting for Claude reset',
+        },
+      ],
+      systemStatuses: [],
+      totalQueued: 2,
+      maxQueueSize: 10,
+    });
+
+    const { result } = renderHook(() => useDispatchQueue());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.tasks).toHaveLength(2);
+    expect(result.current.tasks[0]).toEqual(expect.objectContaining({
+      dispatchEligibleAt: '2026-04-24T22:00:00Z',
+      dispatchScheduleSource: 'user_scheduled',
+      dispatchScheduleText: 'Scheduled by user',
+    }));
+    expect(result.current.tasks[1]).toEqual(expect.objectContaining({
+      dispatchEligibleAt: '2026-04-24T22:00:00Z',
+      dispatchScheduleSource: 'retry_cooloff',
+      dispatchScheduleText: 'Waiting for Claude reset',
+    }));
+  });
+
   it('initializes Firebase when not authenticated', async () => {
     mockIsFirebaseAuthenticated.mockReturnValue(false);
     mockGetDispatchQueue.mockResolvedValue({
       tasks: [],
+      systemStatuses: [],
       totalQueued: 0,
       maxQueueSize: 10,
     });

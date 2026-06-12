@@ -44,4 +44,46 @@ describe('withTimeout', () => {
     expect(clearSpy).toHaveBeenCalled();
     clearSpy.mockRestore();
   });
+
+  describe('abortSignal (INT-1551 §E.7)', () => {
+    it('rejects early when an already-aborted signal is supplied', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentionally never resolves
+      const neverResolves = new Promise<string>(() => {});
+      await expect(
+        withTimeout(neverResolves, 60_000, 'test timeout', controller.signal)
+      ).rejects.toThrow(/aborted by shutdown signal/);
+    });
+
+    it('rejects when the signal aborts mid-flight', async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentionally never resolves
+      const neverResolves = new Promise<string>(() => {});
+      const promise = withTimeout(neverResolves, 60_000, 'test timeout', controller.signal);
+      const assertion = expect(promise).rejects.toThrow(/aborted by shutdown signal/);
+      controller.abort();
+      await assertion;
+    });
+
+    it('still resolves normally when the signal never aborts', async () => {
+      const controller = new AbortController();
+      const result = await withTimeout(
+        Promise.resolve('ok'),
+        5000,
+        'test timeout',
+        controller.signal
+      );
+      expect(result).toBe('ok');
+    });
+
+    it('removes the abort listener on success to avoid leaks', async () => {
+      const controller = new AbortController();
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+      await withTimeout(Promise.resolve('ok'), 5000, 'test timeout', controller.signal);
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+      removeSpy.mockRestore();
+    });
+  });
 });

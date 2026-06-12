@@ -152,6 +152,38 @@ describe('GoogleImageGenerator', () => {
       });
     });
 
+    it('forwards usage metadata to the tracked image client', async () => {
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: Buffer.from('fake image data'),
+          model: LlmModels.Gemini25FlashImage,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+        userId: 'test-user-id',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await generator.generate(testPrompt, {
+        slug: 'test-slug',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-1' },
+      });
+
+      expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
+        slug: 'test-slug',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-1' },
+      });
+    });
+
     it('passes slug option to storage when provided', async () => {
       const fakeImageData = Buffer.from('fake image data');
 
@@ -183,6 +215,42 @@ describe('GoogleImageGenerator', () => {
       }
       expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, fakeImageData, {
         slug: 'my-cool-image',
+      });
+    });
+
+    it('passes usage metadata to the LLM image client', async () => {
+      const fakeImageData = Buffer.from('fake image data');
+
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: LlmModels.Gemini25FlashImage,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
+
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+        userId: 'test-user-id',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await generator.generate(testPrompt, {
+        slug: 'my-cool-image',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
+        slug: 'my-cool-image',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
       });
     });
 

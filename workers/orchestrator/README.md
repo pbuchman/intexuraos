@@ -77,7 +77,7 @@ orchestrator (local)
 
 ## Environment Variables
 
-All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.local` (local overrides). If secrets are missing, run `./scripts/sync-secrets.sh --add-new`.
+All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.local` (local overrides). If secrets are missing, run `./scripts/sync-secrets.sh --add-new`. The `INTEXURAOS_KIMI_APP_API_KEY` secret must have a Secret Manager version before deploying this change; the orchestrator treats it as required at startup.
 
 ### Required (startup fails if missing)
 
@@ -94,22 +94,23 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 | `INTEXURAOS_LINEAR_API_KEY`         | `.envrc`       | Linear API key (passed to workers)                |
 | `INTEXURAOS_SENTRY_AUTH_TOKEN`      | `.envrc`       | Sentry auth (passed to workers)                   |
 | `INTEXURAOS_ZAI_APP_API_KEY`        | `.envrc`       | ZAI API key (passed to workers)                   |
+| `INTEXURAOS_KIMI_APP_API_KEY`       | `.envrc`       | Kimi Code API key for the `kimi` worker type      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`     | `.envrc`       | Gemini API key (required for completion verifier) |
 | `GOOGLE_APPLICATION_CREDENTIALS`    | `.envrc.local` | GCP SA key path                                   |
 
 ### Optional
 
-| Variable                                    | Default                                                                   | Description                                                                              |
-| ------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`                | `~/.code-orchestrator/repo`                                               | Local repo clone path                                                                    |
-| `INTEXURAOS_WORKER_CAPACITY`                | `2`                                                                       | Max concurrent tasks                                                                     |
-| `INTEXURAOS_CODE_WORKER_IMAGE`              | `.../code-worker:latest`                                                  | Worker image reference (tag or digest)                                                   |
-| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | `or:google/gemma-4-31b-it:free,or:google/gemma-4-31b-it,gemini-2.5-flash` | Comma-separated ordered model list for completion verification and compliance validation |
-| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`     | `1`                                                                       | Keep worker containers after task completion for debugging                               |
-| `INTEXURAOS_GIT_USER_NAME`                  | Host `git config user.name`                                               | Git author name for worker commits                                                       |
-| `INTEXURAOS_GIT_USER_EMAIL`                 | Host `git config user.email`                                              | Git author email for worker commits                                                      |
-| `PORT`                                      | `8199`                                                                    | HTTP server port                                                                         |
-| `LOG_LEVEL`                                 | `info`                                                                    | Pino log level                                                                           |
+| Variable                                    | Default                                     | Description                                                                              |
+| ------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_PATH`                | `~/.code-orchestrator/repo`                 | Local repo clone path                                                                    |
+| `INTEXURAOS_WORKER_CAPACITY`                | `2`                                         | Max concurrent tasks                                                                     |
+| `INTEXURAOS_CODE_WORKER_IMAGE`              | `.../code-worker:latest`                    | Worker image reference (tag or digest)                                                   |
+| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | `or:google/gemma-4-31b-it,gemini-2.5-flash` | Comma-separated ordered model list for completion verification and compliance validation |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`     | `1`                                         | Keep worker containers after task completion for debugging                               |
+| `INTEXURAOS_GIT_USER_NAME`                  | Host `git config user.name`                 | Git author name for worker commits                                                       |
+| `INTEXURAOS_GIT_USER_EMAIL`                 | Host `git config user.email`                | Git author email for worker commits                                                      |
+| `PORT`                                      | `8199`                                      | HTTP server port                                                                         |
+| `LOG_LEVEL`                                 | `info`                                      | Pino log level                                                                           |
 
 ---
 
@@ -140,8 +141,8 @@ export INTEXURAOS_REPOSITORY_PATH=$HOME/.code-orchestrator/repo
 export INTEXURAOS_PROJECT_ID=$PROJECT_ID
 export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
 export INTEXURAOS_USAGE_WEBHOOK_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/internal/webhooks/usage-events
-# Optional but recommended: pin to immutable digest
-# export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../code-worker@sha256:<digest>
+# Optional explicit override; the orchestrator follows :latest by default
+# export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../code-worker:latest
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 EOF
 
@@ -669,8 +670,8 @@ pnpm typecheck    # Type checking
 ```bash
 # Setup
 ./scripts/setup-worker-network.sh
-cd workers/code-worker && docker build -t code-worker:test -f Dockerfile.test .
-cd ../orchestrator && pnpm test:e2e
+cd docker/code-worker && docker build -t code-worker:test -f Dockerfile.test .
+cd ../../workers/orchestrator && pnpm test:e2e
 ```
 
 ---

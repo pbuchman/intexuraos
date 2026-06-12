@@ -1,7 +1,7 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { err, ok, type Logger } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
@@ -32,9 +32,11 @@ describe('continuationPr utilities', () => {
   let mockUserServiceClient: {
     getOAuthToken: ReturnType<typeof vi.fn>;
   };
+  let originalWebAppUrl: string | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
 
     mockAutomationLog = {
       record: vi.fn().mockResolvedValue(undefined),
@@ -65,6 +67,14 @@ describe('continuationPr utilities', () => {
     mockUserServiceClient = {
       getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'gh-token' })),
     };
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   function createTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -665,6 +675,23 @@ describe('continuationPr utilities', () => {
       const commentBody = mockGitHubPRClient.postPRComment.mock.calls[0]?.[4] as string;
       expect(commentBody).not.toContain('**Linear Issue:**');
       expect(commentBody).toContain('Execution Retry Task Created');
+    });
+
+    it('uses INTEXURAOS_WEB_APP_URL for the task link when configured', async () => {
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+
+      await postContinuationPrComment(createCommentDeps(), {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 1139,
+        taskId: 'task_retry_1',
+        userId: 'user-123',
+        commentTitle: 'Execution Retry Task Created',
+      });
+
+      const commentBody = mockGitHubPRClient.postPRComment.mock.calls[0]?.[4] as string;
+      expect(commentBody).toContain(
+        '[View in IntexuraOS](https://dev.intexuraos.cloud/#/code-tasks/task_retry_1)'
+      );
     });
   });
 

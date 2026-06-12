@@ -2,23 +2,32 @@
  * Prompt builder for inferring research context from a user query.
  */
 
+import type { PromptBuilder } from '../shared/types.js';
 import type { InferResearchContextOptions } from './contextTypes.js';
 
 function getDatePart(isoString: string): string {
   return isoString.split('T')[0] as string;
 }
 
-export function buildInferResearchContextPrompt(
-  userQuery: string,
-  opts?: InferResearchContextOptions
-): string {
-  const asOfDate = opts?.asOfDate ?? getDatePart(new Date().toISOString());
-  const defaultCountry = opts?.defaultCountryOrRegion ?? 'United States';
-  const defaultJurisdiction = opts?.defaultJurisdiction ?? 'United States';
-  const defaultCurrency = opts?.defaultCurrency ?? 'USD';
-  const prefersRecentYears = opts?.prefersRecentYears ?? 2;
+export interface InferResearchContextPromptInput {
+  userQuery: string;
+  opts?: InferResearchContextOptions | undefined;
+}
 
-  return `You are a query analyzer. Analyze the user's research query and output a JSON context object.
+export const inferResearchContextPrompt: PromptBuilder<InferResearchContextPromptInput> = {
+  name: 'research-context-inference',
+  description: 'Infers a structured research context (domain, mode, plan, …) from a user query',
+  version: '2.1.0',
+
+  build(input: InferResearchContextPromptInput): string {
+    const { userQuery, opts } = input;
+    const asOfDate = opts?.asOfDate ?? getDatePart(new Date().toISOString());
+    const defaultCountry = opts?.defaultCountryOrRegion ?? 'United States';
+    const defaultJurisdiction = opts?.defaultJurisdiction ?? 'United States';
+    const defaultCurrency = opts?.defaultCurrency ?? 'USD';
+    const prefersRecentYears = opts?.prefersRecentYears ?? 2;
+
+    return `You are a query analyzer. Analyze the user's research query and output a JSON context object.
 
 ANALYSIS INSTRUCTIONS:
 1. Detect the language the user wrote in (output in that same language where applicable)
@@ -111,5 +120,5 @@ USER QUERY:
 """
 ${userQuery}
 """`;
-}
-// Prompt version: 2.1.0
+  },
+};

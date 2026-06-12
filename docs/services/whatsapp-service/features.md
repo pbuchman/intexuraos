@@ -43,6 +43,8 @@ Record a voice note and srt-service transcribes it asynchronously with event-dri
 
 **Example:** You record a voice note about a project update while walking. Within seconds, the transcript arrives as a reply threaded beneath your original voice note, along with an AI-generated summary of the key points. You just talked. The system figured out the rest.
 
+Voice dispatch is guarded so a stored audio message is not marked complete until the transcription event is successfully published. If the Pub/Sub handoff fails, the webhook event is left recoverable instead of silently losing the transcription request.
+
 ### Approvals at the Speed of a Tap
 
 When an agent needs your sign-off, an interactive message arrives with clearly labeled buttons. Tap Approve. Tap Reject. Done. The decision happens immediately — no login, no dashboard, no context switch. If buttons are not convenient, reply with plain text. "Yes" works just as well.
@@ -60,6 +62,8 @@ When an agent completes work that produces a URL — a pull request, a research 
 Send any thought the moment it strikes — and the system acts on it immediately. A text message becomes a command routed to the right agent. An image gets stored for later reference. A link becomes a bookmark with the page title, description, and image automatically pulled in. Unlike a notes app, sending a message does not just store it. It triggers the right agent to start working.
 
 **Example:** Walking to lunch, you remember a research question. Send "research quantum computing market trends 2026" via WhatsApp. By the time you sit down, the research-agent has already started gathering sources.
+
+If an async bookmark capture stalls after the WhatsApp webhook has been received, the service can replay persisted pending or retryable webhook events without duplicating the original WhatsApp message record.
 
 ## Getting Connected
 

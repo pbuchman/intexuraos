@@ -38,7 +38,7 @@ export async function listCalendarEvents(
   const query = buildQueryString(filters);
   const response = await apiRequest<ListEventsResponse>(
     config.calendarAgentUrl,
-    `/calendar/events${query}`,
+    `/events${query}`,
     accessToken
   );
   return response.events;
@@ -53,7 +53,7 @@ export async function listFailedEvents(
 ): Promise<FailedCalendarEvent[]> {
   const response = await apiRequest<ListFailedEventsResponse>(
     config.calendarAgentUrl,
-    '/calendar/failed-events',
+    '/failed-events',
     accessToken
   );
   return response.failedEvents;
@@ -65,7 +65,7 @@ export async function deleteFailedEvent(
 ): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.calendarAgentUrl,
-    `/calendar/failed-events/${id}`,
+    `/failed-events/${id}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -81,7 +81,7 @@ export async function retryFailedEvent(
 ): Promise<RetryFailedEventResponse> {
   return await apiRequest<RetryFailedEventResponse>(
     config.calendarAgentUrl,
-    `/calendar/failed-events/${id}/retry`,
+    `/failed-events/${id}/retry`,
     accessToken,
     { method: 'POST' }
   );

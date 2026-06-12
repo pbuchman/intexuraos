@@ -12,6 +12,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseShardArg, selectShardItems } from './lib/sharding.mjs';
 
 const rootDir = resolve(import.meta.dirname, '..');
 
@@ -22,6 +23,8 @@ const CONCURRENT_LIMIT = 4;
 // Check for --sequential flag
 const args = process.argv.slice(2);
 const SEQUENTIAL_MODE = args.includes('--sequential');
+const shardArg = args.find((arg) => arg.startsWith('--shard='));
+const shard = shardArg ? parseShardArg(shardArg.slice('--shard='.length)) : null;
 const concurrency = SEQUENTIAL_MODE ? 1 : CONCURRENT_LIMIT;
 
 // Workspace patterns from pnpm-workspace.yaml
@@ -98,11 +101,13 @@ async function runInBatches(workspaces, batchSize) {
 // Main execution
 (async () => {
   try {
-    const workspaces = getWorkspaces();
+    const allWorkspaces = getWorkspaces();
+    const workspaces = shard ? selectShardItems(allWorkspaces, shard) : allWorkspaces;
     const activeProcesses = [];
 
     const modeText = SEQUENTIAL_MODE ? 'sequentially' : `in batches of ${concurrency}`;
-    console.log(`Running lint for ${workspaces.length} workspaces ${modeText}...\n`);
+    const shardText = shard ? ` (shard ${shard.index}/${shard.count})` : '';
+    console.log(`Running lint for ${workspaces.length} workspaces${shardText} ${modeText}...\n`);
 
     if (workspaces.length === 0) {
       console.log('⚠️  No workspaces with lint:local script found\n');

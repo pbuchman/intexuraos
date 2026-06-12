@@ -5,6 +5,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import type { ArchiveStaleGroupsDeps } from '../../domain/usecases/archiveStaleGroups.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
+import type { GitHubPRSummary } from '../../domain/models/gitHubPRSummary.js';
 
 function createFakeLogger(): Record<string, MockedFunction<() => void>> {
   return {
@@ -49,6 +50,7 @@ describe('archiveStaleGroups', () => {
     ArchiveStaleGroupsDeps['codeTaskRepository']['listAllNonArchivedGlobal']
   >;
   let updateMock: MockedFunction<ArchiveStaleGroupsDeps['codeTaskRepository']['update']>;
+  let findAllOpenMock: MockedFunction<ArchiveStaleGroupsDeps['gitHubPRSummaryRepo']['findAllOpen']>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -60,14 +62,20 @@ describe('archiveStaleGroups', () => {
     updateMock = vi.fn() as MockedFunction<
       ArchiveStaleGroupsDeps['codeTaskRepository']['update']
     >;
+    findAllOpenMock = vi.fn().mockResolvedValue(ok([])) as MockedFunction<
+      ArchiveStaleGroupsDeps['gitHubPRSummaryRepo']['findAllOpen']
+    >;
 
     deps = {
       codeTaskRepository: {
         listAllNonArchivedGlobal: listAllNonArchivedGlobalMock,
         update: updateMock,
       } as unknown as ArchiveStaleGroupsDeps['codeTaskRepository'],
+      gitHubPRSummaryRepo: {
+        findAllOpen: findAllOpenMock,
+      } as unknown as ArchiveStaleGroupsDeps['gitHubPRSummaryRepo'],
       logger: createFakeLogger() as unknown as ArchiveStaleGroupsDeps['logger'],
-    };
+    } as unknown as ArchiveStaleGroupsDeps;
     useCase = createArchiveStaleGroupsUseCase(deps);
   });
 
@@ -102,6 +110,49 @@ describe('archiveStaleGroups', () => {
 
     expect(result.ok).toBe(true);
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('retains stale group when any task matches an open PR summary', async () => {
+    const task = makeTask({
+      id: 'task-open-pr',
+      linearIssueId: 'INT-250',
+      repository: 'intexuraos/app',
+      prNumber: 42,
+      updatedAt: daysAgo(14),
+    });
+    const openSummary: GitHubPRSummary = {
+      repository: 'intexuraos/app',
+      pullRequestNumber: 42,
+      title: 'Open work',
+      state: 'open',
+      mergedAt: null,
+      baseBranch: 'development',
+      authorLogin: 'codex',
+      headBranch: 'worker-b',
+      mergeConflictStatus: null,
+      lastConflictCheckedAt: null,
+      conflictEpisodeStartedAt: null,
+      conflictResolvedAt: null,
+      managedConflictCommentId: null,
+      managedConflictTaskId: null,
+      managedConflictTaskOwnerUserId: null,
+      lastActivityAt: NOW,
+      firstSeenAt: NOW,
+      lastReviewedCommitSha: null,
+      lastReviewNeedsRemediation: null,
+    };
+    listAllNonArchivedGlobalMock.mockResolvedValue(ok([task]));
+    findAllOpenMock.mockResolvedValue(ok([openSummary]));
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(findAllOpenMock).toHaveBeenCalledOnce();
+    expect(updateMock).not.toHaveBeenCalled();
+    if (result.ok) {
+      expect(result.value.groupsRetained).toBe(1);
+      expect(result.value.groupsArchived).toBe(0);
+    }
   });
 
   it('skips group with active task (status=running) even if updatedAt is old', async () => {
@@ -204,6 +255,22 @@ describe('archiveStaleGroups', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toBe('Query failed');
+    }
+  });
+
+  it('returns error when open PR summary lookup fails', async () => {
+    const task = makeTask({ id: 'task-1', linearIssueId: 'INT-701', updatedAt: daysAgo(10) });
+    listAllNonArchivedGlobalMock.mockResolvedValue(ok([task]));
+    findAllOpenMock.mockResolvedValue(
+      err({ code: 'FIRESTORE_ERROR' as const, message: 'PR summary query failed' })
+    );
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(false);
+    expect(updateMock).not.toHaveBeenCalled();
+    if (!result.ok) {
+      expect(result.error.message).toBe('PR summary query failed');
     }
   });
 

@@ -154,7 +154,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         cursor?: string;
       };
     }>(
-      '/code/issue-groups',
+      '/issue-groups',
       {
         schema: {
           querystring: {
@@ -464,7 +464,7 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
       Params: { groupKey: string };
       Body: { important: boolean };
     }>(
-      '/code/issue-groups/:groupKey/important',
+      '/issue-groups/:groupKey/important',
       {
         schema: {
           params: {

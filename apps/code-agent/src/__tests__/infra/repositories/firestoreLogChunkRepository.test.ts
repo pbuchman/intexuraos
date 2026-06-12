@@ -9,7 +9,7 @@ import type { Firestore } from '@intexuraos/infra-firestore';
 import {
   createFirestoreLogChunkRepository,
   FirestoreLogChunkRepository,
-} from '../../../infra/repositories/firestoreLogChunkRepository.js';
+} from '../../../infra/firestore/firestoreLogChunkRepository.js';
 import type { LogChunk } from '../../../domain/models/logChunk.js';
 
 describe('FirestoreLogChunkRepository', () => {
@@ -36,7 +36,14 @@ describe('FirestoreLogChunkRepository', () => {
     ...overrides,
   });
 
+  // Fixed time so `computeExpireAt` produces a deterministic Timestamp the tests
+  // can assert against. expireAt = NOW + 7 days = 2026-05-06T00:00:00.000Z.
+  const NOW = new Date('2026-04-29T00:00:00.000Z');
+  const EXPECTED_EXPIRE_AT = Timestamp.fromMillis(NOW.getTime() + 7 * 24 * 60 * 60 * 1000);
+
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     mockDocRef = { id: 'auto-1' };
 
     mockLogsCollection = {
@@ -70,6 +77,7 @@ describe('FirestoreLogChunkRepository', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -198,6 +206,9 @@ describe('FirestoreLogChunkRepository', () => {
           content: 'hello world',
           timestamp,
           size: 11,
+          expireAt: EXPECTED_EXPIRE_AT,
+          schemaVersion: 1,
+          schemaUpdatedAt: expect.any(Timestamp),
         });
       });
 
@@ -266,12 +277,18 @@ describe('FirestoreLogChunkRepository', () => {
           content: 'first',
           timestamp: timestamp1,
           size: 5,
+          expireAt: EXPECTED_EXPIRE_AT,
+          schemaVersion: 1,
+          schemaUpdatedAt: expect.any(Timestamp),
         });
         expect(mockBatch.set).toHaveBeenNthCalledWith(2, mockDocRef, {
           sequence: 2,
           content: 'second',
           timestamp: timestamp2,
           size: 6,
+          expireAt: EXPECTED_EXPIRE_AT,
+          schemaVersion: 1,
+          schemaUpdatedAt: expect.any(Timestamp),
         });
       });
 
@@ -455,6 +472,22 @@ describe('FirestoreLogChunkRepository', () => {
         const setCall = mockBatch.set.mock.calls[0];
         const storedData = setCall?.[1] as Record<string, unknown>;
         expect(storedData['sequence']).toBe(999999999);
+      });
+
+      it('writes expireAt = now + 7d for Firestore native TTL', async () => {
+        const repo = createFirestoreLogChunkRepository({
+          firestore: mockFirestore as unknown as Firestore,
+          logger,
+        });
+
+        await repo.storeBatch('task-ttl', [createLogChunk()]);
+
+        const setCall = mockBatch.set.mock.calls[0];
+        const storedData = setCall?.[1] as Record<string, unknown>;
+        expect(storedData['expireAt']).toBeInstanceOf(Timestamp);
+        expect((storedData['expireAt'] as Timestamp).toMillis()).toBe(
+          EXPECTED_EXPIRE_AT.toMillis()
+        );
       });
 
       it('handles zero size chunks', async () => {

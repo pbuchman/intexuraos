@@ -2,13 +2,9 @@
 /**
  * Git Hooks Installer
  *
- * Creates pre-commit hook to block vitest.config.ts modifications.
- *
- * Algorithm:
- * 1. Write pre-commit hook to .git/hooks/pre-commit
- * 2. Hook checks if vitest.config.ts is staged
- * 3. If staged, block commit with error message
- * 4. Make hook executable (chmod 755)
+ * Creates:
+ * - pre-commit hook to block vitest.config.ts modifications
+ * - pre-push hook to run Firestore migration/artifact verification
  */
 
 import { writeFileSync, chmodSync, existsSync } from 'node:fs';
@@ -16,9 +12,10 @@ import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const gitHooksDir = join(repoRoot, '.git', 'hooks');
-const hookPath = join(gitHooksDir, 'pre-commit');
 
-const hookContent = `#!/bin/sh
+export function buildHookFiles() {
+  return {
+    'pre-commit': `#!/bin/sh
 # Prevent vitest.config.ts coverage modifications
 
 if git diff --cached --name-only | grep -q "vitest.config.ts"; then
@@ -30,26 +27,43 @@ if git diff --cached --name-only | grep -q "vitest.config.ts"; then
   echo "See: .claude/CLAUDE.md (Protected Files section)"
   exit 1
 fi
-`;
+`,
+    'pre-push': `#!/bin/sh
+set -eu
 
-console.log('Installing git hooks...\n');
-
-if (!existsSync(gitHooksDir)) {
-  console.error('❌ .git/hooks directory not found');
-  console.error('   This script must be run from a git repository.\n');
-  process.exit(1);
+pnpm verify:migrations
+pnpm verify:firestore-artifacts
+`,
+  };
 }
 
-try {
-  writeFileSync(hookPath, hookContent);
-  chmodSync(hookPath, 0o755);
-  console.log('✓ Git pre-commit hook installed');
-  console.log(`  Location: ${hookPath}`);
-  console.log('  Protection: Blocks vitest.config.ts modifications\n');
-  process.exit(0);
-} catch (error) {
-  console.error(
-    `❌ Failed to install hook: ${error instanceof Error ? error.message : 'Unknown error'}`
-  );
-  process.exit(1);
+function installHooks() {
+  console.log('Installing git hooks...\n');
+
+  if (!existsSync(gitHooksDir)) {
+    console.error('❌ .git/hooks directory not found');
+    console.error('   This script must be run from a git repository.\n');
+    process.exit(1);
+  }
+
+  try {
+    for (const [fileName, content] of Object.entries(buildHookFiles())) {
+      const hookPath = join(gitHooksDir, fileName);
+      writeFileSync(hookPath, content);
+      chmodSync(hookPath, 0o755);
+      console.log(`✓ Git ${fileName} hook installed`);
+      console.log(`  Location: ${hookPath}`);
+    }
+    console.log('');
+  } catch (error) {
+    console.error(
+      `❌ Failed to install hook: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+    process.exit(1);
+  }
+}
+
+const isMain = import.meta.url === `file://${process.argv[1]}`;
+if (isMain) {
+  installHooks();
 }

@@ -2,10 +2,10 @@
  * PATCH /internal/code-tasks/:id/status
  *
  * Dedicated, minimal endpoint for the orchestrator to commit terminal task
- * status directly to Firestore. Authed with:
- *   1. X-Internal-Auth header (shared service token)
- *   2. HMAC-SHA256 signature with the shared orchestratorSecret
- *      (same scheme as /internal/code/heartbeat)
+ * status directly to Firestore. Authed with either:
+ *   1. X-Internal-Auth + HMAC-SHA256 signature with the shared orchestratorSecret
+ *      (same scheme as /internal/code/heartbeat), or
+ *   2. HMAC-SHA256 signature with the task webhookSecret for public task callbacks.
  *
  * Body schema is strict (`additionalProperties: false`, primitive types only,
  * no arrays and no defaults) so Ajv cannot mutate the request body and the
@@ -23,8 +23,12 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
-import { validateOrchestratorSignature } from '../../infra/webhookValidation.js';
+import { validateOrchestratorSignature, validateWebhookSignature } from '../../infra/webhookValidation.js';
 import { loadConfig } from '../../config.js';
+import { resolveCompletedTaskStatus } from '../../domain/utils/resolveCompletedTaskStatus.js';
+import type { CodeTask } from '../../domain/models/codeTask.js';
+import type { UpdateTaskInput } from '../../domain/repositories/codeTaskRepository.js';
+import { buildCallbackSuccessState } from '../../domain/usecases/recordTaskCallbackState.js';
 
 interface UpdateTaskStatusBody {
   taskId: string;
@@ -44,6 +48,42 @@ const TERMINAL_STATUSES = new Set<string>([
   'reviewed',
   'archived',
 ]);
+
+async function validateTaskWebhookStatusAuth(
+  request: FastifyRequest<{ Params: { id: string }; Body: UpdateTaskStatusBody }>,
+  task: CodeTask
+): Promise<boolean> {
+  const signatureResult = await validateWebhookSignature(request, {
+    getWebhookSecret: (taskId) => {
+      if (taskId !== task.id) return Promise.resolve(null);
+      return Promise.resolve(task.webhookSecret ?? null);
+    },
+  });
+
+  return signatureResult.ok;
+}
+
+function validateInternalStatusAuth(
+  request: FastifyRequest<{ Params: { id: string }; Body: UpdateTaskStatusBody }>
+): boolean {
+  const authResult = validateInternalAuth(request);
+  if (!authResult.valid) {
+    return false;
+  }
+
+  const signatureResult = validateOrchestratorSignature(request, {
+    orchestratorSecret: loadConfig().orchestratorSecret,
+  });
+  if (!signatureResult.ok) {
+    request.log.warn(
+      { error: signatureResult.error },
+      'Orchestrator signature validation failed for update-task-status'
+    );
+    return false;
+  }
+
+  return true;
+}
 
 const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
   // Fastify's default ajv has `removeAdditional: true`, which silently strips
@@ -120,28 +160,6 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to PATCH /internal/code-tasks/:id/status',
       });
 
-      // Auth layer 1: shared internal service token
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn(
-          { reason: authResult.reason },
-          'Internal auth failed for update-task-status'
-        );
-        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
-      }
-
-      // Auth layer 2: orchestrator HMAC signature over rawBody (INT-1412 Task 1)
-      const signatureResult = validateOrchestratorSignature(request, {
-        orchestratorSecret: loadConfig().orchestratorSecret,
-      });
-      if (!signatureResult.ok) {
-        request.log.warn(
-          { error: signatureResult.error },
-          'Orchestrator signature validation failed for update-task-status'
-        );
-        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
-      }
-
       const { id } = request.params;
       const { taskId, status, completedAt, error, result } = request.body;
 
@@ -152,13 +170,28 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      const { codeTaskRepo, logger } = getServices();
+      const { codeTaskRepo, logger, codeTaskCallbackBaseUrl } = getServices();
 
       const existing = await codeTaskRepo.findById(taskId);
       if (!existing.ok) {
-        return await reply.fail('NOT_FOUND', 'Task not found');
+        const internalAuthOk = validateInternalStatusAuth(request);
+        return await reply.fail(
+          internalAuthOk ? 'NOT_FOUND' : 'UNAUTHORIZED',
+          internalAuthOk ? 'Task not found' : 'Unauthorized'
+        );
       }
       const task = existing.value; // @allow-result-access -- narrowed by !existing.ok guard above
+      const taskWebhookAuthOk = await validateTaskWebhookStatusAuth(request, task);
+      const internalAuthOk = taskWebhookAuthOk
+        ? false
+        : validateInternalStatusAuth(request);
+      if (!taskWebhookAuthOk && !internalAuthOk) {
+        request.log.warn(
+          { internalAuthOk },
+          'Status update auth failed'
+        );
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
 
       if (TERMINAL_STATUSES.has(task.status)) {
         logger.info(
@@ -170,16 +203,12 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Map orchestrator-vocabulary 'completed' to code-agent's agent-type-specific
       // terminal status, mirroring /internal/webhooks/task-complete (webhookRoutes.ts
-       // around line 1451). The Firestore TaskStatus type does not include 'completed';
+      // around line 1451). The Firestore TaskStatus type does not include 'completed';
       // it uses 'planned' | 'implemented' | 'reviewed'. Other terminal values
       // ('failed' | 'interrupted' | 'cancelled') pass through unchanged.
       const resolvedStatus =
         status === 'completed'
-          ? task.agentType === 'planning'
-            ? 'planned'
-            : task.agentType === 'review'
-              ? 'reviewed'
-              : 'implemented'
+          ? resolveCompletedTaskStatus(task.agentType)
           : status;
 
       // Always write `error`: either the provided value or explicit null to
@@ -187,13 +216,23 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
       // existing /internal/webhooks/task-complete behavior this endpoint
       // replaces as the primary status writer. `result` remains conditional —
       // the existing pattern does not clear it on failure.
-      const updateFields: Record<string, unknown> = {
+      const completedAtDate = new Date(completedAt);
+      const callbackState = buildCallbackSuccessState(
+        task,
+        'status',
+        codeTaskCallbackBaseUrl,
+        new Date()
+      );
+      const updateFields: UpdateTaskInput = {
         status: resolvedStatus,
-        completedAt: new Date(completedAt),
+        completedAt: completedAtDate,
         error: error ?? null,
       };
       if (result !== undefined) {
-        updateFields['result'] = result;
+        updateFields.result = result;
+      }
+      if (callbackState !== undefined) {
+        updateFields.callbackState = callbackState;
       }
 
       const updateResult = await codeTaskRepo.update(taskId, updateFields);

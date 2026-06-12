@@ -1,5 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import type { UsageEvent } from '../models/usageEvent.js';
+import type { ResearchCostSummaryRequest } from '../models/researchCostSummary.js';
 
 export type CreateEventResult = { status: 'created' } | { status: 'duplicate' };
 
@@ -40,8 +41,16 @@ export interface ListUsageEventsResult {
   totalMatched: number;
 }
 
+export interface ResearchCostSummaryEventsResult {
+  correlatedEvents: UsageEvent[];
+  missingAttributionEvents: UsageEvent[];
+}
+
 export interface UsageEventRepository {
   createEvent(event: UsageEvent): Promise<Result<CreateEventResult, { code: string; message: string }>>;
   list(params: ListUsageEventsParams): Promise<Result<ListUsageEventsResult, { code: string; message: string }>>;
   getById(eventId: string): Promise<Result<UsageEvent | null, { code: string; message: string }>>;
+  findResearchCostSummaryEvents(
+    params: ResearchCostSummaryRequest,
+  ): Promise<Result<ResearchCostSummaryEventsResult, { code: string; message: string }>>;
 }

@@ -210,12 +210,12 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 | `minimax`         | claude   | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`     | `MiniMax-M2.7`           | —       |
 | `glm`             | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `glm-5`                  | —       |
 | `qwen`            | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `qwen3.5-plus`           | —       |
-| `kimi`            | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `kimi-k2.5`              | —       |
+| `kimi`            | claude   | `https://api.kimi.com/coding`                               | `KIMI_API_KEY`        | `kimi-for-coding`        | high    |
 | `codex`           | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | —       |
 | `codex-xhigh`     | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | xhigh   |
 | `openrouter-free` | claude   | `https://openrouter.ai/api`                                 | `OPENROUTER_API_KEY`  | `qwen/qwen3.6-plus:free` | high    |
 
-GLM-5, Qwen, and Kimi are Chinese LLMs accessed via the unified Alibaba Cloud Model Studio (DashScope) integration. All three share the same API base URL and `DASHSCOPE_API_KEY`, with models differentiated by the model override parameter.
+GLM-5 and Qwen are accessed via Alibaba Cloud Model Studio (DashScope) and share `DASHSCOPE_API_KEY`. Kimi uses the native Kimi Code API with `KIMI_API_KEY` and the stable `kimi-for-coding` model ID.
 
 The `openrouter-free` type routes through OpenRouter's free tier with experimental betas disabled.
 
@@ -411,11 +411,11 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 PUSH=true ./scripts/build-worker-image.sh latest
 ```
 
-The build script uses Docker BuildKit with `docker buildx` for multi-architecture support. The build context is the repository root (not the worker directory), enabling `COPY` of files from `workers/code-worker/`.
+The build script uses Docker BuildKit with `docker buildx` for multi-architecture support. The build context is the repository root (not the worker directory), enabling `COPY` of files from `docker/code-worker/`.
 
 ### Cloud Build
 
-The image is built and pushed via Cloud Build using `workers/code-worker/cloudbuild.yaml`. The trigger does not fire on git push — it is invoked manually or by the daily rebuild schedule.
+The image is built and pushed via Cloud Build using `docker/code-worker/cloudbuild.yaml`. The trigger does not fire on git push — it is invoked manually or by the daily rebuild schedule.
 
 ### Daily Rebuild
 
@@ -466,7 +466,7 @@ After `container.start()`, the orchestrator polls for the `/tmp/worker-ready` ma
 ## File Structure
 
 ```
-workers/code-worker/
+docker/code-worker/
   Dockerfile                          # Production image (multi-arch: amd64+arm64)
   Dockerfile.test                     # Test image (Claude + Codex stubs)
   entrypoint.sh                       # Container entrypoint script

@@ -37,7 +37,7 @@ export async function listDigests(
   if (options.cursor !== undefined) params.set('cursor', options.cursor);
   return await apiRequest<ListDigestsResponse>(
     config.mobileNotificationsServiceUrl,
-    `/notifications/digests?${params.toString()}`,
+    `/digests?${params.toString()}`,
     accessToken,
   );
 }
@@ -53,7 +53,7 @@ export async function getDigest(
 ): Promise<PersistedDailySummary> {
   return await apiRequest<PersistedDailySummary>(
     config.mobileNotificationsServiceUrl,
-    `/notifications/digests/${encodeURIComponent(groupKey)}/${encodeURIComponent(date)}`,
+    `/digests/${encodeURIComponent(groupKey)}/${encodeURIComponent(date)}`,
     accessToken,
   );
 }
@@ -68,7 +68,7 @@ export async function getDigestState(
 ): Promise<GroupState> {
   return await apiRequest<GroupState>(
     config.mobileNotificationsServiceUrl,
-    `/notifications/digests/${encodeURIComponent(groupKey)}/${encodeURIComponent(date)}/state`,
+    `/digests/${encodeURIComponent(groupKey)}/${encodeURIComponent(date)}/state`,
     accessToken,
   );
 }
@@ -83,7 +83,7 @@ export async function runDigest(
 ): Promise<RunDigestResponse> {
   return await apiRequest<RunDigestResponse>(
     config.mobileNotificationsServiceUrl,
-    '/notifications/digests/run',
+    '/digests/run',
     accessToken,
     { method: 'POST', body: input, timeout: 90000 },
   );
@@ -100,7 +100,7 @@ export async function startBackfill(
 ): Promise<StartBackfillResponse> {
   return await apiRequest<StartBackfillResponse>(
     config.mobileNotificationsServiceUrl,
-    '/notifications/digests/backfill',
+    '/digests/backfill',
     accessToken,
     { method: 'POST', body: input },
   );
@@ -115,7 +115,7 @@ export async function getBackfillRun(
 ): Promise<BackfillRun> {
   return await apiRequest<BackfillRun>(
     config.mobileNotificationsServiceUrl,
-    `/notifications/digests/backfill/${encodeURIComponent(runId)}`,
+    `/digests/backfill/${encodeURIComponent(runId)}`,
     accessToken,
   );
 }

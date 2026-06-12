@@ -20,7 +20,11 @@
     },
     "whatsapp_user_mappings": {
       "owner": "whatsapp-service",
-      "description": "Phone number to user ID mappings for WhatsApp integration; also stores the per-user notificationLevel ('all' | 'important', default 'all') used by whatsapp-service to filter outbound messages (INT-1418)."
+      "description": "Phone number to user ID mappings for WhatsApp integration. Shape: { userId, phoneNumbers, connected, createdAt, updatedAt }. Notification preferences are stored separately in whatsapp_notification_preferences (INT-1542)."
+    },
+    "whatsapp_notification_preferences": {
+      "owner": "whatsapp-service",
+      "description": "Per-user WhatsApp notification preferences (notificationLevel: 'all' | 'important'). Structurally isolated from user mappings so notificationLevel can never leak into the public WhatsAppUserMappingPublic projection (INT-1542)."
     },
     "whatsapp_webhook_events": {
       "owner": "whatsapp-service",
@@ -137,7 +141,8 @@
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",
-      "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"]
+      "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"],
+      "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
     "user_spend": {
       "owner": "code-agent",
@@ -179,6 +184,16 @@
       "owner": "code-agent",
       "description": "Failed webhook dispatch retry queue with TTL and max-attempts bounds"
     },
+    "code_task_system_statuses": {
+      "owner": "code-agent",
+      "description": "Durable user-visible system statuses for code-task dispatch blockers",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
+    },
+    "code_task_dispatch_notifications": {
+      "owner": "code-agent",
+      "description": "Durable dispatch-failure notification ledger keyed by task, channel, reason, and phase",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
+    },
     "pr_automation_comments": {
       "owner": "code-agent",
       "description": "PR automation comment tracking for unified PR log (one doc per PR, keyed by repository:prNumber)"
@@ -189,19 +204,23 @@
     },
     "execution_memories": {
       "owner": "code-agent",
-      "description": "Execution memory lessons distilled from completed code tasks with vector embeddings for similarity retrieval"
+      "description": "Execution memory lessons distilled from completed code tasks with vector embeddings for similarity retrieval",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
     },
     "execution_memory_applications": {
       "owner": "code-agent",
-      "description": "Tracks how execution memories were applied to tasks and their post-run evaluation results"
+      "description": "Tracks how execution memories were applied to tasks and their post-run evaluation results",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
     },
     "task_group_summaries": {
       "owner": "code-agent",
-      "description": "Precomputed group-level aggregates for code task issue groups (one doc per userId+linearIssueId)"
+      "description": "Precomputed group-level aggregates for code task issue groups (one doc per userId+linearIssueId)",
+      "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
     "user_group_counts": {
       "owner": "code-agent",
-      "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)"
+      "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)",
+      "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
     "cron_schedules": {
       "owner": "cron-agent",
@@ -219,7 +238,8 @@
     "hellscript_writing_config": {
       "owner": "hellscript-agent",
       "description": "User-level writing configuration with style instructions per category",
-      "subcollections": ["writing_samples"]
+      "subcollections": ["writing_samples"],
+      "indexCollectionGroups": ["hellscript_writing_config", "writing_samples"]
     },
     "llm_usage_events": {
       "owner": "llm-usage-service",
@@ -248,6 +268,26 @@
     "notification_digest_backfill_runs": {
       "owner": "mobile-notifications-service",
       "description": "Progress tracking for digest backfill runs. One doc per run; mutated as the HTTP-chain processes each day."
+    },
+    "fishing_knowledge_folders": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant knowledge folders used to group manually pasted source pages."
+    },
+    "fishing_knowledge_pages": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant raw and normalized knowledge pages used as RAG sources."
+    },
+    "fishing_knowledge_chunks": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant searchable page chunks with vector embeddings for RAG retrieval."
+    },
+    "fishing_chats": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant chat sessions with derived titles and latest-message summary fields."
+    },
+    "fishing_chat_messages": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant user/assistant messages with citations and confidence metadata."
     }
   }
 }

@@ -1,6 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 import type { Logger } from 'pino';
 import { ACTIVE_STATUSES } from '../issueGrouping/constants.js';
 
@@ -9,6 +10,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface ArchiveStaleGroupsDeps {
   codeTaskRepository: CodeTaskRepository;
+  gitHubPRSummaryRepo: Pick<GitHubPRSummaryRepository, 'findAllOpen'>;
   logger: Logger;
 }
 
@@ -34,7 +36,7 @@ export type ArchiveStaleGroupsUseCase = (
 export function createArchiveStaleGroupsUseCase(
   deps: ArchiveStaleGroupsDeps
 ): ArchiveStaleGroupsUseCase {
-  const { codeTaskRepository, logger } = deps;
+  const { codeTaskRepository, gitHubPRSummaryRepo, logger } = deps;
 
   return async (input?: ArchiveStaleGroupsInput): Promise<Result<ArchiveStaleGroupsResult>> => {
     const startTime = Date.now();
@@ -51,6 +53,18 @@ export function createArchiveStaleGroupsUseCase(
 
     const allTasks = listResult.value;
     const totalTasksFetched = allTasks.length;
+
+    const openPRResult = await gitHubPRSummaryRepo.findAllOpen();
+    if (!openPRResult.ok) {
+      logger.error({ error: openPRResult.error.message }, 'Failed to list open PR summaries');
+      return err(new Error(openPRResult.error.message));
+    }
+
+    const openPRKeys = new Set(
+      openPRResult.value.map((summary) =>
+        `${summary.repository}#${String(summary.pullRequestNumber)}`
+      )
+    );
 
     const groups = new Map<string, typeof allTasks>();
     for (const task of allTasks) {
@@ -81,6 +95,19 @@ export function createArchiveStaleGroupsUseCase(
           'Retaining issue group'
         );
         groupsSkippedActive++;
+        continue;
+      }
+
+      const hasOpenPR = tasks.some((task) =>
+        task.prNumber !== undefined &&
+        openPRKeys.has(`${task.repository}#${String(task.prNumber)}`)
+      );
+      if (hasOpenPR) {
+        logger.info(
+          { groupKey, taskCount, reason: 'has_open_pr' },
+          'Retaining issue group'
+        );
+        groupsRetained++;
         continue;
       }
 

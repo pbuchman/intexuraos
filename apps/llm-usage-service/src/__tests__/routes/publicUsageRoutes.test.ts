@@ -9,6 +9,7 @@ import { FakePricingCache } from '../fakePricingCache.js';
 import { createTestEvent } from '../helpers.js';
 import { MAX_LIST_LIMIT, DEFAULT_LIST_LIMIT } from '../../domain/models/usageEvent.js';
 import type { DailyUsageAggregate } from '../../domain/models/dailyAggregate.js';
+import { MISSING_PROMPT_TYPE_SENTINEL } from '../../domain/models/dailyAggregate.js';
 
 // Mock common-http to control authentication
 vi.mock('@intexuraos/common-http', async () => {
@@ -39,6 +40,7 @@ function createTestAggregate(overrides?: Partial<DailyUsageAggregate>): DailyUsa
     provider: LlmProviders.Anthropic,
     model: 'claude-sonnet-4-20250514',
     operation: 'generate',
+    promptType: MISSING_PROMPT_TYPE_SENTINEL,
     success: true,
     calls: 10,
     costUsd: 0.05,
@@ -102,7 +104,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -126,7 +128,7 @@ describe('publicUsageRoutes', () => {
     it('returns 200 with empty events array when none match', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -158,7 +160,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -191,7 +193,7 @@ describe('publicUsageRoutes', () => {
       // First page
       const firstResponse = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -213,7 +215,7 @@ describe('publicUsageRoutes', () => {
       // Second page using cursor
       const secondResponse = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -254,7 +256,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -300,7 +302,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -346,7 +348,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -387,7 +389,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -423,7 +425,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -457,7 +459,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -481,7 +483,7 @@ describe('publicUsageRoutes', () => {
     it('clamps limit to MAX_LIST_LIMIT', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -508,7 +510,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -530,7 +532,7 @@ describe('publicUsageRoutes', () => {
     it('returns 400 for invalid sortBy.field', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -548,7 +550,7 @@ describe('publicUsageRoutes', () => {
     it('returns 400 for malformed cursor', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -571,7 +573,7 @@ describe('publicUsageRoutes', () => {
     it('returns 400 when timeRange.from > timeRange.to', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -593,7 +595,7 @@ describe('publicUsageRoutes', () => {
     it('returns 401 for missing bearer token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/events/list',
+        url: '/events/list',
         payload: {
           timeRange: {
             from: '2026-04-10T00:00:00Z',
@@ -613,7 +615,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/llm-usage/events/evt_found',
+        url: '/events/evt_found',
         headers: { authorization: 'Bearer valid-token' },
       });
 
@@ -629,7 +631,7 @@ describe('publicUsageRoutes', () => {
     it('returns 404 when not found', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/llm-usage/events/evt_nonexistent',
+        url: '/events/evt_nonexistent',
         headers: { authorization: 'Bearer valid-token' },
       });
 
@@ -645,7 +647,7 @@ describe('publicUsageRoutes', () => {
     it('returns 401 for missing bearer token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/llm-usage/events/evt_test',
+        url: '/events/evt_test',
       });
 
       expect(response.statusCode).toBe(401);
@@ -656,7 +658,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/llm-usage/events/evt_test',
+        url: '/events/evt_test',
         headers: { authorization: 'Bearer valid-token' },
       });
 
@@ -676,7 +678,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/query',
+        url: '/query',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -700,7 +702,7 @@ describe('publicUsageRoutes', () => {
     it('returns 200 with no optional fields', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/query',
+        url: '/query',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -724,7 +726,7 @@ describe('publicUsageRoutes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/query',
+        url: '/query',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -750,7 +752,7 @@ describe('publicUsageRoutes', () => {
     it('returns 400 for invalid groupBy', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/query',
+        url: '/query',
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           timeRange: {
@@ -767,7 +769,7 @@ describe('publicUsageRoutes', () => {
     it('returns 401 for missing bearer token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/llm-usage/query',
+        url: '/query',
         payload: {
           timeRange: {
             from: '2026-04-10T00:00:00Z',

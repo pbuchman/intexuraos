@@ -1,231 +1,24 @@
 /**
  * Pub/Sub infrastructure types.
+ *
+ * This module exposes ONLY generic Pub/Sub primitives. Domain-specific event
+ * shapes live in their dedicated leaf client packages
+ * (e.g. `@intexuraos/whatsapp-pubsub-client`,
+ * `@intexuraos/todos-pubsub-client`,
+ * `@intexuraos/calendar-pubsub-client`,
+ * `@intexuraos/pr-triage-pubsub-client`).
  */
-import type { Logger } from 'pino';
+
+/**
+ * Reason a publish operation failed. Extracted as a named type so callers can
+ * switch on it without re-stating the union literally.
+ */
+export type PublishFailureReason = 'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED';
 
 /**
  * Error returned when a publish operation fails.
  */
 export interface PublishError {
-  code: 'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED';
+  code: PublishFailureReason;
   message: string;
-}
-
-/**
- * WhatsApp interactive button for reply messages.
- */
-export interface WhatsAppInteractiveButton {
-  type: 'reply';
-  reply: {
-    id: string;
-    title: string;
-  };
-}
-
-/**
- * Event to send a WhatsApp message.
- * This is the payload format expected by whatsapp-service's Pub/Sub handler.
- * Phone number lookup is done internally by whatsapp-service using userId.
- */
-export interface SendMessageEvent {
-  /**
-   * Event type identifier.
-   */
-  type: 'whatsapp.message.send';
-
-  /**
-   * IntexuraOS user ID. whatsapp-service looks up the phone number internally.
-   */
-  userId: string;
-
-  /**
-   * Message text to send.
-   */
-  message: string;
-
-  /**
-   * Optional: WhatsApp message ID to reply to.
-   */
-  replyToMessageId?: string;
-
-  /**
-   * Optional: Interactive buttons for the message.
-   * Cannot be combined with ctaUrl (WhatsApp API constraint).
-   */
-  buttons?: WhatsAppInteractiveButton[];
-
-  /**
-   * Optional: CTA URL button that opens a link in the browser.
-   * Cannot be combined with buttons (WhatsApp API constraint).
-   */
-  ctaUrl?: { displayText: string; url: string };
-
-  /**
-   * Optional: marks the message as important so whatsapp-service delivers it
-   * even when the recipient has opted into 'important' notifications only.
-   */
-  important?: boolean;
-
-  /**
-   * Correlation ID for tracing across services.
-   */
-  correlationId: string;
-
-  /**
-   * Event timestamp (ISO 8601).
-   */
-  timestamp: string;
-}
-
-/**
- * Configuration for the WhatsApp send publisher.
- */
-export interface WhatsAppSendPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
-}
-
-/**
- * Event to process a newly created todo.
- * This is the payload format expected by todos-agent's Pub/Sub handler.
- */
-export interface TodoProcessingEvent {
-  /**
-   * Event type identifier.
-   */
-  type: 'todos.processing.created';
-
-  /**
-   * The ID of the todo to process.
-   */
-  todoId: string;
-
-  /**
-   * The user who owns the todo.
-   */
-  userId: string;
-
-  /**
-   * The todo title (for logging/debugging).
-   */
-  title: string;
-
-  /**
-   * Correlation ID for tracing across services.
-   */
-  correlationId: string;
-
-  /**
-   * Event timestamp (ISO 8601).
-   */
-  timestamp: string;
-}
-
-/**
- * Configuration for the todos processing publisher.
- */
-export interface TodosProcessingPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
-}
-
-/**
- * Event to generate a calendar preview.
- * This is the payload format expected by calendar-agent's Pub/Sub handler.
- */
-export interface CalendarPreviewGenerateEvent {
-  /**
-   * Event type identifier.
-   */
-  type: 'calendar.preview.generate';
-
-  /**
-   * The action ID to generate preview for.
-   */
-  actionId: string;
-
-  /**
-   * The user who owns the action.
-   */
-  userId: string;
-
-  /**
-   * The natural language text to extract event from.
-   */
-  text: string;
-
-  /**
-   * Current date for relative date parsing (ISO 8601 date).
-   */
-  currentDate: string;
-
-  /**
-   * Correlation ID for tracing across services.
-   */
-  correlationId: string;
-
-  /**
-   * Event timestamp (ISO 8601).
-   */
-  timestamp: string;
-}
-
-/**
- * Configuration for the calendar preview publisher.
- */
-export interface CalendarPreviewPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
-}
-
-/**
- * Event published when a GitHub PR webhook event has been persisted to
- * Firestore and needs unified evaluation (hard rules + LLM triage).
- *
- * The event carries only the Firestore eventId — the push subscription
- * handler reloads the full GitHubPREvent from `github-pr-events`. This
- * keeps the message small and avoids serialization drift.
- */
-export interface PRTriageEvent {
-  /**
-   * Event type identifier.
-   */
-  type: 'code.pr.triage.requested';
-
-  /**
-   * Firestore document ID of the saved github-pr-events record.
-   */
-  eventId: string;
-
-  /**
-   * Repository for logging / dedup; reload from Firestore is the source of truth.
-   */
-  repository: string;
-
-  /**
-   * PR number for logging.
-   */
-  pullRequestNumber: number;
-
-  /**
-   * Correlation ID for tracing across services.
-   */
-  correlationId: string;
-
-  /**
-   * Event timestamp (ISO 8601).
-   */
-  timestamp: string;
-}
-
-/**
- * Configuration for the PR triage publisher.
- */
-export interface PRTriagePublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
 }

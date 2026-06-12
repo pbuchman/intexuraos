@@ -1,5 +1,5 @@
 import { LlmModels } from '@intexuraos/llm-contract';
-import type { Gemini25Pro } from '@intexuraos/llm-contract';
+import type { Gemini25Pro, LLMCorrelationOptions } from '@intexuraos/llm-contract';
 
 export const generatePromptBodySchema = {
   type: 'object',
@@ -19,6 +19,22 @@ export const generatePromptBodySchema = {
     userId: {
       type: 'string',
       description: 'User ID for API key lookup',
+    },
+    promptType: {
+      type: 'string',
+      minLength: 1,
+      description: 'Optional usage tracking prompt type',
+    },
+    correlation: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        researchId: { type: ['string', 'null'] },
+        sessionId: { type: ['string', 'null'] },
+        taskId: { type: ['string', 'null'] },
+        requestId: { type: ['string', 'null'] },
+      },
+      description: 'Optional usage attribution correlation fields',
     },
   },
   additionalProperties: false,
@@ -73,4 +89,6 @@ export interface GeneratePromptBody {
   text: string;
   model: 'gpt-4.1' | Gemini25Pro;
   userId: string;
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }

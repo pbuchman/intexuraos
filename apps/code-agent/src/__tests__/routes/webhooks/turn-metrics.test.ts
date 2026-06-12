@@ -7,7 +7,7 @@ vi.mock('jose', () => ({
 }));
 
 import { buildServer } from '../../../server.js';
-import { resetServices } from '../../../services.js';
+import { getServices, resetServices } from '../../../services.js';
 import { resetFirestore } from '@intexuraos/infra-firestore';
 import { setupTestServices } from '../../helpers/mockServices.js';
 import crypto from 'node:crypto';
@@ -37,7 +37,7 @@ describe('POST /internal/turn-metrics', () => {
     vi.clearAllMocks();
   });
 
-  function generateOrchestratorSignature(
+  function generateWebhookSignature(
     body: object,
     secret: string
   ): { timestamp: string; signature: string } {
@@ -69,7 +69,7 @@ describe('POST /internal/turn-metrics', () => {
     idlePercent: 83,
   };
 
-  it('rejects request without X-Internal-Auth header', async () => {
+  it('rejects request without signature headers', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/turn-metrics',
@@ -79,12 +79,11 @@ describe('POST /internal/turn-metrics', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('rejects request with invalid orchestrator signature', async () => {
+  it('rejects request with invalid task signature', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/turn-metrics',
       headers: {
-        'X-Internal-Auth': 'test-internal-token',
         'X-Request-Timestamp': String(Math.floor(Date.now() / 1000)),
         'X-Request-Signature': 'invalid-signature',
       },
@@ -95,16 +94,28 @@ describe('POST /internal/turn-metrics', () => {
   });
 
   it('stores metrics and returns received:true on valid request', async () => {
-    const { timestamp, signature } = generateOrchestratorSignature(
+    await getServices().codeTaskRepo.create({
+      id: validMetrics.taskId,
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_metrics_valid',
+      webhookSecret: 'test-webhook-secret',
+    });
+    const { timestamp, signature } = generateWebhookSignature(
       validMetrics,
-      'test-orchestrator-secret'
+      'test-webhook-secret'
     );
 
     const response = await app.inject({
       method: 'POST',
       url: '/internal/turn-metrics',
       headers: {
-        'X-Internal-Auth': 'test-internal-token',
         'X-Request-Timestamp': timestamp,
         'X-Request-Signature': signature,
       },

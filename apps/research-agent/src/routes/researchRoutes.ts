@@ -146,7 +146,7 @@ function extractGeneratedByInfo(user: AuthUser, logger: Logger): GeneratedByUser
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /research
   fastify.post(
-    '/research',
+    '/',
     {
       schema: {
         operationId: 'createResearch',
@@ -225,9 +225,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          researchId,
           createTitleGenerator,
-          request.log
+          request.log,
+          researchId
         );
         submitParams.inputContexts = contextsWithLabels;
       }
@@ -267,7 +267,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/draft
   fastify.post(
-    '/research/draft',
+    '/draft',
     {
       schema: {
         operationId: 'saveDraft',
@@ -281,6 +281,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /research/draft',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -327,9 +332,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          draftId,
           createTitleGenerator,
-          request.log
+          request.log,
+          draftId
         );
         const now = new Date().toISOString();
         draftParams.inputContexts = contextsWithLabels.map((ctx) => {
@@ -338,10 +343,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             content: ctx.content,
             addedAt: now,
           };
-          /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+          /* v8 ignore start -- ts-type: ctx.label undefined-guard branch on save-draft route — exactOptionalPropertyTypes @preserve */
           if (ctx.label !== undefined) {
           /* v8 ignore stop @preserve */
-            /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+            /* v8 ignore start -- ts-type: inputContext.label assignment after ctx.label undefined-guard — save-draft route @preserve */
             inputContext.label = ctx.label;
             /* v8 ignore stop @preserve */
           }
@@ -373,7 +378,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // PATCH /research/:id
   fastify.patch(
-    '/research/:id',
+    '/:id',
     {
       schema: {
         operationId: 'updateDraft',
@@ -388,6 +393,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'PATCH /research/:id',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -432,7 +442,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             apiKeys.google,
             user.userId,
             request.log,
-            existing.id
+            id
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -456,9 +466,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          existing.id,
           createTitleGenerator,
-          request.log
+          request.log,
+          id
         );
         const now = new Date().toISOString();
         updates.inputContexts = contextsWithLabels.map((ctx) => {
@@ -467,10 +477,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             content: ctx.content,
             addedAt: now,
           };
-          /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+          /* v8 ignore start -- ts-type: ctx.label undefined-guard branch on update-draft route — exactOptionalPropertyTypes @preserve */
           if (ctx.label !== undefined) {
           /* v8 ignore stop @preserve */
-            /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+            /* v8 ignore start -- ts-type: inputContext.label assignment after ctx.label undefined-guard — update-draft route @preserve */
             inputContext.label = ctx.label;
             /* v8 ignore stop @preserve */
           }
@@ -495,7 +505,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/validate-input
   fastify.post(
-    '/research/validate-input',
+    '/validate-input',
     {
       schema: {
         operationId: 'validateInput',
@@ -510,6 +520,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /research/validate-input',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -582,7 +597,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/improve-input
   fastify.post(
-    '/research/improve-input',
+    '/improve-input',
     {
       schema: {
         operationId: 'improveInput',
@@ -596,6 +611,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /research/improve-input',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -648,7 +668,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // GET /research
   fastify.get(
-    '/research',
+    '/',
     {
       schema: {
         operationId: 'listResearches',
@@ -662,6 +682,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /research' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -673,17 +695,17 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const params: { userId: string; limit?: number; cursor?: string } = {
         userId: user.userId,
       };
-      /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+      /* v8 ignore start -- ts-type: query.limit undefined-guard branch on list-researches route @preserve */
       if (query.limit !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+        /* v8 ignore start -- ts-type: params.limit assignment after query.limit undefined-guard — list-researches route @preserve */
         params.limit = query.limit;
         /* v8 ignore stop @preserve */
       }
-      /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+      /* v8 ignore start -- ts-type: query.cursor undefined-guard branch on list-researches route @preserve */
       if (query.cursor !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+        /* v8 ignore start -- ts-type: params.cursor assignment after query.cursor undefined-guard — list-researches route @preserve */
         params.cursor = query.cursor;
         /* v8 ignore stop @preserve */
       }
@@ -700,7 +722,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // GET /research/:id
   fastify.get(
-    '/research/:id',
+    '/:id',
     {
       schema: {
         operationId: 'getResearch',
@@ -714,6 +736,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /research/:id' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -741,13 +765,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Access denied');
       }
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- result.ok narrowed at line 746 (outside 15-line hook window due to inline null-and-ownership guards)
     }
   );
 
   // POST /research/:id/approve
   fastify.post(
-    '/research/:id/approve',
+    '/:id/approve',
     {
       schema: {
         operationId: 'approveResearch',
@@ -761,6 +785,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /research/:id/approve',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -845,7 +874,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/confirm
   fastify.post(
-    '/research/:id/confirm',
+    '/:id/confirm',
     {
       schema: {
         operationId: 'confirmPartialFailure',
@@ -861,6 +890,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /research/:id/confirm',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -935,13 +969,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
+          const services = getServices();
           const { synthesizer, contextInferrer } = createSynthesisProviders(
             synthesisModel,
-            apiKeysResult.value,
+            apiKeysResult.value, // @allow-result-access -- apiKeysResult.ok narrowed earlier in handler
             user.userId,
-            id,
-            getServices(),
-            request.log
+            services,
+            request.log,
+            id
           );
 
           const synthesisResult = await runSynthesis(id, {
@@ -987,6 +1022,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             notionServiceClient,
             researchExportSettings,
+            researchCostSummaryClient: services.researchCostSummaryClient ?? null,
           });
 
           if (synthesisResult.ok) {
@@ -995,10 +1031,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               message: 'Synthesis completed successfully',
             });
           }
-          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+          /* v8 ignore start -- ts-type: linkPreview.error narrowing after !ok — link-preview route, first guard @preserve */
           return await reply.fail('INTERNAL_ERROR', synthesisResult.error ?? 'Synthesis failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+        /* v8 ignore start -- ts-type: linkPreview.error narrowing after !ok — link-preview route, exhaustive-fallthrough close @preserve */
         }
         /* v8 ignore stop @preserve */
 
@@ -1025,10 +1061,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               /* v8 ignore stop @preserve */
             });
           }
-          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+          /* v8 ignore start -- ts-type: richMetadata.error narrowing after !ok — link-preview route, second guard @preserve */
           return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+        /* v8 ignore start -- ts-type: richMetadata.error narrowing after !ok — link-preview route, exhaustive-fallthrough close @preserve */
         }
         /* v8 ignore stop @preserve */
 
@@ -1051,7 +1087,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/retry
   fastify.post(
-    '/research/:id/retry',
+    '/:id/retry',
     {
       schema: {
         operationId: 'retryFromFailed',
@@ -1066,6 +1102,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /research/:id/retry',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -1081,6 +1122,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         shareStorage,
         shareConfig,
         webAppUrl,
+        notionServiceClient,
+        researchExportSettings,
+        researchCostSummaryClient,
       } = getServices();
 
       const existing = await getResearch(id, { researchRepo });
@@ -1138,9 +1182,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel,
         apiKeysResult.value,
         user.userId,
-        id,
         getServices(),
-        request.log
+        request.log,
+        id
       );
 
       const retryResult = await retryFromFailed(id, {
@@ -1159,6 +1203,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
           },
           imageApiKeys: apiKeysResult.value,
+          notionServiceClient,
+          researchExportSettings,
+          researchCostSummaryClient: researchCostSummaryClient ?? null,
           logger: request.log,
         },
       });
@@ -1167,10 +1214,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (retryResult.error?.startsWith('Cannot retry from status') === true) {
           return await reply.fail('CONFLICT', retryResult.error);
         }
-        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+        /* v8 ignore start -- ts-type: fetchSource.error narrowing after !ok — fetch-source route @preserve */
         return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+      /* v8 ignore start -- ts-type: fetchSource.error narrowing after !ok — fetch-source route, exhaustive-fallthrough close @preserve */
       }
       /* v8 ignore stop @preserve */
 
@@ -1198,7 +1245,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/enhance
   fastify.post(
-    '/research/:id/enhance',
+    '/:id/enhance',
     {
       schema: {
         operationId: 'enhanceResearch',
@@ -1214,6 +1261,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /research/:id/enhance',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -1275,6 +1327,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         sourceResearchId: id,
         userId: user.userId,
       };
+      const enhancedResearchId = generateId();
       if (body.additionalModels !== undefined) {
         enhanceInput.additionalModels = body.additionalModels;
       }
@@ -1283,9 +1336,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.additionalContexts,
           apiKeys.google,
           user.userId,
-          id,
           createTitleGenerator,
-          request.log
+          request.log,
+          enhancedResearchId
         );
         enhanceInput.additionalContexts = contextsWithLabels;
       }
@@ -1298,7 +1351,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const result = await enhanceResearch(enhanceInput, {
         researchRepo,
-        generateId,
+        generateId: () => enhancedResearchId,
         logger: request.log as unknown as Logger,
       });
 
@@ -1323,18 +1376,18 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Publish to Pub/Sub for async processing
       await researchEventPublisher.publishProcessResearch({
         type: 'research.process',
-        researchId: result.value.id,
+        researchId: result.value.id, // @allow-result-access -- result.ok narrowed earlier in handler (outside 15-line hook window due to switch arms)
         userId: user.userId,
         triggeredBy: 'create',
       });
 
-      return await reply.code(201).ok(result.value);
+      return await reply.code(201).ok(result.value); // @allow-result-access -- result.ok narrowed earlier in handler (outside 15-line hook window due to switch arms)
     }
   );
 
   // DELETE /research/:id
   fastify.delete(
-    '/research/:id',
+    '/:id',
     {
       schema: {
         operationId: 'deleteResearch',
@@ -1348,6 +1401,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /research/:id' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -1378,7 +1433,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // DELETE /research/:id/share - Remove public share access
   fastify.delete(
-    '/research/:id/share',
+    '/:id/share',
     {
       schema: {
         operationId: 'unshareResearch',
@@ -1393,6 +1448,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /research/:id/share' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -1418,10 +1475,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error === 'Research is not shared') {
           return await reply.fail('CONFLICT', result.error);
         }
-        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+        /* v8 ignore start -- ts-type: researchSubmit.error narrowing after !ok — submit-research route @preserve */
         return await reply.fail('INTERNAL_ERROR', result.error ?? 'Failed to unshare');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+      /* v8 ignore start -- ts-type: researchSubmit.error narrowing after !ok — submit-research route, exhaustive-fallthrough close @preserve */
       }
       /* v8 ignore stop @preserve */
 
@@ -1431,7 +1488,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // PATCH /research/:id/favourite - Toggle favourite status
   fastify.patch(
-    '/research/:id/favourite',
+    '/:id/favourite',
     {
       schema: {
         operationId: 'toggleFavourite',
@@ -1446,6 +1503,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'PATCH /research/:id/favourite',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -1477,7 +1539,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /research/:id/export-notion
   fastify.post(
-    '/research/:id/export-notion',
+    '/:id/export-notion',
     {
       schema: {
         operationId: 'exportResearchToNotion',

@@ -20,7 +20,7 @@ class EnrichPublisherImpl extends BasePubSubPublisher implements EnrichPublisher
   }
 
   async publishEnrichBookmark(event: EnrichBookmarkEvent): Promise<Result<void, PublishError>> {
-    return await this.publishToTopic(
+    return await this.publishToOptionalTopic(
       this.topicName,
       event,
       { bookmarkId: event.bookmarkId, userId: event.userId },

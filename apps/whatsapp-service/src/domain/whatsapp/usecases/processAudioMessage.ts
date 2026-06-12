@@ -13,6 +13,7 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from '../models/error.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
+import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type {
   WhatsAppMessageRepository,
   WhatsAppWebhookEventRepository,
@@ -69,6 +70,7 @@ export interface ProcessAudioMessageDeps {
   messageRepository: WhatsAppMessageRepository;
   mediaStorage: MediaStoragePort;
   whatsappCloudApi: WhatsAppCloudApiPort;
+  eventPublisher: Pick<EventPublisherPort, 'publishAudioStored'>;
 }
 
 /**
@@ -225,6 +227,33 @@ export class ProcessAudioMessageUseCase {
       );
       await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(saveResult.error);
+    }
+
+    // Step 5: Publish audio.stored event BEFORE marking webhook completed.
+    // A publish failure must surface as a hard webhook failure so the event
+    // is retried/visible instead of silently dropped.
+    const publishResult = await this.deps.eventPublisher.publishAudioStored({
+      type: 'whatsapp.audio.stored',
+      userId,
+      messageId: saveResult.value.id,
+      mediaId: audioMedia.id,
+      gcsPath: uploadResult.value.gcsPath,
+      mimeType: audioMedia.mimeType,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!publishResult.ok) {
+      const failureDetails = `Failed to publish audio stored event: ${publishResult.error.message}`;
+      logger.error(
+        {
+          event: 'audio_publish_failed',
+          eventId,
+          error: publishResult.error.message,
+        },
+        failureDetails
+      );
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
+      return err({ code: 'INTERNAL_ERROR', message: failureDetails });
     }
 
     // Update webhook event status to PROCESSED

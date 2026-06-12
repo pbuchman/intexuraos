@@ -19,6 +19,7 @@ describe('classifyFailure', () => {
     ['TASK_RESUMED_HARD_ERROR', 'Process exited with exit code: 137'],
     ['TASK_FATAL_EXIT_CODE', 'Worker process terminated with signal 137'],
     ['TASK_COMPLETION_VERIFICATION_FAILED', 'fatal_exit_code_137: container killed'],
+    ['TASK_RUNTIME_HARD_ERROR', 'Non-zero exit code: 137; Claude error: OOM killed'],
   ])('returns "retry" for exit-137 pattern in code "%s"', (code, message) => {
     expect(classifyFailure({ code, message })).toBe('retry' satisfies FailureVerdict);
   });
@@ -35,6 +36,99 @@ describe('classifyFailure', () => {
   it('returns "retry_after_cooloff" for 429 rate limit', () => {
     expect(classifyFailure({ code: 'TASK_RESUMED_HARD_ERROR', message: 'API returned 429 Too Many Requests' }))
       .toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  // INT-1457: TASK_RUNTIME_HARD_ERROR is the normal-path counterpart to
+  // TASK_RESUMED_HARD_ERROR. Rate-limit / 429 classification must be identical.
+  it('returns "retry_after_cooloff" for 429 in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: API returned 429',
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('returns "retry_after_cooloff" for literal "rate limited" in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: Task failed: rate limited',
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('returns "retry_after_cooloff" for literal "rate limited" in TASK_RESUMED_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RESUMED_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: Task failed: rate limited',
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  // INT-1463: Claude's actual usage-limit wording does not contain "429" or
+  // "rate limit". The production message below is the verbatim string that
+  // motivated retry_after_cooloff — classifier must recognize it so the
+  // cooloff parser + scheduler path is actually exercised in production.
+  it('returns "retry_after_cooloff" for production usage-limit message in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message:
+          "Non-zero exit code: 1; Claude error: You've hit your limit · resets 10pm (UTC)",
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('returns "retry_after_cooloff" for production usage-limit message in TASK_RESUMED_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RESUMED_HARD_ERROR',
+        message:
+          "Non-zero exit code: 1; Claude error: You've hit your limit · resets 9am (UTC)",
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  // INT-1471: Codex usage-limit wording ("hit your usage limit", "limit · resets")
+  // must also route to retry_after_cooloff. Parity with the Claude-runtime tests
+  // above — guards against regex narrowing that would break the Codex path.
+  it('classifies Codex usage-limit TASK_RUNTIME_HARD_ERROR as retry_after_cooloff', () => {
+    const verdict = classifyFailure({
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message:
+        "Non-zero exit code: 1; Codex error: You've hit your usage limit. Upgrade to Pro.",
+    });
+    expect(verdict).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('classifies Codex "limit · resets" message as retry_after_cooloff', () => {
+    const verdict = classifyFailure({
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: 'Codex error: limit · resets 17:00 UTC',
+    });
+    expect(verdict).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  // 137 priority must still win over the broadened usage-limit phrasing.
+  it('prioritizes exit 137 over "hit your limit" in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: "exit code: 137 — Claude error: You've hit your limit · resets 10pm (UTC)",
+      })
+    ).toBe('retry' satisfies FailureVerdict);
+  });
+
+  it('returns "retry" for TASK_RUNTIME_HARD_ERROR with plain transient message via remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: transient infra glitch',
+        remediation: { action: 'retry' },
+      })
+    ).toBe('retry' satisfies FailureVerdict);
   });
 
   // AI quality failures — ask the user's configured LLM
@@ -101,5 +195,49 @@ describe('classifyFailure', () => {
   it('prioritizes exit 137 over 429 in TASK_RESUMED_HARD_ERROR', () => {
     expect(classifyFailure({ code: 'TASK_RESUMED_HARD_ERROR', message: 'exit code: 137 after 429' }))
       .toBe('retry' satisfies FailureVerdict);
+  });
+
+  // INT-1454: WORKTREE_LOST is terminal — orchestrator could not repair the
+  // worktree metadata and every `git` command in a subsequent attempt would
+  // exit 128. Silent infinite retries would burn attempts for no gain.
+  it('returns "fail" for WORKTREE_LOST even when orchestrator attaches a retry remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKTREE_LOST',
+        message: 'Worktree metadata missing and repair failed for /tmp/worktrees/task-x',
+        remediation: { action: 'retry' },
+      })
+    ).toBe('fail' satisfies FailureVerdict);
+  });
+
+  it('returns "fail" for WORKTREE_LOST without remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKTREE_LOST',
+        message: 'Worktree metadata missing and repair failed',
+      })
+    ).toBe('fail' satisfies FailureVerdict);
+  });
+
+  // INT-1455: WORKER_INFRA_FAILURE is terminal — the verifier was skipped
+  // because the attempt never produced a Claude transcript. Re-running Claude
+  // cannot fix container/entrypoint failures.
+  it('returns "fail" for WORKER_INFRA_FAILURE even when orchestrator attaches a retry remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKER_INFRA_FAILURE',
+        message: 'fatal: not a git repository',
+        remediation: { action: 'retry' },
+      })
+    ).toBe('fail' satisfies FailureVerdict);
+  });
+
+  it('returns "fail" for WORKER_INFRA_FAILURE without remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKER_INFRA_FAILURE',
+        message: 'fatal: not a git repository',
+      })
+    ).toBe('fail' satisfies FailureVerdict);
   });
 });

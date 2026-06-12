@@ -3,6 +3,7 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 import { FieldValue } from 'firebase-admin/firestore';
 import type { UsageEvent } from '../../domain/models/usageEvent.js';
 import type { DailyUsageAggregate } from '../../domain/models/dailyAggregate.js';
+import { MISSING_PROMPT_TYPE_SENTINEL } from '../../domain/models/dailyAggregate.js';
 import type { UsageAggregateRepository } from '../../domain/repositories/usageAggregateRepository.js';
 import { computeAggregateId, toDateString } from './aggregateKeyUtils.js';
 
@@ -54,6 +55,7 @@ export class FirestoreUsageAggregateRepository implements UsageAggregateReposito
           provider: event.request.provider,
           model: event.request.model,
           operation: event.request.operation,
+          promptType: event.request.promptType ?? MISSING_PROMPT_TYPE_SENTINEL,
           success: event.request.success,
 
           // Counter fields
@@ -102,6 +104,7 @@ export class FirestoreUsageAggregateRepository implements UsageAggregateReposito
           provider: data['provider'] as string,
           model: data['model'] as string,
           operation: data['operation'] as string,
+          promptType: (data['promptType'] as string | undefined) ?? MISSING_PROMPT_TYPE_SENTINEL,
           success: data['success'] as boolean,
           calls: data['calls'] as number,
           costUsd: data['costUsd'] as number,

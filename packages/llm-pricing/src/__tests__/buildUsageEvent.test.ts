@@ -19,6 +19,18 @@ interface EventForTests {
     durationMs: number;
     promptType?: string;
   };
+  usage: {
+    imageCount: number;
+    imageSize?: string;
+  };
+  correlation: {
+    requestId: string | null;
+    traceId: string | null;
+    taskId: string | null;
+    researchId: string | null;
+    attempt: number | null;
+    sessionId: string | null;
+  };
   [k: string]: unknown;
 }
 
@@ -29,6 +41,7 @@ const baseParams: UsageLogParams = {
   callType: 'generate',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0 },
   success: true,
+  durationMs: 0,
 };
 
 const baseSource = { service: 'linear-agent', component: 'title-gen' };
@@ -97,13 +110,14 @@ describe('buildUsageEvent', () => {
 
 describe('buildUsageEvent with promptType', () => {
   it('should include promptType in request field when provided', () => {
-    const params = {
+    const params: UsageLogParams = {
       userId: 'user-123',
       provider: LlmProviders.Google,
       model: LlmModels.Gemini25Flash,
       callType: 'generate' as const,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
       success: true,
+      durationMs: 0,
       promptType: 'linear-issue-title',
     };
 
@@ -116,13 +130,14 @@ describe('buildUsageEvent with promptType', () => {
   });
 
   it('should omit promptType when not provided', () => {
-    const params = {
+    const params: UsageLogParams = {
       userId: 'user-123',
       provider: LlmProviders.Google,
       model: LlmModels.Gemini25Flash,
       callType: 'generate' as const,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
       success: true,
+      durationMs: 0,
     };
 
     const event = buildUsageEvent(params, {
@@ -131,5 +146,56 @@ describe('buildUsageEvent with promptType', () => {
     }) as EventForTests;
 
     expect(event.request.promptType).toBeUndefined();
+  });
+});
+
+describe('buildUsageEvent correlation overrides', () => {
+  it('propagates researchId when provided via CorrelationOverrides', () => {
+    const event = buildUsageEvent(baseParams, baseSource, {
+      researchId: 'research-abc-123',
+    }) as EventForTests;
+    expect(event.correlation.researchId).toBe('research-abc-123');
+  });
+
+  it('defaults correlation.researchId to null when overrides omit it', () => {
+    const event = buildUsageEvent(baseParams, baseSource) as EventForTests;
+    expect(event.correlation.researchId).toBeNull();
+  });
+
+  it('defaults correlation.researchId to null when overrides provided without researchId', () => {
+    const event = buildUsageEvent(baseParams, baseSource, {
+      taskId: 'task-1',
+    }) as EventForTests;
+    expect(event.correlation.researchId).toBeNull();
+    expect(event.correlation.taskId).toBe('task-1');
+  });
+});
+
+describe('buildUsageEvent image usage', () => {
+  it('preserves nonzero imageCount and imageSize when provided while retaining correlation', () => {
+    const event = buildUsageEvent(
+      {
+        ...baseParams,
+        callType: 'image_generation',
+        usage: {
+          ...baseParams.usage,
+          imageCount: 1,
+          imageSize: '1024x1024',
+        },
+      },
+      baseSource,
+      { researchId: 'research-image-1' }
+    ) as EventForTests;
+
+    expect(event.usage.imageCount).toBe(1);
+    expect(event.usage.imageSize).toBe('1024x1024');
+    expect(event.correlation.researchId).toBe('research-image-1');
+  });
+
+  it('defaults imageCount to zero and omits imageSize when not provided', () => {
+    const event = buildUsageEvent(baseParams, baseSource) as EventForTests;
+
+    expect(event.usage.imageCount).toBe(0);
+    expect(event.usage.imageSize).toBeUndefined();
   });
 });

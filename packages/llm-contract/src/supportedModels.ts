@@ -43,6 +43,7 @@ export type GPTImage1 = 'gpt-image-1';
 
 export type ClaudeOpus46 = 'claude-opus-4-6';
 export type ClaudeSonnet46 = 'claude-sonnet-4-6';
+export type ClaudeSonnet47 = 'claude-sonnet-4-7';
 export type ClaudeHaiku35 = 'claude-3-5-haiku-20241022';
 
 // =============================================================================
@@ -70,6 +71,7 @@ export type ResearchModel =
   | Gemini25Flash
   | ClaudeOpus46
   | ClaudeSonnet46
+  | ClaudeSonnet47
   | O4MiniDeepResearch
   | GPT54
   | Sonar
@@ -113,9 +115,10 @@ export type LLMModel =
   | GPT54
   | GPT4oMini
   | GPTImage1
-  // Anthropic (3 models)
+  // Anthropic (4 models)
   | ClaudeOpus46
   | ClaudeSonnet46
+  | ClaudeSonnet47
   | ClaudeHaiku35
   // Perplexity (3 models)
   | Sonar
@@ -160,6 +163,7 @@ export const LlmModels = {
   // Anthropic
   ClaudeOpus46: 'claude-opus-4-6' as ClaudeOpus46,
   ClaudeSonnet46: 'claude-sonnet-4-6' as ClaudeSonnet46,
+  ClaudeSonnet47: 'claude-sonnet-4-7' as ClaudeSonnet47,
   ClaudeHaiku35: 'claude-3-5-haiku-20241022' as ClaudeHaiku35,
   // Perplexity
   Sonar: 'sonar' as Sonar,
@@ -189,6 +193,7 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   // Anthropic
   LlmModels.ClaudeOpus46,
   LlmModels.ClaudeSonnet46,
+  LlmModels.ClaudeSonnet47,
   LlmModels.ClaudeHaiku35,
   // Perplexity
   LlmModels.Sonar,
@@ -227,6 +232,7 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
   // Anthropic
   [LlmModels.ClaudeOpus46]: LlmProviders.Anthropic,
   [LlmModels.ClaudeSonnet46]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeSonnet47]: LlmProviders.Anthropic,
   [LlmModels.ClaudeHaiku35]: LlmProviders.Anthropic,
   // Perplexity
   [LlmModels.Sonar]: LlmProviders.Perplexity,
@@ -349,19 +355,35 @@ export function isFastModel(model: string): model is FastModel {
 // =============================================================================
 
 /**
- * Narrowed subset of LLMModel for tool calling agent loops.
+ * Narrowed subset for tool calling agent loops.
  *
- * Every ToolCallingModel is also a valid LLMModel, so
- * getProviderForModel() works out of the box.
+ * Static Gemini models are valid LLMModel IDs. OpenRouter tool-calling models
+ * use the `or:`-prefixed OpenRouterModelId form and are routed through the
+ * OpenRouter client by the app-side factory.
  */
-export type ToolCallingModel = Gemini25Flash;
+export type OpenRouterGemini3FlashPreview = 'or:google/gemini-3-flash-preview' & OpenRouterModelId;
+
+export type OpenRouterToolCallingModel = OpenRouterGemini3FlashPreview;
+
+export const OpenRouterToolCallingModels = {
+  Gemini3FlashPreview: createOpenRouterModelId(
+    'google/gemini-3-flash-preview'
+  ) as OpenRouterGemini3FlashPreview,
+} as const;
+
+export type ToolCallingModel = Gemini25Flash | OpenRouterToolCallingModel;
 
 /** All models that support tool calling */
-export const ALL_TOOL_CALLING_MODELS: ToolCallingModel[] = ['gemini-2.5-flash'];
+export const ALL_TOOL_CALLING_MODELS: readonly ToolCallingModel[] = [
+  'gemini-2.5-flash',
+  OpenRouterToolCallingModels.Gemini3FlashPreview,
+];
+
+const TOOL_CALLING_MODEL_IDS: ReadonlySet<string> = new Set(ALL_TOOL_CALLING_MODELS);
 
 /**
  * Check if a string is a valid tool calling model.
  */
 export function isToolCallingModel(model: string): model is ToolCallingModel {
-  return ALL_TOOL_CALLING_MODELS.includes(model as ToolCallingModel);
+  return TOOL_CALLING_MODEL_IDS.has(model);
 }

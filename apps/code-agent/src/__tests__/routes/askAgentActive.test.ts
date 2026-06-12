@@ -20,11 +20,11 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -36,16 +36,15 @@ import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { ok } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -151,11 +150,7 @@ describe('GET /code/ask-agent/active', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -209,7 +204,6 @@ describe('GET /code/ask-agent/active', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
@@ -229,7 +223,7 @@ describe('GET /code/ask-agent/active', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user
@@ -255,7 +249,7 @@ describe('GET /code/ask-agent/active', () => {
   it('returns 401 without Authorization header', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
     });
 
     expect(response.statusCode).toBe(401);
@@ -268,7 +262,7 @@ describe('GET /code/ask-agent/active', () => {
   it('returns null when no ask-agent task exists', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -296,7 +290,7 @@ describe('GET /code/ask-agent/active', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -315,7 +309,7 @@ describe('GET /code/ask-agent/active', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/code/ask-agent/active',
+      url: '/ask-agent/active',
       headers: { authorization: 'Bearer test-token' },
     });
 

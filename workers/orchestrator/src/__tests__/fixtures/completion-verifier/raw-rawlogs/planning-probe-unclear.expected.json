@@ -1,0 +1,28 @@
+{
+  "agentType": "planning",
+  "workerType": "opus",
+  "marker": "PLANNING_AGENT_FINAL:",
+  "captureContext": {
+    "source": "live-instrumented orchestrator on home-dev (deploy commit 147ba26b3)",
+    "captureDate": "2026-04-25",
+    "probePromptShape": "synthetic INVESTIGATION_PROBE planning task with no Linear issue attached; agent emits PLANNING_AGENT_FINAL with outcome=unclear",
+    "redactions": "service-account email, session_id, hook_id, msg_id replaced with stable placeholders; no secrets present in original"
+  },
+  "preFixVerdict": {
+    "kind": "hard-error",
+    "code": "TASK_RUNTIME_HARD_ERROR",
+    "messageContains": "No PLANNING_AGENT_FINAL: block in transcript"
+  },
+  "postFixVerdict": {
+    "kind": "parsed",
+    "missingRequired": ["linear_issue", "plan_pr"],
+    "dataAssertions": {
+      "outcome": "unclear",
+      "superpowers_writing_plans_used": false,
+      "complex_task": false,
+      "plan_doc": false,
+      "clarification_messageContains": "Investigation probe received",
+      "summaryContains": "Synthetic investigation probe"
+    }
+  }
+}

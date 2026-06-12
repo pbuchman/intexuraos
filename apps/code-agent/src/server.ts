@@ -7,11 +7,16 @@ import cors from '@fastify/cors';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { intexuraFastifyPlugin } from '@intexuraos/common-http';
+import { registerHealthCheck } from '@intexuraos/http-server';
+import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { registerRoutes } from './routes/index.js';
 import { loadConfig } from './config.js';
 import { getServices } from './services.js';
 import { createJwtValidator } from './infra/auth/jwtValidator.js';
+
+const SERVICE_NAME = 'code-agent';
+const SERVICE_VERSION = '0.0.1';
 
 export async function buildServer(loggerStream?: NodeJS.WritableStream): Promise<FastifyInstance> {
   const app = fastify({
@@ -36,8 +41,8 @@ export async function buildServer(loggerStream?: NodeJS.WritableStream): Promise
   await app.register(fastifySwagger, {
     openapi: {
       info: {
-        title: 'code-agent API',
-        version: '0.0.1',
+        title: `${SERVICE_NAME} API`,
+        version: SERVICE_VERSION,
       },
     },
   });
@@ -66,8 +71,11 @@ export async function buildServer(loggerStream?: NodeJS.WritableStream): Promise
     return await reply.type('application/json').send(spec);
   });
 
-  app.get('/health', () => {
-    return { status: 'ok', service: 'code-agent' };
+  // Standard /health envelope (NOT wrapped in apiOk per api-contracts.md)
+  await registerHealthCheck(app, {
+    serviceName: SERVICE_NAME,
+    version: SERVICE_VERSION,
+    checks: [firestoreHealthCheck()],
   });
 
   return await app;

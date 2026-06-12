@@ -16,12 +16,11 @@
 import pino from 'pino';
 import { createSentryStream } from './transport.js';
 import { createDevOutputStream } from './devStream.js';
-import { getOtelTransport } from './otelTransport.js';
 
 /**
  * Create the appropriate log stream for the current environment.
  *
- * @returns A pino-compatible writable stream (multistream with optional Sentry + OTel)
+ * @returns A pino-compatible writable stream (multistream with optional Sentry)
  */
 export function createLogStream(): ReturnType<typeof pino.multistream> {
   const isDev = process.env['NODE_ENV'] === 'development';
@@ -29,11 +28,6 @@ export function createLogStream(): ReturnType<typeof pino.multistream> {
   const destination = isDev ? createDevOutputStream() : pino.destination({ dest: 1, sync: false });
 
   const streams: pino.StreamEntry[] = [{ stream: destination, level: 'trace' as const }];
-
-  const otelTransport = getOtelTransport();
-  if (otelTransport !== undefined) {
-    streams.push({ stream: otelTransport, level: 'trace' as const });
-  }
 
   return createSentryStream(pino.multistream(streams));
 }

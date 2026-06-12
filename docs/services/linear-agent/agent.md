@@ -58,7 +58,7 @@ interface ProcessActionOutput {
 {
   "status": "completed",
   "message": "Issue ENG-45 created successfully",
-  "resourceUrl": "https://linear.app/team/issue/ENG-45"
+  "resourceUrl": "https://.app/team/issue/ENG-45"
 }
 
 // Response (failure)
@@ -111,7 +111,7 @@ interface ValidateIssueOutput {
   "id": "uuid-abc-123",
   "identifier": "ENG-42",
   "title": "Fix login button on iOS",
-  "url": "https://linear.app/team/issue/ENG-42",
+  "url": "https://.app/team/issue/ENG-42",
   "labels": ["bug", "high-priority"],
   "childCount": 2,
   "parentId": null
@@ -205,7 +205,7 @@ interface CreateIssueOutput {
   "id": "uuid-def-456",
   "identifier": "ENG-46",
   "title": "Add unit tests for CSV export",
-  "url": "https://linear.app/team/issue/ENG-46"
+  "url": "https://.app/team/issue/ENG-46"
 }
 ```
 
@@ -580,7 +580,7 @@ interface SyncOutput {
 | 200        | Check `status` field for failure    | `status: 'failed'` is not an HTTP error — read message |
 | 400        | Invalid input or format             | Fix request payload (e.g., invalid identifier format)  |
 | 401        | Unauthorized                        | Check `X-Internal-Auth` and `X-User-Id` headers        |
-| 403        | User not connected to Linear        | User must connect via `POST /linear/connection` first  |
+| 403        | User not connected to Linear        | User must connect via `POST /connection` first  |
 | 404        | Issue not found or wrong team       | Verify identifier and that user is on correct team     |
 | 500        | Internal or downstream error        | Retry with backoff; check Linear API status            |
 
@@ -590,7 +590,7 @@ None. linear-agent does not publish Pub/Sub events. It receives webhook events f
 
 ## Incoming Webhook
 
-Linear sends issue and comment events to `POST /linear/webhook`. The service:
+Linear sends issue and comment events to `POST /webhooks`. The service:
 
 1. Validates HMAC-SHA256 signature using per-team webhook secret
 2. Fans out issue changes to all connected users for that team

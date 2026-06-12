@@ -264,12 +264,6 @@ Release version bump only. No functional changes to user-service code.
 
 Release version bump only. No functional changes to user-service code.
 
-### Dash0 OpenTelemetry Integration (2026-02-16)
-
-**Change:** Added `@intexuraos/infra-otel` dependency and preloaded it via `node --import ./dist/otel-register.js` in the Dockerfile. Exports traces, metrics, and structured logs to Dash0 via OTLP/HTTP. No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset, so local and test environments are unaffected.
-
----
-
 ## Resolved Issues
 
 ### 2026-04-22
@@ -305,7 +299,6 @@ Release version bump only. No functional changes to user-service code.
 | Issue   | Description                                         | Resolution                                                |
 | ------- | --------------------------------------------------- | --------------------------------------------------------- |
 | INT-571 | Default model accepted without checking API key     | Added provider key validation and cascade clearing        |
-| -       | No distributed tracing or metrics                   | Added Dash0 OTel via `infra-otel` preload module          |
 | -       | No per-user default model setting                   | Added `PATCH /users/:uid/settings` with model validation  |
 | -       | PM2 log output hard to read in dev                  | Improved dev-mode log formatting                          |
 

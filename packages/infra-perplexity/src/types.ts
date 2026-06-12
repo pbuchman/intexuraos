@@ -40,8 +40,6 @@ export interface PerplexityConfig {
   model: string;
   /** User ID for usage tracking and analytics */
   userId: string;
-  /** Optional research ID for correlating audit logs to a research run */
-  researchId?: string;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */

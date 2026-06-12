@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { firstDayOfMonth, lastDayOfMonth, shiftMonth, currentMonthIso, monthLabelPl } from '../digestDates.js';
+import { firstDayOfMonth, lastDayOfMonth, shiftMonth, currentMonthIso, monthLabelEn } from '../digestDates.js';
 
 describe('digestDates month helpers', () => {
   it('firstDayOfMonth / lastDayOfMonth handle leap February', () => {
@@ -22,8 +22,8 @@ describe('digestDates month helpers', () => {
     expect(currentMonthIso()).toMatch(/^\d{4}-\d{2}$/);
   });
 
-  it('monthLabelPl returns Polish month name and year', () => {
-    expect(monthLabelPl('2026-04')).toMatch(/kwieci(eń|en)/i);
-    expect(monthLabelPl('2026-04')).toContain('2026');
+  it('monthLabelEn returns English month name and year', () => {
+    expect(monthLabelEn('2026-04')).toContain('April');
+    expect(monthLabelEn('2026-04')).toContain('2026');
   });
 });

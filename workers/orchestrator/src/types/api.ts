@@ -37,10 +37,16 @@ export interface CreateTaskRequest {
   continuationPrBranch?: string;
   /** Review types requested for review agent tasks. */
   reviewTypes?: string[];
+  /**
+   * Optional per-task timeout in hours (1–12). When omitted, the orchestrator
+   * default (5h) applies. INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 // GET /health response
 export interface HealthResponse {
+  healthContractVersion: 1;
   status: OrchestratorStatus;
   capacity: number;
   running: number;
@@ -49,4 +55,9 @@ export interface HealthResponse {
   dockerHealthy: boolean;
   diskHealthy: boolean;
   workerAuths: Record<WorkerAuthProvider, WorkerAuthState>;
+  providerApiKeys: Record<string, ProviderApiKeyHealth>;
+}
+
+export interface ProviderApiKeyHealth {
+  configured: boolean;
 }

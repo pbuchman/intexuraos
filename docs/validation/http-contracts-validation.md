@@ -387,7 +387,7 @@ Workers run as Cloud Functions, not Cloud Run. No HTTP endpoints — event-drive
 | GET    | `/linear/webhook-config`                       | Bearer        | linearRoutes.ts         | OK     |
 | POST   | `/linear/webhook-config`                       | Bearer        | linearRoutes.ts         | OK     |
 | DELETE | `/linear/webhook-config`                       | Bearer        | linearRoutes.ts         | OK     |
-| POST   | `/linear/webhook`                              | HMAC-SHA256   | linearWebhookRoutes.ts  | OK     |
+| POST   | `/linear/webhooks`                              | HMAC-SHA256   | linearWebhookRoutes.ts  | OK     |
 | POST   | `/internal/linear/process-action`              | Internal      | internalRoutes.ts       | OK     |
 | GET    | `/internal/linear/issues/:identifier/validate` | Internal      | internalRoutes.ts       | OK     |
 | POST   | `/internal/linear/issues/generate-title`       | Internal      | internalRoutes.ts       | OK     |
@@ -433,7 +433,7 @@ Worker runs as Cloud Functions. No HTTP endpoints.
 | POST   | `/notion/connect`                                      | Bearer   | integrationRoutes.ts | OK     |
 | GET    | `/notion/status`                                       | Bearer   | integrationRoutes.ts | OK     |
 | POST   | `/notion/disconnect`                                   | Bearer   | integrationRoutes.ts | OK     |
-| POST   | `/notion-webhooks`                                     | HMAC     | webhookRoutes.ts     | OK     |
+| POST   | `/notion/webhooks`                                     | HMAC     | webhookRoutes.ts     | OK     |
 | GET    | `/internal/notion/users/:userId/context`               | Internal | internalRoutes.ts    | OK     |
 | GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Internal | internalRoutes.ts    | OK     |
 

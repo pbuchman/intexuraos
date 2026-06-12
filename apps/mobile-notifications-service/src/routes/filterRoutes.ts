@@ -5,7 +5,7 @@
  * DELETE /notifications/filters/saved/:id - Delete saved filter.
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { CreateSavedFilterInput } from '../domain/filters/index.js';
 
@@ -61,7 +61,7 @@ const filtersDataSchema = {
 export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /notifications/filters
   fastify.get(
-    '/notifications/filters',
+    '/filters',
     {
       schema: {
         operationId: 'getNotificationFilters',
@@ -102,6 +102,8 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /notifications/filters' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -127,7 +129,7 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /notifications/filters/saved
   fastify.post<{ Body: CreateSavedFilterBody }>(
-    '/notifications/filters/saved',
+    '/filters/saved',
     {
       schema: {
         operationId: 'createSavedNotificationFilter',
@@ -187,6 +189,11 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: CreateSavedFilterBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /notifications/filters/saved',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -216,7 +223,7 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // DELETE /notifications/filters/saved/:id
   fastify.delete<{ Params: DeleteSavedFilterParams }>(
-    '/notifications/filters/saved/:id',
+    '/filters/saved/:id',
     {
       schema: {
         operationId: 'deleteSavedNotificationFilter',
@@ -267,6 +274,8 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: DeleteSavedFilterParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /notifications/filters/saved/:id' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

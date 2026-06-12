@@ -13,11 +13,15 @@ export interface WhatsAppUserMappingPublic {
   updatedAt: string;
 }
 
+// NOTE: a legacy `notificationLevel: 'all' | 'important'` field used to live
+// on this document. It was removed in INT-1542 (subtask 4 of INT-1532) and
+// migration 099 backfills the value into the dedicated
+// `whatsapp_notification_preferences/{userId}` collection owned by
+// `notificationPreferencesRepository.ts`. Existing production docs may still
+// carry the field on disk; a follow-up migration drops it after ≥7 days of
+// new-path traffic. This repository MUST NOT read or write that field.
 interface WhatsAppUserMappingDoc extends WhatsAppUserMappingPublic {
   userId: string;
-  // PRIVATE: notification importance level. Must NEVER leak into
-  // WhatsAppUserMappingPublic / GET /whatsapp/status / Pub/Sub events.
-  notificationLevel?: 'all' | 'important';
 }
 
 const COLLECTION_NAME = 'whatsapp_user_mappings';

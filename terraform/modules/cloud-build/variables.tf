@@ -38,13 +38,7 @@ variable "artifact_registry_url" {
   type        = string
 }
 
-variable "web_app_bucket" {
-  description = "Name of the GCS bucket for the web app"
-  type        = string
-}
-
 variable "functions_source_bucket" {
   description = "Name of the GCS bucket for Cloud Functions source code"
   type        = string
 }
-

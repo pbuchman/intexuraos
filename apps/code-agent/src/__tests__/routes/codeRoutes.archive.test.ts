@@ -18,12 +18,12 @@ import { buildServer } from '../../server.js';
 import { resetServices, setServices, getServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -32,7 +32,7 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -40,13 +40,12 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 
 describe('POST /code/tasks/:taskId/archive', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -167,10 +166,6 @@ describe('POST /code/tasks/:taskId/archive', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       workerSettingsRepo: createWorkerSettingsRepository({
@@ -194,6 +189,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { return ok(undefined); },
         async update() { return ok(undefined); },
@@ -230,7 +226,6 @@ describe('POST /code/tasks/:taskId/archive', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
@@ -250,7 +245,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user
@@ -299,7 +294,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -319,7 +314,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -339,7 +334,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const firstResponse = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
     expect(firstResponse.statusCode).toBe(200);
@@ -347,7 +342,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
     // Try to archive again
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -363,7 +358,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: `/code/tasks/${taskId}/archive`,
+      url: `/tasks/${taskId}/archive`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -376,7 +371,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
   it('returns 404 for non-existent task', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/code/tasks/non-existent-task-id/archive',
+      url: '/tasks/non-existent-task-id/archive',
       headers: { authorization: 'Bearer test-token' },
     });
 

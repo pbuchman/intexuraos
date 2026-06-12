@@ -18,6 +18,7 @@ resource "google_pubsub_topic" "dlq" {
 
 # Push subscription
 resource "google_pubsub_subscription" "push" {
+  count   = var.enable_push_subscription ? 1 : 0
   name    = "${var.topic_name}-push"
   topic   = google_pubsub_topic.main.id
   project = var.project_id

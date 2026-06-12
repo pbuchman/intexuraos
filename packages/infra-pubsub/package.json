@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-pubsub",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,7 +15,12 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "@google-cloud/pubsub": "^4.9.0",
+    "@google-cloud/pubsub": "^4.9.0"
+  },
+  "peerDependencies": {
     "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "pino": "catalog:"
   }
 }

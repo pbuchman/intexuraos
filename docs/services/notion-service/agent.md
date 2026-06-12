@@ -14,7 +14,7 @@
 
 ### Connect Notion Integration
 
-**Endpoint:** `POST /notion/connect`
+**Endpoint:** `POST /connect`
 
 **When to use:** When a user provides a Notion integration token and wants to link their workspace.
 
@@ -55,7 +55,7 @@ interface ConnectOutput {
 
 ### Get Connection Status
 
-**Endpoint:** `GET /notion/status`
+**Endpoint:** `GET /status`
 
 **When to use:** When displaying Notion integration state in UI or checking before operations.
 
@@ -98,7 +98,7 @@ interface StatusOutput {
 
 ### Disconnect Integration
 
-**Endpoint:** `DELETE /notion/disconnect`
+**Endpoint:** `DELETE /disconnect`
 
 **When to use:** When a user wants to remove their Notion integration.
 
@@ -168,7 +168,7 @@ interface PagePreviewOutput {
   "success": true,
   "data": {
     "title": "My Research Notes",
-    "url": "https://notion.so/abc-page-id"
+    "url": "https://.so/abc-page-id"
   }
 }
 
@@ -181,7 +181,7 @@ interface PagePreviewOutput {
 
 ### Receive Webhook (Stub)
 
-**Endpoint:** `POST /notion-webhooks`
+**Endpoint:** `POST /webhooks`
 
 **When to use:** Do not actively call this endpoint. It exists as a receiver for Notion-initiated webhook events. Currently a stub that logs payloads only.
 
@@ -201,7 +201,7 @@ interface WebhookOutput {
 
 - Call connect without a valid `secret_*` token — the service validates eagerly and rejects bad tokens
 - Assume token persistence after disconnect — disconnected users return `token: null` from the context endpoint
-- Expect webhook side effects — `POST /notion-webhooks` is a logging stub with no processing
+- Expect webhook side effects — `POST /webhooks` is a logging stub with no processing
 
 **Requires:**
 
@@ -214,9 +214,9 @@ interface WebhookOutput {
 ### Pattern 1: Connection Lifecycle
 
 ```
-1. POST /notion/connect with { notionToken: "secret_..." }
-2. GET /notion/status to verify connected: true
-3. (Later) DELETE /notion/disconnect to remove
+1. POST /connect with { notionToken: "secret_..." }
+2. GET /status to verify connected: true
+3. (Later) DELETE /disconnect to remove
 ```
 
 ### Pattern 2: Research Export Preparation (service-to-service)
@@ -232,7 +232,7 @@ interface WebhookOutput {
 ### Pattern 3: Check Before UI Render
 
 ```
-1. GET /notion/status
+1. GET /status
 2. If configured: false -> show "Set up Notion" button
 3. If configured: true, connected: false -> show "Reconnect" prompt
 4. If connected: true -> show "Connected" badge with timestamps

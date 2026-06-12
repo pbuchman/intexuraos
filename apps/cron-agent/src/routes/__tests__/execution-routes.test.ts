@@ -167,7 +167,7 @@ describe('Execution Routes', () => {
     it('returns 200 with executions list', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions',
+        url: '/executions',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -184,7 +184,7 @@ describe('Execution Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions',
+        url: '/executions',
       });
 
       expect(response.statusCode).toBe(401);
@@ -193,7 +193,7 @@ describe('Execution Routes', () => {
     it('passes scheduleId filter', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions?scheduleId=schedule-1',
+        url: '/executions?scheduleId=schedule-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -203,7 +203,7 @@ describe('Execution Routes', () => {
     it('passes status filter', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions?status=success,failure',
+        url: '/executions?status=success,failure',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -213,7 +213,7 @@ describe('Execution Routes', () => {
     it('passes limit query param', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions?limit=5',
+        url: '/executions?limit=5',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -223,7 +223,7 @@ describe('Execution Routes', () => {
     it('passes cursor query param', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions?cursor=abc',
+        url: '/executions?cursor=abc',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -253,7 +253,7 @@ describe('Execution Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions?limit=500',
+        url: '/executions?limit=500',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -267,7 +267,7 @@ describe('Execution Routes', () => {
     it('uses default limit of 20 when not provided', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions',
+        url: '/executions',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -277,7 +277,7 @@ describe('Execution Routes', () => {
     it('rejects invalid limit query param', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions?limit=abc',
+        url: '/executions?limit=abc',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -301,7 +301,7 @@ describe('Execution Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions',
+        url: '/executions',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -311,7 +311,7 @@ describe('Execution Routes', () => {
     it('combines scheduleId and status filters', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions?scheduleId=schedule-1&status=success',
+        url: '/executions?scheduleId=schedule-1&status=success',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -323,7 +323,7 @@ describe('Execution Routes', () => {
     it('returns 200 with execution', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions/exec-1',
+        url: '/executions/exec-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -336,7 +336,7 @@ describe('Execution Routes', () => {
     it('returns 401 when no auth header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions/exec-1',
+        url: '/executions/exec-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -359,7 +359,7 @@ describe('Execution Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions/nonexistent',
+        url: '/executions/nonexistent',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -384,7 +384,7 @@ describe('Execution Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions/exec-1',
+        url: '/executions/exec-1',
         headers: { authorization: AUTH_HEADER },
       });
 
@@ -408,7 +408,7 @@ describe('Execution Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/cron/executions/exec-1',
+        url: '/executions/exec-1',
         headers: { authorization: AUTH_HEADER },
       });
 

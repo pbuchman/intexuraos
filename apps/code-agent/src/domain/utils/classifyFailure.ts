@@ -31,18 +31,47 @@ const INFRA_RETRY_CODES = new Set([
 export function classifyFailure(error: TaskError): FailureVerdict {
   const { code: errorCode, message: errorMessage, remediation } = error;
 
+  // INT-1454: Worktree metadata was lost on adoption and could not be
+  // repaired. The task's in-container state is unrecoverable; silently
+  // looping on retries would just repeat exit-128 for every git command.
+  // Fail permanently so the UI surfaces it.
+  if (errorCode === 'WORKTREE_LOST') {
+    return 'fail';
+  }
+
+  // INT-1455: Worker infra failure — the container exited before Claude ever
+  // ran (git worktree lost, entrypoint crash, image pull failure, etc.).
+  // Re-dispatching Claude cannot fix infra; surface it as terminal so users
+  // see the real cause instead of a policy-looking "missing fields" message.
+  if (errorCode === 'WORKER_INFRA_FAILURE') {
+    return 'fail';
+  }
+
   // Infrastructure — always retry
   if (INFRA_RETRY_CODES.has(errorCode)) {
     return 'retry';
   }
 
-  // Container crash — retry if signal kill (OOM/SIGKILL = exit 137)
-  if (errorCode === 'TASK_RESUMED_HARD_ERROR' || errorCode === 'TASK_FATAL_EXIT_CODE') {
+  // Container crash — retry if signal kill (OOM/SIGKILL = exit 137).
+  // INT-1457: TASK_RUNTIME_HARD_ERROR is the normal-path counterpart to
+  // TASK_RESUMED_HARD_ERROR — classify identically.
+  if (
+    errorCode === 'TASK_RESUMED_HARD_ERROR' ||
+    errorCode === 'TASK_FATAL_EXIT_CODE' ||
+    errorCode === 'TASK_RUNTIME_HARD_ERROR'
+  ) {
     if (errorMessage.includes('137')) {
       return 'retry';
     }
-    // Rate limit — retry after cooloff (check AFTER 137 so 137+429 = retry)
-    if (errorMessage.includes('429')) {
+    // Rate limit — retry after cooloff (check AFTER 137 so 137+429 = retry).
+    // Claude runtime errors commonly say "Task failed: rate limited" without
+    // the 429 substring. Claude's usage-limit wording ("You've hit your limit
+    // · resets 10pm (UTC)") does not contain "rate limit" either, so match
+    // all observed production phrasings. INT-1463.
+    // Also matches Codex CLI wording ("hit your usage limit", "limit · resets")
+    // so Codex usage-limit exits route to retry_after_cooloff on parity with
+    // Claude — INT-1471.
+    if (/429|rate limit|hit your limit|usage limit|limit · resets/i.test(errorMessage)) {
       return 'retry_after_cooloff';
     }
   }

@@ -202,6 +202,38 @@ describe('GitHubPRAutomationLog', () => {
 
       expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
     });
+
+    it('should not append duplicate dispatch failure events when marker already exists', async () => {
+      gitHubPRClient = createFakeGitHubPRClient({
+        getIssueComment: vi.fn().mockResolvedValue(ok({
+          body: [
+            '@ignore',
+            '### IntexuraOS Automation',
+            '',
+            '**12:00 UTC** -- **Dispatch failed** | [View task](https://intexuraos.cloud/#/code-tasks/task_abc) | opus | workers_unreachable',
+            '<!-- intexuraos:task_dispatch_failed:task_abc:terminal:workers_unreachable -->',
+          ].join('\n'),
+        })),
+      });
+      const log = createLog();
+
+      await log.record(prRef, {
+        type: 'task_dispatch_failed',
+        taskId: 'task_abc',
+        workerType: 'opus',
+        reason: 'workers_unreachable',
+        message: 'No workers are reachable.',
+        remediation: 'Check connectivity.',
+        workerNames: ['home-dev'],
+        terminal: true,
+        idempotencyKey: 'task_abc:terminal:workers_unreachable',
+      });
+
+      expect(gitHubPRClient.getIssueComment).toHaveBeenCalledOnce();
+      expect(gitHubPRClient.updateIssueComment).not.toHaveBeenCalled();
+      const stored = await repo.get('pbuchman/intexuraos', 42);
+      expect(stored?.eventCount).toBe(1);
+    });
   });
 
   describe('filtered events (renderEvent returns null)', () => {
@@ -320,6 +352,37 @@ describe('GitHubPRAutomationLog', () => {
       await expect(log.record(prRef, webhookEvent, tokenUserId)).resolves.toBeUndefined();
 
       expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('should treat repo create failure after posting as delivered to avoid duplicate dispatch failure comments', async () => {
+      const baseRepo = createFakeRepo();
+      repo = {
+        ...baseRepo,
+        create: vi.fn(async () => {
+          throw new Error('comment record write failed');
+        }),
+      };
+      const event: AutomationEvent = {
+        type: 'task_dispatch_failed',
+        taskId: 'task_abc',
+        workerType: 'opus',
+        reason: 'workers_unreachable',
+        message: 'No workers are reachable.',
+        remediation: 'Check connectivity.',
+        workerNames: ['home-dev'],
+        terminal: true,
+        idempotencyKey: 'task_abc:terminal:workers_unreachable',
+      };
+      const log = createLog();
+
+      const result = await log.recordWithResult?.(prRef, event, tokenUserId);
+
+      expect(result).toEqual(ok(undefined));
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledOnce();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: prRef.repository, prNumber: prRef.prNumber, error: 'comment record write failed' }),
+        'Automation log: posted new PR comment but failed to save comment record'
+      );
     });
 
     it('should not throw when getIssueComment fails on append', async () => {

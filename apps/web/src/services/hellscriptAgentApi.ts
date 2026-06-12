@@ -12,7 +12,7 @@ export async function listHellscriptBuffers(
 ): Promise<HellscriptBufferSummary[]> {
   return await apiRequest<HellscriptBufferSummary[]>(
     config.hellscriptAgentUrl,
-    '/hellscript/buffers',
+    '/buffers',
     accessToken
   );
 }
@@ -23,7 +23,7 @@ export async function getHellscriptWorkspace(
 ): Promise<HellscriptWorkspaceResponse> {
   return await apiRequest<HellscriptWorkspaceResponse>(
     config.hellscriptAgentUrl,
-    `/hellscript/buffers/${encodeURIComponent(bufferId)}`,
+    `/buffers/${encodeURIComponent(bufferId)}`,
     accessToken
   );
 }
@@ -34,7 +34,7 @@ export async function imposeOnBuffer(
 ): Promise<HellscriptImposeResponse> {
   return await apiRequest<HellscriptImposeResponse>(
     config.hellscriptAgentUrl,
-    '/hellscript/impose',
+    '/impose',
     accessToken,
     {
       method: 'POST',

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1931",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1439/g3-refactor-githubprhttpclientts-dedup-694l-of-repeated",
+    "review_iterations": 1,
+    "memory_ids_used": [
+      "mem_bd838570-5194-4f6f-ae63-b676b0f7dba9",
+      "mem_4b61618c-9951-40aa-b7a9-b007cea9ca97"
+    ],
+    "memory_ids_rejected": ["mem_f1559458-c36f-499d-a02c-1cb8b7a5f141"],
+    "memory_usage_summary": "Added dedicated unit tests for extracted pure utilities (fetchGitHub, parseNextPageUrl, mapErrorStatus, ensureString) per [1]; ensured the fetch util genuinely centralizes the fetch boilerplate rather than copy-pasting try/catch blocks into endpoint modules per [3]. [2] did not apply (this refactors an HTTP client, not route handlers).",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (general-purpose) — full refactor + TDD + commit; spec-reviewer (general-purpose) — spec compliance review against Linear issue DoD; code-quality-reviewer (pr-review-toolkit:code-reviewer) — quality review; final-reviewer (superpowers:code-reviewer) — holistic pre-merge review",
+    "skill_sequence_proof": "superpowers:subagent-driven-development was invoked first (producing the implementer + 2 intermediate reviewer subagents and the 08f55c311 commit), then superpowers:requesting-code-review was invoked as the final holistic review gate (dispatched superpowers:code-reviewer, verdict APPROVED) before `git push` + `gh pr create`.",
+    "failure_reason": "",
+    "summary": "* Extracted `fetchGitHub` util and 4 endpoint modules under `apps/code-agent/src/infra/http/github-pr/`; `gitHubPRHttpClient.ts` reduced from 694 → 76 lines of pure delegation.\n  * Behavior-preserving: error codes, merge 405/409 semantics, pagination, and shared AbortSignal for parallel check fetches all identical; `linearAgentHttpClient.ts` and all consumers untouched.\n  * New `github-fetch-util.test.ts` (24 nock tests covering happy path, status passthrough, network errors, timeout, custom signal, headers, body serialization) + `endpoint-network-errors.test.ts` (4 tests closing coverage on NETWORK_ERROR branches); existing 74-test facade suite passes unchanged.\n  * `pnpm run ci:tracked` green (typecheck, lint, 15727 tests, 434 v8-ignore pragmas validated, static validation, build, format); 100% branch coverage on all new files with zero new v8-ignore comments.\n  * All three review passes (spec compliance, code quality, final holistic) returned APPROVED with zero issues."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

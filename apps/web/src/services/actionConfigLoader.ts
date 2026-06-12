@@ -1,11 +1,13 @@
 /**
  * Action configuration loader.
- * Fetches, parses, validates, and caches the action configuration YAML file.
+ * Parses, validates, and caches the action configuration YAML, which is
+ * bundled into the JS via Vite's `?raw` import from `src/config/action-config.yaml`.
  */
 
 import { load as parseYaml } from 'js-yaml';
-import type { ActionConfig } from '../types/actionConfig';
-import { config as appConfig } from '../config';
+import actionConfigRaw from '@/config/action-config.yaml?raw';
+import type { ActionConfig } from '../types/actionConfig'; // @allow-missing-js -- web app uses Vite bundler, not Node ESM
+import { config as appConfig } from '../config'; // @allow-missing-js -- web app uses Vite bundler, not Node ESM
 
 type ConfigKey = keyof typeof appConfig;
 
@@ -23,13 +25,19 @@ const CACHE_DURATION_MS = import.meta.env.DEV ? 60_000 : Infinity;
 let cachedConfig: CacheEntry | null = null;
 
 /**
- * Loads the action configuration from YAML file.
+ * Loads the action configuration from the bundled YAML.
  * Uses cache if available and not expired.
  *
+ * Stays async to preserve the existing call-site contract (callers
+ * `await loadActionConfig()`), even though parsing is now synchronous.
+ *
  * @returns Promise resolving to ActionConfig
- * @throws Error if config cannot be loaded or is invalid
+ * @throws Error if config cannot be parsed or is invalid
  */
 export async function loadActionConfig(): Promise<ActionConfig> {
+  // Yield to the microtask queue so this remains an async function.
+  await Promise.resolve();
+
   // Check cache
   if (cachedConfig !== null) {
     const age = Date.now() - cachedConfig.timestamp;
@@ -38,8 +46,8 @@ export async function loadActionConfig(): Promise<ActionConfig> {
     }
   }
 
-  // Fetch and parse
-  const config = await fetchAndParseConfig();
+  // Parse bundled YAML
+  const config = parseBundledConfig();
 
   // Validate
   validateConfig(config);
@@ -54,26 +62,16 @@ export async function loadActionConfig(): Promise<ActionConfig> {
 }
 
 /**
- * Fetches and parses the YAML configuration file.
+ * Parses the bundled YAML configuration string.
+ *
+ * The YAML is imported at build time via `?raw`, so no network fetch is
+ * required and the config ships in the JS bundle.
  *
  * @returns Parsed configuration object
- * @throws Error if fetch or parse fails
+ * @throws Error if parse fails
  */
-async function fetchAndParseConfig(): Promise<ActionConfig> {
-  // Add version query param to bust cache (timestamp in dev, could use hash in prod)
-  const version = import.meta.env.DEV ? Date.now() : '1';
-  const url = `/action-config.yaml?v=${String(version)}`;
-
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch action config: ${String(response.status)} ${response.statusText}`
-    );
-  }
-
-  const yamlText = await response.text();
-  const parsed = parseYaml(yamlText);
+function parseBundledConfig(): ActionConfig {
+  const parsed = parseYaml(actionConfigRaw);
 
   if (parsed === null || typeof parsed !== 'object') {
     throw new Error('Invalid YAML: expected object at root');
@@ -194,7 +192,7 @@ export function getFallbackConfig(): ActionConfig {
     actions: {
       delete: {
         endpoint: {
-          path: '/actions/{actionId}',
+          path: '/{actionId}',
           method: 'DELETE',
         },
         ui: {

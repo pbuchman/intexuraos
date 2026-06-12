@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/llm-pricing",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,11 +11,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*"
-  },
-  "devDependencies": {
-    "@intexuraos/internal-clients": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

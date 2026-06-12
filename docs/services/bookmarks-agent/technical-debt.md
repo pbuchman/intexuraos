@@ -1,6 +1,6 @@
 # Bookmarks Agent — Technical Debt
 
-**Last Updated:** 2026-04-22
+**Last Updated:** 2026-06-12
 **Analysis Run:** [2026-04-22 documentation-runs.md entry](../../documentation-runs.md)
 
 ---
@@ -39,7 +39,7 @@ Features that are planned but not yet implemented:
 3. **Reading list queue** — Track read/unread status with time estimates
 4. **Summary regeneration** — Re-run AI summary on demand (currently only OG refresh via force-refresh)
 5. **Configurable WhatsApp notifications** — User preference to enable/disable summary delivery (currently always sent as important)
-6. **Public API enrichment trigger** — Allow enrichment from the public `POST /bookmarks` endpoint (currently only internal create triggers it)
+6. **Public API enrichment trigger** — Allow enrichment from the public `POST /` endpoint (currently only internal create triggers it)
 
 ---
 
@@ -141,6 +141,10 @@ if (!publishResult.ok) {
 
 The `important: true` flag ensures that when delivery succeeds, the message is never suppressed by the user's notification level preference.
 
+### WhatsApp Bookmark Recovery Boundary
+
+WhatsApp webhook retry and scheduler behavior lives in whatsapp-service. bookmarks-agent participates by keeping bookmark creation idempotent for recovery replays: `createBookmark` checks `userId+url` before insert and returns `DUPLICATE_URL` with `existingBookmarkId` when a replayed command targets an existing bookmark. This service does not use WhatsApp message IDs or `sourceId` as the duplicate key.
+
 ### Event Ordering
 
 The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub topics. This ensures:
@@ -153,7 +157,7 @@ The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub t
 
 ### Enrichment Asymmetry
 
-The public `POST /bookmarks` endpoint does not trigger enrichment — only the internal `POST /internal/bookmarks` does. This means bookmarks created directly by end users via the public API will remain in `ogFetchStatus: pending` unless manually force-refreshed or enriched through another mechanism. This is by design because the public endpoint is currently only used by the web dashboard, which has its own enrichment trigger.
+The public `POST /` endpoint does not trigger enrichment — only the internal `POST /internal/bookmarks` does. This means bookmarks created directly by end users via the public API will remain in `ogFetchStatus: pending` unless manually force-refreshed or enriched through another mechanism. This is by design because the public endpoint is currently only used by the web dashboard, which has its own enrichment trigger.
 
 ---
 
@@ -177,7 +181,14 @@ The public `POST /bookmarks` endpoint does not trigger enrichment — only the i
 | INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
 | —       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
 
-### Recent Improvements (v3.5.0–v3.6.0)
+### Recent Improvements (v3.6.0–v3.7.0)
+
+| Improvement                                      | Description                                                                                                 | Date       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------- |
+| WhatsApp bookmark recovery integration (INT-1662) | Replayed WhatsApp bookmark commands rely on bookmarks-agent duplicate detection to recover existing records | 2026-06-11 |
+| Mobile bookmark rows (INT-1662)                  | Web bookmark rows now preserve title and URL width on mobile screens while showing the updated date inline  | 2026-06-11 |
+
+### Previous Improvements (v3.5.0–v3.6.0)
 
 | Improvement                          | Description                                                                                           | Date       |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------- |
@@ -207,7 +218,6 @@ The public `POST /bookmarks` endpoint does not trigger enrichment — only the i
 | Improvement                       | Description                                                        | Date       |
 | --------------------------------- | ------------------------------------------------------------------ | ---------- |
 | v8-ignore test coverage (INT-786) | Tests added for untestable branch exemptions                       | 2026-03-13 |
-| Dash0 OpenTelemetry integration   | Distributed tracing via package-level OTel instrumentation         | 2026-02-16 |
 | Dev-mode log formatting           | Human-readable logs in PM2 via createLogStream()                   | 2026-02-16 |
 | PM2 ecosystem migration           | Switched to pnpm --filter with start:local for reliable local dev  | 2026-02-14 |
 | 100% branch coverage enforcement  | v8 ignore exemptions with valid categories for untestable branches | 2026-01-31 |

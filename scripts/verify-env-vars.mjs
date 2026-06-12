@@ -62,15 +62,14 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_AUTH_JWKS_URL',
   // Platform-wide Gemini API key (primary fallback for services using user-service client)
   'INTEXURAOS_GEMINI_APP_API_KEY',
-  // Dash0 OpenTelemetry (optional — no-op when not configured)
-  'INTEXURAOS_DASH0_OTLP_ENDPOINT',
-  'INTEXURAOS_DASH0_AUTH_TOKEN',
   // Queue config (optional — have sensible defaults: maxSize=50, ttlMinutes=1440)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
   // Retry queue config (optional — have sensible defaults: maxAttempts=3, ttlMinutes=10)
   'INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS',
   'INTEXURAOS_RETRY_QUEUE_TTL_MINUTES',
+  // Auto-retry chain bound (INT-1560 Fix D) — optional, default 3
+  'INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS',
   // Cloud Monitoring metrics (optional — no-op when not set, requires monitoring.metricWriter IAM role)
   'INTEXURAOS_ENABLE_METRICS',
 ]);
@@ -108,8 +107,11 @@ function findTsFiles(dir, files = []) {
 function extractRequiredEnv(indexContent) {
   const vars = [];
 
-  // Extract from REQUIRED_ENV
-  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\];/;
+  // Extract from REQUIRED_ENV. Supports both
+  //   const REQUIRED_ENV = [...];
+  // and the typed-loadEnv form
+  //   const REQUIRED_ENV = [...] as const;
+  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\](?:\s+as\s+const)?\s*;/;
   const requiredMatch = indexContent.match(requiredEnvPattern);
   if (requiredMatch) {
     const stringPattern = /'([^']+)'/g;
@@ -329,9 +331,6 @@ function isCommonServiceVar(varName) {
     'PORT',
     'HOST',
     'NODE_ENV',
-    // Dash0 OpenTelemetry (optional — set in COMMON_SERVICE_ENV)
-    'INTEXURAOS_DASH0_OTLP_ENDPOINT',
-    'INTEXURAOS_DASH0_AUTH_TOKEN',
   ]);
 
   // From dev.mjs COMMON_SERVICE_URLS (all INTEXURAOS_*_URL vars)

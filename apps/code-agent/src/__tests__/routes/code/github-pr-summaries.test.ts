@@ -23,9 +23,9 @@ import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestor
 import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
-import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
@@ -34,14 +34,13 @@ import { createLinearIssueService } from '../../../domain/services/linearIssueSe
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
+import { createFirestoreTurnMetricsRepository } from '../../../infra/firestore/firestoreTurnMetricsRepository.js';
 
 describe('GET /code/github-pr-summaries', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -148,8 +147,7 @@ describe('GET /code/github-pr-summaries', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -201,7 +199,6 @@ describe('GET /code/github-pr-summaries', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
@@ -221,7 +218,7 @@ describe('GET /code/github-pr-summaries', () => {
       taskEnqueueService: import('../../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     server = await buildServer();
@@ -236,7 +233,7 @@ describe('GET /code/github-pr-summaries', () => {
   it('should return 401 without auth token', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
     });
 
     expect(response.statusCode).toBe(401);
@@ -248,7 +245,7 @@ describe('GET /code/github-pr-summaries', () => {
   it('should return 200 with empty array when no summaries exist', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -297,7 +294,7 @@ describe('GET /code/github-pr-summaries', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -345,7 +342,7 @@ describe('GET /code/github-pr-summaries', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -371,7 +368,7 @@ describe('GET /code/github-pr-summaries', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-pr-summaries',
+      url: '/github-pr-summaries',
       headers: { authorization: 'Bearer fake-token' },
     });
 

@@ -55,6 +55,8 @@ interface SendMessageEvent {
 
 **When to use:** Send a notification with a clickable button that opens a URL in the user's browser.
 
+**Link rule:** Use canonical public URLs. For IntexuraOS APIs, that means public resource paths such as `/api/code/...` or `/api/whatsapp/...`; do not publish doubled service paths such as `/api/whatsapp/whatsapp/...`.
+
 **Input Schema:**
 
 ```typescript
@@ -201,11 +203,51 @@ interface CommandIngestEvent {
 }
 ```
 
+**Reliability note:** whatsapp-service treats command ingestion as required for text/bookmark flows. If `command.ingest` publishing fails, the webhook event is marked `failed` with `retryable: true` so it can be replayed by the retry-pending recovery endpoint.
+
+---
+
+### Retry Pending WhatsApp Webhook Events
+
+**Endpoint:** `POST /internal/whatsapp/webhooks/retry-pending`
+
+**Auth:** Internal scheduler auth
+
+**When to use:** Recover persisted WhatsApp webhook events that stayed `pending` after async processing or failed with `retryable: true`.
+
+**Input Schema:**
+
+```typescript
+interface RetryPendingWebhookEventsInput {
+  eventIds?: string[];
+  limit?: number; // 1-100, default 50
+  olderThanSeconds?: number; // default 120
+  dryRun?: boolean;
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface RetryPendingWebhookEventsResult {
+  processed: number;
+  skipped: number;
+  failed: number;
+  total: number;
+  events: Array<{
+    eventId: string;
+    outcome: 'processed' | 'skipped' | 'failed';
+    status?: string;
+    reason?: string;
+  }>;
+}
+```
+
 ---
 
 ### List User Messages
 
-**Endpoint:** `GET /whatsapp/messages`
+**Endpoint:** `GET /messages`
 
 **Auth:** Bearer token
 
@@ -248,7 +290,7 @@ interface WhatsAppMessageSummary {
 
 ### Get Media Signed URL
 
-**Endpoint:** `GET /whatsapp/messages/:message_id/media`
+**Endpoint:** `GET /messages/:message_id/media`
 
 **Auth:** Bearer token
 
@@ -267,7 +309,7 @@ interface SignedUrlResult {
 
 ### Get Thumbnail Signed URL
 
-**Endpoint:** `GET /whatsapp/messages/:message_id/thumbnail`
+**Endpoint:** `GET /messages/:message_id/thumbnail`
 
 **Auth:** Bearer token
 
@@ -286,7 +328,7 @@ interface SignedUrlResult {
 
 ### Get Notification Preferences
 
-**Endpoint:** `GET /whatsapp/preferences`
+**Endpoint:** `GET /preferences`
 
 **Auth:** Bearer token
 
@@ -304,7 +346,7 @@ interface PreferencesResult {
 
 ### Update Notification Preferences
 
-**Endpoint:** `PUT /whatsapp/preferences`
+**Endpoint:** `PUT /preferences`
 
 **Auth:** Bearer token
 
@@ -384,12 +426,12 @@ interface NotificationPreferences {
 - Provide both `buttons` and `ctaUrl` in the same `SendMessageEvent` — they are mutually exclusive
 - Expect emoji reactions to trigger `action.approval.reply` — reactions are silently ignored
 - Rely on OutboundMessage correlation after 7 days — records expire via Firestore TTL
-- Call `POST /whatsapp/connect` without first verifying the phone number via the verification flow
+- Call `POST /connect` without first verifying the phone number via the verification flow
 - Assume messages without `important: true` will be delivered — the user may have set their notification level to `important`
 
 **Requires:**
 
-- User must have a verified and connected WhatsApp phone number (`GET /whatsapp/status` returns `connected: true`) before messages can be delivered
+- User must have a verified and connected WhatsApp phone number (`GET /status` returns `connected: true`) before messages can be delivered
 - Approval correlationId MUST match `action-{type}-approval-{actionId}` for text-reply correlation to work
 - Button titles must be 20 characters or fewer
 - Set `important: true` on approval requests and critical notifications to ensure delivery regardless of notification level
@@ -433,25 +475,25 @@ interface NotificationPreferences {
 ### Pattern 4: Access Message Media
 
 ```
-1. GET /whatsapp/messages — find message with hasMedia: true
-2. GET /whatsapp/messages/:id/media — get signed URL (valid 15 min)
-3. GET /whatsapp/messages/:id/thumbnail — get thumbnail URL (images only)
+1. GET /messages — find message with hasMedia: true
+2. GET /messages/:id/media — get signed URL (valid 15 min)
+3. GET /messages/:id/thumbnail — get thumbnail URL (images only)
 4. Use URL before expiry; regenerate if needed
 ```
 
 ### Pattern 5: Phone Verification + Connect
 
 ```
-1. POST /whatsapp/verify/send — sends 6-digit OTP via WhatsApp
-2. POST /whatsapp/verify/confirm — validates code; marks phone verified
-3. POST /whatsapp/connect — links verified phone to user account
+1. POST /verify/send — sends 6-digit OTP via WhatsApp
+2. POST /verify/confirm — validates code; marks phone verified
+3. POST /connect — links verified phone to user account
 ```
 
 ### Pattern 6: Manage Notification Preferences
 
 ```
-1. GET /whatsapp/preferences — read current notification level
-2. PUT /whatsapp/preferences — set to 'all' or 'important'
+1. GET /preferences — read current notification level
+2. PUT /preferences — set to 'all' or 'important'
 3. When level is 'important', only SendMessageEvents with important: true are delivered
 ```
 
@@ -475,6 +517,12 @@ interface NotificationPreferences {
 | `whatsapp.audio.stored`        | `INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC`     | Audio ready for transcription        |
 | `whatsapp.linkpreview.extract` | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | URLs found for preview extraction    |
 | `whatsapp.media.cleanup`       | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`    | Media deletion requested             |
+
+---
+
+## Pub/Sub Alias Notes
+
+Use the env var contract in service integrations. In the PM2 dev environment, the fallback topic names are emulator aliases: `whatsapp-send-message`, `whatsapp-media-cleanup`, `whatsapp-webhook-process`, `whatsapp-transcription`, `commands-ingest`, and `approval-reply`. Do not assume those aliases are retained GCP/Terraform topic names.
 
 ---
 

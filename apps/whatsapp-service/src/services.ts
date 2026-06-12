@@ -38,10 +38,10 @@ export interface ServiceConfig {
   mediaBucket: string;
   gcpProjectId: string;
   mediaCleanupTopic: string;
-  commandsIngestTopic?: string;
+  audioStoredTopic: string;
+  approvalReplyTopic: string;
+  commandsIngestTopic: string;
   webhookProcessTopic?: string;
-  audioStoredTopic?: string;
-  approvalReplyTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
   webAgentUrl: string;
@@ -52,19 +52,13 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
   const pubsubConfig: GcpPubSubPublisherConfig = {
     projectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
+    audioStoredTopic: config.audioStoredTopic,
+    approvalReplyTopic: config.approvalReplyTopic,
+    commandsIngestTopic: config.commandsIngestTopic,
     logger: createAppLogger({ name: 'whatsapp-pubsub-publisher' }),
   };
-  if (config.commandsIngestTopic !== undefined) {
-    pubsubConfig.commandsIngestTopic = config.commandsIngestTopic;
-  }
   if (config.webhookProcessTopic !== undefined) {
     pubsubConfig.webhookProcessTopic = config.webhookProcessTopic;
-  }
-  if (config.audioStoredTopic !== undefined) {
-    pubsubConfig.audioStoredTopic = config.audioStoredTopic;
-  }
-  if (config.approvalReplyTopic !== undefined) {
-    pubsubConfig.approvalReplyTopic = config.approvalReplyTopic;
   }
   return pubsubConfig;
 }

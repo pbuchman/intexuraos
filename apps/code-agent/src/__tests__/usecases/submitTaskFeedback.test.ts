@@ -13,7 +13,7 @@
  * 9. Sends WhatsApp notification
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTask } from '../../domain/models/codeTask.js';
@@ -58,6 +58,7 @@ describe('submitTaskFeedback use case', () => {
   let mockMetricsClient: {
     incrementTasksSubmitted: ReturnType<typeof vi.fn>;
   };
+  let originalWebAppUrl: string | undefined;
 
   const userId = 'test-user-123';
   const originalTaskId = 'task_abc123';
@@ -66,6 +67,7 @@ describe('submitTaskFeedback use case', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
 
     // Mock logger
     mockLogger = {
@@ -125,6 +127,14 @@ describe('submitTaskFeedback use case', () => {
     mockMetricsClient = {
       incrementTasksSubmitted: vi.fn(),
     };
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   function createMockTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -615,6 +625,20 @@ describe('submitTaskFeedback use case', () => {
         issueId: linearIssueId,
         body: expect.stringContaining(feedback),
       });
+    });
+
+    it('should use INTEXURAOS_WEB_APP_URL in the Linear feedback comment', async () => {
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+      const deps = createDeps();
+      await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      const body = mockLinearAgentClient.addComment.mock.calls[0]?.[0]?.body as string;
+      expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_abc123');
+      expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/feedback-task-123');
     });
 
     it('should dispatch follow-up task to worker', async () => {

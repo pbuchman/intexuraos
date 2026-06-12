@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1921
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1434/g2-refactor-webhooksgithubts-extract-701l-single-handler-body-into-use
+- Review iterations: 2
+- execution_memory_ids_used: mem_38af51c0-cc01-4025-b236-59887db29639,mem_b5eda4c1-8f95-4ec8-8732-f769a543a9e8
+- execution_memory_ids_rejected: mem_3e3d1d29-c69a-4dc5-abed-62fbcf59d9c4
+- execution_memory_usage_summary: Applied end-to-end routing verification guidance by preserving all 71 route-level integration tests unchanged to catch regressions in the full Webhook → audit → parse → dispatch → triage flow, in addition to new use-case-level unit tests.
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: implementer (refactor 701-line handler into use case + tests + CI); code-reviewer (spec + quality review flagging Critical C1 + Important I1/I2/I3); implementer-fix (address C1 via function ports on input, remove eslint-disable, add dedup test, verify I3); code-reviewer (re-review — Ready to merge).
+- Skill sequence proof: superpowers:subagent-driven-development invoked first (dispatched general-purpose implementer for extract-to-use-case work), then superpowers:requesting-code-review invoked (dispatched pr-review-toolkit:code-reviewer which returned Critical C1 + Important I1/I2/I3). Fix iteration dispatched another implementer, then re-dispatched code-reviewer which returned "Ready to merge".
+- Summary:
+  * Extracted 701-line GitHub webhook handler body into new use case `apps/code-agent/src/domain/usecases/processGitHubWebhook.ts`; route reduced to 93 lines (thin parse → delegate → map HTTP adapter).
+  * Introduced `VerifyGitHubSignature` and `ParseGitHubWebhookEvent` function ports on `ProcessGitHubWebhookInput` to satisfy the domain→infra `no-restricted-imports` rule (code-review fix).
+  * Moved `ALLOWED_BOTS`/`CODE_WORKER_BOTS`/`resolvePrCloseSourceTimestamp`/`GitHubWebhookBody`/`GitHubWebhookHeaders` to canonical `domain/` homes; route re-exports them so callers and tests compile unchanged.
+  * Added 12 use-case tests covering invalid signature, missing audit repos, ping, unsupported event, duplicate, out-of-scope repo, happy path, parse error, triage-publish fallback, push, and dedup of existing decisions; all 71 pre-existing route integration tests pass unchanged.
+  * CI green: 15522 tests, 100% branches, all static validation, build, format.

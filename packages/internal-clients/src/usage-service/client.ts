@@ -1,6 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { fetchWithAuth } from '../shared/errors.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   UsageServiceConfig,
   UsageServiceError,
@@ -13,6 +14,8 @@ import type {
   UsageListEventsRequest,
   UsageListEventsResponse,
   UsageGetEventResponse,
+  ResearchCostSummary,
+  ResearchCostSummaryTimeRange,
 } from './types.js';
 
 interface ApiResponse<T> {
@@ -21,6 +24,12 @@ interface ApiResponse<T> {
 }
 
 export function createUsageServiceClient(config: UsageServiceConfig): UsageServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+  });
+
   return {
     async ingestEvents(
       request: UsageIngestRequest,
@@ -135,6 +144,49 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
         return err({ code: result.error.code, message: result.error.message });
       }
       return ok(result.value.data);
+    },
+
+    async getResearchCostSummary(
+      researchId: string,
+      owner: { type: 'user' | 'system'; id: string },
+      timeRange: ResearchCostSummaryTimeRange,
+      options?: { traceId?: string }
+    ): Promise<Result<ResearchCostSummary, UsageServiceError>> {
+      const result = await httpClient.request<ResearchCostSummary>({
+        path: '/internal/usage/research-cost-summary',
+        method: 'POST',
+        ...(options?.traceId !== undefined
+          ? { extraHeaders: { 'X-Trace-Id': options.traceId } }
+          : {}),
+        body: {
+          researchId,
+          owner,
+          timeRange,
+        },
+      });
+
+      if (result.ok) {
+        return ok(result.value);
+      }
+
+      if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
+        return err({
+          code: 'NETWORK_ERROR',
+          message: result.error.message,
+        });
+      }
+
+      if (result.error.code === 'API_ERROR') {
+        return err({
+          code: 'API_ERROR',
+          message: `HTTP ${String(result.error.status)}: ${result.error.rawText}`,
+        });
+      }
+
+      return err({
+        code: 'API_ERROR',
+        message: result.error.message,
+      });
     },
   };
 }

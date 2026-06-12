@@ -1,14 +1,16 @@
 import { createHmac } from 'node:crypto';
 import type { Logger } from 'pino';
+import { buildTaskCallbackUrl } from './callback-url.js';
 
 /**
  * Orchestrator-side HTTP client that commits a terminal task status to code-agent
  * via `PATCH /internal/code-tasks/:id/status`.
  *
- * Signing scheme mirrors {@link createHeartbeatManager} (see `heartbeat.ts`):
- * `HMAC-SHA256(orchestratorSecret, timestamp + "." + rawBody)`, with
+ * Signing scheme is `HMAC-SHA256(secret, timestamp + "." + rawBody)`, with
  * `X-Request-Timestamp`, `X-Request-Signature`, and `X-Internal-Auth` headers.
- * Uses the shared orchestrator secret, NOT the per-task webhook secret.
+ * When a task webhook secret is available, use it so callbacks can cross
+ * dev/prod ownership boundaries. Otherwise fall back to the shared
+ * orchestrator secret for legacy internal callers.
  *
  * Design reference: INT-1413 finalize-task robustness plan (Task 3).
  */
@@ -28,6 +30,8 @@ export interface StatusUpdatePayload {
   taskId: string;
   status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
   completedAt: Date;
+  webhookUrl?: string;
+  webhookSecret?: string;
   error?: { code: string; message: string };
   result?: { prUrl?: string; branch?: string; summary?: string };
 }
@@ -83,7 +87,12 @@ export class StatusUpdateClient {
     const maxAttempts = this.retryDelaysMs.length + 1;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const outcome = await this.deliver(payload.taskId, rawBody);
+      const outcome = await this.deliver(
+        payload.taskId,
+        rawBody,
+        payload.webhookUrl,
+        payload.webhookSecret
+      );
 
       if (outcome.ok) {
         if (attempt > 0) {
@@ -136,14 +145,21 @@ export class StatusUpdateClient {
 
   private async deliver(
     taskId: string,
-    rawBody: string
+    rawBody: string,
+    webhookUrl: string | undefined,
+    webhookSecret: string | undefined
   ): Promise<{ ok: true } | { ok: false; error: StatusUpdateError }> {
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = createHmac('sha256', this.orchestratorSecret)
+    const signatureSecret = webhookSecret ?? this.orchestratorSecret;
+    const signature = createHmac('sha256', signatureSecret)
       .update(`${String(timestamp)}.${rawBody}`)
       .digest('hex');
 
-    const url = `${this.codeAgentUrl}/internal/code-tasks/${encodeURIComponent(taskId)}/status`;
+    const url = buildTaskCallbackUrl(
+      webhookUrl,
+      this.codeAgentUrl,
+      `/internal/code-tasks/${encodeURIComponent(taskId)}/status`
+    );
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {

@@ -52,7 +52,7 @@ describe('notificationDigestsApi', () => {
       expect(apiRequest).toHaveBeenCalledTimes(1);
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[0]).toBe('https://mn.test');
-      expect(call?.[1]).toBe('/notifications/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15');
+      expect(call?.[1]).toBe('/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15');
       expect(call?.[2]).toBe(TOKEN);
       expect(result).toBe(resp);
     });
@@ -84,7 +84,7 @@ describe('notificationDigestsApi', () => {
       const result = await getDigest(TOKEN, 'group with space', '2026-04-15');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notifications/digests/group%20with%20space/2026-04-15');
+      expect(call?.[1]).toBe('/digests/group%20with%20space/2026-04-15');
       expect(result).toBe(summary);
     });
   });
@@ -101,7 +101,7 @@ describe('notificationDigestsApi', () => {
       await getDigestState(TOKEN, 'g', '2026-04-15');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notifications/digests/g/2026-04-15/state');
+      expect(call?.[1]).toBe('/digests/g/2026-04-15/state');
     });
   });
 
@@ -117,7 +117,7 @@ describe('notificationDigestsApi', () => {
       await runDigest(TOKEN, { groupKey: 'g', date: '2026-04-15' });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notifications/digests/run');
+      expect(call?.[1]).toBe('/digests/run');
       expect(call?.[3]).toEqual({
         method: 'POST',
         body: { groupKey: 'g', date: '2026-04-15' },
@@ -139,7 +139,7 @@ describe('notificationDigestsApi', () => {
       });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notifications/digests/backfill');
+      expect(call?.[1]).toBe('/digests/backfill');
       expect(call?.[3]).toEqual({
         method: 'POST',
         body: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-02' },
@@ -162,7 +162,7 @@ describe('notificationDigestsApi', () => {
       await getBackfillRun(TOKEN, 'bf abc');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe('/notifications/digests/backfill/bf%20abc');
+      expect(call?.[1]).toBe('/digests/backfill/bf%20abc');
     });
   });
 });

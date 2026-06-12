@@ -22,7 +22,7 @@ describe('Code Tasks E2E', () => {
     const testSigningSecret = 'test-signing-secret';
 
     // Create e2e-test-worker with POST (new API)
-    const createWorker = await client.post('/code/worker-settings/workers', {
+    const createWorker = await client.post('/worker-settings/workers', {
       name: 'e2e-test-worker',
       url: mockClaudeUrl,
       cfAccessClientId: 'test-cf-id',
@@ -49,7 +49,7 @@ describe('Code Tasks E2E', () => {
 
   describe('Environment Setup', () => {
     it('should have code-agent service available', async () => {
-      const response = await client.get('/code/workers/status');
+      const response = await client.get('/workers/status');
 
       expect(response.status).toBe(200);
       expect(response.data.data).toHaveProperty('workers');
@@ -60,7 +60,7 @@ describe('Code Tasks E2E', () => {
   describe('Happy Path', () => {
     it('submits task and receives PR with success scenario', async () => {
       // Submit task with success scenario marker
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Add a simple feature for E2E testing',
         workerType: 'auto',
       });
@@ -86,7 +86,7 @@ describe('Code Tasks E2E', () => {
     });
 
     it('creates Linear issue when not provided', async () => {
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Create feature with Linear issue',
         workerType: 'auto',
       });
@@ -114,7 +114,7 @@ describe('Code Tasks E2E', () => {
     it('allows submitting with existing Linear issue', async () => {
       const testLinearIssueId = process.env['E2E_LINEAR_ISSUE_ID'] ?? 'INT-999';
 
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Work on existing Linear issue',
         linearIssueId: testLinearIssueId,
         workerType: 'auto',
@@ -141,7 +141,7 @@ describe('Code Tasks E2E', () => {
 
   describe('Error Handling', () => {
     it('handles task failure gracefully', async () => {
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:failure] This should fail',
         workerType: 'auto',
       });
@@ -157,7 +157,7 @@ describe('Code Tasks E2E', () => {
     });
 
     it('rejects invalid workerType', async () => {
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Test with invalid worker',
         workerType: 'invalid' as unknown as 'auto',
       });
@@ -167,7 +167,7 @@ describe('Code Tasks E2E', () => {
     });
 
     it('rejects empty prompt', async () => {
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '',
         workerType: 'auto',
       });
@@ -179,7 +179,7 @@ describe('Code Tasks E2E', () => {
   describe('Cancellation', () => {
     it('cancels running slow task', async () => {
       // Submit slow task that takes 10 seconds
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:slow-success] Cancellation test task',
         workerType: 'auto',
       });
@@ -191,11 +191,11 @@ describe('Code Tasks E2E', () => {
       await sleep(3000);
 
       // Check it's queued, dispatched, or running
-      const checkResult = await client.get(`/code/tasks/${codeTaskId}`);
+      const checkResult = await client.get(`/tasks/${codeTaskId}`);
       expect(checkResult.data.data.status).toMatch(/^(queued|dispatched|running)$/);
 
       // Cancel it
-      const cancelResult = await client.post('/code/cancel', { taskId: codeTaskId });
+      const cancelResult = await client.post('/cancel', { taskId: codeTaskId });
       expect(cancelResult.status).toBe(200);
       expect(cancelResult.data.data.status).toBe('cancelled');
 
@@ -205,7 +205,7 @@ describe('Code Tasks E2E', () => {
     });
 
     it('returns 404 when cancelling non-existent task', async () => {
-      const cancelResult = await client.post('/code/cancel', {
+      const cancelResult = await client.post('/cancel', {
         taskId: 'non-existent-task-id',
       });
 
@@ -214,7 +214,7 @@ describe('Code Tasks E2E', () => {
 
     it('returns 409 when cancelling already completed task', async () => {
       // Submit and wait for quick success task
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Quick task for cancel test',
         workerType: 'auto',
       });
@@ -223,7 +223,7 @@ describe('Code Tasks E2E', () => {
       await waitForSuccessStatus(client, codeTaskId, 60000);
 
       // Try to cancel completed task
-      const cancelResult = await client.post('/code/cancel', { taskId: codeTaskId });
+      const cancelResult = await client.post('/cancel', { taskId: codeTaskId });
 
       expect(cancelResult.status).toBe(409);
     });
@@ -231,7 +231,7 @@ describe('Code Tasks E2E', () => {
 
   describe('CI Failure', () => {
     it('marks task completed with ciFailed flag', async () => {
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:ci-failure] Broken code for CI test',
         workerType: 'auto',
       });
@@ -257,7 +257,7 @@ describe('Code Tasks E2E', () => {
 
   describe('Task Listing', () => {
     it('lists user tasks', async () => {
-      const response = await client.get('/code/tasks');
+      const response = await client.get('/tasks');
 
       expect(response.status).toBe(200);
       expect(response.data.data).toHaveProperty('tasks');
@@ -265,7 +265,7 @@ describe('Code Tasks E2E', () => {
     });
 
     it('filters tasks by status', async () => {
-      const response = await client.get('/code/tasks', {
+      const response = await client.get('/tasks', {
         params: { status: 'planned' },
       });
 
@@ -279,7 +279,7 @@ describe('Code Tasks E2E', () => {
     });
 
     it('respects limit parameter', async () => {
-      const response = await client.get('/code/tasks', {
+      const response = await client.get('/tasks', {
         params: { limit: 5 },
       });
 
@@ -291,7 +291,7 @@ describe('Code Tasks E2E', () => {
   describe('Task Details', () => {
     it('returns task details', async () => {
       // First create a task
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Get task details test',
         workerType: 'auto',
       });
@@ -299,7 +299,7 @@ describe('Code Tasks E2E', () => {
       const { codeTaskId } = submitResult.data.data;
 
       // Get task details
-      const response = await client.get(`/code/tasks/${codeTaskId}`);
+      const response = await client.get(`/tasks/${codeTaskId}`);
 
       expect(response.status).toBe(200);
       expect(response.data.data.id).toBe(codeTaskId);
@@ -308,7 +308,7 @@ describe('Code Tasks E2E', () => {
     });
 
     it('returns 404 for non-existent task', async () => {
-      const response = await client.get('/code/tasks/non-existent-task');
+      const response = await client.get('/tasks/non-existent-task');
 
       expect(response.status).toBe(404);
     });
@@ -316,7 +316,7 @@ describe('Code Tasks E2E', () => {
 
   describe('Worker Status', () => {
     it('returns worker health status', async () => {
-      const response = await client.get('/code/workers/status');
+      const response = await client.get('/workers/status');
 
       expect(response.status).toBe(200);
       expect(response.data.data).toHaveProperty('workers');
@@ -335,7 +335,7 @@ describe('Code Tasks E2E', () => {
 
   describe('Result Structure', () => {
     it('returns complete result on success', async () => {
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Verify result structure',
         workerType: 'auto',
       });
@@ -362,7 +362,7 @@ describe('Code Tasks E2E', () => {
 
   describe('Status Transitions', () => {
     it('transitions from dispatched to running to completed', async () => {
-      const submitResult = await client.post('/code/submit', {
+      const submitResult = await client.post('/submit', {
         prompt: '[test:success] Status transition test',
         workerType: 'auto',
       });
@@ -370,7 +370,7 @@ describe('Code Tasks E2E', () => {
       const { codeTaskId } = submitResult.data.data;
 
       // Check initial status (queued, dispatched, or running)
-      const initialResponse = await client.get(`/code/tasks/${codeTaskId}`);
+      const initialResponse = await client.get(`/tasks/${codeTaskId}`);
       const initialStatus = initialResponse.data.data.status;
       expect(['queued', 'dispatched', 'running']).toContain(initialStatus);
 

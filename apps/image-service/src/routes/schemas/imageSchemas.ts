@@ -24,6 +24,22 @@ export const generateImageBodySchema = {
       maxLength: 100,
       description: 'Optional title for slug-based filename (from prompt generation)',
     },
+    promptType: {
+      type: 'string',
+      minLength: 1,
+      description: 'Optional usage tracking prompt type',
+    },
+    correlation: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        researchId: { type: ['string', 'null'] },
+        sessionId: { type: ['string', 'null'] },
+        taskId: { type: ['string', 'null'] },
+        requestId: { type: ['string', 'null'] },
+      },
+      description: 'Optional usage attribution correlation fields',
+    },
   },
   additionalProperties: false,
 } as const;
@@ -59,13 +75,19 @@ export const generateImageResponseSchema = {
   },
 } as const;
 
-import type { GPTImage1, Gemini25FlashImage } from '@intexuraos/llm-contract';
+import type {
+  Gemini25FlashImage,
+  GPTImage1,
+  LLMCorrelationOptions,
+} from '@intexuraos/llm-contract';
 
 export interface GenerateImageBody {
   prompt: string;
   model: GPTImage1 | Gemini25FlashImage;
   userId: string;
   title?: string;
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 export const deleteImageParamsSchema = {

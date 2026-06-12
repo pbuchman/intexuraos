@@ -14,7 +14,7 @@
 
 ### Submit Research
 
-**Endpoint:** `POST /research`
+**Endpoint:** `POST /`
 
 **Auth:** Bearer JWT
 
@@ -83,7 +83,7 @@ interface SubmitResearchOutput {
 
 ### Get Research
 
-**Endpoint:** `GET /research/:id`
+**Endpoint:** `GET /:id`
 
 **Auth:** Bearer JWT
 
@@ -143,7 +143,7 @@ interface LlmResult {
 
 ### List Researches
 
-**Endpoint:** `GET /research`
+**Endpoint:** `GET /`
 
 **Auth:** Bearer JWT
 
@@ -186,7 +186,7 @@ interface ResearchSummary {
 
 ### Validate Input
 
-**Endpoint:** `POST /research/validate-input`
+**Endpoint:** `POST /validate-input`
 
 **Auth:** Bearer JWT
 
@@ -215,7 +215,7 @@ interface ValidateInputOutput {
 
 ### Confirm Partial Failure
 
-**Endpoint:** `POST /research/:id/confirm`
+**Endpoint:** `POST /:id/confirm`
 
 **Auth:** Bearer JWT
 
@@ -239,7 +239,7 @@ interface ConfirmPartialFailureInput {
 
 ### Enhance Research
 
-**Endpoint:** `POST /research/:id/enhance`
+**Endpoint:** `POST /:id/enhance`
 
 **Auth:** Bearer JWT
 
@@ -267,7 +267,7 @@ interface EnhanceResearchInput {
 
 ### Browse OpenRouter Models
 
-**Endpoint:** `GET /research/openrouter/models`
+**Endpoint:** `GET /openrouter/models`
 
 **Auth:** Bearer JWT
 
@@ -349,18 +349,18 @@ interface ServiceFeedback {
 - User must have LLM API keys configured in user-service for the selected models
 - OpenRouter models require an OpenRouter API key configured in user-service
 - Synthesis model API key must be present — missing key causes immediate `failed` status
-- Notion export requires `POST /research/settings/notion` to be configured first
+- Notion export requires `POST /settings/notion` to be configured first
 
 ## Usage Patterns
 
 ### Pattern 1: Submit and Poll to Completion
 
 ```
-1. POST /research -> receive researchId
-2. GET /research/:id every 5 seconds
+1. POST / -> receive researchId
+2. GET /:id every 5 seconds
 3. If status === 'awaiting_confirmation':
    a. Read partialFailure.failedModels
-   b. POST /research/:id/confirm with { decision: 'proceed' | 'retry' | 'cancel' }
+   b. POST /:id/confirm with { decision: 'proceed' | 'retry' | 'cancel' }
 4. Wait for status === 'completed' or 'failed'
 5. Read synthesizedResult and shareInfo.shareUrl
 ```
@@ -368,10 +368,10 @@ interface ServiceFeedback {
 ### Pattern 2: Validate Then Submit
 
 ```
-1. POST /research/validate-input with { prompt, includeImprovement: true }
+1. POST /validate-input with { prompt, includeImprovement: true }
 2. If quality === 0: reject, prompt is invalid
 3. If quality === 1 and improvedPrompt is present: offer improved version to user
-4. POST /research with final prompt
+4. POST / with final prompt
 ```
 
 ### Pattern 3: Internal Draft Creation (from another service)
@@ -387,7 +387,7 @@ interface ServiceFeedback {
 
 ```
 1. Ensure source research status === 'completed'
-2. POST /research/:sourceId/enhance with additionalModels and/or additionalContexts
+2. POST /:sourceId/enhance with additionalModels and/or additionalContexts
 3. Poll new research ID to completion
 4. Compare totalCostUsd vs sourceLlmCostUsd to see incremental spend
 ```
@@ -395,9 +395,9 @@ interface ServiceFeedback {
 ### Pattern 5: OpenRouter Model Discovery
 
 ```
-1. GET /research/openrouter/models -> list of 15 curated models with pricing
+1. GET /openrouter/models -> list of 15 curated models with pricing
 2. Select models by id, prefix with 'or:' for selectedModels array
-3. POST /research with or:-prefixed model IDs alongside native models
+3. POST / with or:-prefixed model IDs alongside native models
 ```
 
 ## Error Handling
@@ -415,7 +415,7 @@ interface ServiceFeedback {
 
 | Topic env var                              | Event type         | When                                              | Key payload fields                        |
 | ------------------------------------------ | ------------------ | ------------------------------------------------- | ----------------------------------------- |
-| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | `research.process` | After `POST /research` or draft approved          | `researchId`, `userId`, `triggeredBy`     |
+| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | `research.process` | After `POST /` or draft approved          | `researchId`, `userId`, `triggeredBy`     |
 | `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | `llm.call`         | Once per model during process-research            | `researchId`, `userId`, `model`, `prompt` |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | WhatsApp send      | On LLM failure or research completion             | notification payload (`important: true`)  |
 

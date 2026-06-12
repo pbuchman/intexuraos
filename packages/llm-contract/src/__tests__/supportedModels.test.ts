@@ -12,6 +12,8 @@ import {
   isOpenRouterModel,
   createOpenRouterModelId,
   getOpenRouterRawId,
+  isToolCallingModel,
+  OpenRouterToolCallingModels,
   DEFAULT_OPENROUTER_MODELS,
   isDefaultEligibleModel,
   DEFAULT_MODEL_DISPLAY_NAMES,
@@ -54,6 +56,23 @@ describe('OpenRouter model helpers', () => {
   });
 });
 
+describe('Tool calling model helpers', () => {
+  it('accepts the static Gemini tool calling model', () => {
+    expect(isToolCallingModel('gemini-2.5-flash')).toBe(true);
+  });
+
+  it('accepts OpenRouter model IDs for tool calling', () => {
+    expect(isToolCallingModel(OpenRouterToolCallingModels.Gemini3FlashPreview)).toBe(true);
+  });
+
+  it('rejects non-tool-calling model IDs', () => {
+    expect(isToolCallingModel('gemini-2.5-pro')).toBe(false);
+    expect(isToolCallingModel('or:some/unknown-model')).toBe(false);
+    expect(isToolCallingModel('or:')).toBe(false);
+    expect(isToolCallingModel('not-a-model')).toBe(false);
+  });
+});
+
 describe('LlmProviders constants', () => {
   it('contains all 5 providers (including OpenRouter)', () => {
     expect(LlmProviders.Google).toBe('google');
@@ -80,8 +99,8 @@ describe('getProviderForModel', () => {
 
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
-    it('contains all 14 expected models', () => {
-      expect(ALL_LLM_MODELS).toHaveLength(14);
+    it('contains all 15 expected models', () => {
+      expect(ALL_LLM_MODELS).toHaveLength(15);
     });
 
     it('contains all Google models', () => {
@@ -101,6 +120,7 @@ describe('supportedModels', () => {
     it('contains all Anthropic models', () => {
       expect(ALL_LLM_MODELS).toContain('claude-opus-4-6');
       expect(ALL_LLM_MODELS).toContain('claude-sonnet-4-6');
+      expect(ALL_LLM_MODELS).toContain('claude-sonnet-4-7');
       expect(ALL_LLM_MODELS).toContain('claude-3-5-haiku-20241022');
     });
 
@@ -137,6 +157,7 @@ describe('supportedModels', () => {
     it('maps Anthropic models correctly', () => {
       expect(MODEL_PROVIDER_MAP['claude-opus-4-6']).toBe('anthropic');
       expect(MODEL_PROVIDER_MAP['claude-sonnet-4-6']).toBe('anthropic');
+      expect(MODEL_PROVIDER_MAP['claude-sonnet-4-7']).toBe('anthropic');
       expect(MODEL_PROVIDER_MAP['claude-3-5-haiku-20241022']).toBe('anthropic');
     });
 

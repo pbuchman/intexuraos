@@ -119,6 +119,20 @@ resource "google_monitoring_metric_descriptor" "code_tasks_active" {
   }
 }
 
+resource "google_monitoring_metric_descriptor" "code_tasks_failed" {
+  description  = "Number of code tasks that ended in a non-success terminal state"
+  display_name = "Code Tasks Failed"
+  type         = "custom.googleapis.com/intexuraos/code_tasks_failed"
+  metric_kind  = "CUMULATIVE"
+  value_type   = "INT64"
+
+  labels {
+    key         = "reason"
+    value_type  = "STRING"
+    description = "Terminal failure reason (failed, interrupted, cancelled)"
+  }
+}
+
 resource "google_monitoring_metric_descriptor" "code_tasks_cost_dollars" {
   description  = "Estimated cost of code tasks in dollars"
   display_name = "Code Tasks Cost"
@@ -539,6 +553,23 @@ resource "google_monitoring_notification_channel" "email" {
 
   labels = {
     email_address = var.alert_email
+  }
+}
+
+# Slack notification channel — provisioned only when a bot token is supplied.
+# Cloud Monitoring requires the token at the `chat:write` scope; the token is
+# stored under `sensitive_labels` so Terraform does not emit it in plan output.
+resource "google_monitoring_notification_channel" "slack" {
+  count        = var.slack_auth_token != null ? 1 : 0
+  display_name = "IntexuraOS Alerts — Slack"
+  type         = "slack"
+
+  labels = {
+    channel_name = var.slack_channel_name
+  }
+
+  sensitive_labels {
+    auth_token = var.slack_auth_token
   }
 }
 

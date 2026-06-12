@@ -1,4 +1,4 @@
-import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
 import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
@@ -168,6 +168,7 @@ export interface AppConfig {
   whatsappServiceUrl: string;
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
+  fishingAssistantServiceUrl: string;
   ResearchAgentUrl: string;
   commandsAgentServiceUrl: string;
   actionsAgentUrl: string;
@@ -182,6 +183,8 @@ export interface AppConfig {
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
   llmUsageServiceUrl: string;
+  imageServiceUrl: string;
+  webAgentUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
@@ -929,10 +932,69 @@ export interface CodeTaskError {
   code: string;
   message: string;
   remediation?: {
+    action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';
     retryAfter?: number;
     manualSteps?: string;
     supportLink?: string;
   };
+}
+
+export type CodeTaskDispatchStatusReason =
+  | 'no_enabled_workers'
+  | 'workers_unreachable'
+  | 'worker_health_contract_mismatch'
+  | 'workers_at_capacity'
+  | 'codex_auth_unavailable'
+  | 'claude_auth_unavailable'
+  | 'provider_auth_unavailable'
+  | 'docker_unavailable'
+  | 'disk_unavailable'
+  | 'unknown_worker_type'
+  | 'worker_unavailable'
+  | 'worker_busy'
+  | 'at_capacity'
+  | 'network_error'
+  | 'dispatch_failed'
+  | 'invalid_response'
+  | 'queue_full'
+  | 'queue_timeout'
+  | 'retry_expired'
+  | 'retry_exhausted'
+  | 'missing_pr_branch'
+  | 'scheduled_wait'
+  | 'active_task_blocked';
+
+export interface CodeTaskDispatchStatus {
+  state: 'waiting' | 'blocked' | 'terminal';
+  reason: CodeTaskDispatchStatusReason;
+  terminal: boolean;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  nextAction: 'will_retry_automatically' | 'retry_after_fix' | 'wait_until_scheduled' | 'wait_for_active_task';
+  lastAttemptAt?: string;
+  attemptCount?: number;
+  expiresAt?: string;
+  terminalCause?: {
+    reason: CodeTaskDispatchStatusReason;
+    message: string;
+    remediation: string;
+    workerNames: string[];
+    lastSeenAt: string;
+  };
+  workerHealthDetails?: {
+    workerName: string;
+    tag: string;
+    healthy: boolean;
+    reason?: string;
+    error?: string;
+    code?: string;
+    missingFields?: string[];
+    contractMismatch?: boolean;
+  }[];
 }
 
 export interface CodeTaskExecutionMemoryMatch {
@@ -981,6 +1043,21 @@ export interface CodeTaskExecutionMemoryPostRun {
   completedAt?: string;
 }
 
+export interface CodeTaskCallbackState {
+  webhookUrl: string;
+  callbackBaseUrl: string;
+  owner: 'dev' | 'prod' | 'custom';
+  configuredAt: string;
+  lastSuccessAt?: string;
+  lastSuccessEndpoint?: 'logs' | 'task_event' | 'task_complete' | 'status' | 'turn_metrics';
+  lastFailure?: {
+    endpoint: 'logs' | 'task_event' | 'task_complete' | 'status' | 'turn_metrics';
+    status?: number;
+    message: string;
+    occurredAt: string;
+  };
+}
+
 /**
  * Code task from code-agent
  */
@@ -998,6 +1075,7 @@ export interface CodeTask {
   status: CodeTaskStatus;
   dedupKey: string;
   callbackReceived: boolean;
+  callbackState?: CodeTaskCallbackState;
   createdAt: string;
   updatedAt: string;
   dispatchedAt?: string;
@@ -1017,15 +1095,21 @@ export interface CodeTask {
     lastCommentAt: string | null;
   };
   prNumber?: number;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
   implementationTaskId?: string;
   fanOutChildTaskIds?: string[];
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'merge_conflict';
   result?: CodeTaskResult;
   error?: CodeTaskError;
+  dispatchStatus?: CodeTaskDispatchStatus;
   executionMemoryContext?: CodeTaskExecutionMemoryContext;
   executionMemoryPostRun?: CodeTaskExecutionMemoryPostRun;
+  /**
+   * User-customised per-task timeout in hours (1–12). Absent when the user
+   * accepted the orchestrator default (5h). INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 export type TaskMode = 'planning' | 'execution';
@@ -1042,13 +1126,23 @@ export interface SubmitCodeTaskRequest {
   workerType?: CodeTaskWorkerType;
   linearIssueId?: string;
   taskMode?: TaskMode;
+  scheduledDispatch?: {
+    localDateTime: string;
+    timezone: string;
+    notBeforeAt: string; // ISO UTC
+  };
+  /**
+   * Optional per-task timeout override in hours (1–12). When omitted, the
+   * orchestrator default (5h) applies. INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 /**
  * Response from submitting a code task
  */
 export interface SubmitCodeTaskResponse {
-  status: 'submitted';
+  status: 'submitted' | 'failed';
   codeTaskId: string;
 }
 
@@ -1056,7 +1150,7 @@ export interface SubmitCodeTaskResponse {
  * Response from POST /code/ask-agent/start
  */
 export interface AskAgentStartResponse {
-  status: 'submitted';
+  status: 'submitted' | 'failed';
   codeTaskId: string;
 }
 
@@ -1101,7 +1195,7 @@ export interface ListCodeTasksResponse {
 /**
  * Worker health status tag
  */
-export type WorkerStatusTag = 'healthy' | 'orchestrator-unreachable' | 'tunnel-down' | 'unknown';
+export type WorkerStatusTag = 'healthy' | 'orchestrator-unreachable' | 'tunnel-down' | 'unknown' | 'disabled';
 
 /**
  * Worker status details
@@ -1113,6 +1207,9 @@ export interface WorkerStatusDetails {
   responseTimeMs?: number;
   reason?: string;
   code?: string;
+  error?: string;
+  missingFields?: string[];
+  contractMismatch?: boolean;
 }
 
 /**
@@ -1122,6 +1219,7 @@ export interface WorkerStatus {
   name: string;
   url: string;
   priority: number;
+  enabled: boolean;
   healthy: boolean;
   status: WorkerStatusTag;
   details: WorkerStatusDetails | null;
@@ -1322,3 +1420,30 @@ export type {
   ListExecutionsResponse,
   CreateScheduleRequest,
 } from './cronAgent.js';
+
+export type {
+  FishingContentType,
+  FishingKnowledgeIndexingStatus,
+  FishingEvidenceSourceType,
+  FishingChatRole,
+  FishingAnswerConfidence,
+  FishingDigestGroup,
+  FishingDigestItem,
+  FishingDigestListResponse,
+  FishingIdentityLedgerEntry,
+  FishingModeratorEvent,
+  FishingOpenThread,
+  FishingDigestState,
+  FishingDigestDetail,
+  FishingKnowledgeFolder,
+  FishingKnowledgePage,
+  FishingMessageCitation,
+  FishingChat,
+  FishingChatMessage,
+  ListFishingDigestsOptions,
+  CreateFishingKnowledgeFolderInput,
+  UpdateFishingKnowledgeFolderInput,
+  CreateFishingKnowledgePageInput,
+  UpdateFishingKnowledgePageInput,
+  SendFishingChatMessageResponse,
+} from './fishingAssistant.js';

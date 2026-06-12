@@ -14,7 +14,30 @@ export interface TaskVerificationRecord {
   attempt: number;
   passed: boolean;
   missingFields: string[];
+  /** Memory-telemetry fields missing at this attempt. Separate from missingFields because they may be non-blocking for optional-tier workers. Absent in records written before the tiered-telemetry change. */
+  telemetryMissingFields?: string[];
+  /** True when this attempt was accepted despite missing telemetry (tier=optional). Absent or false otherwise. */
+  telemetryAccepted?: boolean;
   verifierFailure: boolean;
+  createdAt: string;
+}
+
+/**
+ * Sub-reasons attached to a `WORKER_INFRA_FAILURE` TaskError (INT-1455).
+ * Kept as a literal union so producers (the attempt classifier) and
+ * consumers (orchestrator + downstream) can match exhaustively.
+ */
+export type InfraFailureSubReason =
+  | 'container_exit_before_session_init'
+  | 'entrypoint_failed'
+  | 'git_worktree_lost'
+  | 'image_pull_failed'
+  | 'duration_below_threshold'
+  | 'empty_transcript';
+
+export interface TaskInfraFailureRecord {
+  attempt: number;
+  subReason: InfraFailureSubReason;
   createdAt: string;
 }
 
@@ -80,6 +103,12 @@ export interface Task {
    */
   verificationHistory?: TaskVerificationRecord[];
   /**
+   * Records of attempts classified as WORKER_INFRA_FAILURE.
+   * Used to abort retries when the same sub-reason repeats across attempts
+   * (e.g. `git_worktree_lost` N vs N-1) — re-running Claude cannot fix infra.
+   */
+  taskInfraFailureHistory?: TaskInfraFailureRecord[];
+  /**
    * Set when a completed task is resumed via sendMessage().
    * Gates loosened completion verification (exit code + runtime-reported hard error only).
    * Cleared before persisting in finalizeTask().
@@ -103,6 +132,12 @@ export interface Task {
    * Tracks lifetime restarts for observability — never reset.
    */
   inactivityRestartCount?: number;
+  /**
+   * Resolved per-task timeout in milliseconds, derived from
+   * `CreateTaskRequest.timeoutHours`. When undefined, the orchestrator
+   * falls back to TASK_TIMEOUT_KILL_MS (5h). INT-1585.
+   */
+  timeoutMs?: number;
 }
 
 export interface TaskResult {
@@ -121,7 +156,7 @@ export interface TaskResult {
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
-  execution_outcome_label?: 'implemented' | 'already_completed';
+  execution_outcome_label?: 'implemented' | 'already_completed' | 'failed';
   execution_superpowers_subagent_driven_dev_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
   execution_memory_ids_used?: string;

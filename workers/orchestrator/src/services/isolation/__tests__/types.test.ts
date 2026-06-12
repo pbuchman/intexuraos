@@ -3,9 +3,41 @@ import { WORKER_TYPES, type WorkerSecrets } from '../types.js';
 
 describe('WORKER_TYPES configuration', () => {
   it('stays in sync with the shared code task worker type list', async () => {
-    const commonCore = (await import('@intexuraos/common-core')) as Record<string, unknown>;
+    const codeTaskDomain = (await import('@intexuraos/code-task-domain')) as Record<
+      string,
+      unknown
+    >;
 
-    expect(commonCore['CODE_TASK_WORKER_TYPES']).toEqual(Object.keys(WORKER_TYPES));
+    expect(codeTaskDomain['CODE_TASK_WORKER_TYPES']).toEqual(Object.keys(WORKER_TYPES));
+  });
+
+  it('keeps orchestrator runtime config in sync with shared capability metadata', async () => {
+    const codeTaskDomain = (await import('@intexuraos/code-task-domain')) as Record<
+      string,
+      unknown
+    >;
+    const capabilities = codeTaskDomain['CODE_TASK_WORKER_CAPABILITIES'] as Record<
+      string,
+      { runtimeFamily: string; auth: { kind: string; envVar?: string } }
+    >;
+
+    for (const [workerType, config] of Object.entries(WORKER_TYPES)) {
+      const capability = capabilities[workerType];
+      expect(capability, `${workerType} missing shared capability metadata`).toBeDefined();
+      if (capability === undefined) {
+        throw new Error(`${workerType} missing shared capability metadata`);
+      }
+      expect(capability.runtimeFamily === 'codex' ? 'codex' : 'claude').toBe(config.runtime);
+      if (capability.auth.kind === 'api_key') {
+        expect(config.apiKeyEnvVar).toBe(capability.auth.envVar);
+      }
+      if (capability.auth.kind === 'claude') {
+        expect(config.apiKeyEnvVar).toBe('ANTHROPIC_API_KEY');
+      }
+      if (capability.auth.kind === 'codex') {
+        expect(config.apiKeyEnvVar).toBeUndefined();
+      }
+    }
   });
 
   it('uses generic opus alias so CLI resolves the latest model at runtime', () => {
@@ -20,8 +52,16 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.qwen.model).toBe('qwen3.5-plus');
   });
 
-  it('uses kimi as the worker key and preserves kimi-k2.5 as the provider model id', () => {
-    expect(WORKER_TYPES.kimi.model).toBe('kimi-k2.5');
+  it('routes mimo-pro to MiMo Pro 2.5 provider model id', () => {
+    expect(WORKER_TYPES['mimo-pro'].model).toBe('mimo-v2.5-pro');
+  });
+
+  it('routes kimi to native Kimi Code API using stable coding model with thinking enabled', () => {
+    expect(WORKER_TYPES.kimi.runtime).toBe('claude');
+    expect(WORKER_TYPES.kimi.apiBaseUrl).toBe('https://api.kimi.com/coding');
+    expect(WORKER_TYPES.kimi.apiKeyEnvVar).toBe('KIMI_API_KEY');
+    expect(WORKER_TYPES.kimi.model).toBe('kimi-for-coding');
+    expect(WORKER_TYPES.kimi.effort).toBe('high');
   });
 
   it('does not set a model for auto worker type', () => {
@@ -84,6 +124,7 @@ describe('WORKER_TYPES configuration', () => {
       'MINIMAX_API_KEY',
       'MIMO_API_KEY',
       'DASHSCOPE_API_KEY',
+      'KIMI_API_KEY',
       'OPENROUTER_API_KEY',
     ]);
 

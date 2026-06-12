@@ -12,6 +12,8 @@ export type {
   GenerateResult,
   ImageGenerationResult,
   ImageGenerateOptions,
+  LLMCorrelationOptions,
+  ResearchOptions,
   SynthesisInput,
   LLMErrorCode,
   LLMError,
@@ -35,6 +37,7 @@ export {
   isDefaultEligibleModel,
   DEFAULT_OPENROUTER_MODELS,
   DEFAULT_MODEL_DISPLAY_NAMES,
+  OpenRouterToolCallingModels,
 } from './supportedModels.js';
 
 export type {
@@ -47,6 +50,8 @@ export type {
   GenericModel,
   DefaultEligibleModel,
   DefaultOpenRouterModel,
+  OpenRouterGemini3FlashPreview,
+  OpenRouterToolCallingModel,
   // Individual model types
   Gemini25Pro,
   Gemini25Flash,

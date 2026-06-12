@@ -4,7 +4,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { err, ok, type Logger } from '@intexuraos/common-core';
 
-import { createFirestoreExecutionMemoryRepository } from '../../../infra/repositories/firestoreExecutionMemoryRepository.js';
+import { createFirestoreExecutionMemoryRepository } from '../../../infra/firestore/firestoreExecutionMemoryRepository.js';
 
 describe('firestoreExecutionMemoryRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -93,6 +93,10 @@ describe('firestoreExecutionMemoryRepository', () => {
 
     expect(found.value?.id).toBe(created.value.id);
     expect(found.value?.title).toBe('Update route schema and task serialization together');
+
+    const stored = await fakeFirestore.collection('execution_memories').doc(created.value.id).get();
+    expect(stored.get('schemaVersion')).toBe(1);
+    expect(stored.get('schemaUpdatedAt')).toBeInstanceOf(Timestamp);
   });
 
   it('updates counters and status for an existing memory', async () => {

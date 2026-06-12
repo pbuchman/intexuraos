@@ -27,28 +27,40 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { ok, err } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { ServiceContainer } from '../../services.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
+
+function dispatchCompatibleHealth(): Record<string, unknown> {
+  return {
+    status: 'ready',
+    capacity: 2,
+    running: 0,
+    available: 2,
+    workerAuths: {},
+    providerApiKeys: {},
+    dockerHealthy: true,
+    diskHealthy: true,
+  };
+}
 
 describe('Worker Settings Routes', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -140,11 +152,7 @@ describe('Worker Settings Routes', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo,
       workerHealthProbe: mockWorkerHealthProbe,
@@ -196,7 +204,7 @@ describe('Worker Settings Routes', () => {
     it('should return empty workers array for new user', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -214,7 +222,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -238,7 +246,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -273,19 +281,19 @@ describe('Worker Settings Routes', () => {
       // Mock the health endpoint for worker test
       nock('https://tested-worker.example.com')
         .get('/health')
-        .reply(200, { status: 'ok' });
+        .reply(200, dispatchCompatibleHealth());
 
       // Test the worker to populate testStatus/testMessage/lastTestedAt
       await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers/tested-worker/test',
+        url: '/worker-settings/workers/tested-worker/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
       // GET settings and verify test fields are included in masked response
       const response = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -323,7 +331,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -346,7 +354,7 @@ describe('Worker Settings Routes', () => {
     it('should add new worker', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -388,7 +396,7 @@ describe('Worker Settings Routes', () => {
       // Try to add 3rd worker
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -412,7 +420,7 @@ describe('Worker Settings Routes', () => {
       // First add a worker
       await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -429,7 +437,7 @@ describe('Worker Settings Routes', () => {
       // Try to add again with same name
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -458,7 +466,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -486,7 +494,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -514,7 +522,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -538,7 +546,7 @@ describe('Worker Settings Routes', () => {
     it('should validate worker name format', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -561,7 +569,7 @@ describe('Worker Settings Routes', () => {
     it('should reject masked cfAccessClientId', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -586,7 +594,7 @@ describe('Worker Settings Routes', () => {
     it('should reject masked cfAccessClientSecret', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -610,7 +618,7 @@ describe('Worker Settings Routes', () => {
     it('should reject masked dispatchSigningSecret', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers',
+        url: '/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -647,7 +655,7 @@ describe('Worker Settings Routes', () => {
     it('should update existing worker', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -669,7 +677,7 @@ describe('Worker Settings Routes', () => {
     it('should support partial updates', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -683,7 +691,7 @@ describe('Worker Settings Routes', () => {
 
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -697,7 +705,7 @@ describe('Worker Settings Routes', () => {
     it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/cloud-vm',
+        url: '/worker-settings/workers/cloud-vm',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -716,7 +724,7 @@ describe('Worker Settings Routes', () => {
     it('should reject masked credentials in update', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -742,7 +750,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -775,7 +783,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/null-user-worker',
+        url: '/worker-settings/workers/null-user-worker',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -799,7 +807,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -819,7 +827,7 @@ describe('Worker Settings Routes', () => {
     it('should allow partial update with url only (no credentials)', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -851,7 +859,7 @@ describe('Worker Settings Routes', () => {
     it('should delete existing worker', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -862,7 +870,7 @@ describe('Worker Settings Routes', () => {
 
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -873,7 +881,7 @@ describe('Worker Settings Routes', () => {
     it('should preserve default review worker type when deleting the last worker', async () => {
       const patchResponse = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -885,7 +893,7 @@ describe('Worker Settings Routes', () => {
 
       const deleteResponse = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -893,7 +901,7 @@ describe('Worker Settings Routes', () => {
 
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -909,7 +917,7 @@ describe('Worker Settings Routes', () => {
     it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/workers/cloud-vm',
+        url: '/worker-settings/workers/cloud-vm',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -927,7 +935,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -954,7 +962,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/workers/null-user-worker',
+        url: '/worker-settings/workers/null-user-worker',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -972,7 +980,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/workers/home-mac',
+        url: '/worker-settings/workers/home-mac',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -999,7 +1007,7 @@ describe('Worker Settings Routes', () => {
     it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers/cloud-vm/test',
+        url: '/worker-settings/workers/cloud-vm/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -1012,11 +1020,11 @@ describe('Worker Settings Routes', () => {
     it('should test connectivity and update result on success', async () => {
       nock('https://mac-worker.example.com')
         .get('/health')
-        .reply(200, { status: 'ok' });
+        .reply(200, dispatchCompatibleHealth());
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers/home-mac/test',
+        url: '/worker-settings/workers/home-mac/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -1047,7 +1055,7 @@ describe('Worker Settings Routes', () => {
 
       nock('https://null-worker.example.com')
         .get('/health')
-        .reply(200, { status: 'ok' });
+        .reply(200, dispatchCompatibleHealth());
 
       mockedJwtVerify.mockResolvedValueOnce({
         payload: { sub: null, email: 'test@example.com' },
@@ -1056,7 +1064,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers/null-user-worker/test',
+        url: '/worker-settings/workers/null-user-worker/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -1077,7 +1085,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers/home-mac/test',
+        url: '/worker-settings/workers/home-mac/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -1095,7 +1103,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers/home-mac/test',
+        url: '/worker-settings/workers/home-mac/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -1120,7 +1128,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/workers/home-mac/test',
+        url: '/worker-settings/workers/home-mac/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -1160,7 +1168,7 @@ describe('Worker Settings Routes', () => {
     it('should reorder workers', async () => {
       const response = await app.inject({
         method: 'PUT',
-        url: '/code/worker-settings/priority',
+        url: '/worker-settings/priority',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -1177,7 +1185,7 @@ describe('Worker Settings Routes', () => {
 
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -1192,7 +1200,7 @@ describe('Worker Settings Routes', () => {
     it('should return error for non-existent worker', async () => {
       const response = await app.inject({
         method: 'PUT',
-        url: '/code/worker-settings/priority',
+        url: '/worker-settings/priority',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -1232,7 +1240,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/code/worker-settings/priority',
+        url: '/worker-settings/priority',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -1256,7 +1264,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/code/worker-settings/priority',
+        url: '/worker-settings/priority',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
@@ -1278,7 +1286,7 @@ describe('Worker Settings Routes', () => {
     it('should update default review worker type with valid type', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'glm' },
       });
@@ -1291,7 +1299,7 @@ describe('Worker Settings Routes', () => {
       // Verify GET returns the saved value
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer valid-token' },
       });
 
@@ -1302,7 +1310,7 @@ describe('Worker Settings Routes', () => {
     it('should reject invalid worker type', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'invalid-type' },
       });
@@ -1318,7 +1326,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'opus' },
       });
@@ -1341,7 +1349,7 @@ describe('Worker Settings Routes', () => {
       for (const { endpoint, value } of fields) {
         const response = await app.inject({
           method: 'PATCH',
-          url: `/code/worker-settings/${endpoint}`,
+          url: `/worker-settings/${endpoint}`,
           headers: { Authorization: 'Bearer valid-token' },
           payload: { workerType: value },
         });
@@ -1350,7 +1358,7 @@ describe('Worker Settings Routes', () => {
 
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer valid-token' },
       });
 
@@ -1364,7 +1372,7 @@ describe('Worker Settings Routes', () => {
     it('should not include defaultReviewWorkerType in GET when not set', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer valid-token' },
       });
 
@@ -1377,7 +1385,7 @@ describe('Worker Settings Routes', () => {
       // First set a concrete value
       await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'glm' },
       });
@@ -1385,7 +1393,7 @@ describe('Worker Settings Routes', () => {
       // Verify it was set
       const getResponse1 = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer valid-token' },
       });
       const body1 = JSON.parse(getResponse1.body) as { success: boolean; data: { defaultReviewWorkerType?: string } };
@@ -1394,7 +1402,7 @@ describe('Worker Settings Routes', () => {
       // Now clear it by sending "auto"
       const clearResponse = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'auto' },
       });
@@ -1403,7 +1411,7 @@ describe('Worker Settings Routes', () => {
       // Verify it was cleared
       const getResponse2 = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer valid-token' },
       });
       const body2 = JSON.parse(getResponse2.body) as { success: boolean; data: { defaultReviewWorkerType?: string } };
@@ -1422,7 +1430,7 @@ describe('Worker Settings Routes', () => {
       for (const { endpoint, value } of fields) {
         await app.inject({
           method: 'PATCH',
-          url: `/code/worker-settings/${endpoint}`,
+          url: `/worker-settings/${endpoint}`,
           headers: { Authorization: 'Bearer valid-token' },
           payload: { workerType: value },
         });
@@ -1431,7 +1439,7 @@ describe('Worker Settings Routes', () => {
       // Clear only remediation
       await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-remediation-worker-type',
+        url: '/worker-settings/default-remediation-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'auto' },
       });
@@ -1439,7 +1447,7 @@ describe('Worker Settings Routes', () => {
       // Verify remediation cleared but others remain
       const getResponse = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer valid-token' },
       });
       const body = JSON.parse(getResponse.body) as {
@@ -1465,7 +1473,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'auto' },
       });
@@ -1480,7 +1488,7 @@ describe('Worker Settings Routes', () => {
     it('should handle clearing when no settings document exists', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/default-review-worker-type',
+        url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
         payload: { workerType: 'auto' },
       });
@@ -1497,7 +1505,7 @@ describe('Worker Settings Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/code/worker-settings',
+        url: '/worker-settings',
         headers: { Authorization: 'Bearer invalid-token' },
       });
 

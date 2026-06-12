@@ -57,9 +57,9 @@ cloudbuild.dynamic.json
 
 speechmatics-js-sdk/
 
-# Firestore rules (deployed via firebase deploy)
-# firestore.indexes.json - tracked in git for version control
-firestore.rules
+# Firestore artifacts are tracked in git for drift detection
+# firestore.indexes.json
+# firestore.rules
 
 # Local Next.js build output
 apps/web/dev-dist/

@@ -47,8 +47,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Install dependencies
         run: |
@@ -163,6 +161,8 @@ jobs:
           INTEXURAOS_TOKEN_ENCRYPTION_KEY=test-encryption-key-must-be-32chars \
           INTEXURAOS_GITHUB_WEBHOOK_SECRET=test-github-webhook-secret \
           INTEXURAOS_SERVICE_URL=http://127.0.0.1:8128 \
+          INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL=http://127.0.0.1:8128 \
+          INTEXURAOS_WEB_APP_URL=https://dev.intexuraos.cloud \
           FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 \
           PUBSUB_EMULATOR_HOST=127.0.0.1:8085 \
           pnpm tsx src/index.ts > /tmp/code-agent.log 2>&1 &

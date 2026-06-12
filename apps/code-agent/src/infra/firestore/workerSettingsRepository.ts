@@ -10,7 +10,8 @@
 import { FieldValue } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@intexuraos/infra-firestore';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
-import type { Logger, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type {
   WorkerSettingsRepository,
   WorkerSettingsError,
@@ -66,7 +67,7 @@ interface EncryptedWorkerConfig {
   cfAccessClientId: string; // encrypted
   cfAccessClientSecret: string; // encrypted
   dispatchSigningSecret: string; // encrypted
-  enabled: boolean;
+  enabled?: boolean;
   lastTestedAt?: string;
   testStatus?: 'success' | 'failure';
   testMessage?: string;
@@ -85,7 +86,7 @@ function decryptWorkerConfig(
     cfAccessClientId: decryptToken(encrypted.cfAccessClientId),
     cfAccessClientSecret: decryptToken(encrypted.cfAccessClientSecret),
     dispatchSigningSecret: decryptToken(encrypted.dispatchSigningSecret),
-    enabled: encrypted.enabled,
+    enabled: encrypted.enabled ?? true,
   };
 
   if (encrypted.lastTestedAt !== undefined) {
@@ -303,7 +304,7 @@ export function createWorkerSettingsRepository(
             config.dispatchSigningSecret !== undefined
               ? encryptToken(config.dispatchSigningSecret)
               : existingWorker.dispatchSigningSecret,
-          enabled: config.enabled ?? existingWorker.enabled,
+          enabled: config.enabled ?? existingWorker.enabled ?? true,
           ...(existingWorker.lastTestedAt !== undefined && { lastTestedAt: existingWorker.lastTestedAt }),
           ...(existingWorker.testStatus !== undefined && { testStatus: existingWorker.testStatus }),
           ...(existingWorker.testMessage !== undefined && { testMessage: existingWorker.testMessage }),

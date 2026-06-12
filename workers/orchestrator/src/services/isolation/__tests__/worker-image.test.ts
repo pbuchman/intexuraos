@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const dockerfilePath = fileURLToPath(
-  new URL('../../../../../code-worker/Dockerfile', import.meta.url)
+  new URL('../../../../../../docker/code-worker/Dockerfile', import.meta.url)
 );
 const dockerfileTestPath = fileURLToPath(
-  new URL('../../../../../code-worker/Dockerfile.test', import.meta.url)
+  new URL('../../../../../../docker/code-worker/Dockerfile.test', import.meta.url)
 );
 const entrypointPath = fileURLToPath(
-  new URL('../../../../../code-worker/entrypoint.sh', import.meta.url)
+  new URL('../../../../../../docker/code-worker/entrypoint.sh', import.meta.url)
 );
 
 describe('code-worker image Codex skill bootstrap', () => {
@@ -74,6 +74,16 @@ describe('code-worker image Codex skill bootstrap', () => {
 
     // Exit code is used for the return value
     expect(entrypoint).toContain('return "$raw_exit"');
+  });
+
+  it('relies on the staged npmrc for pnpm store configuration instead of global config writes', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf8');
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+
+    expect(dockerfile).toContain(
+      'COPY --chown=claude:claude docker/code-worker/.npmrc /opt/claude-defaults/.npmrc'
+    );
+    expect(entrypoint).not.toContain('pnpm config set store-dir /home/claude/pnpm-store --global');
   });
 
   it('includes a codex stub in the test Dockerfile for E2E Codex-path coverage', () => {

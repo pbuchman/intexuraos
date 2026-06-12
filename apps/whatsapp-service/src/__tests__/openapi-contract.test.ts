@@ -32,6 +32,9 @@ describe('whatsapp-service OpenAPI contract', () => {
     mediaBucket: 'test-media-bucket',
     mediaCleanupTopic: 'test-media-cleanup',
     mediaCleanupSubscription: 'test-media-cleanup-sub',
+    commandsIngestTopic: 'test-commands-ingest',
+    audioStoredTopic: 'test-audio-stored',
+    approvalReplyTopic: 'test-approval-reply',
     gcpProjectId: 'test-project',
     webAgentUrl: 'https://web-agent.example.com',
     internalAuthToken: 'test-internal-auth-token',
@@ -111,9 +114,9 @@ describe('whatsapp-service OpenAPI contract', () => {
     }
   });
 
-  it('GET /whatsapp/webhooks 200 response is text/plain', () => {
+  it('GET /webhooks 200 response is text/plain', () => {
     const paths = openapiSpec.paths;
-    const getWebhook = paths?.['/whatsapp/webhooks']?.['get'];
+    const getWebhook = paths?.['/webhooks']?.['get'];
     expect(getWebhook).toBeDefined();
 
     const response200 = getWebhook?.responses?.['200'];
@@ -125,13 +128,13 @@ describe('whatsapp-service OpenAPI contract', () => {
   it('has required endpoints documented', () => {
     const paths = openapiSpec.paths;
 
-    expect(paths?.['/whatsapp/webhooks']).toBeDefined();
+    expect(paths?.['/webhooks']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
   });
 
-  it('POST /whatsapp/webhooks documents signature header', () => {
+  it('POST /webhooks documents signature header', () => {
     const paths = openapiSpec.paths;
-    const postWebhook = paths?.['/whatsapp/webhooks']?.['post'];
+    const postWebhook = paths?.['/webhooks']?.['post'];
     expect(postWebhook).toBeDefined();
     // Signature is documented in headers schema
   });

@@ -3,12 +3,22 @@
  * When initial LLM response fails schema validation, this builds a repair prompt.
  */
 
-export function buildSynthesisContextRepairPrompt(
-  originalPrompt: string,
-  invalidResponse: string,
-  errorMessage: string
-): string {
-  return `You are a JSON repair assistant. Fix the malformed synthesis context JSON to match the required schema exactly.
+import type { PromptBuilder } from '../shared/types.js';
+
+export interface SynthesisContextRepairPromptInput {
+  originalPrompt: string;
+  invalidResponse: string;
+  errorMessage: string;
+}
+
+export const synthesisContextRepairPrompt: PromptBuilder<SynthesisContextRepairPromptInput> = {
+  name: 'synthesis-context-repair',
+  description: 'Asks the LLM to fix a malformed synthesis-context JSON response',
+  version: '1.3.0',
+
+  build(input: SynthesisContextRepairPromptInput): string {
+    const { originalPrompt, invalidResponse, errorMessage } = input;
+    return `You are a JSON repair assistant. Fix the malformed synthesis context JSON to match the required schema exactly.
 
 This JSON object controls how multiple AI research reports are merged into a final synthesis. Fields like synthesis_goals and detected_conflicts determine the merging strategy.
 
@@ -75,5 +85,5 @@ EXPECTED SCHEMA:
 }
 
 Output the corrected JSON:`;
-}
-// Prompt version: 1.3.0
+  },
+};

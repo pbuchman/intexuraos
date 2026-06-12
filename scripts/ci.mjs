@@ -26,24 +26,14 @@ const phases = [
     ],
   },
   {
-    name: 'Tests',
-    parallel: false,
-    commands: [
-      {
-        name: 'test:coverage',
-        run: 'pnpm run test:coverage',
-        saveTo: 'scripts/test-results/test-output.txt',
-      },
-      { name: 'test-stdout', script: 'verify-test-stdout.mjs' },
-    ],
-  },
-  {
     name: 'Static Validation',
     parallel: true,
     failFast: true,
     commands: [
       { name: 'package-json', script: 'verify-package-json.mjs' },
+      { name: 'package-exports', script: 'verify-package-exports.mjs' },
       { name: 'date-formatting', script: 'verify-date-formatting.mjs' },
+      { name: 'dead-code', script: 'verify-dead-code.mjs' },
       { name: 'boundaries', script: 'verify-boundaries.mjs' },
       { name: 'common', script: 'verify-common.mjs' },
       { name: 'env-vars', script: 'verify-env-vars.mjs' },
@@ -55,16 +45,40 @@ const phases = [
       { name: 'terraform-secrets', script: 'verify-terraform-secrets.mjs' },
       { name: 'pubsub', script: 'verify-pubsub.mjs' },
       { name: 'logging', script: 'verify-logging.mjs' },
+      { name: 'incoming-request-logging', script: 'verify-incoming-request-logging.mjs' },
+      { name: 'no-raw-fetch', script: 'verify-no-raw-fetch.mjs' },
       { name: 'workspace-deps', script: 'verify-workspace-deps.mjs' },
       { name: 'migrations', script: 'verify-migrations.mjs' },
+      { name: 'firestore-artifacts', script: 'verify-firestore-artifacts.mjs' },
       { name: 'no-console', script: 'verify-no-console.mjs' },
+      { name: 'envelope', script: 'verify-envelope.mjs' },
       { name: 'reply-send', script: 'verify-reply-send.mjs' },
       { name: 'sentry-logging', script: 'verify-sentry-logging.mjs' },
-      { name: 'v8-ignore', script: 'verify-v8-ignore.mjs' },
+      { name: 'v8-ignore', run: 'node scripts/verify-v8-ignore.mjs --skip-coverage-data' },
+      { name: 'web-service-manifest', script: 'verify-web-service-manifest.mjs' },
+      { name: 'service-wiring', script: 'verify-service-wiring.mjs' },
+      { name: 'route-resource-names', script: 'verify-route-resource-names.mjs' },
       { name: 'error-serializers', script: 'verify-error-serializers.mjs' },
       { name: 'prompt-versions', script: 'verify-prompt-versions.mjs' },
       { name: 'llm-architecture', run: 'npx tsx scripts/verify-llm-architecture.ts' },
+      { name: 'web-env-lockstep', run: 'node scripts/ci/check-web-env-lockstep.cjs' },
     ],
+  },
+  {
+    name: 'Tests',
+    parallel: false,
+    commands: [
+      {
+        name: 'test:coverage',
+        run: 'node scripts/run-sharded-coverage.mjs --shards=3',
+      },
+      { name: 'test-stdout', script: 'verify-test-stdout.mjs' },
+    ],
+  },
+  {
+    name: 'Coverage Validation',
+    parallel: false,
+    commands: [{ name: 'v8-ignore:coverage', script: 'verify-v8-ignore.mjs' }],
   },
   {
     name: 'Build & Format',
@@ -74,6 +88,11 @@ const phases = [
       { name: 'build', run: 'pnpm run build' },
       { name: 'format', run: 'pnpm run format' },
     ],
+  },
+  {
+    name: 'Post-Build Checks',
+    parallel: false,
+    commands: [{ name: 'web-bundle-budget', run: 'node scripts/ci/check-web-bundle-budget.cjs' }],
   },
 ];
 
