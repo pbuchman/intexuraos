@@ -25,9 +25,9 @@
 
 ### Planned Features
 
-- **Tag filtering** — Add server-side tag filtering to the `GET /notes` endpoint. Implement via Firestore `array-contains-any` query with optional `tags` query parameter. Requires a composite index on `(userId, tags)`.
+- **Tag filtering** — Add server-side tag filtering to the `GET /` endpoint. Implement via Firestore `array-contains-any` query with optional `tags` query parameter. Requires a composite index on `(userId, tags)`.
 - **Full-text search** — Search across note title and content fields. May require Firestore full-text search integration or a dedicated search index.
-- **Pagination** — Add cursor-based pagination to `GET /notes` to handle users with large note collections efficiently.
+- **Pagination** — Add cursor-based pagination to `GET /` to handle users with large note collections efficiently.
 
 ### Proposed Enhancements
 
@@ -146,7 +146,6 @@ No deprecated APIs or dependencies in use.
 
 | Date       | Issue                               | Resolution                                             |
 | ---------- | ----------------------------------- | ------------------------------------------------------ |
-| 2026-02-16 | Dash0 OpenTelemetry integration     | Added distributed tracing via `@intexuraos/infra-otel` |
 | 2026-02-16 | Dev-mode log formatting for PM2     | Improved local log readability in PM2 output           |
 | 2026-02-14 | PM2 ecosystem uses pnpm --filter    | Unified local start script across all services         |
 | 2026-01-30 | Raw reply.send() in internal routes | Migrated to reply.fail() for auth errors               |

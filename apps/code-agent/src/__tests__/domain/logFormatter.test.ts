@@ -553,6 +553,46 @@ describe('formatLogChunk', () => {
       expect(result[0]?.text).toBe('  \u2717 File has not been read yet. Read it first before writing to it.');
       expect(result[0]?.text).not.toContain('<tool_use_error>');
     });
+
+    it('error tool_result with empty content after stripping returns nothing', () => {
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content: '<tool_use_error></tool_use_error>',
+        is_error: true
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result).toEqual([]);
+    });
+
+    it('error tool_result multi-line content indents continuation lines', () => {
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content: 'first error line\nsecond error line\nthird error line',
+        is_error: true
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2717 first error line\n    second error line\n    third error line');
+    });
+
+    it('error tool_result with >2048 chars and >50 lines is head+tail truncated', () => {
+      const lineCount = 60;
+      const lines: string[] = [];
+      for (let i = 0; i < lineCount; i++) {
+        // each line ~50 chars \u2192 well over 2048 total
+        lines.push(`error-line-${String(i)}-${'x'.repeat(40)}`);
+      }
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content: lines.join('\n'),
+        is_error: true
+      });
+      const result = formatLogChunk(json, 0, ts());
+      const text = result[0]?.text ?? '';
+      expect(text).toContain('[... 10 lines omitted ...]');
+      expect(text.startsWith('  \u2717 error-line-0-')).toBe(true);
+      expect(text).toContain('error-line-59-');
+      expect(text).not.toContain('error-line-10-');
+    });
   });
 
   describe('user messages (tool results)', () => {
@@ -1840,7 +1880,7 @@ describe('formatLogChunkForRuntime', () => {
     expect(formatLogChunkForRuntime('codex', '', 0, ts())).toEqual([]);
   });
 
-  it('preserves Codex JSON lines exactly', () => {
+  it('formats Codex JSON lines into readable text', () => {
     const json = JSON.stringify({
       type: 'item.completed',
       item: { type: 'agent_message', text: 'READY' },
@@ -1849,10 +1889,10 @@ describe('formatLogChunkForRuntime', () => {
     const result = formatLogChunkForRuntime('codex', `${json}\n`, 0, ts());
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.text).toBe(json);
+    expect(result[0]?.text).toBe('[msg] READY');
   });
 
-  it('does not truncate long Codex JSON payloads', () => {
+  it('does not leak raw JSON for long Codex message payloads', () => {
     const json = JSON.stringify({
       type: 'item.completed',
       item: { type: 'agent_message', text: 'x'.repeat(3000) },
@@ -1860,11 +1900,11 @@ describe('formatLogChunkForRuntime', () => {
 
     const result = formatLogChunkForRuntime('codex', `${json}\n`, 0, ts());
 
-    expect(result[0]?.text).toBe(json);
-    expect(result[0]?.text).not.toContain('[... TRUNCATED');
+    expect(result[0]?.text).toMatch(/^\[msg\] /);
+    expect(result[0]?.text).not.toContain('"type":"item.completed"');
   });
 
-  it('reassembles split Codex JSON lines exactly across chunk boundaries', () => {
+  it('reassembles split Codex JSON lines across chunk boundaries', () => {
     const state = createFormatterState();
     const json = JSON.stringify({
       type: 'item.completed',
@@ -1879,7 +1919,7 @@ describe('formatLogChunkForRuntime', () => {
     const result2 = formatLogChunkForRuntime('codex', `${json.slice(splitAt)}\n`, 1, ts(), state);
 
     expect(result2).toHaveLength(1);
-    expect(result2[0]?.text).toBe(json);
+    expect(result2[0]?.text).toBe('[msg] split-message');
     expect(state.partialLine).toBeUndefined();
   });
 
@@ -1895,7 +1935,7 @@ describe('formatLogChunkForRuntime', () => {
 
     const flushed = flushLogChunkFormatterForRuntime('codex', 8, ts(), state);
     expect(flushed).toHaveLength(1);
-    expect(flushed[0]?.text).toBe(json);
+    expect(flushed[0]?.text).toBe('[error] boom');
     expect(state.partialLine).toBeUndefined();
   });
 

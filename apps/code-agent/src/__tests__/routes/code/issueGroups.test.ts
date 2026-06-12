@@ -16,20 +16,20 @@ import { buildServer } from '../../../server.js';
 import { resetServices, setServices } from '../../../services.js';
 import type { ServiceContainer } from '../../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { Timestamp } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { createFirestoreDispatchRetryRepository } from '../../../infra/firestore/dispatchRetryRepository.js';
 import { createFirestoreMergeQueueWatchRepository } from '../../../infra/firestore/mergeQueueWatchRepository.js';
 import { createFirestoreEventDecisionRepository } from '../../../infra/firestore/eventDecisionRepository.js';
@@ -39,7 +39,7 @@ import type { Logger } from 'pino';
 import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../../domain/services/taskDispatcher.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { Result } from '@intexuraos/common-core';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
 import { createLinearIssueService } from '../../../domain/services/linearIssueService.js';
@@ -48,6 +48,11 @@ import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroup
 import type { UserGroupCounts, TaskGroupSummary } from '../../../domain/models/taskGroupSummary.js';
 import { createFakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
 import type { FakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
+import { createTaskGroupSummaryFirestoreRepository } from '../../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
+import {
+  createRepairArchivedOpenPrGroupsUseCase,
+  type RepairArchivedOpenPrGroupsDeps,
+} from '../../../domain/usecases/repairArchivedOpenPrGroups.js';
 
 function makeLinearAgentClient(): LinearAgentClient {
   const client: LinearAgentClient = {
@@ -95,7 +100,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     updateAfterDelete: async (): Promise<void> => { return; },
     getUserGroupCounts: async (): ReturnType<TaskGroupSummaryRepository['getUserGroupCounts']> => ok(defaultCounts),
     listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
-    recomputeGroupFromTasks: async (): Promise<void> => { return; },
+    recomputeGroupFromTasks: async (): ReturnType<TaskGroupSummaryRepository['recomputeGroupFromTasks']> => ok(undefined),
     recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
     setImportant: async (): ReturnType<TaskGroupSummaryRepository['setImportant']> => ok(undefined),
     ...overrides,
@@ -119,10 +124,15 @@ function makeTaskInput(overrides: Partial<CreateTaskInput> = {}): CreateTaskInpu
 }
 
 function makeSummary(overrides: Partial<TaskGroupSummary> & { linearIssueId: string }): TaskGroupSummary {
-  const now = new Date() as unknown as import('@google-cloud/firestore').Timestamp;
+  const now = Timestamp.fromDate(new Date('2026-05-06T00:00:00Z'));
+  const issueNumber = Number(overrides.linearIssueId.match(/^INT-(\d+)$/u)?.[1] ?? Number.NaN);
+  const sortFields = Number.isFinite(issueNumber)
+    ? { linearIssueNumber: issueNumber, linearIssueSortKey: issueNumber }
+    : { linearIssueNumber: null, linearIssueSortKey: Number.MAX_SAFE_INTEGER };
   return {
     userId: 'test-user-id',
     groupKey: overrides.linearIssueId,
+    ...sortFields,
     taskCount: 1,
     activeTaskCount: overrides.aggregateStatus === 'active' ? 1 : 0,
     latestTaskStatus: 'queued',
@@ -148,6 +158,8 @@ function makeStandaloneSummary(taskId: string): TaskGroupSummary {
   return {
     userId: 'test-user-id',
     linearIssueId: null,
+    linearIssueNumber: null,
+    linearIssueSortKey: Number.MAX_SAFE_INTEGER,
     groupKey: `standalone_${taskId}`,
     taskCount: 1,
     activeTaskCount: 1,
@@ -202,7 +214,6 @@ describe('GET /code/issue-groups', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -220,7 +231,7 @@ describe('GET /code/issue-groups', () => {
       taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
       mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
       prTriagePublisher: { publishPRTriage: async () => ok(undefined) } as never,
@@ -324,11 +335,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -392,7 +399,7 @@ describe('GET /code/issue-groups', () => {
   it('returns empty groups when no tasks exist', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -425,7 +432,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -457,7 +464,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -481,7 +488,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -502,7 +509,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -525,7 +532,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -558,7 +565,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -586,7 +593,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=failed',
+      url: '/issue-groups?groupStatus=failed',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -601,8 +608,8 @@ describe('GET /code/issue-groups', () => {
     expect(body.data.counts['failed']).toBe(1);
   });
 
-  it('sorts by linear-id by default', async () => {
-    const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-200', traceId: 'trace-s1' }));
+  it('sorts by linear-id by default using numeric issue order', async () => {
+    const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-99', traceId: 'trace-s1' }));
     expect(r1.ok).toBe(true);
     if (!r1.ok) return;
     await codeTaskRepo.update(r1.value.id, { status: 'cancelled' });
@@ -612,21 +619,21 @@ describe('GET /code/issue-groups', () => {
     if (!r2.ok) return;
     await codeTaskRepo.update(r2.value.id, { status: 'cancelled' });
 
-    const r3 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-300', traceId: 'trace-s3' }));
+    const r3 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-2', traceId: 'trace-s3' }));
     expect(r3.ok).toBe(true);
     if (!r3.ok) return;
     await codeTaskRepo.update(r3.value.id, { status: 'cancelled' });
 
     mockSummaries = [
-      makeSummary({ linearIssueId: 'INT-200', aggregateStatus: 'done' }),
-      makeSummary({ linearIssueId: 'INT-100', aggregateStatus: 'done' }),
-      makeSummary({ linearIssueId: 'INT-300', aggregateStatus: 'done' }),
+      makeSummary({ linearIssueId: 'INT-99', linearIssueNumber: 99, linearIssueSortKey: 99, aggregateStatus: 'done' }),
+      makeSummary({ linearIssueId: 'INT-100', linearIssueNumber: 100, linearIssueSortKey: 100, aggregateStatus: 'done' }),
+      makeSummary({ linearIssueId: 'INT-2', linearIssueNumber: 2, linearIssueSortKey: 2, aggregateStatus: 'done' }),
     ];
     mockCounts = { ...mockCounts, done: 3, totalGroups: 3 };
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -634,7 +641,7 @@ describe('GET /code/issue-groups', () => {
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
     // linear-id sort is descending by issue number
-    expect(issueIds).toEqual(['INT-300', 'INT-200', 'INT-100']);
+    expect(issueIds).toEqual(['INT-100', 'INT-99', 'INT-2']);
   });
 
   it('sorts by pr-number when requested', async () => {
@@ -663,7 +670,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=pr-number',
+      url: '/issue-groups?sortBy=pr-number',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -695,7 +702,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=last-updated',
+      url: '/issue-groups?sortBy=last-updated',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -731,7 +738,7 @@ describe('GET /code/issue-groups', () => {
     // Request first page with limit=2
     const page1Response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?limit=2',
+      url: '/issue-groups?limit=2',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -744,7 +751,7 @@ describe('GET /code/issue-groups', () => {
     // Request second page
     const page2Response = await server.inject({
       method: 'GET',
-      url: `/code/issue-groups?limit=2&cursor=${page1.data.nextCursor}`,
+      url: `/issue-groups?limit=2&cursor=${page1.data.nextCursor}`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -777,7 +784,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=active',
+      url: '/issue-groups?groupStatus=active',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -800,7 +807,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -829,7 +836,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -845,7 +852,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer invalid-token' },
     });
 
@@ -878,7 +885,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -931,7 +938,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -970,7 +977,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1015,7 +1022,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1052,7 +1059,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=bogus,invalid',
+      url: '/issue-groups?groupStatus=bogus,invalid',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1114,11 +1121,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1158,7 +1161,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1224,11 +1227,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1271,7 +1270,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1310,7 +1309,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?sortBy=dispatched',
+      url: '/issue-groups?sortBy=dispatched',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1331,7 +1330,7 @@ describe('GET /code/issue-groups', () => {
     const badCursor = Buffer.from(JSON.stringify({ index: -1 })).toString('base64url');
     const response = await server.inject({
       method: 'GET',
-      url: `/code/issue-groups?cursor=${badCursor}`,
+      url: `/issue-groups?cursor=${badCursor}`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1351,7 +1350,7 @@ describe('GET /code/issue-groups', () => {
     const badCursor = Buffer.from(JSON.stringify({ index: 'abc' })).toString('base64url');
     const response = await server.inject({
       method: 'GET',
-      url: `/code/issue-groups?cursor=${badCursor}`,
+      url: `/issue-groups?cursor=${badCursor}`,
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1380,7 +1379,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1442,7 +1441,6 @@ describe('GET /code/issue-groups', () => {
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-        cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -1460,7 +1458,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
@@ -1474,7 +1472,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups',
+        url: '/issue-groups',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1499,6 +1497,8 @@ describe('GET /code/issue-groups', () => {
       const fakeSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: 'INT-9001',
+        linearIssueNumber: 9001,
+        linearIssueSortKey: 9001,
         groupKey: 'INT-9001',
         taskCount: 1,
         activeTaskCount: 1,
@@ -1541,7 +1541,6 @@ describe('GET /code/issue-groups', () => {
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-        cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -1559,7 +1558,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
@@ -1572,7 +1571,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups',
+        url: '/issue-groups',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1606,7 +1605,6 @@ describe('GET /code/issue-groups', () => {
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-        cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -1624,7 +1622,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
@@ -1637,7 +1635,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups',
+        url: '/issue-groups',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1660,7 +1658,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1694,7 +1692,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1717,7 +1715,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups?groupStatus=archived',
+      url: '/issue-groups?groupStatus=archived',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1749,7 +1747,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1771,6 +1769,8 @@ describe('GET /code/issue-groups', () => {
     const standaloneSummary: TaskGroupSummary = {
       userId: 'test-user-id',
       linearIssueId: null,
+      linearIssueNumber: null,
+      linearIssueSortKey: Number.MAX_SAFE_INTEGER,
       groupKey: `standalone_${standaloneTaskId}`,
       taskCount: 1,
       activeTaskCount: 1,
@@ -1805,7 +1805,7 @@ describe('GET /code/issue-groups', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 
@@ -1869,7 +1869,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=done',
+        url: '/issue-groups?groupStatus=done',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -1913,7 +1913,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=done',
+        url: '/issue-groups?groupStatus=done',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -1978,7 +1978,7 @@ describe('GET /code/issue-groups', () => {
       // Request WITHOUT "done" in the filter
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2028,7 +2028,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action',
+        url: '/issue-groups?groupStatus=active,needs-action',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2078,7 +2078,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2125,7 +2125,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2147,6 +2147,8 @@ describe('GET /code/issue-groups', () => {
       const standalonePhantomSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: null,
+        linearIssueNumber: null,
+        linearIssueSortKey: Number.MAX_SAFE_INTEGER,
         groupKey: 'standalone_phantom-err-task',
         taskCount: 1,
         activeTaskCount: 1,
@@ -2187,7 +2189,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2207,6 +2209,8 @@ describe('GET /code/issue-groups', () => {
       const standalonePhantomSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: null,
+        linearIssueNumber: null,
+        linearIssueSortKey: Number.MAX_SAFE_INTEGER,
         groupKey: `standalone_${standaloneTaskId}`,
         taskCount: 1,
         activeTaskCount: 1,
@@ -2247,7 +2251,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2267,6 +2271,8 @@ describe('GET /code/issue-groups', () => {
       const standaloneSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: null,
+        linearIssueNumber: null,
+        linearIssueSortKey: Number.MAX_SAFE_INTEGER,
         groupKey: `standalone_${standaloneTaskId}`,
         taskCount: 1,
         activeTaskCount: 1,
@@ -2336,7 +2342,7 @@ describe('GET /code/issue-groups', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        url: '/issue-groups?groupStatus=active,needs-action,failed',
         headers: { authorization: 'Bearer test-jwt' },
       });
 
@@ -2347,6 +2353,293 @@ describe('GET /code/issue-groups', () => {
       };
       // Task is not a phantom (it exists), so done count stays at 1
       expect(body.data.counts['done']).toBe(1);
+    });
+
+    it('returns archived groups for archived linear-id queries when summary sort keys exist', async () => {
+      const summaryRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      async function createArchivedGroup(linearIssueId: string, traceId: string): Promise<void> {
+        const createResult = await codeTaskRepo.create(makeTaskInput({
+          linearIssueId,
+          traceId,
+          agentType: 'planning',
+        }));
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) {
+          return;
+        }
+
+        await summaryRepo.updateAfterCreate(createResult.value);
+        const archivedResult = await codeTaskRepo.update(createResult.value.id, { status: 'archived' });
+        expect(archivedResult.ok).toBe(true);
+        if (!archivedResult.ok) {
+          return;
+        }
+        await summaryRepo.updateAfterStatusChange(createResult.value, archivedResult.value);
+      }
+
+      await createArchivedGroup('INT-1606', 'trace-archived-1606');
+      await createArchivedGroup('INT-1607', 'trace-archived-1607');
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: summaryRepo as unknown as ReturnType<typeof makeGroupSummaryRepo>,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/issue-groups?groupStatus=archived&sortBy=linear-id',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          groups: { linearIssueId: string | null }[];
+          counts: Record<string, number>;
+          totalGroups: number;
+        };
+      };
+      expect(body.data.groups.map((group) => group.linearIssueId)).toEqual(['INT-1607', 'INT-1606']);
+      expect(body.data.counts['archived']).toBe(2);
+      expect(body.data.totalGroups).toBe(2);
+    });
+
+    it('shows a repaired open PR group in the default non-archived view', async () => {
+      const summaryRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      async function createArchivedTask(
+        traceId: string,
+        agentType: 'planning' | 'review',
+        updatedAt: Date,
+      ): Promise<void> {
+        const createResult = await codeTaskRepo.create(makeTaskInput({
+          linearIssueId: 'INT-1423',
+          traceId,
+          agentType,
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          prNumber: 1903,
+        }));
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) {
+          return;
+        }
+
+        await summaryRepo.updateAfterCreate(createResult.value);
+        const archivedResult = await codeTaskRepo.update(createResult.value.id, {
+          status: 'archived',
+          updatedAt,
+        });
+        expect(archivedResult.ok).toBe(true);
+        if (!archivedResult.ok) {
+          return;
+        }
+        await summaryRepo.updateAfterStatusChange(createResult.value, archivedResult.value);
+      }
+
+      await createArchivedTask('trace-int-1423-planning', 'planning', new Date('2026-05-07T08:00:00Z'));
+      await createArchivedTask('trace-int-1423-review', 'review', new Date('2026-05-07T09:00:00Z'));
+
+      const repairUseCase = createRepairArchivedOpenPrGroupsUseCase({
+        codeTaskRepo: codeTaskRepo as unknown as RepairArchivedOpenPrGroupsDeps['codeTaskRepo'],
+        gitHubPRSummaryRepo: {
+          findAllOpen: async () => ok([{
+            repository: 'pbuchman/intexuraos',
+            pullRequestNumber: 1903,
+            title: 'Open PR',
+            state: 'open',
+            mergedAt: null,
+            baseBranch: 'development',
+            authorLogin: 'pbuchman',
+            headBranch: 'worker/int-1423',
+            mergeConflictStatus: null,
+            lastConflictCheckedAt: null,
+            conflictEpisodeStartedAt: null,
+            conflictResolvedAt: null,
+            managedConflictCommentId: null,
+            managedConflictTaskId: null,
+            managedConflictTaskOwnerUserId: null,
+            lastActivityAt: new Date('2026-05-07T10:00:00Z'),
+            firstSeenAt: new Date('2026-05-07T10:00:00Z'),
+            lastReviewedCommitSha: null,
+            lastReviewNeedsRemediation: null,
+          }]),
+        },
+        groupSummaryRepo: summaryRepo,
+        logger,
+      });
+
+      const repairResult = await repairUseCase();
+      expect(repairResult.ok).toBe(true);
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: summaryRepo as unknown as ReturnType<typeof makeGroupSummaryRepo>,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/issue-groups',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          groups: {
+            linearIssueId: string | null;
+            aggregateStatus: string;
+            tasks: { status: string }[];
+          }[];
+          counts: Record<string, number>;
+          totalGroups: number;
+        };
+      };
+      const repairedGroup = body.data.groups.find((group) => group.linearIssueId === 'INT-1423');
+      expect(repairedGroup).toBeDefined();
+      expect(repairedGroup?.aggregateStatus).toBe('done');
+      expect(repairedGroup?.tasks).toEqual([
+        expect.objectContaining({ status: 'reviewed' }),
+      ]);
+      expect(body.data.counts['done']).toBe(1);
+      expect(body.data.totalGroups).toBe(1);
+    });
+
+    it('restores a mixed open PR group back into the active view with a stable execution sibling', async () => {
+      const summaryRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      async function createArchivedTask(input: {
+        traceId: string;
+        agentType: 'execution' | 'review';
+        updatedAt: Date;
+        prNumber?: number;
+        prMergedAt?: Date;
+      }): Promise<void> {
+        const createResult = await codeTaskRepo.create(makeTaskInput({
+          linearIssueId: 'INT-1423',
+          traceId: input.traceId,
+          agentType: input.agentType,
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          ...(input.prNumber !== undefined ? { prNumber: input.prNumber } : {}),
+        }));
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) {
+          return;
+        }
+
+        await summaryRepo.updateAfterCreate(createResult.value);
+        const archivedResult = await codeTaskRepo.update(createResult.value.id, {
+          status: 'archived',
+          updatedAt: input.updatedAt,
+          ...(input.prMergedAt !== undefined ? { prMergedAt: input.prMergedAt } : {}),
+        });
+        expect(archivedResult.ok).toBe(true);
+        if (!archivedResult.ok) {
+          return;
+        }
+        await summaryRepo.updateAfterStatusChange(createResult.value, archivedResult.value);
+      }
+
+      await createArchivedTask({
+        traceId: 'trace-int-1423-stable-execution',
+        agentType: 'execution',
+        updatedAt: new Date('2026-05-07T08:00:00Z'),
+      });
+      await createArchivedTask({
+        traceId: 'trace-int-1423-open-pr-review',
+        agentType: 'review',
+        prNumber: 1903,
+        updatedAt: new Date('2026-05-07T09:00:00Z'),
+      });
+      await createArchivedTask({
+        traceId: 'trace-int-1423-merged-execution',
+        agentType: 'execution',
+        prNumber: 1994,
+        prMergedAt: new Date('2026-04-30T12:00:05Z'),
+        updatedAt: new Date('2026-05-07T10:00:00Z'),
+      });
+
+      const repairUseCase = createRepairArchivedOpenPrGroupsUseCase({
+        codeTaskRepo: codeTaskRepo as unknown as RepairArchivedOpenPrGroupsDeps['codeTaskRepo'],
+        gitHubPRSummaryRepo: {
+          findAllOpen: async () => ok([{
+            repository: 'pbuchman/intexuraos',
+            pullRequestNumber: 1903,
+            title: 'Open PR',
+            state: 'open',
+            mergedAt: null,
+            baseBranch: 'development',
+            authorLogin: 'pbuchman',
+            headBranch: 'worker/int-1423',
+            mergeConflictStatus: null,
+            lastConflictCheckedAt: null,
+            conflictEpisodeStartedAt: null,
+            conflictResolvedAt: null,
+            managedConflictCommentId: null,
+            managedConflictTaskId: null,
+            managedConflictTaskOwnerUserId: null,
+            lastActivityAt: new Date('2026-05-07T10:00:00Z'),
+            firstSeenAt: new Date('2026-05-07T10:00:00Z'),
+            lastReviewedCommitSha: null,
+            lastReviewNeedsRemediation: null,
+          }]),
+        },
+        groupSummaryRepo: summaryRepo,
+        logger,
+      });
+
+      const repairResult = await repairUseCase();
+      expect(repairResult.ok).toBe(true);
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: summaryRepo as unknown as ReturnType<typeof makeGroupSummaryRepo>,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/issue-groups?groupStatus=active,needs-action',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          groups: {
+            linearIssueId: string | null;
+            aggregateStatus: string;
+            tasks: { status: string; agentType?: string }[];
+          }[];
+          counts: Record<string, number>;
+          totalGroups: number;
+        };
+      };
+
+      const repairedGroup = body.data.groups.find((group) => group.linearIssueId === 'INT-1423');
+      expect(repairedGroup).toBeDefined();
+      expect(repairedGroup?.aggregateStatus).toBe('active');
+      expect(repairedGroup?.tasks).toEqual([
+        expect.objectContaining({
+          status: 'implemented',
+          agentType: 'execution',
+        }),
+      ]);
+      expect(body.data.counts['active']).toBe(1);
+      expect(body.data.totalGroups).toBe(1);
     });
   });
 });
@@ -2425,7 +2718,6 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -2443,7 +2735,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
       taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
       mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
       prTriagePublisher: { publishPRTriage: async () => ok(undefined) } as never,
@@ -2463,7 +2755,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/INT-500/important',
+      url: '/issue-groups/INT-500/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: true },
     });
@@ -2479,7 +2771,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/INT-500/important',
+      url: '/issue-groups/INT-500/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: false },
     });
@@ -2492,7 +2784,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
   it('returns NOT_FOUND for non-existent group', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/nonexistent/important',
+      url: '/issue-groups/nonexistent/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: true },
     });
@@ -2510,7 +2802,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/issue-groups/INT-500/important',
+      url: '/issue-groups/INT-500/important',
       headers: { authorization: 'Bearer test-token' },
       payload: { important: true },
     });
@@ -2525,7 +2817,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/issue-groups',
+      url: '/issue-groups',
       headers: { authorization: 'Bearer test-token' },
     });
 

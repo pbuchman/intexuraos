@@ -107,7 +107,7 @@ describe('llmUsageApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://llm-usage.test',
-        '/llm-usage/events/list',
+        '/events/list',
         mockAccessToken,
         { method: 'POST', body: request }
       );
@@ -129,7 +129,7 @@ describe('llmUsageApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://llm-usage.test',
-        '/llm-usage/events/list',
+        '/events/list',
         mockAccessToken,
         { method: 'POST', body: request }
       );
@@ -157,7 +157,7 @@ describe('llmUsageApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://llm-usage.test',
-        '/llm-usage/events/evt-42',
+        '/events/evt-42',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -171,7 +171,7 @@ describe('llmUsageApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://llm-usage.test',
-        '/llm-usage/events/evt%2Fspecial%26chars',
+        '/events/evt%2Fspecial%26chars',
         mockAccessToken
       );
     });
@@ -203,7 +203,7 @@ describe('llmUsageApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://llm-usage.test',
-        '/llm-usage/query',
+        '/query',
         mockAccessToken,
         { method: 'POST', body: request }
       );
@@ -225,7 +225,7 @@ describe('llmUsageApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://llm-usage.test',
-        '/llm-usage/query',
+        '/query',
         mockAccessToken,
         { method: 'POST', body: request }
       );
@@ -253,7 +253,7 @@ describe('llmUsageApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://llm-usage.test',
-        '/llm-usage/pricing',
+        '/pricing',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);

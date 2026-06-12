@@ -85,6 +85,33 @@ describe('workerSettingsRepository', () => {
       }
     });
 
+    it('should read existing workers with missing enabled as enabled', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      const collection = fakeFirestore.collection('code_worker_settings');
+      const doc = await collection.doc('user-1').get();
+      const data = doc.data();
+      const workers = data?.['workers'] as Record<string, unknown>[];
+      const worker = workers[0];
+      if (worker === undefined) {
+        throw new Error('test setup failed');
+      }
+      const { enabled: _enabled, ...workerWithoutEnabled } = worker;
+      await collection.doc('user-1').update({ workers: [workerWithoutEnabled] });
+
+      const result = await repo.getSettings('user-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.workers[0]?.enabled).toBe(true);
+      }
+    });
+
     it('should return settings with multiple workers', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -353,6 +380,33 @@ describe('workerSettingsRepository', () => {
       if (settings.ok && settings.value !== null) {
         const worker = settings.value.workers.find((w) => w.name === 'home-mac');
         expect(worker?.enabled).toBe(false);
+      }
+    });
+
+    it('should preserve missing enabled as true when updating older worker records', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const collection = fakeFirestore.collection('code_worker_settings');
+      const doc = await collection.doc('user-1').get();
+      const data = doc.data();
+      const workers = data?.['workers'] as Record<string, unknown>[];
+      const [homeMac, officePc] = workers;
+      if (homeMac === undefined || officePc === undefined) {
+        throw new Error('test setup failed');
+      }
+      const { enabled: _enabled, ...homeMacWithoutEnabled } = homeMac;
+      await collection.doc('user-1').update({ workers: [homeMacWithoutEnabled, officePc] });
+
+      await repo.updateWorker('user-1', 'home-mac', { url: 'https://newer.example.com' });
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'home-mac');
+        expect(worker?.enabled).toBe(true);
       }
     });
 
@@ -913,6 +967,13 @@ describe('workerSettingsRepository', () => {
           capacity: 10,
           running: 2,
           available: 8,
+          workerAuths: {
+            claude: { status: 'active' },
+            codex: { status: 'active' },
+          },
+          providerApiKeys: {},
+          dockerHealthy: true,
+          diskHealthy: true,
           responseTimeMs: 150,
         },
         checkedAt: new Date().toISOString(),

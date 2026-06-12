@@ -3,8 +3,8 @@
  *
  * Route URL → File mapping:
  * ─────────────────────────────────────────────────────────────
- * GET    /whatsapp/webhooks            → ./webhookRoutes.ts
- * POST   /whatsapp/webhooks            → ./webhookRoutes.ts
+ * GET    /webhooks                     → ./webhookRoutes.ts
+ * POST   /webhooks                     → ./webhookRoutes.ts
  * POST   /whatsapp/connect             → ./mappingRoutes.ts
  * GET    /whatsapp/status              → ./mappingRoutes.ts
  * DELETE /whatsapp/disconnect          → ./mappingRoutes.ts
@@ -15,6 +15,7 @@
  * GET    /whatsapp/preferences        → ./preferencesRoutes.ts
  * PUT    /whatsapp/preferences        → ./preferencesRoutes.ts
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
+ * POST   /internal/whatsapp/webhooks/retry-pending → ./internalRoutes.ts
  * ─────────────────────────────────────────────────────────────
  */
 

@@ -3,7 +3,7 @@
  * GET /mobile-notifications/status - Check if user has configured signature.
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 
 export interface StatusResponse {
@@ -15,7 +15,7 @@ export interface StatusResponse {
 export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 /* v8 ignore stop @preserve */
   fastify.get(
-    '/mobile-notifications/status',
+    '/status',
     {
       schema: {
         operationId: 'getMobileNotificationsStatus',
@@ -62,6 +62,8 @@ export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /mobile-notifications/status' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

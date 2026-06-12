@@ -6,7 +6,7 @@
  * POST   /notion/connect              → ./integrationRoutes.ts
  * GET    /notion/status               → ./integrationRoutes.ts
  * DELETE /notion/disconnect           → ./integrationRoutes.ts
- * POST   /notion-webhooks             → ./webhookRoutes.ts
+ * POST   /webhooks                    → ./webhookRoutes.ts
  * ─────────────────────────────────────────────────────────────────────────────
  */
 

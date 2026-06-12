@@ -7,15 +7,15 @@
     <a href="https://github.com/pbuchman/intexuraos/actions"><img src="https://img.shields.io/github/actions/workflow/status/pbuchman/intexuraos/ci.yml?branch=main&label=Build&style=flat-square&logo=github" alt="Build Status"></a>
     <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-    <img src="https://img.shields.io/badge/AI_Models-14-purple?style=flat-square" alt="AI Models">
-    <img src="https://img.shields.io/badge/Components-51-orange?style=flat-square" alt="Components">
+    <img src="https://img.shields.io/badge/AI_Models-15-purple?style=flat-square" alt="AI Models">
+    <img src="https://img.shields.io/badge/Components-58-orange?style=flat-square" alt="Components">
     <img src="https://img.shields.io/badge/Hooks-26-green?style=flat-square" alt="Hooks">
     <img src="https://img.shields.io/badge/CI_Scripts-27-green?style=flat-square" alt="CI Scripts">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
   </p>
 </div>
 
-> 48-component TypeScript monorepo — 20 apps, 6 workers, 22 shared packages — built and maintained by a single developer under strict engineering discipline: 100% branch coverage as a CI gate, cross-LLM verification where no model evaluates its own output, 27 CI verification scripts, and 26 Claude Code hooks enforcing quality at every stage. The system takes a WhatsApp voice note and turns it into a tested pull request. It researches topics across 14 AI models from 5 providers. It schedules, tracks tasks, and manages project issues — all from a single voice or text command.
+> 58-component TypeScript monorepo — 23 app workspaces, 6 workers, 29 shared packages — built and maintained by a single developer under strict engineering discipline: 100% branch coverage as a CI gate, cross-LLM verification where no model evaluates its own output, 27 CI verification scripts, and 26 Claude Code hooks enforcing quality at every stage. The system takes a WhatsApp voice note and turns it into a tested pull request. It researches topics across 15 AI models from 5 core providers. It schedules, tracks tasks, and manages project issues — all from a single voice or text command.
 >
 > IntexuraOS does not use AI as a feature. It deploys AI agents that use software as a tool. The platform researches, schedules, manages tasks, and **writes and ships its own code**.
 
@@ -24,15 +24,15 @@
 |                                  |                                                                                                             |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | **Cross-LLM Verification**       | Writer and verifier are always different providers — Claude executes, Gemini verifies, TypeScript validates |
-| **48 Components, One Developer** | 20 apps, 6 workers, 22 packages in a strict TypeScript monorepo                                             |
+| **58 Components, One Developer** | 23 app services, 6 workers, 29 packages in a strict TypeScript monorepo                                     |
 | **Autonomous Code Pipeline**     | WhatsApp voice note → intent classification → Docker-isolated execution → tested PR                         |
 | **Container Isolation**          | Non-root, all capabilities dropped, network-restricted, read-only secrets per task                          |
 | **26 Claude Code Hooks**         | 1 SessionStart, 15 PreToolUse, 7 PostToolUse, 3 Stop — enforcing patterns before code is written            |
 | **27 CI Verification Scripts**   | Automated gates covering coverage, types, contracts, env vars, and cross-linking                            |
 | **Prompt Versioning**            | Semver-versioned prompts with SHA-256 audit trail and CI-enforced bump validation                           |
-| **Multi-Provider AI Council**    | 14 models across 5 providers queried in parallel with attributed synthesis                                  |
+| **Multi-Provider AI Council**    | 15 models across 5 core providers queried in parallel with attributed synthesis                             |
 | **Result Type Discipline**       | Every operation returns typed success or failure — no silent crashes, no unhandled exceptions               |
-| **Event-Driven Architecture**    | 41 Pub/Sub topics decoupling 20 services with crash-safe state persistence                                  |
+| **Event-Driven Architecture**    | 41 Pub/Sub topics decoupling 23 app services with crash-safe state persistence                              |
 
 **[The Self-Building System](#the-self-building-system)** · **[Cross-LLM Verification](#cross-llm-verification-pipeline)** · **[The Council of AI](#the-council-of-ai)** · **[Architecture](#architecture)** · **[Engineering Standards](#engineering-standards)** · **[Voice-First Intelligence](#voice-first-intelligence)** · **[Getting Started](#getting-started)** · **[Documentation](#documentation)**
 
@@ -152,15 +152,15 @@ Neither model evaluates its own work. The writer never sees the verification cri
 
 When IntexuraOS needs to research a topic, it does not ask one model and hope for the best. It asks multiple models.
 
-**9 research models across 4 providers** — Google, OpenAI, Anthropic, and Perplexity — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
+**10 static research models plus OpenRouter across 5 core providers** — Google, OpenAI, Anthropic, Perplexity, and curated OpenRouter models — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
 
 ```mermaid
 graph TB
     Q[Your Question] --> P[Parallel Dispatch]
 
     P --> Gemini[Gemini 2.5 Pro]
-    P --> Claude[Claude Opus 4.5]
-    P --> GPT[GPT-5.2]
+    P --> Claude[Claude Opus 4.6]
+    P --> GPT[GPT-5.4]
     P --> Sonar[Perplexity Sonar Pro]
 
     Gemini & Claude & GPT & Sonar --> S[Synthesis Engine]
@@ -180,7 +180,7 @@ _This section is for developers and builders evaluating the system internals. As
 
 ### From Voice to Merged Code
 
-48 components — 20 services, 6 workers, and 22 shared packages — all in a single repository with strict TypeScript. 24 of these operate as autonomous agents. The architecture exists because one person needed leverage: each agent handles one domain, so research output can feed a code task, a code task result can be pushed to project tracking and WhatsApp simultaneously, and the full loop closes without a human switching tools. No single-domain tool — coding assistant, research chatbot, or project tracker — can replicate this chain.
+58 components — 23 app services, 6 workers, and 29 shared packages — all in a single repository with strict TypeScript. Many of these operate as autonomous agents and services. The architecture exists because one person needed leverage: each specialist handles one domain, so research output can feed a code task, a code task result can be pushed to project tracking and WhatsApp simultaneously, and the full loop closes without a human switching tools. No single-domain tool — coding assistant, research chatbot, or project tracker — can replicate this chain.
 
 ```mermaid
 graph TD
@@ -240,8 +240,8 @@ graph TD
 | Provider       | Models                                                   | Strengths                                                        |
 | -------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
 | **Google**     | Gemini 2.5 Pro, Flash, Flash-Image, 2.0 Flash            | Classification, fast operations, image generation                |
-| **OpenAI**     | GPT-5.2, O4 Mini Deep Research, GPT-4o Mini, GPT Image 1 | Deep research, synthesis, fast classification, document matching |
-| **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5                   | Analysis, validation, autonomous coding                          |
+| **OpenAI**     | GPT-5.4, O4 Mini Deep Research, GPT-4o Mini, GPT Image 1 | Deep research, synthesis, fast classification, document matching |
+| **Anthropic**  | Claude Opus 4.6, Sonnet 4.6/4.7, Haiku 3.5               | Analysis, validation, autonomous coding                          |
 | **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research                    | Real-time web search with citations                              |
 
 ---
@@ -256,7 +256,7 @@ Not a target. A gate. Every branch in every service is either tested or explicit
 
 ### Strict TypeScript
 
-The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 46 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
+The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 58 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
 
 ### Automated Cross-Linking
 
@@ -282,7 +282,7 @@ Hooks encode the patterns that would otherwise live only in a developer's head �
 Automated gates that run on every commit, covering:
 
 - Branch coverage enforcement (100% or documented exemption)
-- TypeScript strict mode compliance across all 48 components
+- TypeScript strict mode compliance across all 58 components
 - API contract validation and cross-service consistency
 - Environment variable verification (no missing vars in deployment)
 - Cross-linking between project tracking, error monitoring, and code changes
@@ -315,9 +315,16 @@ You submit tasks while walking, while commuting, while thinking of something els
 ---
 
 <details>
-<summary><h2>What's New in v3.6.0</h2></summary>
+<summary><h2>What's New in v3.7.0</h2></summary>
 
 > See [CHANGELOG.md](CHANGELOG.md) for the complete history.
+
+#### v3.7.0
+
+| Improvement                        | Impact                                                                                              |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Fishing Assistant Chat and RAG** | Chat with grounded fishing knowledge, conversation history, mobile support, and validated citations |
+| **Richer LLM Cost Visibility**     | Track LLM usage, research costs, image billing, and prompt-type reporting with more accurate detail |
 
 #### v3.6.0
 
@@ -369,7 +376,8 @@ You submit tasks while walking, while commuting, while thinking of something els
 | Improvement                      | Impact                                                                                                                       |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **GitHub Agent**                 | A new agent evaluates pull requests using tool calling, with a unified webhook evaluator routing GitHub events automatically |
-| **Alibaba Cloud Model Studio**   | Unified integration for Chinese LLMs — Qwen, Kimi, and GLM-5 — via Alibaba Cloud Model Studio, replacing the ZAI provider    |
+| **Alibaba Cloud Model Studio**   | Unified integration for Qwen and GLM-5 via Alibaba Cloud Model Studio, replacing the ZAI provider                            |
+| **Native Kimi Code API**         | Kimi code workers route through the native Kimi Code API using the stable `kimi-for-coding` model ID                         |
 | **Code Task Detail V2**          | Completely redesigned code task experience with a modern detail page and issue-centric grouped list view                     |
 | **Unified PR Automation Log**    | Every action taken on a pull request is now visible in a single, auditable automation log                                    |
 | **Structured Output Validation** | GitHub Agent triage produces reliable results with automatic repair prompts when structured output is malformed              |
@@ -431,12 +439,12 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 
 ## Documentation
 
-| Document                                                    | Description                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------- |
-| **[Platform Overview](docs/overview.md)**                   | What IntexuraOS does — 24 agents, from voice notes to finished code |
-| **[Services Catalog](docs/services/index.md)**              | All 20 apps + 6 workers + 22 packages with technical details        |
-| **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 14 models across 5 providers                         |
-| **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step cloud and local environment setup                      |
+| Document                                                    | Description                                                                               |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **[Platform Overview](docs/overview.md)**                   | What IntexuraOS does — specialized agents and services, from voice notes to finished code |
+| **[Services Catalog](docs/services/index.md)**              | All 23 app services + 6 workers + 29 packages with technical details                      |
+| **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 15 models across 5 core providers                                          |
+| **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step cloud and local environment setup                                            |
 
 <details>
 <summary><strong>All Services</strong></summary>
@@ -464,7 +472,6 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 | **[notion-service](docs/services/notion-service/features.md)**                             | Research export to Notion with synthesis and per-model child pages              |
 | **[web](docs/services/web/features.md)**                                                   | Real-time dashboard with code streaming, approvals, and share menu              |
 | **[vm-lifecycle](docs/services/vm-lifecycle/features.md)**                                 | Weekday auto-start/stop for coding worker machines                              |
-| **[log-cleanup](docs/services/log-cleanup/features.md)**                                   | Nightly log rotation in controlled batches                                      |
 | **[api-docs-hub](docs/services/api-docs-hub/features.md)**                                 | Unified interactive API reference for all backend services                      |
 
 </details>
@@ -500,5 +507,5 @@ IntexuraOS is what happens when a single engineer builds agents that work for hi
 ---
 
 <div align="center">
-  <sub>20 apps. 6 workers. 22 packages. 14 AI models. 26 hooks. 27 CI scripts. 100% branch coverage. One developer.</sub>
+  <sub>23 app services. 6 workers. 29 packages. 15 AI models. 26 hooks. 27 CI scripts. 100% branch coverage. One developer.</sub>
 </div>

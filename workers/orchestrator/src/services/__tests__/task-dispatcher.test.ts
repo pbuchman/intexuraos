@@ -1,46 +1,23 @@
 import { describe, expect, it } from 'vitest';
+import type { Task } from '../../types/task.js';
 
-const { buildMissingFieldsPrompt } = await import('../task-dispatcher.js');
+const { missingFieldsPrompt, runVerification } = await import('../task-dispatcher.js');
 
 // ---------------------------------------------------------------------------
-// buildMissingFieldsPrompt
+// missingFieldsPrompt (post-INT-1470: deliverable-only; telemetry misses
+// never trigger a retry so the memory guidance branches have been removed)
 // ---------------------------------------------------------------------------
 
-describe('buildMissingFieldsPrompt', () => {
+describe('missingFieldsPrompt', () => {
   const rawLogs = 'line1\nline2\nline3';
-
-  it('includes memory guidance when memory-related fields are missing', () => {
-    const result = buildMissingFieldsPrompt(
-      'execution',
-      ['memory_acknowledgment', 'memory_ids_unaccounted'],
-      rawLogs
-    );
-    expect(result).toContain('EXECUTION MEMORY REPORTING FAILURE:');
-    expect(result).toContain('memory_ids_used: comma-separated IDs of memories you applied');
-    expect(result).toContain(
-      'memory_ids_rejected: comma-separated IDs of memories you found irrelevant'
-    );
-    expect(result).toContain(
-      'memory_usage_summary: one sentence about how memories influenced your work'
-    );
-    expect(result).toContain('Every injected memory must appear in either used or rejected.');
-    expect(result).toContain('If you did not use any memory, put all IDs in memory_ids_rejected.');
-  });
-
-  it('does NOT include memory guidance when only non-memory fields are missing', () => {
-    const result = buildMissingFieldsPrompt('execution', ['gh_pr_url', 'summary'], rawLogs);
-    expect(result).not.toContain('EXECUTION MEMORY REPORTING FAILURE:');
-    expect(result).not.toContain('memory_ids_used:');
-  });
-
-  it('includes memory guidance when missing fields are mixed (memory + non-memory)', () => {
-    const result = buildMissingFieldsPrompt('execution', ['summary', 'memory_ids_used'], rawLogs);
-    expect(result).toContain('EXECUTION MEMORY REPORTING FAILURE:');
-  });
 
   it('always includes transcript, agent type, and constraints', () => {
     const logsWithContent = 'alpha\nbeta\ngamma';
-    const result = buildMissingFieldsPrompt('planning', ['summary'], logsWithContent);
+    const result = missingFieldsPrompt.build({
+      agentType: 'planning',
+      missingFields: ['summary'],
+      rawLogs: logsWithContent,
+    });
 
     expect(result).toContain('[AUTO-CONTINUE ATTEMPT]');
     expect(result).toContain('Missing fields: summary');
@@ -51,125 +28,172 @@ describe('buildMissingFieldsPrompt', () => {
     expect(result).toContain('- Continue from current repository/worktree state.');
   });
 
-  it('includes the agent type in the output for a memory-failure case', () => {
-    const result = buildMissingFieldsPrompt(
-      'execution',
-      ['memory_ids_used', 'memory_ids_rejected'],
-      rawLogs
-    );
-    expect(result).toContain('Agent type: execution');
-    expect(result).toContain('Missing fields: memory_ids_used, memory_ids_rejected');
-  });
-
-  it('detects each individual memory field correctly', () => {
-    const memoryFields = [
-      'memory_acknowledgment',
-      'memory_ids_used_invalid',
-      'memory_ids_rejected_invalid',
-      'memory_ids_overlap',
-      'memory_ids_unaccounted',
-      'memory_usage_summary',
-      'memory_ids_used',
-      'memory_ids_rejected',
-    ];
-
-    for (const field of memoryFields) {
-      const result = buildMissingFieldsPrompt('execution', [field], rawLogs);
-      expect(result).toContain('EXECUTION MEMORY REPORTING FAILURE:');
-    }
-  });
-
-  it('includes the acknowledgment block template and injected IDs when memory_acknowledgment is missing', () => {
-    const result = buildMissingFieldsPrompt('review', ['memory_acknowledgment'], rawLogs, {
-      applicationId: 'app-1',
-      retrievalVersion: 'execution-memory-retrieval@3.0.0',
-      querySummary: 'q',
-      matchedMemories: [
-        {
-          memoryId: 'mem_aaa',
-          title: 'First memory',
-          memoryType: 'pitfall_pattern',
-          score: 0.9,
-          appliesWhen: 'x',
-          action: 'x',
-          avoid: 'x',
-          verification: 'x',
-        },
-        {
-          memoryId: 'mem_bbb',
-          title: 'Second memory',
-          memoryType: 'review_finding',
-          score: 0.8,
-          appliesWhen: 'y',
-          action: 'y',
-          avoid: 'y',
-          verification: 'y',
-        },
-      ],
-    });
-
-    expect(result).toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
-    expect(result).toContain('📋 **Execution Memories Received:**');
-    expect(result).toContain('- [<n>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because');
-    expect(result).toContain('mem_aaa');
-    expect(result).toContain('mem_bbb');
-    expect(result).toContain('start of a new line');
-  });
-
-  it('omits the acknowledgment block template when memory_acknowledgment is NOT missing', () => {
-    const result = buildMissingFieldsPrompt('review', ['memory_ids_used'], rawLogs, {
-      applicationId: 'app-1',
-      retrievalVersion: 'execution-memory-retrieval@3.0.0',
-      querySummary: 'q',
-      matchedMemories: [
-        {
-          memoryId: 'mem_aaa',
-          title: 'First memory',
-          memoryType: 'pitfall_pattern',
-          score: 0.9,
-          appliesWhen: 'x',
-          action: 'x',
-          avoid: 'x',
-          verification: 'x',
-        },
-      ],
-    });
-
-    expect(result).not.toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
-    expect(result).toContain('EXECUTION MEMORY REPORTING FAILURE:');
-  });
-
-  it('includes both the block template AND the triplet guidance when both classes of memory field are missing', () => {
-    const result = buildMissingFieldsPrompt(
-      'review',
-      ['memory_acknowledgment', 'memory_ids_used'],
+  it('does NOT emit the legacy EXECUTION MEMORY REPORTING FAILURE branch', () => {
+    const result = missingFieldsPrompt.build({
+      agentType: 'execution',
+      missingFields: ['memory_acknowledgment', 'memory_ids_unaccounted'],
       rawLogs,
-      {
-        applicationId: 'app-1',
-        retrievalVersion: 'execution-memory-retrieval@3.0.0',
-        querySummary: 'q',
-        matchedMemories: [
-          {
-            memoryId: 'mem_aaa',
-            title: 'First',
-            memoryType: 'pitfall_pattern',
-            score: 0.9,
-            appliesWhen: 'x',
-            action: 'x',
-            avoid: 'x',
-            verification: 'x',
-          },
-        ],
-      }
-    );
-
-    expect(result).toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
-    expect(result).toContain('EXECUTION MEMORY REPORTING FAILURE:');
+    });
+    expect(result).not.toContain('EXECUTION MEMORY REPORTING FAILURE');
   });
 
-  it('accepts missing executionMemoryContext and still mentions acknowledgment when flagged', () => {
-    const result = buildMissingFieldsPrompt('review', ['memory_acknowledgment'], rawLogs);
-    expect(result).toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
-    expect(result).toContain('📋 **Execution Memories Received:**');
+  it('does NOT emit the legacy MEMORY ACKNOWLEDGMENT BLOCK guidance', () => {
+    const result = missingFieldsPrompt.build({
+      agentType: 'review',
+      missingFields: ['memory_acknowledgment'],
+      rawLogs,
+    });
+    expect(result).not.toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
+    expect(result).not.toContain('Execution Memories Received');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runVerification — selects between the test-only verifier override and the
+// production `verifyCompletion`. Both arms are exercised here directly so the
+// dispatcher-body branch doesn't need a v8 ignore. (v8 ignore on branches is
+// not allowed — see .claude/reference/coverage-exemptions.md.)
+// ---------------------------------------------------------------------------
+
+describe('runVerification [INT-1470]', () => {
+  function makeTask(): Task {
+    return {
+      taskId: 'task-1',
+      workerType: 'sonnet' as Task['workerType'],
+      prompt: 'do work',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      webhookUrl: 'https://example.test/webhook',
+      webhookSecret: 'secret',
+      status: 'running',
+      worktreePath: '/tmp/wt',
+      containerId: 'container-1',
+      linearIssueLabels: [],
+      startedAt: '2024-01-01T00:00:00.000Z',
+      attemptCount: 1,
+      maxAttempts: 3,
+      verificationHistory: [],
+    };
+  }
+
+  it('production path: uses verifyCompletion when no override is set', async () => {
+    const verdict = await runVerification({
+      verifyOverride: undefined,
+      task: makeTask(),
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      rawLogs: [
+        'EXECUTION_AGENT_FINAL:',
+        '- Outcome: implemented',
+        '- pr: https://github.com/x/y/pull/1',
+        '- summary: ok',
+      ].join('\n'),
+    });
+    expect(verdict.kind).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toEqual([]);
+  });
+
+  it('production path: returns hard-error when transcript has no AGENT_FINAL block', async () => {
+    const verdict = await runVerification({
+      verifyOverride: undefined,
+      task: makeTask(),
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      rawLogs: 'no marker at all',
+    });
+    expect(verdict.kind).toBe('hard-error');
+  });
+
+  it('test-override path: routes through the adapter when override is set', async () => {
+    const verdict = await runVerification({
+      verifyOverride: async () => ({
+        passed: true,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+      }),
+      task: makeTask(),
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      rawLogs: 'ignored — override does not read rawLogs',
+    });
+    expect(verdict.kind).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toEqual([]);
+  });
+
+  it('test-override path: threads exitCode into override input when defined', async () => {
+    const capturedInputs: unknown[] = [];
+    await runVerification({
+      verifyOverride: async (input) => {
+        capturedInputs.push(input);
+        return {
+          passed: true,
+          missingFields: [],
+          telemetryMissingFields: [],
+          verifierFailure: false,
+        };
+      },
+      task: makeTask(),
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      rawLogs: '',
+      exitCode: 137,
+    });
+    expect((capturedInputs[0] as { lastExitCode?: number }).lastExitCode).toBe(137);
+  });
+
+  it('test-override path: omits exitCode from override input when undefined', async () => {
+    const capturedInputs: unknown[] = [];
+    await runVerification({
+      verifyOverride: async (input) => {
+        capturedInputs.push(input);
+        return {
+          passed: true,
+          missingFields: [],
+          telemetryMissingFields: [],
+          verifierFailure: false,
+        };
+      },
+      task: makeTask(),
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      rawLogs: '',
+    });
+    expect('lastExitCode' in (capturedInputs[0] as Record<string, unknown>)).toBe(false);
+  });
+
+  it('test-override path: threads executionMemoryContext into override input when defined', async () => {
+    const capturedInputs: unknown[] = [];
+    const task = makeTask();
+    task.executionMemoryContext = {
+      status: 'matched',
+      matchedMemories: [{ memoryId: 'mem_a' }],
+    } as never;
+    await runVerification({
+      verifyOverride: async (input) => {
+        capturedInputs.push(input);
+        return {
+          passed: true,
+          missingFields: [],
+          telemetryMissingFields: [],
+          verifierFailure: false,
+        };
+      },
+      task,
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      rawLogs: '',
+    });
+    expect(
+      (capturedInputs[0] as { executionMemoryContext?: unknown }).executionMemoryContext
+    ).toBeDefined();
   });
 });

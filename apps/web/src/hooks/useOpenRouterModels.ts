@@ -26,7 +26,7 @@ export function useOpenRouterModels(isConfigured: boolean): UseOpenRouterModelsR
     try {
       const response = await request<OpenRouterModelsResponse>(
         config.ResearchAgentUrl,
-        '/research/openrouter/models'
+        '/openrouter/models'
       );
       setModels(response.models);
       fetchedRef.current = true;

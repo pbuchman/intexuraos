@@ -78,10 +78,11 @@ Or via systemd (Linux) or macOS LaunchAgent (see `workers/orchestrator/README.md
 europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
-For deterministic runtime behavior, prefer digest pinning in orchestrator env:
+The orchestrator should follow the mutable `:latest` tag so every worker launch
+pulls the newest published image:
 
 ```bash
-export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:<digest>
+export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
 ### Build
@@ -93,7 +94,7 @@ export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-de
 # Or directly from root context (Dockerfile uses root-relative COPY paths)
 docker build --no-cache --platform linux/amd64 \
   -t europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest \
-  -f workers/code-worker/Dockerfile \
+  -f docker/code-worker/Dockerfile \
   .
 ```
 
@@ -107,7 +108,8 @@ PUSH=true ./scripts/build-worker-image.sh latest
 docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
-After push, capture digest and update `INTEXURAOS_CODE_WORKER_IMAGE` (digest form) on orchestrator host.
+No digest pin update is needed after push. The orchestrator should keep following
+`code-worker:latest`.
 
 ### Cache Busting
 
@@ -116,12 +118,12 @@ Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
 
 ### Key Files
 
-| File                                  | Purpose                                               |
-| ------------------------------------- | ----------------------------------------------------- |
-| `workers/code-worker/Dockerfile`      | Production image (node:22-alpine + Claude/Codex CLIs) |
-| `workers/code-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)          |
-| `workers/code-worker/entrypoint.sh`   | Container entrypoint (dispatches Claude or Codex)     |
-| `scripts/build-worker-image.sh`       | Build + optional push helper                          |
+| File                                 | Purpose                                               |
+| ------------------------------------ | ----------------------------------------------------- |
+| `docker/code-worker/Dockerfile`      | Production image (node:22-alpine + Claude/Codex CLIs) |
+| `docker/code-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)          |
+| `docker/code-worker/entrypoint.sh`   | Container entrypoint (dispatches Claude or Codex)     |
+| `scripts/build-worker-image.sh`      | Build + optional push helper                          |
 
 ### What the Entrypoint Does
 
@@ -155,6 +157,58 @@ Set by `docker-provider.ts` when creating containers:
 
 ---
 
+## Shutdown Behavior
+
+INT-1551 §E.7-§E.8 replaced the orchestrator's legacy 10-minute polling
+shutdown loop with an `AbortController` + `Promise.race` graceful drain.
+
+### Drain Budget
+
+`SHUTDOWN_TIMEOUT_MS = 30_000` (30 s) — defined in
+`workers/orchestrator/src/main.ts`. On SIGTERM / SIGINT the shutdown handler:
+
+1. Closes the Fastify HTTP server (no new requests).
+2. Clears background intervals (token refresh, webhook retry, isolation
+   periodic cleanup, isolation health monitor, heartbeat).
+3. Aborts a top-level `AbortController` threaded into `TaskDispatcher` →
+   `TaskTimers` (cancels per-task `setTimeout` / `setInterval` handles)
+   and `TaskRunner` (refuses brand-new container creations).
+4. Awaits in-flight handler promises via
+   `Promise.race([Promise.allSettled(getInFlightPromises()), 30s timeout])`.
+5. Calls the optional `flush()` (Pino + Sentry) before `process.exit(0)`.
+
+### Process-Supervisor Contract
+
+The process supervisor (systemd / LaunchAgent / PM2) MUST grant the
+orchestrator at least **32 seconds** between SIGTERM and SIGKILL — that
+gives the in-process drain (30 s) a 2 s safety margin for the `app.close()`
+
+- interval cleanup + flush that bracket the race.
+
+| Supervisor                    | Setting                               | Required value |
+| ----------------------------- | ------------------------------------- | -------------- |
+| systemd                       | `TimeoutStopSec=` in the service unit | `>= 32s`       |
+| macOS LaunchAgent (`launchd`) | `ExitTimeOut` plist key               | `>= 32`        |
+| PM2 (`ecosystem.config.cjs`)  | `kill_timeout` (ms)                   | `>= 32000`     |
+
+The orchestrator is currently **not** governed by PM2 — it runs as a native
+Node.js process under systemd (Linux home-dev) or a macOS LaunchAgent. The
+default PM2 `kill_timeout` for app services is `5000` ms, which would be
+**too short** if the orchestrator were ever migrated; raise it to `32000` ms
+in that scenario.
+
+### Diagnostic Logs
+
+| Log message                                                                    | Trigger                                                  |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `Shutdown requested` (`signal: SIGTERM\|SIGINT`)                               | Handler entered, idempotent re-entry returns early       |
+| `In-flight handlers drained` (`drainedCount: N`)                               | Drain arm of the race won within budget                  |
+| `Shutdown timeout reached; forcing exit with in-flight handlers still pending` | Timeout arm won — handlers exceeded 30 s budget          |
+| `Orchestrator shutdown complete`                                               | Race resolved (either arm) and flush about to run        |
+| `flush() raised during shutdown; continuing exit`                              | Optional flush callback rejected (process still exits 0) |
+
+---
+
 ## E2E Testing
 
 ### Prerequisites
@@ -164,7 +218,7 @@ Set by `docker-provider.ts` when creating containers:
 ./scripts/setup-worker-network.sh
 
 # Build test image (uses claude-stub instead of real CLI)
-cd workers/code-worker
+cd docker/code-worker
 docker build -t code-worker:test -f Dockerfile.test .
 ```
 
@@ -192,7 +246,7 @@ pnpm --filter orchestrator test:e2e
 
 1. Build image: `docker build --no-cache ...`
 2. Push image: `docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest`
-3. Capture pushed digest and update `INTEXURAOS_CODE_WORKER_IMAGE` to that digest
+3. Ensure `INTEXURAOS_CODE_WORKER_IMAGE` still points at `code-worker:latest`
 4. Running containers use the old image until recreated (no hot reload)
 
 ### When Orchestrator Source Changes
@@ -209,7 +263,7 @@ pnpm --filter orchestrator test:e2e
 
 1. Commit and push code
 2. Build and push code-worker image (`--no-cache`)
-3. Update orchestrator env (`INTEXURAOS_CODE_WORKER_IMAGE=@sha256:...`)
+3. Ensure orchestrator env uses `INTEXURAOS_CODE_WORKER_IMAGE=.../code-worker:latest`
 4. Rebuild orchestrator: `pnpm --filter orchestrator build`
 5. Restart orchestrator process
 

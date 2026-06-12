@@ -15,6 +15,8 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import { deriveAggregateStatusFromSummary } from '../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
+import { paginatedScan } from '../infra/firestore/paginatedScan.js';
+import { getLinearIssueSortFields } from '../infra/firestore/taskGroupSummary/serializer.js';
 
 /* v8 ignore start -- module-init: standalone backfill script is never imported by test suites; cannot be unit-tested without a live Firestore connection @preserve */
 
@@ -97,6 +99,7 @@ function computeSummaryFromTasks(
 
   const firstTask = tasks[0];
   const linearIssueId = firstTask?.linearIssueId ?? null;
+  const sortFields = getLinearIssueSortFields(linearIssueId);
 
   for (const task of tasks) {
     taskCount++;
@@ -190,6 +193,8 @@ function computeSummaryFromTasks(
     userId,
     linearIssueId,
     groupKey,
+    linearIssueNumber: sortFields.linearIssueNumber,
+    linearIssueSortKey: sortFields.linearIssueSortKey,
     taskCount,
     activeTaskCount,
     latestTaskStatus,
@@ -262,18 +267,18 @@ async function main(): Promise<void> {
 
   logger.info('Fetching all non-archived tasks from code_tasks...');
 
-  const snapshot = await db
+  const allTasks: CodeTask[] = [];
+  const taskQuery = db
     .collection('code_tasks')
-    .where('status', 'in', [...NON_ARCHIVED_STATUSES])
-    .get();
+    .where('status', 'in', [...NON_ARCHIVED_STATUSES]);
 
-  const allTasks = snapshot.docs.map((doc) => {
+  for await (const doc of paginatedScan(taskQuery)) {
     const data = doc.data() as Record<string, unknown>;
-    return {
+    allTasks.push({
       ...data,
       id: doc.id,
-    } as CodeTask;
-  });
+    } as CodeTask);
+  }
 
   logger.info(`Fetched ${allTasks.length} non-archived tasks.`);
 

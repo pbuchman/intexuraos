@@ -3,7 +3,7 @@
  */
 
 export interface RawNotification {
-  sender: string;
+  sender?: string | null;
   text: string;
   postTime: string; // Unix epoch seconds as string
   title: string;
@@ -11,9 +11,14 @@ export interface RawNotification {
 }
 
 export interface CleanMessage {
-  sender: string;
+  senderLabel?: string | null;
   text: string;
   postTimeSec: number;
+}
+
+interface ParsedMessage {
+  message: CleanMessage;
+  dedupeSenderLabel: string;
 }
 
 const META_PATTERNS: RegExp[] = [
@@ -35,7 +40,7 @@ export function filterAndDedupeNotifications(
   raw: readonly RawNotification[]
 ): CleanMessage[] {
   // Parse and drop invalid postTime and meta rows
-  const parsed: CleanMessage[] = [];
+  const parsed: ParsedMessage[] = [];
   for (const notification of raw) {
     if (isMetaRow(notification.text)) {
       continue;
@@ -44,26 +49,36 @@ export function filterAndDedupeNotifications(
     if (!Number.isFinite(postTimeSec)) {
       continue;
     }
-    parsed.push({ sender: notification.sender, text: notification.text, postTimeSec });
+    const message: CleanMessage =
+      notification.sender === undefined
+        ? { text: notification.text, postTimeSec }
+        : { senderLabel: notification.sender, text: notification.text, postTimeSec };
+    parsed.push({
+      message,
+      dedupeSenderLabel: notification.sender ?? notification.title,
+    });
   }
 
   // Sort ascending by postTimeSec for dedup processing
-  parsed.sort((a, b) => a.postTimeSec - b.postTimeSec);
+  parsed.sort((a, b) => a.message.postTimeSec - b.message.postTimeSec);
 
-  // Deduplicate: for each (sender, text) pair, drop any notification
+  // Deduplicate: for each (sender label, text) pair, drop any notification
   // that is within 90 seconds of an earlier one we are keeping.
   const kept: CleanMessage[] = [];
-  // Track the postTimeSec of the last kept notification per (sender, text) key
+  // Track the postTimeSec of the last kept notification per (sender label, text) key
   const lastKeptTime = new Map<string, number>();
 
-  for (const msg of parsed) {
-    const key = `${msg.sender}\x00${msg.text}`;
+  for (const { message, dedupeSenderLabel } of parsed) {
+    const key = `${dedupeSenderLabel}\x00${message.text}`;
     const lastTime = lastKeptTime.get(key);
-    if (lastTime !== undefined && Math.abs(msg.postTimeSec - lastTime) <= DEDUP_WINDOW_SEC) {
+    if (
+      lastTime !== undefined &&
+      Math.abs(message.postTimeSec - lastTime) <= DEDUP_WINDOW_SEC
+    ) {
       continue;
     }
-    lastKeptTime.set(key, msg.postTimeSec);
-    kept.push(msg);
+    lastKeptTime.set(key, message.postTimeSec);
+    kept.push(message);
   }
 
   return kept;

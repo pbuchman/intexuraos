@@ -9,6 +9,7 @@ import type { AgentType, WorkerType } from '../models/codeTask.js';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
 import type { WorkerLocation } from '../models/worker.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
+import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
 
 /**
  * Per-request worker credentials for dispatch.
@@ -22,6 +23,7 @@ export interface DispatchWorkerCredentials {
     cfAccessClientId: string;
     cfAccessClientSecret: string;
     dispatchSigningSecret: string;
+    enabled?: boolean;
   }[];
 }
 
@@ -80,6 +82,11 @@ export interface DispatchRequest {
   reviewTypes?: string[];
   /** Worker location to exclude from dispatch (auto-retry avoidance). INT-1375 */
   failedWorkerLocation?: string;
+  /**
+   * Custom per-task timeout in hours (1–12). When set, orchestrator applies this
+   * instead of its 5h default for both warning and hard-kill timers. INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 /**
@@ -99,9 +106,10 @@ export interface DispatchError {
     | 'worker_busy'
     | 'at_capacity'       // All workers returned 503 (INT-619)
     | 'dispatch_failed'
-    | 'network_error'
-    | 'invalid_response';
+      | 'network_error'
+      | 'invalid_response';
   message: string;
+  blocker?: Extract<CodeTaskDispatchability, { dispatchable: false }>;
 }
 
 /**

@@ -34,5 +34,8 @@ export {
   SynthesisOutputFormatSchema,
   SynthesisContextSchema,
 } from './contextSchemas.js';
-export { buildInferSynthesisContextPrompt } from './contextInference.js';
-export { buildSynthesisContextRepairPrompt } from './repairPrompt.js';
+export { inferSynthesisContextPrompt } from './contextInference.js';
+export {
+  synthesisContextRepairPrompt,
+  type SynthesisContextRepairPromptInput,
+} from './repairPrompt.js';

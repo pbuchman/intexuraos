@@ -55,7 +55,13 @@ export async function repairAttribution(
 
   const repairPrompt = buildRepairPrompt(rawContent, sourceMap);
 
-  const result = await synthesizer.synthesize(repairPrompt, [], undefined, undefined);
+  const result = await synthesizer.synthesize(
+    repairPrompt,
+    [],
+    undefined,
+    undefined,
+    { promptType: 'research-attribution-repair' }
+  );
 
   if (!result.ok) {
     const error = result.error;

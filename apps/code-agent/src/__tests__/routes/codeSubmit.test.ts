@@ -19,11 +19,11 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -33,18 +33,18 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { CodeTaskDispatchStatusService } from '../../domain/services/codeTaskDispatchStatusService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { ok, err } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -52,6 +52,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
+import { createTaskEnqueueService } from '../../infra/services/taskEnqueueServiceImpl.js';
 
 describe('POST /code/submit', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -60,6 +61,7 @@ describe('POST /code/submit', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let taskEnqueueService: TaskEnqueueService;
+  let codeTaskDispatchStatusService: CodeTaskDispatchStatusService;
   let logChunkRepo: LogChunkRepository;
 
   beforeEach(async () => {
@@ -91,6 +93,10 @@ describe('POST /code/submit', () => {
 
     taskEnqueueService = {
       enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })),
+    };
+    codeTaskDispatchStatusService = {
+      recordDispatchBlocked: vi.fn().mockResolvedValue(undefined),
+      resolveDispatchBlockers: vi.fn().mockResolvedValue(undefined),
     };
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -132,6 +138,7 @@ describe('POST /code/submit', () => {
       codeTaskRepo,
       taskDispatcher,
       whatsappNotifier,
+      codeTaskDispatchStatusService,
       logChunkRepo,
       logLineRepo,
       actionsAgentClient,
@@ -150,11 +157,7 @@ describe('POST /code/submit', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -202,13 +205,13 @@ describe('POST /code/submit', () => {
       logLineRepo: LogLineRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      codeTaskDispatchStatusService: CodeTaskDispatchStatusService;
       linearAgentClient: LinearAgentClient;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
@@ -228,7 +231,7 @@ describe('POST /code/submit', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user
@@ -254,7 +257,7 @@ describe('POST /code/submit', () => {
     it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         payload: {
           prompt: 'Fix the bug',
         },
@@ -277,7 +280,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer invalid-token',
         },
@@ -305,7 +308,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -343,7 +346,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Build execution feature' },
       });
@@ -388,7 +391,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -422,7 +425,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -454,7 +457,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Implement feature', taskMode: 'execution' },
       });
@@ -481,7 +484,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Plan feature', taskMode: 'planning', linearIssueId: 'INT-999' },
       });
@@ -508,7 +511,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Do something unique' },
       });
@@ -540,7 +543,7 @@ describe('POST /code/submit', () => {
       // Submit first task
       const response1 = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -554,7 +557,7 @@ describe('POST /code/submit', () => {
       // Try to submit duplicate immediately
       const response2 = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -600,7 +603,7 @@ describe('POST /code/submit', () => {
       // Try to create second task with same Linear issue (should fail)
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -618,9 +621,60 @@ describe('POST /code/submit', () => {
   });
 
   describe('error handling', () => {
-    it('returns 503 when enqueue returns queue_full error', async () => {
-      const linearService = getServices().linearIssueService;
-      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+    it('returns a failed task id when enqueue returns queue_full error', async () => {
+      const services = getServices();
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(codeTaskRepo, 'countQueued').mockResolvedValueOnce(ok(50));
+      setServices({
+        ...services,
+        taskEnqueueService: createTaskEnqueueService({
+          logger,
+          codeTaskRepo,
+          whatsappNotifier: services.whatsappNotifier,
+        }),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.error).toEqual(expect.objectContaining({
+          code: 'dispatch_blocked_queue_full',
+          message: expect.stringContaining('queue is full'),
+        }));
+        const dispatchStatus = (taskResult.value as { dispatchStatus?: unknown }).dispatchStatus;
+        expect(dispatchStatus).toEqual(expect.objectContaining({
+          state: 'terminal',
+          reason: 'queue_full',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }));
+      }
+    });
+
+    it('returns a failed task id when the user has no enabled workers', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Fix the bug',
         linearIssueLabels: [],
@@ -628,22 +682,174 @@ describe('POST /code/submit', () => {
         linearFallback: false,
       });
 
-      // Mock enqueue to return queue_full error
-      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
-        err({ code: 'queue_full', message: 'Queue is full (11/10). Please try again later.' })
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug without workers' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.error).toEqual(expect.objectContaining({
+          code: 'dispatch_blocked_no_enabled_workers',
+        }));
+        const dispatchStatus = (taskResult.value as { dispatchStatus?: unknown }).dispatchStatus;
+        expect(dispatchStatus).toEqual(expect.objectContaining({
+          state: 'terminal',
+          reason: 'no_enabled_workers',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }));
+      }
+    });
+
+    it('returns a failed task id when worker settings fetch fails after task creation', async () => {
+      const services = getServices();
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'read failed' }),
       );
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Fix the bug' },
+        payload: { prompt: 'Fix the bug while settings read is down' },
       });
 
-      expect(response.statusCode).toBe(503);
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual(expect.objectContaining({
+        status: 'failed',
+        codeTaskId: expect.stringMatching(/^task_/),
+      }));
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.error).toEqual(expect.objectContaining({
+          code: 'dispatch_blocked_dispatch_failed',
+        }));
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'dispatch_failed',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }));
+      }
+    });
+
+    it('returns 500 when settings-fetch failure status cannot be persisted', async () => {
+      const services = getServices();
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'read failed' }),
+      );
+      vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug while settings and writes are down' },
+      });
+
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('write failed');
+    });
+
+    it('still fails the created task when dispatch status recording throws', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      vi.mocked(codeTaskDispatchStatusService.recordDispatchBlocked).mockRejectedValueOnce(
+        new Error('status repo unavailable')
+      );
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug while status recording is down' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual(expect.objectContaining({
+        status: 'failed',
+        codeTaskId: expect.stringMatching(/^task_/),
+      }));
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'no_enabled_workers',
+          terminal: true,
+        }));
+      }
+    });
+
+    it('returns 500 when no-worker task failure persistence fails', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug without workers while writes are down' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('write failed');
     });
 
     it('returns 500 when enqueue returns internal_error', async () => {
@@ -663,7 +869,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
@@ -680,7 +886,7 @@ describe('POST /code/submit', () => {
     it('rejects requests without prompt', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -695,7 +901,7 @@ describe('POST /code/submit', () => {
     it('rejects empty prompt', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -723,7 +929,7 @@ describe('POST /code/submit', () => {
       for (const workerType of workerTypes) {
         const response = await app.inject({
           method: 'POST',
-          url: '/code/submit',
+          url: '/submit',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -754,7 +960,7 @@ describe('POST /code/submit', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -771,6 +977,298 @@ describe('POST /code/submit', () => {
           sanitizedPrompt: 'Fix the bug',  // Sanitized
         })
       );
+    });
+  });
+
+  describe('scheduled dispatch', () => {
+    it('persists dispatchSchedule when execution mode includes valid future scheduledDispatch (INT-1468)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-700',
+        linearIssueTitle: 'Scheduled task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const notBeforeAt = new Date(Date.now() + 60 * 60 * 1000); // 1h in the future
+      const notBeforeAtIso = notBeforeAt.toISOString();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run this later',
+          taskMode: 'execution',
+          scheduledDispatch: {
+            localDateTime: '2026-04-24T22:00',
+            timezone: 'Europe/Warsaw',
+            notBeforeAt: notBeforeAtIso,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      const taskId = body.data.codeTaskId as string;
+
+      // Verify round-trip: load task back and inspect dispatchSchedule
+      const taskResult = await codeTaskRepo.findById(taskId);
+      expect(taskResult.ok).toBe(true);
+      if (!taskResult.ok) return;
+      const task = taskResult.value;
+      expect(task.dispatchSchedule).toBeDefined();
+      expect(task.dispatchSchedule?.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+      expect(task.dispatchSchedule?.source).toBe('user_scheduled');
+      expect(task.dispatchSchedule?.derivedBy).toBe('user_input');
+      expect(task.dispatchSchedule?.timezone).toBe('Europe/Warsaw');
+      expect(task.dispatchSchedule?.localDateTime).toBe('2026-04-24T22:00');
+    });
+
+    it('rejects scheduledDispatch when taskMode is planning (400 INVALID_REQUEST)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-701',
+        linearIssueTitle: 'Planning task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const notBeforeAtIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Plan later',
+          taskMode: 'planning',
+          scheduledDispatch: {
+            localDateTime: '2026-04-24T22:00',
+            timezone: 'UTC',
+            notBeforeAt: notBeforeAtIso,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toMatch(/execution/i);
+    });
+
+    it('rejects scheduledDispatch with past notBeforeAt (400 INVALID_REQUEST)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-702',
+        linearIssueTitle: 'Past task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const pastIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run in the past',
+          taskMode: 'execution',
+          scheduledDispatch: {
+            localDateTime: '2020-01-01T00:00',
+            timezone: 'UTC',
+            notBeforeAt: pastIso,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toMatch(/future/i);
+    });
+
+    it('rejects scheduledDispatch with invalid ISO notBeforeAt (400 INVALID_REQUEST)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-703',
+        linearIssueTitle: 'Invalid task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run with bad iso',
+          taskMode: 'execution',
+          scheduledDispatch: {
+            localDateTime: '2026-04-24T22:00',
+            timezone: 'UTC',
+            notBeforeAt: 'not-a-valid-iso',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('omits dispatchSchedule on execution submit when scheduledDispatch is not provided', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-704',
+        linearIssueTitle: 'No schedule task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run now',
+          taskMode: 'execution',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const taskId = body.data.codeTaskId as string;
+
+      const taskResult = await codeTaskRepo.findById(taskId);
+      expect(taskResult.ok).toBe(true);
+      if (!taskResult.ok) return;
+      expect(taskResult.value.dispatchSchedule).toBeUndefined();
+    });
+  });
+
+  describe('custom timeout (INT-1585)', () => {
+    const stubLinearIssue = (issueId: string, title: string): void => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: issueId,
+        linearIssueTitle: title,
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+    };
+
+    it('persists timeoutHours when sent in /code/submit body', async () => {
+      stubLinearIssue('INT-800', 'Timeout custom task');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Long-running task',
+          timeoutHours: 8,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const taskId = body.data.codeTaskId as string;
+      const stored = await codeTaskRepo.findById(taskId);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) return;
+      expect(stored.value.timeoutHours).toBe(8);
+    });
+
+    it('rejects timeoutHours below MIN_TIMEOUT_HOURS', async () => {
+      stubLinearIssue('INT-801', 'Bad timeout low');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Bad lower bound',
+          timeoutHours: 0,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('rejects timeoutHours above MAX_TIMEOUT_HOURS', async () => {
+      stubLinearIssue('INT-802', 'Bad timeout high');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Bad upper bound',
+          timeoutHours: 13,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('rejects non-integer timeoutHours via Fastify Ajv integer validation', async () => {
+      // The route declares `type: integer` in the JSON-schema body; Ajv
+      // therefore rejects floats before the handler runs. There is no
+      // additional runtime guard — Ajv coverage is sufficient (INT-1585).
+      stubLinearIssue('INT-803', 'Float timeout');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Float bound',
+          timeoutHours: 5.5,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('omitting timeoutHours produces a task without it (backward compat)', async () => {
+      stubLinearIssue('INT-804', 'No timeout task');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'No override',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const taskId = body.data.codeTaskId as string;
+      const stored = await codeTaskRepo.findById(taskId);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) return;
+      expect(stored.value.timeoutHours).toBeUndefined();
     });
   });
 });

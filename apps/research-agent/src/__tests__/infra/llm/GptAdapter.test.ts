@@ -52,15 +52,13 @@ describe('GptAdapter', () => {
         LlmModels.O4MiniDeepResearch,
         'test-user-id',
         mockLogger,
-        fakeUsageSink,
-        'research-123'
+        fakeUsageSink
       );
 
       expect(mockCreateGptClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.O4MiniDeepResearch,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
@@ -82,7 +80,24 @@ describe('GptAdapter', () => {
       if (result.ok) {
         expect(result.value.content).toBe('Research result');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { promptType: 'research-web-search' }
+      );
+    });
+
+    it('threads researchId through per-call correlation when provided', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Research result', sources: [], usage: mockUsage },
+      });
+
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1', promptType: 'research-web-search' });
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { promptType: 'research-web-search', correlation: { researchId: 'r-1' } }
+      );
     });
 
     it('maps error codes correctly', async () => {
@@ -158,6 +173,70 @@ describe('GptAdapter', () => {
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('External context'),
         expect.objectContaining({ promptType: 'research-synthesis' })
+      );
+    });
+
+    it('threads constructor researchId into client.generate via correlation', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
+
+      const adapterWithResearchId = new GptAdapter(
+        'test-key',
+        LlmModels.O4MiniDeepResearch,
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'r-gpt-1'
+      );
+      await adapterWithResearchId.synthesize('Prompt', [{ model: 'claude', content: 'Claude' }]);
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-synthesis',
+          correlation: { researchId: 'r-gpt-1' },
+        }
+      );
+
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Title', usage: mockUsage } });
+      await adapterWithResearchId.generateTitle('content');
+      expect(mockGenerate).toHaveBeenLastCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-title-generation',
+          correlation: { researchId: 'r-gpt-1' },
+        }
+      );
+    });
+
+    it('falls back to constructor researchId on research() when call-site option is omitted', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: {
+          content: 'Research',
+          sources: [],
+          usage: mockUsage,
+        },
+      });
+      const adapterWithBaked = new GptAdapter(
+        'test-key',
+        LlmModels.O4MiniDeepResearch,
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'baked-gpt'
+      );
+      await adapterWithBaked.research('Test prompt');
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-web-search', correlation: { researchId: 'baked-gpt' } }
+      );
+    });
+
+    it('omits correlation entirely when no researchId is configured', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
+      await adapter.synthesize('Prompt', [{ model: 'claude', content: 'Claude' }]);
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-synthesis' }
       );
     });
 

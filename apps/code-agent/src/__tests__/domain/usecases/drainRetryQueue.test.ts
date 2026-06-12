@@ -24,6 +24,7 @@ import {
   _resetRetryDrainGuard,
   type DrainRetryQueueDeps,
 } from '../../../domain/usecases/drainRetryQueue.js';
+import type { CodeTaskDispatchStatusService } from '../../../domain/services/codeTaskDispatchStatusService.js';
 
 const prepareExecutionMemoryContextMock = vi.fn();
 let mockExecutionMemoryEnabled = false;
@@ -62,10 +63,12 @@ vi.mock('../../../config.js', () => ({
   loadConfig: (): {
     retryQueue: { maxAttempts: number; ttlMinutes: number };
     serviceUrl: string;
+    codeTaskCallbackBaseUrl: string;
     executionMemoryEnabled: boolean;
   } => ({
     retryQueue: { maxAttempts: 3, ttlMinutes: 10 },
     serviceUrl: 'https://code-agent.test',
+    codeTaskCallbackBaseUrl: 'https://callback.test',
     executionMemoryEnabled: mockExecutionMemoryEnabled,
   }),
 }));
@@ -80,12 +83,14 @@ describe('drainRetryQueue', () => {
   let mockLogger: Logger;
   let mockDispatchRetryRepo: {
     findOldest: ReturnType<typeof vi.fn>;
+    claimForProcessing: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
   };
   let mockCodeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
+    claimForDispatch: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
   let mockTaskDispatcher: {
@@ -98,6 +103,7 @@ describe('drainRetryQueue', () => {
   let mockWhatsappNotifier: {
     notifyDispatchRetryExhausted: ReturnType<typeof vi.fn>;
     notifyTaskStarted: ReturnType<typeof vi.fn>;
+    notifyTaskDispatchBlocked: ReturnType<typeof vi.fn>;
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
@@ -108,6 +114,7 @@ describe('drainRetryQueue', () => {
   let mockStatusMirrorService: {
     mirrorStatus: ReturnType<typeof vi.fn>;
   };
+  let mockDispatchStatusService: CodeTaskDispatchStatusService;
   let mockUserServiceClient: {
     getLlmClient: ReturnType<typeof vi.fn>;
   };
@@ -191,6 +198,7 @@ describe('drainRetryQueue', () => {
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
       logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
       statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
+      codeTaskDispatchStatusService: mockDispatchStatusService,
       createTaskForPRFn: mockCreateTaskForPRFn,
       userServiceClient: mockUserServiceClient as never,
     };
@@ -213,6 +221,7 @@ describe('drainRetryQueue', () => {
 
     mockDispatchRetryRepo = {
       findOldest: vi.fn(),
+      claimForProcessing: vi.fn().mockResolvedValue(ok(true)),
       delete: vi.fn().mockResolvedValue(ok(undefined)),
       update: vi.fn().mockResolvedValue(ok(undefined)),
       create: vi.fn(),
@@ -220,6 +229,7 @@ describe('drainRetryQueue', () => {
 
     mockCodeTaskRepo = {
       findById: vi.fn().mockResolvedValue(ok(sampleTask)),
+      claimForDispatch: vi.fn().mockResolvedValue(ok(true)),
       update: vi.fn().mockResolvedValue(ok(sampleTask)),
     };
 
@@ -235,6 +245,7 @@ describe('drainRetryQueue', () => {
     mockWhatsappNotifier = {
       notifyDispatchRetryExhausted: vi.fn().mockResolvedValue(ok(undefined)),
       notifyTaskStarted: vi.fn().mockResolvedValue(ok(undefined)),
+      notifyTaskDispatchBlocked: vi.fn().mockResolvedValue(ok(undefined)),
     };
 
     mockWorkerSettingsRepo = {
@@ -247,6 +258,11 @@ describe('drainRetryQueue', () => {
 
     mockStatusMirrorService = {
       mirrorStatus: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+
+    mockDispatchStatusService = {
+      recordDispatchBlocked: vi.fn().mockResolvedValue(undefined),
+      resolveDispatchBlockers: vi.fn().mockResolvedValue(undefined),
     };
 
     mockUserServiceClient = {
@@ -568,6 +584,38 @@ describe('drainRetryQueue', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.action).toBe('empty');
+    expect(mockDispatchRetryRepo.claimForProcessing).not.toHaveBeenCalled();
+  });
+
+  it('skips when the retry entry is already claimed by another drain', async () => {
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockDispatchRetryRepo.claimForProcessing.mockResolvedValue(ok(false));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual({ action: 'skipped', taskId: 'task_xyz' });
+    expect(mockCodeTaskRepo.findById).not.toHaveBeenCalled();
+    expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('returns internal_error when the retry entry claim fails', async () => {
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockDispatchRetryRepo.claimForProcessing.mockResolvedValue(err({
+      code: 'FIRESTORE_ERROR',
+      message: 'transaction failed',
+    }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      code: 'internal_error',
+      message: 'Failed to claim retry entry for processing',
+    });
+    expect(mockCodeTaskRepo.findById).not.toHaveBeenCalled();
   });
 
   it('returns skipped on concurrent drain', async () => {
@@ -598,8 +646,75 @@ describe('drainRetryQueue', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.action).toBe('expired');
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      status: 'failed',
+      error: {
+        code: 'retry_expired',
+        message: 'Dispatch retry expired after 10 minutes and 0 attempts: worker_unavailable',
+      },
+      dispatchStatus: expect.objectContaining({
+        state: 'terminal',
+        reason: 'retry_expired',
+        terminal: true,
+        nextAction: 'retry_after_fix',
+        attemptCount: 0,
+        terminalCause: expect.objectContaining({
+          reason: 'dispatch_failed',
+          message: 'worker_unavailable',
+        }),
+      }),
+    }));
     expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
-    expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).toHaveBeenCalled();
+    expect(mockCodeTaskRepo.update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDispatchRetryRepo.delete.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      reason: 'retry_expired',
+      exampleTaskId: 'task_xyz',
+    }));
+    expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+  });
+
+  it('keeps retry entry when expired new-task failure status cannot be persisted', async () => {
+    const expiredRetry = {
+      ...sampleNewTaskRetry,
+      createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+    };
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(expiredRetry));
+    mockCodeTaskRepo.update.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to persist retry dispatch failure status',
+      });
+    }
+    expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+    expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+  });
+
+  it('returns internal_error when expired retry entry cannot be deleted after task notification', async () => {
+    const expiredRetry = {
+      ...sampleNewTaskRetry,
+      createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+    };
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(expiredRetry));
+    mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      code: 'internal_error',
+      message: 'Failed to delete expired retry entry',
+    });
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      reason: 'retry_expired',
+    }));
   });
 
   it('exhausts entry when max attempts exceeded', async () => {
@@ -615,8 +730,74 @@ describe('drainRetryQueue', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.action).toBe('exhausted');
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+      status: 'failed',
+      error: { code: 'retry_exhausted', message: 'Dispatch retry exhausted after 3 attempts: worker_unavailable' },
+      dispatchStatus: expect.objectContaining({
+        state: 'terminal',
+        reason: 'retry_exhausted',
+        terminal: true,
+        nextAction: 'retry_after_fix',
+        attemptCount: 3,
+        terminalCause: expect.objectContaining({
+          reason: 'dispatch_failed',
+          message: 'worker_unavailable',
+        }),
+      }),
+    }));
     expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
-    expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).toHaveBeenCalled();
+    expect(mockCodeTaskRepo.update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDispatchRetryRepo.delete.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      reason: 'retry_exhausted',
+      exampleTaskId: 'task_xyz',
+    }));
+    expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+  });
+
+  it('keeps retry entry when exhausted new-task failure status cannot be persisted', async () => {
+    const exhaustedRetry = {
+      ...sampleNewTaskRetry,
+      attempts: 3,
+      maxAttempts: 3,
+    };
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(exhaustedRetry));
+    mockCodeTaskRepo.update.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to persist retry dispatch failure status',
+      });
+    }
+    expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+    expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+  });
+
+  it('returns internal_error when exhausted retry entry cannot be deleted after task notification', async () => {
+    const exhaustedRetry = {
+      ...sampleNewTaskRetry,
+      attempts: 3,
+      maxAttempts: 3,
+    };
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(exhaustedRetry));
+    mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      code: 'internal_error',
+      message: 'Failed to delete exhausted retry entry',
+    });
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      reason: 'retry_exhausted',
+    }));
   });
 
   describe('new_task retry', () => {
@@ -631,7 +812,109 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('dispatched');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({ status: 'dispatched' }));
+      expect(mockCodeTaskRepo.claimForDispatch).toHaveBeenCalledWith('task_xyz');
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        dispatchStatus: null,
+        workerLocation: 'home-mac',
+        callbackState: expect.objectContaining({
+          webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
+          callbackBaseUrl: 'https://callback.test',
+          owner: 'custom',
+        }),
+      }));
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
+        })
+      );
+      expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith({
+        userId: 'user_123',
+        workerType: 'opus',
+      });
+    });
+
+    it('returns internal_error when retry entry cannot be deleted after successful dispatch', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete retry entry after successful dispatch',
+      });
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        dispatchStatus: null,
+        workerLocation: 'home-mac',
+      }));
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips without dispatching when the task cannot be claimed', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(false));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual({ action: 'skipped', taskId: 'task_xyz' });
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('returns internal_error when claiming the task for retry dispatch fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'claim failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to claim retry task for dispatch',
+      });
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes stale retry entry without dispatching when task is no longer queued', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok({ ...sampleTask, status: 'dispatched' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('failed');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('dispatches successfully when dispatch status service is omitted', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ ...sampleTask, status: 'dispatched' }));
+      const deps = buildDeps();
+      delete (deps as Partial<DrainRetryQueueDeps>).codeTaskDispatchStatusService;
+
+      const result = await drainRetryQueue(deps);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockDispatchStatusService.resolveDispatchBlockers).not.toHaveBeenCalled();
     });
 
     it('forwards prNumber in dispatch request when task has prNumber', async () => {
@@ -666,6 +949,21 @@ describe('drainRetryQueue', () => {
       );
     });
 
+    it('does not include reviewTypes in dispatch request when task has none', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok({ ...sampleTask, reviewTypes: undefined }));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.not.objectContaining({ reviewTypes: expect.anything() })
+      );
+    });
+
     it('includes reviewTypes in dispatch when task has them', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(
@@ -685,6 +983,44 @@ describe('drainRetryQueue', () => {
         expect.objectContaining({
           reviewTypes: ['code_quality', 'architecture'],
         })
+      );
+    });
+
+    it('forwards timeoutHours to dispatcher when task has it (INT-1585)', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(
+        ok({
+          ...sampleTask,
+          timeoutHours: 8,
+        })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutHours: 8 }),
+      );
+    });
+
+    it('omits timeoutHours from retry dispatch when task has none — backward compat (INT-1585)', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok({ ...sampleTask }));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.not.objectContaining({ timeoutHours: expect.anything() }),
       );
     });
 
@@ -774,6 +1110,26 @@ describe('drainRetryQueue', () => {
       expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
     });
 
+    it('returns internal_error when retry metadata cannot be persisted after retryable dispatch failure', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({ code: 'worker_unavailable', message: 'connection refused' }));
+      mockDispatchRetryRepo.update.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'retry update failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to update retry entry',
+      });
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+    });
+
     it('deletes entry and fails task on non-retryable error', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
@@ -785,7 +1141,57 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('failed');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({ status: 'failed' }));
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        status: 'failed',
+        dispatchStatus: expect.objectContaining({
+          state: 'terminal',
+          reason: 'dispatch_failed',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }),
+      }));
+    });
+
+    it('returns internal_error when terminal retry dispatch failure cannot be persisted', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({ code: 'dispatch_failed', message: 'bad payload' }));
+      mockCodeTaskRepo.update.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to persist retry dispatch failure status',
+      });
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+    });
+
+    it('returns internal_error when retry entry cannot be deleted after terminal dispatch failure', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({ code: 'dispatch_failed', message: 'bad payload' }));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete retry entry after terminal dispatch failure',
+      });
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        status: 'failed',
+      }));
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+        reason: 'dispatch_failed',
+      }));
     });
 
     it('returns failed when new_task entry has no taskId', async () => {
@@ -803,6 +1209,24 @@ describe('drainRetryQueue', () => {
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
     });
 
+    it('returns internal_error when malformed new_task retry entry cannot be deleted', async () => {
+      const entryWithoutTaskId = {
+        ...sampleNewTaskRetry,
+        taskId: undefined,
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(entryWithoutTaskId));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete malformed new-task retry entry',
+      });
+    });
+
     it('returns failed when task lookup fails for retry', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(err({ code: 'not_found', message: 'task not found' }));
@@ -813,6 +1237,52 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('failed');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+    });
+
+    it('returns internal_error when missing-task retry entry cannot be deleted', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(err({ code: 'not_found', message: 'task not found' }));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete retry entry after missing task lookup',
+      });
+    });
+
+    it('keeps retry entry when task lookup fails transiently for retry', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'read failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to find task for retry',
+      });
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('returns internal_error when stale retry entry cannot be deleted', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok({ ...sampleTask, status: 'dispatched' }));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete stale new-task retry entry',
+      });
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
     });
 
     it('returns retry_failed when worker settings fetch fails', async () => {
@@ -831,7 +1301,26 @@ describe('drainRetryQueue', () => {
       }));
     });
 
-    it('returns retry_failed when worker settings value is null', async () => {
+    it('returns internal_error when worker settings failure cannot update retry metadata', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(err({ code: 'not_found', message: 'no settings' }));
+      mockDispatchRetryRepo.update.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'retry update failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to update retry entry',
+      });
+    });
+
+    it('deletes retry entry and fails task immediately when worker settings value is null', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok(null));
@@ -840,13 +1329,21 @@ describe('drainRetryQueue', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value.action).toBe('retry_failed');
-      expect(mockDispatchRetryRepo.update).toHaveBeenCalledWith('dr_abc', expect.objectContaining({
-        lastError: 'Failed to fetch worker settings',
+      expect(result.value.action).toBe('failed');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        status: 'failed',
+        error: expect.objectContaining({
+          code: 'dispatch_blocked_no_enabled_workers',
+        }),
+        dispatchStatus: expect.objectContaining({
+          state: 'terminal',
+          reason: 'no_enabled_workers',
+        }),
       }));
     });
 
-    it('returns retry_failed when no enabled workers exist', async () => {
+    it('deletes retry entry and fails task immediately when no enabled workers exist', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
@@ -855,9 +1352,101 @@ describe('drainRetryQueue', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value.action).toBe('retry_failed');
-      expect(mockDispatchRetryRepo.update).toHaveBeenCalledWith('dr_abc', expect.objectContaining({
-        lastError: 'No enabled workers',
+      expect(result.value.action).toBe('failed');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        status: 'failed',
+        error: expect.objectContaining({
+          code: 'dispatch_blocked_no_enabled_workers',
+        }),
+        dispatchStatus: expect.objectContaining({
+          state: 'terminal',
+          reason: 'no_enabled_workers',
+          terminal: true,
+          nextAction: 'retry_after_fix',
+        }),
+      }));
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+        reason: 'no_enabled_workers',
+        exampleTaskId: 'task_xyz',
+      }));
+    });
+
+    it('returns internal_error when retry entry cannot be deleted after no enabled workers', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete retry entry after no enabled workers',
+      });
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        status: 'failed',
+      }));
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+        reason: 'no_enabled_workers',
+      }));
+    });
+
+    it('returns internal_error and keeps retry entry when terminal task failure persistence fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
+      mockCodeTaskRepo.update.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toEqual({
+          code: 'internal_error',
+          message: 'Failed to persist retry dispatch failure status',
+        });
+      }
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('records dispatch system status when no enabled workers exist', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
+
+      await drainRetryQueue(buildDeps());
+
+      expect(mockDispatchStatusService.recordDispatchBlocked).toHaveBeenCalledWith({
+        userId: 'user_123',
+        workerType: 'opus',
+        blocker: expect.objectContaining({
+          dispatchable: false,
+          reason: 'no_enabled_workers',
+        }),
+        affectedTaskCount: 1,
+        exampleTaskIds: ['task_xyz'],
+      });
+    });
+
+    it('still fails and notifies when no enabled workers exist and dispatch status service is omitted', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
+      const deps = buildDeps();
+      delete (deps as Partial<DrainRetryQueueDeps>).codeTaskDispatchStatusService;
+
+      const result = await drainRetryQueue(deps);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('failed');
+      expect(mockDispatchStatusService.recordDispatchBlocked).not.toHaveBeenCalled();
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+        reason: 'no_enabled_workers',
+        exampleTaskId: 'task_xyz',
       }));
     });
 
@@ -910,6 +1499,88 @@ describe('drainRetryQueue', () => {
       }));
     });
 
+    it('records task-level waiting status and sends one notification for recoverable dispatcher blockers', async () => {
+      const blocker = {
+        dispatchable: false as const,
+        reason: 'workers_at_capacity' as const,
+        severity: 'warning' as const,
+        message: 'All capable workers for opus are currently at capacity.',
+        remediation: 'Wait for a running task to finish or add worker capacity.',
+        workerNames: ['home-mac'],
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: blocker.message, blocker })
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('retry_failed');
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        dispatchStatus: expect.objectContaining({
+          state: 'waiting',
+          reason: 'workers_at_capacity',
+          terminal: false,
+          nextAction: 'will_retry_automatically',
+        }),
+      }));
+      expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user_123', expect.objectContaining({
+        workerType: 'opus',
+        reason: 'workers_at_capacity',
+        affectedTaskCount: 1,
+        exampleTaskId: 'task_xyz',
+      }));
+    });
+
+    it('returns internal_error and does not increment attempts when recoverable dispatch status persistence fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'all workers busy' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toEqual({
+          code: 'internal_error',
+          message: 'Failed to persist retry dispatch status',
+        });
+      }
+      expect(mockDispatchRetryRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('records dispatch system status when dispatcher returns blocker metadata', async () => {
+      const blocker = {
+        dispatchable: false as const,
+        reason: 'claude_auth_unavailable' as const,
+        severity: 'critical' as const,
+        message: 'No reachable worker has active Claude auth for opus.',
+        remediation: 'Refresh Claude authentication on a worker that can run this task.',
+        workerNames: ['home-mac'],
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'worker_unavailable', message: blocker.message, blocker })
+      );
+
+      await drainRetryQueue(buildDeps());
+
+      expect(mockDispatchStatusService.recordDispatchBlocked).toHaveBeenCalledWith({
+        userId: 'user_123',
+        workerType: 'opus',
+        blocker,
+        affectedTaskCount: 1,
+        exampleTaskIds: ['task_xyz'],
+      });
+    });
+
     it('notifies user on successful dispatch when task update succeeds', async () => {
       const updatedTask = { ...sampleTask, status: 'dispatched' };
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
@@ -941,7 +1612,7 @@ describe('drainRetryQueue', () => {
       }));
     });
 
-    it('skips notification when task update fails after successful dispatch', async () => {
+    it('returns internal_error and keeps retry entry when successful dispatch metadata cannot be persisted', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
       mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
@@ -949,10 +1620,14 @@ describe('drainRetryQueue', () => {
 
       const result = await drainRetryQueue(buildDeps());
 
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.action).toBe('dispatched');
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to persist successful retry dispatch metadata',
+      });
       expect(mockWhatsappNotifier.notifyTaskStarted).not.toHaveBeenCalled();
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -969,7 +1644,7 @@ describe('drainRetryQueue', () => {
   });
 
   describe('TTL expired edge cases', () => {
-    it('expires new_task and falls through to userId notification when task lookup fails', async () => {
+    it('expires new_task without notification when task lookup fails', async () => {
       const expiredRetry = {
         ...sampleNewTaskRetry,
         userId: 'user_123',
@@ -984,10 +1659,33 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('expired');
       expect(result.value.taskId).toBe('task_xyz');
-      // Falls through to userId notification since task lookup failed
-      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).toHaveBeenCalledWith('user_123', expect.objectContaining({
-        repository: 'intexuraos/test-repo',
-      }));
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ retryId: 'dr_abc', taskId: 'task_xyz' }),
+        'Expired new-task retry target was not found; skipping task-level dispatch notification'
+      );
+    });
+
+    it('keeps expired new_task retry entry when task lookup fails transiently', async () => {
+      const expiredRetry = {
+        ...sampleNewTaskRetry,
+        userId: 'user_123',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(expiredRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'read failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to find expired retry task',
+      });
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
     });
 
     it('expires task_message type with userId notification', async () => {
@@ -1006,6 +1704,60 @@ describe('drainRetryQueue', () => {
       expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).toHaveBeenCalledWith('user_123', expect.objectContaining({
         repository: 'intexuraos/test-repo',
       }));
+    });
+
+    it('expires task_message without userId and without notification', async () => {
+      const expiredMessage = {
+        ...sampleTaskMessageRetry,
+        userId: undefined,
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(expiredMessage));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('expired');
+      expect(result.value.taskId).toBe('task_xyz');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+    });
+
+    it('returns an error when deleting expired task_message retry fails', async () => {
+      const expiredMessage = {
+        ...sampleTaskMessageRetry,
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(expiredMessage));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({ code: 'internal_error', message: 'Failed to delete expired retry entry' });
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+    });
+
+    it('logs when expired task_message notification fails after cleanup', async () => {
+      const expiredMessage = {
+        ...sampleTaskMessageRetry,
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(expiredMessage));
+      mockWhatsappNotifier.notifyDispatchRetryExhausted.mockResolvedValue(err({
+        code: 'notification_failed',
+        message: 'wa down',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ retryId: 'dr_def', userId: 'user_123' }),
+        'Failed to notify user about expired message retry'
+      );
     });
 
     it('expires entry without userId and without notification', async () => {
@@ -1028,7 +1780,7 @@ describe('drainRetryQueue', () => {
   });
 
   describe('max attempts exhausted edge cases', () => {
-    it('exhausts new_task and falls through to userId notification when task lookup fails', async () => {
+    it('exhausts new_task without notification when task lookup fails', async () => {
       const exhaustedRetry = {
         ...sampleNewTaskRetry,
         userId: 'user_123',
@@ -1044,10 +1796,34 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('exhausted');
       expect(result.value.taskId).toBe('task_xyz');
-      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).toHaveBeenCalledWith('user_123', expect.objectContaining({
-        repository: 'intexuraos/test-repo',
-        lastError: 'worker_unavailable',
-      }));
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ retryId: 'dr_abc', taskId: 'task_xyz' }),
+        'Exhausted new-task retry target was not found; skipping task-level dispatch notification'
+      );
+    });
+
+    it('keeps exhausted new_task retry entry when task lookup fails transiently', async () => {
+      const exhaustedRetry = {
+        ...sampleNewTaskRetry,
+        userId: 'user_123',
+        attempts: 3,
+        maxAttempts: 3,
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(exhaustedRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'read failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to find exhausted retry task',
+      });
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
     });
 
     it('exhausts task_message type with userId notification', async () => {
@@ -1067,6 +1843,63 @@ describe('drainRetryQueue', () => {
       expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).toHaveBeenCalledWith('user_123', expect.objectContaining({
         repository: 'intexuraos/test-repo',
       }));
+    });
+
+    it('exhausts task_message without userId and without notification', async () => {
+      const exhaustedMessage = {
+        ...sampleTaskMessageRetry,
+        userId: undefined,
+        attempts: 3,
+        maxAttempts: 3,
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(exhaustedMessage));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('exhausted');
+      expect(result.value.taskId).toBe('task_xyz');
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+    });
+
+    it('returns an error when deleting exhausted task_message retry fails', async () => {
+      const exhaustedMessage = {
+        ...sampleTaskMessageRetry,
+        attempts: 3,
+        maxAttempts: 3,
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(exhaustedMessage));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'delete failed' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({ code: 'internal_error', message: 'Failed to delete exhausted retry entry' });
+      expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+    });
+
+    it('logs when exhausted task_message notification fails after cleanup', async () => {
+      const exhaustedMessage = {
+        ...sampleTaskMessageRetry,
+        attempts: 3,
+        maxAttempts: 3,
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(exhaustedMessage));
+      mockWhatsappNotifier.notifyDispatchRetryExhausted.mockResolvedValue(err({
+        code: 'notification_failed',
+        message: 'wa down',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ retryId: 'dr_def', userId: 'user_123' }),
+        'Failed to notify user about exhausted message retry'
+      );
     });
 
     it('exhausts entry without userId and without notification', async () => {
@@ -1104,6 +1937,26 @@ describe('drainRetryQueue', () => {
       expect(mockLogLineRepo.storeBatch).toHaveBeenCalled();
     });
 
+    it('returns internal_error when successful message retry cleanup fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'delete failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete retry entry after successful message delivery',
+      });
+      expect(mockLogLineRepo.storeBatch).not.toHaveBeenCalled();
+    });
+
     it('increments attempts on retryable failure', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
@@ -1115,6 +1968,26 @@ describe('drainRetryQueue', () => {
       if (!result.ok) return;
       expect(result.value.action).toBe('retry_failed');
       expect(mockDispatchRetryRepo.update).toHaveBeenCalledWith('dr_def', expect.objectContaining({ attempts: 1 }));
+    });
+
+    it('returns internal_error when retryable message failure cannot update retry metadata', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(err({ code: 'worker_unavailable', message: 'connection refused' }));
+      mockDispatchRetryRepo.update.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'retry update failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to update retry entry',
+      });
+      expect(mockDispatchRetryRepo.delete).not.toHaveBeenCalled();
     });
 
     it('returns failed when required fields are missing', async () => {
@@ -1134,6 +2007,29 @@ describe('drainRetryQueue', () => {
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
     });
 
+    it('returns internal_error when malformed task-message retry cleanup fails', async () => {
+      const entryMissingFields = {
+        ...sampleTaskMessageRetry,
+        userId: undefined,
+        taskId: undefined,
+        message: undefined,
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(entryMissingFields));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'delete failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete malformed task-message retry entry',
+      });
+    });
+
     it('returns retry_failed when worker settings fetch fails', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(err({ code: 'internal_error', message: 'db error' }));
@@ -1146,6 +2042,24 @@ describe('drainRetryQueue', () => {
       expect(mockDispatchRetryRepo.update).toHaveBeenCalledWith('dr_def', expect.objectContaining({
         lastError: 'Failed to fetch worker settings',
       }));
+    });
+
+    it('returns internal_error when task-message settings failure cannot update retry metadata', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(err({ code: 'internal_error', message: 'db error' }));
+      mockDispatchRetryRepo.update.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'retry update failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to update retry entry',
+      });
     });
 
     it('returns retry_failed when worker settings value is null', async () => {
@@ -1176,6 +2090,24 @@ describe('drainRetryQueue', () => {
       }));
     });
 
+    it('returns internal_error when no-worker task-message retry metadata cannot be updated', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ ...workerConfig, enabled: false }] }));
+      mockDispatchRetryRepo.update.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'retry update failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to update retry entry',
+      });
+    });
+
     it('deletes entry on non-retryable send failure', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
@@ -1188,6 +2120,25 @@ describe('drainRetryQueue', () => {
       expect(result.value.action).toBe('failed');
       expect(result.value.taskId).toBe('task_xyz');
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+    });
+
+    it('returns internal_error when permanent message failure cleanup fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(err({ code: 'dispatch_failed', message: 'bad payload' }));
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'delete failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete retry entry after permanent message failure',
+      });
     });
 
     it('creates new task when message retry fails with stale task error (worker_error + Task not found)', async () => {
@@ -1210,6 +2161,28 @@ describe('drainRetryQueue', () => {
         senderLogin: 'testuser',
         comment: 'please also fix tests',
       }));
+    });
+
+    it('returns internal_error and does not create fallback task when stale retry cleanup fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_error', message: 'Worker returned HTTP 404: Task not found' })
+      );
+      mockDispatchRetryRepo.delete.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'delete failed',
+      }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'internal_error',
+        message: 'Failed to delete retry entry before stale task fallback',
+      });
+      expect(mockCreateTaskForPRFn).not.toHaveBeenCalled();
     });
 
     it('creates new task when message retry fails with task_not_found code', async () => {

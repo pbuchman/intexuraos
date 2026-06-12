@@ -77,7 +77,7 @@ function validateCategory(
 export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /hellscript/writing-config
   fastify.get(
-    '/hellscript/writing-config',
+    '/writing-config',
     {
       schema: {
         operationId: 'getWritingConfig',
@@ -109,7 +109,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
 
   // PUT /hellscript/writing-config/:category/style
   fastify.put<{ Params: CategoryParams; Body: StyleBody }>(
-    '/hellscript/writing-config/:category/style',
+    '/writing-config/:category/style',
     {
       schema: {
         operationId: 'updateStyleInstructions',
@@ -151,7 +151,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
 
   // DELETE /hellscript/writing-config/:category/style
   fastify.delete<{ Params: CategoryParams }>(
-    '/hellscript/writing-config/:category/style',
+    '/writing-config/:category/style',
     {
       schema: {
         operationId: 'deleteStyleInstructions',
@@ -191,7 +191,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
 
   // GET /hellscript/writing-config/:category/samples
   fastify.get<{ Params: CategoryParams }>(
-    '/hellscript/writing-config/:category/samples',
+    '/writing-config/:category/samples',
     {
       schema: {
         operationId: 'listWritingSamples',
@@ -231,7 +231,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
 
   // POST /hellscript/writing-config/:category/samples
   fastify.post<{ Params: CategoryParams; Body: SampleBody }>(
-    '/hellscript/writing-config/:category/samples',
+    '/writing-config/:category/samples',
     {
       schema: {
         operationId: 'createWritingSample',
@@ -277,7 +277,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
 
   // PUT /hellscript/writing-config/:category/samples/:sampleId
   fastify.put<{ Params: SampleParams; Body: SampleBody }>(
-    '/hellscript/writing-config/:category/samples/:sampleId',
+    '/writing-config/:category/samples/:sampleId',
     {
       schema: {
         operationId: 'updateWritingSample',
@@ -324,7 +324,7 @@ export const writingConfigRoutes: FastifyPluginCallback = (fastify, _opts, done)
 
   // DELETE /hellscript/writing-config/:category/samples/:sampleId
   fastify.delete<{ Params: SampleParams }>(
-    '/hellscript/writing-config/:category/samples/:sampleId',
+    '/writing-config/:category/samples/:sampleId',
     {
       schema: {
         operationId: 'deleteWritingSample',

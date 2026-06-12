@@ -1,0 +1,17 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1900",
+    "requires_re_review": true,
+    "memory_ids_used": [
+      "mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad",
+      "mem_a4ce6dce-aecb-4189-816f-4a69d7d19251",
+      "mem_87d21fc9-fd32-47d6-a495-d1349e395a69"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "The bootstrap modularization memories reinforced the review context — the PR is a bootstrap-split refactor with Deps-based DI and a thin start.ts facade, so fixes stayed narrowly scoped to the already-extracted modules (api-key-validator.ts, service-wiring.test.ts) without touching the facade structure.",
+    "summary": "* Fixed Finding 1: `fetchWithRetry` v8-ignore category changed from `ts-type` → `upstream` (reviewer suggested `async-timing` but CI validator rejects it — requires setTimeout/clearTimeout pairs; `upstream` matches the early-throw guard semantically and passes validation).\n  * Fixed Finding 2: aligned `service-wiring.test.ts` `makeLogger` fake with `api-key-validator.test.ts` pattern (`...args: unknown[]`) so pino message strings are captured.\n  * Skipped 3 bot self-messages (prior nitpick-nuker summaries + `@ignore` review-started marker); posted reply + 😄 reaction on each.\n  * Pushed commit `559f58d05` to `feature/int-1429`; `pnpm run ci:tracked` green locally; remote CI passed all checks (Type Check, Lint, Tests 1–3/3, Coverage, E2E Isolation, Build & Format, Validation, Terraform).\n  * Posted Nitpick Nuker summary comment to PR."
+  },
+  "missingRequired": [],
+  "warnings": []
+}

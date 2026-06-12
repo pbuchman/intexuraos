@@ -39,8 +39,26 @@ export interface LlmSynthesisResult {
   usage?: LlmUsage;
 }
 
+/**
+ * Per-call options forwarded by the adapter into the underlying infra
+ * client's usage metadata bag so emitted usage events can be attributed
+ * and categorized end-to-end.
+ */
+export interface ResearchProviderCallOptions {
+  researchId?: string;
+  promptType?: string;
+}
+
+export interface SynthesisCallOptions {
+  promptType?: string;
+}
+
 export interface LlmResearchProvider {
-  research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>>;
+  research(
+    prompt: string,
+    ctx?: ResearchContext,
+    options?: ResearchProviderCallOptions
+  ): Promise<Result<LlmResearchResult, LlmError>>;
 }
 
 export interface LlmSynthesisProvider {
@@ -48,7 +66,8 @@ export interface LlmSynthesisProvider {
     originalPrompt: string,
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
-    synthesisContext?: SynthesisContext
+    synthesisContext?: SynthesisContext,
+    options?: SynthesisCallOptions
   ): Promise<Result<LlmSynthesisResult, LlmError>>;
 
   generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>>;

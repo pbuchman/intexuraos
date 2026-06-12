@@ -5,7 +5,54 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type FirebaseFirestore from '@google-cloud/firestore';
-import type { AgentType, CodeTask, TaskStatus, WorkerType } from '../models/codeTask.js';
+import type { Timestamp } from '@google-cloud/firestore';
+import type {
+  AgentType,
+  CodeTask,
+  CodeTaskDispatchStatus,
+  CodeTaskCallbackState,
+  DispatchSchedule,
+  ExecutionMemoryContext,
+  ExecutionMemoryPostRun,
+  TaskStatus,
+  WorkerType,
+} from '../models/codeTask.js';
+
+/**
+ * Create/update input shapes: accept raw `Date` for timestamp fields as a
+ * convenience for callers — the serializer converts them to Firestore
+ * `Timestamp` values. Production reads still yield `Timestamp` via `CodeTask`.
+ */
+export type ExecutionMemoryContextCreateInput = Omit<ExecutionMemoryContext, 'matchedAt'> & {
+  matchedAt?: Date | Timestamp;
+};
+
+export type ExecutionMemoryPostRunCreateInput = Omit<
+  ExecutionMemoryPostRun,
+  'lastAttemptAt' | 'completedAt'
+> & {
+  lastAttemptAt?: Date | Timestamp;
+  completedAt?: Date | Timestamp;
+};
+
+/**
+ * Write-time shape for `DispatchSchedule` (INT-1468).
+ * Accepts `Date | Timestamp` for `notBeforeAt` — the serializer converts to Timestamp.
+ */
+export type DispatchScheduleCreateInput = Omit<DispatchSchedule, 'notBeforeAt'> & {
+  notBeforeAt: Date | Timestamp;
+};
+
+export type CodeTaskDispatchStatusCreateInput = CodeTaskDispatchStatus;
+
+export type CodeTaskCallbackStateCreateInput =
+  Omit<CodeTaskCallbackState, 'configuredAt' | 'lastSuccessAt' | 'lastFailure'> & {
+    configuredAt: Date | Timestamp;
+    lastSuccessAt?: Date | Timestamp;
+    lastFailure?: Omit<NonNullable<CodeTaskCallbackState['lastFailure']>, 'occurredAt'> & {
+      occurredAt: Date | Timestamp;
+    };
+  };
 
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
@@ -47,21 +94,29 @@ export interface CreateTaskInput {
 
   // Review task metadata
   reviewTypes?: string[];
-  executionMemoryContext?: CodeTask['executionMemoryContext'];
-  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
+  executionMemoryContext?: ExecutionMemoryContextCreateInput | undefined;
+  executionMemoryPostRun?: ExecutionMemoryPostRunCreateInput | undefined;
 
   // Auto-retry metadata (INT-1375)
   failedWorkerLocation?: string;
   autoRetryAttempt?: number;
+
+  // Deferred dispatch metadata (INT-1468)
+  dispatchSchedule?: DispatchScheduleCreateInput | undefined;
+
+  /** Custom per-task timeout in hours (1–12). INT-1585. */
+  timeoutHours?: number;
 }
 
 export interface UpdateTaskInput {
   status?: TaskStatus;
   result?: CodeTask['result'];
   error?: CodeTask['error'] | null;
+  dispatchStatus?: CodeTaskDispatchStatusCreateInput | null;
   statusSummary?: CodeTask['statusSummary'];
   workerLocation?: string;
   callbackReceived?: boolean;
+  callbackState?: CodeTaskCallbackStateCreateInput;
   queuedAt?: Date;               // When task entered queue (INT-619)
   dispatchedAt?: Date;
   completedAt?: Date;
@@ -81,8 +136,8 @@ export interface UpdateTaskInput {
   prBranch?: string;
   prMergedAt?: Date;  // When PR was merged (INT-1174)
   prClosedAt?: Date;  // When PR was closed without merge (INT-1316)
-  executionMemoryContext?: CodeTask['executionMemoryContext'];
-  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
+  executionMemoryContext?: ExecutionMemoryContextCreateInput | undefined;
+  executionMemoryPostRun?: ExecutionMemoryPostRunCreateInput | undefined;
 
   // PR URL validation (INT-1361)
   prUrlValidationFailed?: boolean;
@@ -90,6 +145,9 @@ export interface UpdateTaskInput {
 
   // Remediation task metadata
   requiresReReview?: boolean;
+
+  // Deferred dispatch metadata (INT-1468)
+  dispatchSchedule?: DispatchScheduleCreateInput | undefined;
 }
 
 export interface ListTasksInput {
@@ -128,7 +186,10 @@ export interface CodeTaskRepository {
    */
   create(input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>>;
 
-  findById(taskId: string): Promise<Result<CodeTask, RepositoryError>>;
+  findById(
+    taskId: string,
+    options?: { transaction?: FirebaseFirestore.Transaction }
+  ): Promise<Result<CodeTask, RepositoryError>>;
 
   findByIdForUser(
     taskId: string,
@@ -170,22 +231,6 @@ export interface CodeTaskRepository {
   countByUserToday(userId: string): Promise<Result<number, RepositoryError>>;
 
   /**
-   * Find tasks eligible for log archival (completed before cutoff, not yet archived).
-   */
-  findArchivableTasks(
-    cutoffDate: Date,
-    limit: number
-  ): Promise<Result<{ taskId: string }[], RepositoryError>>;
-
-  /**
-   * Archive logs for a task: delete logs subcollection and mark task as archived.
-   */
-  archiveTaskLogs(
-    taskId: string,
-    batchSize: number
-  ): Promise<Result<{ logCount: number; archivedAt: Date }, RepositoryError>>;
-
-  /**
    * Find the task that created a specific PR.
    * Excludes merge-conflict follow-up tasks so PR routing links back to the
    * canonical PR task instead of a later conflict-resolution episode (INT-465).
@@ -194,6 +239,16 @@ export interface CodeTaskRepository {
     repository: string,
     prNumber: number
   ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * Find newest tasks for a PR, ordered by createdAt descending.
+   * Used by archived-open-PR repair to inspect the recent task window safely.
+   */
+  findRecentTasksByPR(
+    repository: string,
+    prNumber: number,
+    limit: number,
+  ): Promise<Result<CodeTask[], RepositoryError>>;
 
   /**
    * Find an active review task for a PR.
@@ -216,6 +271,23 @@ export interface CodeTaskRepository {
   ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
 
   /**
+   * Excludes queued siblings (uses DISPATCHED_OR_RUNNING_STATUSES) so that two queued
+   * reviews on the same Linear issue cannot deadlock. Filters out the candidate's own
+   * document.
+   */
+  hasOtherDispatchedOrRunningForLinearIssue(
+    taskId: string,
+    linearIssueId: string,
+  ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
+
+  /**
+   * Atomically transitions queued → dispatched via a Firestore transaction. Returns true
+   * when this caller acquired the claim; false when the task was already past queued or
+   * does not exist. Caller must roll status back to queued on retryable dispatch failure.
+   */
+  claimForDispatch(taskId: string): Promise<Result<boolean, RepositoryError>>;
+
+  /**
    * Find the newest execution-eligible task for a PR.
    * Excludes review, remediation, planning, and merge-conflict follow-up tasks —
    * only returns execution or canonical pull_request tasks. Used to route
@@ -230,9 +302,11 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
-   * Find the latest planning or execution origin task for a PR.
-   * Excludes review, remediation, and pull_request tasks.
-   * Used to resolve the true origin task for review-outcome labeling.
+   * Find the latest origin task for a PR. Prefers `planning` or `execution`
+   * tasks; falls back to the most recent `pull_request` task when neither
+   * exists. Excludes `review`, `remediation`, and merge-conflict follow-up
+   * tasks. Used to resolve the true origin task for review-outcome labeling
+   * and to gate review creation when the latest origin failed.
    */
   findOriginTaskByPR(
     repository: string,

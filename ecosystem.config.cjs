@@ -8,6 +8,10 @@
  *   pm2 stop all
  *   pm2 delete all
  */
+const { COMMON_SERVICE_URLS_GENERATED } = require('./ecosystem.generated.cjs');
+
+const PM2_BASE_ENV = { ...process.env };
+delete PM2_BASE_ENV.NODE_OPTIONS;
 
 // Common auth secrets for all services (mirrors Terraform local.common_service_secrets)
 const COMMON_SERVICE_ENV = {
@@ -20,43 +24,49 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID,
   INTEXURAOS_INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN,
   INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID,
-  INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
+  INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'https://dev.intexuraos.cloud',
   INTEXURAOS_MINIMAX_APP_API_KEY: process.env.INTEXURAOS_MINIMAX_APP_API_KEY,
   INTEXURAOS_MIMO_APP_API_KEY: process.env.INTEXURAOS_MIMO_APP_API_KEY,
   INTEXURAOS_GEMINI_APP_API_KEY: process.env.INTEXURAOS_GEMINI_APP_API_KEY,
   INTEXURAOS_DASHSCOPE_APP_API_KEY: process.env.INTEXURAOS_DASHSCOPE_APP_API_KEY,
+  INTEXURAOS_KIMI_APP_API_KEY: process.env.INTEXURAOS_KIMI_APP_API_KEY,
   INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
   INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS:
     process.env.INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS ??
-    'or:google/gemma-4-31b-it:free,or:google/gemma-4-31b-it,gemini-2.5-flash',
+    'or:google/gemma-4-31b-it,gemini-2.5-flash',
   INTEXURAOS_ENVIRONMENT: process.env.INTEXURAOS_ENVIRONMENT ?? 'dev',
   INTEXURAOS_RUNTIME: 'dev',
-  INTEXURAOS_DASH0_OTLP_ENDPOINT: process.env.INTEXURAOS_DASH0_OTLP_ENDPOINT,
-  INTEXURAOS_DASH0_AUTH_TOKEN: process.env.INTEXURAOS_DASH0_AUTH_TOKEN,
 };
 
 // All service URLs - mirrors Terraform local.common_service_env_vars
 const COMMON_SERVICE_URLS = {
-  INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
-  INTEXURAOS_NOTION_SERVICE_URL: 'http://localhost:8112',
-  INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
-  INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL: 'http://localhost:8114',
-  INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
-  INTEXURAOS_COMMANDS_AGENT_URL: 'http://localhost:8117',
-  INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
-  INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
-  INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
-  INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',
-  INTEXURAOS_TODOS_AGENT_URL: 'http://localhost:8123',
-  INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
-  INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
-  INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
-  INTEXURAOS_CHAT_AGENT_URL: 'http://localhost:8129',
-  INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
-  INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
-  INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
-  INTEXURAOS_HELLSCRIPT_AGENT_URL: 'http://localhost:8131',
-  INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
+  ...COMMON_SERVICE_URLS_GENERATED,
+  INTEXURAOS_API_DOCS_HUB_URL: 'http://localhost:8133',
+};
+
+// OpenAPI source URLs consumed by api-docs-hub. Each upstream service exposes
+// `/openapi.json` on the same port as its main HTTP server (see COMMON_SERVICE_URLS).
+const API_DOCS_HUB_OPENAPI_URLS = {
+  INTEXURAOS_USER_SERVICE_OPENAPI_URL: 'http://localhost:8110/openapi.json',
+  INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
+  INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
+  INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
+  INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
+  INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL: 'http://localhost:8117/openapi.json',
+  INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
+  INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
+  INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL: 'http://localhost:8122/openapi.json',
+  INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
+  INTEXURAOS_TODOS_AGENT_OPENAPI_URL: 'http://localhost:8123/openapi.json',
+  INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://localhost:8124/openapi.json',
+  INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
+  INTEXURAOS_CHAT_AGENT_OPENAPI_URL: 'http://localhost:8129/openapi.json',
+  INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'https://dev.intexuraos.cloud/api/code/openapi.json',
+  INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://localhost:8126/openapi.json',
+  INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://localhost:8127/openapi.json',
+  INTEXURAOS_CRON_AGENT_OPENAPI_URL: 'http://localhost:8130/openapi.json',
+  INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://localhost:8131/openapi.json',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -74,10 +84,14 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_LLM_CALL_TOPIC: process.env.INTEXURAOS_PUBSUB_LLM_CALL_TOPIC ?? 'llm-call',
   },
   'whatsapp-service': {
+    // home-dev publishes to the local Pub/Sub emulator on localhost:8102.
+    // These fallbacks must match the emulator topic aliases configured in
+    // tools/pubsub-ui/server.mjs, not the Terraform-managed Cloud Run topic
+    // names (`intexuraos-*-dev`), or inbound webhooks fail before processing.
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'whatsapp-send-message-sub',
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'whatsapp-send-message-push',
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC:
       process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'whatsapp-media-cleanup',
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
@@ -88,13 +102,13 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID: process.env.INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID,
     INTEXURAOS_WHATSAPP_VERIFY_TOKEN: process.env.INTEXURAOS_WHATSAPP_VERIFY_TOKEN,
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET:
-      process.env.INTEXURAOS_WHATSAPP_MEDIA_BUCKET ?? 'whatsapp-media',
+      process.env.INTEXURAOS_WHATSAPP_MEDIA_BUCKET ?? 'intexuraos-whatsapp-media-dev',
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION:
-      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ?? 'whatsapp-media-cleanup-sub',
+      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ?? 'whatsapp-media-cleanup-push',
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? 'whatsapp-webhook-process',
     INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC ?? 'audio-stored-dev',
+      process.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC ?? 'whatsapp-transcription',
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC:
       process.env.INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC ?? 'approval-reply',
   },
@@ -104,10 +118,10 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC:
       process.env.INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC ?? 'calendar-preview',
-    INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   },
   'code-agent': {
     INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/code',
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: 'https://dev.intexuraos.cloud/api/code',
     INTEXURAOS_WEBHOOK_VERIFY_SECRET: process.env.INTEXURAOS_WEBHOOK_VERIFY_SECRET,
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
@@ -117,13 +131,18 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY,
     INTEXURAOS_GITHUB_WEBHOOK_SECRET: process.env.INTEXURAOS_GITHUB_WEBHOOK_SECRET,
     INTEXURAOS_EXECUTION_MEMORY_ENABLED: process.env.INTEXURAOS_EXECUTION_MEMORY_ENABLED ?? 'false',
+    INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
     INTEXURAOS_QUEUE_MAX_SIZE: process.env.INTEXURAOS_QUEUE_MAX_SIZE ?? '50',
     INTEXURAOS_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_QUEUE_TTL_MINUTES ?? '1440',
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS: process.env.INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS ?? '3',
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_RETRY_QUEUE_TTL_MINUTES ?? '10',
+    INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS: process.env.INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS ?? '3',
     // INTEXURAOS_LLM_USAGE_SERVICE_URL: already in COMMON_SERVICE_URLS (http://localhost:8132)
     // INTEXURAOS_ENABLE_METRICS: not set — Cloud Monitoring disabled on home-dev (no IAM role)
+  },
+  'linear-agent': {
+    INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/linear',
   },
   'bookmarks-agent': {
     INTEXURAOS_PUBSUB_BOOKMARK_ENRICH:
@@ -139,6 +158,7 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
   },
   'commands-agent': {
+    INTEXURAOS_SERVICE_URL: 'http://localhost:8117',
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
   },
   'todos-agent': {
@@ -160,6 +180,11 @@ const SERVICE_ENV_MAPPINGS = {
   'chat-agent': {
     // OpenAI API key for embeddings (from .envrc)
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
+    // HS256 secret used to sign guest session JWTs (>=32 bytes; from .envrc)
+    INTEXURAOS_GUEST_SESSION_SECRET: process.env.INTEXURAOS_GUEST_SESSION_SECRET,
+  },
+  'fishing-assistant-service': {
+    INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
   },
   'llm-usage-service': {
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
@@ -170,6 +195,9 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+  },
+  'api-docs-hub': {
+    ...API_DOCS_HUB_OPENAPI_URLS,
   },
 };
 
@@ -199,13 +227,12 @@ function createServiceConfig(name, port, options = {}) {
     script: TSX_CLI,
     interpreter: 'node',
     env: {
-      ...process.env,
+      ...PM2_BASE_ENV,
       ...COMMON_SERVICE_ENV,
       ...COMMON_SERVICE_URLS,
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       PORT: String(port),
       NODE_ENV: 'development',
-      NODE_OPTIONS: '--import @intexuraos/infra-otel/register',
     },
     autorestart: true,
     kill_timeout: 5000,
@@ -239,6 +266,7 @@ module.exports = {
     createServiceConfig('notion-service', 8112),
     createServiceConfig('whatsapp-service', 8113),
     createServiceConfig('mobile-notifications-service', 8114),
+    createServiceConfig('fishing-assistant-service', 8119),
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),
@@ -259,6 +287,10 @@ module.exports = {
     createServiceConfig('chat-agent', 8129, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('web-agent', 8127, { waitForService: 'http://localhost:8122/health' }),
 
+    // Aggregates `/openapi.json` from every other service — register last so
+    // upstream services have already been started by the time it boots.
+    createServiceConfig('api-docs-hub', 8133),
+
     // Web app (Vite dev server — uses proxy for /api/* routes in dev environment)
     {
       name: 'web',
@@ -267,7 +299,7 @@ module.exports = {
       args: ['--mode', 'development'],
       interpreter: 'node',
       env: {
-        ...process.env,
+        ...PM2_BASE_ENV,
         ...COMMON_SERVICE_ENV,
         ...COMMON_SERVICE_URLS,
         NODE_ENV: 'development',

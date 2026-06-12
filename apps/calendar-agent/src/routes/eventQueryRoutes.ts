@@ -20,7 +20,7 @@ import {
 
 export const eventQueryRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get<{ Querystring: ListEventsQuery }>(
-    '/calendar/events',
+    '/events',
     {
       schema: {
         operationId: 'listCalendarEvents',
@@ -105,7 +105,7 @@ export const eventQueryRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
   );
 
   fastify.get<{ Params: EventParams; Querystring: CalendarIdQuery }>(
-    '/calendar/events/:eventId',
+    '/events/:eventId',
     {
       schema: {
         operationId: 'getCalendarEvent',

@@ -1,4 +1,5 @@
 import type { ApiErrorResponse, ApiResponse } from '@/types';
+import { newRequestId } from '@/services/requestId';
 
 export type ConflictReason = 'duplicate' | 'active' | 'duplicate_approval';
 
@@ -54,6 +55,14 @@ interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   timeout?: number; // Timeout in milliseconds (default: 30000ms)
+  /**
+   * Optional callback invoked when a request fails with HTTP 401. When
+   * provided, the client awaits the new access token, swaps the
+   * `Authorization` header, and retries the request exactly once. If the
+   * second attempt also returns 401 (or any other failure), the error
+   * propagates to the caller.
+   */
+  refreshToken?: () => Promise<string>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -64,7 +73,17 @@ export async function apiRequest<T>(
   accessToken: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { method = 'GET', body, headers = {}, timeout = DEFAULT_TIMEOUT_MS } = options;
+  return await performRequest<T>(baseUrl, path, accessToken, options, false);
+}
+
+async function performRequest<T>(
+  baseUrl: string,
+  path: string,
+  accessToken: string,
+  options: RequestOptions,
+  retried: boolean
+): Promise<T> {
+  const { method = 'GET', body, headers = {}, timeout = DEFAULT_TIMEOUT_MS, refreshToken } = options;
 
   // AbortController for timeout handling
   const controller = new AbortController();
@@ -75,6 +94,7 @@ export async function apiRequest<T>(
   const url = `${baseUrl}${path}`;
   const requestHeaders: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
+    'X-Request-Id': newRequestId(),
     ...headers,
   };
 
@@ -106,6 +126,14 @@ export async function apiRequest<T>(
     throw err;
   } finally {
     clearTimeout(timeoutId);
+  }
+
+  // 401 silent-refresh retry: if a refreshToken callback is provided and this
+  // is the first attempt, fetch a fresh token and retry exactly once. The
+  // retry inherits the same `cache: 'no-store'` option set above.
+  if (response.status === 401 && !retried && refreshToken !== undefined) {
+    const newToken = await refreshToken();
+    return await performRequest<T>(baseUrl, path, newToken, options, true);
   }
 
   // Handle 204 No Content - successful response with no body

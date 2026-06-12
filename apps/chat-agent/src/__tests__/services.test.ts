@@ -75,6 +75,8 @@ describe('chat-agent services', () => {
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://localhost:8081';
     process.env['INTEXURAOS_GEMINI_APP_API_KEY'] = 'test-gemini-key';
     process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'] = 'test-dashscope-key';
+    process.env['INTEXURAOS_GUEST_SESSION_SECRET'] =
+      'test-secret-min-32-bytes-padded-padded-padded';
     mockCreateUserServiceClient.mockClear();
     mockCreateLlmClient.mockClear();
   });
@@ -89,6 +91,7 @@ describe('chat-agent services', () => {
     delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
     delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
     delete process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'];
+    delete process.env['INTEXURAOS_GUEST_SESSION_SECRET'];
   });
 
   describe('getServices', () => {
@@ -147,6 +150,7 @@ describe('chat-agent services', () => {
         logger: mockLogger as unknown as ServiceContainer['logger'],
         guestRateLimiter: null as unknown as ServiceContainer['guestRateLimiter'],
         guestLlmClient: null as unknown as ServiceContainer['guestLlmClient'],
+        guestSessionSigner: null as unknown as ServiceContainer['guestSessionSigner'],
       };
       setServices(customServices);
       const services = getServices();
@@ -177,6 +181,7 @@ describe('chat-agent services', () => {
         logger: mockLogger as unknown as ServiceContainer['logger'],
         guestRateLimiter: null as unknown as ServiceContainer['guestRateLimiter'],
         guestLlmClient: null as unknown as ServiceContainer['guestLlmClient'],
+        guestSessionSigner: null as unknown as ServiceContainer['guestSessionSigner'],
       };
       setServices(customServices);
       expect(() => getServices()).not.toThrow();
@@ -208,6 +213,16 @@ describe('chat-agent services', () => {
       expect(() => initializeServices()).toThrow(
         'INTEXURAOS_GEMINI_APP_API_KEY environment variable is required for guest access'
       );
+    });
+
+    it('throws when INTEXURAOS_GUEST_SESSION_SECRET is missing', () => {
+      delete process.env['INTEXURAOS_GUEST_SESSION_SECRET'];
+      expect(() => initializeServices()).toThrow(/INTEXURAOS_GUEST_SESSION_SECRET/);
+    });
+
+    it('throws when INTEXURAOS_GUEST_SESSION_SECRET is too short', () => {
+      process.env['INTEXURAOS_GUEST_SESSION_SECRET'] = 'short';
+      expect(() => initializeServices()).toThrow(/INTEXURAOS_GUEST_SESSION_SECRET/);
     });
   });
 });

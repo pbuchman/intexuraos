@@ -189,14 +189,6 @@ No deprecated APIs or dependencies in use.
 - Colorized format: `service-name | HH:mm:ss | LEVEL | message | {extras}`
 - Applied across all 18 service `server.ts` files via `6063175b`
 
-### 2026-02-16: Dash0 OpenTelemetry Integration
-
-**Issue:** No distributed tracing or OpenTelemetry metrics across services.
-
-**Resolution:**
-- New `packages/infra-otel` package with preload module loaded via `--import` in Dockerfile
-- All 19 services instrumented transparently; no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` unset
-
 ### 2026-02-15: Gemini Platform Fallback Added
 
 **Issue:** Platform fallback only supported ZAI (GLM-4.7-flash), which took 29s for title generation and exceeded the 10s HTTP timeout.

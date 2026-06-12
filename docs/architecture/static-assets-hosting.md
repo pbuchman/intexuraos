@@ -25,10 +25,9 @@ IntexuraOS uses a public Google Cloud Storage (GCS) bucket to serve static asset
    - Public read access via `allUsers` member
    - Role: `roles/storage.objectViewer`
 
-3. **Cloud Build Sync** (`cloudbuild/cloudbuild.yaml`)
-   - Dedicated `sync-static-assets` step
-   - Uses `gsutil rsync` for efficient synchronization
-   - Runs independently of service builds (no affected gating)
+3. **Terraform-owned bucket**
+   - The bucket and IAM are retained GCP infrastructure.
+   - App/web service deployment no longer runs through GCP Cloud Build.
 
 ## Access
 

@@ -8,16 +8,6 @@ output "repository_id" {
   value       = google_cloudbuildv2_repository.intexuraos.id
 }
 
-output "deploy_trigger_id" {
-  description = "Deploy trigger ID"
-  value       = google_cloudbuild_trigger.manual_main.trigger_id
-}
-
-output "deploy_trigger_name" {
-  description = "Deploy trigger name"
-  value       = google_cloudbuild_trigger.manual_main.name
-}
-
 output "cloud_build_service_account" {
   description = "Cloud Build service account email"
   value       = google_service_account.cloud_build.email
@@ -37,16 +27,6 @@ output "github_actions_workload_identity_provider" {
 output "github_actions_service_account" {
   description = "Service account for GitHub Actions (use as GCP_SERVICE_ACCOUNT secret)"
   value       = google_service_account.cloud_build.email
-}
-
-output "service_triggers" {
-  description = "Per-service trigger names"
-  value       = { for k, v in google_cloudbuild_trigger.service : k => v.name }
-}
-
-output "web_trigger" {
-  description = "Web trigger name"
-  value       = google_cloudbuild_trigger.web.name
 }
 
 output "firestore_trigger" {

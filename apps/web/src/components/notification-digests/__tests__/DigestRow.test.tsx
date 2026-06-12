@@ -10,7 +10,7 @@ const baseSummary = {
   date: '2026-04-17',
   groupKey: 'grupa-wedkarska-skool',
   messageCount: 412,
-  headline: 'Wyciek przepisów i debata o echosondach.',
+  headline: 'Recipe leak and fish-finder debate.',
   bullets: ['a', 'b', 'c'],
   threads: [],
   moderatorPosts: [],
@@ -25,7 +25,7 @@ describe('DigestRow', () => {
         <DigestRow digest={{ summary: baseSummary, generation: 1, generatedAt: '', modelId: '' }} />
       </MemoryRouter>
     );
-    expect(screen.getByText(/Wyciek przepisów/)).toBeInTheDocument();
+    expect(screen.getByText(/Recipe leak/)).toBeInTheDocument();
   });
 
   it('renders "no messages" copy when headline is empty', () => {
@@ -35,6 +35,6 @@ describe('DigestRow', () => {
         <DigestRow digest={{ summary: empty, generation: 1, generatedAt: '', modelId: '' }} />
       </MemoryRouter>
     );
-    expect(screen.getByText(/Brak wiadomości tego dnia/)).toBeInTheDocument();
+    expect(screen.getByText(/No messages that day/)).toBeInTheDocument();
   });
 });

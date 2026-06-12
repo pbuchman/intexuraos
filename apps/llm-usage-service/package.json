@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/llm-usage-service",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -25,12 +25,10 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
-    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "fastify": "^5.1.0",
+    "fastify": "catalog:",
     "firebase-admin": "^13.0.2",
-    "pino": "^10.1.1",
-    "zod": "^3.24.1"
+    "pino": "catalog:"
   },
   "devDependencies": {
     "nock": "^14.0.0"

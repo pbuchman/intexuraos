@@ -24,11 +24,7 @@ import {
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
-import {
-  buildHealthResponse,
-  checkSecrets,
-  type HealthCheck,
-} from '@intexuraos/http-server';
+import { registerHealthCheck, secretsHealthCheck } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { linearRoutes } from './routes/linearRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
@@ -43,16 +39,20 @@ const REQUIRED_SECRETS = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_SERVICE_URL',
   'INTEXURAOS_USER_SERVICE_URL',
 ];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   const servers = [
     {
-      url: 'https://intexuraos-linear-agent-cj44trunra-lm.a.run.app',
-      description: 'Cloud (Development)',
+      url: 'https://intexuraos.cloud/api/linear',
+      description: 'Production',
     },
-    { url: 'http://localhost:8080', description: 'Local' },
+    {
+      url: 'https://dev.intexuraos.cloud/api/linear',
+      description: 'Development',
+    },
   ];
 
   return {
@@ -246,25 +246,11 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
     }
   );
 
-  app.get(
-    '/health',
-    {
-      schema: {
-        summary: 'Health check',
-        description: 'Health check endpoint',
-        tags: ['system'],
-      },
-    },
-    async (_req, reply) => {
-      const started = Date.now();
-      const checks: HealthCheck[] = [checkSecrets(REQUIRED_SECRETS)];
-
-      const response = buildHealthResponse(SERVICE_NAME, SERVICE_VERSION, checks);
-
-      void reply.header('x-health-duration-ms', String(Date.now() - started));
-      return await reply.type('application/json').send(response);
-    }
-  );
+  await registerHealthCheck(app, {
+    serviceName: SERVICE_NAME,
+    version: SERVICE_VERSION,
+    checks: [secretsHealthCheck(REQUIRED_SECRETS)],
+  });
 
   return await Promise.resolve(app);
 }

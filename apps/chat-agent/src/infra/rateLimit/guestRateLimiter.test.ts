@@ -164,4 +164,21 @@ describe('guestRateLimiter', () => {
       expect(usage?.remaining).toBe(100);
     });
   });
+
+  describe('unbounded map protection', () => {
+    it('evicts the oldest entries when capacity is exceeded', () => {
+      const limiter = createGuestRateLimiter({ maxPerHour: 100, maxSessions: 3 });
+
+      limiter.record('a');
+      limiter.record('b');
+      limiter.record('c');
+      limiter.record('d'); // 'a' should be evicted
+
+      const aUsage = limiter.getUsage('a');
+      const dUsage = limiter.getUsage('d');
+
+      expect(aUsage).toEqual({ count: 0, remaining: 100 }); // reset (evicted)
+      expect(dUsage).toEqual({ count: 1, remaining: 99 });
+    });
+  });
 });

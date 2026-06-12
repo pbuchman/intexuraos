@@ -18,13 +18,24 @@ import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../utils/secrets.js';
-
-const MAX_AUTO_RETRY_DEPTH = 3;
+import { loadConfig } from '../../config.js';
 
 export interface AutoRetryTaskRequest {
   failedTask: CodeTask;
   failedWorkerLocation: string;
   reason: string;
+  /**
+   * Optional cooloff dispatch schedule (INT-1463). Only set when the failure
+   * verdict is `retry_after_cooloff`; the retry task will be queued but
+   * ineligible for dispatch until `notBeforeAt`. Fallback-derived schedules
+   * use a fixed 60-minute wait; parser/LLM-derived ones use the parsed reset time.
+   */
+  cooloffSchedule?: {
+    notBeforeAt: Date;
+    timezone?: string;
+    sourceText?: string;
+    derivedBy: 'parser' | 'llm' | 'fallback';
+  };
 }
 
 export interface AutoRetryTaskResult {
@@ -35,10 +46,9 @@ export interface AutoRetryTaskResult {
 
 export type AutoRetryTaskErrorCode = 'budget_exhausted' | 'internal_error';
 
-export interface AutoRetryTaskError {
-  code: AutoRetryTaskErrorCode;
-  message: string;
-}
+export type AutoRetryTaskError =
+  | { code: 'budget_exhausted'; message: string; attempts: number }
+  | { code: 'internal_error'; message: string };
 
 export interface AutoRetryTaskDeps {
   logger: Logger;
@@ -48,26 +58,19 @@ export interface AutoRetryTaskDeps {
   orchestratorSecret: string;
 }
 
-/**
- * Count auto-retry depth by walking the retriedFrom chain.
- * Each hop increments depth by 1. Stops at MAX_AUTO_RETRY_DEPTH or chain end.
- */
 async function countRetryDepth(
   codeTaskRepo: CodeTaskRepository,
-  task: CodeTask
+  task: CodeTask,
+  maxDepth: number,
 ): Promise<number> {
   let depth = 0;
   let currentRetryFrom = task.retriedFrom;
-
-  while (currentRetryFrom !== undefined && depth < MAX_AUTO_RETRY_DEPTH) {
+  while (currentRetryFrom !== undefined && depth < maxDepth) {
     depth++;
     const parentResult = await codeTaskRepo.findById(currentRetryFrom);
-    if (!parentResult.ok) {
-      break;
-    }
+    if (!parentResult.ok) break;
     currentRetryFrom = parentResult.value.retriedFrom;
   }
-
   return depth;
 }
 
@@ -76,20 +79,21 @@ export async function autoRetryTask(
   request: AutoRetryTaskRequest
 ): Promise<Result<AutoRetryTaskResult, AutoRetryTaskError>> {
   const { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier } = deps;
-  const { failedTask, failedWorkerLocation, reason } = request;
+  const { failedTask, failedWorkerLocation, reason, cooloffSchedule } = request;
 
-  // Step 1: Check retry budget via chain walking
-  const retryDepth = await countRetryDepth(codeTaskRepo, failedTask);
+  const maxAttempts = loadConfig().autoRetry.maxAttempts;
+  const retryDepth = await countRetryDepth(codeTaskRepo, failedTask, maxAttempts);
   const attemptNumber = retryDepth + 1;
 
-  if (attemptNumber > MAX_AUTO_RETRY_DEPTH) {
+  if (retryDepth >= maxAttempts) {
     logger.info(
-      { taskId: failedTask.id, retryDepth, maxDepth: MAX_AUTO_RETRY_DEPTH },
+      { taskId: failedTask.id, retryDepth, maxAttempts },
       'Auto-retry budget exhausted'
     );
     return err({
       code: 'budget_exhausted' as const,
       message: `Auto-retry budget exhausted after ${String(retryDepth)} attempts`,
+      attempts: retryDepth,
     });
   }
 
@@ -116,6 +120,16 @@ export async function autoRetryTask(
     ...(failedTask.linearIssueId !== undefined && { linearIssueId: failedTask.linearIssueId }),
     ...(failedTask.prNumber !== undefined && { prNumber: failedTask.prNumber }),
     ...(failedTask.prBranch !== undefined && { prBranch: failedTask.prBranch }),
+    ...(cooloffSchedule !== undefined && {
+      dispatchSchedule: {
+        notBeforeAt: cooloffSchedule.notBeforeAt,
+        source: 'retry_cooloff' as const,
+        derivedBy: cooloffSchedule.derivedBy,
+        derivedFromTaskId: failedTask.id,
+        ...(cooloffSchedule.timezone !== undefined && { timezone: cooloffSchedule.timezone }),
+        ...(cooloffSchedule.sourceText !== undefined && { sourceText: cooloffSchedule.sourceText }),
+      },
+    }),
   });
 
   if (!createResult.ok) {
@@ -123,10 +137,13 @@ export async function autoRetryTask(
     return err({ code: 'internal_error' as const, message: `Failed to create auto-retry task: ${createResult.error.message}` });
   }
 
-  // Step 3: Enqueue for dispatch
+  // queue TTL must bound the entire retry chain, so the new task inherits the
+  // first attempt's queuedAt instead of getting a fresh stamp from enqueue().
+  const inheritedQueuedAt = failedTask.queuedAt?.toDate() ?? failedTask.createdAt.toDate();
   const enqueueResult = await taskEnqueueService.enqueue({
     taskId: retryTaskId,
     userId: failedTask.userId,
+    queuedAt: inheritedQueuedAt,
   });
 
   if (!enqueueResult.ok) {
@@ -147,7 +164,7 @@ export async function autoRetryTask(
   await whatsappNotifier.notifyTaskAutoRetried(
     failedTask.userId,
     failedTask,
-    { attempt: attemptNumber, maxAttempts: MAX_AUTO_RETRY_DEPTH, reason, retryTaskId }
+    { attempt: attemptNumber, maxAttempts, reason, retryTaskId }
   );
 
   logger.info(

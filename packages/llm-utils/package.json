@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/llm-utils",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,13 +10,13 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "@intexuraos/llm-contract": "workspace:*",
+    "pino": "catalog:",
+    "zod": "catalog:"
   }
 }

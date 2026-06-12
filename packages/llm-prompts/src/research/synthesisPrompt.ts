@@ -3,6 +3,7 @@
  * Used by adapters in research-agent to synthesize research from multiple providers.
  */
 
+import type { PromptBuilder } from '../shared/types.js';
 import type { SynthesisContext } from '../synthesis/contextTypes.js';
 import { filterByExclusions, extractUserExclusions } from './promptUtils.js';
 
@@ -270,37 +271,11 @@ Create a unified synthesis that:
 Write the ENTIRE synthesis in ${ctx.language.toUpperCase()}. This is the language of the original query.`;
 }
 
-/**
- * Builds a structured synthesis prompt for combining research from multiple LLM models.
- * Handles both LLM reports and optional additional sources provided by the user.
- *
- * @param originalPrompt - The original user query
- * @param reports - Array of LLM research reports to synthesize
- * @param ctxOrAdditionalSources - Optional synthesis context or additional sources (for backward compatibility)
- * @param additionalSources - Optional additional sources when context is provided
- */
-export function buildSynthesisPrompt(
+function buildLegacySynthesisPrompt(
   originalPrompt: string,
   reports: (SynthesisReport | undefined)[],
-  ctxOrAdditionalSources?: SynthesisContext | (AdditionalSource | undefined)[],
-  additionalSources?: (AdditionalSource | undefined)[]
+  legacyAdditionalSourcesRaw: (AdditionalSource | undefined)[] | undefined
 ): string {
-  if (
-    ctxOrAdditionalSources !== undefined &&
-    !Array.isArray(ctxOrAdditionalSources) &&
-    'synthesis_goals' in ctxOrAdditionalSources
-  ) {
-    return buildContextualSynthesisPrompt(
-      originalPrompt,
-      reports,
-      ctxOrAdditionalSources,
-      additionalSources
-    );
-  }
-
-  const legacyAdditionalSourcesRaw = Array.isArray(ctxOrAdditionalSources)
-    ? ctxOrAdditionalSources
-    : undefined;
   const legacyAdditionalSources =
     legacyAdditionalSourcesRaw !== undefined
       ? legacyAdditionalSourcesRaw.filter((s): s is AdditionalSource => s !== undefined)
@@ -414,4 +389,33 @@ Adjust your synthesis style based on the topic:
 
 Write the ENTIRE synthesis in the SAME LANGUAGE as the Original Prompt (Polish → Polish, Spanish → Spanish, etc.)`;
 }
-// Prompt version: 1.2.0
+
+export interface SynthesisPromptInput {
+  originalPrompt: string;
+  reports: (SynthesisReport | undefined)[];
+  ctx?: SynthesisContext | undefined;
+  additionalSources?: (AdditionalSource | undefined)[] | undefined;
+}
+
+/**
+ * Builds a structured synthesis prompt for combining research from multiple LLM models.
+ * Handles both LLM reports and optional additional sources provided by the user.
+ *
+ * Routes between two implementations:
+ * - When `ctx` is provided, uses the structured-context renderer (with safety,
+ *   conflicts, missing-coverage, etc.).
+ * - When `ctx` is omitted, uses the legacy renderer with optional additional sources.
+ */
+export const synthesisPrompt: PromptBuilder<SynthesisPromptInput> = {
+  name: 'research-synthesis',
+  description: 'Combines multi-model research reports into a unified synthesis',
+  version: '1.2.0',
+
+  build(input: SynthesisPromptInput): string {
+    const { originalPrompt, reports, ctx, additionalSources } = input;
+    if (ctx !== undefined) {
+      return buildContextualSynthesisPrompt(originalPrompt, reports, ctx, additionalSources);
+    }
+    return buildLegacySynthesisPrompt(originalPrompt, reports, additionalSources);
+  },
+};

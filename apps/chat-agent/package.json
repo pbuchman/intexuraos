@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/chat-agent",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "@fastify/rate-limit": "^10.2.1",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",
     "@intexuraos/common-core": "workspace:*",
@@ -24,18 +25,17 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
-    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "fastify": "^5.1.0",
-    "openai": "^4.0.0",
-    "pino": "^10.1.0"
+    "fastify": "catalog:",
+    "jose": "^5.9.6",
+    "openai": "catalog:",
+    "pino": "catalog:"
   },
   "devDependencies": {
-    "jose": "^5.9.6",
     "vitest": "^3.0.0"
   }
 }

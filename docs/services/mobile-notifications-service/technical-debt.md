@@ -1,7 +1,7 @@
 # Mobile Notifications Service — Technical Debt
 
-**Last Updated:** 2026-04-22
-**Analysis Run:** [2026-04-22 v3.6.0 documentation refresh](../../documentation-runs.md)
+**Last Updated:** 2026-06-12
+**Analysis Run:** [2026-06-12 v3.7.0 service documentation refresh](../../documentation-runs.md)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
-| Code Smells | 1     | Medium   |
+| Code Smells | 2     | Medium   |
 | Test Gaps   | 0     | —        |
 | Type Issues | 0     | —        |
 | TODOs       | 0     | —        |
-| **Total**   | **1** | —        |
+| **Total**   | **2** | —        |
 
 ---
 
@@ -40,6 +40,7 @@ _None identified._
 | File                         | Issue                                                                                                    | Impact                                                                            |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `src/routes/digestRoutes.ts` | Single route file handles all digest endpoints (internal cron, internal run, user-facing CRUD, backfill) | Approaching SRP threshold; will become harder to navigate as digest features grow |
+| `src/routes/internalRoutes.ts` | Single internal route file now owns generic notification query plus five Fishing Assistant digest evidence routes | The file is larger and mixes unrelated internal API surfaces; split by consumer/domain if more routes are added |
 
 ### Low Priority
 
@@ -87,6 +88,8 @@ _None identified._
 
 | Date       | Issue                                                        | Resolution                                                                                    |
 | ---------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| 2026-06-12 | Fishing Assistant needed digest/history evidence from mobile notifications | Added internal digest subscription, digest evidence, state, and cleaned group-message routes |
+| 2026-06-12 | Digest regeneration could lose configured output language | Regeneration now passes subscription `outputLanguage`; internal Markdown labels follow the configured language |
 | 2026-04-22 | 5-batch cap in title filter caused incomplete results        | Removed cap; title filter now iterates all matching batches (INT-1398)                        |
 | 2026-04-22 | Digest timestamp filter used milliseconds instead of seconds | Fixed to use seconds for postTimeSec field (INT-1412)                                         |
 | 2026-04-22 | Missing daily digest summaries from cron                     | Fixed run-yesterday endpoint dispatching (INT-1420)                                           |

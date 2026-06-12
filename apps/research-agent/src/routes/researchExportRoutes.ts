@@ -37,7 +37,7 @@ const saveBodySchema = {
 
 export const researchExportRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /research/settings/notion/validate
-  fastify.post('/research/settings/notion/validate', async (request, reply) => {
+  fastify.post('/settings/notion/validate', async (request, reply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /research/settings/notion/validate',
       });
@@ -77,7 +77,7 @@ export const researchExportRoutes: FastifyPluginCallback = (fastify, _opts, done
   );
 
   // GET /research/settings/notion
-  fastify.get('/research/settings/notion', async (request, reply) => {
+  fastify.get('/settings/notion', async (request, reply) => {
       logIncomingRequest(request, {
         message: 'Received request to GET /research/settings/notion',
       });
@@ -110,7 +110,7 @@ export const researchExportRoutes: FastifyPluginCallback = (fastify, _opts, done
 
   // POST /research/settings/notion
   fastify.post(
-    '/research/settings/notion',
+    '/settings/notion',
     {
       schema: {
         body: saveBodySchema,

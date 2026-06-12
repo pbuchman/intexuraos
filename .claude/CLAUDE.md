@@ -37,19 +37,21 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Rules:** Apps can't import other apps. Routes use `getServices()`. Service communication via `/internal/{resource-name}` with `X-Internal-Auth`. All endpoints MUST use `logIncomingRequest()`. Pub/Sub: HTTP push only (no pull). Use cases MUST accept `logger: Logger`. Firestore: one collection owner per service, cross-service via HTTP, registry: `firestore-collections.json`. Migrations: IMMUTABLE — create new to fix bugs. Multi-field queries need composite indexes in `migrations/*.mjs`.
 
+**Code Task Callback Ownership:** Orchestrator is deployment-independent. `workerLocation` is only the machine executing the task, never the task's dev/prod owner. The task's `webhookUrl` determines the owning code-agent environment, and public dev/prod callbacks MUST use `/api/code/internal/...`. Reference: `.claude/reference/environments.md`, `.claude/reference/architecture.md`
+
 **Apps & Packages:** Apps: `getServices()`, `getFirestore()`, `INTEXURAOS_*` env vars, `validateRequiredEnv()`. New service: `/create-service`. Packages: `common-*` (leaf), `infra-*` (wrappers), no domain logic. Pub/Sub publishers MUST extend `BasePubSubPublisher`, topic names from env vars.
 
 **Env Vars (services):** Three locations required: (1) `apps/<service>/src/index.ts` `REQUIRED_ENV`, (2) `terraform/environments/dev/main.tf`, (3) `ecosystem.config.cjs`. Reference: `.claude/reference/env-vars-patterns.md`.
 
-**Env Vars (web app):** Web app is a static Vite bundle, not a Cloud Run service — env vars are **baked in at build time**, no runtime env surface exists. When a new `INTEXURAOS_*_URL` is consumed by the web app, it MUST be wired in THREE web-specific locations: (1) `apps/web/src/config.ts` `getConfig()` — add a `getServiceUrl()` entry with the dev proxy path, (2) `apps/web/cloudbuild.yaml` `CLOUD_RUN_SERVICES` array — add `"<service>:<SUFFIX>"` so the prod build fetches the URL and writes it to `/workspace/apps/web/.env`, (3) `apps/web/vite.config.ts` proxy + `ecosystem.config.cjs` — so dev shells can route `/api/<path>` to the local process. Skipping (2) produces a clean build, green tests, and a prod bundle that throws `Missing required environment variable` at module load.
+**Env Vars (web app):** Web app is a static Vite bundle, not a Cloud Run service — env vars are **baked in at build time**, no runtime env surface exists. When a new `INTEXURAOS_*_URL` is consumed by the web app, wire it through `apps/web/service-manifest.json`, regenerate service wiring, and ensure `apps/web/src/config.ts`, `apps/web/vite.config.ts`, `ecosystem.config.cjs`, and `scripts/hetzner/deploy-web.sh` consume the generated values. Reference: `.claude/reference/env-vars-patterns.md`.
 
-**Web App:** Hash routing only (`/#/path`). TailwindCSS, `@auth0/auth0-react`, `useApiClient`, SRP ~150 lines, `import.meta.env.INTEXURAOS_*`. Dev: Vite proxies `/api/*`. Prod: absolute Cloud Run URLs.
+**Web App:** Hash routing only (`/#/path`). TailwindCSS, `@auth0/auth0-react`, `useApiClient`, SRP ~150 lines, `import.meta.env.INTEXURAOS_*`. Dev: Vite proxies `/api/*`. Prod: Hetzner nginx public `/api/*` routes.
 
 # Workflow
 
 **CI Failure:** Capture output with `tee /tmp/ci-output-*.txt`, analyze with `rg "error|FAIL" -C3`. Any failure in any workspace: fix it or ask user. Do not commit until ALL resolved.
 
-**Verification:** Run from repo root. (1) `pnpm run verify:workspace:tracked -- <app-name>`. (2) Verify `packages/*/dist/` exists. (3) `pnpm run ci:tracked` must pass. Never modify `vitest.config.ts` coverage exclusions.
+**Verification:** Run from repo root. (1) `pnpm run verify:workspace:tracked -- <app-name>`. (2) Packages export from `./src/*.ts` (source-exports default); only `infra-otel` ships `dist/` — `pnpm run verify:package-exports` enforces this. (3) `pnpm run ci:tracked` must pass. Never modify `vitest.config.ts` coverage exclusions.
 
 **Git & PR:** Commit Gate must pass before every commit. NEVER commit directly to `main` or `development` — both are protected branches (direct pushes are blocked by branch protection rules). Always create a feature branch and open a PR targeting `development`. Merge latest base branch before PR. Git worktrees NOT allowed.
 
@@ -57,7 +59,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Infrastructure:** ALL via Terraform. GCP project: `--project=intexuraos-dev-pbuchman`. SA key: `$HOME/.config/gcloud/sa-key.json`. Reference: `.claude/reference/infrastructure.md`
 
-**Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Cloud Run). No "local". Firestore shared. Reference: `.claude/reference/environments.md`
+**Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Hetzner PM2/nginx + retained GCP data plane). No "local". Both environments use the SAME retained GCP project `intexuraos-dev-pbuchman` (the `-dev-pbuchman` suffix is legacy — there is no separate prod project). `terraform/environments/dev/` owns retained GCP resources; `terraform/hetzner-prod/` owns the production Hetzner host and Hetzner-targeted async/control-plane resources. Firestore shared. Reference: `.claude/reference/environments.md`
 
 **Code Task Investigation:** When user pastes `dev.intexuraos.cloud/#/code-tasks/task_*` or `intexuraos.cloud/#/code-tasks/task_*` URL — use `/debug-code-task` skill. NEVER WebFetch/curl the SPA URL (hash routing returns shell HTML). Data is in Firestore `code_tasks` collection.
 

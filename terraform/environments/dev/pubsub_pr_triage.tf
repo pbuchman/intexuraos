@@ -12,9 +12,11 @@ module "pubsub_pr_triage" {
   topic_name     = "intexuraos-pr-triage-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.code_agent.service_url}/internal/code/pubsub/pr-triage"
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
+
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/code/pubsub/pr-triage"
   push_service_account_email = module.iam.service_accounts["code_agent"]
-  push_audience              = module.code_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
 
   # Triage runs an LLM + Linear API + Firestore writes; budget room above default 60s.
   ack_deadline_seconds = 300
@@ -26,6 +28,5 @@ module "pubsub_pr_triage" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.code_agent,
   ]
 }

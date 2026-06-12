@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-perplexity",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,7 +17,8 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
-    "@intexuraos/llm-pricing": "workspace:*"
+    "@intexuraos/llm-pricing": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*"
   },
   "devDependencies": {
     "nock": "^14.0.0"

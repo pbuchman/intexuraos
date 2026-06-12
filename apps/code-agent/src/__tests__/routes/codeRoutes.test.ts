@@ -19,12 +19,12 @@ import { buildServer } from '../../server.js';
 import { resetServices, setServices, getServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -34,7 +34,7 @@ import type { LogLineRepository } from '../../domain/repositories/logLineReposit
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import { ok, type Result } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -42,15 +42,15 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import type { WorkerConfig, WorkerHealthState } from '../../domain/models/workerSettings.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
 import type { DispatchRetry } from '../../domain/models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../../domain/repositories/dispatchRetryRepository.js';
@@ -62,6 +62,27 @@ function generateOrchestratorSignature(payload: object, secret: string): { times
   const message = `${timestamp}.${rawBody}`;
   const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
   return { timestamp, signature };
+}
+
+function healthyWorkerState(
+  overrides: Partial<Extract<WorkerHealthState, { _tag: 'healthy' }>> = {}
+): Extract<WorkerHealthState, { _tag: 'healthy' }> {
+  return {
+    _tag: 'healthy',
+    healthy: true,
+    capacity: 1,
+    running: 0,
+    available: 1,
+    workerAuths: {
+      claude: { status: 'active' },
+      codex: { status: 'active' },
+    },
+    providerApiKeys: {},
+    dockerHealthy: true,
+    diskHealthy: true,
+    responseTimeMs: 100,
+    ...overrides,
+  };
 }
 
 describe('codeRoutes', () => {
@@ -183,11 +204,7 @@ describe('codeRoutes', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -210,6 +227,7 @@ describe('codeRoutes', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { return ok(undefined); },
         async update() { return ok(undefined); },
@@ -246,7 +264,6 @@ describe('codeRoutes', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
@@ -266,7 +283,7 @@ describe('codeRoutes', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user
@@ -317,7 +334,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -363,7 +380,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -440,7 +457,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -497,7 +514,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -511,7 +528,7 @@ describe('codeRoutes', () => {
     it('returns 404 for non-existent task', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/non-existent',
+        url: '/tasks/non-existent',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -525,7 +542,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/task-123',
+        url: '/tasks/task-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -646,7 +663,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -693,7 +710,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -743,7 +760,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?status=implemented',
+        url: '/tasks?status=implemented',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -779,7 +796,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?limit=2',
+        url: '/tasks?limit=2',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -795,7 +812,7 @@ describe('codeRoutes', () => {
     it('returns empty array for user with no tasks', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -810,7 +827,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
       });
 
       expect(response.statusCode).toBe(401);
@@ -833,7 +850,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?userId=user-123',
+        url: '/tasks?userId=user-123',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1342,7 +1359,7 @@ describe('codeRoutes', () => {
     it('submits task successfully', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1364,7 +1381,7 @@ describe('codeRoutes', () => {
     it('submits task with workerType and linearIssueId', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1389,7 +1406,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         payload: {
           prompt: 'Fix the login bug',
         },
@@ -1417,7 +1434,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1451,7 +1468,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1467,7 +1484,7 @@ describe('codeRoutes', () => {
       expect(body.error.code).toBe('CONFLICT');
     });
 
-    it('returns 503 when enqueue returns queue_full error', async () => {
+    it('returns a failed task id when enqueue returns queue_full error', async () => {
       setServices({
         ...getServices(),
         taskEnqueueService: {
@@ -1477,7 +1494,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1486,13 +1503,14 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(503);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
     });
 
-    it('returns 500 when getSettings fails with Firestore error', async () => {
+    it('returns a failed task id when getSettings fails after task creation', async () => {
       const services = getServices();
       const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
         err({ code: 'internal_error', message: 'Firestore unavailable' })
@@ -1500,7 +1518,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1509,15 +1527,28 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual(expect.objectContaining({
+        status: 'failed',
+        codeTaskId: expect.stringMatching(/^task_/),
+      }));
+
+      const taskResult = await services.codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'dispatch_failed',
+          terminal: true,
+        }));
+      }
 
       mockGetSettings.mockRestore();
     });
 
-    it('returns WORKER_NOT_CONFIGURED when user has no enabled workers', async () => {
+    it('returns a failed task id when user has no enabled workers', async () => {
       const services = getServices();
       const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
         ok({
@@ -1539,7 +1570,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1548,10 +1579,11 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(424);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
 
       mockGetSettings.mockRestore();
     });
@@ -1584,7 +1616,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1602,7 +1634,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         payload: {
           taskId: 'task-123',
         },
@@ -1614,7 +1646,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1652,7 +1684,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1692,7 +1724,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1712,7 +1744,7 @@ describe('codeRoutes', () => {
     it('returns workers array from user settings', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1728,7 +1760,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1742,7 +1774,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1765,7 +1797,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1803,14 +1835,12 @@ describe('codeRoutes', () => {
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
           'test-worker': {
-            state: {
-              _tag: 'healthy',
-              healthy: true,
+            state: healthyWorkerState({
               capacity: 5,
               running: 2,
               available: 3,
               responseTimeMs: 150,
-            },
+            }),
             checkedAt: new Date().toISOString(),
             stale: false,
           },
@@ -1829,7 +1859,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1840,6 +1870,7 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.workers).toHaveLength(1);
       expect(body.data.workers[0].name).toBe('test-worker');
+      expect(body.data.workers[0].enabled).toBe(true);
       expect(body.data.workers[0].healthy).toBe(true);
       expect(body.data.workers[0].status).toBe('healthy');
       expect(body.data.workers[0].details).toEqual({
@@ -1848,6 +1879,132 @@ describe('codeRoutes', () => {
         available: 3,
         responseTimeMs: 150,
       });
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('returns disabled worker status without probing disabled workers', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'disabled-worker',
+              url: 'http://disabled-worker:3000',
+              enabled: false,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({})
+      );
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.stale).toBe(false);
+      expect(body.data.workers).toEqual([
+        {
+          name: 'disabled-worker',
+          url: 'http://disabled-worker:3000',
+          priority: 1,
+          enabled: false,
+          healthy: false,
+          status: 'disabled',
+          details: { reason: 'disabled' },
+          checkedAt: null,
+          stale: false,
+        },
+      ]);
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('treats legacy workers with missing enabled as enabled in status responses', async () => {
+      const services = getServices();
+      const legacyWorker = {
+        name: 'legacy-worker',
+        url: 'http://legacy-worker:3000',
+        cfAccessClientId: 'client-id',
+        cfAccessClientSecret: 'client-secret',
+        dispatchSigningSecret: 'secret',
+      } satisfies Omit<WorkerConfig, 'enabled'>;
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [legacyWorker as WorkerConfig],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'legacy-worker': {
+            state: healthyWorkerState({
+              responseTimeMs: 50,
+            }),
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'legacy-worker',
+        enabled: true,
+        healthy: true,
+        status: 'healthy',
+      });
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
 
       mockGetSettings.mockRestore();
       mockGetHealthStatuses.mockRestore();
@@ -1900,7 +2057,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1967,7 +2124,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -1981,6 +2138,77 @@ describe('codeRoutes', () => {
       expect(body.data.workers[0].status).toBe('tunnel-down');
       expect(body.data.workers[0].details).toEqual({
         reason: 'connection-refused',
+      });
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('returns unknown worker contract mismatch details', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'test-worker': {
+            state: {
+              _tag: 'unknown',
+              healthy: false,
+              error: 'Health response missing worker capability details',
+              contractMismatch: true,
+              missingFields: ['providerApiKeys'],
+            },
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        healthy: false,
+        status: 'unknown',
+        details: {
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['providerApiKeys'],
+        },
       });
 
       mockGetSettings.mockRestore();
@@ -2012,14 +2240,7 @@ describe('codeRoutes', () => {
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
         ok({
           'test-worker': {
-            state: {
-              _tag: 'healthy',
-              healthy: true,
-              capacity: 1,
-              running: 0,
-              available: 1,
-              responseTimeMs: 100,
-            },
+            state: healthyWorkerState(),
             checkedAt: oldCheckedAt,
             stale: false,
           },
@@ -2038,7 +2259,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2104,7 +2325,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2178,7 +2399,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2232,7 +2453,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/workers/status',
+        url: '/workers/status',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -2419,10 +2640,10 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(mockDetectZombieTasks).toHaveBeenCalled();
+      // INT-1531: Bearer tokens are now verified against Google's JWKS;
+      // a non-Google token is rejected.
+      expect(response.statusCode).toBe(401);
+      expect(mockDetectZombieTasks).not.toHaveBeenCalled();
     });
 
     it('returns 500 when zombie detection fails', async () => {
@@ -2786,162 +3007,6 @@ describe('codeRoutes', () => {
     });
   });
 
-  describe('POST /internal/tasks/cleanup-logs', () => {
-    it('returns 200 with cleanup result', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          tasksProcessed: 10,
-          tasksFailed: 1,
-          logsDeleted: 500,
-          durationMs: 2000,
-        },
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.tasksProcessed).toBe(10);
-      expect(body.data.tasksFailed).toBe(1);
-      expect(body.data.logsDeleted).toBe(500);
-      expect(body.data.durationMs).toBe(2000);
-    });
-
-    it('returns 401 when missing auth header', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('UNAUTHORIZED');
-    });
-
-    it('returns 401 when auth header invalid', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'wrong-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('passes body parameters to use case', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          tasksProcessed: 0,
-          tasksFailed: 0,
-          logsDeleted: 0,
-          durationMs: 100,
-        },
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {
-          retentionDays: 30,
-          batchSize: 250,
-          tasksPerRun: 50,
-        },
-      });
-
-      expect(mockCleanupTaskLogs).toHaveBeenCalledWith({
-        retentionDays: 30,
-        batchSize: 250,
-        tasksPerRun: 50,
-      });
-    });
-
-    it('returns 500 when use case errors', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: false,
-        error: new Error('Cleanup failed'),
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-    });
-
-    it('uses defaults when body empty', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          tasksProcessed: 0,
-          tasksFailed: 0,
-          logsDeleted: 0,
-          durationMs: 100,
-        },
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {},
-      });
-
-      expect(mockCleanupTaskLogs).toHaveBeenCalledWith({
-        retentionDays: undefined,
-        batchSize: undefined,
-        tasksPerRun: undefined,
-      });
-    });
-  });
-
   describe('POST /code/workers/refresh-status', () => {
     it('should return workers status after synchronous health probe', async () => {
       const mockProbeAllWorkers = vi.fn().mockResolvedValue({
@@ -2982,7 +3047,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -2997,6 +3062,7 @@ describe('codeRoutes', () => {
         name: 'home-mac',
         url: 'https://cc-mac.intexuraos.cloud',
         priority: 1,
+        enabled: true,
         healthy: true,
         status: 'healthy',
         details: {
@@ -3013,6 +3079,58 @@ describe('codeRoutes', () => {
           name: 'home-mac',
         }),
       ]);
+    });
+
+    it('should return disabled worker status without probing disabled workers', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual({
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            priority: 1,
+            enabled: false,
+            healthy: false,
+            status: 'disabled',
+            details: { reason: 'disabled' },
+            checkedAt: null,
+            stale: false,
+          },
+        ],
+        stale: false,
+      });
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
     });
 
     it('should return orchestrator-unreachable when probe times out', async () => {
@@ -3044,7 +3162,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3078,7 +3196,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3096,7 +3214,7 @@ describe('codeRoutes', () => {
     it('should return 401 when user is not authenticated', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
       });
 
       expect(response.statusCode).toBe(401);
@@ -3114,7 +3232,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3157,7 +3275,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3204,7 +3322,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3217,6 +3335,59 @@ describe('codeRoutes', () => {
       expect(body.data.workers[0].status).toBe('unknown');
       expect(body.data.workers[0].healthy).toBe(false);
       expect(body.data.workers[0].details).toBeNull();
+    });
+
+    it('should return unknown contract mismatch details from refreshed probe results', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['providerApiKeys'],
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        healthy: false,
+        status: 'unknown',
+        details: {
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['providerApiKeys'],
+        },
+        stale: false,
+      });
     });
 
     it('should return orchestrator-unreachable with code in details', async () => {
@@ -3248,7 +3419,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3294,7 +3465,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/workers/refresh-status',
+        url: '/workers/refresh-status',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3442,7 +3613,7 @@ describe('codeRoutes', () => {
     it('returns 401 when user is not authenticated', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
       });
 
       expect(response.statusCode).toBe(401);
@@ -3565,7 +3736,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3641,7 +3812,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3661,7 +3832,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3702,7 +3873,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3744,7 +3915,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3807,7 +3978,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: {
           Authorization: 'Bearer test-token',
         },
@@ -3826,7 +3997,7 @@ describe('codeRoutes', () => {
     it('should return 401 when user is not authenticated', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         payload: {
           taskId,
         },
@@ -3844,7 +4015,7 @@ describe('codeRoutes', () => {
     it('returns 401 without JWT token', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         payload: {
           message: 'Hello task',
         },
@@ -3856,7 +4027,7 @@ describe('codeRoutes', () => {
     it('returns 400 with empty message body', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3871,7 +4042,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/non-existent-task/messages',
+        url: '/tasks/non-existent-task/messages',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3909,7 +4080,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/messages`,
+        url: `/tasks/${created.value.id}/messages`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3947,7 +4118,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/messages`,
+        url: `/tasks/${created.value.id}/messages`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -3968,7 +4139,7 @@ describe('codeRoutes', () => {
     it('returns 401 without JWT token', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
       });
 
       expect(response.statusCode).toBe(401);
@@ -3977,7 +4148,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/non-existent-task/implement',
+        url: '/tasks/non-existent-task/implement',
         headers: { authorization: 'Bearer test-token' },
         body: {},
       });
@@ -4054,7 +4225,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/implement`,
+        url: `/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
         body: { workerType: 'sonnet' },
       });
@@ -4131,7 +4302,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/implement`,
+        url: `/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
         body: { workerType: 'kimi' },
       });
@@ -4196,7 +4367,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/messages`,
+        url: `/tasks/${created.value.id}/messages`,
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -4230,7 +4401,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -4243,7 +4414,7 @@ describe('codeRoutes', () => {
     it('returns 404 when task does not exist', async () => {
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/tasks/non-existent-task-id',
+        url: '/tasks/non-existent-task-id',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -4323,7 +4494,7 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
     });
 
-    it('returns 200 when authenticated via OIDC bearer token', async () => {
+    it('returns 401 when Bearer token is not a valid Google OIDC token (INT-1531)', async () => {
       const response = await server.inject({
         method: 'POST',
         url: '/internal/drain-queue',
@@ -4333,9 +4504,7 @@ describe('codeRoutes', () => {
         payload: {},
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
+      expect(response.statusCode).toBe(401);
     });
 
     it('returns retry queue result when retry entry is non-empty', async () => {
@@ -4359,6 +4528,7 @@ describe('codeRoutes', () => {
       let deleted = false;
       const retryRepo: DispatchRetryRepository = {
         async findOldest() { return ok(expiredEntry); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { deleted = true; return ok(undefined); },
         async update() { return ok(undefined); },
@@ -4382,6 +4552,135 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('expired');
       expect(deleted).toBe(true);
+    });
+
+    it('returns failed retry result when terminal retry failure has locks to clean up', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      const created = await services.codeTaskRepo.create({
+        id: 'task-retry-terminal',
+        userId: 'test-user-id',
+        prompt: 'Retry terminal PR task',
+        sanitizedPrompt: 'Retry terminal PR task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'pending',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-retry-terminal',
+        prNumber: 55,
+      });
+      expect(created.ok).toBe(true);
+
+      const retryEntry: DispatchRetry = {
+        id: 'dr_terminal-1',
+        type: 'new_task',
+        eventId: 'event-terminal-1',
+        repository: 'test/repo',
+        pullRequestNumber: 55,
+        senderLogin: 'tester',
+        taskId: 'task-retry-terminal',
+        userId: 'test-user-id',
+        attempts: 0,
+        maxAttempts: 3,
+        lastError: 'Worker unavailable',
+        createdAt: Timestamp.now(),
+        ttlMinutes: 60,
+      };
+      let deleted = false;
+      const retryRepo: DispatchRetryRepository = {
+        async findOldest() { return ok(retryEntry); },
+        async claimForProcessing() { return ok(true); },
+        async create() { return ok({} as never); },
+        async delete() { deleted = true; return ok(undefined); },
+        async update() { return ok(undefined); },
+      };
+      const listQueuedSpy = vi.spyOn(services.codeTaskRepo, 'listQueuedByAge');
+      setServices({
+        ...services,
+        dispatchRetryRepo: retryRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('failed');
+      expect(body.data.taskId).toBe('task-retry-terminal');
+      expect(deleted).toBe(true);
+      expect(listQueuedSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 when retry queue drain fails before regular queue drain', async () => {
+      const services = getServices();
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+      const created = await services.codeTaskRepo.create({
+        id: 'task-retry-persist-failure',
+        userId: 'test-user-id',
+        prompt: 'Retry persistence failure task',
+        sanitizedPrompt: 'Retry persistence failure task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'pending',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-retry-persist-failure',
+      });
+      expect(created.ok).toBe(true);
+      const retryEntry: DispatchRetry = {
+        id: 'dr_persist-failure-1',
+        type: 'new_task',
+        eventId: 'event-persist-failure-1',
+        repository: 'test/repo',
+        pullRequestNumber: 10,
+        senderLogin: 'tester',
+        taskId: 'task-retry-persist-failure',
+        userId: 'test-user-id',
+        attempts: 0,
+        maxAttempts: 3,
+        lastError: 'Worker unavailable',
+        createdAt: Timestamp.now(),
+        ttlMinutes: 60,
+      };
+      const retryRepo: DispatchRetryRepository = {
+        async findOldest() { return ok(retryEntry); },
+        async claimForProcessing() { return ok(true); },
+        async create() { return ok({} as never); },
+        async delete() { return ok(undefined); },
+        async update() { return ok(undefined); },
+      };
+      const listQueuedSpy = vi.spyOn(services.codeTaskRepo, 'listQueuedByAge');
+      vi.spyOn(services.codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'task write failed' }),
+      );
+      setServices({
+        ...services,
+        dispatchRetryRepo: retryRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to persist retry dispatch failure status');
+      expect(listQueuedSpy).not.toHaveBeenCalled();
     });
 
     it('returns 500 when drain use case fails', async () => {

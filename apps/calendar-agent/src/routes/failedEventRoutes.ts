@@ -17,7 +17,7 @@ interface FailedEventParams {
 
 export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get<{ Querystring: FailedEventsQuery }>(
-    '/calendar/failed-events',
+    '/failed-events',
     {
       schema: {
         operationId: 'listFailedEvents',
@@ -110,7 +110,7 @@ export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) =
   );
 
   fastify.delete<{ Params: FailedEventParams }>(
-    '/calendar/failed-events/:id',
+    '/failed-events/:id',
     {
       schema: {
         operationId: 'deleteFailedEvent',
@@ -171,7 +171,7 @@ export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) =
   );
 
   fastify.post<{ Params: FailedEventParams }>(
-    '/calendar/failed-events/:id/retry',
+    '/failed-events/:id/retry',
     {
       schema: {
         operationId: 'retryFailedEvent',

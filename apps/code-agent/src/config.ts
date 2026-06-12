@@ -16,6 +16,15 @@ export interface RetryQueueConfig {
   ttlMinutes: number;
 }
 
+export interface AutoRetryConfig {
+  /**
+   * Maximum auto-retry attempts in a chain before triageFailedTask
+   * returns permanent_failure (default 3). Bounds the length of
+   * retry chains spawned by self-healing failure triage (INT-1560 Fix D).
+   */
+  maxAttempts: number;
+}
+
 export interface Config {
   port: number;
   gcpProjectId: string;
@@ -30,6 +39,8 @@ export interface Config {
   tokenEncryptionKey: string;
   orchestratorSecret: string;
   serviceUrl: string;
+  codeTaskCallbackBaseUrl: string;
+  webAppUrl: string;
   githubWebhookSecret: string;
   userServiceUrl: string;
   // Auth0 JWT validation
@@ -39,8 +50,10 @@ export interface Config {
   // Task queue configuration (INT-619)
   queue: QueueConfig;
   retryQueue: RetryQueueConfig;
+  // Auto-retry chain bounds (INT-1560 Fix D)
+  autoRetry: AutoRetryConfig;
   // GitHub Agent (INT-743)
-  geminiAppApiKey: string;
+  openRouterAppApiKey: string;
   executionMemoryEnabled: boolean;
   openaiAppApiKey: string;
   llmUsageServiceUrl: string;
@@ -59,13 +72,17 @@ export function loadConfig(): Config {
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? ''; // validated in REQUIRED_ENV
+  const codeTaskCallbackBaseUrl = (
+    process.env['INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL'] ?? serviceUrl
+  ).replace(/\/+$/, '');
+  const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
   const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
   const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
-  const geminiAppApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '';
+  const openRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
   const executionMemoryEnabled =
     (process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] ?? '').toLowerCase() === 'true';
   const openaiAppApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'] ?? '';
@@ -84,6 +101,8 @@ export function loadConfig(): Config {
     webhookVerifySecret,
     orchestratorSecret,
     serviceUrl,
+    codeTaskCallbackBaseUrl,
+    webAppUrl,
     tokenEncryptionKey,
     githubWebhookSecret,
     userServiceUrl,
@@ -98,7 +117,10 @@ export function loadConfig(): Config {
       maxAttempts: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS'] ?? '3', 10),
       ttlMinutes: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_TTL_MINUTES'] ?? '10', 10),
     },
-    geminiAppApiKey,
+    autoRetry: {
+      maxAttempts: parseInt(process.env['INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS'] ?? '3', 10),
+    },
+    openRouterAppApiKey,
     executionMemoryEnabled,
     openaiAppApiKey,
     llmUsageServiceUrl,

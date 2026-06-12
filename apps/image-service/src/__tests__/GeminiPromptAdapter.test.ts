@@ -138,6 +138,7 @@ describe('GeminiPromptAdapter', () => {
     it('returns RATE_LIMITED error for 429 response', async () => {
       nock('https://generativelanguage.googleapis.com')
         .post(/.*/)
+        .times(3)
         .replyWithError('429 Too Many Requests');
 
       const adapter = new GeminiPromptAdapter({
@@ -156,7 +157,10 @@ describe('GeminiPromptAdapter', () => {
     });
 
     it('returns TIMEOUT error for timeout', async () => {
-      nock('https://generativelanguage.googleapis.com').post(/.*/).replyWithError('timeout');
+      nock('https://generativelanguage.googleapis.com')
+        .post(/.*/)
+        .times(3)
+        .replyWithError('timeout');
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',

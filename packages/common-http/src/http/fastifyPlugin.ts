@@ -3,6 +3,7 @@ import fp from 'fastify-plugin';
 import { getRequestId, REQUEST_ID_HEADER } from './requestId.js';
 import type { ApiError, ApiOk, Diagnostics } from './response.js';
 import { fail, ok } from './response.js';
+import { setCurrentRequestId } from './traceContext.js';
 import type { ErrorCode } from '@intexuraos/common-core';
 import { ERROR_HTTP_STATUS } from '@intexuraos/common-core';
 
@@ -69,6 +70,10 @@ const intexuraPlugin: FastifyPluginCallback = (
       request.requestId = getRequestId(
         request.headers as Record<string, string | string[] | undefined>
       );
+      // Bind the requestId to the current ALS scope so downstream code
+      // (use cases, infra adapters, internal HTTP clients) can read it
+      // via getCurrentRequestId() without explicit threading.
+      setCurrentRequestId(request.requestId);
       hookDone();
     }
   );

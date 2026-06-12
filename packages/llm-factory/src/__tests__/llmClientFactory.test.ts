@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
-import type { Logger } from '@intexuraos/common-core';
+import { OpenRouterToolCallingModels, LlmProviders, LlmModels } from '@intexuraos/llm-contract';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
@@ -24,13 +24,47 @@ class MockOpenRouterGenerateClient {
   generate = mockOrGenerate;
 }
 
+const mockClaudeGenerate = vi.fn();
+
+class MockClaudeGenerateClient {
+  generate = mockClaudeGenerate;
+}
+
+const mockGptGenerate = vi.fn();
+
+class MockGptGenerateClient {
+  generate = mockGptGenerate;
+}
+
+const mockPerplexityGenerate = vi.fn();
+
+class MockPerplexityGenerateClient {
+  generate = mockPerplexityGenerate;
+}
+
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: vi.fn(() => new MockGeminiClient()),
   createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
 }));
 
+vi.mock('@intexuraos/infra-openrouter', () => ({
+  createOpenRouterToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
+}));
+
 vi.mock('../openRouterGenerateClient.js', () => ({
   createOpenRouterGenerateClient: vi.fn(() => new MockOpenRouterGenerateClient()),
+}));
+
+vi.mock('../claudeGenerateClient.js', () => ({
+  createClaudeGenerateClient: vi.fn(() => new MockClaudeGenerateClient()),
+}));
+
+vi.mock('../gptGenerateClient.js', () => ({
+  createGptGenerateClient: vi.fn(() => new MockGptGenerateClient()),
+}));
+
+vi.mock('../perplexityGenerateClient.js', () => ({
+  createPerplexityGenerateClient: vi.fn(() => new MockPerplexityGenerateClient()),
 }));
 
 const { createLlmClient, createToolCallingClient, isSupportedProvider } =
@@ -107,16 +141,124 @@ describe('llmClientFactory', () => {
       ).toThrow('Unsupported LLM model');
     });
 
-    it('throws for valid non-Google model passed to createLlmClient', () => {
-      expect(() =>
-        createLlmClient({
-          apiKey: 'test-key',
-          model: LlmModels.ClaudeHaiku35,
-          userId: 'user-123',
-          logger: mockLogger,
-          usageSink: mockUsageSink,
-        })
-      ).toThrow('Unsupported LLM provider: anthropic');
+    it('creates Claude client for Anthropic models', () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.ClaudeHaiku35,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      expect(client.generate).toBeDefined();
+      expect(client).toBeInstanceOf(MockClaudeGenerateClient);
+    });
+
+    it('creates GPT client for OpenAI models', () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.GPT4oMini,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      expect(client.generate).toBeDefined();
+      expect(client).toBeInstanceOf(MockGptGenerateClient);
+    });
+
+    it('creates Perplexity client for Perplexity models', () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.SonarPro,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      expect(client.generate).toBeDefined();
+      expect(client).toBeInstanceOf(MockPerplexityGenerateClient);
+    });
+
+    it('returns a defined client for each supported provider', () => {
+      const baseConfig = {
+        apiKey: 'test-key',
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      };
+
+      const gemini = createLlmClient({ ...baseConfig, model: LlmModels.Gemini25Flash });
+      const claude = createLlmClient({ ...baseConfig, model: LlmModels.ClaudeHaiku35 });
+      const gpt = createLlmClient({ ...baseConfig, model: LlmModels.GPT4oMini });
+      const perplexity = createLlmClient({ ...baseConfig, model: LlmModels.SonarPro });
+      const openrouter = createLlmClient({
+        ...baseConfig,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: 'or:google/gemma-4-31b-it:free' as any,
+      });
+
+      expect(gemini).toBeDefined();
+      expect(gemini.generate).toBeDefined();
+      expect(claude).toBeDefined();
+      expect(claude.generate).toBeDefined();
+      expect(gpt).toBeDefined();
+      expect(gpt.generate).toBeDefined();
+      expect(perplexity).toBeDefined();
+      expect(perplexity.generate).toBeDefined();
+      expect(openrouter).toBeDefined();
+      expect(openrouter.generate).toBeDefined();
+    });
+
+    it('forwards ownerType to createClaudeGenerateClient when passed', async () => {
+      const { createClaudeGenerateClient } = await import('../claudeGenerateClient.js');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.ClaudeHaiku35,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(vi.mocked(createClaudeGenerateClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
+    });
+
+    it('forwards ownerType to createGptGenerateClient when passed', async () => {
+      const { createGptGenerateClient } = await import('../gptGenerateClient.js');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.GPT4oMini,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(vi.mocked(createGptGenerateClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
+    });
+
+    it('forwards ownerType to createPerplexityGenerateClient when passed', async () => {
+      const { createPerplexityGenerateClient } = await import('../perplexityGenerateClient.js');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.SonarPro,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(vi.mocked(createPerplexityGenerateClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
     });
 
     it('creates OpenRouter client for or: prefixed models', () => {
@@ -142,9 +284,35 @@ describe('llmClientFactory', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
+        ownerType: 'user',
       });
 
       expect(client.run).toBeDefined();
+    });
+
+    it('creates OpenRouter tool calling client for or: prefixed models', async () => {
+      const { createOpenRouterToolCallingClient } = await import('@intexuraos/infra-openrouter');
+
+      const client = createToolCallingClient({
+        apiKey: 'test-key',
+        model: OpenRouterToolCallingModels.Gemini3FlashPreview,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(client.run).toBeDefined();
+      expect(createOpenRouterToolCallingClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'test-key',
+          model: 'google/gemini-3-flash-preview',
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+          ownerType: 'user',
+        })
+      );
     });
 
     it('throws for invalid model', () => {
@@ -153,6 +321,32 @@ describe('llmClientFactory', () => {
           apiKey: 'test-key',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'nonexistent-model' as any,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        })
+      ).toThrow('Unsupported LLM model');
+    });
+
+    it('throws for unsupported OpenRouter tool calling model', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'or:some/unknown-model' as any,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        })
+      ).toThrow('Unsupported LLM model');
+    });
+
+    it('throws for valid Google model that is not a tool calling model', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: LlmModels.Gemini25Pro as any,
           userId: 'test-user',
           logger: mockLogger,
           usageSink: mockUsageSink,
@@ -272,16 +466,16 @@ describe('llmClientFactory', () => {
       expect(isSupportedProvider('unknown-provider')).toBe(false);
     });
 
-    it('returns false for Anthropic provider', () => {
-      expect(isSupportedProvider(LlmProviders.Anthropic)).toBe(false);
+    it('returns true for Anthropic provider', () => {
+      expect(isSupportedProvider(LlmProviders.Anthropic)).toBe(true);
     });
 
-    it('returns false for OpenAI provider', () => {
-      expect(isSupportedProvider(LlmProviders.OpenAI)).toBe(false);
+    it('returns true for OpenAI provider', () => {
+      expect(isSupportedProvider(LlmProviders.OpenAI)).toBe(true);
     });
 
-    it('returns false for Perplexity provider', () => {
-      expect(isSupportedProvider(LlmProviders.Perplexity)).toBe(false);
+    it('returns true for Perplexity provider', () => {
+      expect(isSupportedProvider(LlmProviders.Perplexity)).toBe(true);
     });
 
     it('returns false for unknown provider strings', () => {
@@ -292,9 +486,79 @@ describe('llmClientFactory', () => {
     it('type narrows correctly for supported providers', () => {
       const provider = LlmProviders.Google as string;
       if (isSupportedProvider(provider)) {
-        // TypeScript should know provider is 'google' or 'openrouter' here
-        expect(provider === LlmProviders.Google || provider === LlmProviders.OpenRouter).toBe(true);
+        expect(
+          provider === LlmProviders.Google ||
+            provider === LlmProviders.Anthropic ||
+            provider === LlmProviders.OpenAI ||
+            provider === LlmProviders.Perplexity ||
+            provider === LlmProviders.OpenRouter
+        ).toBe(true);
       }
+    });
+  });
+
+  describe('IntexuraOSError migration (INT-1564)', () => {
+    it('createLlmClient throws IntexuraOSError(INVALID_REQUEST) for unknown model', () => {
+      let captured: unknown;
+      try {
+        createLlmClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'made-up-model-id' as any,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+      } catch (e) {
+        captured = e;
+      }
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const err = captured as IntexuraOSError;
+      expect(err.code).toBe('INVALID_REQUEST');
+      expect(err.httpStatus).toBe(400);
+      expect(err.message).toContain('made-up-model-id');
+    });
+
+    it('createToolCallingClient throws IntexuraOSError(INVALID_REQUEST) for unknown model', () => {
+      let captured: unknown;
+      try {
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'made-up-model-id' as any,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+      } catch (e) {
+        captured = e;
+      }
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const err = captured as IntexuraOSError;
+      expect(err.code).toBe('INVALID_REQUEST');
+      expect(err.httpStatus).toBe(400);
+      expect(err.message).toContain('made-up-model-id');
+    });
+
+    it('createToolCallingClient throws IntexuraOSError(INVALID_REQUEST) for unsupported provider', () => {
+      let captured: unknown;
+      try {
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: LlmModels.ClaudeOpus46 as any,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+      } catch (e) {
+        captured = e;
+      }
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const err = captured as IntexuraOSError;
+      expect(err.code).toBe('INVALID_REQUEST');
+      expect(err.httpStatus).toBe(400);
+      expect(err.message).toContain('anthropic');
     });
   });
 });

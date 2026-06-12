@@ -67,27 +67,6 @@ describe('OpenRouterAdapter', () => {
       });
     });
 
-    it('passes researchId to client when provided', () => {
-      mockCreateOpenRouterClient.mockClear();
-      new OpenRouterAdapter(
-        'test-key',
-        TEST_MODEL,
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink,
-        'research-123'
-      );
-
-      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
-        model: EXPECTED_RAW_MODEL,
-        userId: 'test-user-id',
-        researchId: 'research-123',
-        logger: mockLogger,
-        usageSink: fakeUsageSink,
-      });
-    });
-
     it('passes non-OpenRouter model directly without stripping prefix', () => {
       mockCreateOpenRouterClient.mockClear();
       const nonOpenRouterModel = 'google/gemini-2.0-flash';
@@ -146,7 +125,28 @@ describe('OpenRouterAdapter', () => {
         expect(result.value.content).toBe('Research result');
         expect(result.value.sources).toContain('https://source.com');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { promptType: 'research-web-search' }
+      );
+    });
+
+    it('threads researchId through per-call correlation when provided', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: {
+          content: 'Research result',
+          sources: [],
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.00105 },
+        },
+      });
+
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1', promptType: 'research-web-search' });
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { promptType: 'research-web-search', correlation: { researchId: 'r-1' } }
+      );
     });
 
     it('maps RATE_LIMITED error code correctly', async () => {
@@ -294,6 +294,66 @@ describe('OpenRouterAdapter', () => {
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('External context'),
         expect.objectContaining({ promptType: 'research-synthesis' })
+      );
+    });
+
+    it('threads constructor researchId into client.generate via correlation', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
+
+      const adapterWithResearchId = new OpenRouterAdapter(
+        'test-key',
+        'or:anthropic/claude-sonnet-4.6',
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'r-or-1'
+      );
+      await adapterWithResearchId.synthesize('Prompt', [{ model: 'claude', content: 'Claude' }]);
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-synthesis',
+          correlation: { researchId: 'r-or-1' },
+        }
+      );
+
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Title', usage: mockUsage } });
+      await adapterWithResearchId.generateTitle('content');
+      expect(mockGenerate).toHaveBeenLastCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-title-generation',
+          correlation: { researchId: 'r-or-1' },
+        }
+      );
+    });
+
+    it('falls back to constructor researchId on research() when call-site option is omitted', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Research', sources: [], usage: mockUsage },
+      });
+      const adapterWithBaked = new OpenRouterAdapter(
+        'test-key',
+        'or:anthropic/claude-sonnet-4.6',
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'baked-or'
+      );
+      await adapterWithBaked.research('Test prompt');
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-web-search', correlation: { researchId: 'baked-or' } }
+      );
+    });
+
+    it('omits correlation entirely when no researchId is configured', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
+      await adapter.synthesize('Prompt', [{ model: 'claude', content: 'Claude' }]);
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-synthesis' }
       );
     });
 

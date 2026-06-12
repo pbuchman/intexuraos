@@ -2,12 +2,18 @@ import { describe, it, expect, vi } from 'vitest';
 import { pollUntilComplete, type PollingConfig } from '../polling.js';
 import type { SpeechTranscriptionPort } from '../providers/transcription-provider.js';
 
+// `child` is unused by pollUntilComplete but required by the WorkerLogger
+// contract; returning `this` keeps any incidental child-logger calls
+// recorded against the same vi.fn() instances.
 const mockLogger = {
   level: 'info',
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  child: vi.fn().mockImplementation(function (this: unknown) {
+    return this;
+  }),
 };
 
 const fastConfig: PollingConfig = {

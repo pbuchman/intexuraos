@@ -134,13 +134,13 @@ sequenceDiagram
 
 | Method | Path                                   | Description                            | Auth         |
 | ------ | -------------------------------------- | -------------------------------------- | ------------ |
-| GET    | `/actions`                             | List actions for authenticated user    | Bearer token |
-| PATCH  | `/actions/:actionId`                   | Update action status or type           | Bearer token |
-| DELETE | `/actions/:actionId`                   | Delete an action                       | Bearer token |
-| POST   | `/actions/batch`                       | Fetch multiple actions by IDs (max 50) | Bearer token |
-| POST   | `/actions/:actionId/execute`           | Synchronously execute an action        | Bearer token |
-| GET    | `/actions/:actionId/preview`           | Get calendar action preview            | Bearer token |
-| POST   | `/actions/:actionId/resolve-duplicate` | Skip or update duplicate bookmark      | Bearer token |
+| GET    | `/`                             | List actions for authenticated user    | Bearer token |
+| PATCH  | `/:actionId`                   | Update action status or type           | Bearer token |
+| DELETE | `/:actionId`                   | Delete an action                       | Bearer token |
+| POST   | `/batch`                       | Fetch multiple actions by IDs (max 50) | Bearer token |
+| POST   | `/:actionId/execute`           | Synchronously execute an action        | Bearer token |
+| GET    | `/:actionId/preview`           | Get calendar action preview            | Bearer token |
+| POST   | `/:actionId/resolve-duplicate` | Skip or update duplicate bookmark      | Bearer token |
 
 ### Internal Endpoints
 
@@ -343,7 +343,7 @@ if (updateResult.outcome === 'status_mismatch') {
 
 ### updateAction (INT-914)
 
-Handles the PATCH `/actions/:actionId` business logic. Fetches action, verifies ownership, delegates type changes to `changeActionTypeUseCase`, and persists status changes.
+Handles the PATCH `/:actionId` business logic. Fetches action, verifies ownership, delegates type changes to `changeActionTypeUseCase`, and persists status changes.
 
 ### handleCalendarAction
 
@@ -492,7 +492,7 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 **Action type correction**: When user changes action type, the old type is logged to `actions_transitions` for ML training data.
 
-**Duplicate link handling**: Link actions may fail with `existingBookmarkId` in payload. Use `/actions/:id/resolve-duplicate` to skip or refresh the existing bookmark.
+**Duplicate link handling**: Link actions may fail with `existingBookmarkId` in payload. Use `/:id/resolve-duplicate` to skip or refresh the existing bookmark.
 
 **Batch endpoint limit**: Maximum 50 action IDs per batch request to prevent abuse.
 

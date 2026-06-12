@@ -14,7 +14,9 @@ import type {
 } from '../types/chat.js';
 
 const LOCAL_STORAGE_KEY = 'intex-chat-session';
-const GUEST_SESSION_KEY = 'intex-guest-session-id';
+const GUEST_SESSION_KEY = 'intex-guest-session-token';
+const GUEST_SESSION_EXPIRES_KEY = 'intex-guest-session-expires';
+const LEGACY_GUEST_SESSION_KEY = 'intex-guest-session-id';
 
 /** Timeout for chat message requests — longer than default to handle Cloud Run cold starts. */
 export const CHAT_MESSAGE_TIMEOUT_MS = 60000;
@@ -22,22 +24,95 @@ export const CHAT_MESSAGE_TIMEOUT_MS = 60000;
 // Re-export ApiError for consumers
 export { ApiError };
 
+// Purge legacy unsigned guest session ID from localStorage on module import.
+// Wrapped in try/catch to handle SSR/incognito environments without localStorage.
+try {
+  localStorage.removeItem(LEGACY_GUEST_SESSION_KEY);
+} catch {
+  // localStorage unavailable
+}
+
 /**
- * Get or create a guest session ID for anonymous users.
- * The session ID is stored in localStorage and persists across page refreshes.
+ * Get or create a signed guest session token for anonymous users.
+ *
+ * The token is fetched from the chat-agent's `/guest-session` endpoint and
+ * cached in localStorage along with its expiry timestamp. A 30-second buffer
+ * is applied to the expiry check to avoid using a token that is about to
+ * expire mid-flight.
  */
-export function getOrCreateGuestSessionId(): string {
+export async function getOrCreateGuestSessionToken(): Promise<string> {
+  // Try cache first
   try {
-    let sessionId = localStorage.getItem(GUEST_SESSION_KEY);
-    if (sessionId === null) {
-      sessionId = crypto.randomUUID();
-      localStorage.setItem(GUEST_SESSION_KEY, sessionId);
+    const cachedToken = localStorage.getItem(GUEST_SESSION_KEY);
+    const cachedExpiresRaw = localStorage.getItem(GUEST_SESSION_EXPIRES_KEY);
+    if (cachedToken !== null && cachedExpiresRaw !== null) {
+      const cachedExpires = Number(cachedExpiresRaw);
+      if (
+        Number.isFinite(cachedExpires) &&
+        cachedExpires > Date.now() + 30_000
+      ) {
+        return cachedToken;
+      }
     }
-    return sessionId;
   } catch {
-    // localStorage unavailable - generate ephemeral ID
-    return crypto.randomUUID();
+    // localStorage unavailable - fall through to fetch
   }
+
+  const url = `${config.chatAgentUrl}/guest-session`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    throw new ApiError('UNKNOWN', 'Invalid response format', response.status);
+  }
+
+  if (
+    typeof json !== 'object' ||
+    json === null ||
+    !('success' in json)
+  ) {
+    throw new ApiError('UNKNOWN', 'Invalid response format', response.status);
+  }
+
+  const data = json as {
+    success: boolean;
+    data?: { sessionToken: string; expiresAt: number };
+    error?: { code: string; message: string };
+  };
+
+  if (!data.success) {
+    const error = data.error;
+    if (error === undefined) {
+      throw new ApiError('UNKNOWN', 'An unexpected error occurred', response.status);
+    }
+    throw new ApiError(error.code, error.message, response.status);
+  }
+
+  if (
+    data.data === undefined ||
+    typeof data.data.sessionToken !== 'string' ||
+    typeof data.data.expiresAt !== 'number'
+  ) {
+    throw new ApiError('UNKNOWN', 'Missing response data', response.status);
+  }
+
+  const { sessionToken, expiresAt } = data.data;
+
+  try {
+    localStorage.setItem(GUEST_SESSION_KEY, sessionToken);
+    localStorage.setItem(GUEST_SESSION_EXPIRES_KEY, String(expiresAt));
+  } catch {
+    // localStorage unavailable - return token without caching
+  }
+
+  return sessionToken;
 }
 
 /**
@@ -57,7 +132,7 @@ export async function sendMessage(
 ): Promise<ChatResponse> {
   return await apiRequest<ChatResponse>(
     config.chatAgentUrl,
-    '/chat',
+    '/',
     accessToken,
     {
       method: 'POST',
@@ -73,7 +148,8 @@ export async function sendMessage(
 
 /**
  * Send a message to the chat agent as a guest (unauthenticated).
- * Uses a session ID stored in localStorage for rate limiting.
+ * Uses a server-signed JWT session token (fetched from `/guest-session`)
+ * stored in localStorage for verified, abuse-resistant rate limiting.
  *
  * @param message - User message to send
  * @param conversationHistory - Previous messages in the conversation
@@ -85,14 +161,14 @@ export async function sendGuestMessage(
   conversationHistory: ChatMessage[],
   pendingAction?: SuggestedAction
 ): Promise<ChatResponse> {
-  const guestSessionId = getOrCreateGuestSessionId();
-  const url = `${config.chatAgentUrl}/chat`;
+  const guestSessionToken = await getOrCreateGuestSessionToken();
+  const url = `${config.chatAgentUrl}/`;
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Guest-Session': guestSessionId,
+      'X-Guest-Session': guestSessionToken,
     },
     body: JSON.stringify({
       message,

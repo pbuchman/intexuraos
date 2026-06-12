@@ -40,6 +40,18 @@ The assistant carries up to twenty messages of conversation history, so follow-u
 
 You do not need an account to try it. Guest sessions use a platform-provided model at zero cost, so prospective users can explore the platform's capabilities before committing to sign up. Authenticated users run on their own configured model, which defaults to the best available option.
 
+### Guest session authentication
+
+Unauthenticated (guest) access uses a server-signed JWT session token:
+
+1. The web app calls `POST /guest-session` on first visit and receives a signed token (HS256, 24h TTL, opaque sub).
+2. The token is stored in `localStorage` and sent on every `/chat` call via the `X-Guest-Session` header.
+3. `/chat` verifies the token signature and rate-limits based on the **verified `sub` claim** — client-side rotation cannot bypass the limit.
+4. `/guest-session` itself is IP-rate-limited (10/min) to prevent the attacker from mass-minting sessions.
+5. The per-sub limiter is bounded (LRU) to prevent memory exhaustion.
+
+The signing secret is provided via `INTEXURAOS_GUEST_SESSION_SECRET` (Secret Manager).
+
 ## Key Benefits
 
 - **Always current** — The assistant's knowledge refreshes after every release, so it tracks the platform as it ships

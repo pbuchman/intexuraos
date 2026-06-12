@@ -67,6 +67,26 @@ describe('createImageServiceClient', () => {
       expect(result.ok).toBe(true);
     });
 
+    it('includes prompt type and research correlation when provided', async () => {
+      nock(baseUrl)
+        .post('/internal/images/prompts/generate', {
+          text: 'correlated prompt text',
+          model: 'gpt-4.1',
+          userId: 'user-1',
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-1' },
+        })
+        .reply(200, { success: true, data: mockPrompt });
+
+      const client = createImageServiceClient({ baseUrl, internalAuthToken });
+      const result = await client.generatePrompt('correlated prompt text', 'gpt-4.1', 'user-1', {
+        promptType: 'image-thumbnail-prompt',
+        correlation: { researchId: 'research-1' },
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
     it('returns API_ERROR on non-200 response', async () => {
       nock(baseUrl).post('/internal/images/prompts/generate').reply(500, 'Internal Server Error');
 
@@ -143,6 +163,33 @@ describe('createImageServiceClient', () => {
         'user-1',
         {
           title: 'My Mountain Photo',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('includes prompt type and research correlation when provided', async () => {
+      nock(baseUrl)
+        .post('/internal/images/generate', {
+          prompt: 'Correlated mountain landscape',
+          model: LlmModels.Gemini25FlashImage,
+          userId: 'user-1',
+          title: 'My Mountain Photo',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
+        .reply(200, { success: true, data: mockImageData });
+
+      const client = createImageServiceClient({ baseUrl, internalAuthToken });
+      const result = await client.generateImage(
+        'Correlated mountain landscape',
+        LlmModels.Gemini25FlashImage,
+        'user-1',
+        {
+          title: 'My Mountain Photo',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
         }
       );
 

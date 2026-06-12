@@ -9,7 +9,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -32,7 +32,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -59,7 +59,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks?archived=true',
+        url: '/?archived=true',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -81,7 +81,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks?tags=work',
+        url: '/?tags=work',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -102,7 +102,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks?ogFetchStatus=pending',
+        url: '/?ogFetchStatus=pending',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -115,7 +115,7 @@ describe('Bookmark Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks',
+        url: '/',
       });
 
       expect(response.statusCode).toBe(401);
@@ -130,7 +130,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -143,7 +143,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -179,7 +179,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -203,7 +203,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -220,7 +220,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -239,7 +239,7 @@ describe('Bookmark Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           'content-type': 'application/json',
         },
@@ -270,7 +270,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -300,7 +300,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/bookmarks/${bookmark.id}`,
+        url: `/${bookmark.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -324,7 +324,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -335,7 +335,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks/non-existent',
+        url: '/non-existent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -351,7 +351,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks/any-id',
+        url: '/any-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -361,7 +361,7 @@ describe('Bookmark Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks/any-id',
+        url: '/any-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -383,7 +383,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -399,7 +399,7 @@ describe('Bookmark Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/bookmarks/bookmark-123',
+        url: '/bookmark-123',
         headers: { 'content-type': 'application/json' },
         payload: { title: 'Updated' },
       });
@@ -411,7 +411,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/bookmarks/non-existent',
+        url: '/non-existent',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -436,7 +436,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -466,7 +466,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -493,7 +493,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -504,7 +504,7 @@ describe('Bookmark Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/bookmarks/bookmark-123',
+        url: '/bookmark-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -514,7 +514,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/bookmarks/non-existent',
+        url: '/non-existent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -535,7 +535,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -561,7 +561,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -584,7 +584,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${createResult.value.id}/archive`,
+        url: `/${createResult.value.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -596,7 +596,7 @@ describe('Bookmark Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks/bookmark-123/archive',
+        url: '/bookmark-123/archive',
       });
 
       expect(response.statusCode).toBe(401);
@@ -606,7 +606,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks/non-existent/archive',
+        url: '/non-existent/archive',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -627,7 +627,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${createResult.value.id}/archive`,
+        url: `/${createResult.value.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -653,7 +653,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${createResult.value.id}/archive`,
+        url: `/${createResult.value.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -680,7 +680,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${bookmark.id}/unarchive`,
+        url: `/${bookmark.id}/unarchive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -692,7 +692,7 @@ describe('Bookmark Routes', () => {
     it('returns 401 without auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks/bookmark-123/unarchive',
+        url: '/bookmark-123/unarchive',
       });
 
       expect(response.statusCode).toBe(401);
@@ -702,7 +702,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks/non-existent/unarchive',
+        url: '/non-existent/unarchive',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -723,7 +723,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'other-user' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${createResult.value.id}/unarchive`,
+        url: `/${createResult.value.id}/unarchive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -753,7 +753,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${bookmark.id}/unarchive`,
+        url: `/${bookmark.id}/unarchive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -774,7 +774,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks?archived=false',
+        url: '/?archived=false',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -803,7 +803,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks?tags=work,urgent',
+        url: '/?tags=work,urgent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -829,7 +829,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/bookmarks/${createResult.value.id}`,
+        url: `/${createResult.value.id}`,
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -857,7 +857,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -884,7 +884,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -911,7 +911,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/bookmarks/any-id',
+        url: '/any-id',
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',
@@ -933,7 +933,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/bookmarks/any-id',
+        url: '/any-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -951,7 +951,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks/any-id/archive',
+        url: '/any-id/archive',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -976,7 +976,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${bookmark.id}/archive`,
+        url: `/${bookmark.id}/archive`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -996,7 +996,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/bookmarks/any-id/unarchive',
+        url: '/any-id/unarchive',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1017,7 +1017,7 @@ describe('Bookmark Routes', () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
         method: 'POST',
-        url: `/bookmarks/${createResult.value.id}/unarchive`,
+        url: `/${createResult.value.id}/unarchive`,
         headers: { authorization: `Bearer ${token}` },
       });
 

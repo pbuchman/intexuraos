@@ -83,20 +83,23 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async countByUserToday(): ReturnType<CodeTaskRepository['countByUserToday']> {
       return ok(0);
     },
-    async findArchivableTasks(): ReturnType<CodeTaskRepository['findArchivableTasks']> {
-      return ok([]);
-    },
-    async archiveTaskLogs(): ReturnType<CodeTaskRepository['archiveTaskLogs']> {
-      return ok({ logCount: 0, archivedAt: new Date() });
-    },
     async findByPR(): ReturnType<CodeTaskRepository['findByPR']> {
       return ok(null);
+    },
+    async findRecentTasksByPR(): ReturnType<CodeTaskRepository['findRecentTasksByPR']> {
+      return ok([]);
     },
     async findActiveReviewForPR(): ReturnType<CodeTaskRepository['findActiveReviewForPR']> {
       return ok(null);
     },
     async hasDispatchedOrRunningForPR(): ReturnType<CodeTaskRepository['hasDispatchedOrRunningForPR']> {
       return ok({ hasActive: false });
+    },
+    async hasOtherDispatchedOrRunningForLinearIssue(): ReturnType<CodeTaskRepository['hasOtherDispatchedOrRunningForLinearIssue']> {
+      return ok({ hasActive: false });
+    },
+    async claimForDispatch(): ReturnType<CodeTaskRepository['claimForDispatch']> {
+      return ok(true);
     },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
@@ -166,6 +169,9 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
       return ok(undefined);
     },
     async notifyTaskStarted(): ReturnType<WhatsAppNotifier['notifyTaskStarted']> {
+      return ok(undefined);
+    },
+    async notifyTaskDispatchBlocked(): ReturnType<WhatsAppNotifier['notifyTaskDispatchBlocked']> {
       return ok(undefined);
     },
     async notifyTaskResumed(): ReturnType<WhatsAppNotifier['notifyTaskResumed']> {

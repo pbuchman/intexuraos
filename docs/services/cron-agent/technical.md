@@ -115,15 +115,15 @@ These are cross-cutting infrastructure changes — no cron-agent-specific featur
 
 | Method | Path                          | Purpose                                       | Auth   |
 | ------ | ----------------------------- | --------------------------------------------- | ------ |
-| GET    | `/cron/services`              | List available services and their tools       | Bearer |
-| GET    | `/cron/schedules`             | List schedules with status filter, pagination | Bearer |
-| POST   | `/cron/schedules`             | Create a new schedule                         | Bearer |
-| GET    | `/cron/schedules/:id`         | Get a specific schedule                       | Bearer |
-| PATCH  | `/cron/schedules/:id`         | Update a schedule                             | Bearer |
-| DELETE | `/cron/schedules/:id`         | Soft-delete a schedule                        | Bearer |
-| POST   | `/cron/schedules/:id/trigger` | Manually trigger a schedule execution         | Bearer |
-| GET    | `/cron/executions`            | List executions with filters                  | Bearer |
-| GET    | `/cron/executions/:id`        | Get a specific execution                      | Bearer |
+| GET    | `/services`              | List available services and their tools       | Bearer |
+| GET    | `/schedules`             | List schedules with status filter, pagination | Bearer |
+| POST   | `/schedules`             | Create a new schedule                         | Bearer |
+| GET    | `/schedules/:id`         | Get a specific schedule                       | Bearer |
+| PATCH  | `/schedules/:id`         | Update a schedule                             | Bearer |
+| DELETE | `/schedules/:id`         | Soft-delete a schedule                        | Bearer |
+| POST   | `/schedules/:id/trigger` | Manually trigger a schedule execution         | Bearer |
+| GET    | `/executions`            | List executions with filters                  | Bearer |
+| GET    | `/executions/:id`        | Get a specific execution                      | Bearer |
 
 ### Internal Endpoints
 
@@ -263,7 +263,7 @@ Additionally, each target service in `INTERNAL_API_SERVICE_CATALOG` requires a p
 - **Overlap protection:** Both scheduled ticks and manual triggers check for a running execution before starting a new one. The check queries Firestore for `status === 'running'` — there is no distributed lock, so a narrow race window exists under very high concurrency.
 - **Response truncation:** Tool call responses are truncated at 50,000 bytes to prevent context overflow in the LLM agent loop.
 - **User ID propagation:** The execute-action prompt enforces that the LLM agent must use exactly the schedule owner's `userId` when calling tools that require it. The `X-Cron-User-Id` header is also set on every outbound HTTP tool call for downstream services to verify ownership.
-- **Empty service filtering:** Services that produce zero tools after OpenAPI discovery are filtered from the `GET /cron/services` response. This means a misconfigured service (no OpenAPI spec, no `/internal/*` routes) silently disappears from the available services list.
+- **Empty service filtering:** Services that produce zero tools after OpenAPI discovery are filtered from the `GET /services` response. This means a misconfigured service (no OpenAPI spec, no `/internal/*` routes) silently disappears from the available services list.
 - **LLM usage is fire-and-forget:** Token usage is reported to `llm-usage-service` via `HttpInternalAuthUsageSink`. If the usage service is down, execution proceeds normally — usage data is lost but the scheduled task completes.
 
 ## File Structure

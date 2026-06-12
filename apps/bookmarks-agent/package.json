@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/bookmarks-agent",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -26,15 +26,15 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
-    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
+    "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "@intexuraos/whatsapp-pubsub-client": "workspace:*",
+    "fastify": "catalog:",
+    "pino": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.16",

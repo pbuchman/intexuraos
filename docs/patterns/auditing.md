@@ -215,8 +215,8 @@ After applying a pattern across services:
 
 4. **Verify deployment**
    ```bash
-   ./scripts/verify-deployment.sh
-   # All services healthy, logs show correct auth
+   curl -fsS https://intexuraos.cloud/healthz
+   # Hetzner edge and runtime are healthy
    ```
 
 **Result:** Pattern applied consistently across 3 services, 4 endpoints total.

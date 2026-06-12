@@ -69,7 +69,7 @@ const githubPRSummariesRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastif
     fastify.addHook('onRequest', jwtValidator);
 
     fastify.get(
-      '/code/github-pr-summaries',
+      '/github-pr-summaries',
       {
         schema: {
           response: {

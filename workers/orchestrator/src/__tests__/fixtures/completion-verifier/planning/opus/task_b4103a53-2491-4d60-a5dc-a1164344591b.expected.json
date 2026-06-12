@@ -1,0 +1,19 @@
+{
+  "data": {
+    "outcome": "planned",
+    "superpowers_writing_plans_used": true,
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1451/investigate-and-resolve-missing-transcriptions-for-whatsapp-voice",
+    "complex_task": false,
+    "plan_doc": true,
+    "subtask_urls": [],
+    "plan_pr": "https://github.com/pbuchman/intexuraos/pull/1902",
+    "parallel_breakdown_proof": "",
+    "memory_ids_used": [],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "",
+    "clarification_message": "",
+    "summary": "* Investigated why three dev voice messages were stored but never transcribed; evidence: `intexuraos-transcription-dev` Cloud Function has zero invocations since its 2026-03-07 deploy despite an ACTIVE Eventarc subscription.\n  * Identified primary root cause — `handleAudioMessage` marks the webhook event `completed` inside `ProcessAudioMessageUseCase` before attempting the `whatsapp.audio.stored` publish, and a failed publish only logs.\n  * Identified contributing latent bugs — `ecosystem.config.cjs` topic fallback `audio-stored-dev` does not match the Terraform topic `intexuraos-audio-stored-dev`, `BasePubSubPublisher.publishToTopic(null, …)` silently returns ok, and the transcription worker publishes to legacy `transcription-completed-dev` topic with no prod-Hetzner subscriber.\n  * Classified as PLAN-DOC (multi-step, spans whatsapp-service + infra-pubsub + ecosystem + Terraform + Cloud Function) and wrote six sequenced tasks (investigate env, move publish into use case with hard failure, fix fallbacks, tighten publisher types, consolidate completion topic, add alerting).\n  * Artifacts: Linear description updated with findings and `Plan document:` reference; original description archived as Linear comment; plan doc `docs/plans/INT-1451-whatsapp-voice-transcription-investigation.md` committed on branch `plan/int-1451-whatsapp-voice-transcription` and opened as PR #1902."
+  },
+  "missingRequired": [],
+  "warnings": []
+}

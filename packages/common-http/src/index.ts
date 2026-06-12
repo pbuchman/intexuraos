@@ -15,10 +15,10 @@ export {
   err,
   isOk,
   isErr,
+  redactToken,
+  redactObject,
+  SENSITIVE_FIELDS,
 } from '@intexuraos/common-core';
-
-// Re-export llm-utils redaction utilities for convenience
-export { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-utils';
 
 // HTTP response types and helpers
 export {
@@ -33,6 +33,12 @@ export {
 
 // Request ID handling
 export { REQUEST_ID_HEADER, getRequestId } from './http/requestId.js';
+
+// Shared fetch wrapper for app infra adapters.
+export { performHttpFetch } from './http/fetch.js';
+
+// Trace context (AsyncLocalStorage-backed request id)
+export { runWithRequestId, getCurrentRequestId, setCurrentRequestId } from './http/traceContext.js';
 
 // Fastify plugin
 export { intexuraFastifyPlugin } from './http/fastifyPlugin.js';
@@ -60,3 +66,11 @@ export {
 
 // Internal service-to-service auth
 export { type InternalAuthResult, validateInternalAuth } from './auth/internalAuth.js';
+
+// Shared internal auth strategies (Cloud Scheduler + Pub/Sub push)
+export {
+  authenticateInternalScheduler,
+  authenticateInternalPubSub,
+  type InternalAuthStrategy,
+  type AuthResult,
+} from './auth/internalAuthStrategies.js';

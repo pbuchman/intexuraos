@@ -640,7 +640,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/commands',
+        url: '/',
       });
 
       expect(response.statusCode).toBe(401);
@@ -652,7 +652,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/commands',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -691,7 +691,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/commands',
+        url: '/',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -714,7 +714,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/commands',
+        url: '/',
         payload: { text: 'Test shared content', source: 'pwa-shared' },
       });
 
@@ -727,7 +727,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/commands',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: { source: 'pwa-shared' },
       });
@@ -741,7 +741,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/commands',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Test content' },
       });
@@ -765,7 +765,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/commands',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Test shared content from PWA', source: 'pwa-shared' },
       });
@@ -796,7 +796,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/commands',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Research the latest news', source: 'pwa-shared' },
       });
@@ -826,7 +826,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/commands',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Auto-generated ID test', source: 'pwa-shared' },
       });
@@ -857,7 +857,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/commands',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Custom ID test', source: 'pwa-shared', externalId: 'custom-ext-123' },
       });
@@ -973,7 +973,7 @@ describe('Commands Agent Routes', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('accepts OIDC Bearer token authentication (Cloud Scheduler)', async () => {
+    it('rejects fake Bearer tokens (INT-1531: now verified against Google JWKS)', async () => {
       app = await buildServer();
 
       const response = await app.inject({
@@ -982,9 +982,7 @@ describe('Commands Agent Routes', () => {
         headers: { authorization: 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.fake-oidc-token' },
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(true);
+      expect(response.statusCode).toBe(401);
     });
 
     it('returns success with zero counts when no pending commands', async () => {
@@ -1308,7 +1306,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/cmd-1',
+        url: '/cmd-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1320,7 +1318,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/nonexistent',
+        url: '/nonexistent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1345,7 +1343,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/cmd-received',
+        url: '/cmd-received',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1375,7 +1373,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/cmd-pending',
+        url: '/cmd-pending',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1401,7 +1399,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/cmd-failed',
+        url: '/cmd-failed',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1433,7 +1431,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/cmd-classified',
+        url: '/cmd-classified',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1461,7 +1459,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/cmd-cross-user-del',
+        url: '/cmd-cross-user-del',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1488,7 +1486,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/commands/cmd-archived',
+        url: '/cmd-archived',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1505,7 +1503,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/commands/cmd-1',
+        url: '/cmd-1',
         payload: { status: 'archived' },
       });
 
@@ -1518,7 +1516,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/commands/nonexistent',
+        url: '/nonexistent',
         headers: { authorization: `Bearer ${token}` },
         payload: { status: 'archived' },
       });
@@ -1551,7 +1549,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/commands/cmd-to-archive',
+        url: '/cmd-to-archive',
         headers: { authorization: `Bearer ${token}` },
         payload: { status: 'archived' },
       });
@@ -1586,7 +1584,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/commands/cmd-not-classified',
+        url: '/cmd-not-classified',
         headers: { authorization: `Bearer ${token}` },
         payload: { status: 'archived' },
       });
@@ -1622,7 +1620,7 @@ describe('Commands Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/commands/cmd-cross-user-patch',
+        url: '/cmd-cross-user-patch',
         headers: { authorization: `Bearer ${token}` },
         payload: { status: 'archived' },
       });

@@ -1,10 +1,12 @@
 import { ok, err, type Result } from '@intexuraos/common-core';
 import { decodeCursor, encodeCursor } from '../domain/models/cursor.js';
 import type { UsageEvent } from '../domain/models/usageEvent.js';
+import type { ResearchCostSummaryRequest } from '../domain/models/researchCostSummary.js';
 import type {
   CreateEventResult,
   ListUsageEventsParams,
   ListUsageEventsResult,
+  ResearchCostSummaryEventsResult,
   SortField,
   UsageEventRepository,
 } from '../domain/repositories/usageEventRepository.js';
@@ -152,6 +154,32 @@ export class FakeUsageEventRepository implements UsageEventRepository {
     return ok(event ?? null);
   }
 
+  async findResearchCostSummaryEvents(
+    params: ResearchCostSummaryRequest,
+  ): Promise<Result<ResearchCostSummaryEventsResult, { code: string; message: string }>> {
+    if (this.failWith !== null) {
+      return err(this.failWith);
+    }
+
+    const allEvents = Array.from(this.events.values());
+    const correlatedEvents = allEvents.filter((event) =>
+      event.correlation.researchId === params.researchId &&
+      matchesOwner(event, params.owner) &&
+      matchesTimeRange(event, params.timeRange)
+    );
+
+    const missingAttributionEvents =
+      params.owner !== undefined && params.timeRange !== undefined
+        ? allEvents.filter((event) =>
+            event.correlation.researchId === null &&
+            matchesOwner(event, params.owner) &&
+            matchesTimeRange(event, params.timeRange)
+          )
+        : [];
+
+    return ok({ correlatedEvents, missingAttributionEvents });
+  }
+
   getStoredEvents(): UsageEvent[] {
     return Array.from(this.events.values());
   }
@@ -168,6 +196,26 @@ export class FakeUsageEventRepository implements UsageEventRepository {
     this.events.clear();
     this.failWith = null;
   }
+}
+
+function matchesOwner(
+  event: UsageEvent,
+  owner: ResearchCostSummaryRequest['owner'],
+): boolean {
+  if (owner === undefined) {
+    return true;
+  }
+  return event.owner.type === owner.type && event.owner.id === owner.id;
+}
+
+function matchesTimeRange(
+  event: UsageEvent,
+  timeRange: ResearchCostSummaryRequest['timeRange'],
+): boolean {
+  if (timeRange === undefined) {
+    return true;
+  }
+  return event.occurredAt >= timeRange.from && event.occurredAt <= timeRange.to;
 }
 
 function getSortValue(event: UsageEvent, field: SortField): string | number {

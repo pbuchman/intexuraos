@@ -24,7 +24,7 @@ interface DeleteParams {
 export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /mobile-notifications
   fastify.get<{ Querystring: ListQuerystring }>(
-    '/mobile-notifications',
+    '/',
     {
       schema: {
         operationId: 'listMobileNotifications',
@@ -141,7 +141,7 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
   // DELETE /mobile-notifications/:notification_id
   fastify.delete<{ Params: DeleteParams }>(
-    '/mobile-notifications/:notification_id',
+    '/:notification_id',
     {
       schema: {
         operationId: 'deleteMobileNotification',

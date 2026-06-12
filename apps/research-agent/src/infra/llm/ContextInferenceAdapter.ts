@@ -6,10 +6,10 @@
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
-  buildInferResearchContextPrompt,
-  buildInferSynthesisContextPrompt,
-  buildResearchContextRepairPrompt,
-  buildSynthesisContextRepairPrompt,
+  inferResearchContextPrompt,
+  inferSynthesisContextPrompt,
+  researchContextRepairPrompt,
+  synthesisContextRepairPrompt,
   ResearchContextSchema,
   SynthesisContextSchema,
   type InferResearchContextOptions,
@@ -68,6 +68,13 @@ const SYNTHESIS_CONTEXT_SCHEMA = `{
 export class ContextInferenceAdapter implements ContextInferenceProvider {
   private readonly client: GeminiClient;
   private readonly logger: Logger;
+  /**
+   * Optional research correlation token baked at construction time. When the
+   * adapter is built inside `handleAllCompleted`'s synthesis path the live
+   * researchId must travel with every internal `client.generate()` call so
+   * llm-usage-service can attribute context-inference cost to the research.
+   */
+  private readonly researchId?: string;
 
   constructor(
     apiKey: string,
@@ -81,19 +88,31 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       apiKey,
       model,
       userId,
-      ...(researchId !== undefined && { researchId }),
       logger,
       usageSink,
     });
     this.logger = logger;
+    if (researchId !== undefined) {
+      this.researchId = researchId;
+    }
+  }
+
+  private generateOptions(promptType: string): {
+    promptType: string;
+    correlation?: { researchId: string };
+  } {
+    if (this.researchId !== undefined) {
+      return { promptType, correlation: { researchId: this.researchId } };
+    }
+    return { promptType };
   }
 
   async inferResearchContext(
     userQuery: string,
     opts?: InferResearchContextOptions
   ): Promise<Result<ResearchContextResult, LlmError>> {
-    const prompt = buildInferResearchContextPrompt(userQuery, opts);
-    const result = await this.client.generate(prompt, { promptType: 'research-context-inference' });
+    const prompt = inferResearchContextPrompt.build({ userQuery, opts });
+    const result = await this.client.generate(prompt, this.generateOptions('research-context-inference'));
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
@@ -153,8 +172,8 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
   async inferSynthesisContext(
     params: InferSynthesisContextParams
   ): Promise<Result<SynthesisContextResult, LlmError>> {
-    const prompt = buildInferSynthesisContextPrompt(params);
-    const result = await this.client.generate(prompt, { promptType: 'research-synthesis-context-inference' });
+    const prompt = inferSynthesisContextPrompt.build(params);
+    const result = await this.client.generate(prompt, this.generateOptions('research-synthesis-context-inference'));
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
@@ -216,12 +235,12 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     invalidResponse: string,
     errorMessage: string
   ): Promise<Result<ResearchContextResult, string>> {
-    const repairPrompt = buildResearchContextRepairPrompt(
-      userQuery,
+    const repairPrompt = researchContextRepairPrompt.build({
+      originalQuery: userQuery,
       invalidResponse,
-      errorMessage
-    );
-    const result = await this.client.generate(repairPrompt, { promptType: 'research-context-inference-repair' });
+      errorMessage,
+    });
+    const result = await this.client.generate(repairPrompt, this.generateOptions('research-context-inference-repair'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -264,12 +283,12 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     invalidResponse: string,
     errorMessage: string
   ): Promise<Result<SynthesisContextResult, string>> {
-    const repairPrompt = buildSynthesisContextRepairPrompt(
-      params.originalPrompt,
+    const repairPrompt = synthesisContextRepairPrompt.build({
+      originalPrompt: params.originalPrompt,
       invalidResponse,
-      errorMessage
-    );
-    const result = await this.client.generate(repairPrompt, { promptType: 'research-synthesis-context-inference-repair' });
+      errorMessage,
+    });
+    const result = await this.client.generate(repairPrompt, this.generateOptions('research-synthesis-context-inference-repair'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

@@ -1,0 +1,25 @@
+#cloud-config
+package_update: true
+packages:
+  - ca-certificates
+  - rsync
+  - sudo
+users:
+  - default
+  - name: deploy
+    groups:
+      - sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${jsonencode(deploy_ssh_public_key)}
+ssh_pwauth: false
+disable_root: false
+write_files:
+  - path: /etc/sudoers.d/90-intexuraos-deploy
+    owner: root:root
+    permissions: '0440'
+    content: |
+      deploy ALL=(ALL) NOPASSWD:ALL
+runcmd:
+  - [ bash, -lc, "install -d -o deploy -g deploy -m 755 /opt/intexuraos /var/www/intexuraos/web/dist" ]

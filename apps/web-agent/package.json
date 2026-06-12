@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/web-agent",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -21,7 +21,6 @@
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
-    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
@@ -30,8 +29,8 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "cheerio": "^1.0.0",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.0"
+    "fastify": "catalog:",
+    "pino": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

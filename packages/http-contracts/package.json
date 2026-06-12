@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/http-contracts",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -12,5 +12,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@intexuraos/llm-contract": "workspace:*",
+    "zod": "catalog:",
+    "zod-to-json-schema": "^3.25.1"
   }
 }

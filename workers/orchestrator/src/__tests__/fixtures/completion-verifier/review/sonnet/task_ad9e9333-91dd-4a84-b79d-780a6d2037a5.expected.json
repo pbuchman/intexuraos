@@ -1,0 +1,21 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1895",
+    "review_id": "4161555998",
+    "review_comments_posted": 2,
+    "review_types": ["code_quality", "test_quality"],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "all passed",
+    "needs_remediation": false,
+    "memory_ids_used": [
+      "mem_3e3d1d29-c69a-4dc5-abed-62fbcf59d9c4",
+      "mem_26d588f3-c12e-4ffd-9c02-fded950e5f68",
+      "mem_c12b2148-3eec-4f2c-9ec3-d6b513f7c3ca"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "All three memories were applicable — they confirmed the correct pattern of retaining the planning branch body (not deleting it), keeping plan PRs open after review, and asserting via negative spy checks that mergePullRequest is NOT called; the PR implements all three correctly.",
+    "summary": "* Reviewed `webhookRoutes.ts` and `webhooks.test.ts` for a focused reversal of INT-1282: removes the auto-merge of plan PRs on review pass\n  * Code quality is clean: `mergePlanPr` import removed, `fetchGitHubToken` correctly retained, planning branch preserved to prevent ready-to-merge fall-through\n  * Test quality is thorough: old five-case block replaced with three targeted negative-assertion tests; `mergePullRequest.not.toHaveBeenCalled()` directly addresses all acceptance criteria\n  * Two minor findings posted as inline comments: (1) log message says \"passed\" but fires for remediation cases too (cosmetic); (2) test 2 (remediation) could add a parallel ready-to-merge label absence assertion to mirror test 3\n  * All CI checks green; 6/6 requirements met; no code changes required"
+  },
+  "missingRequired": [],
+  "warnings": []
+}

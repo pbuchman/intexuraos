@@ -22,7 +22,7 @@
 ## Future Plans
 
 1. **Multiple workspaces** — Support connecting multiple Notion workspaces per user (currently limited to one; reconnecting replaces the existing connection)
-2. **Webhook event processing** — Replace the stub at `POST /notion-webhooks` with real event handling for sync triggers, cache invalidation, or page change notifications
+2. **Webhook event processing** — Replace the stub at `POST /webhooks` with real event handling for sync triggers, cache invalidation, or page change notifications
 3. **Scoped page access** — Granular database/page permissions beyond the current all-or-nothing integration token approach
 4. **Sync status tracking** — Detailed progress reporting for operations that read from or write to Notion (e.g., research export progress)
 
@@ -36,7 +36,7 @@
 | ------------------------------------ | -------------- | --------------------------------------------------- |
 | `src/routes/webhookRoutes.ts`        | Webhook stub   | Accepts any JSON, logs it, performs no side effects |
 
-**Detail:** The `POST /notion-webhooks` endpoint accepts any JSON payload via `z.record(z.unknown())`, logs it for debugging, and returns `{ received: true }`. This is intentionally a stub awaiting future webhook processing implementation. It has no security impact since it produces no side effects, but represents an incomplete feature.
+**Detail:** The `POST /webhooks` endpoint accepts any JSON payload via `z.record(z.unknown())`, logs it for debugging, and returns `{ received: true }`. This is intentionally a stub awaiting future webhook processing implementation. It has no security impact since it produces no side effects, but represents an incomplete feature.
 
 ---
 
@@ -104,10 +104,6 @@ Package version bump to v3.1.0.
 
 Full documentation refresh as part of monorepo v3.0.0 release.
 
-### Dash0 OpenTelemetry Integration (2026-02-16)
-
-Added Dash0 OTel distributed tracing integration (#803). Provides end-to-end request tracing alongside existing Sentry error tracking.
-
 ### Dev-mode Log Formatting (2026-02-16)
 
 Added PM2-friendly log formatting in development mode for improved readability during local development.
@@ -144,7 +140,6 @@ Achieved strict 100% branch coverage with proper v8 ignore annotations for TypeS
 | ---------- | ---------------------------------- | ----------------------------------------------- |
 | 2026-03-24 | v8 ignore explanations too vague   | Blocker keyword enforcement (strict validation) |
 | 2026-03-13 | v8 ignore blocks without tests     | INT-794: replaced with real tests               |
-| 2026-02-16 | No distributed tracing             | Added Dash0 OTel integration                    |
 | 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests               |
 | 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger                     |
 | 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()             |

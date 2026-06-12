@@ -167,7 +167,6 @@ Behavior:
 - **Development (`NODE_ENV=development`):** Formatted, colorized output via `createDevOutputStream`. Format: `HH:mm:ss | LEVEL | service-name | message | key=val pairs`
 - **Production:** Raw JSON to stdout (`pino.destination` async, Cloud Logging compatible)
 - **Both modes:** Sentry stream attached when `INTEXURAOS_SENTRY_DSN` is set
-- **OTel transport:** `pino-opentelemetry-transport` stream added when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set (routes logs to Dash0 via OTLP)
 
 This function replaces the 3-line boilerplate previously required in every `server.ts`.
 
@@ -209,7 +208,6 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 | `@sentry/node`                 | Sentry SDK (`init`, `captureException`, etc.)          |
 | `fastify`                      | Type definitions for `FastifyInstance`, `FastifyError` |
 | `pino`                         | Logger creation and multistream API                    |
-| `pino-opentelemetry-transport` | Pino transport that forwards logs to Dash0 via OTLP    |
 
 ---
 
@@ -244,7 +242,6 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 
 | Commit     | Description                                               |
 | ---------- | --------------------------------------------------------- |
-| `0338e04f` | Route pino logs to Dash0 via pino-opentelemetry-transport |
 | `6063175b` | Add dev-mode log formatting for PM2 readability           |
 | `f10ebdbf` | Fix empty error objects in log output                     |
 | `44017d5c` | Fix ESLint OOM with batched parallel lint runner          |
@@ -276,7 +273,6 @@ packages/infra-sentry/
     appLogger.ts                      # createAppLogger(), AppLoggerConfig
     logStream.ts                      # createLogStream() — unified stream factory
     devStream.ts                      # createDevOutputStream() — colorized dev-mode formatter
-    otelTransport.ts                  # getOtelTransport() — pino-opentelemetry-transport singleton
     __tests__/
       init.test.ts                    # Tests for initSentry
       transport.test.ts               # Tests for stream and transport functions

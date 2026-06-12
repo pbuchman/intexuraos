@@ -1,4 +1,4 @@
-import type { WhatsAppInteractiveButton } from '@intexuraos/infra-pubsub';
+import type { WhatsAppInteractiveButton } from '@intexuraos/whatsapp-pubsub-client';
 
 export interface ApprovalButtonsConfig {
   actionId: string;

@@ -52,6 +52,7 @@ describe('FirestoreUsageAggregateRepository', () => {
           provider: LlmProviders.Anthropic,
           firstOccurredAt: event.occurredAt,
           lastOccurredAt: event.occurredAt,
+          promptType: '__missing__',
         }),
       );
       expect(mockUpdate).not.toHaveBeenCalled();
@@ -145,6 +146,7 @@ describe('FirestoreUsageAggregateRepository', () => {
         provider: LlmProviders.Anthropic,
         model: 'claude-sonnet-4-20250514',
         operation: 'generate',
+        promptType: 'plan-analysis',
         success: true,
         calls: 10,
         costUsd: 0.05,
@@ -176,6 +178,53 @@ describe('FirestoreUsageAggregateRepository', () => {
       if (result.ok) {
         expect(result.value).toHaveLength(1);
         expect(result.value[0]?.calls).toBe(10);
+        expect(result.value[0]?.promptType).toBe('plan-analysis');
+      }
+    });
+
+    it('maps missing promptType documents to the deterministic sentinel', async () => {
+      const docData = {
+        aggregateId: 'agg_legacy',
+        date: '2026-04-10',
+        ownerType: 'user',
+        ownerId: 'user_123',
+        sourceService: 'orchestrator',
+        sourceComponent: 'research',
+        sourceClient: 'web',
+        sourceEnvironment: 'dev',
+        provider: LlmProviders.Anthropic,
+        model: 'claude-sonnet-4-20250514',
+        operation: 'generate',
+        success: true,
+        calls: 10,
+        costUsd: 0.05,
+        inputTokens: 1000,
+        outputTokens: 2000,
+        totalTokens: 3000,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cachedTokens: 0,
+        reasoningTokens: 0,
+        thinkingTokens: 0,
+        webSearchCalls: 0,
+        imageCount: 0,
+        firstOccurredAt: '2026-04-10T08:00:00.000Z',
+        lastOccurredAt: '2026-04-10T20:00:00.000Z',
+        updatedAt: '2026-04-10T20:00:01.000Z',
+      };
+
+      mockGet.mockResolvedValue({
+        docs: [{ data: (): typeof docData => docData }],
+      });
+
+      const result = await repo.queryAggregates(
+        '2026-04-10T00:00:00Z',
+        '2026-04-10T23:59:59Z',
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.promptType).toBe('__missing__');
       }
     });
 

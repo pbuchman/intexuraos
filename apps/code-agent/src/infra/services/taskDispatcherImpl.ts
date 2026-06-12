@@ -5,6 +5,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
@@ -17,7 +18,13 @@ import type {
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerConfig as WorkerSettingsConfig } from '../../domain/models/workerSettings.js';
+import {
+  classifyCodeTaskDispatchability,
+  type CodeTaskDispatchability,
+} from '../../domain/services/codeTaskDispatchBlockers.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
+
+type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
 
 /**
  * Check if an HTTP status code is a retryable infrastructure error.
@@ -66,6 +73,8 @@ interface WorkerTaskRequest {
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   reviewTypes?: string[];
+  /** Custom per-task timeout in hours (1–12). INT-1585. */
+  timeoutHours?: number;
 }
 
 /**
@@ -149,6 +158,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     if (request.reviewTypes !== undefined) {
       taskRequest.reviewTypes = request.reviewTypes;
     }
+    if (request.timeoutHours !== undefined) {
+      taskRequest.timeoutHours = request.timeoutHours;
+    }
 
     const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
@@ -157,9 +169,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
 
     if (workers.length === 0) {
+      const blocker = classifyCodeTaskDispatchability({
+        workerType: request.workerType,
+        workers: [],
+        healthByWorkerName: {},
+      }) as DispatchBlocker;
       return err({
         code: 'worker_unavailable',
-        message: 'No workers configured for this user',
+        message: blocker.message,
+        blocker,
       });
     }
 
@@ -174,6 +192,28 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }));
 
     const healthResults = await this.workerHealthProbe.probeAllWorkers(probeConfigs);
+    const dispatchability = classifyCodeTaskDispatchability({
+      workerType: request.workerType,
+      workers: probeConfigs,
+      healthByWorkerName: healthResults,
+    });
+
+    if (!dispatchability.dispatchable) {
+      this.logger.warn(
+        {
+          taskId: request.taskId,
+          workerType: request.workerType,
+          reason: dispatchability.reason,
+          workerNames: dispatchability.workerNames,
+        },
+        'Dispatch blocked by worker capability or health state'
+      );
+      return err({
+        code: dispatchability.reason === 'workers_at_capacity' ? 'at_capacity' : 'worker_unavailable',
+        message: dispatchability.message,
+        blocker: dispatchability,
+      });
+    }
 
     // Filter to healthy workers and extract available capacity in a single pass.
     // If failedWorkerLocation is set, prefer workers OTHER than the failed one.
@@ -196,17 +236,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     // Fall back to the failed worker if no alternatives are healthy
     if (workersWithCapacity.length === 0) {
       workersWithCapacity.push(...failedWorkerFallback);
-    }
-
-    if (workersWithCapacity.length === 0) {
-      this.logger.warn(
-        { totalWorkers: workers.length },
-        'All worker health probes failed, no workers available for dispatch'
-      );
-      return err({
-        code: 'worker_unavailable',
-        message: 'All worker health probes failed',
-      });
     }
 
     // Sort by available capacity descending, priority as tiebreaker
@@ -382,9 +411,17 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         throw error;
       }
 
+      const errorText = typeof response.text === 'function'
+        ? await response.text().catch(() => '')
+        : '';
+      const errorMessage = extractErrorMessage(errorText);
+
       return err({
         code: 'dispatch_failed',
-        message: `Worker returned HTTP ${String(response.status)}`,
+        message:
+          errorMessage.length > 0
+            ? `Worker returned HTTP ${String(response.status)}: ${errorMessage}`
+            : `Worker returned HTTP ${String(response.status)}`,
       });
     }
 
@@ -405,7 +442,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
    * Fetch with timeout using AbortSignal.
    */
   private async fetchWithTimeout(url: string, options: RequestInit & { signal: AbortSignal }): Promise<Response> {
-    return await fetch(url, options);
+    return await performHttpFetch(url, options);
   }
 
   /**
@@ -413,19 +450,21 @@ class TaskDispatcherImpl implements TaskDispatcherService {
    * Workers are already sorted by user's priority (array order).
    */
   private getWorkerConfigsFromCredentials(credentials: DispatchWorkerCredentials): WorkerConfigWithCredentials[] {
-    return credentials.workers.map((worker, index) => ({
-      name: worker.name,
-      location: worker.name,
-      url: worker.url,
-      priority: index + 1,
-      credentials: {
+    return credentials.workers
+      .filter((worker) => worker.enabled !== false)
+      .map((worker, index) => ({
         name: worker.name,
+        location: worker.name,
         url: worker.url,
-        cfAccessClientId: worker.cfAccessClientId,
-        cfAccessClientSecret: worker.cfAccessClientSecret,
-        dispatchSigningSecret: worker.dispatchSigningSecret,
-      },
-    }));
+        priority: index + 1,
+        credentials: {
+          name: worker.name,
+          url: worker.url,
+          cfAccessClientId: worker.cfAccessClientId,
+          cfAccessClientSecret: worker.cfAccessClientSecret,
+          dispatchSigningSecret: worker.dispatchSigningSecret,
+        },
+      }));
   }
 
   async sendMessageToWorker(

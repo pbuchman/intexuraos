@@ -1,0 +1,26 @@
+{
+  "description": "Single source of truth for web-facing service URLs used by local web/dev wiring and the Hetzner web build. Consumed by scripts/generate-service-wiring.mjs, apps/web/src/config.ts, apps/web/vite.config.ts, ecosystem.config.cjs, and scripts/hetzner/deploy-web.sh.",
+  "services": [
+    { "name": "user-service",                 "envSuffix": "USER_SERVICE",                 "apiPath": "/api/user",              "proxyTarget": "http://localhost:8110",                    "serviceUrl": "http://localhost:8110" },
+    { "name": "whatsapp-service",             "envSuffix": "WHATSAPP_SERVICE",             "apiPath": "/api/whatsapp",          "proxyTarget": "http://localhost:8113",                    "serviceUrl": "http://localhost:8113" },
+    { "name": "notion-service",               "envSuffix": "NOTION_SERVICE",               "apiPath": "/api/notion",            "proxyTarget": "http://localhost:8112",                    "serviceUrl": "http://localhost:8112" },
+    { "name": "mobile-notifications-service", "envSuffix": "MOBILE_NOTIFICATIONS_SERVICE", "apiPath": "/api/notifications",     "proxyTarget": "http://localhost:8114",                    "serviceUrl": "http://localhost:8114" },
+    { "name": "fishing-assistant-service",    "envSuffix": "FISHING_ASSISTANT_SERVICE",    "apiPath": "/api/fishing-assistant", "proxyTarget": "http://localhost:8119",                    "serviceUrl": "http://localhost:8119" },
+    { "name": "research-agent",               "envSuffix": "RESEARCH_AGENT",               "apiPath": "/api/research",          "proxyTarget": "http://localhost:8116",                    "serviceUrl": "http://localhost:8116" },
+    { "name": "commands-agent",               "envSuffix": "COMMANDS_AGENT",               "apiPath": "/api/commands",          "proxyTarget": "http://localhost:8117",                    "serviceUrl": "http://localhost:8117" },
+    { "name": "actions-agent",                "envSuffix": "ACTIONS_AGENT",                "apiPath": "/api/actions",           "proxyTarget": "http://localhost:8118",                    "serviceUrl": "http://localhost:8118" },
+    { "name": "notes-agent",                  "envSuffix": "NOTES_AGENT",                  "apiPath": "/api/notes",             "proxyTarget": "http://localhost:8121",                    "serviceUrl": "http://localhost:8121" },
+    { "name": "todos-agent",                  "envSuffix": "TODOS_AGENT",                  "apiPath": "/api/todos",             "proxyTarget": "http://localhost:8123",                    "serviceUrl": "http://localhost:8123" },
+    { "name": "bookmarks-agent",              "envSuffix": "BOOKMARKS_AGENT",              "apiPath": "/api/bookmarks",         "proxyTarget": "http://localhost:8124",                    "serviceUrl": "http://localhost:8124" },
+    { "name": "calendar-agent",               "envSuffix": "CALENDAR_AGENT",               "apiPath": "/api/calendar",          "proxyTarget": "http://localhost:8125",                    "serviceUrl": "http://localhost:8125" },
+    { "name": "chat-agent",                   "envSuffix": "CHAT_AGENT",                   "apiPath": "/api/chat",              "proxyTarget": "http://localhost:8129",                    "serviceUrl": "http://localhost:8129" },
+    { "name": "linear-agent",                 "envSuffix": "LINEAR_AGENT",                 "apiPath": "/api/linear",            "proxyTarget": "http://localhost:8126",                    "serviceUrl": "http://localhost:8126" },
+    { "name": "code-agent",                   "envSuffix": "CODE_AGENT",                   "apiPath": "/api/code",              "proxyTarget": "http://localhost:8128",                    "serviceUrl": "https://dev.intexuraos.cloud/api/code" },
+    { "name": "image-service",                "envSuffix": "IMAGE_SERVICE",                "apiPath": "/api/images",            "proxyTarget": "http://localhost:8120",                    "serviceUrl": "http://localhost:8120" },
+    { "name": "web-agent",                    "envSuffix": "WEB_AGENT",                    "apiPath": "/api/web",               "proxyTarget": "http://localhost:8127",                    "serviceUrl": "http://localhost:8127" },
+    { "name": "app-settings-service",         "envSuffix": "APP_SETTINGS_SERVICE",         "apiPath": "/api/settings",          "proxyTarget": "http://localhost:8122",                    "serviceUrl": "http://localhost:8122" },
+    { "name": "cron-agent",                   "envSuffix": "CRON_AGENT",                   "apiPath": "/api/cron-agent",        "proxyTarget": "http://localhost:8130",                    "serviceUrl": "http://localhost:8130" },
+    { "name": "hellscript-agent",             "envSuffix": "HELLSCRIPT_AGENT",             "apiPath": "/api/hellscript-agent",  "proxyTarget": "http://localhost:8131",                    "serviceUrl": "http://localhost:8131" },
+    { "name": "llm-usage-service",            "envSuffix": "LLM_USAGE_SERVICE",            "apiPath": "/api/llm-usage",         "proxyTarget": "http://localhost:8132",                    "serviceUrl": "http://localhost:8132" }
+  ]
+}

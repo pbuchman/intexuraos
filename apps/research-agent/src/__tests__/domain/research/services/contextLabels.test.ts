@@ -28,7 +28,6 @@ describe('generateContextLabels', () => {
       contexts,
       undefined,
       'user-123',
-      undefined,
       () => {
         throw new Error('Should not be called');
       },
@@ -62,7 +61,6 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
-      undefined,
       () => mockGenerator,
       mockLogger
     );
@@ -87,7 +85,6 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
-      undefined,
       () => mockGenerator,
       mockLogger
     );
@@ -112,7 +109,6 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
-      undefined,
       () => mockGenerator,
       mockLogger
     );
@@ -140,7 +136,6 @@ describe('generateContextLabels', () => {
       contexts,
       'test-api-key',
       'test-user-id',
-      'research-456',
       (model, apiKey, userId, logger, researchId) => {
         capturedModel = model;
         capturedApiKey = apiKey;
@@ -149,14 +144,15 @@ describe('generateContextLabels', () => {
         capturedResearchId = researchId;
         return mockGenerator;
       },
-      mockLogger
+      mockLogger,
+      'research-1'
     );
 
     expect(capturedModel).toBe(LlmModels.Gemini25Flash);
     expect(capturedApiKey).toBe('test-api-key');
     expect(capturedUserId).toBe('test-user-id');
     expect(capturedLogger).toBe(mockLogger);
-    expect(capturedResearchId).toBe('research-456');
+    expect(capturedResearchId).toBe('research-1');
   });
 
   it('processes multiple contexts in parallel', async () => {
@@ -176,7 +172,7 @@ describe('generateContextLabels', () => {
       },
     };
 
-    await generateContextLabels(contexts, 'api-key', 'user', undefined, () => mockGenerator, mockLogger);
+    await generateContextLabels(contexts, 'api-key', 'user', () => mockGenerator, mockLogger);
 
     expect(callOrder).toEqual([1, 2, 3]);
   });

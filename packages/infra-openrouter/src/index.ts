@@ -7,6 +7,10 @@
 
 export { createOpenRouterClient, type OpenRouterClient } from './client.js';
 export {
+  createOpenRouterToolCallingClient,
+  type OpenRouterToolCallingConfig,
+} from './toolCallingClient.js';
+export {
   OPENROUTER_ALLOWED_MODELS,
   OPENROUTER_VALIDATION_MODEL,
   isAllowedModel,

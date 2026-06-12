@@ -5,7 +5,7 @@
  * Uses exponential backoff between polls.
  */
 import type { SpeechTranscriptionPort } from './providers/transcription-provider.js';
-import type { Logger } from './logger.js';
+import type { WorkerLogger as Logger } from './__shims__/common-worker.js';
 
 /**
  * Configuration for polling behavior.

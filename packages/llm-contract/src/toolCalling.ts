@@ -63,6 +63,8 @@ export interface ToolCallingClient {
     systemPrompt: string;
     messages: ToolCallingMessage[];
     tools: ToolDefinition[];
+    /** Semantic identifier for usage tracking. */
+    promptType?: string;
     /** Maximum iterations of the tool calling loop (default: 5) */
     maxIterations?: number;
     /** Called when maxIterations exhausted without text. Return a repair message to inject, or undefined to fail. */

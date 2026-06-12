@@ -6,11 +6,12 @@
 import { type ClaudeClient, createClaudeClient } from '@intexuraos/infra-claude';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
-import { buildResearchPrompt, type ResearchContext } from '@intexuraos/llm-prompts';
+import { researchPrompt, type ResearchContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
   LlmResearchProvider,
   LlmResearchResult,
+  ResearchProviderCallOptions,
 } from '../../domain/research/index.js';
 
 export class ClaudeAdapter implements LlmResearchProvider {
@@ -23,14 +24,12 @@ export class ClaudeAdapter implements LlmResearchProvider {
     model: string,
     userId: string,
     logger: Logger,
-    usageSink: UsageSink,
-    researchId?: string
+    usageSink: UsageSink
   ) {
     this.client = createClaudeClient({
       apiKey,
       model,
       userId,
-      ...(researchId !== undefined && { researchId }),
       logger,
       usageSink,
     });
@@ -38,10 +37,18 @@ export class ClaudeAdapter implements LlmResearchProvider {
     this.logger = logger;
   }
 
-  async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
-    const builtPrompt = buildResearchPrompt(prompt, ctx);
+  async research(
+    prompt: string,
+    ctx?: ResearchContext,
+    options?: ResearchProviderCallOptions
+  ): Promise<Result<LlmResearchResult, LlmError>> {
+    const builtPrompt = researchPrompt.build({ userPrompt: prompt, ctx });
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'Claude research started');
-    const result = await this.client.research(builtPrompt);
+    const researchOptions = {
+      promptType: options?.promptType ?? 'research-web-search',
+      ...(options?.researchId !== undefined && { correlation: { researchId: options.researchId } }),
+    };
+    const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
       this.logger.error(

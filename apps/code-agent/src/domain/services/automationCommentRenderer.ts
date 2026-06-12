@@ -7,6 +7,7 @@
 
 import type { AgentType } from '../models/codeTask.js';
 import type { AutomationEvent } from '../ports/automationLog.js';
+import { buildCodeTaskUrl } from '../utils/taskUrls.js';
 
 export interface RenderEventOptions {
   repository?: string;
@@ -50,7 +51,7 @@ export function renderEvent(
       return renderTriageFailed(ts, event);
 
     case 'task_dispatched':
-      return `**${ts}** -- ${agentTypeLabel(event.agentType)} dispatched | ${event.workerType} | [View task](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
+      return `**${ts}** -- ${agentTypeLabel(event.agentType)} queued | ${event.workerType} | [View task](${buildCodeTaskUrl(event.taskId)})`;
 
     case 'task_dispatch_failed':
       return renderTaskDispatchFailed(ts, event);
@@ -141,9 +142,6 @@ function renderSkipped(
   if (event.ruleName !== undefined) {
     details.push(`Rule: ${event.ruleName}`);
   }
-  if (event.cost !== undefined) {
-    details.push(`Triage cost: ${formatCost(event.cost)}`);
-  }
   if (event.reasoning !== undefined) {
     details.push('', event.reasoning);
   }
@@ -169,8 +167,7 @@ function renderTriageDispatch(
     : `**${ts}** -- Triage → dispatching task`;
 
   const details: string[] = [];
-  details.push(`Triage cost: ${formatCost(event.cost)}`);
-  details.push('', event.reasoning);
+  details.push(event.reasoning);
   if (event.toolCalls.length > 0) {
     details.push('', '**Tool calls:**', ...event.toolCalls.map((tc) => `- \`${tc}\``));
   }
@@ -184,19 +181,63 @@ function renderTriageFailed(
 ): string {
   const summary = `**${ts}** -- **Triage failed** | ${event.fallbackAction}`;
   const details = event.error;
-  return summary + '\n' + wrapDetails('Error', details);
+  return summary + '\n' + wrapDetails('Details', details);
 }
 
 function renderTaskDispatchFailed(
   ts: string,
   event: Extract<AutomationEvent, { type: 'task_dispatch_failed' }>
 ): string {
-  const summary = `**${ts}** -- **Dispatch failed**`;
-  const details: string[] = [event.error];
+  const summaryParts = [`**${ts}** -- **Dispatch failed**`];
+  if (event.taskId !== undefined) {
+    summaryParts.push(`[View task](${buildCodeTaskUrl(event.taskId)})`);
+  }
+  if (event.workerType !== undefined) {
+    summaryParts.push(event.workerType);
+  }
+  if (event.reason !== undefined) {
+    summaryParts.push(event.reason);
+  }
+
+  const details: string[] = [];
+  if (event.message !== undefined) {
+    details.push(event.message);
+  } else if (event.error !== undefined) {
+    details.push(event.error);
+  }
+  if (event.remediation !== undefined) {
+    details.push('', `Remediation: ${event.remediation}`);
+  }
+  if (event.workerNames !== undefined && event.workerNames.length > 0) {
+    details.push(`Workers: ${event.workerNames.join(', ')}`);
+  }
+  if (event.terminal !== undefined) {
+    details.push(`Terminal: ${String(event.terminal)}`);
+  }
   if (event.errorCode !== undefined) {
     details.push(`Code: ${event.errorCode}`);
   }
-  return summary + '\n' + wrapDetails('Error', details.join('\n'));
+  if (event.logLines !== undefined && event.logLines.length > 0) {
+    details.push('', '**Log excerpt:**', ...event.logLines.map((line) => `- ${line}`));
+  }
+  if (details.length === 0) {
+    return withIdempotencyMarker(summaryParts.join(' | '), event);
+  }
+  return withIdempotencyMarker(summaryParts.join(' | ') + '\n' + wrapDetails('Details', details.join('\n')), event);
+}
+
+function withIdempotencyMarker(
+  rendered: string,
+  event: Extract<AutomationEvent, { type: 'task_dispatch_failed' }>
+): string {
+  if (event.idempotencyKey === undefined || event.idempotencyKey === '') {
+    return rendered;
+  }
+  return `${rendered}\n${dispatchFailureIdempotencyMarker(event.idempotencyKey)}`;
+}
+
+export function dispatchFailureIdempotencyMarker(idempotencyKey: string): string {
+  return `<!-- intexuraos:task_dispatch_failed:${idempotencyKey} -->`;
 }
 
 function renderTaskCompleted(
@@ -237,7 +278,8 @@ function renderTaskFailed(
   ts: string,
   event: Extract<AutomationEvent, { type: 'task_failed' }>
 ): string {
-  const parts: string[] = [`**${ts}** -- **Failed**`];
+  const label = event.agentType !== undefined ? `${agentTypeLabel(event.agentType)} failed` : 'Failed';
+  const parts: string[] = [`**${ts}** -- **${label}**`];
   if (event.duration !== undefined) {
     parts.push(formatDuration(event.duration));
   }
@@ -346,10 +388,6 @@ function formatDuration(ms: number): string {
     return `${String(minutes)}m ${String(seconds)}s`;
   }
   return `${String(seconds)}s`;
-}
-
-function formatCost(dollars: number): string {
-  return `$${dollars.toFixed(3)}`;
 }
 
 function extractPrNumber(prUrl: string): string {

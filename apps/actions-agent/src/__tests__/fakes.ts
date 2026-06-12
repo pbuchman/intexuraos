@@ -1,5 +1,6 @@
-import type { Result, ServiceFeedback, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
 import type {
@@ -65,11 +66,8 @@ import type { ApprovalMessage } from '../domain/models/approvalMessage.js';
 import type { UserServiceClient, UserServiceError, DecryptedApiKeys } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Services } from '../services.js';
-import type {
-  PublishError,
-  WhatsAppInteractiveButton,
-  WhatsAppSendPublisher,
-} from '@intexuraos/infra-pubsub';
+import type { PublishError } from '@intexuraos/infra-pubsub';
+import type { WhatsAppInteractiveButton, WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 import type { Logger } from 'pino';
 import { vi } from 'vitest';
@@ -373,7 +371,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     message: string;
     correlationId: string;
     replyToMessageId?: string;
-    buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
+    buttons?: import('@intexuraos/whatsapp-pubsub-client').WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
     important?: boolean;
   }[] = [];
@@ -397,7 +395,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     userId: string;
     message: string;
     replyToMessageId?: string;
-    buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
+    buttons?: import('@intexuraos/whatsapp-pubsub-client').WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
     important?: boolean;
     correlationId?: string;

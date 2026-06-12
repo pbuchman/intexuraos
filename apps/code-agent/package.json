@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/code-agent",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,16 +9,20 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs code-agent",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
     "start:local": "tsx src/index.ts",
-    "dev": "node --watch --experimental-strip-types src/index.ts"
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "view-metrics": "tsx src/scripts/view-metrics.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",
+    "@google-cloud/firestore": "catalog:",
     "@google-cloud/monitoring": "^5.3.1",
+    "@intexuraos/code-task-domain": "workspace:*",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
@@ -26,24 +30,25 @@
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
-    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
+    "@intexuraos/linear-domain": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
+    "@intexuraos/pr-triage-pubsub-client": "workspace:*",
+    "@intexuraos/whatsapp-pubsub-client": "workspace:*",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "fastify": "^5.1.0",
+    "fastify": "catalog:",
     "jose": "^6.1.3",
-    "openai": "^6.15.0",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "openai": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@google-cloud/firestore": "^7.10.0",
     "@types/node": "^22.10.5",
     "pino-pretty": "^13.0.0",
     "typescript": "^5.7.3",

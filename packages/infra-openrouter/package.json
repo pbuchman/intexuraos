@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-openrouter",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,7 +18,7 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "openai": "^5.3.0"
+    "@intexuraos/llm-utils": "workspace:*"
   },
   "devDependencies": {
     "nock": "^14.0.0"

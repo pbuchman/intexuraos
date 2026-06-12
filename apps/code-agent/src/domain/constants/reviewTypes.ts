@@ -14,6 +14,7 @@ export const ALL_REVIEW_TYPES = [
   'architecture',
   'plan_review',
   'test_quality',
+  'documentation',
 ] as const;
 export type ReviewType = (typeof ALL_REVIEW_TYPES)[number];
 

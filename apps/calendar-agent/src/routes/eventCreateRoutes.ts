@@ -10,7 +10,7 @@ import { buildCreateEventInput, type CreateEventBody } from './calendarHelpers.j
 
 export const eventCreateRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: CreateEventBody }>(
-    '/calendar/events',
+    '/events',
     {
       schema: {
         operationId: 'createCalendarEvent',

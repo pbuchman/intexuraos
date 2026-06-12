@@ -12,6 +12,7 @@ export type GroupByMode =
   | 'day'
   | 'component'
   | 'service'
+  | 'promptType'
   | 'model'
   | 'openrouter-model';
 
@@ -46,6 +47,7 @@ export const GROUP_BY_MAP: Record<GroupByMode, string[]> = {
   day: ['day'],
   component: ['source.component'],
   service: ['source.service'],
+  promptType: ['request.promptType'],
   model: ['request.model'],
   'openrouter-model': ['request.provider', 'request.model'],
 };
@@ -55,6 +57,7 @@ export const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
   { key: 'day', label: 'Day' },
   { key: 'component', label: 'Component' },
   { key: 'service', label: 'Service' },
+  { key: 'promptType', label: 'Prompt Type' },
   { key: 'model', label: 'Model' },
   { key: 'openrouter-model', label: 'OpenRouter Model' },
 ];

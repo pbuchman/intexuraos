@@ -19,10 +19,21 @@ import type {
 export interface GcpPubSubPublisherConfig {
   projectId: string;
   mediaCleanupTopic: string;
-  commandsIngestTopic?: string;
+  /**
+   * Required: triggers srt-service to start audio transcription. Required at the type
+   * level so misconfiguration is caught at construction, not silently no-op'd at runtime.
+   */
+  audioStoredTopic: string;
+  /**
+   * Required: triggers actions-agent to process approval/rejection of pending actions.
+   */
+  approvalReplyTopic: string;
+  /**
+   * Required: commands-agent turns WhatsApp text commands into bookmark records.
+   */
+  commandsIngestTopic: string;
+  /** Optional: webhook async-processing fanout; safe to leave unset in dev. */
   webhookProcessTopic?: string;
-  audioStoredTopic?: string;
-  approvalReplyTopic?: string;
   logger: Logger;
 }
 
@@ -31,18 +42,35 @@ export interface GcpPubSubPublisherConfig {
  */
 export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPublisherPort {
   private readonly mediaCleanupTopic: string;
-  private readonly commandsIngestTopic: string | null;
+  private readonly audioStoredTopic: string;
+  private readonly approvalReplyTopic: string;
+  private readonly commandsIngestTopic: string;
   private readonly webhookProcessTopic: string | null;
-  private readonly audioStoredTopic: string | null;
-  private readonly approvalReplyTopic: string | null;
 
   constructor(config: GcpPubSubPublisherConfig) {
     super({ projectId: config.projectId, logger: config.logger });
+    // Belt-and-suspenders runtime guards: types enforce presence, but runtime
+    // callers can still bypass them (e.g., tests using `as unknown as` casts,
+    // JS callers, or empty-string env values that pass Zod at load time only
+    // because an upstream step forgot `.min(1)`). The upstream has .min(1) —
+    // this guard is the last line of defense.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
+    if (config.audioStoredTopic === undefined || config.audioStoredTopic === '') {
+      throw new Error('audioStoredTopic is required');
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
+    if (config.approvalReplyTopic === undefined || config.approvalReplyTopic === '') {
+      throw new Error('approvalReplyTopic is required');
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
+    if (config.commandsIngestTopic === undefined || config.commandsIngestTopic === '') {
+      throw new Error('commandsIngestTopic is required');
+    }
     this.mediaCleanupTopic = config.mediaCleanupTopic;
-    this.commandsIngestTopic = config.commandsIngestTopic ?? null;
+    this.audioStoredTopic = config.audioStoredTopic;
+    this.approvalReplyTopic = config.approvalReplyTopic;
+    this.commandsIngestTopic = config.commandsIngestTopic;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;
-    this.audioStoredTopic = config.audioStoredTopic ?? null;
-    this.approvalReplyTopic = config.approvalReplyTopic ?? null;
   }
 
   async publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
@@ -66,7 +94,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   }
 
   async publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
+    const result = await this.publishToOptionalTopic(
       this.webhookProcessTopic,
       event,
       { eventId: event.eventId },
@@ -88,7 +116,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   async publishExtractLinkPreviews(
     event: ExtractLinkPreviewsEvent
   ): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
+    const result = await this.publishToOptionalTopic(
       this.webhookProcessTopic,
       event,
       { messageId: event.messageId },

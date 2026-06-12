@@ -1,24 +1,20 @@
 # Code Agent — Technical Debt
 
-**Last Updated:** 2026-04-22
-**Analysis Run:** [2026-04-22 autonomous run — v3.6.0 release]
-
----
+**Last Updated:** 2026-06-12
+**Analysis Run:** [2026-06-12 release 3.7.0 Service Scribe pass]
 
 ## Summary
 
 | Category       | Count  | Severity |
 | -------------- | ------ | -------- |
 | TODO comments  | 2      | Medium   |
-| Code smells    | 4      | Low-Med  |
-| Future plans   | 4      | Medium   |
+| Code smells    | 2      | Low-Med  |
+| Future plans   | 3      | Medium   |
 | TS strictness  | 2      | Low      |
-| SRP violations | 1      | High     |
-| **Total**      | **13** | ---      |
+| SRP violations | 0      | None     |
+| **Total**      | **9**  | n/a      |
 
-> Note: codeRoutes.ts remains a large file. Routing split is an ongoing priority. New routes are correctly added to `routes/code/` and `routes/merge-queue/` as separate files (e.g., `updateTaskStatusRoute.ts`, `prTriagePubsubRoute.ts`). The execution memory pipeline is in alpha and under active iteration.
-
----
+> Note: the INT-1430 route split is complete: `codeRoutes.ts` is now a composition plugin and route logic lives in resource-specific modules. Remaining release 3.7.0 debt centers on prompt hash auditability, distributed drain guards, and execution memory maturation.
 
 ## Future Plans
 
@@ -26,21 +22,15 @@
 
 Replace static hash placeholders with computed hashes from the real system prompt template. This enables prompt A/B testing and audit compliance.
 
-**Files:** `processCodeAction.ts:26`, `codeRoutes.ts:1805`
+**Files:** `processCodeAction.ts:26`, `routes/code/task-routes.ts:1683`
 
-### 2. Route splitting for codeRoutes.ts
+### 2. Distributed drain queue guard
 
-Continue the pattern established by `routes/code/` and `routes/merge-queue/` and split the remaining routes by domain concern. See Code Smells section below for details.
+Replace module-level `isDraining` and `isDrainingRetries` booleans with Firestore-based distributed locks if multi-instance deployment is planned. Currently safe for the single-process service deployment.
 
-### 3. Distributed drain queue guard
-
-Replace module-level `isDraining` and `isDrainingRetries` booleans with Firestore-based distributed locks if multi-instance deployment is planned. Currently safe for Cloud Run scale 0-1.
-
-### 4. Execution memory pipeline maturation
+### 3. Execution memory pipeline maturation
 
 The execution memory graph is in alpha. Planned improvements include tuning rerank thresholds and scoring weights, refining distillation prompts for higher-quality memories, expanding component hints guidance, and improving the evaluation pipeline for post-run memory feedback. The `labelHints` signal was recently removed from the scoring pipeline after proving unreliable.
-
----
 
 ## TODO Comments
 
@@ -52,7 +42,7 @@ The execution memory graph is in alpha. Planned improvements include tuning rera
 // TODO: Compute from actual system prompt content instead of using a static placeholder.
 ```
 
-**File:** `apps/code-agent/src/routes/codeRoutes.ts:1805`
+**File:** `apps/code-agent/src/routes/code/task-routes.ts:1683`
 
 ```typescript
 systemPromptHash: 'default', // TODO: Use actual system prompt hash
@@ -64,48 +54,11 @@ The `systemPromptHash` field is designed for audit tracking — recording which 
 
 **Remediation:** Compute SHA-256 of the actual system prompt template at startup and inject it via config.
 
----
-
 ## Code Smells
 
-### 1. codeRoutes.ts is a large file (SRP violation)
+### 1. In-flight health probe deduplication uses module-level Map
 
-**File:** `apps/code-agent/src/routes/codeRoutes.ts`
-
-This single file contains all internal code task routes AND all public code task routes, plus the ask-agent endpoints. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, ask-agent start/active, internal submit, and queue draining. Each route includes inline Fastify schema definitions that contribute significant line count. New routes are added to `routes/code/` and `routes/merge-queue/` as separate files (e.g., `issueGroupRoutes.ts`, `github-pr-summaries.ts`, `github-event-log.ts`, `mergeQueueRoutes.ts`, `updateTaskStatusRoute.ts`) but the original routes remain consolidated.
-
-**Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
-
-**Remediation:** Continue the pattern established by `routes/code/` and split the remaining routes by domain concern:
-
-- `routes/code/submit.ts` (public submit)
-- `routes/code/tasks.ts` (public list/get/cancel)
-- `routes/code/retry.ts` (public retry)
-- `routes/code/feedback.ts` (public feedback)
-- `routes/code/messages.ts` (public sendTaskMessage)
-- `routes/code/ask-agent.ts` (ask-agent start/active)
-- `routes/internal/process.ts` (internal code action processing)
-- `routes/internal/submit.ts` (internal code submit)
-- `routes/internal/taskUpdate.ts` (internal task PATCH)
-- `routes/internal/maintenance.ts` (heartbeat, zombies, cleanup, drain)
-
-### 2. ESLint disabled for entire route files
-
-**Files:** `codeRoutes.ts:1`, `webhookRoutes.ts:1`
-
-```typescript
-/* eslint-disable */
-```
-
-Both files have ESLint completely disabled at the file level, silencing all linting rules including safety-critical ones like `@typescript-eslint/no-unsafe-*`.
-
-**Impact:** Type safety and code quality rules are not enforced in the most complex route files.
-
-**Remediation:** Remove the blanket disable, address individual lint issues, and use targeted `eslint-disable-next-line` comments where genuinely necessary.
-
-### 3. In-flight health probe deduplication uses module-level Map
-
-**File:** `apps/code-agent/src/routes/codeRoutes.ts`
+**File:** `apps/code-agent/src/routes/code/task-routes.ts`
 
 Module-level mutable state for deduplicating concurrent health probes. This map grows unbounded if entries are not cleaned up properly.
 
@@ -113,23 +66,21 @@ Module-level mutable state for deduplicating concurrent health probes. This map 
 
 **Remediation:** Add a TTL-based cleanup or use a WeakMap pattern.
 
-### 4. Drain queue guards use module-level booleans
+### 2. Drain queue guards use module-level booleans
 
 **Files:** `domain/usecases/drainTaskQueue.ts`, `domain/usecases/drainRetryQueue.ts`
 
-Module-level mutable state for preventing concurrent drain operations. Works for single-instance deployment (Cloud Run scale 0-1) but would break with multiple instances.
+Module-level mutable state for preventing concurrent drain operations. Works for the current single-process service deployment but would break with multiple instances.
 
 **Impact:** Not a problem in current deployment (single instance), but would become a race condition if scaled horizontally.
 
 **Remediation:** Use Firestore-based distributed lock if multi-instance deployment is planned.
 
----
-
 ## TypeScript Strictness Issues
 
 ### 1. Firestore Timestamp handling
 
-Throughout the codebase, Firestore `Timestamp` objects require runtime type narrowing when serializing to JSON. The `timestampToIso()` helper handles this but requires `as` casts. This pattern appears in `codeRoutes.ts`, `mergeQueueRoutes.ts`, and `issueGroupRoutes.ts` and could benefit from a typed wrapper.
+Throughout the codebase, Firestore `Timestamp` objects require runtime type narrowing when serializing to JSON. The `timestampToIso()` helper handles this but requires `as` casts. This pattern appears in `routes/code/*`, `mergeQueueRoutes.ts`, and `issueGroupRoutes.ts` and could benefit from a typed wrapper.
 
 ### 2. `any` type usage in Firestore queries
 
@@ -146,8 +97,6 @@ const tasks = snapshot.docs.map((doc: any) => ...
 
 **Remediation:** Use typed Firestore converters to eliminate the `any` casts.
 
----
-
 ## Test Coverage Notes
 
 The service has 50+ test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> -- reason @preserve */` pattern with valid categories.
@@ -160,17 +109,26 @@ Common exemption categories in this service:
 
 Several v8 ignore blocks were replaced with real tests in previous releases (INT-1071, INT-1072, INT-1073, INT-1237).
 
----
-
 ## Resolved Issues
 
 | Issue    | Description                                        | Resolution                                                                             |
 | -------- | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| INT-1430 | `codeRoutes.ts` route monolith                     | Split into a 41-line composition plugin plus resource-specific route modules           |
+| INT-1468 | Code tasks could only dispatch immediately         | `scheduledDispatch` stores future eligibility; queue drain skips until `notBeforeAt`   |
+| INT-1585 | Longer automation needed per-task time budgets     | `timeoutHours` persisted on `CodeTask` and forwarded to orchestrator dispatch payload  |
+| INT-1630 | GitHub Agent needed Gemini 3 Flash support         | OpenRouter Gemini 3 Flash Preview wired through `resolveToolCallingClient`             |
+| INT-1650 | Dispatch failures lacked task-visible status       | Task-level `dispatchStatus` and recoverable/terminal blocker handling added            |
+| INT-1652 | Dispatch blockers lacked diagnostics/notifications | Worker health diagnostics, dispatch log/PR/WhatsApp reporter, and notification ledger  |
+| INT-1657 | Callback ownership could follow worker location    | Callback owner now derives from task webhook URL and public bases normalize to `/api/code` |
+| INT-1658 | `/api/code/internal/*` callback routing hit deny rule | Nginx routing fixed so code-agent callback paths route before generic internal deny  |
+| PR #2126 | Callback auth diagnostics were incomplete          | Per-task webhook HMAC accepted for callback family; `callbackState` persisted/exposed  |
+| PR #2126 | Issue group counts included hidden phantom groups  | `GET /issue-groups` subtracts summaries with no displayable tasks from badge counts    |
+| PR #2111 | Public API resource paths were doubled in callers  | Public code-agent resources normalized under `/api/code` without `/code` duplication   |
 | INT-1414 | Task finalization stalls on webhook timeout        | Dedicated `PATCH /internal/code-tasks/:id/status` endpoint for idempotent status write |
 | INT-1406 | PR triage blocks webhook response                  | Moved to Pub/Sub push subscription — webhook returns immediately                       |
-| INT-1383 | No way to mark issue groups as high-priority       | `POST /code/issue-groups/:groupKey/important` endpoint with `isImportant` flag         |
-| INT-1389 | GitHub Agent uses hardcoded model                  | Per-user `resolveToolCallingClient` tries user key first, falls back to platform key   |
-| INT-1360 | Cannot skip design phase for known-good tasks      | `taskMode` parameter on `POST /code/submit` — choose planning or execution explicitly  |
+| INT-1383 | No way to mark issue groups as high-priority       | `POST /issue-groups/:groupKey/important` endpoint with `isImportant` flag         |
+| INT-1389 | GitHub Agent uses hardcoded model                  | Replaced later by OpenRouter Gemini 3 Flash Preview with user/platform key resolution  |
+| INT-1360 | Cannot skip design phase for known-good tasks      | `taskMode` parameter on `POST /submit` — choose planning or execution explicitly  |
 | INT-1345 | Code tasks triggered on draft PRs waste compute    | `DraftPRRule` blocks all code tasks when `isDraft === true`                            |
 | INT-1380 | Merge step attempted on closed/merged PRs          | Pipeline suppresses merge step for closed/merged PRs                                   |
 | INT-1375 | Failed tasks not auto-retried on different worker  | Self-healing triage with `autoRetryTask` — up to 3 retries excluding failed worker     |
@@ -196,7 +154,7 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 | INT-1020 | Merge queue for ordered PR merging                 | Merge queue watch + Cloud Scheduler tick + GitHub as source of truth                   |
 | INT-1023 | Merge conflict detection blocking webhooks         | Dedicated cron job for reconciliation, decoupled from webhook pipeline                 |
 | INT-1040 | Orchestrator direct Linear dependency              | Code-agent proxy endpoint for issue context                                            |
-| INT-1027 | Cannot inspect raw webhook payloads                | Expandable rows + GET /code/github-event-log/:id/payload endpoint                      |
+| INT-1027 | Cannot inspect raw webhook payloads                | Expandable rows + GET /github-event-log/:id/payload endpoint                      |
 | INT-1025 | GitHub Event Log shows unsupported event types     | Server-side filtering to VISIBLE_EVENT_TYPES                                           |
 | INT-1029 | Task queue capacity too small                      | Queue capacity increased from 10 to 50                                                 |
 | INT-1048 | Merge queue reliability issues                     | GitHub as source of truth, Firestore as synchronized cache                             |
@@ -217,7 +175,7 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 | INT-711  | Retried tasks clutter task list                    | Original task archived to `archived` status on retry                                   |
 | INT-725  | Planning tasks not linked to execution             | backLinkPlanningTask sets implementationTaskId on planning task                        |
 | INT-738  | WhatsApp notifications lack direct links           | CTA URL buttons with deep links to PR and task dashboard                               |
-| INT-743  | GitHub Agent for PR evaluation                     | Gemini tool-calling agent with unified evaluator pipeline                              |
+| INT-743  | GitHub Agent for PR evaluation                     | LLM tool-calling agent with unified evaluator pipeline                                 |
 | INT-744  | Unified webhook evaluator                          | Two-tier evaluation: hard rules then LLM triage with audit trail                       |
 | INT-773  | Already-completed execution outcome                | `already_completed` execution outcome label added                                      |
 | INT-780  | v8 coverage gaps in codeRoutes.ts                  | Refactored and added tests for uncovered branches                                      |
@@ -241,10 +199,8 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 | INT-921  | Review tasks not queued when busy                  | Queue support for review tasks when workers at capacity                                |
 | INT-924  | Redundant triage PR comments                       | Removed redundant "Automated Code Review Triage Decision" comments                     |
 
----
-
 ## Related
 
-- [Features](features.md) --- User-facing documentation
-- [Technical](technical.md) --- Developer reference
+- [Features](features.md) - User-facing documentation
+- [Technical](technical.md) - Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

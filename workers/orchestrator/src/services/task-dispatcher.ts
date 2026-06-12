@@ -1,14 +1,6 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
-import {
-  type Result,
-  type Logger,
-  getErrorMessage,
-  hasCodeTaskLabel,
-} from '@intexuraos/common-core';
+import { type Result, type Logger } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
-import { withTimeout } from '../with-timeout.js';
 import type { Task, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { SendMessageResult, SendMessageError } from '../types/schemas.js';
@@ -18,148 +10,66 @@ import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { StatusUpdateClient } from './status-update-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { IsolationProvider, WorkerConfig, WorkerHandle } from './isolation/types.js';
-import { WORKER_TYPES } from './isolation/types.js';
+import type { IsolationProvider } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
-import type { WorkerAuthProvider, WorkerAuthRegistry } from './worker-auth/index.js';
-import { buildSystemPrompt } from './system-prompt.js';
-import { stripDockerHeaders } from './log-formatter.js';
+import type { WorkerAuthRegistry } from './worker-auth/index.js';
 import { ActivityTimeoutManager } from './activity-timeout-manager.js';
 import {
   type CompletionAgentType,
-  type CompletionVerifier,
   type CompletionVerifierVerdict,
-  getLast50Lines,
-  getLast50ClaudeLines,
+  ResumeSummaryExtractor,
 } from './completion-verifier.js';
-import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
+import type { RuntimeEvent } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 import type {
   AgentComplianceValidator,
   ComplianceValidationInput,
 } from './agent-compliance-validator.js';
-import type { ExecutionAgentData } from './completion-verifier.js';
-import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
-import { readSessionTranscript } from './transcript-reader.js';
-import { formatTranscript } from './transcript-formatter.js';
-import { extractPrNumber } from './deep-validator-helpers.js';
-import { fetchDispatchMetadata } from './dispatch-metadata-client.js';
+import {
+  missingFieldsPrompt as missingFieldsPromptObj,
+  buildResumePreamble as buildResumePreambleFn,
+  buildActiveGoalSection as buildActiveGoalSectionFn,
+  parseRebaseResultOutput as parseRebaseResultOutputFn,
+  parseContinuationPrOutput as parseContinuationPrOutputFn,
+  getTaskEventUrl as getTaskEventUrlFn,
+  hasFatalExitCodeField as hasFatalExitCodeFieldFn,
+} from './task-dispatcher/prompts.js';
+import {
+  appendOrchestratorTaskLog as appendOrchestratorTaskLogFn,
+  appendTaggedTaskLog as appendTaggedTaskLogFn,
+  flushTaskLogs as flushTaskLogsFn,
+} from './task-dispatcher/log-streaming.js';
+import { checkForResult as checkForResultFn } from './task-dispatcher/webhook-callbacks.js';
+import { getRuntimeDisplayName as getRuntimeDisplayNameFn } from './task-dispatcher/lifecycle.js';
+import { INACTIVITY_TIMEOUT_MS, MAX_INACTIVITY_RESTARTS } from './task-dispatcher/retry-logic.js';
+import type { DispatcherContext } from './task-dispatcher/dispatcher-context.js';
+import { TaskRunner } from './task-dispatcher/task-runner.js';
+import { TaskTimers } from './task-dispatcher/task-timers.js';
+import { CompletionPipeline } from './task-dispatcher/completion-pipeline.js';
+import { AttemptLifecycle } from './task-dispatcher/attempt-lifecycle.js';
+import {
+  submitTask as submitTaskOp,
+  adoptTask as adoptTaskOp,
+  cancelTask as cancelTaskOp,
+  sendMessage as sendMessageOp,
+} from './task-dispatcher/operations.js';
+import { buildDispatcherContext } from './task-dispatcher/setup.js';
+// Re-export so external callers continue to import from the dispatcher barrel.
+export { runVerification } from './task-dispatcher/completion-pipeline.js';
+export type {
+  LegacyVerdict,
+  VerifierOverrideForTests,
+} from './task-dispatcher/completion-pipeline.js';
+export { computeTaskDurationMs } from './task-dispatcher/completion-pipeline.js';
+import type { VerifierOverrideForTests } from './task-dispatcher/completion-pipeline.js';
+import type { AttemptClassification } from './task-dispatcher/classify-attempt.js';
+import { noopMetricsClient, type MetricsClient } from '../metrics.js';
 
-const execAsync = promisify(exec);
-
-export function getTaskEventUrl(webhookUrl: string): string {
-  return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
-}
-
-const FATAL_EXIT_CODE_PREFIX = 'fatal_exit_code_';
-
-export function hasFatalExitCodeField(missingFields: string[]): string | undefined {
-  return missingFields.find((f) => f.startsWith(FATAL_EXIT_CODE_PREFIX));
-}
-
-const MEMORY_FIELDS = [
-  'memory_acknowledgment',
-  'memory_ids_used_invalid',
-  'memory_ids_rejected_invalid',
-  'memory_ids_overlap',
-  'memory_ids_unaccounted',
-  'memory_usage_summary',
-  'memory_ids_used',
-  'memory_ids_rejected',
-];
-
-export function buildMissingFieldsPrompt(
-  agentType: CompletionAgentType,
-  missingFields: string[],
-  rawLogs: string,
-  executionMemoryContext?: ExecutionMemoryPromptContext
-): string {
-  const transcript = getLast50Lines(rawLogs);
-  const hasMemoryFailures = missingFields.some((field) => MEMORY_FIELDS.includes(field));
-  const hasAckFailure = missingFields.includes('memory_acknowledgment');
-
-  const triplet = hasMemoryFailures
-    ? [
-        '',
-        'EXECUTION MEMORY REPORTING FAILURE:',
-        'You were injected with execution memories but did not properly report their usage.',
-        'You MUST include in your final output:',
-        '1. memory_ids_used: comma-separated IDs of memories you applied',
-        '2. memory_ids_rejected: comma-separated IDs of memories you found irrelevant',
-        '3. memory_usage_summary: one sentence about how memories influenced your work',
-        'Every injected memory must appear in either used or rejected. No ID may be missing.',
-        'If you did not use any memory, put all IDs in memory_ids_rejected.',
-      ]
-    : [];
-
-  const ackGuidance = hasAckFailure
-    ? buildMemoryAcknowledgmentGuidance(executionMemoryContext)
-    : [];
-
-  return [
-    '[AUTO-CONTINUE ATTEMPT]',
-    'Your last response was missing required fields for the completion verifier.',
-    '',
-    `Missing fields: ${missingFields.join(', ')}`,
-    ...ackGuidance,
-    ...triplet,
-    '',
-    'Please ensure your final message includes all required information.',
-    `Agent type: ${agentType}`,
-    '',
-    'Last 50 lines of transcript for reference:',
-    transcript,
-    '',
-    'Constraints:',
-    '- Do not restart from scratch.',
-    '- Continue from current repository/worktree state.',
-  ].join('\n');
-}
-
-function buildMemoryAcknowledgmentGuidance(
-  context: ExecutionMemoryPromptContext | undefined // @allow-undefined-type -- function parameter, not optional property
-): string[] {
-  const idLines =
-    context !== undefined && context.matchedMemories.length > 0
-      ? [
-          'Injected memory IDs you MUST acknowledge (one bullet per ID):',
-          ...context.matchedMemories.map(
-            (memory, index) =>
-              `- [${String(index + 1)}] ${memory.memoryId} — "${memory.title}" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>`
-          ),
-          '',
-        ]
-      : [];
-
-  return [
-    '',
-    'MEMORY ACKNOWLEDGMENT BLOCK MISSING:',
-    'The completion verifier requires this exact block, EACH bullet on the start of a new line with no leading characters other than "- ":',
-    '',
-    '📋 **Execution Memories Received:**',
-    'I have received and reviewed <N> execution memories for this task:',
-    '- [<n>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>',
-    '',
-    'Emit the block verbatim BEFORE your final REVIEW_AGENT_FINAL / PLAN_AGENT_FINAL / (etc.) block.',
-    'Do NOT inline the bullets as the value of a field — they must be standalone lines that start with "- [".',
-    ...idLines,
-  ];
-}
-
-const TASK_TIMEOUT_WARNING_MS = 295 * 60 * 1000; // 4h 55m
-const TASK_TIMEOUT_KILL_MS = 300 * 60 * 1000; // 5h
-const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
-const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
-const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
-const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
-const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
-const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — no output triggers kill+restart
-const MAX_INACTIVITY_RESTARTS = 3; // max consecutive restarts before task is failed
-
-const INACTIVITY_RESTART_PROMPT = `Your previous session became unresponsive (no output for 10 minutes) and was terminated.
-Continue working on the task from where you left off. Review your progress so far and
-resume the next incomplete step.`;
+// Re-export module-level helpers for backward compatibility with existing imports.
+export const getTaskEventUrl = getTaskEventUrlFn;
+export const hasFatalExitCodeField = hasFatalExitCodeFieldFn;
+export const missingFieldsPrompt = missingFieldsPromptObj;
 
 export interface DispatchError {
   type:
@@ -191,6 +101,7 @@ export interface IsolationConfig {
     MINIMAX_API_KEY: string;
     MIMO_API_KEY: string;
     DASHSCOPE_API_KEY: string;
+    KIMI_API_KEY: string;
     OPENROUTER_API_KEY: string;
   };
   gcpSaKeyPath: string;
@@ -199,7 +110,25 @@ export interface IsolationConfig {
 
 export interface CompletionControlConfig {
   maxAttempts: number;
-  verifier: CompletionVerifier;
+  /**
+   * [INT-1470] The completion verifier is no longer an injected class — it's a
+   * pure sync function (`verifyCompletion`) that the dispatcher calls directly.
+   * Only the resume-summary helper (which is LLM-backed) remains injectable.
+   *
+   * `resumeSummaryExtractor` is required in production. Tests may pass
+   * `verifier` instead as a legacy alias; it must expose `extractResumeSummary`
+   * and (optionally) `verify` to override the deterministic pipeline.
+   */
+  resumeSummaryExtractor?: ResumeSummaryExtractor;
+  /**
+   * Test-only override. Production code must use `resumeSummaryExtractor` and
+   * let `verifyCompletion` run as the verification pipeline. Tests pass
+   * `verifier` to (optionally) stub the verify step; `adaptLegacyVerdictIfNeeded`
+   * bridges the returned verdict into the canonical shape.
+   *
+   * @internal Test-only. Not part of the stable public API.
+   */
+  verifier?: VerifierOverrideForTests;
   preserveWorkerContainers?: boolean;
   /** Override inactivity timeout settings. Defaults: 10 min timeout, 3 max restarts. */
   activityTimeout?: {
@@ -209,11 +138,22 @@ export interface CompletionControlConfig {
 }
 
 export class TaskDispatcher {
-  private runningCount = 0;
+  private readonly runningCountBox = { value: 0 };
+  /**
+   * @internal Tests poke this directly via `dispatcher as unknown as { runningCount: number }`.
+   * Backed by `runningCountBox.value` so the sub-modules see writes through the shared context.
+   */
+  get runningCount(): number {
+    return this.runningCountBox.value;
+  }
+  set runningCount(v: number) {
+    this.runningCountBox.value = v;
+  }
   private readonly capacityMutex = new Mutex();
   private readonly activeTasks = new Map<string, NodeJS.Timeout>();
   private readonly claudeErrors = new Map<string, string>();
   private readonly taskExitCodes = new Map<string, number>();
+  private readonly attemptStartedAt = new Map<string, number>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
   /** Task IDs whose handleInactivityRestart is currently mid-flight (after the
@@ -223,10 +163,41 @@ export class TaskDispatcher {
   private readonly inactivityRestartInProgress = new Set<string>();
   private readonly pendingMessages = new Map<string, string[]>();
   private readonly lastOutputAt = new Map<string, number>();
+  /**
+   * INT-1551 §E.7: in-flight fire-and-forget handler promises. The shutdown
+   * handler in `main.ts` calls `getInFlightPromises()` and awaits drain via
+   * `Promise.race` against `SHUTDOWN_TIMEOUT_MS`.
+   */
+  private readonly inFlightHandlers = new Set<Promise<unknown>>();
   private readonly completionMaxAttempts: number;
-  private readonly completionVerifier: CompletionVerifier;
+  /** Injectable resume-summary helper. In tests the override may instead
+   * supply `verifier.extractResumeSummary` — we resolve to a uniform callable. */
+  private readonly extractResumeSummaryFn: (
+    taskId: string,
+    rawLogs: string
+  ) => Promise<string | undefined>;
+  /** Optional test-only override for the verify() step (see VerifierOverrideForTests). */
+  private readonly verifyOverride: VerifierOverrideForTests['verify'] | undefined; // @allow-undefined-type -- test-only hook; production leaves this unset to use verifyCompletion
   private readonly preserveWorkerContainers: boolean;
   private readonly activityTimeoutManager: ActivityTimeoutManager;
+  /**
+   * Custom-metrics client used to emit `code_tasks_*` on every task transition
+   * (INT-1565 §S5). Defaults to a no-op so test fixtures that don't care about
+   * metrics (and so the orchestrator running before S8 lands its
+   * `@intexuraos/common-metrics` package) cannot crash on emission.
+   */
+  private readonly metrics: MetricsClient;
+
+  /** INT-1551 §E.2: per-attempt execution module. */
+  private readonly taskRunner: TaskRunner;
+  /** INT-1551 §E.3: timer/monitor lifecycle module. */
+  private readonly taskTimers: TaskTimers;
+  /** INT-1551 §E.5: completion verifier + finalize pipeline module. */
+  private readonly completionPipeline: CompletionPipeline;
+  /** INT-1551 §E.4: attempt setup/recovery/inactivity-restart module. */
+  private readonly attemptLifecycle: AttemptLifecycle;
+  /** INT-1551 §10: shared state and dependency container for the sub-modules. */
+  private readonly context: DispatcherContext;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -240,10 +211,23 @@ export class TaskDispatcher {
     private readonly isolation: IsolationConfig,
     completionControl: CompletionControlConfig,
     private readonly turnMetricsCollector?: TurnMetricsCollector,
-    private readonly agentComplianceValidator?: AgentComplianceValidator
+    private readonly agentComplianceValidator?: AgentComplianceValidator,
+    metrics?: MetricsClient
   ) {
+    this.metrics = metrics ?? noopMetricsClient();
     this.completionMaxAttempts = completionControl.maxAttempts;
-    this.completionVerifier = completionControl.verifier;
+    // [INT-1470] Resolve which extractResumeSummary to use: prefer the
+    // production-injected ResumeSummaryExtractor; fall back to the test-legacy
+    // `verifier.extractResumeSummary`; last resort a no-op that returns undefined.
+    const prodExtractor = completionControl.resumeSummaryExtractor;
+    const testExtractor = completionControl.verifier?.extractResumeSummary;
+    const noopExtractor = async (): Promise<string | undefined> => undefined;
+    /* v8 ignore start -- ts-type: last-resort no-op fallback for the type-narrowed case where both `resumeSummaryExtractor` and `verifier.extractResumeSummary` are undefined; production wiring (service-wiring.ts) always supplies `resumeSummaryExtractor`, and every test constructs a verifier with `extractResumeSummary` — the bare-object CompletionControlConfig with neither arm is unreachable from both code paths @preserve */
+    this.extractResumeSummaryFn = prodExtractor
+      ? prodExtractor.extractResumeSummary.bind(prodExtractor)
+      : (testExtractor ?? noopExtractor);
+    /* v8 ignore stop @preserve */
+    this.verifyOverride = completionControl.verifier?.verify;
     this.preserveWorkerContainers = completionControl.preserveWorkerContainers ?? false;
     /* v8 ignore start -- ts-type: defensive fallback for optional activityTimeout; TypeScript narrows via optional chaining + nullish coalescing @preserve */
     this.activityTimeoutManager = new ActivityTimeoutManager(
@@ -254,564 +238,109 @@ export class TaskDispatcher {
       },
       /* v8 ignore stop @preserve */
       (taskId) => {
-        void this.handleInactivityRestart(taskId).catch((error: unknown) => {
-          this.logger.error({ taskId, error }, 'Error in inactivity restart handler');
-        });
+        // INT-1551 §E.7: track inactivity-restart so graceful shutdown drains it.
+        void this.context.trackInFlight(
+          this.attemptLifecycle.handleInactivityRestart(taskId).catch((error: unknown) => {
+            this.logger.error({ taskId, error }, 'Error in inactivity restart handler');
+          })
+        );
       }
     );
-  }
 
-  private checkDockerAvailability(): Result<void, DispatchError> | null {
-    if (this.isolation.provider.isHealthy?.() === false) {
-      return {
-        ok: false,
-        error: { type: 'docker_unavailable', message: 'Docker daemon is not responding' },
-      };
-    }
-    return null;
-  }
-
-  private getRequiredWorkerAuthProvider(
-    workerType: CreateTaskRequest['workerType']
-  ): WorkerAuthProvider | null {
-    const workerTypeConfig = WORKER_TYPES[workerType];
-    if (workerTypeConfig.runtime === 'codex') {
-      return 'codex';
-    }
-    if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
-      return 'claude';
-    }
-    return null;
-  }
-
-  private checkWorkerAuthAvailability(
-    workerType: CreateTaskRequest['workerType']
-  ): Result<void, DispatchError> | null {
-    const provider = this.getRequiredWorkerAuthProvider(workerType);
-    if (provider === null) {
-      return null;
-    }
-
-    const authState = this.isolation.workerAuthRegistry.getState(provider);
-    const isReady =
-      provider === 'codex'
-        ? authState.status === 'active' ||
-          (authState.status === 'expired' && authState.refreshSupported)
-        : authState.status === 'active';
-
-    if (isReady) {
-      return null;
-    }
-
-    const providerName = provider === 'claude' ? 'Claude' : 'Codex';
-    return {
-      ok: false,
-      error: {
-        type: 'auth_unavailable',
-        message: `${providerName} auth is not ready: ${authState.message ?? authState.status}`,
+    // INT-1551 §E.6: build the shared dispatcher context once via the
+    // helper in `task-dispatcher/setup.ts`. The class still owns per-task
+    // state Maps/Sets/counter physically — they're handed in by reference.
+    this.context = buildDispatcherContext(
+      {
+        logger: this.logger,
+        config: this.config,
+        isolation: this.isolation,
+        logForwarder: this.logForwarder,
+        webhookClient: this.webhookClient,
+        statusUpdateClient: this.statusUpdateClient,
+        statePersistence: this.statePersistence,
+        worktreeManager: this.worktreeManager,
+        metrics: this.metrics,
+        activityTimeoutManager: this.activityTimeoutManager,
+        turnMetricsCollector: this.turnMetricsCollector,
+        agentComplianceValidator: this.agentComplianceValidator,
+        completionMaxAttempts: this.completionMaxAttempts,
+        extractResumeSummaryFn: this.extractResumeSummaryFn,
+        verifyOverride: this.verifyOverride,
+        preserveWorkerContainers: this.preserveWorkerContainers,
       },
-    };
+      {
+        activeTasks: this.activeTasks,
+        claudeErrors: this.claudeErrors,
+        taskExitCodes: this.taskExitCodes,
+        attemptStartedAt: this.attemptStartedAt,
+        attemptCompletionSignals: this.attemptCompletionSignals,
+        completionInProgress: this.completionInProgress,
+        inactivityRestartInProgress: this.inactivityRestartInProgress,
+        pendingMessages: this.pendingMessages,
+        lastOutputAt: this.lastOutputAt,
+        inFlightHandlers: this.inFlightHandlers,
+        capacityMutex: this.capacityMutex,
+        runningCount: this.runningCountBox,
+      },
+      {
+        appendOrchestratorTaskLog: (taskId, message): void => {
+          this.appendOrchestratorTaskLog(taskId, message);
+        },
+        appendTaggedTaskLog: (taskId, tag, message): void => {
+          this.appendTaggedTaskLog(taskId, tag, message);
+        },
+        flushTaskLogs: (taskId) => this.flushTaskLogs(taskId),
+        handleTaskCompletion: (task) => this.completionPipeline.handleTaskCompletion(task),
+        checkForResult: (task) => this.checkForResult(task),
+        saveTask: (task) => this.saveTask(task),
+        getTask: (taskId) => this.getTask(taskId),
+        startWorkerAttempt: (task, params) => this.taskRunner.startWorkerAttempt(task, params),
+        finalizeTask: (task, statusParam, payload, keepLogForwarderOpen) =>
+          this.completionPipeline.finalizeTask(task, statusParam, payload, keepLogForwarderOpen),
+        teardownAttempt: (taskId, keepSession) =>
+          this.attemptLifecycle.teardownAttempt(taskId, keepSession),
+        clearTaskTimers: (taskId): void => {
+          this.taskTimers.clearTaskTimers(taskId);
+        },
+        scheduleTimeoutWarning: (taskId, overrideKillMs): void => {
+          this.taskTimers.scheduleTimeoutWarning(taskId, overrideKillMs);
+        },
+        scheduleTimeoutKill: (taskId, overrideKillMs): void => {
+          this.taskTimers.scheduleTimeoutKill(taskId, overrideKillMs);
+        },
+        startCompletionMonitoring: (taskId): void => {
+          this.taskTimers.startCompletionMonitoring(taskId);
+        },
+        failAcceptedResume: (task, error) => this.attemptLifecycle.failAcceptedResume(task, error),
+        getRuntimeDisplayName: (task) => getRuntimeDisplayNameFn(task),
+        getDefaultRepository: () => 'pbuchman/intexuraos',
+      }
+    );
+
+    this.taskRunner = new TaskRunner(this.context);
+    this.taskTimers = new TaskTimers(this.context);
+    this.completionPipeline = new CompletionPipeline(this.context);
+    this.attemptLifecycle = new AttemptLifecycle(this.context);
   }
 
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
-    const healthErr = this.checkDockerAvailability();
-    if (healthErr !== null) return healthErr;
-
-    const workerAuthErr = this.checkWorkerAuthAvailability(request.workerType);
-    if (workerAuthErr !== null) return workerAuthErr;
-
-    // Atomic capacity check
-    const capacityCheck = await this.capacityMutex.runExclusive(() => {
-      if (this.runningCount >= this.config.capacity) {
-        return {
-          ok: false as const,
-          error: { type: 'at_capacity' as const, message: 'Service at capacity' },
-        };
-      }
-      this.runningCount++;
-      return { ok: true as const, value: undefined };
-    });
-
-    if (!capacityCheck.ok) {
-      return capacityCheck;
-    }
-
-    this.executeTaskSetup(request).catch((error: unknown) => {
-      this.logger.error({ taskId: request.taskId, error }, 'Unhandled error in async task setup');
-    });
-
-    return { ok: true, value: undefined };
+    return await submitTaskOp(this.context, this.attemptLifecycle, request);
   }
 
   async adoptTask(task: Task): Promise<Result<void, DispatchError>> {
-    const healthErr = this.checkDockerAvailability();
-    if (healthErr !== null) return healthErr;
-
-    // Check if task is already at maxAttempts
-    if ((task.attemptCount ?? 0) >= (task.maxAttempts ?? this.completionMaxAttempts)) {
-      return {
-        ok: false,
-        error: { type: 'invalid_status', message: 'Task at max attempts' },
-      };
-    }
-
-    // Atomic capacity check
-    const capacityCheck = await this.capacityMutex.runExclusive(() => {
-      if (this.runningCount >= this.config.capacity) {
-        return {
-          ok: false as const,
-          error: { type: 'at_capacity' as const, message: 'Service at capacity' },
-        };
-      }
-      this.runningCount++;
-      return { ok: true as const, value: undefined };
-    });
-
-    if (!capacityCheck.ok) {
-      return capacityCheck;
-    }
-
-    // Register with log forwarder
-    this.logForwarder.registerTask(task.taskId, task.webhookSecret);
-
-    // Start worker attempt with continueSession: true
-    const startResult = await this.startWorkerAttempt(task, {
-      prompt: task.prompt,
-      continueSession: true,
-    });
-
-    if (!startResult.ok) {
-      this.runningCount--;
-      this.isolation.tokenRefresher.unregisterTask(task.taskId);
-      this.logForwarder.unregisterTask(task.taskId);
-      await this.isolation.provider.cleanupTaskSession?.(task.taskId);
-      return {
-        ok: false,
-        error: {
-          type: 'service_error',
-          message: 'Failed to start worker for adopted task',
-          originalError: startResult.error,
-        },
-      };
-    }
-
-    // Increment attempt count after successful start
-    task.attemptCount = (task.attemptCount ?? 0) + 1;
-    task.containerId = startResult.containerId;
-    await this.saveTask(task);
-
-    this.scheduleTimeoutWarning(task.taskId);
-    this.scheduleTimeoutKill(task.taskId);
-    this.startCompletionMonitoring(task.taskId);
-
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Task adopted after restart: attempt=${String(task.attemptCount)}/${String(task.maxAttempts ?? this.completionMaxAttempts)} containerId=${task.containerId}`
-    );
-
-    this.logger.info(
-      {
-        taskId: task.taskId,
-        attemptCount: task.attemptCount,
-        containerId: startResult.containerId,
-      },
-      `Task adopted: id=${task.taskId} attempt=${String(task.attemptCount)}/${String(task.maxAttempts ?? this.completionMaxAttempts)}`
-    );
-
-    return { ok: true, value: undefined };
-  }
-
-  private async executeTaskSetup(request: CreateTaskRequest): Promise<void> {
-    const taskId = request.taskId;
-
-    try {
-      const repository = request.repository ?? this.getDefaultRepository(request);
-      const baseBranch = request.baseBranch ?? 'development';
-
-      // Create worktree
-      let worktreePath: string;
-      try {
-        worktreePath =
-          request.continuationPrBranch === undefined
-            ? await this.worktreeManager.createWorktree(taskId, baseBranch)
-            : await this.worktreeManager.createWorktree(
-                taskId,
-                baseBranch,
-                request.continuationPrBranch
-              );
-      } catch (error) {
-        if (this.runningCount > 0) this.runningCount--;
-        await this.sendSetupFailureWebhook(request, 'Failed to create worktree', error);
-        return;
-      }
-
-      this.logForwarder.registerTask(taskId, request.webhookSecret);
-
-      // Create task object
-      const task: Task = {
-        taskId,
-        workerType: request.workerType,
-        runtime: WORKER_TYPES[request.workerType].runtime,
-        prompt: request.prompt,
-        repository,
-        baseBranch,
-        webhookUrl: request.webhookUrl,
-        webhookSecret: request.webhookSecret,
-        status: 'running',
-        worktreePath,
-        containerId: '',
-        ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
-        ...(request.linearIssueTitle !== undefined && {
-          linearIssueTitle: request.linearIssueTitle,
-        }),
-        linearIssueLabels: request.linearIssueLabels,
-        hasChildren: request.hasChildren,
-        ...(request.slug !== undefined && { slug: request.slug }),
-        ...(request.actionId !== undefined && { actionId: request.actionId }),
-        ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
-        ...(request.agentType !== undefined && { agentType: request.agentType }),
-        ...(request.executionMemoryContext !== undefined && {
-          executionMemoryContext: request.executionMemoryContext,
-        }),
-        ...(request.trackingCommentId !== undefined && {
-          trackingCommentId: request.trackingCommentId,
-        }),
-        ...(request.prNumber !== undefined && { prNumber: request.prNumber }),
-        ...(request.continuationPrNumber !== undefined && {
-          continuationPrNumber: request.continuationPrNumber,
-        }),
-        ...(request.continuationPrBranch !== undefined && {
-          continuationPrBranch: request.continuationPrBranch,
-        }),
-        /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
-        ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
-        /* v8 ignore stop @preserve */
-        startedAt: new Date().toISOString(),
-        attemptCount: 1,
-        maxAttempts: this.completionMaxAttempts,
-        verificationHistory: [],
-      };
-
-      const startResult = await this.startWorkerAttempt(task, {
-        prompt: request.prompt,
-        continueSession: false,
-      });
-      if (!startResult.ok) {
-        if (this.runningCount > 0) this.runningCount--;
-        this.logger.error(
-          {
-            taskId,
-            error: startResult.error,
-            errorMessage:
-              startResult.error instanceof Error
-                ? startResult.error.message
-                : String(startResult.error),
-          },
-          'Failed to create worker container'
-        );
-        this.isolation.tokenRefresher.unregisterTask(taskId);
-        this.logForwarder.unregisterTask(taskId);
-        await this.isolation.provider.cleanupTaskSession?.(taskId);
-        this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
-          this.logger.error(
-            { taskId, cleanupError },
-            'Failed to cleanup worktree after worker start failure'
-          );
-        });
-        await this.sendSetupFailureWebhook(
-          request,
-          'Failed to start worker container',
-          startResult.error
-        );
-        return;
-      }
-      task.containerId = startResult.containerId;
-
-      await this.saveTask(task);
-
-      this.scheduleTimeoutWarning(taskId);
-      this.scheduleTimeoutKill(taskId);
-
-      this.startCompletionMonitoring(taskId);
-      this.appendOrchestratorTaskLog(
-        taskId,
-        `Task started: id=${taskId} attempt=1/${String(this.completionMaxAttempts)} workerType=${task.workerType}`
-      );
-      if (task.linearIssueId !== undefined) {
-        this.appendOrchestratorTaskLog(
-          taskId,
-          `Linear issue: ${task.linearIssueId}${task.linearIssueTitle !== undefined ? ` — ${task.linearIssueTitle}` : ''}`
-        );
-      }
-      const promptPreview =
-        task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
-      this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const isPullRequestTask =
-        task.agentType === 'pull_request' ||
-        task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
-      const agentLabel = isPullRequestTask
-        ? 'Pull Request Agent'
-        : task.agentType === 'review'
-          ? 'Review Agent'
-          : task.agentType === 'remediation'
-            ? 'Remediation Agent'
-            : task.agentType === 'execution'
-              ? 'Execution Agent'
-              : task.agentType === 'planning'
-                ? 'Planning Agent'
-                : task.agentType === 'ask_agent'
-                  ? 'Ask Agent'
-                  : hasCodeTaskLabel(task.linearIssueLabels)
-                    ? 'Execution Agent'
-                    : 'Planning Agent';
-      const agentDesc =
-        agentLabel === 'Pull Request Agent'
-          ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
-          : agentLabel === 'Review Agent'
-            ? 'Review Agent \u2014 read-only PR review, post review comments'
-            : agentLabel === 'Remediation Agent'
-              ? 'Remediation Agent \u2014 address review findings on the existing PR branch and decide if re-review is needed'
-              : agentLabel === 'Ask Agent'
-                ? 'Ask Agent \u2014 interactive code assistant, respond to user questions'
-                : agentLabel === 'Execution Agent'
-                  ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
-                  : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
-      /* v8 ignore stop @preserve */
-      this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
-      this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
-    } catch (error) {
-      if (this.runningCount > 0) this.runningCount--;
-      await this.sendSetupFailureWebhook(request, 'Failed to start task', error);
-    }
-  }
-
-  private async sendSetupFailureWebhook(
-    request: CreateTaskRequest,
-    message: string,
-    originalError: unknown
-  ): Promise<void> {
-    this.logger.error(
-      { taskId: request.taskId, error: originalError },
-      `Task setup failed: ${message}`
-    );
-    try {
-      await this.webhookClient.send({
-        url: request.webhookUrl,
-        secret: request.webhookSecret,
-        payload: {
-          taskId: request.taskId,
-          status: 'failed',
-          error: {
-            code: 'SETUP_FAILED',
-            message,
-          },
-          duration: 0,
-        },
-        taskId: request.taskId,
-      });
-    } catch (webhookError) {
-      this.logger.error(
-        { taskId: request.taskId, webhookError },
-        'Failed to send setup failure webhook'
-      );
-    }
+    return await adoptTaskOp(this.context, this.attemptLifecycle, task);
   }
 
   async cancelTask(taskId: string): Promise<Result<void, CancelError>> {
-    const state = await this.statePersistence.load();
-    const task = state.tasks[taskId];
-
-    if (task === undefined) {
-      return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
-    }
-
-    if (task.status !== 'running') {
-      return { ok: false, error: { type: 'already_completed', message: 'Task already completed' } };
-    }
-
-    try {
-      // Kill Docker container - destroyWorker handles graceful + force kill
-      await this.isolation.provider.destroyWorker(taskId);
-
-      try {
-        await this.logForwarder.flushAndStop(taskId);
-      } catch (flushError: unknown) {
-        this.logger.error(
-          { taskId, error: flushError },
-          'Failed to flush logs during cancellation'
-        );
-      }
-      this.logForwarder.unregisterTask(taskId);
-      this.isolation.tokenRefresher.unregisterTask(taskId);
-      this.claudeErrors.delete(taskId);
-      this.taskExitCodes.delete(taskId);
-      this.attemptCompletionSignals.delete(taskId);
-      this.completionInProgress.delete(taskId);
-      this.pendingMessages.delete(taskId);
-      this.lastOutputAt.delete(taskId);
-      await this.isolation.provider.cleanupTaskSession?.(taskId);
-
-      // Update task status
-      task.status = 'cancelled';
-      task.completedAt = new Date().toISOString();
-      await this.saveTask(task);
-
-      // Decrease running count
-      if (this.runningCount > 0) this.runningCount--;
-      this.clearTaskTimers(taskId);
-
-      // Send webhook
-      await this.webhookClient.send({
-        url: task.webhookUrl,
-        secret: task.webhookSecret,
-        payload: {
-          taskId,
-          status: 'cancelled',
-          duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-        },
-        taskId,
-      });
-
-      this.logger.info({ taskId }, 'Task cancelled');
-
-      return { ok: true, value: undefined };
-    } catch (error) {
-      return {
-        ok: false,
-        error: { type: 'service_error', message: 'Failed to cancel task', originalError: error },
-      };
-    }
+    return await cancelTaskOp(this.context, taskId);
   }
 
   async sendMessage(
     taskId: string,
     message: string
   ): Promise<Result<SendMessageResult, SendMessageError>> {
-    const loadResult = await this.statePersistence.load().catch((error: unknown) => {
-      this.logger.error({ taskId, error }, 'Failed to load state persistence');
-      return null;
-    });
-    if (loadResult === null) {
-      return { ok: false, error: { type: 'service_error', message: 'Failed to load task state' } };
-    }
-    const task = loadResult.tasks[taskId];
-
-    if (task === undefined) {
-      const recovered = await this.tryRecoverMissingTask(taskId, message);
-      if (recovered !== null) {
-        return recovered;
-      }
-
-      return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
-    }
-
-    if (task.agentType === 'review' || task.agentType === 'remediation') {
-      return {
-        ok: false,
-        error: {
-          type: 'invalid_agent_type' as const,
-          message: 'Cannot send messages to review/remediation tasks',
-        },
-      };
-    }
-
-    if (task.status === 'running') {
-      const queue = this.pendingMessages.get(taskId) ?? [];
-      queue.push(message);
-      this.pendingMessages.set(taskId, queue);
-      /* v8 ignore start -- source-map: ternary inside template literal misattributed by v8; truncation branch covered by test but not tracked by coverage @preserve */
-      this.appendOrchestratorTaskLog(
-        taskId,
-        `Message queued (${String(queue.length)} pending): ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
-      );
-      /* v8 ignore stop @preserve */
-      this.logger.info({ taskId }, 'Message queued for running task');
-      return { ok: true, value: { action: 'queued', pendingMessages: [...queue] } };
-    }
-
-    if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
-      // Check if the worktree exists — a container can be recreated, but a worktree cannot.
-      // If the container is gone but worktree exists, createWorker(continueSession=true) will
-      // create a fresh container. If the worktree is also gone, reject — user must retry.
-      const hasWorktree = await this.worktreeManager.worktreeExists(taskId);
-      if (!hasWorktree) {
-        return {
-          ok: false,
-          error: {
-            type: 'not_found',
-            message: 'Worker container and worktree no longer available for resume',
-          },
-        };
-      }
-
-      // Check if the container (or its session) is still available for resume.
-      // If only the worktree survives but the container is gone, --continue will
-      // start a fresh session with no context — worse than rejecting outright.
-      // Use optional chaining + ?? true for fail-open on providers that don't implement this method.
-      const canResume = (await this.isolation.provider.isResumeAvailable?.(taskId)) ?? true;
-      if (!canResume) {
-        return {
-          ok: false,
-          error: {
-            type: 'session_expired',
-            message:
-              'Session has expired — the worker container was cleaned up. Please start a new session.',
-          },
-        };
-      }
-
-      const wasCompleted = task.status === 'completed';
-      await this.teardownAttempt(taskId, true);
-
-      // Register secret BEFORE any appendOrchestratorTaskLog calls, because
-      // appendChunk creates a ForwardingState that captures the webhook secret
-      // at creation time and never refreshes it.
-      this.logForwarder.registerTask(taskId, task.webhookSecret);
-
-      this.appendOrchestratorTaskLog(taskId, 'Resuming task with user message');
-      /* v8 ignore start -- source-map: ternary inside function argument misattributed by v8; truncation branch covered by test but not tracked by coverage @preserve */
-      this.appendTaggedTaskLog(
-        taskId,
-        'prompt',
-        message.length > 200 ? message.slice(0, 200) + '\u2026' : message
-      );
-      /* v8 ignore stop @preserve */
-
-      const prompt =
-        task.agentType === 'ask_agent' ? message : this.buildResumePreamble(task) + message;
-      task.status = 'running';
-      task.containerId = '';
-      task.startedAt = new Date().toISOString();
-      task.attemptCount = 1;
-      task.verificationHistory = [];
-      task.pendingResumeStart = {
-        prompt,
-        acceptedAt: new Date().toISOString(),
-      };
-      delete task.completedAt;
-      if (wasCompleted) {
-        task.resumedAfterSuccess = true;
-      } else {
-        delete task.resumedAfterSuccess;
-      }
-      await this.saveTask(task);
-
-      this.runningCount++;
-      void this.resumeTaskWithUserMessage(task).catch((error: unknown) => {
-        void this.failAcceptedResume(task, error);
-      });
-      this.logger.info({ taskId }, 'Task resume accepted with user message');
-      return { ok: true, value: { action: 'resumed' } };
-    }
-
-    return {
-      ok: false,
-      error: {
-        type: 'invalid_status',
-        message: `Cannot send message to task with status "${task.status}"`,
-      },
-    };
+    return await sendMessageOp(this.context, this.attemptLifecycle, taskId, message);
   }
 
   async getTask(taskId: string): Promise<Task | null> {
@@ -830,18 +359,40 @@ export class TaskDispatcher {
       };
     }
 
-    this.logForwarder.registerTask(task.taskId, task.webhookSecret);
-    this.runningCount++;
+    this.logForwarder.registerTask(task.taskId, task.webhookSecret, task.webhookUrl);
+    this.runningCountBox.value++;
     // `ok: true` here means startup recovery took ownership of the accepted resume.
     // Worker startup may still fail, in which case resumeTaskWithUserMessage finalizes the task.
     this.logger.info({ taskId: task.taskId }, 'Recovering pending accepted resume after restart');
-    await this.resumeTaskWithUserMessage(task);
+    await this.attemptLifecycle.resumeTaskWithUserMessage(task);
 
     return { ok: true, value: undefined };
   }
 
   getRunningCount(): number {
-    return this.runningCount;
+    return this.runningCountBox.value;
+  }
+
+  /**
+   * INT-1551 §E.7: snapshot of currently-tracked fire-and-forget handler
+   * promises. The shutdown path in `main.ts` awaits these via
+   * `Promise.race([Promise.allSettled(...), timeout])` so graceful shutdown
+   * actually drains in-flight work instead of polling `getRunningCount()`.
+   */
+  getInFlightPromises(): Promise<unknown>[] {
+    return Array.from(this.inFlightHandlers);
+  }
+
+  /**
+   * INT-1551 §E.7: thread the top-level AbortController signal down to
+   * `TaskRunner` and `TaskTimers`. Wired from `main.ts` after construction so
+   * the dispatcher does not need an extra constructor parameter (preserves the
+   * public construction API). Calling with a fresh signal replaces any prior
+   * one — current tests construct dispatchers without a signal and the
+   * production caller invokes this exactly once.
+   */
+  setShutdownSignal(signal: AbortSignal): void {
+    this.context.shutdownSignal = signal;
   }
 
   getCapacity(): number {
@@ -854,1159 +405,145 @@ export class TaskDispatcher {
       .map((key) => key.replace('-monitor', ''));
   }
 
-  private getDefaultRepository(_request: CreateTaskRequest): string {
-    // TODO: Implement GitHub API call to get default repository
-    // For now, use a default
-    return 'pbuchman/intexuraos';
-  }
-
-  private resolveTaskRuntime(task: Task): WorkerRuntime {
-    return task.runtime ?? WORKER_TYPES[task.workerType].runtime;
-  }
-
-  private getRuntimeDisplayName(task: Task): string {
-    return this.resolveTaskRuntime(task) === 'codex' ? 'Codex' : 'Claude';
-  }
-
   private async saveTask(task: Task): Promise<void> {
     await this.statePersistence.modify((state) => {
       state.tasks[task.taskId] = task;
     });
   }
 
-  private async tryRecoverMissingTask(
-    taskId: string,
-    message: string
-  ): Promise<Result<SendMessageResult, SendMessageError> | null> {
-    const metadata = await fetchDispatchMetadata(
-      {
-        codeAgentUrl: this.config.codeAgentUrl,
-        internalAuthToken: this.config.internalAuthToken,
-      },
-      taskId
-    );
-
-    if (metadata === null) {
-      return null;
-    }
-
-    if (metadata.webhookSecret === null) {
-      return null;
-    }
-
-    if (metadata.agentType === 'review' || metadata.agentType === 'remediation') {
-      return {
-        ok: false,
-        error: {
-          type: 'invalid_agent_type',
-          message: 'Cannot send messages to review/remediation tasks',
-        },
-      };
-    }
-
-    const task: Task = {
-      taskId: metadata.taskId,
-      workerType: metadata.workerType,
-      runtime: WORKER_TYPES[metadata.workerType].runtime,
-      prompt: metadata.prompt,
-      repository: metadata.repository,
-      baseBranch: metadata.baseBranch,
-      linearIssueLabels: [],
-      webhookUrl: metadata.webhookUrl,
-      webhookSecret: metadata.webhookSecret,
-      status: 'running',
-      worktreePath: '',
-      containerId: '',
-      startedAt: new Date().toISOString(),
-      attemptCount: 1,
-      maxAttempts: this.completionMaxAttempts,
-      verificationHistory: [],
-      ...(metadata.agentType !== null && { agentType: metadata.agentType }),
-      ...(metadata.linearIssueId !== null && { linearIssueId: metadata.linearIssueId }),
-      ...(metadata.trackingCommentId !== null && {
-        trackingCommentId: metadata.trackingCommentId,
-      }),
-      ...(metadata.prNumber !== null && { prNumber: metadata.prNumber }),
-      ...(metadata.continuationPrBranch !== null && {
-        continuationPrBranch: metadata.continuationPrBranch,
-      }),
-    };
-
-    this.logForwarder.registerTask(taskId, task.webhookSecret);
-    this.appendOrchestratorTaskLog(
-      taskId,
-      'Recreating task from dispatch metadata with user message'
-    );
-    this.appendTaggedTaskLog(
-      taskId,
-      'prompt',
-      message.length > 200 ? message.slice(0, 200) + '\u2026' : message
-    );
-
-    const prompt =
-      task.agentType === 'ask_agent' ? message : this.buildResumePreamble(task) + message;
-    task.pendingResumeStart = {
-      prompt,
-      acceptedAt: new Date().toISOString(),
-    };
-    await this.saveTask(task);
-
-    this.runningCount++;
-    void this.recreateTaskFromDispatchMetadata(task).catch((error: unknown) => {
-      void this.failAcceptedResume(task, error);
-    });
-    this.logger.info({ taskId }, 'Task resume accepted after dispatch metadata recovery');
-
-    return { ok: true, value: { action: 'resumed' } };
+  /**
+   * @internal Test-spy delegators preserved on the class so existing tests
+   * that cast via `dispatcher as unknown as { method }` continue to work
+   * after the implementation moved into sub-modules.
+   */
+  async resumeTaskWithUserMessage(task: Task): Promise<void> {
+    await this.attemptLifecycle.resumeTaskWithUserMessage(task);
   }
 
-  private async recreateTaskFromDispatchMetadata(task: Task): Promise<void> {
-    try {
-      task.worktreePath =
-        task.continuationPrBranch === undefined
-          ? await this.worktreeManager.createWorktree(task.taskId, task.baseBranch)
-          : await this.worktreeManager.createWorktree(
-              task.taskId,
-              task.baseBranch,
-              task.continuationPrBranch
-            );
-      await this.saveTask(task);
-      await this.resumeTaskWithUserMessage(task);
-    } catch (error) {
-      await this.failAcceptedResume(task, error);
-    }
-  }
-
-  private async resumeTaskWithUserMessage(task: Task): Promise<void> {
-    const prompt = task.pendingResumeStart?.prompt;
-    /* v8 ignore start -- upstream: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking this async helper; this guard cannot be reached in unit tests because callers always set pendingResumeStart before calling resumeTaskWithUserMessage @preserve */
-    if (prompt === undefined) {
-      await this.failAcceptedResume(
-        task,
-        new Error('Accepted resume is missing the persisted startup prompt')
-      );
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    try {
-      const resumeResult = await this.startWorkerAttempt(task, {
-        prompt,
-        continueSession: true,
-        injectActiveGoal: task.agentType !== 'ask_agent',
-      });
-
-      if (!resumeResult.ok) {
-        await this.failAcceptedResume(task, resumeResult.error);
-        return;
-      }
-
-      task.containerId = resumeResult.containerId;
-      delete task.pendingResumeStart;
-      await this.saveTask(task);
-
-      this.scheduleTimeoutWarning(task.taskId);
-      this.scheduleTimeoutKill(task.taskId);
-      this.startCompletionMonitoring(task.taskId);
-
-      this.logger.info({ taskId: task.taskId }, 'Task resumed with user message');
-    } catch (error) {
-      await this.failAcceptedResume(task, error);
-    }
-  }
-
-  private scheduleTimeoutWarning(taskId: string): void {
-    const timeout = setTimeout(() => {
-      void (async (): Promise<void> => {
-        try {
-          const task = await this.getTask(taskId);
-          /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
-          if (task !== null && task.status === 'running') {
-            this.logger.warn({ taskId }, 'Task approaching 5-hour timeout');
-          }
-          /* v8 ignore stop @preserve */
-        } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in timeout warning callback');
-        }
-      })();
-    }, TASK_TIMEOUT_WARNING_MS);
-
-    this.activeTasks.set(`${taskId}-warning`, timeout);
-  }
-
-  private scheduleTimeoutKill(taskId: string): void {
-    const timeout = setTimeout(() => {
-      void (async (): Promise<void> => {
-        try {
-          const task = await this.getTask(taskId);
-          /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
-          if (task?.status !== 'running') {
-            return;
-          }
-          /* v8 ignore stop @preserve */
-
-          this.logger.warn({ taskId }, 'Task timeout - killing');
-
-          // Stop inactivity timeout early to prevent restart during hard kill
-          this.activityTimeoutManager.stop(taskId);
-
-          // Kill Docker container
-          await this.isolation.provider.destroyWorker(taskId);
-
-          try {
-            await this.logForwarder.flushAndStop(taskId);
-          } catch (flushError: unknown) {
-            this.logger.error(
-              { taskId, error: flushError },
-              'Failed to flush logs during timeout kill'
-            );
-          }
-          this.logForwarder.unregisterTask(taskId);
-          this.isolation.tokenRefresher.unregisterTask(taskId);
-          this.claudeErrors.delete(taskId);
-          this.taskExitCodes.delete(taskId);
-          this.attemptCompletionSignals.delete(taskId);
-          this.completionInProgress.delete(taskId);
-          this.lastOutputAt.delete(taskId);
-          await this.isolation.provider.cleanupTaskSession?.(taskId);
-
-          // Check for PR
-          const result = await this.checkForResult(task);
-
-          // Update task
-          task.status = 'interrupted';
-          task.completedAt = new Date().toISOString();
-          await this.saveTask(task);
-
-          // Decrease running count
-          if (this.runningCount > 0) this.runningCount--;
-          this.clearTaskTimers(taskId);
-
-          // Send webhook
-          await this.webhookClient.send({
-            url: task.webhookUrl,
-            secret: task.webhookSecret,
-            payload: {
-              taskId,
-              status: 'interrupted',
-              result,
-              duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-            },
-            taskId,
-          });
-        } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in timeout kill callback');
-        }
-      })();
-    }, TASK_TIMEOUT_KILL_MS);
-
-    this.activeTasks.set(`${taskId}-kill`, timeout);
-  }
-
-  private async handleInactivityRestart(taskId: string): Promise<void> {
-    // Mark the restart as in-flight synchronously before any await so the
-    // completion monitor cannot race and run verification on the stale
-    // transcript while destroyWorker/startWorkerAttempt are pending.
-    this.inactivityRestartInProgress.add(taskId);
-    try {
-      await this.doHandleInactivityRestart(taskId);
-    } finally {
-      this.inactivityRestartInProgress.delete(taskId);
-    }
-  }
-
-  private async doHandleInactivityRestart(taskId: string): Promise<void> {
-    // Guard: skip if completion is already in progress
-    if (this.completionInProgress.has(taskId)) {
-      this.logger.debug({ taskId }, 'Inactivity restart skipped: completion already in progress');
-      return;
-    }
-
-    const task = await this.getTask(taskId);
-    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
-    if (task?.status !== 'running') {
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    const canRestart = this.activityTimeoutManager.recordRestart(taskId);
-    if (!canRestart) {
-      // Max consecutive restarts exceeded — fail the task
-      this.activityTimeoutManager.stop(taskId);
-
-      this.appendTaggedTaskLog(
-        taskId,
-        'system',
-        `Inactivity timeout: worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive restarts — failing task`
-      );
-      this.logger.error(
-        { taskId, maxRestarts: MAX_INACTIVITY_RESTARTS },
-        'Max inactivity restarts exceeded — failing task'
-      );
-
-      const result = await this.checkForResult(task);
-      const error: TaskError = {
-        code: 'TASK_INACTIVITY_TIMEOUT',
-        message: `Worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive inactivity restarts`,
-        remediation: { action: 'retry' },
-      };
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error,
-      });
-      /* v8 ignore stop @preserve */
-      return;
-    }
-
-    const restartCount = this.activityTimeoutManager.getRestartCount(taskId);
-    // Note: do NOT call stop() here — it would clear the consecutive restart counter.
-    // The counter must persist across restarts. The timer is reset when
-    // startWorkerAttempt() calls activityTimeoutManager.start(), which calls
-    // clearTimer() internally before creating a new timer.
-
-    this.appendTaggedTaskLog(
-      taskId,
-      'system',
-      `Inactivity timeout: no output for ${String(INACTIVITY_TIMEOUT_MS / 1000)}s — killing worker and restarting (restart ${String(restartCount)}/${String(MAX_INACTIVITY_RESTARTS)})`
-    );
-    this.logger.info(
-      { taskId, restartCount, maxRestarts: MAX_INACTIVITY_RESTARTS },
-      'Inactivity restart triggered'
-    );
-
-    const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
-    const [copyResult, statsResult] = await Promise.allSettled([
-      this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
-      this.isolation.provider.statsSnapshot(taskId),
-    ]);
-    if (copyResult.status === 'rejected') {
-      this.logger.warn(
-        { taskId, error: getErrorMessage(copyResult.reason) },
-        'Failed to copy /tmp evidence before inactivity kill'
-      );
-    }
-    if (statsResult.status === 'fulfilled') {
-      this.logger.warn({ taskId, stats: statsResult.value }, 'Container stats at inactivity kill');
-    } else {
-      this.logger.warn(
-        { taskId, error: getErrorMessage(statsResult.reason) },
-        'Failed to capture container stats before inactivity kill'
-      );
-    }
-
-    try {
-      await this.isolation.provider.destroyWorker(taskId);
-    } catch (destroyError) {
-      this.logger.warn(
-        { taskId, error: destroyError },
-        'Failed to destroy worker for inactivity restart'
-      );
-    }
-    this.appendOrchestratorTaskLog(taskId, 'Worker destroyed for inactivity restart');
-
-    await this.teardownAttempt(taskId, true);
-
-    // Re-fetch to avoid race with completion monitor: if status is no longer
-    // 'running', the task was finalized by another handler and we must bail out.
-    const reloadedTask = await this.getTask(taskId);
-    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
-    if (reloadedTask?.status !== 'running') {
-      this.logger.debug({ taskId }, 'Inactivity restart bailed out: task no longer running');
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    this.appendTaggedTaskLog(taskId, 'prompt', INACTIVITY_RESTART_PROMPT);
-    const startResult = await this.startWorkerAttempt(task, {
-      prompt: INACTIVITY_RESTART_PROMPT,
-      continueSession: true,
-    });
-
-    if (!startResult.ok) {
-      this.logger.error(
-        { taskId, error: startResult.error },
-        'Failed to restart worker after inactivity timeout'
-      );
-      const error: TaskError = {
-        code: 'TASK_INACTIVITY_RESTART_FAILED',
-        message: 'Failed to restart worker after inactivity timeout',
-        remediation: { action: 'retry' },
-      };
-      const result = await this.checkForResult(task);
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error,
-      });
-      /* v8 ignore stop @preserve */
-      return;
-    }
-
-    task.containerId = startResult.containerId;
-    task.inactivityRestartCount = (task.inactivityRestartCount ?? 0) + 1;
-    await this.saveTask(task);
-
-    this.appendOrchestratorTaskLog(taskId, `Inactivity restart attempt started: taskId=${taskId}`);
-  }
-
-  private startCompletionMonitoring(taskId: string): void {
-    const checkInterval = setInterval(() => {
-      void (async (): Promise<void> => {
-        try {
-          const task = await this.getTask(taskId);
-          if (task?.status !== 'running') {
-            this.clearTaskTimers(taskId);
-            return;
-          }
-
-          // Check if Docker container is still running
-          const isRunning = await this.isolation.provider.isWorkerRunning(taskId);
-          const attemptCompleted = this.attemptCompletionSignals.has(taskId);
-
-          // Emit activity heartbeat when no Docker output for threshold duration
-          const lastActivity = this.lastOutputAt.get(taskId);
-          if (isRunning && lastActivity !== undefined) {
-            const silenceMs = Date.now() - lastActivity;
-            if (silenceMs >= ACTIVITY_HEARTBEAT_THRESHOLD_MS) {
-              const silenceSeconds = Math.round(silenceMs / 1000);
-              this.appendTaggedTaskLog(
-                taskId,
-                'system',
-                `Still processing... no output for ${String(silenceSeconds)}s`
-              );
-            }
-          }
-
-          if (!isRunning || attemptCompleted) {
-            if (this.completionInProgress.has(taskId)) {
-              return;
-            }
-            // Skip: an inactivity restart is mid-flight (old worker destroyed,
-            // new one not yet up). Running completion now would verify on the
-            // stale transcript of the killed session.
-            if (this.inactivityRestartInProgress.has(taskId)) {
-              this.logger.debug(
-                { taskId },
-                'Completion monitor tick skipped: inactivity restart in progress'
-              );
-              return;
-            }
-            this.completionInProgress.add(taskId);
-            try {
-              await this.handleTaskCompletion(task);
-            } finally {
-              this.completionInProgress.delete(taskId);
-            }
-          }
-        } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in completion monitoring callback');
-        }
-      })();
-    }, COMPLETION_CHECK_INTERVAL_MS);
-
-    this.activeTasks.set(`${taskId}-monitor`, checkInterval);
-  }
-
-  private async handleTaskCompletion(task: Task): Promise<void> {
-    if (task.resumedAfterSuccess === true) {
-      await this.handleResumedAfterSuccessCompletion(task);
-      return;
-    }
-
-    const attempt = task.attemptCount ?? 1;
-    const maxAttempts = task.maxAttempts ?? 5;
-    const isPullRequestTask =
-      task.agentType === 'pull_request' ||
-      task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    /* v8 ignore start -- ts-type: nested ternary chain over discriminated union variants creates structural branches; exhaustive conditional narrowing @preserve */
-    const completionAgentType: CompletionAgentType = isPullRequestTask
-      ? 'pull_request'
-      : task.agentType === 'review'
-        ? 'review'
-        : task.agentType === 'remediation'
-          ? 'remediation'
-          : task.agentType === 'execution'
-            ? 'execution'
-            : task.agentType === 'planning'
-              ? 'planning'
-              : task.agentType === 'ask_agent'
-                ? 'ask_agent'
-                : hasCodeTaskLabel(task.linearIssueLabels)
-                  ? 'execution'
-                  : 'planning';
-    /* v8 ignore stop @preserve */
-    this.attemptCompletionSignals.delete(task.taskId);
-
-    // ask_agent: skip structured completion verification — extract summary and finalize
-    if (completionAgentType === 'ask_agent') {
-      try {
-        await this.logForwarder.flushAndStop(task.taskId);
-      } catch (flushError: unknown) {
-        this.logger.error(
-          { taskId: task.taskId, error: flushError },
-          'Failed to flush logs on ask_agent task completion'
-        );
-      }
-
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing ask_agent task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      // Check for pending messages before finalizing — user may have sent
-      // a follow-up while this attempt was completing.
-      const pendingQueue = this.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        this.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Ask agent: delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        this.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.teardownAttempt(task.taskId, true);
-        const resumeResult = await this.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: false,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await this.saveTask(task);
-          this.claudeErrors.delete(task.taskId);
-          this.taskExitCodes.delete(task.taskId);
-          return;
-        }
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          'Failed to deliver queued messages, finalizing normally'
-        );
-      }
-      /* v8 ignore stop @preserve */
-
-      const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-      const summary = getLast50ClaudeLines(rawLogs);
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Ask agent completed — skipping structured verification`
-      );
-      await this.finalizeTaskWithResult(task, 'ask_agent', { summary });
-      return;
-    }
-
-    this.logger.info(
-      {},
-      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
-    );
-
-    try {
-      await this.logForwarder.flushAndStop(task.taskId);
-    } catch (flushError: unknown) {
-      this.logger.error(
-        { taskId: task.taskId, error: flushError },
-        'Failed to flush logs on task completion'
-      );
-    }
-
-    const result = await this.checkForResult(task);
-    const exitCode = this.taskExitCodes.get(task.taskId);
-    /* v8 ignore start -- ts-type: nullish coalescing and optional chaining in log statements create narrowing branches unreachable given prior type guards @preserve */
-    if (result !== undefined) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
-      );
-    }
-    /* v8 ignore stop @preserve */
-    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Running completion verification: attempt=${String(attempt)}/${String(maxAttempts)}`
-    );
-    const verification = await this.completionVerifier.verify({
-      taskId: task.taskId,
-      attempt,
-      maxAttempts,
-      agentType: completionAgentType,
-      rawLogs,
-      ...(exitCode !== undefined && { lastExitCode: exitCode }),
-      ...(task.executionMemoryContext !== undefined && {
-        executionMemoryContext: task.executionMemoryContext,
-      }),
-    });
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Passed: ${String(verification.passed)} | VerifierFailure: ${String(verification.verifierFailure)}`
-    );
-    if (verification.missingFields.length > 0) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Missing fields: ${verification.missingFields.join(' | ')}`
-      );
-    }
-    const transcriptLines = verification.trace.transcript
-      .split('\n')
-      .filter((l) => l.trim() !== '');
-    /* v8 ignore start -- ts-type: nullish coalescing and ternary in transcript summary narrowing; noUncheckedIndexedAccess creates unreachable else branch given filter guarantees @preserve */
-    const firstLine = transcriptLines[0] ?? '';
-    const lastLine = transcriptLines[transcriptLines.length - 1] ?? '';
-    const transcriptSummary =
-      transcriptLines.length <= 2
-        ? transcriptLines.join('\n')
-        : `${firstLine}\n  ... (${String(transcriptLines.length - 2)} lines omitted) ...\n${lastLine}`;
-    /* v8 ignore stop @preserve */
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `📋 Transcript (first + last):\n${transcriptSummary}`
-    );
-    /* v8 ignore start -- ts-type: optional chaining on agentData creates narrowing branch; agentData guaranteed to have summary when present @preserve */
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `🤖 Verifier summary (${verification.succeededModelName ?? 'unknown'}): ${verification.agentData?.summary ?? '(no summary extracted)'}`
-    );
-    /* v8 ignore stop @preserve */
-
-    if (typeof exitCode === 'number') {
-      task.lastExitCode = exitCode;
-    } else {
-      delete task.lastExitCode;
-    }
-    task.verificationHistory = [
-      ...(task.verificationHistory ?? []),
-      {
-        attempt,
-        passed: verification.passed,
-        missingFields: verification.missingFields,
-        verifierFailure: verification.verifierFailure,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-
-    // Verifier failure (all validation models down or unparseable output): retry immediately if attempts remain
-    /* v8 ignore start -- upstream: verifierFailure path requires all validation models to return parse errors; FakeCompletionVerifier always returns valid responses and cannot simulate upstream failures @preserve */
-    if (verification.verifierFailure) {
-      if (attempt < maxAttempts) {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Verifier failure; retrying verifier (${String(attempt + 1)}/${String(maxAttempts)})`
-        );
-        // Re-call verifier with same logs — counts as an attempt
-        const retryVerification = await this.completionVerifier.verify({
-          taskId: task.taskId,
-          attempt: attempt + 1,
-          maxAttempts,
-          agentType: completionAgentType,
-          rawLogs,
-          ...(task.executionMemoryContext !== undefined && {
-            executionMemoryContext: task.executionMemoryContext,
-          }),
-        });
-        task.verificationHistory = [
-          ...(task.verificationHistory ?? []),
-          {
-            attempt: attempt + 1,
-            passed: retryVerification.passed,
-            missingFields: retryVerification.missingFields,
-            verifierFailure: retryVerification.verifierFailure,
-            createdAt: new Date().toISOString(),
-          },
-        ];
-        task.attemptCount = attempt + 1;
-
-        if (retryVerification.passed && retryVerification.agentData !== undefined) {
-          this.appendOrchestratorTaskLog(task.taskId, 'Verifier retry succeeded');
-          await this.flushTaskLogs(task.taskId);
-          await this.collectTurnMetrics(task, attempt + 1);
-          const finalResult = this.buildResultFromVerification(task, result, retryVerification);
-          await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
-          return;
-        }
-      }
-
-      const error: TaskError = {
-        code: 'TASK_COMPLETION_VERIFIER_FAILED',
-        message: 'Completion verifier unavailable (all validation models failed)',
-        remediation: {
-          action: 'contact_support',
-          manualSteps: [
-            'Ensure INTEXURAOS_GEMINI_APP_API_KEY and INTEXURAOS_OPENROUTER_APP_API_KEY are configured for orchestrator.',
-            'Check connectivity to all configured validation models and retry task after verifier is healthy.',
-          ],
-        },
-      };
-      this.appendOrchestratorTaskLog(task.taskId, 'Terminal failure: verifier unavailable');
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error,
-      });
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    // Verification passed
-    if (verification.passed && verification.agentData !== undefined) {
-      // Non-zero exit code overrides verifier passed decision
-      if (exitCode !== undefined && exitCode !== 0) {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Non-zero exit code (${String(exitCode)}) overrides verifier passed decision`
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.collectTurnMetrics(task, attempt);
-        const error: TaskError = {
-          code: 'TASK_EXIT_CODE_OVERRIDE',
-          message: `Non-zero exit code (${String(exitCode)}) overrides verifier passed decision`,
-          remediation: { action: 'retry' },
-        };
-        /* v8 ignore start -- ts-type: conditional spread for exact optional property types; FakeIsolationProvider cannot deliver a result alongside a non-zero exit code in the same fake-driven completion tick @preserve */
-        await this.finalizeTask(task, 'failed', {
-          ...(result !== undefined && { result }),
-          error,
-        });
-        /* v8 ignore stop @preserve */
-        return;
-      }
-
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      const pendingQueue = this.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        this.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        this.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.teardownAttempt(task.taskId, true);
-        const resumeResult = await this.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: true,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await this.saveTask(task);
-          this.claudeErrors.delete(task.taskId);
-          this.taskExitCodes.delete(task.taskId);
-          return;
-        }
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to deliver queued messages, finalizing normally`
-        );
-      }
-      /* v8 ignore stop @preserve */
-
-      this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      const finalResult = this.buildResultFromVerification(task, result, verification);
-
-      // Compliance validation for execution tasks: pre-read data before cleanup, then fire-and-forget
-      /* v8 ignore start -- source-map: void fire-and-forget compliance validation branches misattributed by v8; detached promise created by void expression not tracked by coverage instrumentation @preserve */
-      let complianceInput: ComplianceValidationInput | undefined;
-      if (completionAgentType === 'execution' && this.agentComplianceValidator !== undefined) {
-        complianceInput = await this.prepareComplianceValidationInput(
-          task,
-          finalResult,
-          verification
-        );
-      }
-
-      const keepLogOpen = complianceInput !== undefined;
-      await this.finalizeTaskWithResult(task, completionAgentType, finalResult, keepLogOpen);
-
-      if (complianceInput !== undefined) {
-        void this.executeComplianceValidation(task, complianceInput).finally(() => {
-          void this.flushAndCloseLogForwarder(task.taskId);
-        });
-      }
-      /* v8 ignore stop @preserve */
-      return;
-    }
-
-    // Fatal exit code (SIGKILL=137, SIGSEGV=139): do not retry — session state is corrupted
-    const fatalField = hasFatalExitCodeField(verification.missingFields);
-    if (fatalField !== undefined) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Fatal exit code detected (${fatalField}); skipping retry — session state is not recoverable`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      const error: TaskError = {
-        code: 'TASK_FATAL_EXIT_CODE',
-        message: `Worker process killed by signal: ${fatalField}`,
-        remediation: { action: 'retry' },
-      };
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error,
-      });
-      return;
-    }
-
-    /* v8 ignore start -- upstream: FakeIsolationProvider cannot drive the missing-fields retry or terminal-failure paths in the remainder of this method — the fake always returns exitCode 0 and unable to reproduce multi-attempt verifier sequences or runtime resume signals @preserve */
-    // Missing fields: re-launch the selected runtime with an adjusted prompt if attempts remain
-    if (verification.missingFields.length > 0 && attempt < maxAttempts) {
-      this.logForwarder.appendChunk(task.taskId, '\n\n');
-      const nextAttempt = attempt + 1;
-      const runtimeName = this.getRuntimeDisplayName(task);
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Missing fields; re-launching ${runtimeName} (${String(nextAttempt)}/${String(maxAttempts)}): ${verification.missingFields.join(', ')}`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.teardownAttempt(task.taskId, true);
-
-      const resumePrompt = this.buildMissingFieldsPrompt(
-        completionAgentType,
-        verification.missingFields,
-        rawLogs,
-        task.executionMemoryContext
-      );
-      const resumePreview =
-        resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '\u2026' : resumePrompt;
-      this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
-      const resumeStart = await this.startWorkerAttempt(task, {
-        prompt: resumePrompt,
-        continueSession: true,
-      });
-
-      if (resumeStart.ok) {
-        task.attemptCount = nextAttempt;
-        task.containerId = resumeStart.containerId;
-        await this.saveTask(task);
-        this.logger.info(
-          { taskId: task.taskId, attempt: nextAttempt, maxAttempts },
-          'Resumed task with follow-up attempt'
-        );
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Resume attempt started: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
-        );
-        this.claudeErrors.delete(task.taskId);
-        this.taskExitCodes.delete(task.taskId);
-        return;
-      }
-
-      const resumeError: TaskError = {
-        code: 'RESUME_ATTEMPT_FAILED',
-        message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
-        remediation: { action: 'retry' },
-      };
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: resumeError,
-      });
-      return;
-    }
-
-    // Terminal failure: no attempts left
-    const error: TaskError = {
-      code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-      message:
-        verification.missingFields.length > 0
-          ? `Missing fields: ${verification.missingFields.join(', ')}`
-          : 'Completion verification failed',
-      remediation: {
-        action: 'retry',
-        ...(verification.missingFields.length > 0 && {
-          manualSteps: verification.missingFields,
-        }),
-      },
-    };
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Terminal failure: completion criteria not met after ${String(attempt)} attempts`
-    );
-    await this.flushTaskLogs(task.taskId);
-    await this.collectTurnMetrics(task, attempt);
-    await this.finalizeTask(task, 'failed', {
-      ...(result !== undefined && { result }),
-      error,
-    });
-    /* v8 ignore stop @preserve */
-  }
-
-  private buildMissingFieldsPrompt(
-    agentType: CompletionAgentType,
-    missingFields: string[],
-    rawLogs: string,
-    executionMemoryContext?: ExecutionMemoryPromptContext
-  ): string {
-    return buildMissingFieldsPrompt(agentType, missingFields, rawLogs, executionMemoryContext);
-  }
-
-  private buildResultFromVerification(
+  /** @internal Test-spy delegator. */
+  async finalizeTask(
     task: Task,
-    gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
-    verification: CompletionVerifierVerdict
-  ): TaskResult {
-    const base: TaskResult = { ...(gitResult ?? {}) };
-    const agentData = verification.agentData;
-    if (agentData === undefined) return base;
-
-    base.summary = agentData.summary;
-    if ('memory_ids_used' in agentData) {
-      base.execution_memory_ids_used = agentData.memory_ids_used;
-      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
-      base.execution_memory_usage_summary = agentData.memory_usage_summary;
-    }
-
-    /* v8 ignore start -- upstream: FakeCompletionVerifier always returns planning agentData; execution/review/remediation/pull_request variants require agent-type specific verifier responses not producible with unit test fakes @preserve */
-    if (agentData.agentType === 'planning') {
-      base.planning_outcome_label = agentData.outcome;
-      base.planning_superpowers_writing_plans_used =
-        agentData.superpowers_writing_plans === 'used' ? '1' : '0';
-      base.planning_linear_url = agentData.linear_url;
-      base.planning_is_complex = agentData.is_complex;
-      base.planning_has_plan_doc = agentData.has_plan_doc;
-      base.planning_subtask_urls = agentData.subtask_urls;
-      if (agentData.pr_url !== '') {
-        base.planning_pr_url = agentData.pr_url;
-      }
-      base.planning_unclear_clarification = agentData.unclear_clarification;
-    } else if (agentData.agentType === 'execution') {
-      base.execution_outcome_label = agentData.outcome;
-      base.execution_superpowers_subagent_driven_dev_used =
-        agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
-      base.execution_superpowers_requesting_code_review_used =
-        agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      if (task.linearIssueId !== undefined) {
-        base.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
-      }
-    } else if (agentData.agentType === 'review') {
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      if (agentData.review_id !== undefined) {
-        base.review_id = agentData.review_id;
-      }
-      base.review_comments_posted = agentData.review_comments_posted;
-      base.review_types = agentData.review_types;
-      base.requirements_tracker_updated = agentData.requirements_tracker_updated;
-      base.gh_actions_status = agentData.gh_actions_status;
-      base.needs_remediation = agentData.needs_remediation;
-      if (agentData.review_body !== '') {
-        base.review_body = agentData.review_body;
-      }
-      if (agentData.review_inline_comments !== '') {
-        base.review_inline_comments = agentData.review_inline_comments;
-      }
-    } else if (agentData.agentType === 'remediation') {
-      base.execution_outcome_label = agentData.outcome;
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      base.requires_re_review = agentData.requires_re_review;
-    } else {
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      base.comment_replied = agentData.comments_replied === 'yes';
-    }
-    /* v8 ignore stop @preserve */
-
-    return base;
-  }
-
-  private enrichResultForResumedTask(
-    task: Task,
-    result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
-  ): TaskResult | undefined {
-    if (result === undefined) return undefined;
-    /* v8 ignore start -- upstream: enrichResultForResumedTask agent-type branches require review/remediation/pull_request tasks with lastSuccessResult set; FakeIsolationProvider always returns planning task fixtures without prior success results @preserve */
-    if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
-      result.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
-    }
-    if (task.agentType === 'review' && task.lastSuccessResult !== undefined) {
-      if (result.review_id === undefined && task.lastSuccessResult.review_id !== undefined) {
-        result.review_id = task.lastSuccessResult.review_id;
-      }
-      if (
-        result.review_comments_posted === undefined &&
-        task.lastSuccessResult.review_comments_posted !== undefined
-      ) {
-        result.review_comments_posted = task.lastSuccessResult.review_comments_posted;
-      }
-      if (result.review_types === undefined && task.lastSuccessResult.review_types !== undefined) {
-        result.review_types = task.lastSuccessResult.review_types;
-      }
-      if (
-        result.requirements_tracker_updated === undefined &&
-        task.lastSuccessResult.requirements_tracker_updated !== undefined
-      ) {
-        result.requirements_tracker_updated = task.lastSuccessResult.requirements_tracker_updated;
-      }
-      if (
-        result.gh_actions_status === undefined &&
-        task.lastSuccessResult.gh_actions_status !== undefined
-      ) {
-        result.gh_actions_status = task.lastSuccessResult.gh_actions_status;
-      }
-      if (
-        result.needs_remediation === undefined &&
-        task.lastSuccessResult.needs_remediation !== undefined
-      ) {
-        result.needs_remediation = task.lastSuccessResult.needs_remediation;
-      }
-    }
-    if (task.agentType === 'remediation' && task.lastSuccessResult !== undefined) {
-      if (
-        result.requires_re_review === undefined &&
-        task.lastSuccessResult.requires_re_review !== undefined
-      ) {
-        result.requires_re_review = task.lastSuccessResult.requires_re_review;
-      }
-    }
-    if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
-      if (
-        result.comment_replied === undefined &&
-        task.lastSuccessResult.comment_replied !== undefined
-      ) {
-        result.comment_replied = task.lastSuccessResult.comment_replied;
-      }
-    }
-    /* v8 ignore stop @preserve */
-    return result;
-  }
-
-  private async finalizeTaskWithResult(
-    task: Task,
-    agentType: CompletionAgentType,
-    finalResult: TaskResult,
+    statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
     keepLogForwarderOpen = false
   ): Promise<void> {
-    /* v8 ignore start -- upstream: planning 'unclear' outcome requires FakeCompletionVerifier to return unclear outcome label; fake verifier always returns 'completed' outcome and cannot simulate unclear planning decisions @preserve */
-    if (agentType === 'planning' && finalResult.planning_outcome_label === 'unclear') {
-      await this.finalizeTask(
-        task,
-        'failed',
-        {
-          result: finalResult,
-          error: {
-            code: 'PLANNING_AGENT_UNCLEAR',
-            message:
-              finalResult.planning_unclear_clarification ??
-              'Planning agent reported unclear outcome',
-          },
-        },
-        keepLogForwarderOpen
-      );
-      return;
+    await this.completionPipeline.finalizeTask(task, statusParam, payload, keepLogForwarderOpen);
+  }
+
+  /** @internal Test-spy delegator. */
+  clearTaskTimers(taskId: string): void {
+    this.taskTimers.clearTaskTimers(taskId);
+  }
+
+  /** @internal Test-spy delegator. */
+  appendOrchestratorTaskLog(taskId: string, message: string): void {
+    appendOrchestratorTaskLogFn(this.logForwarder, taskId, message);
+  }
+
+  /** @internal Test-spy delegator. */
+  appendTaggedTaskLog(taskId: string, tag: string, message: string): void {
+    appendTaggedTaskLogFn(this.logForwarder, taskId, tag, message);
+  }
+
+  /** @internal Test-spy delegator. */
+  async flushTaskLogs(taskId: string): Promise<void> {
+    await flushTaskLogsFn(this.logForwarder, this.logger, taskId);
+  }
+
+  /** @internal Test-spy delegator. */
+  buildResumePreamble(task?: Task): string {
+    return buildResumePreambleFn(task);
+  }
+
+  /** @internal Test-spy delegator. */
+  async startWorkerAttempt(
+    task: Task,
+    params: {
+      prompt: string;
+      continueSession: boolean;
+      injectActiveGoal?: boolean;
     }
-    /* v8 ignore stop @preserve */
-    await this.finalizeTask(task, 'completed', { result: finalResult }, keepLogForwarderOpen);
+  ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
+    return await this.taskRunner.startWorkerAttempt(task, params);
   }
 
-  private buildResumePreamble(task?: Task): string {
-    const prViewCommand =
-      task?.continuationPrNumber !== undefined
-        ? `gh pr view ${String(task.continuationPrNumber)} --json state,mergedAt,number 2>/dev/null || echo "NO_PR"`
-        : 'gh pr view --json state,mergedAt,number 2>/dev/null || echo "NO_PR"';
-
-    const openInstructions =
-      task?.continuationPrBranch !== undefined
-        ? {
-            lines: [
-              'If PR is OPEN:',
-              '  1. Continue on current local branch normally',
-              `  2. Push updates with: git push origin HEAD:${task.continuationPrBranch}`,
-              '  3. Check for unaddressed PR comments:',
-            ],
-            finalStep: '  4. If the message below references a PR comment or review, address it',
-          }
-        : {
-            lines: [
-              'If PR is OPEN:',
-              '  1. Continue on current branch normally',
-              '  2. Check for unaddressed PR comments:',
-            ],
-            finalStep: '  3. If the message below references a PR comment or review, address it',
-          };
-
-    return [
-      '[RESUME PRE-FLIGHT — MANDATORY]',
-      'Before making ANY changes, check your PR state:',
-      `  ${prViewCommand}`,
-      '',
-      'If PR is MERGED or CLOSED or NO_PR:',
-      '  1. git fetch origin',
-      '  2. git checkout -b followup/<short-desc> origin/development',
-      '  3. After changes → create NEW PR targeting development',
-      '  4. Do NOT push to the old branch',
-      '',
-      ...openInstructions.lines,
-      '     gh api /repos/{owner}/{repo}/pulls/{number}/comments --jq "[.[] | select(.user.login != \\"intexuraos-code-worker[bot]\\")] | length"',
-      openInstructions.finalStep,
-      '---',
-      '',
-    ].join('\n');
+  /** @internal Test-spy delegator (vi.spyOn target). */
+  async checkForResult(task: Task): Promise<TaskResult | undefined> {
+    return await checkForResultFn(this.logger, task);
   }
 
-  private buildActiveGoalSection(task: Task | undefined, prompt: string): string {
-    const preamble = this.buildResumePreamble(task);
-    const goalText = prompt.startsWith(preamble) ? prompt.slice(preamble.length) : prompt;
-    return [
-      '',
-      '',
-      '[ACTIVE GOAL — HIGHEST PRIORITY]',
-      'A new user message has been received. This is your PRIMARY task.',
-      'Complete this goal before doing anything else. If context was compacted,',
-      'this section survives and takes absolute priority over conversation history.',
-      '',
-      goalText,
-    ].join('\n');
+  /**
+   * INT-1455: Finalize an attempt classified as `infra_failed`. Skips the
+   * verifier entirely and writes a `WORKER_INFRA_FAILURE` TaskError. If the
+   * same sub-reason was observed on the previous attempt, mark the remediation
+   * action as contact_support so the code-agent classifier stops looping.
+   */
+  async finalizeAttemptAsInfraFailure(
+    task: Task,
+    attempt: number,
+    classification: Extract<AttemptClassification, { outcome: 'infra_failed' }>,
+    result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
+  ): Promise<void> {
+    await this.completionPipeline.finalizeAttemptAsInfraFailure(
+      task,
+      attempt,
+      classification,
+      result
+    );
   }
 
-  private parseRebaseResultOutput(
-    output: string,
-    taskId: string
-  ): TaskResult['rebaseResult'] | undefined {
-    try {
-      const parsed = JSON.parse(output) as {
-        attempted?: boolean;
-        success?: boolean;
-        conflictFiles?: string[];
-      };
-      if (parsed.attempted === true && typeof parsed.success === 'boolean') {
-        return {
-          attempted: parsed.attempted,
-          success: parsed.success,
-          ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
-        };
-      }
-      return undefined;
-    } catch (parseError) {
-      this.logger.warn({ taskId, error: parseError }, 'Failed to parse rebase result');
-      return undefined;
-    }
+  buildResultFromVerification(
+    task: Task,
+    gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
+    verification: CompletionVerifierVerdict,
+    agentType: CompletionAgentType
+  ): TaskResult {
+    return this.completionPipeline.buildResultFromVerification(
+      task,
+      gitResult,
+      verification,
+      agentType
+    );
   }
 
-  private parseContinuationPrOutput(
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `internal.buildActiveGoalSection(...)` continue to work after the
+   * implementation moved to `task-dispatcher/prompts.ts` and the only
+   * production caller (`startWorkerAttempt`) moved to `TaskRunner`.
+   */
+  buildActiveGoalSection(task: Task | undefined, prompt: string): string {
+    return buildActiveGoalSectionFn(task, prompt);
+  }
+
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `dispatcher.handleRuntimeEvents(...)` continue to work after the
+   * implementation moved to `TaskRunner`.
+   */
+  async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
+    await this.taskRunner.handleRuntimeEvents(task, events);
+  }
+
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `getInternal().parseRebaseResultOutput(...)` continue to work after the
+   * implementation moved to `task-dispatcher/prompts.ts`.
+   */
+  parseRebaseResultOutput(output: string, taskId: string): TaskResult['rebaseResult'] | undefined {
+    return parseRebaseResultOutputFn(output, taskId, this.logger);
+  }
+
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `internal.parseContinuationPrOutput(...)` continue to work after the
+   * implementation moved to `task-dispatcher/prompts.ts`.
+   */
+  parseContinuationPrOutput(
     taskId: string,
     prOutput: string
   ):
@@ -2019,988 +556,56 @@ export class TaskDispatcher {
         mergedAt?: string | null;
       }
     | undefined {
-    try {
-      return JSON.parse(prOutput) as {
-        url?: string;
-        number?: number;
-        headRefName?: string;
-        title?: string;
-        state?: string;
-        mergedAt?: string | null;
-      };
-    } catch {
-      this.logger.warn({ taskId, prOutput }, 'Failed to parse continuation PR output');
-      return undefined;
-    }
+    return parseContinuationPrOutputFn(taskId, prOutput, this.logger);
   }
 
-  private async handleResumedAfterSuccessCompletion(task: Task): Promise<void> {
-    this.attemptCompletionSignals.delete(task.taskId);
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing on attemptCount; task always has attemptCount set before this method is called @preserve */
-    const attempt = task.attemptCount ?? 1;
-    /* v8 ignore stop @preserve */
-
-    this.logger.info(
-      {},
-      `Resumed-after-success completion: taskId=${task.taskId} attempt=${String(attempt)}`
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      'Resumed-after-success completion: using loosened verification (exit code + runtime hard error only)'
-    );
-
-    try {
-      await this.logForwarder.flushAndStop(task.taskId);
-    } catch (flushError: unknown) {
-      this.logger.error(
-        { taskId: task.taskId, error: flushError },
-        'Failed to flush logs on resumed-after-success completion'
-      );
-    }
-
-    const checkResult = await this.checkForResult(task);
-    const effectiveResult = checkResult ?? task.lastSuccessResult;
-    if (checkResult === undefined && task.lastSuccessResult !== undefined) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        'checkForResult returned undefined, falling back to lastSuccessResult'
-      );
-    }
-    const claudeError = this.claudeErrors.get(task.taskId);
-    const exitCode = this.taskExitCodes.get(task.taskId);
-    const runtimeName = this.getRuntimeDisplayName(task);
-
-    const hasHardError =
-      (typeof exitCode === 'number' && exitCode !== 0) || claudeError !== undefined;
-
-    if (typeof exitCode === 'number') {
-      task.lastExitCode = exitCode;
-    } else {
-      delete task.lastExitCode;
-    }
-
-    /* v8 ignore start -- ts-type: nullish coalescing on verificationHistory; task always has verificationHistory initialized before this method is called @preserve */
-    task.verificationHistory = [
-      ...(task.verificationHistory ?? []),
-      {
-        attempt,
-        passed: !hasHardError,
-        missingFields: [],
-        verifierFailure: false,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    /* v8 ignore stop @preserve */
-
-    /* v8 ignore start -- upstream: hasHardError path requires non-zero exit code or claudeError set by runtime; FakeIsolationProvider cannot simulate worker process failures or runtime errors in unit tests @preserve */
-    if (hasHardError) {
-      const error: TaskError = {
-        code: 'TASK_RESUMED_HARD_ERROR',
-        message: [
-          ...(typeof exitCode === 'number' && exitCode !== 0
-            ? [`Non-zero exit code: ${String(exitCode)}`]
-            : []),
-          ...(claudeError !== undefined ? [`${runtimeName} error: ${claudeError}`] : []),
-        ].join('; '),
-        remediation: { action: 'retry' },
-      };
-
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Resumed-after-success hard error: ${error.message}`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      delete task.resumedAfterSuccess;
-      const enrichedErrorResult = this.enrichResultForResumedTask(task, effectiveResult);
-      await this.finalizeTask(task, 'failed', {
-        ...(enrichedErrorResult !== undefined && { result: enrichedErrorResult }),
-        error,
-      });
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    // Check for pending messages before finalizing
-    /* v8 ignore start -- upstream: pending messages path in resumed-after-success requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-    const pendingQueue = this.pendingMessages.get(task.taskId);
-    if (pendingQueue !== undefined && pendingQueue.length > 0) {
-      this.pendingMessages.delete(task.taskId);
-      const combinedPrompt = pendingQueue.join('\n\n');
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-      );
-      this.appendTaggedTaskLog(
-        task.taskId,
-        'prompt',
-        combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.teardownAttempt(task.taskId, true);
-      const resumeResult = await this.startWorkerAttempt(task, {
-        prompt: combinedPrompt,
-        continueSession: true,
-        injectActiveGoal: true,
-      });
-      if (resumeResult.ok) {
-        task.containerId = resumeResult.containerId;
-        await this.saveTask(task);
-        this.claudeErrors.delete(task.taskId);
-        this.taskExitCodes.delete(task.taskId);
-        return;
-      }
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        'Failed to deliver queued messages, finalizing normally'
-      );
-    }
-    /* v8 ignore stop @preserve */
-
-    this.appendOrchestratorTaskLog(task.taskId, 'Resumed-after-success verification passed');
-    await this.flushTaskLogs(task.taskId);
-    await this.collectTurnMetrics(task, attempt);
-    delete task.resumedAfterSuccess;
-
-    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-    const geminiSummary = await this.completionVerifier.extractResumeSummary(task.taskId, rawLogs);
-
-    const enrichedResult = this.enrichResultForResumedTask(task, effectiveResult);
-    if (enrichedResult !== undefined && geminiSummary !== undefined) {
-      enrichedResult.summary = geminiSummary;
-    }
-    await this.finalizeTask(task, 'completed', {
-      ...(enrichedResult !== undefined && { result: enrichedResult }),
-      resumedCompletion: true,
-    });
-  }
-
-  private async startWorkerAttempt(
-    task: Task,
-    params: {
-      prompt: string;
-      continueSession: boolean;
-      injectActiveGoal?: boolean;
-    }
-  ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
-    this.attemptCompletionSignals.delete(task.taskId);
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Starting worker attempt: continueSession=${String(params.continueSession)}`
-    );
-    const runtimeName = this.resolveTaskRuntime(task);
-    const workerTypeConfig = WORKER_TYPES[task.workerType];
-    const runtime = getRuntime(runtimeName);
-    const runtimeAttemptState = runtime.createAttemptState(task.taskId, this.logger);
-    if (params.continueSession && task.runtimeSessionId === undefined) {
-      return {
-        ok: false,
-        error: new Error(`${runtimeName} resume requires a persisted runtime session ID`),
-      };
-    }
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Worker config: type=${task.workerType} runtime=${runtimeName} model=${workerTypeConfig.model ?? 'default'} apiUrl=${workerTypeConfig.apiBaseUrl}`
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Container config: worktree=${task.worktreePath} baseBranch=${task.baseBranch}`
-    );
-    if (params.continueSession) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Exec command: /entrypoint.sh run-attempt (reusing existing container)`
-      );
-    } else {
-      const imageInfo = this.isolation.provider.getImageInfo?.();
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Creating new container: image=${imageInfo?.configuredRef ?? 'configured'} cmd=/entrypoint.sh`
-      );
-    }
-
-    const workerConfig: WorkerConfig = {
-      taskId: task.taskId,
-      worktreePath: task.worktreePath,
-      prompt: params.prompt,
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
-      systemPrompt:
-        buildSystemPrompt({
-          taskId: task.taskId,
-          ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-          ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
-          taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
-          linearIssueLabels: task.linearIssueLabels,
-          workerType: task.workerType,
-          ...(WORKER_TYPES[task.workerType].model !== undefined && {
-            modelName: WORKER_TYPES[task.workerType].model,
-          }),
-          ...(task.agentType !== undefined && { agentType: task.agentType }),
-          ...(task.trackingCommentId !== undefined && {
-            trackingCommentId: task.trackingCommentId,
-          }),
-          ...(task.continuationPrNumber !== undefined && {
-            continuationPrNumber: task.continuationPrNumber,
-          }),
-          ...(task.continuationPrBranch !== undefined && {
-            continuationPrBranch: task.continuationPrBranch,
-          }),
-          ...(task.executionMemoryContext !== undefined && {
-            executionMemoryContext: task.executionMemoryContext,
-          }),
-          ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
-        }) +
-        /* v8 ignore stop @preserve */
-        (params.injectActiveGoal === true ? this.buildActiveGoalSection(task, params.prompt) : ''),
-      workerType: task.workerType,
-      runtimeOverride: runtimeName,
-      ...(task.runtimeSessionId !== undefined && { runtimeSessionId: task.runtimeSessionId }),
-      secrets: this.isolation.getSecrets(),
-      gcpSaKeyPath: this.isolation.gcpSaKeyPath,
-      githubAppKeyPath: this.isolation.githubAppKeyPath,
-      continueSession: params.continueSession,
-      onLog: (chunk) => {
-        const cleaned = stripDockerHeaders(chunk);
-        this.lastOutputAt.set(task.taskId, Date.now());
-        this.activityTimeoutManager.touch(task.taskId);
-        void this.handleRuntimeEvents(task, runtime.processLogChunk(runtimeAttemptState, cleaned));
-      },
-      onComplete: (exitCode) => {
-        void this.handleRuntimeEvents(task, runtime.flushAttemptState(runtimeAttemptState));
-        this.taskExitCodes.set(task.taskId, exitCode);
-        this.attemptCompletionSignals.add(task.taskId);
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Worker attempt completed: exitCode=${String(exitCode)}`
-        );
-        this.logForwarder.flushAndStop(task.taskId).catch((error: unknown) => {
-          this.logger.error({ taskId: task.taskId, error }, 'Failed to flush logs on completion');
-        });
-      },
-    };
-
-    this.logger.info(
-      {
-        taskId: task.taskId,
-        agentType: task.agentType ?? 'default',
-        systemPromptLength: workerConfig.systemPrompt.length,
-        userPromptLength: params.prompt.length,
-      },
-      'System prompt built'
-    );
-
-    this.claudeErrors.delete(task.taskId);
-    this.taskExitCodes.delete(task.taskId);
-    this.lastOutputAt.set(task.taskId, Date.now());
-
-    // Store promise to enable zombie cleanup if timeout fires mid-creation.
-    let createPromise: Promise<WorkerHandle> | undefined;
-
-    try {
-      await this.isolation.tokenRefresher.registerTask(task.taskId);
-
-      // Phase 1/2: Pull worker image (network-bound, variable latency)
-      // Only pull for new containers — continued sessions reuse existing containers.
-      if (!params.continueSession && this.isolation.provider.pullImage !== undefined) {
-        this.appendOrchestratorTaskLog(task.taskId, 'Phase 1/2: Pulling worker image...');
-        const resolvedImage = await withTimeout(
-          this.isolation.provider.pullImage(task.taskId, (message) => {
-            this.appendOrchestratorTaskLog(task.taskId, message);
-          }),
-          IMAGE_PULL_TIMEOUT_MS,
-          `Image pull timed out after ${String(IMAGE_PULL_TIMEOUT_MS / 1000)}s`
-        );
-        workerConfig.resolvedImage = resolvedImage;
-      }
-
-      // Phase 2/2: Create worker container (deterministic, ~40s)
-      if (!params.continueSession) {
-        this.appendOrchestratorTaskLog(task.taskId, 'Phase 2/2: Creating worker container...');
-      }
-      createPromise = this.isolation.provider.createWorker(workerConfig);
-
-      const handle = await withTimeout(
-        createPromise,
-        CONTAINER_CREATE_TIMEOUT_MS,
-        `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`
-      );
-
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Worker container ready: containerId=${handle.containerId}`
-      );
-
-      // Best-effort: send task_started event to code-agent
-      this.webhookClient
-        .send({
-          url: getTaskEventUrl(task.webhookUrl),
-          secret: task.webhookSecret,
-          payload: {
-            taskId: task.taskId,
-            event: 'task_started',
-            attempt: task.attemptCount ?? 1,
-            workerType: task.workerType,
-          },
-          taskId: task.taskId,
-        })
-        .catch((sendError: unknown) => {
-          this.logger.warn(
-            { taskId: task.taskId, error: sendError },
-            'Failed to send task_started event (best-effort)'
-          );
-        });
-
-      this.activityTimeoutManager.start(task.taskId);
-      return { ok: true, containerId: handle.containerId };
-    } catch (error) {
-      // If the timeout fired but createWorker is still in-flight, it may
-      // eventually succeed and leave a zombie container running with no
-      // monitoring. Attach a cleanup handler to destroy it if that happens.
-      createPromise
-        ?.then((handle) => {
-          this.logger.warn(
-            { taskId: task.taskId, containerId: handle.containerId },
-            'Late container created after timeout — destroying zombie'
-          );
-          this.appendOrchestratorTaskLog(
-            task.taskId,
-            `Destroying zombie container created after timeout: ${handle.containerId}`
-          );
-          return withTimeout(
-            this.isolation.provider.destroyWorker(task.taskId),
-            ZOMBIE_CLEANUP_TIMEOUT_MS,
-            'Zombie container cleanup timed out'
-          );
-        })
-        .catch(() => {
-          // createWorker itself failed or cleanup timed out — best effort
-        });
-
-      /* v8 ignore start -- ts-type: error instanceof Error ternary creates branch; FakeIsolationProvider throws Error instances so String(error) branch is unreachable in unit tests @preserve */
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Worker start failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      /* v8 ignore stop @preserve */
-      return { ok: false, error };
-    }
-  }
-
-  private async teardownAttempt(taskId: string, keepSession: boolean): Promise<void> {
-    if (!keepSession) {
-      try {
-        await this.isolation.provider.destroyWorker(taskId);
-      } catch (error) {
-        this.logger.warn({ taskId, error }, 'Failed to destroy worker after attempt completion');
-      }
-      await this.isolation.provider.cleanupTaskSession?.(taskId);
-    }
-  }
-
-  private async failAcceptedResume(task: Task, error: unknown): Promise<void> {
-    this.logger.error(
-      { taskId: task.taskId, error },
-      'Accepted task resume failed during worker startup'
-    );
-
-    const resumeError: TaskError = {
-      code: 'RESUME_ATTEMPT_FAILED',
-      /* v8 ignore start -- ts-type: error instanceof Error ternary; failAcceptedResume always receives Error instances so String(error) branch is structurally unreachable in unit tests @preserve */
-      message: `Failed to resume task: ${error instanceof Error ? error.message : String(error)}`,
-      /* v8 ignore stop @preserve */
-      remediation: { action: 'retry' },
-    };
-
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Terminal failure: resume start failed (${resumeError.message})`
-    );
-
-    await this.finalizeTask(task, 'failed', {
-      error: resumeError,
-    });
-  }
-
-  private async finalizeTask(
-    task: Task,
-    statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
-    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
-    keepLogForwarderOpen = false
-  ): Promise<void> {
-    const finalStatus = statusParam;
-    const isNonPreservableAgentType =
-      task.agentType === 'review' || task.agentType === 'remediation';
-    const shouldPreserve =
-      this.preserveWorkerContainers &&
-      !isNonPreservableAgentType &&
-      (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
-    );
-
-    try {
-      await this.logForwarder.flush(task.taskId);
-    } catch (flushError) {
-      this.logger.error(
-        { taskId: task.taskId, error: flushError },
-        'Log flush failed during finalization'
-      );
-    }
-
-    this.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushed logs`);
-    if (!keepLogForwarderOpen) {
-      this.logForwarder.close(task.taskId);
-    }
-
-    if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
-      /* v8 ignore start -- source-map: optional chaining on listPreservedWorkers not tracked by v8 even though test covers both undefined and array paths @preserve */
-      const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
-      /* v8 ignore stop @preserve */
-      if (preserved.length > 0) {
-        const savedState = await this.statePersistence.load();
-        for (const p of preserved) {
-          const preservedTask = savedState.tasks[p.taskId];
-          if (
-            preservedTask?.agentType === 'pull_request' &&
-            preservedTask.prNumber === task.prNumber &&
-            preservedTask.taskId !== task.taskId
-          ) {
-            this.logger.info(
-              { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
-              'Destroying previous preserved pull_request container for same PR'
-            );
-            await this.isolation.provider.destroyWorker(p.taskId);
-          }
-        }
-      }
-    }
-    if (shouldPreserve) {
-      /* v8 ignore start -- ts-type: optional chaining + nullish coalescing on preserveWorker; IsolationProvider.preserveWorker is structurally optional but always defined by both DockerProvider and the FakeIsolationProvider, so the undefined branch is unreachable from any test entry point @preserve */
-      const preserved = (await this.isolation.provider.preserveWorker?.(task.taskId)) ?? false;
-      /* v8 ignore stop @preserve */
-      if (preserved) {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Preserved worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
-        );
-      } else {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to preserve worker container (no tracked worker): taskId=${task.taskId} status=${finalStatus}`
-        );
-        await this.teardownAttempt(task.taskId, false);
-      }
-    } else {
-      await this.teardownAttempt(task.taskId, false);
-    }
-    this.isolation.tokenRefresher.unregisterTask(task.taskId);
-    this.claudeErrors.delete(task.taskId);
-    this.taskExitCodes.delete(task.taskId);
-    this.attemptCompletionSignals.delete(task.taskId);
-    this.pendingMessages.delete(task.taskId);
-    this.lastOutputAt.delete(task.taskId);
-
-    task.status = finalStatus;
-    task.completedAt = new Date().toISOString();
-    delete task.resumedAfterSuccess;
-    // Store result for resume-after-success fallback; clear on non-success
-    if (finalStatus === 'completed' && payload.result !== undefined) {
-      task.lastSuccessResult = payload.result;
-    } else {
-      delete task.lastSuccessResult;
-    }
-    delete task.pendingResumeStart;
-    await this.saveTask(task);
-
-    if (this.runningCount > 0) this.runningCount--;
-    this.clearTaskTimers(task.taskId);
-
-    // Send task lifecycle event to code-agent (best-effort)
-    /* v8 ignore start -- ts-type: nested ternary over TaskStatus discriminated union; v8 cannot track all branch arms of chained ternary expressions despite tests exercising all statuses @preserve */
-    const taskLifecycleEvent =
-      finalStatus === 'completed'
-        ? 'task_completed'
-        : finalStatus === 'failed'
-          ? 'task_failed'
-          : finalStatus === 'interrupted'
-            ? 'task_interrupted'
-            : undefined;
-    /* v8 ignore stop @preserve */
-
-    /* v8 ignore start -- ts-type: taskLifecycleEvent undefined branch; v8 misattributes the false branch of this conditional check despite test at line 2160 exercising finalizeTask with cancelled status @preserve */
-    if (taskLifecycleEvent !== undefined) {
-      /* v8 ignore stop @preserve */
-      const agentStatusMap: Record<string, string> = {
-        execution: 'implemented',
-        remediation: 'implemented',
-        review: 'reviewed',
-        planning: 'planned',
-      };
-      /* v8 ignore start -- ts-type: conditional spread branches for optional result/error fields; FakeWebhookClient records payloads but branch tracking for spread operators inside object literals is misattributed by v8 @preserve */
-      const taskEventPayload: Record<string, unknown> = {
-        taskId: task.taskId,
-        event: taskLifecycleEvent,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
-        ...(task.completedAt !== undefined && {
-          duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-        }),
-        ...(payload.result?.prUrl !== undefined && { prUrl: payload.result.prUrl }),
-        ...(payload.result?.commitDetails !== undefined && {
-          commits: payload.result.commitDetails,
-        }),
-        ...(payload.error !== undefined && { error: payload.error }),
-        ...(task.agentType !== undefined &&
-          agentStatusMap[task.agentType] !== undefined && {
-            status: agentStatusMap[task.agentType],
-          }),
-      };
-      /* v8 ignore stop @preserve */
-
-      this.webhookClient
-        .send({
-          url: getTaskEventUrl(task.webhookUrl),
-          secret: task.webhookSecret,
-          payload: taskEventPayload,
-          taskId: task.taskId,
-        })
-        .catch((sendError: unknown) => {
-          this.logger.warn(
-            { taskId: task.taskId, error: sendError },
-            'Failed to send task lifecycle event (best-effort)'
-          );
-        });
-    }
-
-    // Commit terminal status to code-agent's Firestore BEFORE firing the
-    // legacy task-complete webhook. Code-agent's Firestore is the single
-    // source of truth for status; the webhook is demoted to side-effects
-    // (Linear labels, WhatsApp, etc.). On commit failure, log + continue —
-    // the zombie watchdog (Task 6) is the recovery path. Do NOT block
-    // finalize: Docker teardown and local state cleanup already ran.
-    const statusCommitResult = await this.statusUpdateClient.commit({
-      taskId: task.taskId,
-      status: finalStatus,
-      // Defensive fallback mirrors the line ~2505 guard: task.completedAt is
-      // set above at line 2465, but test mocks or future refactors could
-      // bypass that assignment. Avoids RangeError inside .toISOString().
-      /* v8 ignore start -- ts-type: defensive fallback for optional Task.completedAt; production path at line 2465 always sets it before reaching here, mirrors the runtime guard at line ~2505 @preserve */
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
-      completedAt: task.completedAt !== undefined ? new Date(task.completedAt) : new Date(),
-      /* v8 ignore stop @preserve */
-      ...(payload.error !== undefined && {
-        error: { code: payload.error.code, message: payload.error.message },
-      }),
-      ...(payload.result !== undefined && {
-        result: {
-          ...(payload.result.prUrl !== undefined && { prUrl: payload.result.prUrl }),
-          ...(payload.result.branch !== undefined && { branch: payload.result.branch }),
-          ...(payload.result.summary !== undefined && { summary: payload.result.summary }),
-        },
-      }),
-    });
-    if (!statusCommitResult.ok) {
-      this.logger.error(
-        {
-          taskId: task.taskId,
-          tag: 'STATUS_UPDATE_COMMIT_FAILED',
-          errorType: statusCommitResult.error.type,
-          errorMessage: statusCommitResult.error.message,
-          agentType: task.agentType,
-          prNumber: task.prNumber,
-          repository: task.repository,
-          finalStatus,
-        },
-        'Failed to commit terminal status via /internal/code-tasks/:id/status; zombie watchdog will recover'
-      );
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `STATUS_UPDATE_COMMIT_FAILED: type=${statusCommitResult.error.type} — zombie watchdog will recover`
-      );
-    }
-
-    await this.webhookClient.send({
-      url: task.webhookUrl,
-      secret: task.webhookSecret,
-      /* v8 ignore start -- ts-type: conditional spread branches for optional result/error/resumedCompletion fields; spread operator branch tracking inside object literals is misattributed by v8 @preserve */
-      payload: {
-        taskId: task.taskId,
-        status: finalStatus,
-        ...(payload.result !== undefined && { result: payload.result }),
-        ...(payload.error !== undefined && { error: payload.error }),
-        duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-        ...(payload.resumedCompletion === true && { resumedCompletion: true }),
-      },
-      /* v8 ignore stop @preserve */
-      taskId: task.taskId,
-    });
-    this.logger.info(
-      {},
-      `Task finalized: id=${task.taskId} status=${finalStatus} durationMs=${String(new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime())}`
-    );
-  }
-
-  private async checkForResult(task: Task): Promise<TaskResult | undefined> {
-    try {
-      const execOptions = { cwd: task.worktreePath };
-
-      /* v8 ignore start -- upstream: continuationPrNumber path requires a pull_request task with a PR number set; unit test fixtures cannot exercise continuationPrNumber workflows without active GitHub PR infrastructure @preserve */
-      if (task.continuationPrNumber !== undefined) {
-        const { stdout: prOutput } = await execAsync(
-          `gh pr view ${String(task.continuationPrNumber)} --json url,number,headRefName,title,state,mergedAt --jq .`,
-          execOptions
-        );
-        const pr = this.parseContinuationPrOutput(task.taskId, prOutput);
-        if (pr === undefined) {
-          return undefined;
-        }
-
-        if (
-          typeof pr.url === 'string' &&
-          typeof pr.headRefName === 'string' &&
-          typeof pr.title === 'string' &&
-          String(pr.state).toUpperCase() === 'OPEN' &&
-          (pr.mergedAt === null || pr.mergedAt === undefined)
-        ) {
-          const { stdout: rebaseOutput } = await execAsync(
-            'cat .rebase-result.json 2>/dev/null || echo "{}"',
-            execOptions
-          );
-          const rebaseResult = this.parseRebaseResultOutput(rebaseOutput, task.taskId);
-
-          return {
-            branch: pr.headRefName,
-            prUrl: pr.url,
-            summary: pr.title,
-            ...(rebaseResult !== undefined && { rebaseResult }),
-          };
-        }
-
-        return undefined;
-      }
-      /* v8 ignore stop @preserve */
-
-      // Get current branch name from worktree
-      const { stdout: branchOutput } = await execAsync('git branch --show-current', execOptions);
-      const currentBranch = branchOutput.trim();
-
-      // Check for pull requests on this branch
-      const { stdout: prOutput } = await execAsync(
-        `gh pr list --head "${currentBranch}" --json url,number,headRefName,title,commits --jq .`,
-        execOptions
-      );
-      const prs = JSON.parse(prOutput) as {
-        url: string;
-        number: number;
-        headRefName: string;
-        commits?: { oid: string; messageHeadline: string }[];
-        title: string;
-      }[];
-
-      /* v8 ignore start -- ts-type: array access with nullish coalescing creates type narrowing branches @preserve */
-      if (prs.length > 0) {
-        const pr = prs[0] ?? undefined;
-        if (pr === undefined) {
-          return undefined;
-        }
-        const branch = pr.headRefName;
-        const commits = Array.isArray(pr.commits) ? pr.commits.length : 0;
-        const commitDetails = Array.isArray(pr.commits)
-          ? pr.commits.map((c) => ({ sha: c.oid, message: c.messageHeadline }))
-          : undefined;
-
-        // Check for rebase result
-        const { stdout: rebaseOutput } = await execAsync(
-          'cat .rebase-result.json 2>/dev/null || echo "{}"',
-          execOptions
-        );
-        const rebaseResult = this.parseRebaseResultOutput(rebaseOutput, task.taskId);
-
-        /* v8 ignore start -- ts-type: spread operator with optional rebaseResult creates type narrowing branch @preserve */
-        const result: TaskResult = {
-          branch,
-          commits,
-          prUrl: pr.url,
-          summary: pr.title,
-          ...(commitDetails !== undefined && { commitDetails }),
-          /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
-          ...(rebaseResult !== undefined && { rebaseResult }),
-          /* v8 ignore stop @preserve */
-        };
-        /* v8 ignore stop @preserve */
-
-        return result;
-      }
-      /* v8 ignore stop @preserve */
-
-      return undefined;
-    } catch (error) {
-      this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
-      return undefined;
-    }
-  }
-
-  private async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
-    let shouldPersistTask = false;
-    const taskId = task.taskId;
-    const runtimeName = this.resolveTaskRuntime(task);
-
-    for (const event of events) {
-      if (event.type === 'log') {
-        if (event.text !== '') {
-          if (runtimeName === 'codex') {
-            this.logForwarder.appendRawChunk(taskId, event.text);
-          } else {
-            this.logForwarder.appendChunk(taskId, event.text);
-          }
-        }
-        continue;
-      }
-
-      if (event.type === 'runtime_session_started') {
-        if (task.runtimeSessionId !== event.sessionId) {
-          task.runtimeSessionId = event.sessionId;
-          shouldPersistTask = true;
-        }
-        this.logger.info({ taskId, sessionId: event.sessionId }, 'Detected runtime session start');
-        continue;
-      }
-
-      if (event.type === 'attempt_completed') {
-        if (!this.attemptCompletionSignals.has(taskId)) {
-          this.taskExitCodes.set(taskId, event.exitCode);
-          this.attemptCompletionSignals.add(taskId);
-          this.logger.info(
-            { taskId, exitCode: event.exitCode },
-            'Detected runtime stream result; signaling attempt completion'
-          );
-        }
-        continue;
-      }
-
-      if (!this.attemptCompletionSignals.has(taskId)) {
-        this.taskExitCodes.set(taskId, event.exitCode);
-        this.attemptCompletionSignals.add(taskId);
-        this.logger.info(
-          { taskId, exitCode: event.exitCode },
-          'Detected runtime stream result; signaling attempt completion'
-        );
-      }
-      this.claudeErrors.set(taskId, event.errorMessage);
-    }
-
-    if (shouldPersistTask) {
-      await this.saveTask(task);
-    }
-  }
-
-  private formatLocalTime(date: Date): string {
-    const h = String(date.getHours()).padStart(2, '0');
-    const m = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    const ms = String(date.getMilliseconds()).padStart(3, '0');
-    return `${h}:${m}:${s}.${ms}`;
-  }
-
-  private appendOrchestratorTaskLog(taskId: string, message: string): void {
-    this.appendTaggedTaskLog(taskId, 'orchestrator', message);
-  }
-
-  private appendTaggedTaskLog(taskId: string, tag: string, message: string): void {
-    this.logForwarder.appendChunk(
-      taskId,
-      `${this.formatLocalTime(new Date())} [${tag}] ${message}\n`
-    );
-  }
-
-  private async flushTaskLogs(taskId: string): Promise<void> {
-    try {
-      await this.logForwarder.flush(taskId);
-    } catch (error) {
-      this.logger.warn({ taskId, error }, 'Failed to flush task logs');
-    }
-  }
-
-  private async collectTurnMetrics(task: Task, attempt: number): Promise<void> {
-    if (this.turnMetricsCollector === undefined) return;
-    try {
-      await this.turnMetricsCollector.collectAndPublish({
-        taskId: task.taskId,
-        containerId: task.containerId,
-        attempt,
-        startedAt: task.startedAt,
-        completedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      this.logger.error(
-        { taskId: task.taskId, attempt, error },
-        'Failed to collect turn metrics (non-fatal, task finalization continues)'
-      );
-    }
-  }
-
-  private async prepareComplianceValidationInput(
+  async prepareComplianceValidationInput(
     task: Task,
     finalResult: TaskResult,
     verification: CompletionVerifierVerdict
   ): Promise<ComplianceValidationInput | undefined> {
-    if (this.agentComplianceValidator === undefined) return undefined;
-    if (verification.agentData?.agentType !== 'execution') return undefined;
-
-    try {
-      const agentData: ExecutionAgentData = verification.agentData;
-
-      const prNumber = extractPrNumber(finalResult.prUrl);
-      if (prNumber === undefined) {
-        this.logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no PR number');
-        return undefined;
-      }
-
-      this.appendOrchestratorTaskLog(task.taskId, 'Starting compliance validation');
-
-      const entries = await readSessionTranscript(
-        this.config.secretsBasePath,
-        task.taskId,
-        this.logger
-      );
-
-      if (entries.length === 0) {
-        this.logger.warn(
-          { taskId: task.taskId },
-          'Compliance validation skipped: no transcript entries'
-        );
-        return undefined;
-      }
-
-      const formattedTranscript = formatTranscript(entries);
-
-      return {
-        taskId: task.taskId,
-        prNumber,
-        repository: task.repository,
-        formattedTranscript,
-        agentClaims: {
-          outcome: agentData.outcome,
-          superpowers_subagent_driven_dev: agentData.superpowers_subagent_driven_dev,
-          superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
-          gh_pr_url: agentData.gh_pr_url,
-          memory_ids_used: agentData.memory_ids_used,
-          memory_ids_rejected: agentData.memory_ids_rejected,
-          memory_usage_summary: agentData.memory_usage_summary,
-          summary: agentData.summary,
-        },
-        workerType: task.workerType,
-      };
-    } catch (error) {
-      this.logger.warn(
-        { taskId: task.taskId, error: getErrorMessage(error) },
-        'Compliance validation preparation failed (non-fatal, skipping compliance validation)'
-      );
-      return undefined;
-    }
-  }
-
-  private async executeComplianceValidation(
-    task: Task,
-    input: ComplianceValidationInput
-  ): Promise<void> {
-    const { taskId } = task;
-    this.appendOrchestratorTaskLog(
-      taskId,
-      `Compliance validation starting (transcript: ${String(input.formattedTranscript.length)} chars)`
+    return await this.completionPipeline.prepareComplianceValidationInput(
+      task,
+      finalResult,
+      verification
     );
-    try {
-      const result = await this.agentComplianceValidator?.validate(input, (message: string) => {
-        this.appendOrchestratorTaskLog(taskId, `Compliance validation: ${message}`);
-      });
-      if (result !== undefined && result !== null) {
-        this.appendOrchestratorTaskLog(taskId, 'Compliance validation completed');
-        this.logger.info({ taskId }, 'Compliance validation completed');
-
-        // Fire-and-forget: send structured report to code-agent
-        const complianceReportUrl = task.webhookUrl.replace(
-          '/internal/webhooks/task-complete',
-          '/internal/webhooks/compliance-report'
-        );
-        if (!task.webhookUrl.includes('/internal/webhooks/task-complete')) {
-          this.logger.warn(
-            { taskId, webhookUrl: task.webhookUrl },
-            'Compliance report webhook URL does not contain expected path — skipping delivery'
-          );
-        } else {
-          void this.webhookClient
-            .send({
-              url: complianceReportUrl,
-              secret: task.webhookSecret,
-              payload: {
-                taskId: input.taskId,
-                prNumber: input.prNumber,
-                report: result.report,
-                model: result.model,
-                promptVersion: result.promptVersion,
-                costUsd: result.costUsd,
-                workerType: input.workerType,
-                transcriptTooLong: result.transcriptTooLong,
-              },
-              taskId,
-            })
-            .then((webhookResult) => {
-              if (webhookResult.ok) {
-                this.logger.info({ taskId }, 'Compliance report webhook delivered');
-              } else {
-                this.logger.warn(
-                  { taskId, error: webhookResult.error.message },
-                  'Compliance report webhook delivery failed'
-                );
-              }
-            })
-            .catch((error: unknown) => {
-              this.logger.warn(
-                { taskId, error: getErrorMessage(error) },
-                'Compliance report webhook send error'
-              );
-            });
-        }
-      } else {
-        this.appendOrchestratorTaskLog(taskId, 'Compliance validation completed without result');
-        this.logger.warn({ taskId }, 'Compliance validation completed without result');
-      }
-    } catch (error) {
-      this.appendOrchestratorTaskLog(
-        taskId,
-        `Compliance validation error: ${getErrorMessage(error)}`
-      );
-      this.logger.error(
-        { taskId, error: getErrorMessage(error) },
-        'Compliance validation failed (non-fatal, task finalization continues)'
-      );
-    }
   }
 
-  private async flushAndCloseLogForwarder(taskId: string): Promise<void> {
-    await this.flushTaskLogs(taskId);
-    try {
-      this.logForwarder.close(taskId);
-    } catch (error) {
-      this.logger.warn(
-        { taskId, error },
-        'Failed to close log forwarder after compliance validation'
-      );
-    }
+  async executeComplianceValidation(task: Task, input: ComplianceValidationInput): Promise<void> {
+    await this.completionPipeline.executeComplianceValidation(task, input);
   }
 
-  private clearTaskTimers(taskId: string): void {
-    const keys = [`${taskId}-warning`, `${taskId}-kill`, `${taskId}-monitor`];
-    for (const key of keys) {
-      const timer = this.activeTasks.get(key);
-      if (timer !== undefined) {
-        clearTimeout(timer);
-        clearInterval(timer);
-        this.activeTasks.delete(key);
-      }
-    }
-    this.activityTimeoutManager.stop(taskId);
-    this.completionInProgress.delete(taskId);
-    this.attemptCompletionSignals.delete(taskId);
+  async flushAndCloseLogForwarder(taskId: string): Promise<void> {
+    await this.completionPipeline.flushAndCloseLogForwarder(taskId);
+  }
+
+  /**
+   * Emit the `code_tasks_*` metric family for a task that has just reached
+   * a terminal state (INT-1565 §S5).
+   *
+   * - `code_tasks_completed{status}` increments on every terminal transition.
+   * - `code_tasks_failed{reason}` increments only for non-success terminal
+   *   statuses; `reason` carries the raw status (`failed | interrupted |
+   *   cancelled`) so dashboards can distinguish operator-cancelled from
+   *   genuinely failed runs.
+   * - `code_tasks_duration{status}` records wall-clock duration in ms;
+   *   non-finite or negative durations are clamped to 0 so the distribution
+   *   stays well-formed.
+   *
+   * Public so the startup-recovery path in `main.ts` can also count
+   * `interrupted` transitions that bypass `finalizeTask()` (the recovery
+   * loop marks `running` tasks `interrupted` directly when their container
+   * is gone). Without this, restart-induced interruptions would be missing
+   * from the `code_tasks_*` series.
+   *
+   * Emission is best-effort — `MetricsClient` swallows its own errors, but
+   * we wrap the duration parse defensively because a malformed `startedAt`
+   * timestamp would otherwise propagate `NaN` into the histogram.
+   */
+  emitTerminalMetrics(
+    task: Task,
+    finalStatus: 'completed' | 'failed' | 'interrupted' | 'cancelled'
+  ): void {
+    this.completionPipeline.emitTerminalMetrics(task, finalStatus);
   }
 }

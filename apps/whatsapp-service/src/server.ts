@@ -9,7 +9,8 @@ import {
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
-import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
+import { type HealthCheck, registerHealthCheck } from '@intexuraos/http-server';
+import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { createWhatsappRoutes } from './routes/routes.js';
 import { type Config, validateConfigEnv } from './config.js';
@@ -19,18 +20,20 @@ const SERVICE_NAME = 'whatsapp-service';
 const SERVICE_VERSION = '0.0.4';
 
 /**
- * Check required secrets using service-specific validation.
- * Uses validateConfigEnv() which has service-specific validation logic.
+ * Probe required secrets using this service's bespoke validation logic
+ * (`validateConfigEnv`). Wraps the validator in the functional `HealthCheck`
+ * shape consumed by `registerHealthCheck`.
  */
-function checkSecrets(): HealthCheck {
-  const start = Date.now();
-  const missing = validateConfigEnv();
-
+function configEnvHealthCheck(): HealthCheck {
   return {
     name: 'secrets',
-    status: missing.length === 0 ? 'ok' : 'down',
-    latencyMs: Date.now() - start,
-    details: missing.length > 0 ? { missing } : null,
+    check: (): Promise<{ ok: true } | { ok: false; detail?: string }> => {
+      const missing = validateConfigEnv();
+      if (missing.length === 0) {
+        return Promise.resolve({ ok: true });
+      }
+      return Promise.resolve({ ok: false, detail: `missing: ${missing.join(', ')}` });
+    },
   };
 }
 
@@ -106,25 +109,17 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
+    audioStoredTopic: config.audioStoredTopic,
+    approvalReplyTopic: config.approvalReplyTopic,
+    commandsIngestTopic: config.commandsIngestTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
   };
-  if (config.commandsIngestTopic !== undefined) {
-    (serviceConfig as { commandsIngestTopic?: string }).commandsIngestTopic =
-      config.commandsIngestTopic;
-  }
   if (config.webhookProcessTopic !== undefined) {
     (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =
       config.webhookProcessTopic;
-  }
-  if (config.audioStoredTopic !== undefined) {
-    (serviceConfig as { audioStoredTopic?: string }).audioStoredTopic = config.audioStoredTopic;
-  }
-  if (config.approvalReplyTopic !== undefined) {
-    (serviceConfig as { approvalReplyTopic?: string }).approvalReplyTopic =
-      config.approvalReplyTopic;
   }
   initServices(serviceConfig);
 
@@ -188,53 +183,11 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   await app.register(createWhatsappRoutes(config));
 
   // Health endpoint (NOT wrapped in envelope per api-contracts.md)
-  app.get(
-    '/health',
-    {
-      schema: {
-        operationId: 'getHealth',
-        summary: 'Health check',
-        description: 'Health check endpoint',
-        tags: ['system'],
-        response: {
-          200: {
-            description: 'Service health status',
-            type: 'object',
-            required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
-            properties: {
-              status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-              serviceName: { type: 'string' },
-              version: { type: 'string' },
-              timestamp: { type: 'string', format: 'date-time' },
-              checks: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  required: ['name', 'status', 'latencyMs'],
-                  properties: {
-                    name: { type: 'string' },
-                    status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-                    latencyMs: { type: 'number' },
-                    details: { type: 'object', nullable: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    async (_req, reply) => {
-      const started = Date.now();
-      const firestoreCheck = await checkFirestore();
-      const checks: HealthCheck[] = [checkSecrets(), firestoreCheck];
-
-      const response = buildHealthResponse(SERVICE_NAME, SERVICE_VERSION, checks);
-
-      void reply.header('x-health-duration-ms', String(Date.now() - started));
-      return await reply.type('application/json').send(response);
-    }
-  );
+  await registerHealthCheck(app, {
+    serviceName: SERVICE_NAME,
+    version: SERVICE_VERSION,
+    checks: [configEnvHealthCheck(), firestoreHealthCheck()],
+  });
 
   // OpenAPI JSON endpoint
   app.get(

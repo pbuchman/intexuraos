@@ -15,6 +15,7 @@ const MODEL_TO_PROVIDER = {
   [LlmModels.Gemini25Flash]: LlmProviders.Google,
   [LlmModels.ClaudeOpus46]: LlmProviders.Anthropic,
   [LlmModels.ClaudeSonnet46]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeSonnet47]: LlmProviders.Anthropic,
   [LlmModels.O4MiniDeepResearch]: LlmProviders.OpenAI,
   [LlmModels.GPT54]: LlmProviders.OpenAI,
   [LlmModels.Sonar]: LlmProviders.Perplexity,

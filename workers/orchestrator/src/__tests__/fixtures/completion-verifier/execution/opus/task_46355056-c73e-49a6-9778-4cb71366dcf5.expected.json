@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1938",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1443",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_1f7d0a83-aef8-4652-8418-32dcad36a7d5",
+      "mem_4b61618c-9951-40aa-b7a9-b007cea9ca97"
+    ],
+    "memory_ids_rejected": ["mem_48c09865-7bdd-4e47-9b59-65129cef01f3"],
+    "memory_usage_summary": "Applied the thin-facade pattern from mem_1f7d0a83 by extracting prepare/dispatch modules with the main file shrunk to 88 lines; heeded mem_4b61618c by keeping the facade as pure delegation (not relocating logic) and extracting an announceInLinear helper to eliminate moved-but-duplicated blocks.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "superpowers:code-reviewer (spec+quality review across two iterations)",
+    "skill_sequence_proof": "Invoked superpowers:subagent-driven-development first (dispatch phase preceded code review), then superpowers:requesting-code-review invoked twice — initial review surfaced 2 Important issues, fix commit f59baab1b addressed them, re-review returned \"zero Critical, zero Important, ship it\".",
+    "failure_reason": "",
+    "summary": "* Split 604-line submitToExecutionAgent.ts into an 88-line facade plus prepareSubmission, dispatchSubmission, announceInLinear, and types modules under domain/usecases/submitToExecutionAgent/.\n  * Preserved the public function signature, DI shape, and all 63 existing tests; added 13 new tests (6 prepare + 7 dispatch + 1 facade) for the new modules.\n  * Key decision: prepareSubmission throws on missing request fields per the Linear test-table spec; the facade wraps it in try/catch so the public Result contract is preserved.\n  * Extracted announceInLinear helper shared by both dispatch paths, with caller-supplied log messages to retain distinct wording and avoid breaking existing log assertions.\n  * `pnpm run ci:tracked` passes end-to-end (15,938 tests, typecheck, lint, static validation, build, format); PR #1938 opened against development."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

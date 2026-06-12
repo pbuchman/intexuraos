@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/orchestrator",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,16 +11,21 @@
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
+    "dev": "NODE_ENV=development tsx watch src/index.ts",
     "test": "vitest run --exclude '**/e2e*.test.ts'",
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
     "@fastify/cors": "^10.1.0",
-    "@google-cloud/firestore": "^7.10.0",
+    "@google-cloud/firestore": "catalog:",
     "@google/genai": "^1.0.0",
+    "@sentry/node": "^8.42.0",
+    "@intexuraos/code-task-domain": "workspace:*",
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
+    "@intexuraos/linear-domain": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
@@ -30,15 +35,16 @@
     "@octokit/plugin-retry": "^7.1.0",
     "async-mutex": "^0.5.0",
     "dockerode": "^4.0.9",
-    "fastify": "^5.6.2",
+    "fastify": "catalog:",
     "fastify-server": "0.0.1-alpha.1",
     "jose": "^5.9.6",
     "jsonwebtoken": "^9.0.2",
     "minimatch": "^10.1.1",
-    "openai": "^6.15.0",
-    "pino": "^9.6.0",
+    "openai": "catalog:",
+    "pino": "catalog:",
     "pino-pretty": "^13.0.0",
-    "zod": "^3.24.1"
+    "yaml": "^2.8.3",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.1",

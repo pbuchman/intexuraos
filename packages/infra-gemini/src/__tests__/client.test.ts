@@ -45,6 +45,7 @@ const TEST_MODEL = LlmModels.Gemini25Flash;
 describe('createGeminiClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUsageSink.clear();
   });
 
   it('passes usage sink to createUsageLogger', async () => {
@@ -337,6 +338,31 @@ describe('createGeminiClient', () => {
         expect(result.value.usage.costUsd).toBe(0);
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'ok',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+        candidates: [{ groundingMetadata: {} }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          promptType: 'research-web-search',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {
@@ -569,6 +595,50 @@ describe('createGeminiClient', () => {
         })
       );
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', {
+        promptType: 'test-prompt',
+        correlation: { researchId: 'r-1', sessionId: 's-2' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          correlation: { researchId: 'r-1', sessionId: 's-2' },
+        })
+      );
+    });
+
+    it('omits correlation from usage logger when not provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'test-prompt' });
+
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(lastCall).not.toHaveProperty('correlation');
+    });
   });
 
   describe('generateImage', () => {
@@ -602,7 +672,7 @@ describe('createGeminiClient', () => {
       }
     });
 
-    it('uses specified image size', async () => {
+    it('does not log imageSize when size option is supplied', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -628,6 +698,10 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value.usage.costUsd).toBe(0);
       }
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as
+        | { usage?: Record<string, unknown> }
+        | undefined;
+      expect(lastCall?.usage).not.toHaveProperty('imageSize');
     });
 
     it('returns image with zero cost when no imagePricing', async () => {
@@ -711,7 +785,104 @@ describe('createGeminiClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'image_generation',
+          model: LlmModels.Gemini25FlashImage,
+          promptType: 'image-generation',
           success: true,
+          usage: expect.objectContaining({ imageCount: 1 }),
+        })
+      );
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as
+        | { usage?: Record<string, unknown> }
+        | undefined;
+      expect(lastCall?.usage).not.toHaveProperty('imageSize');
+    });
+
+    it('forwards image generation correlation to usage logger on success', async () => {
+      const imageB64 = Buffer.from('fake-image-data').toString('base64');
+      mockGenerateContent.mockResolvedValue({
+        candidates: [
+          {
+            content: {
+              parts: [{ inlineData: { data: imageB64 } }],
+            },
+          },
+        ],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat', {
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-123' },
+          success: true,
+          usage: expect.objectContaining({ imageCount: 1 }),
+        })
+      );
+    });
+
+    it('logs failed image generation with imageCount zero when response has no image data', async () => {
+      mockGenerateContent.mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: 'No image' }] } }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat');
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          success: false,
+          usage: expect.objectContaining({ imageCount: 0 }),
+        })
+      );
+    });
+
+    it('forwards image generation correlation to usage logger on failure', async () => {
+      mockGenerateContent.mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: 'No image' }] } }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat', {
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-123' },
+          success: false,
+          usage: expect.objectContaining({ imageCount: 0 }),
         })
       );
     });
@@ -846,38 +1017,84 @@ describe('createGeminiClient', () => {
     });
 
     it('maps timeout error to TIMEOUT in generate', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Connection timeout'));
+      vi.useFakeTimers();
+      try {
+        mockGenerateContent.mockRejectedValue(new Error('Connection timeout'));
 
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      const result = await client.generate('Test', { promptType: 'test-prompt' });
+        const client = createGeminiClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+        const promise = client.generate('Test', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('TIMEOUT');
+        }
+      } finally {
+        vi.useRealTimers();
       }
     });
 
     it('maps rate limit error to RATE_LIMITED in generate', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('429 rate limit'));
+      vi.useFakeTimers();
+      try {
+        mockGenerateContent.mockRejectedValue(new Error('429 rate limit'));
 
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      const result = await client.generate('Test', { promptType: 'test-prompt' });
+        const client = createGeminiClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+        const promise = client.generate('Test', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('RATE_LIMITED');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('RATE_LIMITED');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      vi.useFakeTimers();
+      try {
+        mockGenerateContent
+          .mockRejectedValueOnce(new Error('429 rate limit'))
+          .mockResolvedValueOnce({
+            text: 'recovered',
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+          });
+
+        const client = createGeminiClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        const promise = client.generate('hi', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('recovered');
+        }
+      } finally {
+        vi.useRealTimers();
       }
     });
 

@@ -76,10 +76,10 @@ const SERVICE_ENV_MAPPINGS = {
 
 ## Web App Patterns
 
-The web app is a static Vite bundle (deployed to GCS + CDN, NOT Cloud Run). Env vars are
-baked into the bundle at build time — there is no runtime env surface. Skipping any of
-the three locations below produces a bundle that throws `Missing required environment
-variable: <name>` at module-load time in prod.
+The web app is a static Vite bundle served by Hetzner nginx, not Cloud Run. Env vars are
+baked into the bundle at build time — there is no runtime env surface. Keep the
+manifest, generated files, config consumer, and dev proxy in lockstep or the bundle can
+throw `Missing required environment variable: <name>` at module-load time.
 
 ### 1. `apps/web/src/config.ts` — consumer declaration
 
@@ -89,22 +89,25 @@ export function getConfig(): AppConfig {
   return {
     // ...
     // Dev: Vite proxy /api/<path> → local process
-    // Prod: absolute Cloud Run URL baked in from .env at build time
+    // Prod: absolute Hetzner /api URL baked in from .env at build time
     myServiceUrl: getServiceUrl('INTEXURAOS_MY_SERVICE_URL', '/api/my-service'),
   };
 }
 ```
 
-### 2. `apps/web/cloudbuild.yaml` — prod build-time injection
+### 2. `apps/web/service-manifest.json` — generated web URL wiring
 
-```yaml
-# apps/web/cloudbuild.yaml - fetch-config step
-CLOUD_RUN_SERVICES=(
-  # Format: "<cloud-run-service-name>:<ENV_VAR_SUFFIX>"
-  # Produces INTEXURAOS_<SUFFIX>_URL in /workspace/apps/web/.env before Vite builds
-  "my-service:MY_SERVICE"
-)
+```json
+{
+  "name": "my-service",
+  "envSuffix": "MY_SERVICE",
+  "apiPath": "/api/my-service",
+  "proxyTarget": "http://localhost:8XXX",
+  "serviceUrl": "http://localhost:8XXX"
+}
 ```
+
+Run `pnpm run generate:service-wiring` after editing the manifest. The generator updates `apps/web/src/config.generated.ts`, `ecosystem.generated.cjs`, and `terraform/environments/dev/service-urls.auto.tfvars.json`. `scripts/hetzner/deploy-web.sh` renders production URLs from the same manifest with the public Hetzner origin.
 
 ### 3. `apps/web/vite.config.ts` + `ecosystem.config.cjs` — dev proxy
 

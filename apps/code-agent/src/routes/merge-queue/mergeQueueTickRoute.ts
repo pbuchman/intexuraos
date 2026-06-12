@@ -13,7 +13,7 @@ export const mergeQueueTickRoute: FastifyPluginCallback = (fastify, _opts, done)
         message: 'Received request to POST /internal/merge-queue/tick',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for merge-queue tick');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');

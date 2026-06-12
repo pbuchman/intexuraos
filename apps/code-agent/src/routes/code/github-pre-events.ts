@@ -12,7 +12,7 @@ import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { RepositoryError } from '../../domain/repositories/gitHubPREventRepository.js';
-import { extractEventUrl } from './extractEventUrl.js';
+import { extractEventUrl } from '../../domain/utils/extractEventUrl.js';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
@@ -195,7 +195,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
     fastify.get<{
       Querystring: { repository?: string; pullRequestNumber?: number; limit?: number };
     }>(
-      '/code/github-pr-events',
+      '/github-pr-events',
       {
         schema: {
           querystring: githubPREventsQuerySchema,

@@ -1,11 +1,15 @@
 import { InstancesClient } from '@google-cloud/compute';
+import * as Sentry from '@sentry/node';
+import { IntexuraOSError, type ErrorCode } from '@intexuraos/common-core';
 import { logger } from './logger.js';
 import { VM_CONFIG } from './config.js';
+import { isExpectedStartupNetworkError } from './errors.js';
 
 export interface StartVmResult {
   success: boolean;
   message: string;
   startupDurationMs?: number;
+  errorCode?: ErrorCode;
 }
 
 export async function startVm(): Promise<StartVmResult> {
@@ -75,11 +79,18 @@ export async function startVm(): Promise<StartVmResult> {
       startupDurationMs: Date.now() - startTime,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error({ error: message }, 'Failed to start VM');
+    if (error instanceof IntexuraOSError) {
+      logger.error({ err: error, code: error.code }, 'Failed to start VM');
+      return {
+        success: false,
+        message: error.message,
+        errorCode: error.code,
+      };
+    }
+    logger.error({ err: error }, 'Failed to start VM');
     return {
       success: false,
-      message: `Failed to start VM: ${message}`,
+      message: `Failed to start VM: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -104,7 +115,10 @@ async function waitForState(
     await sleep(5000);
   }
 
-  throw new Error(`Timeout waiting for VM to reach ${targetState} state`);
+  throw new IntexuraOSError(
+    'WORKER_UNAVAILABLE',
+    `Timeout waiting for VM to reach ${targetState} state`
+  );
 }
 
 async function pollHealth(): Promise<boolean> {
@@ -124,13 +138,18 @@ async function pollHealth(): Promise<boolean> {
           logger.info({}, 'VM health check passed');
           return true;
         }
+        logger.debug({ status: data.status }, 'VM not ready yet, retrying');
       }
       /* v8 ignore stop @preserve */
-    } catch {
-      // Expected during startup - VM not yet responding
+    } catch (error) {
+      if (isExpectedStartupNetworkError(error)) {
+        logger.debug({ err: error }, 'VM not yet responding (expected during startup)');
+      } else {
+        logger.error({ err: error }, 'Unexpected error during VM health poll');
+        Sentry.captureException(error);
+      }
     }
 
-    logger.debug({}, 'Health check failed, retrying...');
     await sleep(VM_CONFIG.HEALTH_POLL_INTERVAL_MS);
   }
 

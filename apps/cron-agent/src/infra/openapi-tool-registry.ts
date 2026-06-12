@@ -1,4 +1,5 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { ToolDefinition } from '@intexuraos/llm-contract';
 import type { ServiceDefinition } from '../config.js';
 import type { ToolRegistry, ServiceToolInfo, ToolExecutionContext } from '../domain/ports/tool-registry.js';
@@ -76,7 +77,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
       'Fetching OpenAPI spec for service',
     );
     try {
-      const response = await fetch(service.openapiUrl);
+      const response = await performHttpFetch(service.openapiUrl);
       if (!response.ok) {
         this.deps.logger.warn(
           { service: service.key, status: response.status },
@@ -247,7 +248,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
       const controller = new AbortController();
       const timeout = setTimeout(() => { controller.abort(); }, 30_000);
       try {
-        const response = await fetch(url, {
+        const response = await performHttpFetch(url, {
           method: method.toUpperCase(),
           headers,
           signal: controller.signal,

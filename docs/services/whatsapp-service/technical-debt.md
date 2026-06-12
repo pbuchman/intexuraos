@@ -1,7 +1,7 @@
 # WhatsApp Service — Technical Debt
 
-**Last Updated:** 2026-04-22
-**Analysis Run:** v3.6.0 documentation refresh
+**Last Updated:** 2026-06-12
+**Analysis Run:** v3.7.0 documentation refresh
 
 ---
 
@@ -64,6 +64,7 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 - Event-driven transcription via srt-service, CTA URL messages
 - Sentry quota protection via SKIP_SENTRY_KEY in sender error paths
 - Notification preferences: GET/PUT endpoints, shouldDeliverMessage logic, importance filter in send-message handler, savePreferences failure path
+- Recovery coverage: audio publish failures, retryable text/command-ingest failures, idempotent replay by WhatsApp message ID, and retry-pending endpoint summaries
 
 ### Test Files
 
@@ -76,6 +77,7 @@ Located in `apps/whatsapp-service/src/__tests__/`:
 - `messageMediaRoutes.test.ts` — Media URL, thumbnail URL, message deletion (was `outboundMessageRepository.test.ts`)
 - `mappingRoutes.test.ts` — User phone number mapping (with verification gate)
 - `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed, 429 retry classification, notification importance filter)
+- `usecases/retryPendingWebhookEvents.test.ts` — Retry-pending recovery for old pending events, retryable failed events, dry runs, and terminal-status skips
 - `preferencesRoutes.test.ts` — Notification preferences GET/PUT endpoints
 - `verificationRoutes.test.ts` — Phone verification send/confirm/status
 - `shared.test.ts` — Shared utility functions (extractButtonResponse with button_reply fix)
@@ -106,7 +108,7 @@ No `@ts-ignore`, `@ts-expect-error`, or `any` types found in production code.
 
 | File                                                         | Issue                                     | Suggestion                                                                |
 | ------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------- |
-| `domain/whatsapp/usecases/processWebhookEventUseCase.ts`     | Handles routing + 4 message type handlers | Extract handleTextMessage and handleButtonMessage into separate use cases |
+| `domain/usecases/processWebhookEventUseCase.ts`     | Handles routing + 4 message type handlers | Extract handleTextMessage and handleButtonMessage into separate use cases |
 
 **Details:** `processWebhookEventUseCase.ts` contains:
 
@@ -175,6 +177,8 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 
 | Date       | Issue                                                             | Resolution                                                                  |
 | ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 2026-06-11 | WhatsApp bookmark webhooks could stall after async dispatch        | Added retry-pending recovery and retryable command-ingest failure handling (INT-1662) |
+| 2026-04-23 | Voice notes could be stored without transcription dispatch         | Audio publish now fails the webhook before completion (INT-1451)            |
 | 2026-04-21 | No user control over notification volume                          | Added notification preferences with importance filter (INT-1418)            |
 | 2026-03-29 | WhatsApp API errors exhausting Sentry quota                       | Added SKIP_SENTRY_KEY to all error log paths in sender.ts (INT-1172)        |
 | 2026-03-29 | 429 rate limit responses classified as permanent errors           | Excluded 429 from permanent error classification in send-message handler    |

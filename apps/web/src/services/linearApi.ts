@@ -27,7 +27,7 @@ export async function getLinearConnection(
   try {
     return await apiRequest<LinearConnectionStatus>(
       config.linearAgentUrl,
-      '/linear/connection',
+      '/connection',
       accessToken
     );
   } catch (e) {
@@ -47,7 +47,7 @@ export async function validateLinearApiKey(
 ): Promise<LinearTeam[]> {
   const response = await apiRequest<ValidateResponse>(
     config.linearAgentUrl,
-    '/linear/connection/validate',
+    '/connection/validate',
     accessToken,
     {
       method: 'POST',
@@ -66,7 +66,7 @@ export async function saveLinearConnection(
 ): Promise<LinearConnectionStatus> {
   return await apiRequest<LinearConnectionStatus>(
     config.linearAgentUrl,
-    '/linear/connection',
+    '/connection',
     accessToken,
     {
       method: 'POST',
@@ -83,7 +83,7 @@ export async function disconnectLinear(
 ): Promise<LinearConnectionStatus> {
   return await apiRequest<LinearConnectionStatus>(
     config.linearAgentUrl,
-    '/linear/connection',
+    '/connection',
     accessToken,
     {
       method: 'DELETE',
@@ -101,7 +101,7 @@ export async function listLinearIssues(
   const query = includeArchive ? '?includeArchive=true' : '';
   return await apiRequest<ListIssuesResponse>(
     config.linearAgentUrl,
-    `/linear/issues${query}`,
+    `/issues${query}`,
     accessToken
   );
 }
@@ -118,7 +118,7 @@ export async function listFailedLinearIssues(
 ): Promise<FailedLinearIssue[]> {
   const response = await apiRequest<ListFailedIssuesResponse>(
     config.linearAgentUrl,
-    '/linear/failed-issues',
+    '/failed-issues',
     accessToken
   );
   return response.failedIssues;
@@ -130,7 +130,7 @@ export async function deleteFailedIssue(
 ): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.linearAgentUrl,
-    `/linear/failed-issues/${id}`,
+    `/failed-issues/${id}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -146,7 +146,7 @@ export async function retryFailedIssue(
 ): Promise<RetryFailedIssueResponse> {
   return await apiRequest<RetryFailedIssueResponse>(
     config.linearAgentUrl,
-    `/linear/failed-issues/${id}/retry`,
+    `/failed-issues/${id}/retry`,
     accessToken,
     { method: 'POST' }
   );
@@ -204,7 +204,7 @@ export async function syncFromLinear(
 ): Promise<SyncFromLinearResponse> {
   return await apiRequest<SyncFromLinearResponse>(
     config.linearAgentUrl,
-    '/linear/sync',
+    '/sync',
     accessToken,
     { method: 'POST' }
   );
@@ -222,7 +222,7 @@ export async function getWebhookConfig(
 ): Promise<LinearWebhookConfig> {
   return await apiRequest<LinearWebhookConfig>(
     config.linearAgentUrl,
-    '/linear/webhook-config',
+    '/webhook-config',
     accessToken
   );
 }
@@ -236,7 +236,7 @@ export async function saveWebhookSecret(
 ): Promise<WebhookConfigSaveResponse> {
   return await apiRequest<WebhookConfigSaveResponse>(
     config.linearAgentUrl,
-    '/linear/webhook-config',
+    '/webhook-config',
     accessToken,
     {
       method: 'POST',
@@ -253,7 +253,7 @@ export async function removeWebhookSecret(
 ): Promise<WebhookConfigSaveResponse> {
   return await apiRequest<WebhookConfigSaveResponse>(
     config.linearAgentUrl,
-    '/linear/webhook-config',
+    '/webhook-config',
     accessToken,
     { method: 'DELETE' }
   );
@@ -282,7 +282,7 @@ export async function listPruneCandidates(
 ): Promise<PruneCandidateResponse[]> {
   const response = await apiRequest<ListPruneCandidatesResponse>(
     config.linearAgentUrl,
-    '/linear/prune-candidates',
+    '/prune-candidates',
     accessToken
   );
   return response.candidates;
@@ -302,7 +302,7 @@ export async function deletePruneCandidates(
 ): Promise<DeletePruneCandidatesResponse> {
   return await apiRequest<DeletePruneCandidatesResponse>(
     config.linearAgentUrl,
-    '/linear/prune-candidates',
+    '/prune-candidates',
     accessToken,
     { method: 'DELETE' }
   );

@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as Sentry from '@sentry/node';
+import { IntexuraOSError } from '@intexuraos/common-core';
+import { logger } from '../logger.js';
 
 vi.mock('../logger.js', () => ({
   logger: {
@@ -7,6 +10,11 @@ vi.mock('../logger.js', () => ({
     error: vi.fn(),
     debug: vi.fn(),
   },
+  flush: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock('@sentry/node', () => ({
+  captureException: vi.fn(),
 }));
 
 vi.mock('../config.js', () => ({
@@ -44,6 +52,11 @@ describe('stopVm', () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockStop.mockReset();
+    vi.mocked(Sentry.captureException).mockReset();
+    vi.mocked(logger.error).mockReset();
+    vi.mocked(logger.warn).mockReset();
+    vi.mocked(logger.info).mockReset();
+    vi.mocked(logger.debug).mockReset();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     originalFetch = globalThis.fetch;
   });
@@ -127,14 +140,12 @@ describe('stopVm', () => {
     expect(mockStop).toHaveBeenCalledOnce();
   });
 
-  it('should force shutdown if orchestrator unresponsive', async () => {
+  it('should force shutdown if orchestrator unresponsive (ECONNREFUSED)', async () => {
     mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
     mockStop.mockResolvedValue([{ name: 'stop-op-123' }]);
 
-    globalThis.fetch = vi.fn().mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      throw new Error('Timeout');
-    });
+    const econn = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    globalThis.fetch = vi.fn().mockRejectedValue(econn);
 
     const resultPromise = stopVm();
     await vi.runAllTimersAsync();
@@ -142,6 +153,7 @@ describe('stopVm', () => {
 
     expect(result.success).toBe(true);
     expect(mockStop).toHaveBeenCalledOnce();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('should return error if GCP API fails', async () => {
@@ -176,6 +188,22 @@ describe('stopVm', () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toContain('Stop operation failed');
+  });
+
+  it('defaults runningTasksAtShutdown to 0 when orchestrator returns non-numeric runningTasks', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockResolvedValue([{ name: 'stop-op-bad-shape' }]);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'acknowledged', runningTasks: 'not-a-number' }),
+    });
+
+    const result = await stopVm();
+
+    expect(result.success).toBe(true);
+    expect(result.runningTasksAtShutdown).toBe(0);
+    expect(mockStop).toHaveBeenCalledOnce();
   });
 
   it('should proceed with shutdown when orchestrator returns non-ok response', async () => {
@@ -251,7 +279,7 @@ describe('stopVm', () => {
     expect(mockStop).toHaveBeenCalledOnce();
   });
 
-  it('should proceed when health endpoint throws during wait for tasks', async () => {
+  it('should proceed when health endpoint throws ECONNREFUSED during wait for tasks', async () => {
     mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
     mockStop.mockResolvedValue([{ name: 'stop-op-catch' }]);
 
@@ -270,7 +298,7 @@ describe('stopVm', () => {
           }
 
           if (urlStr.includes('health')) {
-            throw new Error('Connection refused');
+            throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
           }
 
           throw new Error(`Unexpected URL: ${urlStr}`);
@@ -283,6 +311,7 @@ describe('stopVm', () => {
 
     expect(result.success).toBe(true);
     expect(mockStop).toHaveBeenCalledOnce();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('should warn and proceed when grace period expires with tasks still running', async () => {
@@ -320,6 +349,80 @@ describe('stopVm', () => {
 
     expect(result.success).toBe(true);
     expect(mockStop).toHaveBeenCalledOnce();
+  });
+
+  it('captures unexpected orchestrator-shutdown errors to Sentry and proceeds', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockResolvedValue([{ name: 'stop-op-unexpected' }]);
+
+    // Non-network TypeError at the shutdown call. Should still proceed to stop the VM.
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Boom (unexpected)'));
+
+    const resultPromise = stopVm();
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.success).toBe(true);
+    expect(mockStop).toHaveBeenCalledOnce();
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('captures unexpected wait-for-tasks errors to Sentry and proceeds', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockResolvedValue([{ name: 'stop-op-wait-unexpected' }]);
+
+    globalThis.fetch = vi
+      .fn()
+      .mockImplementation(
+        async (url: string): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+          const urlStr = String(url);
+          if (urlStr.includes('shutdown')) {
+            return {
+              ok: true,
+              json: (): Promise<unknown> =>
+                Promise.resolve({ status: 'acknowledged', runningTasks: 1 }),
+            };
+          }
+          if (urlStr.includes('health')) {
+            // Unexpected error during waitForTasksToComplete polling
+            throw new TypeError('Boom (unexpected)');
+          }
+          throw new Error(`Unexpected URL: ${urlStr}`);
+        }
+      );
+
+    const resultPromise = stopVm();
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.success).toBe(true);
+    expect(mockStop).toHaveBeenCalledOnce();
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('surfaces IntexuraOSError code on the StopVmResult and logs structured code', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockRejectedValue(
+      new IntexuraOSError('WORKER_UNAVAILABLE', 'Compute API timed out stopping VM')
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'acknowledged', runningTasks: 0 }),
+    });
+
+    const result = await stopVm();
+
+    // Outer catch unwraps the IntexuraOSError and propagates code+message,
+    // rather than the generic 'Failed to stop VM: ...' wrapping.
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('Compute API timed out stopping VM');
+    expect(result.errorCode).toBe('WORKER_UNAVAILABLE');
+
+    const errorCalls = vi.mocked(logger.error).mock.calls;
+    const failedToStopCall = errorCalls.find(([, msg]) => msg === 'Failed to stop VM');
+    expect(failedToStopCall).toBeDefined();
+    expect(failedToStopCall?.[0]).toMatchObject({ code: 'WORKER_UNAVAILABLE' });
   });
 
   it('should handle graceful shutdown with running tasks that finish via running=0', async () => {

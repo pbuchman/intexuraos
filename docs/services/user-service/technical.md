@@ -356,7 +356,6 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | Firestore (`auth_tokens` collection)       | Auth0 token cache                   |
 | Firestore (`oauth_connections` collection) | OAuth token storage                 |
 | Firebase Admin SDK                         | Firebase token generation           |
-| `@intexuraos/infra-otel`                   | Dash0 OpenTelemetry tracing/metrics |
 
 ## Configuration
 
@@ -378,7 +377,6 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID`     | Yes      | GitHub OAuth client ID                                    |
 | `INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET` | Yes      | GitHub OAuth client secret                                |
 | `INTEXURAOS_SENTRY_DSN`                 | No       | Sentry DSN for error tracking (optional)                  |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`        | No       | Dash0 OTLP endpoint for tracing/metrics (no-op if unset)  |
 
 ## Gotchas
 

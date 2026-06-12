@@ -10,12 +10,12 @@ output "topic_id" {
 
 output "subscription_name" {
   description = "Name of the push subscription"
-  value       = google_pubsub_subscription.push.name
+  value       = try(google_pubsub_subscription.push[0].name, null)
 }
 
 output "subscription_id" {
   description = "Full ID of the push subscription"
-  value       = google_pubsub_subscription.push.id
+  value       = try(google_pubsub_subscription.push[0].id, null)
 }
 
 output "dlq_topic_name" {

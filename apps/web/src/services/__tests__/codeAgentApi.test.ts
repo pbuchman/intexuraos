@@ -66,7 +66,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks',
+        '/tasks',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -80,7 +80,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?status=running',
+        '/tasks?status=running',
         mockAccessToken
       );
     });
@@ -93,7 +93,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?status=running%2Cfailed',
+        '/tasks?status=running%2Cfailed',
         mockAccessToken
       );
     });
@@ -106,7 +106,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks',
+        '/tasks',
         mockAccessToken
       );
     });
@@ -119,7 +119,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?limit=10',
+        '/tasks?limit=10',
         mockAccessToken
       );
     });
@@ -132,7 +132,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?cursor=abc123',
+        '/tasks?cursor=abc123',
         mockAccessToken
       );
     });
@@ -145,7 +145,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks?status=completed&limit=5&cursor=xyz789',
+        '/tasks?status=completed&limit=5&cursor=xyz789',
         mockAccessToken
       );
     });
@@ -160,7 +160,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-123',
+        '/tasks/task-123',
         mockAccessToken
       );
       expect(result).toEqual(mockTask);
@@ -183,7 +183,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log?limit=25&cursor=2026-03-12T09%3A00%3A00.000Z',
+        '/github-event-log?limit=25&cursor=2026-03-12T09%3A00%3A00.000Z',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -205,7 +205,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log/rows',
+        '/github-event-log/rows',
         mockAccessToken,
         {
           method: 'POST',
@@ -226,7 +226,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log/delivery-abc/payload',
+        '/github-event-log/delivery-abc/payload',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -240,7 +240,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/github-event-log/id%2Fwith%20special/payload',
+        '/github-event-log/id%2Fwith%20special/payload',
         mockAccessToken
       );
     });
@@ -256,7 +256,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/submit',
+        '/submit',
         mockAccessToken,
         {
           method: 'POST',
@@ -282,7 +282,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/submit',
+        '/submit',
         mockAccessToken,
         {
           method: 'POST',
@@ -306,7 +306,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/submit',
+        '/submit',
         mockAccessToken,
         {
           method: 'POST',
@@ -339,7 +339,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/cancel',
+        '/cancel',
         mockAccessToken,
         {
           method: 'POST',
@@ -359,7 +359,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-123',
+        '/tasks/task-123',
         mockAccessToken,
         { method: 'DELETE' }
       );
@@ -376,7 +376,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-123/implement',
+        '/tasks/task-123/implement',
         mockAccessToken,
         {
           method: 'POST',
@@ -395,7 +395,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/tasks/task-456/implement',
+        '/tasks/task-456/implement',
         mockAccessToken,
         {
           method: 'POST',
@@ -411,9 +411,10 @@ describe('codeAgentApi', () => {
       const { apiRequest } = await import('../apiClient.js');
       const mockResponse: WorkersStatusResponse = {
         workers: [
-          { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, healthy: true, checkedAt: '2024-01-01T00:00:00Z' },
-          { name: 'vm-worker', url: 'https://vm.example.com', priority: 2, healthy: false, checkedAt: '2024-01-01T00:00:00Z' },
+          { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, enabled: true, healthy: true, status: 'healthy', details: null, checkedAt: '2024-01-01T00:00:00Z', stale: false },
+          { name: 'vm-worker', url: 'https://vm.example.com', priority: 2, enabled: false, healthy: false, status: 'disabled', details: { reason: 'disabled' }, checkedAt: '2024-01-01T00:00:00Z', stale: false },
         ],
+        stale: false,
       };
       vi.mocked(apiRequest).mockResolvedValue(mockResponse);
 
@@ -421,7 +422,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/workers/status',
+        '/workers/status',
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
@@ -435,6 +436,23 @@ describe('codeAgentApi', () => {
         tasks: [
           { id: 'task-1', prompt: 'Fix bug', workerType: 'opus', queuedAt: '2026-03-17T10:00:00Z', createdAt: '2026-03-17T09:55:00Z', position: 1 },
         ],
+        systemStatuses: [
+          {
+            id: 'status-1',
+            component: 'code-task-dispatch',
+            status: 'active',
+            severity: 'critical',
+            workerType: 'opus',
+            reason: 'claude_auth_unavailable',
+            message: 'No reachable worker has active Claude auth for opus.',
+            remediation: 'Refresh Claude authentication on a worker that can run this task.',
+            affectedTaskCount: 1,
+            exampleTaskIds: ['task-1'],
+            workerNames: ['home-mac'],
+            firstSeenAt: '2026-06-05T10:00:00Z',
+            lastSeenAt: '2026-06-05T10:05:00Z',
+          },
+        ],
         totalQueued: 1,
         maxQueueSize: 10,
       };
@@ -444,7 +462,7 @@ describe('codeAgentApi', () => {
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
-        '/code/queue',
+        '/queue',
         mockAccessToken
       );
       expect(result).toEqual(mockQueueData);

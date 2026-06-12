@@ -43,7 +43,7 @@ export async function waitForTaskStatus(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const response = await client.get(`/code/tasks/${taskId}`);
+      const response = await client.get(`/tasks/${taskId}`);
 
       if (response.status !== 200) {
         throw new Error(`Failed to get task status: ${String(response.status)}`);
@@ -100,7 +100,7 @@ export async function waitForSuccessStatus(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const response = await client.get(`/code/tasks/${taskId}`);
+      const response = await client.get(`/tasks/${taskId}`);
 
       if (response.status !== 200) {
         throw new Error(`Failed to get task status: ${String(response.status)}`);
@@ -180,7 +180,7 @@ export async function waitForTaskInList(
 ): Promise<CodeTask> {
   return waitForCondition(
     async () => {
-      const response = await client.get('/code/tasks', { params: { userId } });
+      const response = await client.get('/tasks', { params: { userId } });
       if (response.status !== 200) return false;
       const responseData = response.data as { success: boolean; data: { tasks: CodeTask[] } };
       const tasks = responseData.data.tasks;
@@ -190,7 +190,7 @@ export async function waitForTaskInList(
     500,
     'task to appear in list'
   ).then(async () => {
-    const response = await client.get('/code/tasks', { params: { userId } });
+    const response = await client.get('/tasks', { params: { userId } });
     const responseData = response.data as { success: boolean; data: { tasks: CodeTask[] } };
     const tasks = responseData.data.tasks;
     const task = tasks[0];

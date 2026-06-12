@@ -1,47 +1,59 @@
 import { describe, expect, it } from 'vitest';
-import { buildDigestPrompt, DIGEST_PROMPT_VERSION } from '../digestPrompt.js';
+import { digestPrompt, DIGEST_PROMPT_VERSION } from '../digestPrompt.js';
 
-describe('buildDigestPrompt', () => {
+describe('digestPrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(digestPrompt.name).toBe('whatsapp-digest');
+    expect(digestPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(digestPrompt.version).toBe(DIGEST_PROMPT_VERSION);
+  });
+});
+
+describe('digestPrompt.build', () => {
   const baseInput = {
     userId: 'google-oauth2|test-user',
     groupKey: 'grupa-wedkarska-skool',
     date: '2026-04-15',
+    outputLanguage: 'Polish',
     previousState: null,
     last3Summaries: [],
-    todaysMessages: [{ sender: 'Test', text: 'Cześć', postTimeSec: 1776380400 }],
+    todaysMessages: [{ sender: 'Test', text: 'Testowa polska wiadomość', postTimeSec: 1776380400 }],
   };
 
   it('returns a non-empty prompt with the date and group key', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt.length).toBeGreaterThan(500);
     expect(prompt).toContain('2026-04-15');
     expect(prompt).toContain('grupa-wedkarska-skool');
   });
 
   it('embeds both few-shot examples', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt).toContain('2026-04-08');
     expect(prompt).toContain('2026-04-11');
   });
 
-  it('instructs the model to write Polish narratives', () => {
-    const prompt = buildDigestPrompt(baseInput);
-    expect(prompt.toLowerCase()).toContain('po polsku');
+  it('instructs the model to write in the configured target language', () => {
+    const prompt = digestPrompt.build(baseInput);
+    expect(prompt).toContain('Target output language: Polish');
+    expect(prompt).toContain('dailySummary.headline');
+    expect(prompt).toContain('stateUpdate.openThreads[].lastSignal');
+    expect(prompt.toLowerCase()).not.toContain('in english');
   });
 
   it('instructs the model to output headline + bullets (hybrid format)', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt).toMatch(/headline/i);
     expect(prompt).toMatch(/bullets/i);
     expect(prompt).toMatch(/3.{0,10}7/);
   });
 
   it('forbids copying from last3Summaries', () => {
-    const prompt = buildDigestPrompt(baseInput);
-    expect(prompt.toLowerCase()).toContain('nie kopiuj');
+    const prompt = digestPrompt.build(baseInput);
+    expect(prompt.toLowerCase()).toContain('do not copy');
   });
 
-  it('exposes semver version 2.x', () => {
-    expect(DIGEST_PROMPT_VERSION).toMatch(/^2\.\d+\.\d+$/);
+  it('exposes semver version 4.x', () => {
+    expect(DIGEST_PROMPT_VERSION).toMatch(/^4\.\d+\.\d+$/);
   });
 });

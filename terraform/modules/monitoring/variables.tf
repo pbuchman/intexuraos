@@ -13,3 +13,16 @@ variable "alert_email" {
   type        = string
   default     = null
 }
+
+variable "slack_auth_token" {
+  description = "Slack bot OAuth token (xoxb-...) for the monitoring notification channel. Set to null to skip provisioning the Slack channel."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "slack_channel_name" {
+  description = "Slack channel where monitoring notifications are posted (e.g. \"#alerts\")."
+  type        = string
+  default     = "#alerts"
+}

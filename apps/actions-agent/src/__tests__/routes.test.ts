@@ -630,7 +630,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/actions',
+        url: '/',
       });
 
       expect(response.statusCode).toBe(401);
@@ -655,7 +655,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions',
+        url: '/',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -701,7 +701,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions?status=pending',
+        url: '/?status=pending',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -760,7 +760,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions?status=pending,completed',
+        url: '/?status=pending,completed',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -798,7 +798,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions?status=invalid_status,pending',
+        url: '/?status=invalid_status,pending',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -838,7 +838,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions',
+        url: '/',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -878,7 +878,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         payload: { status: 'rejected' },
       });
 
@@ -891,7 +891,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/nonexistent',
+        url: '/nonexistent',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -920,7 +920,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -949,7 +949,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -993,7 +993,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1026,7 +1026,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1059,7 +1059,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1086,7 +1086,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1120,7 +1120,7 @@ describe('Research Agent Routes', () => {
 
       await app.inject({
         method: 'PATCH',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1150,7 +1150,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/actions/action-1',
+        url: '/action-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1162,7 +1162,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/actions/nonexistent',
+        url: '/nonexistent',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1190,7 +1190,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1218,7 +1218,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/actions/action-1',
+        url: '/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1241,7 +1241,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/batch',
+        url: '/batch',
         payload: { actionIds: ['action-1'] },
       });
 
@@ -1254,7 +1254,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/batch',
+        url: '/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1313,7 +1313,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/batch',
+        url: '/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1355,7 +1355,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/batch',
+        url: '/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1377,7 +1377,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/batch',
+        url: '/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1393,7 +1393,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/batch',
+        url: '/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1414,7 +1414,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/execute',
+        url: '/action-1/execute',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1426,7 +1426,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/nonexistent/execute',
+        url: '/nonexistent/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1454,7 +1454,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/execute',
+        url: '/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1482,7 +1482,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/execute',
+        url: '/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1512,7 +1512,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/execute',
+        url: '/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1561,7 +1561,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/execute',
+        url: '/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1583,7 +1583,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/actions/action-1/preview',
+        url: '/action-1/preview',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1595,7 +1595,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions/nonexistent/preview',
+        url: '/nonexistent/preview',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1623,7 +1623,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions/action-1/preview',
+        url: '/action-1/preview',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1653,7 +1653,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions/action-1/preview',
+        url: '/action-1/preview',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1688,7 +1688,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/actions/action-1/preview',
+        url: '/action-1/preview',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1708,7 +1708,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/resolve-duplicate',
+        url: '/action-1/resolve-duplicate',
         payload: { action: 'skip' },
       });
 
@@ -1721,7 +1721,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/resolve-duplicate',
+        url: '/action-1/resolve-duplicate',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1750,7 +1750,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/resolve-duplicate',
+        url: '/action-1/resolve-duplicate',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1788,7 +1788,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/resolve-duplicate',
+        url: '/action-1/resolve-duplicate',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1829,7 +1829,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/resolve-duplicate',
+        url: '/action-1/resolve-duplicate',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1858,7 +1858,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/resolve-duplicate',
+        url: '/action-1/resolve-duplicate',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1901,7 +1901,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/actions/action-1/resolve-duplicate',
+        url: '/action-1/resolve-duplicate',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },

@@ -19,6 +19,7 @@ import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/task
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import type { SortOption } from '../../domain/issueGrouping/types.js';
+import { getLinearIssueSortFields } from '../../infra/firestore/taskGroupSummary/serializer.js';
 
 const ACTIVE_STATUSES = new Set(['queued', 'dispatched', 'running']);
 
@@ -106,11 +107,13 @@ function computeSummaryFromTasks(
   });
 
   const linearIssueId = tasks.find((t) => t.linearIssueId !== undefined)?.linearIssueId ?? null;
+  const sortFields = getLinearIssueSortFields(linearIssueId);
 
   return {
     userId,
     linearIssueId,
     groupKey,
+    ...sortFields,
     taskCount: tasks.length,
     activeTaskCount: tasks.filter((t) => ACTIVE_STATUSES.has(t.status)).length,
     latestTaskStatus: latestTask.status,
@@ -181,7 +184,11 @@ function sortSummaries(summaries: TaskGroupSummary[], sortBy: SortOption): TaskG
       sorted.sort((a, b) => (b.prNumber ?? 0) - (a.prNumber ?? 0));
       break;
     case 'linear-id':
-      sorted.sort((a, b) => (a.linearIssueId ?? '').localeCompare(b.linearIssueId ?? ''));
+      sorted.sort((a, b) => {
+        const keyDiff = (b.linearIssueSortKey ?? 0) - (a.linearIssueSortKey ?? 0);
+        if (keyDiff !== 0) return keyDiff;
+        return b.latestTaskUpdatedAt.toMillis() - a.latestTaskUpdatedAt.toMillis();
+      });
       break;
   }
   return sorted;
@@ -294,10 +301,14 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
       return ok({ summaries: page, ...(nextCursor !== undefined && { nextCursor }) });
     },
 
-    async recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<void> {
+    async recomputeGroupFromTasks(
+      userId: string,
+      groupKey: string,
+      tasks: CodeTask[],
+    ): Promise<Result<void, GroupSummaryError>> {
       if (tasks.length === 0) {
         removeSummary(userId, groupKey);
-        return;
+        return ok(undefined);
       }
       const current = summaries.get(summaryKey(userId, groupKey));
       const next = computeSummaryFromTasks(userId, groupKey, tasks);
@@ -314,6 +325,7 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
         next.aggregateStatus = deriveAggregateStatusFromSummary(next);
       }
       upsertSummary(next);
+      return ok(undefined);
     },
 
     async recomputeWithLabels(

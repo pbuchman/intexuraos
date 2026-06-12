@@ -55,28 +55,27 @@ const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 import { buildServer } from '../../server.js';
 import { resetServices, setServices, getServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import type { Firestore } from '@google-cloud/firestore';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { Timestamp, type Firestore } from '@google-cloud/firestore';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { createGitHubPRHttpClient } from '../../infra/http/gitHubPRHttpClient.js';
 
 // Import mocked functions
@@ -209,11 +208,7 @@ describe('codeRoutes branch coverage', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       workerSettingsRepo,
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
@@ -232,9 +227,16 @@ describe('codeRoutes branch coverage', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },
+        async claimForProcessing() { return ok(true); },
         async create() { return ok({} as never); },
         async delete() { return ok(undefined); },
         async update() { return ok(undefined); },
+      },
+      codeTaskSystemStatusRepo: {
+        upsertActive: vi.fn().mockResolvedValue(ok({} as never)),
+        listActiveForUser: vi.fn().mockResolvedValue(ok([])),
+        resolveActive: vi.fn().mockResolvedValue(ok(0)),
+        markNotified: vi.fn().mockResolvedValue(ok(undefined)),
       },
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
@@ -347,11 +349,53 @@ describe('codeRoutes branch coverage', () => {
         implementationTaskId: 'impl-task-1',
         fanOutChildTaskIds: ['child-task-1', 'child-task-2'],
         error: { code: 'WORKER_ERROR', message: 'Worker crashed' },
-      });
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'dispatch_failed',
+          terminal: true,
+          severity: 'critical',
+          message: 'Worker rejected the dispatch request.',
+          remediation: 'Fix worker dispatch handling, then retry.',
+          workerNames: ['home-dev'],
+          firstSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:00:00.000Z')),
+          lastSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:01:00.000Z')),
+          lastAttemptAt: Timestamp.fromDate(new Date('2026-06-05T12:02:00.000Z')),
+          attemptCount: 3,
+          expiresAt: Timestamp.fromDate(new Date('2026-06-05T12:03:00.000Z')),
+          terminalCause: {
+            reason: 'worker_health_contract_mismatch',
+            message: 'Worker health response is missing capability fields.',
+            remediation: 'Deploy the compatible worker health endpoint.',
+            workerNames: ['home-dev'],
+            lastSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:04:00.000Z')),
+          },
+          workerHealthDetails: [{
+            workerName: 'home-dev',
+            tag: 'unknown',
+            healthy: false,
+            contractMismatch: true,
+            missingFields: ['workerAuths'],
+            error: 'Health response missing worker capability details',
+          }],
+          nextAction: 'retry_after_fix',
+        },
+        callbackState: {
+          webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+          callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+          owner: 'prod',
+          configuredAt: new Date('2026-06-05T12:06:00.000Z'),
+          lastFailure: {
+            endpoint: 'logs',
+            status: 401,
+            message: 'Internal authentication failed',
+            occurredAt: new Date('2026-06-05T12:07:00.000Z'),
+          },
+        },
+      } as Parameters<typeof repo.update>[1]);
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -367,6 +411,37 @@ describe('codeRoutes branch coverage', () => {
       expect(task.followUpReason).toBe('retry');
       expect(task.error).toBeDefined();
       expect(task.error.code).toBe('WORKER_ERROR');
+      expect(task.dispatchStatus).toEqual(expect.objectContaining({
+        state: 'terminal',
+        reason: 'dispatch_failed',
+        terminal: true,
+        firstSeenAt: '2026-06-05T12:00:00.000Z',
+        lastSeenAt: '2026-06-05T12:01:00.000Z',
+        lastAttemptAt: '2026-06-05T12:02:00.000Z',
+        attemptCount: 3,
+        expiresAt: '2026-06-05T12:03:00.000Z',
+        terminalCause: expect.objectContaining({
+          reason: 'worker_health_contract_mismatch',
+          lastSeenAt: '2026-06-05T12:04:00.000Z',
+        }),
+        workerHealthDetails: [expect.objectContaining({
+          workerName: 'home-dev',
+          contractMismatch: true,
+          missingFields: ['workerAuths'],
+        })],
+      }));
+      expect(task.callbackState).toEqual(expect.objectContaining({
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        callbackBaseUrl: 'https://intexuraos.cloud/api/code',
+        owner: 'prod',
+        configuredAt: '2026-06-05T12:06:00.000Z',
+        lastFailure: expect.objectContaining({
+          endpoint: 'logs',
+          status: 401,
+          message: 'Internal authentication failed',
+          occurredAt: '2026-06-05T12:07:00.000Z',
+        }),
+      }));
       expect(task.linearIssueId).toBe('INT-100');
       expect(task.prNumber).toBe(42);
       expect(task.agentType).toBe('planning');
@@ -396,7 +471,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -440,7 +515,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/task-with-dispatched-at',
+        url: '/tasks/task-with-dispatched-at',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -469,6 +544,18 @@ describe('codeRoutes branch coverage', () => {
           status: 'running',
           dedupKey: 'dedup',
           callbackReceived: false,
+          dispatchStatus: {
+            state: 'waiting',
+            reason: 'worker_unavailable',
+            terminal: false,
+            severity: 'warning',
+            message: 'Worker unavailable.',
+            remediation: 'Wait for worker recovery.',
+            workerNames: [],
+            firstSeenAt: { seconds: 789 } as never,
+            lastSeenAt: { seconds: 790 } as never,
+            nextAction: 'will_retry_automatically',
+          },
           // Pass objects without toDate() to trigger timestampToIso returning undefined
           createdAt: { seconds: 123 } as never,
           updatedAt: { seconds: 456 } as never,
@@ -479,7 +566,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/task-with-bad-timestamp',
+        url: '/tasks/task-with-bad-timestamp',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -488,6 +575,8 @@ describe('codeRoutes branch coverage', () => {
       // Both should fall back to '' since timestampToIso returns undefined
       expect(body.data.createdAt).toBe('');
       expect(body.data.updatedAt).toBe('');
+      expect(body.data.dispatchStatus.firstSeenAt).toBe('');
+      expect(body.data.dispatchStatus.lastSeenAt).toBe('');
     });
   });
 
@@ -829,7 +918,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -858,7 +947,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Fix the bug',
@@ -885,7 +974,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Fix the bug',
@@ -912,7 +1001,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
@@ -935,7 +1024,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug', linearIssueId: 'INT-999' },
       });
@@ -953,7 +1042,7 @@ describe('codeRoutes branch coverage', () => {
     it('returns 404 when delete returns NOT_FOUND', async () => {
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/tasks/nonexistent-task-id',
+        url: '/tasks/nonexistent-task-id',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -970,7 +1059,7 @@ describe('codeRoutes branch coverage', () => {
     it('returns 404 when task not found for archiving', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/nonexistent-task/archive',
+        url: '/tasks/nonexistent-task/archive',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1019,7 +1108,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/archive`,
+        url: `/tasks/${created.value.id}/archive`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1067,7 +1156,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: created.value.id },
       });
@@ -1320,7 +1409,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         payload: { taskId: 'task-123' },
       });
 
@@ -1335,7 +1424,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: 'task-123' },
       });
@@ -1354,7 +1443,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: 'task-123' },
       });
@@ -1373,7 +1462,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: 'task-123' },
       });
@@ -1391,7 +1480,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: 'task-123' },
       });
@@ -1411,7 +1500,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/feedback',
+        url: '/tasks/task-123/feedback',
         payload: { feedback: 'Fix the indentation' },
       });
 
@@ -1426,7 +1515,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/feedback',
+        url: '/tasks/task-123/feedback',
         headers: { authorization: 'Bearer test-token' },
         payload: { feedback: 'Fix the indentation' },
       });
@@ -1444,7 +1533,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/feedback',
+        url: '/tasks/task-123/feedback',
         headers: { authorization: 'Bearer test-token' },
         payload: { feedback: 'Fix the indentation' },
       });
@@ -1462,7 +1551,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/feedback',
+        url: '/tasks/task-123/feedback',
         headers: { authorization: 'Bearer test-token' },
         payload: { feedback: 'Fix the indentation' },
       });
@@ -1480,7 +1569,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/feedback',
+        url: '/tasks/task-123/feedback',
         headers: { authorization: 'Bearer test-token' },
         payload: { feedback: 'Fix the indentation' },
       });
@@ -1503,7 +1592,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1521,7 +1610,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1539,7 +1628,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1557,7 +1646,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1575,7 +1664,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1592,7 +1681,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1611,7 +1700,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1629,7 +1718,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1647,7 +1736,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1665,7 +1754,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -1688,7 +1777,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: { authorization: 'Bearer test-token' },
         payload: { message: 'Hello' },
       });
@@ -1706,7 +1795,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: { authorization: 'Bearer test-token' },
         payload: { message: 'Hello' },
       });
@@ -1723,7 +1812,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: { authorization: 'Bearer test-token' },
         payload: { message: 'Hello' },
       });
@@ -1740,7 +1829,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: { authorization: 'Bearer test-token' },
         payload: { message: 'Hello' },
       });
@@ -1757,7 +1846,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: { authorization: 'Bearer test-token' },
         payload: { message: 'Hello' },
       });
@@ -1775,7 +1864,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: { authorization: 'Bearer test-token' },
         payload: { message: 'Hello' },
       });
@@ -1802,7 +1891,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
@@ -1817,7 +1906,7 @@ describe('codeRoutes branch coverage', () => {
   // POST /code/submit - settings null triggers ?? [] fallback (line 1292)
   // ============================================================
   describe('POST /code/submit no worker settings', () => {
-    it('returns WORKER_NOT_CONFIGURED when user has no worker settings', async () => {
+    it('returns a failed task id when user has no worker settings', async () => {
       // Override workerSettingsRepo to return null (no settings)
       const mockWorkerSettingsRepo = {
         ...getServices().workerSettingsRepo,
@@ -1828,16 +1917,16 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
 
-      // With null settings, enabledWorkers = settings?.workers.filter() ?? [] = []
-      // Then enabledWorkers.length === 0 triggers WORKER_NOT_CONFIGURED (HTTP 424)
-      expect(response.statusCode).toBe(424);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
     });
   });
 
@@ -1876,7 +1965,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1895,7 +1984,7 @@ describe('codeRoutes branch coverage', () => {
     it('uses default limit of 20 when no limit provided', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1908,7 +1997,7 @@ describe('codeRoutes branch coverage', () => {
     it('uses provided limit when specified', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?limit=5',
+        url: '/tasks?limit=5',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1936,7 +2025,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'DELETE',
-        url: '/code/tasks/some-task-id',
+        url: '/tasks/some-task-id',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -1963,7 +2052,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/some-task-id/archive',
+        url: '/tasks/some-task-id/archive',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2015,7 +2104,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: created.value.id },
       });
@@ -2042,7 +2131,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: 'task-123' },
       });
@@ -2067,7 +2156,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/retry',
+        url: '/retry',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: 'original-task' },
       });
@@ -2093,7 +2182,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/original-task-123/feedback',
+        url: '/tasks/original-task-123/feedback',
         headers: { authorization: 'Bearer test-token' },
         payload: { feedback: 'Please fix the indentation' },
       });
@@ -2117,7 +2206,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/feedback',
+        url: '/tasks/task-123/feedback',
         headers: { authorization: 'Bearer test-token' },
         payload: { feedback: 'Fix this' },
       });
@@ -2137,7 +2226,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/messages',
+        url: '/tasks/task-123/messages',
         headers: { authorization: 'Bearer test-token' },
         payload: { message: 'Please continue' },
       });
@@ -2162,7 +2251,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/tasks/task-123/implement',
+        url: '/tasks/task-123/implement',
         headers: { authorization: 'Bearer test-token' },
         payload: {},
       });
@@ -2181,7 +2270,7 @@ describe('codeRoutes branch coverage', () => {
     it('returns 404 when task not found', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/nonexistent-task-id',
+        url: '/tasks/nonexistent-task-id',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2203,7 +2292,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/some-task-id',
+        url: '/tasks/some-task-id',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2220,7 +2309,7 @@ describe('codeRoutes branch coverage', () => {
     it('filters by status parameter', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?status=running,failed',
+        url: '/tasks?status=running,failed',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2232,7 +2321,7 @@ describe('codeRoutes branch coverage', () => {
     it('uses cursor parameter for pagination', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?cursor=some-cursor-value',
+        url: '/tasks?cursor=some-cursor-value',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2259,7 +2348,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2314,7 +2403,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2365,7 +2454,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks',
+        url: '/tasks',
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2423,7 +2512,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}`,
+        url: `/tasks/${created.value.id}`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2460,7 +2549,7 @@ describe('codeRoutes branch coverage', () => {
       // Task is in 'dispatched' status (initial), which is not terminal
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/archive`,
+        url: `/tasks/${created.value.id}/archive`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2513,7 +2602,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: { authorization: 'Bearer test-token' },
         payload: { taskId: created.value.id },
       });
@@ -2552,7 +2641,7 @@ describe('codeRoutes branch coverage', () => {
   // POST /code/submit - enqueue queue_full error (line 1317)
   // ============================================================
   describe('POST /code/submit queue_full error', () => {
-    it('returns QUEUE_FULL when enqueue service returns queue_full', async () => {
+    it('returns a failed task id when enqueue service returns queue_full', async () => {
       setServices({
         ...getServices(),
         taskEnqueueService: {
@@ -2565,13 +2654,16 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
 
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toBeDefined();
     });
   });
 
@@ -2582,7 +2674,7 @@ describe('codeRoutes branch coverage', () => {
     it('submits task with linearIssueId and marks in progress', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Fix the bug in INT-100',
@@ -2619,7 +2711,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: {
           prompt: 'Fix the thing with code-task label',
@@ -2652,7 +2744,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: '/code/submit',
+        url: '/submit',
         headers: { authorization: 'Bearer test-token' },
         payload: { prompt: 'Fix the bug' },
       });
@@ -2692,7 +2784,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'POST',
-        url: `/code/tasks/${created.value.id}/archive`,
+        url: `/tasks/${created.value.id}/archive`,
         headers: { authorization: 'Bearer test-token' },
       });
 
@@ -2720,7 +2812,7 @@ describe('codeRoutes branch coverage', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/queue',
+        url: '/queue',
         headers: { authorization: 'Bearer test-token' },
       });
 

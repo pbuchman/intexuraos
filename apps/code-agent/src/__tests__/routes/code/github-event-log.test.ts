@@ -22,9 +22,9 @@ import { err, ok } from '@intexuraos/common-core';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
-import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
@@ -33,14 +33,13 @@ import { createLinearIssueService } from '../../../domain/services/linearIssueSe
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
+import { createFirestoreTurnMetricsRepository } from '../../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { createFirestoreGitHubWebhookAuditEventRepository } from '../../../infra/firestore/gitHubWebhookAuditEventRepository.js';
 import { createFirestoreGitHubEventLogEntryRepository } from '../../../infra/firestore/gitHubEventLogEntryRepository.js';
 import { createFirestoreEventDecisionRepository } from '../../../infra/firestore/eventDecisionRepository.js';
@@ -155,8 +154,7 @@ describe('GitHub event log routes', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -210,7 +208,6 @@ describe('GitHub event log routes', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
@@ -232,7 +229,7 @@ describe('GitHub event log routes', () => {
       taskEnqueueService: import('../../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     };
 
     setServices(baseServices);
@@ -311,7 +308,7 @@ describe('GitHub event log routes', () => {
   it('returns hydrated event log rows from audit events and decisions', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log',
+      url: '/github-event-log',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -339,7 +336,7 @@ describe('GitHub event log routes', () => {
   it('hydrates specific rows by ids', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/code/github-event-log/rows',
+      url: '/github-event-log/rows',
       headers: {
         authorization: 'Bearer fake-token',
         'content-type': 'application/json',
@@ -390,7 +387,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/github-event-log/rows',
+      url: '/github-event-log/rows',
       headers: {
         authorization: 'Bearer fake-token',
         'content-type': 'application/json',
@@ -439,7 +436,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log',
+      url: '/github-event-log',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -449,7 +446,7 @@ describe('GitHub event log routes', () => {
   it('returns 400 for an invalid cursor', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log?cursor=not-a-date',
+      url: '/github-event-log?cursor=not-a-date',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -478,7 +475,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log?limit=1&cursor=2026-03-12T11:30:00.000Z',
+      url: '/github-event-log?limit=1&cursor=2026-03-12T11:30:00.000Z',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -492,7 +489,7 @@ describe('GitHub event log routes', () => {
   it('uses default limit of 100 when limit query param is omitted (L250)', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log',
+      url: '/github-event-log',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -517,7 +514,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log',
+      url: '/github-event-log',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -538,7 +535,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log',
+      url: '/github-event-log',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -559,7 +556,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log',
+      url: '/github-event-log',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -574,7 +571,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/github-event-log/rows',
+      url: '/github-event-log/rows',
       headers: {
         authorization: 'Bearer fake-token',
         'content-type': 'application/json',
@@ -599,7 +596,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/code/github-event-log/rows',
+      url: '/github-event-log/rows',
       headers: {
         authorization: 'Bearer fake-token',
         'content-type': 'application/json',
@@ -648,7 +645,7 @@ describe('GitHub event log routes', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/code/github-event-log',
+      url: '/github-event-log',
       headers: { authorization: 'Bearer fake-token' },
     });
 
@@ -667,7 +664,7 @@ describe('GitHub event log routes', () => {
     it('returns 200 with payload for valid audit event ID', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: `/code/github-event-log/${seededAuditEventId}/payload`,
+        url: `/github-event-log/${seededAuditEventId}/payload`,
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -680,7 +677,7 @@ describe('GitHub event log routes', () => {
     it('returns 404 when audit event does not exist', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/github-event-log/non-existent-id/payload',
+        url: '/github-event-log/non-existent-id/payload',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -693,7 +690,7 @@ describe('GitHub event log routes', () => {
     it('returns 401 when no auth token provided', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/github-event-log/delivery-1/payload',
+        url: '/github-event-log/delivery-1/payload',
       });
 
       expect(response.statusCode).toBe(401);
@@ -729,7 +726,7 @@ describe('GitHub event log routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/github-event-log/${saveResult.value.id}/payload`,
+        url: `/github-event-log/${saveResult.value.id}/payload`,
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -753,7 +750,7 @@ describe('GitHub event log routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/github-event-log/delivery-1/payload',
+        url: '/github-event-log/delivery-1/payload',
         headers: { authorization: 'Bearer fake-token' },
       });
 
@@ -771,7 +768,7 @@ describe('GitHub event log routes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/github-event-log/delivery-1/payload',
+        url: '/github-event-log/delivery-1/payload',
         headers: { authorization: 'Bearer fake-token' },
       });
 

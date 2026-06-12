@@ -9,6 +9,7 @@ export interface Config {
   gcpProjectId: string;
   userServiceUrl: string;
   internalAuthToken: string;
+  serviceUrl: string;
 }
 
 /** Configuration for the issue pruning system */
@@ -22,11 +23,13 @@ export function loadConfig(): Config {
   const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? '';
 
   return {
     port,
     gcpProjectId,
     userServiceUrl,
     internalAuthToken,
+    serviceUrl,
   };
 }

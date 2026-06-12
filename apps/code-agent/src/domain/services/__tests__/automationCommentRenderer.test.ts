@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { AutomationEvent } from '../../ports/automationLog.js';
 import {
   renderHeader,
@@ -14,8 +14,20 @@ function useFakeTime(): void {
   vi.setSystemTime(new Date('2026-03-14T14:35:00Z'));
 }
 
+let originalWebAppUrl: string | undefined;
+
+beforeEach(() => {
+  originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+  delete process.env['INTEXURAOS_WEB_APP_URL'];
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  if (originalWebAppUrl === undefined) {
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
+  } else {
+    process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+  }
 });
 
 describe('renderHeader', () => {
@@ -134,7 +146,7 @@ describe('renderEvent', () => {
       expect(result).toBeNull();
     });
 
-    it('renders cost, reasoning, and tool calls for llm_triage skip', () => {
+    it('renders reasoning and tool calls for llm_triage skip without cost', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'skipped',
@@ -148,7 +160,7 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Skipped** | NO_ACTION_NEEDED');
       expect(result).toContain('<details>');
-      expect(result).toContain('Triage cost: $0.042');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('This is a documentation-only change.');
       expect(result).toContain('- `readFile(README.md)`');
       expect(result).toContain('- `getDiff()`');
@@ -179,7 +191,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Triage cost: $0.010');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('Trivial change.');
       // No tool calls section when array is empty
       expect(result).not.toContain('Tool calls');
@@ -204,7 +216,7 @@ describe('renderEvent', () => {
       expect(result).not.toContain('->');
       expect(result).not.toContain('**Dispatching review**');
       expect(result).toContain('<details>');
-      expect(result).toContain('Triage cost: $0.123');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('Complex PR needs thorough review.');
       expect(result).toContain('- `readFile(src/index.ts)`');
       expect(result).toContain('- `getDiff()`');
@@ -229,7 +241,7 @@ describe('renderEvent', () => {
   });
 
   describe('triage_failed', () => {
-    it('renders fallback action and error in details', () => {
+    it('renders fallback action and neutral details label', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_failed',
@@ -240,6 +252,8 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Triage failed** | dispatch');
       expect(result).toContain('<details>');
+      expect(result).toContain('<summary>Details</summary>');
+      expect(result).not.toContain('<summary>Error</summary>');
       expect(result).toContain('LLM timeout after 30s');
     });
   });
@@ -256,39 +270,55 @@ describe('renderEvent', () => {
 
       const result = renderEvent(event);
       expect(result).toBe(
-        '**14:35 UTC** -- Implementation dispatched | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
+        '**14:35 UTC** -- Implementation queued | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
+      );
+    });
+
+    it('uses INTEXURAOS_WEB_APP_URL for the task link when configured', () => {
+      useFakeTime();
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+      const event: AutomationEvent = {
+        type: 'task_dispatched',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        agentType: 'execution',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35 UTC** -- Implementation queued | opus | [View task](https://dev.intexuraos.cloud/#/code-tasks/task_abc123)'
       );
     });
 
     it('renders review agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'review' });
-      expect(result).toContain('Review dispatched |');
-      expect(result).not.toContain('Review dispatched:');
+      expect(result).toContain('Review queued |');
+      expect(result).not.toContain('Review queued:');
       expect(result).toContain('[View task]');
     });
 
     it('renders remediation agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'remediation' });
-      expect(result).toContain('Remediation dispatched |');
-      expect(result).not.toContain('Remediation dispatched:');
+      expect(result).toContain('Remediation queued |');
+      expect(result).not.toContain('Remediation queued:');
       expect(result).toContain('[View task]');
     });
 
     it('renders plan agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'planning' });
-      expect(result).toContain('Plan dispatched |');
-      expect(result).not.toContain('Plan dispatched:');
+      expect(result).toContain('Plan queued |');
+      expect(result).not.toContain('Plan queued:');
       expect(result).toContain('[View task]');
     });
 
     it('renders PR agent type label without raw UUID', () => {
       useFakeTime();
       const result = renderEvent({ type: 'task_dispatched', taskId: 'task_1', workerType: 'glm', agentType: 'pull_request' });
-      expect(result).toContain('PR dispatched |');
-      expect(result).not.toContain('PR dispatched:');
+      expect(result).toContain('PR queued |');
+      expect(result).not.toContain('PR queued:');
       expect(result).toContain('[View task]');
     });
   });
@@ -360,8 +390,47 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('<details>');
+      expect(result).toContain('<summary>Details</summary>');
       expect(result).toContain('Rate limit exceeded');
       expect(result).toContain('RATE_LIMIT');
+    });
+
+    it('renders structured dispatch failure with task link, remediation, workers, and log lines', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_dispatch_failed',
+        taskId: 'task_abc123',
+        workerType: 'codex-xhigh',
+        agentType: 'review',
+        reason: 'worker_health_contract_mismatch',
+        message: 'Configured workers responded with an incompatible health contract.',
+        remediation: 'Restart the worker orchestrator.',
+        workerNames: ['home-dev'],
+        terminal: true,
+        logLines: ['Health response missing providerApiKeys'],
+      };
+
+      const result = renderEvent(event);
+
+      expect(result).toContain('**14:35 UTC** -- **Dispatch failed** | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123) | codex-xhigh | worker_health_contract_mismatch');
+      expect(result).toContain('Configured workers responded with an incompatible health contract.');
+      expect(result).toContain('Remediation: Restart the worker orchestrator.');
+      expect(result).toContain('Workers: home-dev');
+      expect(result).toContain('- Health response missing providerApiKeys');
+    });
+
+    it('renders a hidden idempotency marker when provided', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_dispatch_failed',
+        taskId: 'task_abc123',
+        reason: 'worker_health_contract_mismatch',
+        idempotencyKey: 'task_abc123:terminal:worker_health_contract_mismatch',
+      };
+
+      const result = renderEvent(event);
+
+      expect(result).toContain('<!-- intexuraos:task_dispatch_failed:task_abc123:terminal:worker_health_contract_mismatch -->');
     });
 
     it('renders without errorCode when missing', () => {
@@ -375,6 +444,34 @@ describe('renderEvent', () => {
       expect(result).toContain('**14:35 UTC** -- **Dispatch failed**');
       expect(result).toContain('Unknown error');
       expect(result).not.toContain('Code:');
+    });
+
+    it('renders a compact dispatch failure when no details are present', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_dispatch_failed',
+        reason: 'workers_unreachable',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe('**14:35 UTC** -- **Dispatch failed** | workers_unreachable');
+    });
+  });
+
+  describe('task_failed', () => {
+    it('renders agent-specific runtime failure label', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'task_failed',
+        taskId: 'task_abc123',
+        agentType: 'review',
+        error: 'Worker failed after start',
+      };
+
+      const result = renderEvent(event);
+
+      expect(result).toContain('**14:35 UTC** -- **Review failed**');
+      expect(result).toContain('Worker failed after start');
     });
   });
 
@@ -802,13 +899,13 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Skipped** | LOW_PRIORITY');
       expect(result).toContain('Rule: PriorityRule');
-      expect(result).toContain('Triage cost: $0.033');
+      expect(result).not.toContain('Triage cost');
       expect(result).toContain('This is a minor formatting change.');
       expect(result).toContain('- `getDiff()`');
       expect(result).toContain('- `readFile(package.json)`');
     });
 
-    it('formats cost with 3 decimal places', () => {
+    it('omits cost from triage dispatch details', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_dispatch',
@@ -819,7 +916,8 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('Triage cost: $1.000');
+      expect(result).not.toContain('Triage cost');
+      expect(result).toContain('Expensive.');
     });
   });
 

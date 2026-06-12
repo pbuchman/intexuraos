@@ -1,4 +1,4 @@
-import { getErrorMessage } from '@intexuraos/common-core';
+import { createCommandsAgentServiceClient } from '@intexuraos/internal-clients';
 import type {
   CommandsAgentClient,
   CommandWithText,
@@ -19,68 +19,18 @@ export interface CommandsAgentHttpClientConfig {
   logger: HttpLogger;
 }
 
-interface GetCommandResponse {
-  success: boolean;
-  data?: {
-    command: {
-      id: string;
-      text: string;
-      sourceType: string;
-    };
-  };
-}
-
 export function createCommandsAgentHttpClient(
   config: CommandsAgentHttpClientConfig
 ): CommandsAgentClient {
-  const logger = config.logger;
+  const client = createCommandsAgentServiceClient(config);
 
   return {
     async getCommand(commandId: string): Promise<CommandWithText | null> {
-      const url = `${config.baseUrl}/internal/commands/${commandId}`;
-
-      logger.info({ commandId, url }, 'Fetching command from commands-agent');
-
-      let response: Response;
-      try {
-        response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
-      } catch (error) {
-        logger.error({ commandId, error: getErrorMessage(error) }, 'Failed to fetch command');
-        throw error;
+      const result = await client.getCommand(commandId);
+      if (!result.ok) {
+        throw new Error(result.error.message);
       }
-
-      if (response.status === 404) {
-        logger.info({ commandId }, 'Command not found');
-        return null;
-      }
-
-      if (!response.ok) {
-        logger.error(
-          { commandId, httpStatus: response.status, statusText: response.statusText },
-          'Failed to fetch command - HTTP error'
-        );
-        throw new Error(`HTTP ${String(response.status)}: Failed to fetch command`);
-      }
-
-      const body = (await response.json()) as GetCommandResponse;
-      if (!body.success || body.data === undefined) {
-        logger.error({ commandId, body }, 'Invalid response from commands-agent');
-        throw new Error('Invalid response from commands-agent');
-      }
-
-      logger.info({ commandId }, 'Successfully fetched command');
-
-      return {
-        id: body.data.command.id,
-        text: body.data.command.text,
-        sourceType: body.data.command.sourceType,
-      };
+      return result.value;
     },
   };
 }

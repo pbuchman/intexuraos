@@ -9,6 +9,7 @@ export interface CorrelationOverrides {
   taskId?: string | null;
   sessionId?: string | null;
   requestId?: string | null;
+  researchId?: string | null;
 }
 
 /**
@@ -58,7 +59,7 @@ export function buildUsageEvent(
       model: params.model,
       operation: params.callType,
       success: params.success,
-      durationMs: 0, // Not tracked at the UsageLogParams level; NormalizedUsage carries token counts only
+      durationMs: params.durationMs,
       ...(params.promptType !== undefined && { promptType: params.promptType }),
     },
     usage: {
@@ -72,7 +73,8 @@ export function buildUsageEvent(
       thinkingTokens: params.usage.thinkingTokens ?? 0,
       webSearchCalls: params.usage.webSearchCalls ?? 0,
       groundingEnabled: params.usage.groundingEnabled ?? false,
-      imageCount: 0,
+      imageCount: params.usage.imageCount ?? 0,
+      ...(params.usage.imageSize !== undefined && { imageSize: params.usage.imageSize }),
     },
     cost: {
       providerReportedUsd,
@@ -82,7 +84,7 @@ export function buildUsageEvent(
       requestId: correlationOverrides?.requestId ?? null,
       traceId: null,
       taskId: correlationOverrides?.taskId ?? null,
-      researchId: null,
+      researchId: correlationOverrides?.researchId ?? null,
       attempt: null,
       sessionId: correlationOverrides?.sessionId ?? null,
     },

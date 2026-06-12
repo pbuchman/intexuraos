@@ -15,7 +15,7 @@ interface MessageParams {
 export const messageMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /whatsapp/messages/:message_id/media — get signed URL for original media
   fastify.get<{ Params: MessageParams }>(
-    '/whatsapp/messages/:message_id/media',
+    '/messages/:message_id/media',
     {
       schema: {
         operationId: 'getWhatsAppMessageMedia',
@@ -135,7 +135,7 @@ export const messageMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
   // GET /whatsapp/messages/:message_id/thumbnail — get signed URL for thumbnail
   fastify.get<{ Params: MessageParams }>(
-    '/whatsapp/messages/:message_id/thumbnail',
+    '/messages/:message_id/thumbnail',
     {
       schema: {
         operationId: 'getWhatsAppMessageThumbnail',
@@ -256,7 +256,7 @@ export const messageMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
   // DELETE /whatsapp/messages/:message_id — delete a message
   fastify.delete<{ Params: MessageParams }>(
-    '/whatsapp/messages/:message_id',
+    '/messages/:message_id',
     {
       schema: {
         operationId: 'deleteWhatsAppMessage',

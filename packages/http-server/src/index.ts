@@ -11,14 +11,39 @@
 export {
   type HealthStatus,
   type HealthCheck,
+  type HealthCheckResult,
   type HealthResponse,
+  type RegisterHealthCheckOptions,
   checkSecrets,
-  checkFirestore,
-  checkNotionSdk,
+  secretsHealthCheck,
   computeOverallStatus,
   buildHealthResponse,
   validateRequiredEnv,
+  registerHealthCheck,
 } from './health.js';
 
 // Validation error handler
 export { createValidationErrorHandler } from './validation-handler.js';
+
+// Shared Fastify bootstrap
+export {
+  createFastifyApp,
+  type CreateFastifyAppOptions,
+  type OpenApiServer,
+  type OpenApiTag,
+  type OpenApiInfo,
+} from './createFastifyApp.js';
+
+// Shared service lifecycle scaffold
+export { startFastifyService, type StartFastifyServiceOptions } from './startFastifyService.js';
+
+// IntexuraOSError-aware error handler (plan §8)
+export { createErrorHandler, type CreateErrorHandlerOptions } from './errorHandler.js';
+
+// Request-context Fastify integration (plan §3)
+export {
+  registerRequestContext,
+  buildRequestContext,
+  X_REQUEST_ID,
+  X_CORRELATION_ID,
+} from './requestContext.js';

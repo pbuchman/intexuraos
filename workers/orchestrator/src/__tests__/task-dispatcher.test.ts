@@ -23,6 +23,7 @@ import type { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
 import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
 import type { CompletionVerifierVerdict } from '../services/completion-verifier.js';
+import type { LegacyVerdict } from '../services/task-dispatcher.js';
 import type {
   AgentComplianceValidator,
   ComplianceValidationInput,
@@ -101,7 +102,9 @@ const createMockChildProcess = (): ChildProcess =>
   }) as unknown as ChildProcess;
 
 const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
-  JSON.stringify({
+  // INT-1455: [claude] prefix required so classifyAttempt treats the attempt
+  // as `ran` rather than `infra_failed` and the completion verifier runs.
+  `[claude] ${JSON.stringify({
     type: 'assistant',
     message: {
       content: [
@@ -114,16 +117,18 @@ const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
 - Planning issue: ${outcome === 'planned' ? 'https://linear.app/pbuchman/issue/INT-456' : ''}
 - Child issues: ${outcome === 'planned' ? '1' : '0'}
 - Plan doc:
-- Planning PR: 
+- Planning PR:
 - Clarification message: ${outcome === 'unclear' ? 'Need API contract details from user' : ''}
 - Summary: Planning completed`,
         },
       ],
     },
-  });
+  })}`;
 
 const executionFinalAssistantLog = (): string =>
-  JSON.stringify({
+  // INT-1455: [claude] prefix required so classifyAttempt treats the attempt
+  // as `ran` rather than `infra_failed` and the completion verifier runs.
+  `[claude] ${JSON.stringify({
     type: 'assistant',
     message: {
       content: [
@@ -137,7 +142,7 @@ const executionFinalAssistantLog = (): string =>
         },
       ],
     },
-  });
+  })}`;
 
 describe('TaskDispatcher', () => {
   // Mock config
@@ -191,6 +196,8 @@ describe('TaskDispatcher', () => {
     createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
     deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
     worktreeExists: vi.fn(async () => true),
+    isWorktreeRegistered: vi.fn(async () => true),
+    repairWorktree: vi.fn(async () => undefined),
   } as unknown as WorktreeManager;
 
   // Mock IsolationProvider
@@ -205,7 +212,11 @@ describe('TaskDispatcher', () => {
     ),
     destroyWorker: vi.fn(async () => undefined),
     isWorkerRunning: vi.fn(async () => false),
-    getWorkerLogs: vi.fn(async () => ''),
+    // INT-1455: default log fixture must include a [claude] line so the new
+    // classifyAttempt() gate treats the attempt as `ran` and falls through to
+    // the completion verifier. Tests that simulate infra failures (empty logs
+    // + non-zero exit) override this via mockResolvedValueOnce('').
+    getWorkerLogs: vi.fn(async () => '[claude] Session init: id=test-session\n'),
     streamLogs: vi.fn(async () => undefined),
     waitForCompletion: vi.fn(async () => 0),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
@@ -268,6 +279,7 @@ describe('TaskDispatcher', () => {
       MINIMAX_API_KEY: 'test-minimax-key',
       MIMO_API_KEY: 'test-mimo-key',
       DASHSCOPE_API_KEY: 'test-dashscope-key',
+      KIMI_API_KEY: 'test-kimi-key',
       OPENROUTER_API_KEY: 'test-openrouter-key',
     }),
     gcpSaKeyPath: '/tmp/gcp-sa.json',
@@ -313,7 +325,10 @@ describe('TaskDispatcher', () => {
     debug: vi.fn(),
   };
 
-  type VerifierMockResult = CompletionVerifierVerdict;
+  // [INT-1470] Accept the legacy fake-verifier verdict shape — bridged by
+  // adaptLegacyVerdictIfNeeded in the dispatcher — OR the new discriminated
+  // verdict. Every pre-existing test stub in this file uses the legacy shape.
+  type VerifierMockResult = CompletionVerifierVerdict | LegacyVerdict;
   const dummyTrace = { transcript: '', prompt: '', response: '' };
 
   // Activity timeout set to 6 hours so it never fires in tests that don't test it explicitly
@@ -328,6 +343,7 @@ describe('TaskDispatcher', () => {
         async (_input: unknown): Promise<VerifierMockResult> => ({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -378,6 +394,139 @@ describe('TaskDispatcher', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  describe('shutdown wiring (INT-1551 §E.7)', () => {
+    it('getInFlightPromises returns an empty array initially', () => {
+      expect(dispatcher.getInFlightPromises()).toEqual([]);
+    });
+
+    it('setShutdownSignal threads a signal into the dispatcher context', () => {
+      const controller = new AbortController();
+      // Method returns void; assertion is that the call does not throw and
+      // does not break subsequent dispatch — the signal flows into TaskRunner /
+      // TaskTimers behaviorally (covered by their own unit tests).
+      dispatcher.setShutdownSignal(controller.signal);
+      expect(dispatcher.getInFlightPromises()).toEqual([]);
+    });
+
+    it('getInFlightPromises tracks fire-and-forget submitTask handlers', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'inflight-1',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      // Capture the in-flight set DURING the async setup before it settles.
+      // submitTask returns immediately after registering trackInFlight.
+      const accept = await dispatcher.submitTask(request);
+      expect(accept.ok).toBe(true);
+      // The handler may already have settled by the time we check (FakeIsolation
+      // resolves synchronously). The contract we assert is: getInFlightPromises
+      // returns a snapshot array, not undefined, and is safe to await on.
+      const snapshot = dispatcher.getInFlightPromises();
+      expect(Array.isArray(snapshot)).toBe(true);
+      await Promise.allSettled(snapshot);
+      await flushAsync();
+    });
+
+    it('SIGTERM aborts an in-flight pullImage attempt instead of waiting for the 15-min timeout', async () => {
+      // INT-1551 §E.7: drive a real dispatcher through a SIGTERM-equivalent
+      // shutdown. We arrange a `pullImage` call that hangs forever, fire the
+      // top-level abort signal, and assert that:
+      //   1. The in-flight handler set drains within the post-abort window
+      //      (NOT the 15-min IMAGE_PULL_TIMEOUT_MS budget).
+      //   2. The drained handler ends in 'rejected' state because withTimeout
+      //      surfaced "aborted by shutdown signal".
+      //   3. No worker container survives (taskExitCode is empty / the slot
+      //      released — verified via getRunningCount() after drain).
+      const pullImageDeferred = createDeferred<string>();
+      const pullImageMock = vi.fn(
+        async (_taskId: string, _onProgress?: (msg: string) => void) => pullImageDeferred.promise
+      );
+      const stuckProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        pullImage: pullImageMock,
+      };
+      const stuckIsolationConfig: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: stuckProvider,
+      };
+
+      const stuckDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        stuckIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const controller = new AbortController();
+      stuckDispatcher.setShutdownSignal(controller.signal);
+
+      const request: CreateTaskRequest = {
+        taskId: 'sigterm-1',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      const accept = await stuckDispatcher.submitTask(request);
+      expect(accept.ok).toBe(true);
+      // Yield so the fire-and-forget handler reaches `pullImage` and parks.
+      await flushAsync();
+      expect(pullImageMock).toHaveBeenCalled();
+
+      const inFlight = stuckDispatcher.getInFlightPromises();
+      expect(inFlight.length).toBeGreaterThan(0);
+
+      // Trip the shutdown signal — withTimeout's abort arm short-circuits the
+      // pull/create races without waiting for the deferred pullImage to settle.
+      controller.abort();
+
+      // Drain via Promise.race against a small budget (NOT the 15-min image-pull
+      // timeout). If abort wiring is missing, this test deadlocks until the
+      // vitest-level test timeout fires — that itself is the failure signal.
+      const drainStart = Date.now();
+      let timeoutHandle: NodeJS.Timeout | undefined;
+      const timeoutP = new Promise<'timeout'>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+          resolve('timeout');
+        }, 5_000);
+      });
+      const winner = await Promise.race([
+        Promise.allSettled(inFlight).then(() => 'drained' as const),
+        timeoutP,
+      ]);
+      clearTimeout(timeoutHandle);
+      const elapsedMs = Date.now() - drainStart;
+
+      expect(winner).toBe('drained');
+      // Sanity: aborting must short-circuit well below the IMAGE_PULL_TIMEOUT_MS
+      // ceiling. We bound it generously to avoid flaking on slow CI.
+      expect(elapsedMs).toBeLessThan(5_000);
+
+      // After drain, the dispatcher should have released the running slot.
+      // If the abort never propagated, the slot would still be held and we
+      // would never get here without a vitest-timeout failure.
+      expect(stuckDispatcher.getRunningCount()).toBeLessThanOrEqual(1);
+
+      // Resolve the deferred so the underlying pullImage doesn't leak as an
+      // unhandled rejection in subsequent tests. The dispatcher already moved
+      // past the await, so the late resolution is a no-op for behavior.
+      pullImageDeferred.resolve('late-noop');
+      await flushAsync();
+    });
   });
 
   describe('submitTask', () => {
@@ -1734,6 +1883,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: ['gh_pr_url'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -1780,6 +1930,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -1833,6 +1984,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -1841,6 +1993,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
+          failure_reason: '',
           memory_ids_used: 'mem_142,mem_155',
           memory_ids_rejected: 'mem_188',
           memory_usage_summary: 'Used route logging and coverage lessons.',
@@ -1898,6 +2051,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -1906,6 +2060,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary:
@@ -1955,6 +2110,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -1991,13 +2147,16 @@ describe('TaskDispatcher', () => {
       const task = await agentDispatcher.getTask('claude-error-test');
       expect(task?.status).toBe('failed');
 
+      // INT-1457: Claude emitting is_error=true also sets exit code 1 via the
+      // log processor's attempt_failed event. Runtime hard-error branch now
+      // surfaces the runtime reason instead of generic verifier failure.
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'failed',
             error: expect.objectContaining({
-              code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: 'Completion verification failed',
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('StructuredOutput validation error'),
             }),
           }),
         })
@@ -2026,6 +2185,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2076,6 +2236,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2138,6 +2299,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2185,6 +2347,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2253,6 +2416,619 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('INT-1457: normal-path rate-limit runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR', async () => {
+      // Verifier rejects transcript as schema-invalid (outcome missing),
+      // but runtime already emitted a concrete rate-limit error. The dispatcher
+      // should surface the runtime reason, not the generic verification failure.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: ['outcome'],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      // Spy on checkForResult so the result-defined spread branch is covered.
+      const internalCheck = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internalCheck, 'checkForResult').mockResolvedValue({
+        branch: 'task/rate-limit-runtime',
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'rate-limit-runtime-test',
+        workerType: 'auto',
+        prompt: 'Test rate limit runtime failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Grab onLog callback and emit Claude rate-limit stream error.
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: rate limited"}\n');
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('rate-limit-runtime-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('Non-zero exit code: 1'),
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as { error?: { message?: string } } | undefined;
+      expect(failedPayload?.error?.message).toContain('rate limited');
+    });
+
+    it('INT-1576: verifier-hard-error + claudeError rate-limit → TASK_RUNTIME_HARD_ERROR preserves runtime phrase', async () => {
+      // When Claude exits before emitting an AGENT_FINAL block, the verifier
+      // returns hard-error with a generic "No FINAL block" message — but the
+      // runtime already captured the actual failure (e.g. rate-limit) into
+      // claudeErrors. That signal must reach error.message so downstream
+      // classifyFailure routes to 'retry_after_cooloff' instead of plain retry.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        kind: 'hard-error',
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'No EXECUTION_AGENT_FINAL: block in transcript',
+      });
+      const internalCheck = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internalCheck, 'checkForResult').mockResolvedValue(undefined);
+      const request: CreateTaskRequest = {
+        taskId: 'int-1576-verifier-hard-error-rate-limit',
+        workerType: 'auto',
+        prompt: 'Trigger verifier-hard-error path while claudeErrors holds the rate-limit phrase',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Feed the actual production rate-limit JSON shape so the runtime processor
+      // emits attempt_failed → claudeErrors.set(taskId, "You've hit your limit ...").
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+      onLog?.(
+        '{"type":"result","is_error":true,"result":"You\'ve hit your limit · resets 12am (UTC)"}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.message).toContain('hit your limit');
+      expect(failedPayload?.error?.message).toContain('No EXECUTION_AGENT_FINAL');
+      // Mirrors the regex in apps/code-agent/src/domain/utils/classifyFailure.ts:74.
+      // If this match breaks, classifyFailure would return 'retry' instead of
+      // 'retry_after_cooloff' and the cooloff scheduler would not engage.
+      expect(failedPayload?.error?.message).toMatch(
+        /429|rate limit|hit your limit|usage limit|limit · resets/i
+      );
+      const appendedLogs = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.map((call) => String(call[1]))
+        .join('\n');
+      expect(appendedLogs).toContain('Task failed: TASK_RUNTIME_HARD_ERROR');
+      expect(appendedLogs).toContain('hit your limit');
+      expect(appendedLogs).toContain('No EXECUTION_AGENT_FINAL');
+    });
+
+    it('INT-1457: normal-path generic runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'generic-runtime-test',
+        workerType: 'auto',
+        prompt: 'Test generic runtime error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.(
+        '{"type":"result","is_error":true,"result":"Task failed: something generic broke"}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('something generic broke'),
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('INT-1471: resolves classifyAttempt runtime to "claude" for a legacy task with workerType "auto" when task.runtime is absent', async () => {
+      // Guards the resolveTaskRuntime() fallback for workerType='auto' (which
+      // maps to runtime 'claude' via WORKER_TYPES). Legacy persisted tasks from
+      // before INT-1455 had no `runtime` field; the dispatcher must still
+      // classify them correctly by resolving the runtime from the worker type.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[claude] Session init: id=legacy-session\n' +
+          '{"type":"result","is_error":true,"result":"Task failed: legacy error"}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'legacy-runtime-undefined-test',
+        workerType: 'auto',
+        prompt: 'Test legacy task without runtime field',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate a legacy persisted task by stripping the runtime field. The
+      // next getTask() call (inside the completion monitor) will reload the
+      // task with task.runtime === undefined, exercising the nullish default.
+      const preState = await statePersistence.load();
+      const persistedTask = preState.tasks['legacy-runtime-undefined-test'];
+      if (!persistedTask) throw new Error('Task not found');
+      delete persistedTask.runtime;
+      await statePersistence.save(preState);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: legacy error"}\n');
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('legacy-runtime-undefined-test');
+      expect(task?.status).toBe('failed');
+
+      // Legacy task with Claude-like logs must be classified as `ran` under
+      // the default `claude` runtime and finalized via TASK_RUNTIME_HARD_ERROR,
+      // NOT WORKER_INFRA_FAILURE.
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string; taskId?: string } | undefined;
+        return p?.status === 'failed' && p.taskId === 'legacy-runtime-undefined-test';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+    });
+
+    it('INT-1471: resolves classifyAttempt runtime from workerType when task.runtime is absent (legacy codex state)', async () => {
+      // Companion to the Claude-legacy test above. A legacy persisted task with
+      // workerType='codex' but no task.runtime field must still resolve to the
+      // 'codex' runtime via resolveTaskRuntime(), so codex-only ran-signals are
+      // recognized and the attempt flows through TASK_RUNTIME_HARD_ERROR instead
+      // of being short-circuited to WORKER_INFRA_FAILURE.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[codex] Session started: thread=legacy-thread\n' +
+          '[codex] Turn started\n' +
+          "[error] You've hit your usage limit. Upgrade to Pro\n" +
+          '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'legacy-codex-runtime-undefined-test',
+        workerType: 'codex',
+        prompt: 'Legacy codex task without runtime field',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Strip runtime to simulate a legacy persisted task — classifier must
+      // still pick 'codex' via WORKER_TYPES[task.workerType].runtime.
+      const preState = await statePersistence.load();
+      const persistedTask = preState.tasks['legacy-codex-runtime-undefined-test'];
+      if (!persistedTask) throw new Error('Task not found');
+      delete persistedTask.runtime;
+      await statePersistence.save(preState);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('[codex] Session started: thread=legacy-thread\n');
+      onLog?.("[error] You've hit your usage limit. Upgrade to Pro\n");
+      onLog?.(
+        '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('legacy-codex-runtime-undefined-test');
+      expect(task?.status).toBe('failed');
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string; taskId?: string } | undefined;
+        return p?.status === 'failed' && p.taskId === 'legacy-codex-runtime-undefined-test';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.code).not.toBe('WORKER_INFRA_FAILURE');
+    });
+
+    it('INT-1471: Codex usage-limit runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR (not WORKER_INFRA_FAILURE)', async () => {
+      // Replicates the real INT-1471 incident: a codex attempt emits
+      // thread/turn markers and then turn.failed with the ChatGPT usage-limit
+      // message. The runtime-aware classifyAttempt must treat the attempt as
+      // `ran` (via hasCodexRanSignal), so the dispatcher falls through to the
+      // runtime-hard-error path instead of finalizing as WORKER_INFRA_FAILURE.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      // rawLogs fetched by the dispatcher must contain codex ran-signals so
+      // classifyAttempt({ runtime: 'codex', ... }) returns outcome: 'ran'.
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[codex] Session started: thread=019dc00d-fb13-7e30-b21d-a77982c54bab\n' +
+          '[codex] Turn started\n' +
+          "[error] You've hit your usage limit. Upgrade to Pro\n" +
+          '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'codex-usage-limit-test',
+        workerType: 'codex',
+        prompt: 'Test Codex usage-limit runtime failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Feed the codex stream-JSON logs via onLog so the codex-log-processor
+      // emits attempt_failed{ errorMessage: "You've hit your usage limit..." },
+      // which populates claudeErrors for the codex runtime. onComplete(1)
+      // triggers the fail-exit-override path with a non-zero exit code.
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+      onLog?.('[codex] Session started: thread=019dc00d\n');
+      onLog?.('[codex] Turn started\n');
+      onLog?.("[error] You've hit your usage limit. Upgrade to Pro\n");
+      onLog?.(
+        '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('codex-usage-limit-test');
+      expect(task?.status).toBe('failed');
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.code).not.toBe('WORKER_INFRA_FAILURE');
+      expect(failedPayload?.error?.message).toContain('hit your usage limit');
+    });
+
+    it('INT-1457: verifier passed + execution outcome=failed → TASK_RUNTIME_HARD_ERROR with failure_reason (result defined)', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'execution',
+          outcome: 'failed',
+          superpowers_subagent_driven_dev: 'not used',
+          superpowers_requesting_code_review: 'not used',
+          gh_pr_url: '',
+          failure_reason: 'rate_limited',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
+          summary: 'Task was interrupted due to a rate limit before completion.',
+        },
+      });
+      // Spy on checkForResult so the result-present branch is covered.
+      const internalCheck = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internalCheck, 'checkForResult').mockResolvedValue({
+        branch: 'task/exec-failed',
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'exec-failed-outcome-test',
+        workerType: 'auto',
+        prompt: 'Execution task with failed verdict',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('exec-failed-outcome-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('reason: rate_limited'),
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('INT-1457: verifier passed + execution outcome=failed + exit 1 + claudeError → combined message', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'execution',
+          outcome: 'failed',
+          superpowers_subagent_driven_dev: 'not used',
+          superpowers_requesting_code_review: 'not used',
+          gh_pr_url: '',
+          failure_reason: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
+          summary: 'Task was interrupted.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'exec-failed-combined-test',
+        workerType: 'auto',
+        prompt: 'Execution task with failed verdict and runtime error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: rate limited"}\n');
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.message).toContain('Non-zero exit code: 1');
+      expect(failedPayload?.error?.message).toContain('rate limited');
+      expect(failedPayload?.error?.message).toContain('Execution agent reported task failed');
+    });
+
+    it('[INT-1461] tier=optional worker with only telemetry missing → completed with telemetryAccepted=true', async () => {
+      // glm is declared telemetryExpectation='optional' in WORKER_TYPES. When the verifier
+      // reports passed=false ONLY because the memory-acknowledgment block is missing AND
+      // agentData is populated (i.e. the primary deliverable is valid), the dispatcher must
+      // finalize the task as completed (not retry, not fail) with telemetryAccepted=true.
+      //
+      // Scope note: this test exercises the dispatcher's tier=optional acceptance policy
+      // given an already-well-formed verdict. The regression that agentData actually flows
+      // through the completion-verifier's memory-failure return sites is guarded by the
+      // unit tests in completion-verifier.test.ts ("emits memory_acknowledgment into
+      // telemetryMissingFields" and "populates agentData on detectEmptyMemoryFields
+      // failure").
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: ['memory_acknowledgment', 'memory_ids_unaccounted'],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'review',
+          gh_pr_url: 'https://github.com/org/repo/pull/99',
+          review_id: '321',
+          review_comments_posted: '5',
+          review_types: 'code_quality',
+          memory_ids_used: 'mem_x',
+          memory_ids_rejected: '',
+          memory_usage_summary: 'Used it.',
+          requirements_tracker_updated: '',
+          gh_actions_status: '',
+          needs_remediation: '0',
+          review_body: 'Looks good',
+          review_inline_comments: '',
+          summary: 'Review complete.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'glm-tier-optional-accept',
+        workerType: 'glm',
+        prompt: 'Weak-worker review task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['pr-comment'],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('glm-tier-optional-accept');
+      expect(task?.status).toBe('completed');
+      expect(task?.verificationHistory?.at(-1)?.telemetryAccepted).toBe(true);
+      expect(task?.verificationHistory?.at(-1)?.telemetryMissingFields).toEqual([
+        'memory_acknowledgment',
+        'memory_ids_unaccounted',
+      ]);
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'completed';
+      });
+      expect(sentCall).toBeDefined();
+    });
+
+    it('[INT-1461/INT-1470] tier=required worker with only telemetry missing → accepts with telemetryAccepted=true (was: retry 3x then fail)', async () => {
+      // auto is telemetryExpectation='required'. Same telemetry-only failure must retry, not accept.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: ['memory_acknowledgment'],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'review',
+          gh_pr_url: 'https://github.com/org/repo/pull/99',
+          review_id: '321',
+          review_comments_posted: '5',
+          review_types: 'code_quality',
+          memory_ids_used: 'mem_x',
+          memory_ids_rejected: '',
+          memory_usage_summary: 'Used it.',
+          requirements_tracker_updated: '',
+          gh_actions_status: '',
+          needs_remediation: '0',
+          review_body: 'Looks good',
+          review_inline_comments: '',
+          summary: 'Review complete.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'auto-tier-required-retry',
+        workerType: 'auto',
+        prompt: 'Strong-worker review task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['pr-comment'],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('auto-tier-required-retry');
+      // [INT-1470] Policy flip: tier=required + telemetry-only miss now accepts
+      // with telemetryAccepted=true (previously retried 3x then failed).
+      expect(task?.status).toBe('completed');
+      expect(task?.verificationHistory?.at(-1)?.telemetryAccepted).toBe(true);
+    });
+
     it('buildResultFromVerification returns base result when agentData is undefined', () => {
       const internal = agentDispatcher as unknown as {
         buildResultFromVerification: (
@@ -2262,6 +3038,7 @@ describe('TaskDispatcher', () => {
             agentData: undefined;
             passed: boolean;
             missingFields: string[];
+            telemetryMissingFields: [];
             verifierFailure: boolean;
             trace: { transcript: string; prompt: string; response: string };
           }
@@ -2273,6 +3050,7 @@ describe('TaskDispatcher', () => {
         agentData: undefined,
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2284,27 +3062,32 @@ describe('TaskDispatcher', () => {
         buildResultFromVerification: (
           task: Task,
           gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter type in as-cast block cannot use ?: syntax
-          verification: CompletionVerifierVerdict
+          verification: CompletionVerifierVerdict,
+          agentType: 'remediation'
         ) => TaskResult;
       };
       const fakeTask = { taskId: 'remediation-memory', linearIssueLabels: [] } as unknown as Task;
       const gitResult: TaskResult = { branch: 'task/remediation-memory' };
-      const result = internal.buildResultFromVerification(fakeTask, gitResult, {
-        agentData: {
-          agentType: 'remediation',
-          outcome: 'implemented',
-          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
-          memory_ids_used: 'mem_142',
-          memory_ids_rejected: 'mem_188',
-          memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
-          requires_re_review: '1',
-          summary: 'Done.',
+      const result = internal.buildResultFromVerification(
+        fakeTask,
+        gitResult,
+        {
+          kind: 'parsed',
+          data: {
+            outcome: 'implemented',
+            pr: 'https://github.com/pbuchman/intexuraos/pull/123',
+            memory_ids_used: ['mem_142'],
+            memory_ids_rejected: ['mem_188'],
+            memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
+            requires_re_review: true,
+            summary: 'Done.',
+          },
+          missingRequired: [],
+          telemetryMissing: [],
+          warnings: [],
         },
-        passed: true,
-        missingFields: [],
-        verifierFailure: false,
-        trace: dummyTrace,
-      });
+        'remediation'
+      );
 
       expect(result).toMatchObject({
         branch: 'task/remediation-memory',
@@ -2600,6 +3383,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2632,13 +3416,15 @@ describe('TaskDispatcher', () => {
       const task = await headerDispatcher.getTask('docker-header-error');
       expect(task?.status).toBe('failed');
 
+      // INT-1457: is_error=true produces attempt_failed(exitCode=1, errorMessage).
+      // Runtime hard-error branch surfaces the runtime reason.
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'failed',
             error: expect.objectContaining({
-              code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: 'Completion verification failed',
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('error_max_structured_output_retries'),
             }),
           }),
         })
@@ -2649,6 +3435,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2782,6 +3569,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2945,12 +3733,14 @@ describe('TaskDispatcher', () => {
         .mockResolvedValueOnce({
           passed: false,
           missingFields: ['agent_final_block'],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -3057,6 +3847,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: true,
         trace: dummyTrace,
       });
@@ -3112,12 +3903,10 @@ describe('TaskDispatcher', () => {
 
       const task = await verifierFailureDispatcher.getTask('verifier-failure-task');
       expect(task?.status).toBe('failed');
-      // attemptCount is 2 because verifier retries once (attempt + 1)
-      expect(task?.attemptCount).toBe(2);
-      expect(task?.verificationHistory?.[0]?.verifierFailure).toBe(true);
-      // Verifier retry also recorded
-      expect(task?.verificationHistory?.[1]?.verifierFailure).toBe(true);
-      // createWorker called once (only task worker, not the verifier retry)
+      // [INT-1470] Verifier-LLM retries are gone — the dispatcher finalizes
+      // immediately on a verifier-failure signal (routed to TASK_RUNTIME_HARD_ERROR).
+      expect(task?.attemptCount).toBe(1);
+      // createWorker called once (no verifier retry)
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(1);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3127,8 +3916,7 @@ describe('TaskDispatcher', () => {
               prUrl: 'https://github.com/pbuchman/intexuraos/pull/1234',
             }),
             error: expect.objectContaining({
-              code: 'TASK_COMPLETION_VERIFIER_FAILED',
-              message: expect.stringContaining('Completion verifier unavailable'),
+              code: 'TASK_RUNTIME_HARD_ERROR',
             }),
           }),
         })
@@ -3161,6 +3949,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: ['some_field'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -3306,6 +4095,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: ['criteria_a'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -3378,6 +4168,7 @@ describe('TaskDispatcher', () => {
         const verify = vi.fn().mockResolvedValue({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -3475,6 +4266,7 @@ describe('TaskDispatcher', () => {
         const verify = vi.fn().mockResolvedValue({
           passed: false,
           missingFields: ['fatal_exit_code_137'],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         });
@@ -3572,6 +4364,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -3648,6 +4441,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -3733,6 +4527,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -3923,6 +4718,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4032,6 +4828,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4115,6 +4912,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4198,6 +4996,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4251,6 +5050,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: true,
         trace: dummyTrace,
       });
@@ -4314,7 +5114,8 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      // First call: attempt defaults to 1, maxAttempts defaults to 5 (fallback)
+      // [INT-1470] Verifier-LLM retries are gone — verify is called once with
+      // default fallback metadata (attempt=1, maxAttempts=5).
       expect(verify).toHaveBeenCalledWith(
         expect.objectContaining({
           attempt: 1,
@@ -4322,19 +5123,10 @@ describe('TaskDispatcher', () => {
           taskId: 'fallback-metadata-task',
         })
       );
-      // Second call: Gemini retry at attempt 2
-      expect(verify).toHaveBeenCalledWith(
-        expect.objectContaining({
-          attempt: 2,
-          maxAttempts: 5,
-          taskId: 'fallback-metadata-task',
-        })
-      );
+      expect(verify).toHaveBeenCalledTimes(1);
 
       const finalTask = await fallbackDispatcher.getTask('fallback-metadata-task');
       expect(finalTask?.status).toBe('failed');
-      // 2 records: initial verifier failure + one Gemini retry (also failed)
-      expect(finalTask?.verificationHistory).toHaveLength(2);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
@@ -4377,6 +5169,7 @@ describe('TaskDispatcher', () => {
         const verify = vi.fn().mockResolvedValue({
           passed: false,
           missingFields: [`fatal_exit_code_${String(exitCode)}`],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         });
@@ -4786,6 +5579,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -5158,22 +5952,22 @@ describe('TaskDispatcher', () => {
     ) => Promise<void>;
 
     const executionVerification: CompletionVerifierVerdict = {
-      passed: true,
-      missingFields: [],
-      verifierFailure: false,
-      trace: dummyTrace,
-      agentData: {
-        agentType: 'execution' as const,
-        outcome: 'implemented' as const,
-        superpowers_subagent_driven_dev: 'used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
-        memory_ids_used: 'mem_142',
-        memory_ids_rejected: '',
+      kind: 'parsed',
+      data: {
+        outcome: 'implemented',
+        superpowers_subagent_driven_dev_used: true,
+        superpowers_requesting_code_review_used: true,
+        pr: 'https://github.com/pbuchman/intexuraos/pull/123',
+        failure_reason: '',
+        memory_ids_used: ['mem_142'],
+        memory_ids_rejected: [],
         memory_usage_summary:
           'Used the execution memory to align the implementation with prior patterns.',
         summary: 'Done.',
       },
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [],
     };
 
     const mockTranscriptEntry: SessionJsonlEntry = {
@@ -5186,6 +5980,7 @@ describe('TaskDispatcher', () => {
 
     const mockTask = {
       taskId: 'compliance-val-test',
+      agentType: 'execution',
       repository: 'pbuchman/intexuraos',
       worktreePath: '/tmp/worktrees/compliance-val-test',
       linearIssueLabels: [],
@@ -5200,7 +5995,7 @@ describe('TaskDispatcher', () => {
 
     const mockComplianceResult: ComplianceValidationResult = {
       report: null,
-      model: 'xiaomi/mimo-v2-pro',
+      model: 'xiaomi/mimo-v2.5-pro',
       promptVersion: '1.0.0',
       costUsd: 0.05,
       transcriptTooLong: false,
@@ -5290,6 +6085,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',
@@ -5352,6 +6148,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',
@@ -5414,32 +6211,34 @@ describe('TaskDispatcher', () => {
       );
 
       const planningVerification: CompletionVerifierVerdict = {
-        passed: true,
-        missingFields: [],
-        verifierFailure: false,
-        trace: dummyTrace,
-        agentData: {
-          agentType: 'planning' as const,
+        kind: 'parsed',
+        data: {
           outcome: 'planned',
-          superpowers_writing_plans: 'used',
-          linear_url: '',
-          is_complex: '0',
-          has_plan_doc: '0',
-          subtask_urls: '',
-          pr_url: '',
-          memory_ids_used: '',
-          memory_ids_rejected: '',
+          superpowers_writing_plans_used: true,
+          linear_issue: '',
+          complex_task: false,
+          plan_doc: false,
+          subtask_urls: [],
+          plan_pr: '',
+          memory_ids_used: [],
+          memory_ids_rejected: [],
           memory_usage_summary: '',
           summary: 'Planned',
-          unclear_clarification: '',
+          clarification_message: '',
         },
+        missingRequired: [],
+        telemetryMissing: [],
+        warnings: [],
       };
 
       const internal = complianceDispatcher as unknown as {
         prepareComplianceValidationInput: PrepareComplianceValidationInput;
       };
+      // [INT-1470] agent-type gating now reads from task.agentType, not the
+      // verdict's agentData. The guard still applies — a planning task must
+      // not run execution compliance even if the verdict is well-formed.
       const result = await internal.prepareComplianceValidationInput(
-        mockTask,
+        { ...mockTask, agentType: 'planning' } as Task,
         mockFinalResult,
         planningVerification
       );
@@ -5597,6 +6396,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',
@@ -7114,12 +7914,14 @@ describe('TaskDispatcher', () => {
         .mockResolvedValueOnce({
           passed: false,
           missingFields: ['final_block'],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -7218,7 +8020,11 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
-      expect(mockLogForwarder.registerTask).toHaveBeenCalledWith('adopt-task-1', 'secret-123');
+      expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
+        'adopt-task-1',
+        'secret-123',
+        task.webhookUrl
+      );
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'adopt-task-1',
@@ -7335,6 +8141,119 @@ describe('TaskDispatcher', () => {
       }
       expect(dispatcher.getRunningCount()).toBe(0);
     });
+
+    // INT-1454: worktree rehydration on adoption
+    describe('worktree rehydration', () => {
+      it('should skip repair when worktree metadata is already registered', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(true);
+        const task = createTask({ taskId: 'adopt-registered' });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(true);
+        expect(mockWorktreeManager.isWorktreeRegistered).toHaveBeenCalledWith('adopt-registered');
+        expect(mockWorktreeManager.repairWorktree).not.toHaveBeenCalled();
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalled();
+      });
+
+      it('should repair worktree metadata when registration is missing and continue adoption', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(false);
+        vi.mocked(mockWorktreeManager.repairWorktree).mockResolvedValueOnce(undefined);
+        const task = createTask({ taskId: 'adopt-needs-repair' });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(true);
+        expect(mockWorktreeManager.isWorktreeRegistered).toHaveBeenCalledWith('adopt-needs-repair');
+        expect(mockWorktreeManager.repairWorktree).toHaveBeenCalledWith('adopt-needs-repair');
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalled();
+      });
+
+      it('should fail fast with WORKTREE_LOST when repair fails and finalize task', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(false);
+        vi.mocked(mockWorktreeManager.repairWorktree).mockRejectedValueOnce(
+          new Error('path /tmp/worktrees/adopt-lost does not exist on disk')
+        );
+        const task = createTask({
+          taskId: 'adopt-lost',
+          worktreePath: '/tmp/worktrees/adopt-lost',
+        });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.type).toBe('service_error');
+          expect(result.error.message).toContain('Worktree metadata missing and repair failed');
+          expect(result.error.message).toContain('/tmp/worktrees/adopt-lost');
+        }
+        // No worker should be started when the worktree cannot be repaired.
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        // Log forwarder must not be registered when adoption short-circuits
+        // on a lost worktree — nothing is going to emit on it.
+        expect(mockLogForwarder.registerTask).not.toHaveBeenCalled();
+        // Running count must be released so capacity is not permanently leaked.
+        expect(dispatcher.getRunningCount()).toBe(0);
+        // Task must be finalized as failed with the WORKTREE_LOST webhook error code.
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              taskId: 'adopt-lost',
+              status: 'failed',
+              error: expect.objectContaining({
+                code: 'WORKTREE_LOST',
+                remediation: expect.objectContaining({
+                  action: 'contact_support',
+                  worktreePath: '/tmp/worktrees/adopt-lost',
+                }),
+              }),
+            }),
+          })
+        );
+      });
+
+      it('should fail adoption when isWorktreeRegistered throws, without starting worker', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockRejectedValueOnce(
+          new Error('git exec blew up')
+        );
+        const task = createTask({ taskId: 'adopt-check-throws' });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.type).toBe('service_error');
+          expect(result.error.message).toBe(
+            'Failed to check worktree registration for adopted task'
+          );
+        }
+        expect(mockWorktreeManager.repairWorktree).not.toHaveBeenCalled();
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        expect(dispatcher.getRunningCount()).toBe(0);
+      });
+
+      it('should wrap non-Error rejection from repairWorktree in a WORKTREE_LOST failure', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(false);
+        // Reject with a non-Error value to exercise the `'Unknown error'` fallback
+        // branch when formatting the terminal WORKTREE_LOST message.
+        vi.mocked(mockWorktreeManager.repairWorktree).mockRejectedValueOnce('string-thrown');
+        const task = createTask({
+          taskId: 'adopt-non-error-throw',
+          worktreePath: '/tmp/worktrees/adopt-non-error-throw',
+        });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.type).toBe('service_error');
+          expect(result.error.message).toContain('Unknown error');
+        }
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        // finalizeTask releases the reserved capacity slot.
+        expect(dispatcher.getRunningCount()).toBe(0);
+      });
+    });
   });
 
   describe('recoverPendingResumeTask', () => {
@@ -7374,7 +8293,8 @@ describe('TaskDispatcher', () => {
       expect(dispatcher.getRunningCount()).toBe(1);
       expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
         'recover-resume-task-1',
-        'secret-123'
+        'secret-123',
+        task.webhookUrl
       );
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -9352,7 +10272,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
-    it('scheduleTimeoutKill handles error in callback gracefully', async () => {
+    it('scheduleTimeoutKill logs destroy error and proceeds when destroyWorker rejects', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       const killErrorState = createStatePersistence();
@@ -9391,8 +10311,56 @@ describe('TaskDispatcher', () => {
 
       expect(errorSpy).toHaveBeenCalledWith(
         { taskId: 'kill-error-test', error: expect.any(Error) },
-        'Error in timeout kill callback'
+        'Failed to destroy worker during timeout kill'
       );
+      const task = await killErrorDispatcher.getTask('kill-error-test');
+      expect(task?.status).toBe('interrupted');
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutKill finalizes task when destroyWorker hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const killHangState = createStatePersistence();
+      const killHangDispatcher = new TaskDispatcher(
+        mockConfig,
+        killHangState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-destroy-hang-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await killHangDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.destroyWorker).mockImplementationOnce(
+        () => new Promise<void>(() => undefined)
+      );
+
+      // Advance past the 5-hour kill + withTimeout for destroyWorker
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await killHangDispatcher.getTask('kill-destroy-hang-test');
+      expect(task?.status).toBe('interrupted');
 
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
@@ -9874,6 +10842,69 @@ describe('TaskDispatcher', () => {
         'Container stats at inactivity kill'
       );
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-null-test');
+
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart when copyOut hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.copyOut).mockImplementationOnce(
+        () => new Promise<void>(() => undefined)
+      );
+
+      const dispatcher = await triggerInactivityRestart('copyout-hang-test');
+      // Advance past the evidence-capture timeout so the withTimeout rejection fires
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('copyout-hang-test');
+      const task = await dispatcher.getTask('copyout-hang-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart when statsSnapshot hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockImplementationOnce(
+        () => new Promise(() => undefined)
+      );
+
+      const dispatcher = await triggerInactivityRestart('stats-hang-test');
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-hang-test');
+      const task = await dispatcher.getTask('stats-hang-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart when destroyWorker hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.destroyWorker).mockImplementationOnce(
+        () => new Promise<void>(() => undefined)
+      );
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      const dispatcher = await triggerInactivityRestart('destroy-hang-test');
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'destroy-hang-test' }),
+        'Failed to destroy worker for inactivity restart'
+      );
+      const task = await dispatcher.getTask('destroy-hang-test');
+      expect(task?.inactivityRestartCount).toBe(1);
 
       warnSpy.mockRestore();
       vi.useRealTimers();
@@ -10415,6 +11446,7 @@ describe('TaskDispatcher', () => {
       const raceVerify = vi.fn(async () => ({
         passed: true,
         missingFields: [] as string[],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -10501,6 +11533,7 @@ describe('TaskDispatcher', () => {
       const exitCodeVerify = vi.fn(async () => ({
         passed: false,
         missingFields: ['fatal_exit_code_137'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       }));
@@ -10848,6 +11881,7 @@ describe('TaskDispatcher', () => {
             taskId: string;
             status: string;
             completedAt: Date;
+            webhookUrl: string;
             error?: { code: string; message: string };
             result?: { prUrl?: string; branch?: string; summary?: string };
           }
@@ -10857,6 +11891,7 @@ describe('TaskDispatcher', () => {
       expect(commitArg.taskId).toBe('status-commit-ok');
       expect(commitArg.status).toBe('completed');
       expect(commitArg.completedAt).toBeInstanceOf(Date);
+      expect(commitArg.webhookUrl).toBe(task.webhookUrl);
       expect(commitArg.error).toBeUndefined();
       expect(commitArg.result).toEqual({
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
@@ -11273,6 +12308,200 @@ describe('TaskDispatcher', () => {
       expect(pullImageCall?.[0]).toBe('progress-test');
       expect(typeof pullImageCall?.[1]).toBe('function');
       vi.useRealTimers();
+    });
+  });
+
+  describe('WORKER_INFRA_FAILURE classification (INT-1455)', () => {
+    let infraDispatcher: TaskDispatcher;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      infraDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('finalizes attempt as WORKER_INFRA_FAILURE when exit!=0 and no Session init line', async () => {
+      // Empty Claude output — container exited before producing any [claude] lines.
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[entrypoint] starting run-attempt\nfatal: not a git repository: /repo/.git/worktrees/stale\n'
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'infra-fail-exit-128',
+        workerType: 'auto',
+        prompt: 'Code task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      await infraDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate non-zero exit code on attempt completion. Use the same
+      // access pattern as the TASK_EXIT_CODE_OVERRIDE tests above: inject
+      // the exit code directly into the dispatcher's private map before
+      // advancing the completion monitor.
+      const internal = infraDispatcher as unknown as {
+        taskExitCodes: Map<string, number>;
+      };
+      internal.taskExitCodes.set('infra-fail-exit-128', 128);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await infraDispatcher.getTask('infra-fail-exit-128');
+      expect(task?.status).toBe('failed');
+      expect(task?.taskInfraFailureHistory?.[0]?.subReason).toBe(
+        'container_exit_before_session_init'
+      );
+
+      // Error code + message land in the webhook payload (Task itself does not
+      // persist the TaskError — see finalizeTask signature).
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'WORKER_INFRA_FAILURE',
+              message: expect.stringContaining('fatal: not a git repository'),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('does not call the verifier when classification is infra_failed', async () => {
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[entrypoint] booting\nfatal: image pull failed\n'
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'infra-fail-no-verifier',
+        workerType: 'auto',
+        prompt: 'Code task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      const verifySpy = vi.mocked(singleAttemptCompletionControl.verifier.verify);
+      verifySpy.mockClear();
+
+      await infraDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = infraDispatcher as unknown as {
+        taskExitCodes: Map<string, number>;
+      };
+      internal.taskExitCodes.set('infra-fail-no-verifier', 128);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(verifySpy).not.toHaveBeenCalled();
+    });
+
+    it('flips remediation to contact_support on repeated sub-reason and forwards a defined result', async () => {
+      // This test drives finalizeAttemptAsInfraFailure directly because the
+      // repeated-sub-reason branch only fires if the Task already carries
+      // taskInfraFailureHistory from a prior attempt. In production the
+      // history accumulates across attempts: a user-driven resume via
+      // sendMessage() intentionally leaves `taskInfraFailureHistory` in place
+      // (see the comment next to the `verificationHistory = []` reset in
+      // sendMessage), so the next infra failure sees the prior entry and
+      // flips remediation. The fake isolation harness cannot drive a full
+      // submit → fail → resume → fail-again cycle for infra failures, so we
+      // seed the history explicitly and invoke the private finalize path.
+      const existingTask: Task = {
+        taskId: 'repeat-infra-failure',
+        workerType: 'auto',
+        prompt: 'Code task',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        linearIssueLabels: ['code-task'],
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        worktreePath: '/tmp/repeat-infra-failure',
+        containerId: 'container-repeat',
+        startedAt: new Date().toISOString(),
+        attemptCount: 2,
+        maxAttempts: 3,
+        taskInfraFailureHistory: [
+          {
+            attempt: 1,
+            subReason: 'container_exit_before_session_init',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await statePersistence.modify(async (s) => {
+        s.tasks[existingTask.taskId] = existingTask;
+      });
+
+      const internal = infraDispatcher as unknown as {
+        finalizeAttemptAsInfraFailure: (
+          task: Task,
+          attempt: number,
+          classification: {
+            outcome: 'infra_failed';
+            subReason: string;
+            firstErrorLine: string;
+          },
+          result: TaskResult | undefined // @allow-undefined-type -- mirrors private method signature
+        ) => Promise<void>;
+      };
+
+      const priorResult: TaskResult = { prUrl: 'https://github.com/x/y/pull/42' };
+
+      await internal.finalizeAttemptAsInfraFailure(
+        existingTask,
+        2,
+        {
+          outcome: 'infra_failed',
+          subReason: 'container_exit_before_session_init',
+          firstErrorLine: 'fatal: again',
+        },
+        priorResult
+      );
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'WORKER_INFRA_FAILURE',
+              remediation: expect.objectContaining({ action: 'contact_support' }),
+            }),
+            result: expect.objectContaining({
+              prUrl: 'https://github.com/x/y/pull/42',
+            }),
+          }),
+        })
+      );
+
+      const persisted = await infraDispatcher.getTask('repeat-infra-failure');
+      expect(persisted?.taskInfraFailureHistory).toHaveLength(2);
+      expect(persisted?.taskInfraFailureHistory?.[1]?.subReason).toBe(
+        'container_exit_before_session_init'
+      );
     });
   });
 });

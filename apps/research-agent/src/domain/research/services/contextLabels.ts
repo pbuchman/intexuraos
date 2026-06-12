@@ -17,15 +17,15 @@ export async function generateContextLabels(
   contexts: ContextWithLabel[],
   googleApiKey: string | undefined,
   userId: string,
-  researchId: string | undefined,
   createTitleGenerator: (
     model: Gemini25Flash,
     apiKey: string,
     userId: string,
     logger: Logger,
-    researchId: string | undefined
+    researchId?: string
   ) => TitleGenerator,
-  logger: Logger
+  logger: Logger,
+  researchId?: string
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
     return contexts;

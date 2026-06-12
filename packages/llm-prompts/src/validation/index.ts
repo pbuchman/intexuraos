@@ -21,6 +21,7 @@ export {
 } from './guards.js';
 
 export {
-  buildValidationRepairPrompt,
-  buildImprovementRepairPrompt,
+  validationRepairPrompt,
+  improvementRepairPrompt,
+  type ValidationRepairPromptInput,
 } from './buildInputValidationRepairPrompt.js';

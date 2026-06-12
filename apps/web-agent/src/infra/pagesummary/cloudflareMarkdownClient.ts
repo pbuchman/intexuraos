@@ -1,4 +1,5 @@
 import { err, ok, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { Logger } from 'pino';
 
 export interface CloudflareMarkdownClientConfig {
@@ -61,7 +62,7 @@ export function createCloudflareMarkdownClient(
       }, timeoutMs);
 
       try {
-        const response = await fetch(endpointUrl, {
+        const response = await performHttpFetch(endpointUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

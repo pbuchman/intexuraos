@@ -55,6 +55,7 @@ const TEST_MODEL = 'claude-sonnet-4-20250514';
 describe('createClaudeClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUsageSink.clear();
   });
 
   describe('research', () => {
@@ -321,6 +322,30 @@ describe('createClaudeClient', () => {
         expect(result.error.message).toBe('Network failure');
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          promptType: 'research-web-search',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {
@@ -389,6 +414,38 @@ describe('createClaudeClient', () => {
         expect(result.error.code).toBe('INVALID_KEY');
       }
     });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      vi.useFakeTimers();
+      try {
+        mockMessagesCreate
+          .mockRejectedValueOnce(new MockAPIError(429, 'Rate limited'))
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: 'recovered' }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          });
+
+        const client = createClaudeClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        const promise = client.generate('hi', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('recovered');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('passes ownerType to usage logger when provided', async () => {
@@ -428,5 +485,49 @@ describe('createClaudeClient', () => {
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(
       expect.objectContaining({ promptType: 'test-prompt' })
     );
+  });
+
+  it('forwards per-call correlation to usage logger when provided', async () => {
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const client = createClaudeClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1', sessionId: 's-2', taskId: 't-3', requestId: 'req-4' },
+    });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        correlation: { researchId: 'r-1', sessionId: 's-2', taskId: 't-3', requestId: 'req-4' },
+      })
+    );
+  });
+
+  it('omits correlation from usage logger when not provided', async () => {
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const client = createClaudeClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(lastCall).not.toHaveProperty('correlation');
   });
 });

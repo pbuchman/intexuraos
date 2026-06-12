@@ -1,0 +1,65 @@
+import type { FishingChatMessage } from '../models/chat.js';
+import type { EvidenceItem } from '../retrieval/types.js';
+
+interface PromptBuilder<TInput> {
+  name: string;
+  description: string;
+  version: string;
+  build(input: TInput): string;
+}
+
+export interface BuildFishingAnswerPromptInput {
+  question: string;
+  recentMessages: FishingChatMessage[];
+  evidence: EvidenceItem[];
+}
+
+function sanitizeHistoryContent(content: string): string {
+  const withoutControlCharacters = Array.from(content)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code < 32 || code === 127 ? ' ' : char;
+    })
+    .join('');
+  return withoutControlCharacters
+    .replace(/\b(system|developer|assistant|user|tool)\s*:/gi, '[stored message label]:')
+    .replace(/\b(ignore|disregard)\s+(all\s+)?previous\s+instructions\b/gi, '[instruction text removed]')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export const fishingAnswerPrompt: PromptBuilder<BuildFishingAnswerPromptInput> = {
+  name: 'fishing-assistant-answer',
+  description: 'Builds a grounded JSON-answer prompt for Fishing Assistant chat responses',
+  version: '4.0.0',
+
+  build(input: BuildFishingAnswerPromptInput): string {
+    const history = input.recentMessages
+      .map((message) => `[stored ${message.role} message] ${sanitizeHistoryContent(message.content)}`)
+      .join('\n');
+    const evidenceBlocks = input.evidence
+      .map(
+        (item) =>
+          `[${item.id}] (${item.sourceType}) ${item.title}${item.date !== undefined ? ` ${item.date}` : ''}\n${item.text}`
+      )
+      .join('\n\n');
+
+    return [
+      'Answer the fishing question using only the evidence below.',
+      'Knowledge Base evidence (knowledge_page) is the authoritative base for the answer.',
+      'Digest and raw message evidence are supporting context for recent group signals, confirmations, conflicts, and practical adaptations.',
+      'When knowledge_page evidence is present, build the core answer from it first, then use digest/raw_message evidence to support or update it.',
+      'If supporting evidence conflicts with Knowledge Base evidence, say so explicitly instead of silently replacing the Knowledge Base.',
+      'Return strict JSON with shape {"answerMarkdown": string, "citations": [{"sourceId": string, "usedFor": string}], "confidence": "high"|"medium"|"low"}.',
+      'In citations[].sourceId, copy one of the evidence sourceIds exactly as written in the square brackets. Never translate, shorten, reorder, or invent a sourceId.',
+      input.evidence.length > 0
+        ? `Allowed citation sourceIds: ${input.evidence.map((item) => item.id).join(', ')}`
+        : '',
+      history !== '' ? `Conversation history:\n${history}` : '',
+      `Question:\n${input.question}`,
+      `Evidence:\n${evidenceBlocks}`,
+    ]
+      .filter((part) => part !== '')
+      .join('\n\n');
+  },
+};

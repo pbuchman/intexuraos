@@ -88,7 +88,7 @@ Four instances of `as any` in test files for testing unsupported action types:
 
 **Recommendation:** Consider extracting route handlers into separate files if adding new endpoints:
 
-- `/routes/public/actions.ts` - CRUD operations
+- `/routes/public/.ts` - CRUD operations
 - `/routes/public/execute.ts` - Execution endpoints
 
 > **Note:** `internalRoutes.ts` was reduced significantly in v3.4.0 by extracting auth middleware (`pubsubAuth.ts`) and PubSub decoding (`decodePubSubMessage.ts`) via INT-888, and business logic to `updateActionUseCase` via INT-914. It is no longer an SRP concern.
@@ -220,7 +220,7 @@ No deprecated APIs or dependencies in use.
 
 ### updateAction Use Case Extraction (INT-914)
 
-**Issue:** The PATCH `/actions/:actionId` route handler contained business logic (action lookup, ownership validation, type change delegation, status update) that belonged in the domain layer.
+**Issue:** The PATCH `/:actionId` route handler contained business logic (action lookup, ownership validation, type change delegation, status update) that belonged in the domain layer.
 
 **Resolution:** Extracted business logic into `updateAction.ts` use case. The route handler now calls `updateActionUseCase` and returns its result.
 
