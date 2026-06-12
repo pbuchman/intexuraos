@@ -4,6 +4,15 @@ Use this as the quick release checklist for `$release`.
 
 ---
 
+## Phase 0: Subagent Plan
+
+- [ ] Verify whether Codex subagent tools are available
+- [ ] Read `reference/subagent-execution.md`
+- [ ] Create a short subagent-driven release execution plan or report current-session fallback
+- [ ] Confirm no git worktree will be created
+
+---
+
 ## Phase 1: Kickoff
 
 - [ ] Verify tools: `git`, `gh`, `node`, `jq`, `gsutil`
@@ -30,15 +39,15 @@ gh pr list --state merged --base development --json number,title,body,mergedAt,a
 
 - [ ] Skip if `--skip-docs`
 - [ ] Build a release context block for each modified service
-- [ ] Execute `Service Scribe` from `reference/agent-prompts.md` in the current Codex session
-- [ ] Execute `Doc Validator` from `reference/agent-prompts.md` for each updated service
+- [ ] Dispatch one `Service Scribe` worker per modified service with bounded `docs/services/<service>/` write scope
+- [ ] Dispatch `Doc Validator` explorer for each updated service
 - [ ] Log coverage and contradiction findings
 
 ---
 
 ## Phase 3: High-Level Docs
 
-- [ ] Execute `Docs Updater` from `reference/agent-prompts.md`
+- [ ] Dispatch `Docs Updater` worker from `reference/agent-prompts.md`
 - [ ] Update `docs/overview.md` only for grounded high-priority capabilities
 - [ ] Verify README badges
 - [ ] Verify `docs/services/index.md` lists real services only
@@ -74,6 +83,7 @@ gh pr list --state merged --base development --json number,title,body,mergedAt,a
 - [ ] Run `pnpm run ci:tracked` and fix all failures
 - [ ] Refresh RAG embeddings unless `--skip-docs`
 - [ ] Run pre-commit release validation
+- [ ] Dispatch final `xhigh` release auditor and fix critical findings
 - [ ] Confirm a real `INT-XXX` exists, or get explicit user permission to proceed without one before branch or PR creation
 - [ ] Commit on feature branch
 - [ ] Push feature branch

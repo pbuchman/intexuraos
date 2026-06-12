@@ -2,7 +2,7 @@
 
 **Trigger:** User calls `$release --collect`.
 
-Run deterministic data collection, then enrich `.prerelease-data.md` by executing the four triage prompts from `reference/agent-prompts.md` in the current Codex session.
+Run deterministic data collection, then enrich `.prerelease-data.md` through four sequential subagent triage steps. Use current-session execution only when Codex subagent tools are unavailable.
 
 ---
 
@@ -38,16 +38,17 @@ After the script completes, read `.prerelease-data.md` and count commits. If few
 
 ---
 
-## Current-Session Triage Pattern
+## Subagent Triage Pattern
 
 Each triage step follows the same pattern:
 
 1. Read the required sections from `.prerelease-data.md`.
 2. Read the named prompt in `reference/agent-prompts.md`.
-3. Execute the prompt in the current Codex session using the default model.
-4. Append exactly the generated markdown section to `.prerelease-data.md`.
+3. Dispatch an `explorer` subagent with the required input, exact prompt section, required output heading, and `reasoning_effort` from the step below.
+4. Review the returned markdown for shape and obvious omissions.
+5. Append exactly the approved generated markdown section to `.prerelease-data.md`.
 
-Do not use external agent names by default. Use Codex subagents only if the user explicitly asks for delegated or parallel agent work.
+These steps are sequential because each step consumes prior generated output. If subagent tools are unavailable, report the fallback and execute the same prompts in the current session with the default model.
 
 ---
 
@@ -59,6 +60,8 @@ Input: `## Commits` from `.prerelease-data.md`.
 
 Output to append: `## Commit Analysis`.
 
+Agent: `explorer`, `reasoning_effort: medium`.
+
 ---
 
 ## Step 2: Change Classifier
@@ -68,6 +71,8 @@ Prompt section: `## Change Classifier` in `reference/agent-prompts.md`.
 Input: `## Pull Requests` and `## Commit Analysis` from `.prerelease-data.md`.
 
 Output to append: `## Change Groups`.
+
+Agent: `explorer`, `reasoning_effort: high`.
 
 ---
 
@@ -79,6 +84,8 @@ Input: `## Change Groups` and `## Pull Requests` from `.prerelease-data.md`.
 
 Output to append: `## Netting Analysis`.
 
+Agent: `explorer`, `reasoning_effort: xhigh`.
+
 ---
 
 ## Step 4: Summary Writer
@@ -88,6 +95,8 @@ Prompt section: `## Summary Writer` in `reference/agent-prompts.md`.
 Input: `## Change Groups` and `## Netting Analysis` from `.prerelease-data.md`.
 
 Output to append: `## Triage Summary`.
+
+Agent: `explorer`, `reasoning_effort: high`.
 
 ---
 

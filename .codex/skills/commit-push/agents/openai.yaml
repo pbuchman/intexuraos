@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Commit Push'
+  short_description: 'Finalize IntexuraOS changes'
+  default_prompt: 'Use $commit-push to commit changes, push a branch, and open a PR against development without asking for a Linear issue ID.'
