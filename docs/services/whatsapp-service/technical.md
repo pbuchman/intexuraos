@@ -2,7 +2,7 @@
 
 ## Overview
 
-WhatsApp-service is the integration layer between WhatsApp Business API and IntexuraOS. It receives webhooks from Meta, validates signatures, stores messages in Firestore, downloads media to GCS, tracks outbound messages for reply correlation, filters outbound deliveries by user notification preferences, and publishes events via Pub/Sub for async processing. Audio transcription is delegated to srt-service via event-driven architecture. Runs on Cloud Run with auto-scaling.
+WhatsApp-service is the integration layer between WhatsApp Business API and IntexuraOS. It receives webhooks from Meta, validates signatures, stores messages in Firestore, downloads media to GCS, tracks outbound messages for reply correlation, filters outbound deliveries by user notification preferences, and publishes events via Pub/Sub for async processing. Audio transcription is delegated to srt-service via event-driven architecture. The app is a Fastify service in the dev/prod PM2 deployment path, using retained GCP data-plane resources for Firestore, GCS, and Pub/Sub.
 
 ## Architecture
 
@@ -82,6 +82,30 @@ sequenceDiagram
     WS-->>-PS: Ack
 ```
 
+### Webhook Recovery Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Scheduler as Scheduler/Operator
+    participant WS as WhatsApp Service
+    participant FS as Firestore
+    participant PS as Pub/Sub
+
+    Scheduler->>WS: POST /internal/whatsapp/webhooks/retry-pending
+    WS->>FS: Find pending events older than threshold
+    WS->>FS: Find failed events with retryable=true
+    WS->>WS: Re-run ProcessWebhookEventUseCase
+    alt Text Bookmark / Command Message
+        WS->>FS: Reuse existing message by waMessageId when present
+        WS->>PS: Publish command.ingest
+        WS->>FS: Mark webhook_event completed
+    else Terminal outcome
+        WS->>FS: Keep ignored/user_unmapped/completed outcome
+    end
+    WS-->>Scheduler: processed/skipped/failed counts
+```
+
 ### Outbound Message Flow (with Notification Importance Filter)
 
 ```mermaid
@@ -140,15 +164,25 @@ sequenceDiagram
 
 | Commit     | Description                                                                 | Date       |
 | ---------- | --------------------------------------------------------------------------- | ---------- |
-| `63d174c0` | Cover savePreferences failure + v8-ignore for unreachable Zod branch        | 2026-04-21 |
-| `62d6d647` | Add GET/PUT /preferences endpoints for notification level          | 2026-04-21 |
+| `5987ee4d` | Add WhatsApp bookmark recovery and retry-pending webhook processing         | 2026-06-11 |
+| `737a2e7f` | Normalize provider webhook URLs around `/webhooks`                          | 2026-06-03 |
+| `70fd49d9` | Normalize public API resource paths behind `/api/whatsapp`                  | 2026-06-03 |
+| `54275940` | Make critical Pub/Sub topics non-nullable at the type level                 | 2026-04-23 |
+| `70fa2618` | Fail audio webhook when `whatsapp.audio.stored` publish fails               | 2026-04-23 |
+| `62d6d647` | Add GET/PUT `/preferences` endpoints for notification level                 | 2026-04-21 |
 | `85a49b38` | Filter WhatsApp deliveries by notification importance level                 | 2026-04-20 |
-| `244ee42d` | Mirror important flag on internal SendMessageEvent                          | 2026-04-20 |
-| `e6e96ee7` | Wire NotificationPreferencesRepository into service container               | 2026-04-20 |
-| `19ec20d7` | Add Firestore notificationPreferencesRepository implementation              | 2026-04-20 |
-| `0a45e125` | Add NotificationPreferencesRepository port                                  | 2026-04-20 |
-| `f83ef671` | Add shouldDeliverMessage domain use case                                    | 2026-04-20 |
-| `0909adb4` | Add NotificationPreferences domain model                                    | 2026-04-20 |
+
+### Reliable Voice Transcription Dispatch (INT-1451)
+
+Audio webhooks now publish `whatsapp.audio.stored` from `ProcessAudioMessageUseCase` before the webhook event is marked `completed`. If the publish fails, the service updates `whatsapp_webhook_events/{eventId}` to `failed` with `failureDetails` and logs `event: 'audio_publish_failed'`, instead of acknowledging a webhook whose transcription was never dispatched. `INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC`, `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`, and `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC` are required service config fields, and `GcpPubSubPublisher` guards them at construction.
+
+### Bookmark Recovery Flow (INT-1662)
+
+Text webhook processing now treats command ingestion as required for bookmark flows. `ProcessWebhookEventUseCase` reuses an existing message when a retry sees the same WhatsApp message ID, marks command-ingest publish failures as `failed` with `retryable: true`, and distinguishes retryable failures from terminal unexpected failures. The internal retry endpoint drains old `pending` events and explicitly retryable failed events so stalled WhatsApp bookmark captures can be replayed through the same domain use case.
+
+### Public Path and Webhook Normalization
+
+Service-local public routes are mounted behind `/api/whatsapp` by the web/API layer. Provider configuration should target `https://intexuraos.cloud/api/whatsapp/webhooks`, while the service route remains `/webhooks`. Internal Pub/Sub and scheduler routes stay under `/internal/whatsapp/...`.
 
 ### Notification Importance Filter (INT-1418)
 
@@ -195,10 +229,11 @@ WhatsApp API errors in `sender.ts` now use `SKIP_SENTRY_KEY` on all error log en
 
 | Method | Path                                                | Description                                             | Auth         |
 | ------ | --------------------------------------------------- | ------------------------------------------------------- | ------------ |
-| POST   | `/internal/whatsapp/pubsub/process-webhook`         | Process webhook or link preview extraction from Pub/Sub | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/transcription-completed` | Handle transcription result from srt-service            | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/send-message`            | Send WhatsApp message (text, interactive, or CTA)       | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/media-cleanup`           | Delete GCS media files                                  | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/process-webhook`         | Process webhook or link preview extraction from Pub/Sub | Pub/Sub push or internal auth |
+| POST   | `/internal/whatsapp/pubsub/transcription-completed` | Handle transcription result from srt-service            | Pub/Sub push or internal auth |
+| POST   | `/internal/whatsapp/pubsub/send-message`            | Send WhatsApp message (text, interactive, or CTA)       | Pub/Sub push or internal auth |
+| POST   | `/internal/whatsapp/pubsub/media-cleanup`           | Delete GCS media files                                  | Pub/Sub push or internal auth |
+| POST   | `/internal/whatsapp/webhooks/retry-pending`         | Retry pending/retryable persisted webhook events        | Internal scheduler auth |
 
 ## Domain Models
 
@@ -316,6 +351,21 @@ Tracks phone number verification attempts with rate limiting and cooldown.
 | `whatsapp.message.send`        | `POST /internal/whatsapp/pubsub/send-message`            |
 | `whatsapp.media.cleanup`       | `POST /internal/whatsapp/pubsub/media-cleanup`           |
 
+### Internal Recovery Endpoint
+
+`POST /internal/whatsapp/webhooks/retry-pending` accepts an optional JSON body:
+
+```typescript
+interface RetryPendingWebhookEventsInput {
+  eventIds?: string[];
+  limit?: number; // 1-100, default 50
+  olderThanSeconds?: number; // default 120
+  dryRun?: boolean;
+}
+```
+
+Without `eventIds`, the use case searches `whatsapp_webhook_events` for `pending` events older than the threshold and `failed` events with `retryable: true`, ordered by `receivedAt`. With `dryRun: true`, matching events are reported but not replayed.
+
 ### ApprovalReplyEvent Schema
 
 ```typescript
@@ -409,6 +459,16 @@ Uses HMAC-SHA256 with app secret. Signature is in `X-Hub-Signature-256` header. 
 
 The POST /webhooks handler returns 200 immediately after saving the event and publishing `whatsapp.webhook.process`. Heavy processing (media download, user lookup, Pub/Sub fan-out) happens asynchronously via the process-webhook internal endpoint. This avoids Meta's 20-second webhook timeout.
 
+If publishing `whatsapp.webhook.process` fails, the webhook event is marked `failed` and Meta receives a 500 so it can retry the original webhook delivery.
+
+### Voice Dispatch Reliability
+
+For audio messages, `ProcessAudioMessageUseCase` downloads the audio, uploads it to GCS, saves the message, publishes `whatsapp.audio.stored`, and only then marks the webhook event `completed`. A failed `audio.stored` publish keeps the saved message and GCS object but marks the webhook event `failed`, making the failed transcription dispatch visible and recoverable instead of silently completing the webhook.
+
+### Bookmark Command Recovery
+
+For text messages, command ingestion failures are retryable. Before saving a text message during replay, the use case checks for an existing message with the same `userId` and WhatsApp `waMessageId`; if found, it reuses that message rather than creating a duplicate. It then republishes `command.ingest` and, when applicable, link preview extraction. This is the path used by `/internal/whatsapp/webhooks/retry-pending` to recover stalled WhatsApp bookmark captures.
+
 ### Notification Importance Filter (INT-1418)
 
 The send-message Pub/Sub handler reads the user's notification preferences before sending. If `notificationLevel` is `important` and the `SendMessageEvent.important` field is absent or `false`, the message is silently dropped with a 200 OK (acknowledged, not retried). The preference defaults to `all` when no stored preference exists or when the read fails — the service falls back to delivering in case of Firestore errors. The `notificationLevel` field is stored on the `whatsapp_user_mappings/{userId}` document alongside the phone mapping data but is owned exclusively by `NotificationPreferencesRepository`. The `GET /status` endpoint never surfaces this field.
@@ -438,6 +498,8 @@ Button titles are truncated to 20 characters (WhatsApp API limit).
 ### CTA URL Messages
 
 When `ctaUrl` is provided in a `SendMessageEvent`, the message is sent as a WhatsApp CTA URL message with a clickable button that opens a link in the user's browser. `ctaUrl` and `buttons` are mutually exclusive — the WhatsApp API does not support both in a single message.
+
+CTA URLs should use canonical public resource paths, for example `/api/code/...` or `/api/whatsapp/...` at the public origin. Do not include duplicated service segments such as `/api/whatsapp/whatsapp/...`.
 
 ### Read Receipts on Button Click
 
@@ -502,7 +564,11 @@ When sending transcription results back to users, the service uses language-spec
 
 ### Pub/Sub Auth Detection
 
-Internal Pub/Sub push endpoints accept both OIDC tokens (from Cloud Pub/Sub, detected via `from: noreply@google.com` header — validated by Cloud Run before the request arrives) and `X-Internal-Auth` tokens (for direct service-to-service calls). This dual-auth pattern allows the same endpoint to handle both push subscriptions and direct internal calls.
+Internal Pub/Sub push endpoints accept Pub/Sub push requests detected via the `from: noreply@google.com` header and direct internal calls authenticated with `X-Internal-Auth`. This dual path allows the same endpoint to handle push subscriptions and operator/service calls; do not call these endpoints without one of those request shapes.
+
+### Dev Pub/Sub Topic Aliases
+
+In the PM2 dev environment, whatsapp-service publishes to the Pub/Sub emulator. The fallback topic names in `ecosystem.config.cjs` are emulator aliases, not Terraform topic names: `whatsapp-send-message`, `whatsapp-media-cleanup`, `whatsapp-webhook-process`, `whatsapp-transcription`, `commands-ingest`, and `approval-reply`. Keep docs and runbooks explicit about whether they refer to service env vars, emulator aliases, or retained GCP topic names.
 
 ## File Structure
 
@@ -560,6 +626,7 @@ apps/whatsapp-service/src/
     mappingRoutes.ts                  # Verification-gated connect
     preferencesRoutes.ts              # GET/PUT /preferences (INT-1418)
     pubsubRoutes.ts                   # send-message (importance filter, 429 retry), media-cleanup, transcription-completed, process-webhook
+    internalRoutes.ts                 # retry-pending webhook recovery
     verificationRoutes.ts
     shared.ts                         # extractButtonResponse (button/button_reply fix)
     schemas.ts

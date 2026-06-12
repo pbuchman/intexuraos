@@ -55,6 +55,8 @@ interface SendMessageEvent {
 
 **When to use:** Send a notification with a clickable button that opens a URL in the user's browser.
 
+**Link rule:** Use canonical public URLs. For IntexuraOS APIs, that means public resource paths such as `/api/code/...` or `/api/whatsapp/...`; do not publish doubled service paths such as `/api/whatsapp/whatsapp/...`.
+
 **Input Schema:**
 
 ```typescript
@@ -198,6 +200,46 @@ interface CommandIngestEvent {
   text: string;        // Message text or transcription
   summary?: string;    // AI-generated summary (voice messages only)
   timestamp: string;
+}
+```
+
+**Reliability note:** whatsapp-service treats command ingestion as required for text/bookmark flows. If `command.ingest` publishing fails, the webhook event is marked `failed` with `retryable: true` so it can be replayed by the retry-pending recovery endpoint.
+
+---
+
+### Retry Pending WhatsApp Webhook Events
+
+**Endpoint:** `POST /internal/whatsapp/webhooks/retry-pending`
+
+**Auth:** Internal scheduler auth
+
+**When to use:** Recover persisted WhatsApp webhook events that stayed `pending` after async processing or failed with `retryable: true`.
+
+**Input Schema:**
+
+```typescript
+interface RetryPendingWebhookEventsInput {
+  eventIds?: string[];
+  limit?: number; // 1-100, default 50
+  olderThanSeconds?: number; // default 120
+  dryRun?: boolean;
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface RetryPendingWebhookEventsResult {
+  processed: number;
+  skipped: number;
+  failed: number;
+  total: number;
+  events: Array<{
+    eventId: string;
+    outcome: 'processed' | 'skipped' | 'failed';
+    status?: string;
+    reason?: string;
+  }>;
 }
 ```
 
@@ -475,6 +517,12 @@ interface NotificationPreferences {
 | `whatsapp.audio.stored`        | `INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC`     | Audio ready for transcription        |
 | `whatsapp.linkpreview.extract` | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | URLs found for preview extraction    |
 | `whatsapp.media.cleanup`       | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`    | Media deletion requested             |
+
+---
+
+## Pub/Sub Alias Notes
+
+Use the env var contract in service integrations. In the PM2 dev environment, the fallback topic names are emulator aliases: `whatsapp-send-message`, `whatsapp-media-cleanup`, `whatsapp-webhook-process`, `whatsapp-transcription`, `commands-ingest`, and `approval-reply`. Do not assume those aliases are retained GCP/Terraform topic names.
 
 ---
 

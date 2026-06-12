@@ -78,6 +78,8 @@ Every task moves through two distinct phases. In the first, the agent interprets
 
 You can now explicitly choose between planning and execution mode when submitting a task via the `taskMode` parameter. If you already have a plan and want to skip the design phase, set `taskMode: 'execution'` to go straight to implementation. If you want the design-first workflow, set `taskMode: 'planning'`. Omitting the parameter uses the default behavior.
 
+Execution tasks can also be scheduled for a future dispatch time. Scheduled tasks enter the queue immediately, but the queue drainer skips them until their `notBeforeAt` time. The queue TTL starts from the later of `queuedAt` and `notBeforeAt`, so scheduled wait time does not expire the task before it becomes eligible.
+
 This checkpoint exists because the most expensive mistake an AI coding tool can make is building the wrong thing quickly. A two-minute design review costs nothing. A pull request built on a misunderstanding costs an hour of review and a round trip back to square one.
 
 The design phase also creates a paper trail. Every task has a Linear issue, a plan, and an approval record before any code exists. When you look back weeks later, you know exactly what was requested, what was proposed, and what was built — not just a diff with no context.
@@ -116,7 +118,9 @@ Every line of code the agent writes is produced inside an isolated environment r
 
 You name your workers, order them by priority, and the system handles the rest. If the primary worker is occupied, the agent routes to the next available one. Health checks confirm each worker is reachable before dispatching, so you know immediately if something is misconfigured. If all workers are busy, tasks enter a queue and dispatch automatically when capacity opens. Worker credentials — the keys that connect the agent to your machines — are encrypted with AES-256-GCM at rest and masked in every API response.
 
-Multiple worker types are available across several AI providers — you pick the model that fits the task, or let the agent choose automatically. Different agent types (planning, execution, review, remediation) can be tuned to use different worker types independently. The GitHub Agent now inherits your default LLM model settings instead of using hardcoded models, so the triage pipeline uses the provider you configured.
+Multiple worker types are available across several AI providers — including Claude, MiniMax, MiMo Pro 2.5, GLM, Qwen, Kimi, Codex, and OpenRouter-backed options — so you pick the model that fits the task, or let the agent choose automatically. Different agent types (planning, execution, review, remediation) can be tuned to use different worker types independently. The GitHub Agent uses OpenRouter Gemini 3 Flash Preview for tool-calling triage, trying the user's OpenRouter key first and falling back to the platform key when needed.
+
+When a task needs more time than the default worker budget, the submission can include `timeoutHours` from 1 to 12. Code Agent stores the override on the task and forwards it to the orchestrator, which applies it to that task's warning and hard-kill timers. If the field is omitted, the orchestrator uses its default timeout.
 
 **Example:** You set up a high-spec desktop as your primary worker and a cloud VM as your backup. During a busy afternoon, you submit three tasks in quick succession. The first runs on your desktop, the second routes to the cloud VM, and the third queues until a slot opens — all without you making a single routing decision.
 
@@ -148,7 +152,15 @@ When a task fails, the system classifies the failure and determines whether to a
 
 A dedicated status endpoint (`PATCH /internal/code-tasks/:id/status`) ensures task completion is committed to Firestore reliably, separate from the side-effect-heavy webhook. The orchestrator writes the terminal status first via this lightweight, idempotent endpoint, then fires the full completion webhook for notifications, Linear updates, and PR labeling. If the webhook fails, the task is already in the correct terminal state — no more stalled tasks from webhook timeouts.
 
+Callback routing is owned by the task, not by the worker machine that happens to run it. Code Agent records callback owner state (`dev`, `prod`, or `custom`) from the task webhook URL, normalizes public dev/prod callbacks through `/api/code/internal/...`, and exposes callback success or failure diagnostics on the task.
+
 **Example:** The orchestrator finishes a task and the completion webhook times out due to a transient network issue. Because the status was already committed via the dedicated endpoint, the task shows the correct final state in the dashboard immediately. The webhook retries and handles the side effects later.
+
+### Dispatch Recovery and Visibility
+
+When dispatch cannot start, Code Agent now records why instead of leaving the task as an unexplained queue row. Recoverable blockers such as worker capacity or temporary reachability keep the task queued with a visible `dispatchStatus`; terminal blockers fail the task with a remediation message. Queue and task APIs expose active system statuses, worker health diagnostics, affected task counts, and the next action (`will_retry_automatically`, `retry_after_fix`, `wait_until_scheduled`, or `wait_for_active_task`).
+
+The same reporting path writes task log lines, PR automation log entries, and deduplicated WhatsApp notifications, so users can see whether the scheduler will retry automatically or they need to fix worker configuration.
 
 ### PR Triage via Pub/Sub
 
@@ -188,6 +200,7 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 - **Merge queue eliminates manual PR coordination** — Bot-authored PRs merge in order, automatically, with CI checks verified before each merge
 - **Merge conflict resolution runs unattended** — Conflicts are detected by a dedicated cron job and dispatched for resolution without blocking the webhook pipeline
 - **Design before code with explicit mode selection** — Choose planning or execution mode, or let the system default; you approve the plan before a single line is written
+- **Scheduled dispatch and custom timeouts** — Execution tasks can wait until a future dispatch time and can carry a per-task timeout override
 - **Independent two-provider verification** — Claude writes the code, Gemini independently verifies the result, so no single model grades its own work
 - **Voice note to pull request** — Record a WhatsApp voice note about a bug, and the system transcribes, classifies, designs, codes, tests, and opens a pull request without you touching a keyboard
 - **Your machines, your code, your LLM settings** — Source code stays on infrastructure you own, using your own AI subscriptions and model preferences, with credentials encrypted at rest
@@ -196,6 +209,7 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 - **PR comments become tasks** — Review feedback on a pull request automatically creates or resumes a task with full context, keeping the loop inside GitHub
 - **Self-healing failure triage** — Failed tasks are automatically classified, retried on different workers, or escalated based on the failure type
 - **Robust task finalization** — Dedicated status endpoint ensures tasks reach terminal state even if the completion webhook fails
+- **Dispatch and callback diagnostics** — Queue blockers, worker health details, callback owner, and callback failures are visible on task and queue surfaces
 - **Asynchronous PR triage** — Pub/Sub decouples webhook response time from triage evaluation, preventing webhook timeouts during heavy event loads
 - **Draft PR blocking** — Code tasks are blocked on draft PRs, preventing wasted compute on work-in-progress changes
 - **Predictable spend** — Per-user limits on concurrency, hourly rate, and monthly cost are enforced before the work begins, not after
@@ -211,7 +225,5 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 - **Planning requires explicit labeling** — Autonomous planning only runs on Linear issues tagged with the designated label
 - **Merge queue watches the `main` branch with a blocked flag** — The `main` branch appears in the branch list for visibility but cannot be used as a merge queue base branch
 - **Execution memory is in alpha** — The memory graph is focused on data collection and RAG pipeline tuning; memory retrieval quality is being actively adjusted
-
----
 
 _Part of [IntexuraOS](../overview.md) — describe what you want, come back to a pull request._

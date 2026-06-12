@@ -38,14 +38,22 @@ Attach tags to any bookmark for lightweight grouping. Tag links by topic, projec
 
 The system will not save the same link twice. If you bookmark a URL you have already saved, it recognizes the duplicate and points you to the existing bookmark instead. One less source of clutter.
 
+This duplicate response is also the service-facing recovery path for replayed WhatsApp bookmark commands: if WhatsApp webhook processing retries the same saved link after an async command-ingest failure, bookmarks-agent returns the existing bookmark ID instead of creating a second record.
+
+### Mobile Bookmark Rows
+
+The bookmark list is optimized for narrow screens. On mobile, the title and URL/description keep the main row width while the updated date moves inline with the URL, so WhatsApp-saved links remain scannable without the date column crowding the content.
+
 ## Key Benefits
 
 - **Zero-friction capture** — Save links from WhatsApp or other platform agents without switching apps
 - **Rich preview cards** — Title, description, images, and site information extracted automatically from every page
 - **AI summaries on arrival** — Every bookmark comes with a concise explanation of what the page contains
 - **WhatsApp notification** — Summaries delivered to your chat the moment they are ready, marked as important so they always reach you
+- **Recoverable WhatsApp saves** — Retried WhatsApp bookmark commands resolve to the original bookmark instead of duplicating links
 - **Tag-based filtering** — Organize by topic, project, or priority and find bookmarks when you need them
 - **Duplicate prevention** — The same URL is never saved twice; the system returns the existing bookmark
+- **Mobile-friendly rows** — Bookmark titles and URLs stay readable on phone-width screens
 - **Archive and restore** — Hide finished bookmarks from your default view, bring them back when needed
 
 ## Limitations

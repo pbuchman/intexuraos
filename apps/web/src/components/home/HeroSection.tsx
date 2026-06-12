@@ -46,7 +46,7 @@ export function HeroSection(): React.JSX.Element {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
             </span>
-            IntexuraOS v3.6.0
+            IntexuraOS v3.7.0
           </div>
 
           <p className="mx-auto mb-4 max-w-xl text-lg leading-relaxed text-neutral-600">

@@ -2,12 +2,12 @@
 
 ## Overview
 
-The code-agent service orchestrates autonomous code execution tasks. It accepts task submissions from the web UI (Auth0 JWT), the actions-agent (internal auth), and other internal services (internal auth), sanitizes prompts through two layers (secret redaction and injection prevention), creates Firestore documents with four-layer deduplication, dispatches HMAC-signed requests to user-configured workers via Cloudflare Access, streams log chunks into Firestore subcollections, processes completion webhooks, receives GitHub PR events and evaluates them through a two-tier pipeline (deterministic hard rules then Gemini tool-calling triage), dispatches follow-up instructions or creates new tasks from PR comments, manages automated code reviews with structured output validation, runs autonomous remediation loops for review findings, records all PR automation decisions in a unified log, detects merge conflicts on bot-authored PRs via a dedicated cron job, queues and auto-merges PRs through a merge queue, manages execution memory retrieval and post-run distillation for cross-task learning, provides interactive Ask Agent sessions, groups tasks by Linear issue with server-side aggregation and pagination, auto-archives merged tasks, proxies Linear issue context for the orchestrator, and mirrors state transitions to Linear and the actions-agent.
+The code-agent service orchestrates autonomous code execution tasks. It accepts task submissions from the web UI (Auth0 JWT), the actions-agent (internal auth), and other internal services (internal auth), sanitizes prompts through two layers (secret redaction and injection prevention), creates Firestore documents with four-layer deduplication, dispatches HMAC-signed requests to user-configured workers via Cloudflare Access, streams log chunks into Firestore subcollections, processes completion webhooks, receives GitHub PR events and evaluates them through a two-tier pipeline (deterministic hard rules then OpenRouter Gemini 3 Flash tool-calling triage), dispatches follow-up instructions or creates new tasks from PR comments, manages automated code reviews with structured output validation, runs autonomous remediation loops for review findings, records all PR automation decisions in a unified log, detects merge conflicts on bot-authored PRs via a dedicated cron job, queues and auto-merges PRs through a merge queue, manages execution memory retrieval and post-run distillation for cross-task learning, provides interactive Ask Agent sessions, groups tasks by Linear issue with server-side aggregation and pagination, auto-archives merged tasks, proxies Linear issue context for the orchestrator, and mirrors state transitions to Linear and the actions-agent.
 
 - **Framework:** Fastify 5 on Node.js 22+
-- **Port:** 8128 (local), 8080 (Cloud Run)
+- **Port:** 8128 in the dev service process; `PORT` in deployed process managers
 - **Package:** `@intexuraos/code-agent`
-- **Deploy:** Cloud Run (scale 0-1)
+- **Deploy:** PM2/nginx on the dev and prod service hosts
 
 ## Architecture
 
@@ -26,7 +26,7 @@ graph TD
         Routes[Routes Layer]
         WebhookRules[Webhook Rules Engine]
         UnifiedEval[Unified Evaluator]
-        GitHubAgent[GitHub Agent - Gemini Tool Calling]
+        GitHubAgent[GitHub Agent - OpenRouter Gemini 3 Flash]
         MergeQueue[Merge Queue Tick]
         ConflictReconcile[Merge Conflict Reconciler]
         IssueGrouping[Issue Grouping Engine]
@@ -48,7 +48,8 @@ graph TD
         ActionsAgentSvc[actions-agent]
         UserSvc[user-service]
         GitHubAPI[GitHub API]
-        GeminiAPI[Gemini API]
+        OpenRouterAPI[OpenRouter API]
+        ConfiguredLLM[Configured LLM Client]
         OpenAIAPI[OpenAI Embeddings API]
         PubSub[Cloud Pub/Sub]
         CloudMonitoring[Cloud Monitoring]
@@ -73,7 +74,7 @@ graph TD
     ConflictReconcile --> GitHubAPI
     UseCases --> DomainServices
     UseCases --> ExecMemory
-    ExecMemory --> GeminiAPI
+    ExecMemory --> ConfiguredLLM
     ExecMemory --> OpenAIAPI
     DomainServices --> AutoLog
     UseCases --> Repos
@@ -83,7 +84,7 @@ graph TD
     InfraAdapters --> ActionsAgentSvc
     InfraAdapters --> UserSvc
     InfraAdapters --> GitHubAPI
-    GitHubAgent --> GeminiAPI
+    GitHubAgent --> OpenRouterAPI
     DomainServices --> PubSub
     InfraAdapters --> CloudMonitoring
     AutoLog --> GitHubAPI
@@ -120,14 +121,26 @@ sequenceDiagram
 
 ## Recent Changes
 
-Changes since v3.5.0, sourced from release context and git history:
+Changes for v3.7.0, sourced from release context and git history:
+
+| Change                                      | Description                                                                                                                                                                                                                                                           | Reference          |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Scheduled code task dispatch                | `POST /submit` accepts execution-only `scheduledDispatch { localDateTime, timezone, notBeforeAt }`. Queued tasks are skipped until `notBeforeAt`, and queue TTL is measured from the later of `queuedAt` and `notBeforeAt`.                                          | INT-1468, PR #1939 |
+| Custom code task timeouts                   | `POST /submit` accepts optional integer `timeoutHours` (1-12). The value is persisted on `CodeTask` and forwarded to the worker dispatch payload only when present.                                                                                                  | INT-1585, PR #2028 |
+| GitHub Agent on OpenRouter Gemini 3 Flash   | GitHub Agent tool calling now resolves `OpenRouterToolCallingModels.Gemini3FlashPreview`, using a user OpenRouter key first and falling back to `INTEXURAOS_OPENROUTER_APP_API_KEY`.                                                                                | INT-1630, PR #2086 |
+| Dispatch status recovery and observability  | Dispatch blockers are classified from worker health and capability data, persisted as task-level `dispatchStatus` and user-level `code_task_system_statuses`, surfaced by queue/system-status APIs, and reported through logs, PR automation comments, and WhatsApp. | INT-1650, INT-1652, PRs #2116, #2117, #2118 |
+| Callback routing and diagnostics            | Public dev/prod callback bases normalize to `/api/code`; callback owner is derived from the task callback URL rather than `workerLocation`; status, log, turn-metrics, task-event, and completion callbacks accept per-task webhook HMAC and record callback state. | INT-1657, INT-1658, PRs #2122, #2123, #2126 |
+| Issue group visibility repair               | Issue group listing subtracts summaries with no displayable tasks, including archived or `ask_agent`-only phantoms, so badge counts match the groups returned to the user.                                                                                          | PR #2126 |
+| Normalized public API resource paths        | Public code-agent resources are relative to the `/api/code` mount. Service routes use `/submit`, `/tasks`, `/queue`, `/worker-settings/*`, and `/merge-queue/*`; doubled paths such as `/api/code/code/*` are not compatibility aliases.                            | PR #2111 |
+
+### Changes from v3.5.0 to v3.6.0 (Previous)
 
 | Change                                      | Description                                                                                                                                                                                                                                                           | Reference          |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
 | Dedicated task status endpoint              | `PATCH /internal/code-tasks/:id/status` — lightweight, idempotent endpoint for the orchestrator to commit terminal task status directly to Firestore before the side-effect-heavy completion webhook fires. Prevents stalled tasks from webhook timeouts.             | INT-1414, PR #1875 |
 | PR triage via Pub/Sub push subscription     | PR triage processing moved from inline webhook execution to a Pub/Sub push subscription (`POST /internal/code/pubsub/pr-triage`). The webhook publishes a `PRTriageEvent` and returns immediately; triage runs asynchronously through the push handler.               | INT-1406, PR #1864 |
 | Important flag for issue groups             | `POST /issue-groups/:groupKey/important` — users mark issue groups as high-priority via the `isImportant` field on `TaskGroupSummary`.                                                                                                                           | INT-1383, PR #1830 |
-| GitHub Agent inherits user LLM settings     | `resolveToolCallingClient` replaced the static `toolCallingClient` with per-user resolution. Tries the user's own Google API key first, falls back to the platform key. Ensures the GitHub Agent triage pipeline uses the user's configured LLM provider.             | INT-1389, PR #1835 |
+| GitHub Agent user key resolution            | `resolveToolCallingClient` replaced the static `toolCallingClient` with per-user key resolution before later OpenRouter Gemini 3 Flash routing.                                                                                                                     | INT-1389, PR #1835 |
 | Task mode selector (planning/execution)     | `POST /submit` accepts optional `taskMode` parameter (`'planning'` or `'execution'`), letting users explicitly choose between the design-first workflow and direct implementation.                                                                               | INT-1360, PR #1788 |
 | Block code tasks on draft PRs               | `DraftPRRule` added to the webhook rules chain. When `isDraft` is `true`, all code tasks are blocked — preventing wasted compute on work-in-progress branches. The `isDraft` field was added to the domain model and parsers.                                         | INT-1345, PR #1792 |
 | Suppress merge step for closed/merged PRs   | The task pipeline no longer attempts the merge step when the PR is already closed or merged, avoiding unnecessary GitHub API calls and confusing error messages.                                                                                                      | INT-1380, PR #1833 |
@@ -171,6 +184,7 @@ Changes since v3.5.0, sourced from release context and git history:
 | `POST`   | `/cancel`                                     | Cancel a running or dispatched task                  |
 | `POST`   | `/retry`                                      | Retry a failed, cancelled, or interrupted task       |
 | `GET`    | `/queue`                                      | Get task queue status                                |
+| `GET`    | `/system-status`                              | List active code-task system statuses                |
 | `GET`    | `/issue-groups`                               | List issue groups with aggregated status (paginated) |
 | `POST`   | `/issue-groups/:groupKey/important`           | Toggle important flag on an issue group              |
 | `GET`    | `/workers/status`                             | Get worker health status                             |
@@ -263,6 +277,8 @@ Changes since v3.5.0, sourced from release context and git history:
 | `cancelNonce`            | `string?`                 | 4-char hex nonce for WhatsApp cancel button                                       |
 | `lastHeartbeat`          | `Timestamp?`              | Last heartbeat from orchestrator (zombie detection)                               |
 | `statusSummary`          | `StatusSummary?`          | UI display fallback when logs unavailable                                         |
+| `dispatchStatus`         | `CodeTaskDispatchStatus?` | Visible dispatch blocker or wait state for queued/failed tasks                    |
+| `callbackState`          | `CodeTaskCallbackState?`  | Callback base, owner, last success endpoint, or last failure diagnostics          |
 | `pendingUserMessages`    | `string[]?`               | Mid-task messages queued for next turn                                            |
 | `callbackReceived`       | `boolean`                 | True after completion webhook received                                            |
 | `executionMemoryContext` | `ExecutionMemoryContext?` | Pre-run memory retrieval context                                                  |
@@ -273,6 +289,8 @@ Changes since v3.5.0, sourced from release context and git history:
 | `prUrlValidationErrors`  | `string[]?`               | Validation error details (INT-1361)                                               |
 | `failedWorkerLocation`   | `string?`                 | Worker location that failed, excluded on retry dispatch                           |
 | `autoRetryAttempt`       | `number?`                 | 1-based auto-retry attempt number (max 3)                                         |
+| `dispatchSchedule`       | `DispatchSchedule?`       | Earliest dispatch time for user-scheduled work or retry cooloff                   |
+| `timeoutHours`           | `number?`                 | Optional per-task timeout override in hours (1-12)                                |
 | `createdAt`              | `Timestamp`               | Creation timestamp                                                                |
 | `updatedAt`              | `Timestamp`               | Last update (used in zombie detection queries)                                    |
 
@@ -422,6 +440,8 @@ Changes since v3.5.0, sourced from release context and git history:
 | `user_group_counts`             | code-agent | Per-user group status counts for filter badges            |
 | `execution_memories`            | code-agent | Distilled execution memories with embeddings              |
 | `execution_memory_applications` | code-agent | Memory retrieval and application tracking                 |
+| `code_task_system_statuses`     | code-agent | Active/resolved user-level dispatch blocker summaries     |
+| `code_task_dispatch_notifications` | code-agent | Dispatch-notification deduplication ledger              |
 
 ## Dependencies
 
@@ -445,7 +465,8 @@ Changes since v3.5.0, sourced from release context and git history:
 | ---------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | Orchestrator     | Run code tasks in isolated environment                                                 | Task fails with dispatch error                           |
 | GitHub API       | PR title updates, file reads, comment posting, mergeability checks, merge execution    | Automation log falls back to skip                        |
-| Gemini API       | Tool-calling triage for GitHub PR events; execution memory distillation and evaluation | Falls back to direct dispatch / memory pipeline skipped  |
+| OpenRouter       | Gemini 3 Flash Preview tool-calling triage for GitHub PR events                        | Triage fails if no user or platform key is available     |
+| Configured LLM client | Execution memory query generation, distillation, and evaluation                   | Memory pipeline skipped                                  |
 | OpenAI API       | Text embeddings for execution memory retrieval (`text-embedding-3-small`)              | Memory retrieval skipped, task proceeds without memories |
 | Cloud Pub/Sub    | WhatsApp notification delivery                                                         | Notification skipped, task proceeds                      |
 | Cloud Monitoring | Metrics emission for tasks/cost/duration                                               | No-op if unavailable                                     |
@@ -461,19 +482,21 @@ Changes since v3.5.0, sourced from release context and git history:
 | `INTEXURAOS_ORCHESTRATOR_SECRET`        | HMAC secret for task dispatch and webhook signatures        | Yes                         |
 | `INTEXURAOS_GITHUB_WEBHOOK_SECRET`      | GitHub webhook signature verification secret                | Yes                         |
 | `INTEXURAOS_SERVICE_URL`                | Callback URL — orchestrator reports task status here        | Yes                         |
+| `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL` | Callback base sent to workers; public dev/prod bases normalize to `/api/code` | Yes              |
 | `INTEXURAOS_WHATSAPP_SERVICE_URL`       | WhatsApp service URL                                        | Production                  |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp send messages                    | Production                  |
 | `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC`     | Pub/Sub topic for PR triage push subscription               | Production                  |
 | `INTEXURAOS_LINEAR_AGENT_URL`           | linear-agent base URL                                       | Production                  |
 | `INTEXURAOS_ACTIONS_AGENT_URL`          | actions-agent base URL                                      | Production                  |
 | `INTEXURAOS_USER_SERVICE_URL`           | user-service base URL                                       | Production                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY`         | Gemini API key for GitHub Agent triage and execution memory | Production                  |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`     | Platform fallback key for GitHub Agent OpenRouter tool calling | Production               |
 | `INTEXURAOS_OPENAI_APP_API_KEY`         | OpenAI API key for execution memory embeddings              | Production                  |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`      | llm-usage-service base URL for usage event forwarding       | Production                  |
 | `INTEXURAOS_EXECUTION_MEMORY_ENABLED`   | Feature flag for execution memory retrieval/distillation    | Production                  |
 | `INTEXURAOS_AUTH_AUDIENCE`              | Auth0 JWT audience                                          | Production                  |
 | `INTEXURAOS_AUTH_ISSUER`                | Auth0 JWT issuer                                            | Production                  |
 | `INTEXURAOS_AUTH_JWKS_URL`              | Auth0 JWKS endpoint                                         | Production                  |
-| `INTEXURAOS_WEB_URL`                    | Web app URL for task links in notifications                 | Optional (has default)      |
+| `INTEXURAOS_WEB_APP_URL`                | Web app URL for task links in notifications                 | Yes                         |
 | `INTEXURAOS_SENTRY_DSN`                 | Sentry error tracking DSN                                   | Optional                    |
 | `INTEXURAOS_ENABLE_METRICS`             | Enable Cloud Monitoring metrics                             | Optional                    |
 | `E2E_MODE`                              | Enable E2E mode with mocked external services               | Optional                    |
@@ -481,6 +504,7 @@ Changes since v3.5.0, sourced from release context and git history:
 | `INTEXURAOS_QUEUE_TTL_MINUTES`          | Queue task TTL in minutes (default: 1440)                   | Optional (defaults to 1440) |
 | `INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS`   | Max retry attempts (default: 3)                             | Optional (defaults to 3)    |
 | `INTEXURAOS_RETRY_QUEUE_TTL_MINUTES`    | Retry queue TTL in minutes (default: 10)                    | Optional (defaults to 10)   |
+| `INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS`    | Max automatic retry attempts after retryable worker failures | Optional                    |
 
 ## Gotchas
 
@@ -492,11 +516,11 @@ Changes since v3.5.0, sourced from release context and git history:
 - **Four deduplication layers run on every submission.** A 409 Conflict response means one of these fired: approvalEventId replay, actionId Pub/Sub retry, dedupKey (same prompt within the window), or active task on the same Linear issue.
 - **Dispatch is optimistic.** Tasks are created with `queued` status first; `dispatched` status is only written after the worker ACKs the request. This prevents phantom `dispatched` tasks on restart.
 - **The `INTEXURAOS_ORCHESTRATOR_SECRET` must match on both sides.** It signs task dispatch requests (outbound) and validates completion webhooks (inbound). A mismatch causes 401 on webhooks and dispatch failures.
-- **GitHub Agent triage only activates when `INTEXURAOS_GEMINI_APP_API_KEY` is set** and non-empty. Without it, the `toolCallingClient` is `undefined` and `evaluateEvent` is bypassed — all events go through hard rules only.
-- **Execution memory requires both `INTEXURAOS_GEMINI_APP_API_KEY` and `INTEXURAOS_OPENAI_APP_API_KEY`** plus `INTEXURAOS_EXECUTION_MEMORY_ENABLED=true`. Without all three, memory retrieval and distillation are silently skipped.
+- **GitHub Agent triage requires an OpenRouter key.** `resolveToolCallingClient` tries the user's OpenRouter key from user-service, then falls back to `INTEXURAOS_OPENROUTER_APP_API_KEY`. The tool-calling model is `OpenRouterToolCallingModels.Gemini3FlashPreview`.
+- **Execution memory is gated by `INTEXURAOS_EXECUTION_MEMORY_ENABLED=true`.** Embeddings require `INTEXURAOS_OPENAI_APP_API_KEY`; query generation and distillation use the configured user or service LLM client when available.
 - **The automation log is a single append-only GitHub PR comment.** The `pr_automation_comments` collection caches the comment ID per PR to enable updates. If the comment is deleted externally, the next event creates a new one.
-- **ESLint is disabled at the file level** in `codeRoutes.ts` and `webhookRoutes.ts`. Type safety rules are not enforced in these files.
-- **Drain queue guards use module-level booleans.** The `isDraining` / `isDrainingRetries` flags work for single-instance deployment (Cloud Run scale 0-1) but would race with multiple instances.
+- **`codeRoutes.ts` is a composition plugin.** Route logic lives under `routes/code/*`, `routes/merge-queue/*`, and `routes/webhooks/*`; add handlers to the resource-specific plugin instead of expanding the wrapper.
+- **Drain queue guards use module-level booleans.** The `isDraining` / `isDrainingRetries` flags work for the current single-process service deployment but would race with multiple service instances.
 - **The `main` branch is blocked as a merge queue base branch.** The `BLOCKED_BASE_BRANCHES` set in `mergeQueueRoutes.ts` prevents creating merge queue watches targeting `main`. The branch still appears in the branch list with a `blocked` flag for visibility.
 - **Merge conflict reconciliation runs as a separate cron job.** The `POST /internal/merge-conflicts/reconcile` endpoint is triggered by Cloud Scheduler, not by webhooks. It skips closed PRs and refreshes `mergeConflictStatus` only for open PRs.
 - **Merge queue tick processes one PR per watch per tick.** Each Cloud Scheduler invocation of `POST /internal/merge-queue/tick` attempts to merge the oldest eligible PR for each active watch. If the PR's CI is still pending, it is skipped until the next tick.
@@ -507,11 +531,14 @@ Changes since v3.5.0, sourced from release context and git history:
 - **PR triage runs asynchronously via Pub/Sub push.** The GitHub webhook handler publishes a `PRTriageEvent` to `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC` and returns 200 immediately. The push subscription delivers the event to `POST /internal/code/pubsub/pr-triage` for evaluation. This decouples webhook response time from triage compute.
 - **The status endpoint (`PATCH /internal/code-tasks/:id/status`) is idempotent.** If the task is already in a terminal state, it returns 200 no-op without calling the repository. The orchestrator calls this endpoint before the full completion webhook to ensure terminal status is persisted even if the webhook fails.
 - **Draft PRs block all code tasks.** The `DraftPRRule` in the webhook rules chain skips all events where `isDraft === true`. When `isDraft` is `null` (event type does not carry draft info), the rule fails open.
-- **`resolveToolCallingClient` is per-user, not static.** The GitHub Agent tries the user's own Google API key first (via `userServiceClient.getApiKeys`), then falls back to the platform `INTEXURAOS_GEMINI_APP_API_KEY`. This means different users can use different Gemini keys for triage.
+- **Public code-agent routes are mounted at `/api/code`.** Route files define service-relative paths such as `/submit`, `/tasks`, and `/queue`. Public callers use `/api/code/submit`, `/api/code/tasks`, and `/api/code/queue`; doubled paths like `/api/code/code/submit` are invalid.
+- **Callback ownership comes from `webhookUrl`, not `workerLocation`.** Orchestrator workers may execute dev-owned or prod-owned tasks. Code Agent records callback owner from the normalized callback base, and public callback URLs use `/api/code/internal/...`.
+- **Scheduled dispatch is execution-only.** `scheduledDispatch` is accepted only for effective execution tasks and must contain a future ISO `notBeforeAt`. Scheduled wait time does not consume queue TTL before the task becomes eligible.
+- **`timeoutHours` is optional.** When absent, no timeout field is persisted or sent to the worker. When present, it must be an integer from 1 to 12.
 - **`taskMode` on `/submit` is optional.** When omitted, the default behavior applies. Set `'planning'` for design-first or `'execution'` for direct implementation.
 - **Auto-retry excludes the failed worker location.** Tasks that fail with `TASK_EXIT_CODE_OVERRIDE` are retried up to 3 times (`autoRetryAttempt`), each time excluding the `failedWorkerLocation` from dispatch.
 - **Zombie sweep runs every 5 minutes.** The `POST /internal/code/detect-zombies` endpoint is triggered by Cloud Scheduler on a 5-minute interval, using `lastHeartbeat` field for detection.
-- **The turn-metrics viewer moved into code-agent.** To inspect `code_tasks/{taskId}/turn_metrics` locally, run `pnpm --filter @intexuraos/code-agent view-metrics <taskId>` or pipe JSON into the same command.
+- **The turn-metrics viewer moved into code-agent.** To inspect `code_tasks/{taskId}/turn_metrics`, run `pnpm --filter @intexuraos/code-agent view-metrics <taskId>` or pipe JSON into the same command.
 
 ## File Structure
 
@@ -564,7 +591,7 @@ apps/code-agent/src/
 │   │   ├── autoArchiveMergedTasks.ts    — Daily merged task archival
 │   │   ├── drainTaskQueue.ts             — Queue drain with distributed guard
 │   │   ├── drainRetryQueue.ts            — Retry queue drain
-│   │   ├── githubAgent.ts                — Gemini tool-calling triage
+│   │   ├── githubAgent.ts                — OpenRouter Gemini 3 Flash tool-calling triage
 │   │   ├── detectMergeConflictsOnPush.ts — Merge conflict detection + reconcile
 │   │   ├── mergeQueueTick.ts             — Merge queue auto-merge tick
 │   │   ├── prepareExecutionMemoryContext.ts — Pre-run memory retrieval
@@ -585,7 +612,6 @@ apps/code-agent/src/
 │   │   ├── onReviewSkippedCallback.ts   — Ready-to-merge label on skip
 │   │   ├── unauthorizedSenderCommentHandler.ts — GitHub comment for rejected senders
 │   │   ├── linearIssueService.ts         — Linear API abstraction
-│   │   ├── rateLimitService.ts           — Concurrent/hourly/cost limits
 │   │   ├── taskDispatcher.ts             — Worker dispatch with health check
 │   │   ├── taskEnqueueService.ts         — Task queue enrollment
 │   │   ├── statusMirrorService.ts        — actions-agent state sync
@@ -607,8 +633,8 @@ apps/code-agent/src/
 │   ├── auth/                             — Auth0 JWT validator
 │   └── migrations/                       — Firestore migration scripts
 ├── routes/
-│   ├── codeRoutes.ts                     — Core code task, ask-agent, and worker routes
-│   ├── webhookRoutes.ts                  — Orchestrator webhook endpoints
+│   ├── codeRoutes.ts                     — Composition plugin for split code-task route modules
+│   ├── webhookRoutes.ts                  — Thin orchestrator webhook endpoint wrapper
 │   ├── workerSettingsRoutes.ts           — Worker configuration CRUD
 │   ├── internalRoutes.ts                 — Cron endpoints + Linear proxy
 │   ├── code/

@@ -100,10 +100,17 @@ sequenceDiagram
     Note over WSP: WhatsApp Service delivers summary to user
 ```
 
+### WhatsApp Bookmark Recovery Boundary
+
+WhatsApp webhook recovery is owned by whatsapp-service, but bookmarks-agent provides the idempotent bookmark boundary it depends on. WhatsApp text messages publish `command.ingest` events; command handling calls `POST /internal/bookmarks` for bookmark saves. If that upstream path is replayed for the same user and URL, bookmarks-agent checks `findByUserIdAndUrl()` before creating and returns `409 CONFLICT` with `error.details.existingBookmarkId`, allowing callers to recover the existing bookmark instead of duplicating it.
+
+PR #2127 made `command.ingest` required in whatsapp-service, marks failed command-ingest publishes as retryable, and adds `/internal/whatsapp/webhooks/retry-pending` on whatsapp-service for pending/retryable webhook events. No bookmarks-agent endpoint or environment variable was added for that recovery path.
+
 ## Recent Changes
 
 | Commit     | Description                                                                 | Date       |
 | ---------- | --------------------------------------------------------------------------- | ---------- |
+| `227c87d6` | WhatsApp bookmark recovery and mobile bookmark rows integration (INT-1662)  | 2026-06-11 |
 | `3e04155`  | Mark bookmark summary WhatsApp messages as important (INT-1418)             | 2026-04-20 |
 | `5397ce3`  | Extend FakeWhatsAppSendPublisher with important flag (INT-1418)             | 2026-04-20 |
 | `af79b3ea` | Pass title/description hints to web-agent summary request                   | 2026-04-02 |
@@ -312,6 +319,7 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 - **Enrichment is async** — `POST /internal/bookmarks` returns immediately with `{ id, url, bookmark }` where `url` is the app deep link (`/#/bookmarks/{id}`); OG data and AI summary populate later via Pub/Sub
 - **Enrichment only triggers on internal create** — The public `POST /` endpoint does NOT trigger the enrichment pipeline; only `POST /internal/bookmarks` publishes the `bookmarks.enrich` event (via `enrichPublisher` dependency on `createBookmark`)
 - **Duplicate detection by userId+url** — Same URL can exist for different users
+- **Replay recovery uses duplicate detection** — Replayed WhatsApp bookmark commands receive `409 CONFLICT` with `existingBookmarkId` when the bookmark already exists; bookmarks-agent does not dedupe by WhatsApp message ID or `sourceId`
 - **OG fetch can fail** — Some sites block scrapers; status will be `failed`
 - **WhatsApp delivery is fire-and-forget** — If Pub/Sub publish fails, no retry for WhatsApp notification (summary is still saved)
 - **WhatsApp messages marked important** — Bookmark summaries are published with `important: true`, bypassing user notification level filtering
