@@ -96,4 +96,4 @@ Phase 5 auto-implements website improvements from High-priority features without
 2. **Update hero statistics** if service/model counts changed
 3. **For major releases:** Create VersionHistorySection using marketing slogan from Phase 1
 
-All improvements are implemented directly in the current Codex session using the existing React, Tailwind, motion, and icon patterns in `apps/web/src/pages/HomePage.tsx`.
+All improvements are implemented by the Phase 5 website worker using the existing React, Tailwind, motion, and icon patterns in `apps/web/src/pages/HomePage.tsx`.

@@ -30,6 +30,14 @@ Use this template to display the final summary after Phase 6 completes.
 | bookmarks-agent | Updated |
 | research-agent  | Skipped |
 
+## Subagent Execution
+
+| Area                | Mode              | Effort            |
+| ------------------- | ----------------- | ----------------- |
+| Release triage      | Sequential agents | medium/high/xhigh |
+| Service docs        | Service workers   | medium/high       |
+| Final release audit | Explorer          | xhigh             |
+
 ## Files Changed
 
 ### Documentation
@@ -110,7 +118,7 @@ Release complete.
 
 | Status    | Meaning                                      |
 | --------- | -------------------------------------------- |
-| Updated   | Service docs updated successfully            |
+| Updated   | Service docs worker completed successfully   |
 | Skipped   | Service not modified in this release         |
 | Failed    | Service docs update encountered an error     |
 
