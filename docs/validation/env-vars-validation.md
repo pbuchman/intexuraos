@@ -41,7 +41,6 @@ All services inherit two shared blocks:
 - `INTEXURAOS_AUTH_JWKS_URL`, `INTEXURAOS_AUTH_ISSUER`, `INTEXURAOS_AUTH_AUDIENCE`
 - `INTEXURAOS_INTERNAL_AUTH_TOKEN`, `INTEXURAOS_SENTRY_DSN`
 - `INTEXURAOS_MINIMAX_APP_API_KEY`, `INTEXURAOS_GEMINI_APP_API_KEY`, `INTEXURAOS_DASHSCOPE_APP_API_KEY`
-- `INTEXURAOS_DASH0_OTLP_ENDPOINT`, `INTEXURAOS_DASH0_AUTH_TOKEN`
 
 **`local.common_service_env_vars`** (all services receive these as plain env vars):
 
@@ -50,7 +49,7 @@ All services inherit two shared blocks:
 
 **`ecosystem.config.cjs` common blocks:**
 
-- `COMMON_SERVICE_ENV`: mirrors `common_service_secrets` (auth vars, GCP project, API keys, DASH0)
+- `COMMON_SERVICE_ENV`: mirrors `common_service_secrets` (auth vars, GCP project, API keys)
 - `COMMON_SERVICE_URLS`: mirrors `common_service_env_vars` service URLs (localhost ports for dev)
 - `SERVICE_ENV_MAPPINGS[service]`: per-service Pub/Sub topics and non-URL config
 
@@ -252,7 +251,7 @@ Missing from ecosystem SERVICE_ENV_MAPPINGS (but present in COMMON_SERVICE_URLS 
 - `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`, `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET`
 - `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID`, `INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET`
 
-Optional (accessed but not in REQUIRED_ENV): `INTEXURAOS_SENTRY_DSN`, `INTEXURAOS_ENVIRONMENT`, `INTEXURAOS_DASH0_OTLP_ENDPOINT`
+Optional (accessed but not in REQUIRED_ENV): `INTEXURAOS_SENTRY_DSN`, `INTEXURAOS_ENVIRONMENT`
 
 #### Terraform provision (user-service)
 
@@ -274,7 +273,6 @@ Optional (accessed but not in REQUIRED_ENV): `INTEXURAOS_SENTRY_DSN`, `INTEXURAO
 | `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID`     | user-service secrets block     | YES      |
 | `INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET` | user-service secrets block     | YES      |
 | `INTEXURAOS_SENTRY_DSN`                 | common_service_secrets         | YES      |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`        | common_service_secrets         | YES      |
 
 Terraform-only (not in REQUIRED_ENV):
 - `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` — present in Terraform secrets block, absent from REQUIRED_ENV. Not referenced in user-service source code (likely constructed from `INTEXURAOS_WEB_APP_URL` at runtime). The Terraform secret exists to allow override of the callback URL.
@@ -290,7 +288,6 @@ Terraform-only (not in REQUIRED_ENV):
 | Severity | Finding                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | LOW      | `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` is provisioned in Terraform but absent from REQUIRED_ENV, absent from docs Configuration table, and not directly referenced in user-service source code. If the service constructs the redirect URI from `INTEXURAOS_WEB_APP_URL`, the Terraform secret is either unused or a legacy artifact. Should be documented as optional or removed from Terraform. |
-| LOW      | `INTEXURAOS_DASH0_AUTH_TOKEN` is in `common_service_secrets` (Terraform) but not documented in the user-service Configuration table. It is documented in the infrastructure section. The docs omit it under Configuration.                                                                                                                                                                        |
 | NONE     | All `REQUIRED_ENV` vars are satisfied in both Terraform and ecosystem. No startup-blocker gaps.                                                                                                                                                                                                                                                                                                   |
 
 ---
