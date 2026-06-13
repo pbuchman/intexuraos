@@ -386,8 +386,8 @@ module "artifact_registry" {
   environment                           = var.environment
   labels                                = local.common_labels
   cleanup_policy_dry_run                = false
-  cleanup_keep_count                    = 3
-  cleanup_delete_older_than             = "86400s"
+  cleanup_keep_count                    = 1
+  cleanup_delete_older_than             = "259200s"
   code_worker_cleanup_delete_older_than = "86400s"
 
   depends_on = [google_project_service.apis]

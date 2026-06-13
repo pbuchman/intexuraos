@@ -57,7 +57,7 @@ node scripts/artifact-registry/generate-prune-plan.mjs \
   --project=intexuraos-dev-pbuchman \
   --location=europe-central2 \
   --repository=intexuraos-dev \
-  --keep-count=3 \
+  --keep-count=1 \
   --protected=/tmp/artifact-registry/live-$(date +%F)/protected-digests.json \
   --retired-packages=claude-worker,commands-router,data-insights-service,llm-orchestrator,llm-orchestrator-service \
   --out-dir=/tmp/artifact-registry/plan-$(date +%F)
@@ -141,12 +141,12 @@ terraform plan
 
 The intended steady state is:
 
-- active cleanup policy after live digests are verified inside the newest-3 window
-- global keep count of `3`
-- general delete policy for images older than `86400s` (1 day)
+- active cleanup policy after live digests are verified inside the newest-1 window
+- global keep count of `1`
+- general delete policy for images older than `259200s` (3 days)
 - `code-worker` delete policy for images older than `86400s` (1 day)
 
-If the exported prune plan shows no package with more than `3` retained digests, the live runtimes are already inside the retained window and the policy can be applied immediately.
+If the exported prune plan shows no package with more than `1` retained digest, the live runtimes are already inside the retained window and the policy can be applied immediately.
 
 ## Verification
 
