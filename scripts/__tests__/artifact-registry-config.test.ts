@@ -45,8 +45,8 @@ describe('artifact registry prevention config', () => {
     expect(moduleVariables).toContain('variable "code_worker_cleanup_delete_older_than"');
 
     expect(environmentMain).toMatch(/cleanup_policy_dry_run\s*=\s*false/);
-    expect(environmentMain).toMatch(/cleanup_keep_count\s*=\s*3/);
-    expect(environmentMain).toMatch(/cleanup_delete_older_than\s*=\s*"86400s"/);
+    expect(environmentMain).toMatch(/cleanup_keep_count\s*=\s*1/);
+    expect(environmentMain).toMatch(/cleanup_delete_older_than\s*=\s*"259200s"/);
     expect(environmentMain).toMatch(/code_worker_cleanup_delete_older_than\s*=\s*"86400s"/);
   });
 });
