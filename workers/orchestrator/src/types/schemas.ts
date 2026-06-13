@@ -1,4 +1,5 @@
 import {
+  CODE_TASK_REVIEW_TYPES,
   CODE_TASK_WORKER_TYPES,
   MIN_TIMEOUT_HOURS,
   MAX_TIMEOUT_HOURS,
@@ -81,9 +82,7 @@ export const CreateTaskRequestSchema = z.object({
   prNumber: z.number().int().positive().optional(),
   continuationPrNumber: z.number().int().positive().optional(),
   continuationPrBranch: z.string().min(1).optional(),
-  reviewTypes: z
-    .array(z.enum(['code_quality', 'security', 'architecture', 'plan_review', 'test_quality']))
-    .optional(),
+  reviewTypes: z.array(z.enum(CODE_TASK_REVIEW_TYPES)).optional(),
   /**
    * Optional per-task timeout in hours (1–12). When omitted, the orchestrator
    * applies its 5h default. INT-1585.
