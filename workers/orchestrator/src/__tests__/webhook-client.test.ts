@@ -858,6 +858,7 @@ describe('WebhookClient', () => {
           errorType: '5xx',
           errorMessage: expect.stringContaining('Server error'),
           attempt: expect.any(Number),
+          _skipSentry: true,
         }),
         expect.stringContaining('Pending webhook retry attempt failed')
       );

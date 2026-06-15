@@ -7,7 +7,8 @@ describe('migration 110 - whatsapp webhook retry indexes', () => {
     expect(metadata).toMatchObject({
       id: '110',
       name: 'whatsapp-webhook-retry-indexes',
-      description: 'Composite indexes for retrying pending and retryable WhatsApp webhook events safely',
+      description:
+        'Composite indexes for retrying pending and retryable WhatsApp webhook events safely',
       createdAt: '2026-06-10',
     });
   });

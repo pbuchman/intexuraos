@@ -17,10 +17,10 @@ describe('Routes', () => {
   let isolationProvider: IsolationProvider;
 
   const mockLogger: Logger = {
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-    debug: () => undefined,
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   };
 
   const orchestratorSecret = 'test-secret';
@@ -46,6 +46,7 @@ describe('Routes', () => {
   };
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     app = Fastify();
 
     dispatcher = {
@@ -700,6 +701,10 @@ describe('Routes', () => {
       });
 
       expect(response.statusCode).toBe(404);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ _skipSentry: true }),
+        'GET 404 /tasks/non-existent'
+      );
     });
   });
 
@@ -1449,6 +1454,10 @@ describe('Routes', () => {
         error:
           'Session has expired — the worker container was cleaned up. Please start a new session.',
       });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ _skipSentry: true }),
+        'POST 410 /tasks/expired-session/message'
+      );
     });
   });
 

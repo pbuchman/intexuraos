@@ -215,13 +215,14 @@ describe('processGitHubWebhook', () => {
   it('returns invalid_signature when signature header is missing', async () => {
     const body = buildPullRequestBody();
     const { rawBody } = signPayload(body);
+    const logger = createMockLogger();
     const result = await processGitHubWebhook({
       rawBody,
       signatureHeader: undefined,
       eventType: 'pull_request',
       deliveryId: 'delivery-1',
       body: body as never,
-      logger: createMockLogger(),
+      logger,
       webhookSecret: WEBHOOK_SECRET,
       verifySignature: defaultVerifySignature,
       parseEvent: defaultParseEvent,
@@ -232,18 +233,23 @@ describe('processGitHubWebhook', () => {
       expect(result.reason).toBe('invalid_signature');
     }
     expect(mocks.gitHubWebhookAuditEventRepo.save).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ _skipSentry: true }),
+      'Invalid GitHub webhook signature'
+    );
   });
 
   it('returns invalid_signature when signature does not match', async () => {
     const body = buildPullRequestBody();
     const rawBody = Buffer.from(JSON.stringify(body), 'utf-8');
+    const logger = createMockLogger();
     const result = await processGitHubWebhook({
       rawBody,
       signatureHeader: 'sha256=deadbeef',
       eventType: 'pull_request',
       deliveryId: 'delivery-1',
       body: body as never,
-      logger: createMockLogger(),
+      logger,
       webhookSecret: WEBHOOK_SECRET,
       verifySignature: defaultVerifySignature,
       parseEvent: defaultParseEvent,
@@ -253,6 +259,10 @@ describe('processGitHubWebhook', () => {
     if (!result.ok) {
       expect(result.reason).toBe('invalid_signature');
     }
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ signature: 'sha256=deadbeef', _skipSentry: true }),
+      'Invalid GitHub webhook signature'
+    );
   });
 
   it('returns internal_error when audit repositories are not configured', async () => {

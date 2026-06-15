@@ -85,8 +85,8 @@ describe('CredentialRefresher', () => {
     expect(mockDocker.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
         Image: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
-        Entrypoint: ['claude'],
-        Cmd: ['--print', '--model', 'haiku', 'reply ok'],
+        Entrypoint: ['/bin/bash', '-lc'],
+        Cmd: [expect.stringContaining('cp -r /opt/claude-defaults/. /home/claude/')],
         HostConfig: expect.objectContaining({
           Binds: expect.arrayContaining([
             '/home/user/.code-orchestrator/claude-creds:/home/claude/.claude:rw',
@@ -96,6 +96,10 @@ describe('CredentialRefresher', () => {
         }),
       })
     );
+    const createArg = mockDocker.createContainer.mock.calls[0]?.[0] as
+      | { Cmd?: string[] }
+      | undefined;
+    expect(createArg?.Cmd?.[0]).toContain('exec claude --print --model haiku');
   });
 
   it('returns true on exit code 0', async () => {

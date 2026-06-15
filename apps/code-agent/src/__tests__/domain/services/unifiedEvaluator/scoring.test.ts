@@ -34,6 +34,10 @@ describe('scoring/handleFallback', () => {
   it('dispatches for issue_comment event and records automation log', async () => {
     const deps = createDeps();
     await handleFallback(deps, createFakeEvent({ eventType: 'issue_comment' }), 'llm_down', Date.now(), logger);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'evt-1', _skipSentry: true }),
+      'Fallback: dispatching comment event',
+    );
     expect(deps.dispatchService.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         decision: expect.objectContaining({ reason: 'FALLBACK_DISPATCH: llm_down' }),
@@ -410,6 +414,10 @@ describe('scoring/handleLlmTriage', () => {
     // pull_request fallback is skip
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'fallback_skip: down' }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'evt-1', _skipSentry: true }),
+      'LLM triage failed',
     );
   });
 
