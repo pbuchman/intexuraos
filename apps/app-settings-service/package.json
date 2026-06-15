@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/app-settings-service",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -24,12 +24,10 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
-    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.1",
-    "zod": "^3.24.1"
+    "fastify": "catalog:",
+    "pino": "catalog:"
   },
   "devDependencies": {
     "nock": "^14.0.0"

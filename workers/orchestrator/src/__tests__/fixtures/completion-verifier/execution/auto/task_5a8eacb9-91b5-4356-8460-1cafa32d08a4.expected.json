@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1908",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1452/reduce-whatsapp-notification-noise-by-alerting-only-on-actionable-task",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_ead942e6-2f78-4c37-aa16-2670d91a6a43",
+      "mem_16dbe3ce-0c2e-42a1-94d6-a020412575fc"
+    ],
+    "memory_ids_rejected": ["mem_e97d3f6f-3979-44af-8577-bbe9e43bc3fb"],
+    "memory_usage_summary": "mem_ead942e6 and mem_16dbe3ce guided the importance-flag placement — interactive-button convention was intentionally overridden on `notifyTaskStarted` because dispatch is not an actionable moment, while `notifyTaskComplete` now carries the flag as a terminal \"ready to merge\" state; mem_e97d3f6f (queued notification removal) did not apply since `notifyTaskQueued` is out of scope.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": true,
+    "subagents": "superpowers:code-reviewer (role: independent production-readiness review of the diff 7d4a031..dd69610; scope: apps/code-agent notifier impl + test); superpowers:code-reviewer (role: re-review after hardening fix; scope: same range)",
+    "skill_sequence_proof": "superpowers:subagent-driven-development invoked first at the start of execution (read the plan and dispatched implementation); superpowers:requesting-code-review invoked after commit f2a2ce240 to obtain the initial review, then a second time after hardening commit dd69610b0 to confirm zero remaining issues — strictly in that order.",
+    "failure_reason": "",
+    "summary": "* Removed `important: true` from `notifyTaskStarted` and added it to `notifyTaskComplete` in `apps/code-agent/src/infra/services/whatsappNotifierImpl.ts`; all other notifiers untouched per spec.\n  * Updated tests to assert `callArgs.important` is `undefined` for started and `important: true` for complete (including both the plain and prUrl branches); removed the now-stale INT-1418 comment.\n  * TDD cycle confirmed — tests failed red before implementation, passed green after; 73/73 whatsappNotifier tests pass.\n  * `pnpm run verify:workspace:tracked code-agent` and `pnpm run ci:tracked` both fully green (15241 tests, static validation, build, format).\n  * Two code-review iterations: first returned \"Ready to merge\" with one minor hardening suggestion (lock the flag on the prUrl branch test); fix applied and re-reviewed with \"Approved, no remaining issues\"; PR #1908 opened against development."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

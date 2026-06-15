@@ -9,6 +9,7 @@ export {
   saveWebhookEvent,
   updateWebhookEventStatus,
   getWebhookEvent,
+  findRetryableWebhookEvents,
 } from './webhookEventRepository.js';
 
 export {
@@ -26,6 +27,7 @@ export {
   getMessagesByUser,
   getMessage,
   findById,
+  findByWaMessageId,
   updateTranscription,
   updateLinkPreview,
   deleteMessage,

@@ -5,7 +5,7 @@
  * Implementations may use Docker containers, VMs, or other isolation mechanisms.
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type { WorkerRuntime } from '../runtime/types.js';
 
 export interface AnthropicOAuthCredentials {
@@ -32,10 +32,18 @@ export interface WorkerTypeConfig {
     | 'MINIMAX_API_KEY'
     | 'MIMO_API_KEY'
     | 'DASHSCOPE_API_KEY'
+    | 'KIMI_API_KEY'
     | 'OPENROUTER_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
   disableExperimentalBetas?: boolean;
+  /**
+   * Whether this worker tier is expected to emit the full memory-acknowledgment
+   * telemetry block. 'required' → missing telemetry triggers retry / terminal-fail
+   * (Opus/Sonnet-grade). 'optional' → missing telemetry is logged as a warning
+   * but does not block task completion (weaker / cheaper models).
+   */
+  telemetryExpectation: 'required' | 'optional';
 }
 
 export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
@@ -43,6 +51,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    telemetryExpectation: 'required',
   },
   opus: {
     runtime: 'claude',
@@ -50,51 +59,61 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'opus',
     effort: 'high',
+    telemetryExpectation: 'required',
   },
   sonnet: {
     runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'sonnet',
+    telemetryExpectation: 'required',
   },
   minimax: {
     runtime: 'claude',
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     model: 'MiniMax-M2.7',
+    telemetryExpectation: 'optional',
   },
   'mimo-pro': {
     runtime: 'claude',
     apiBaseUrl: 'https://token-plan-sgp.xiaomimimo.com/anthropic',
     apiKeyEnvVar: 'MIMO_API_KEY',
-    model: 'mimo-v2-pro',
+    model: 'mimo-v2.5-pro',
+    telemetryExpectation: 'optional',
   },
   glm: {
     runtime: 'claude',
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'glm-5',
+    telemetryExpectation: 'optional',
   },
   qwen: {
     runtime: 'claude',
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'qwen3.5-plus',
+    telemetryExpectation: 'optional',
   },
   kimi: {
     runtime: 'claude',
-    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    model: 'kimi-k2.5',
+    apiBaseUrl: 'https://api.kimi.com/coding',
+    apiKeyEnvVar: 'KIMI_API_KEY',
+    model: 'kimi-for-coding',
+    effort: 'high',
+    telemetryExpectation: 'optional',
   },
   codex: {
     runtime: 'codex',
     apiBaseUrl: 'https://api.openai.com',
+    telemetryExpectation: 'optional',
   },
   'codex-xhigh': {
     runtime: 'codex',
     apiBaseUrl: 'https://api.openai.com',
     effort: 'xhigh',
+    telemetryExpectation: 'optional',
   },
   'openrouter-free': {
     runtime: 'claude',
@@ -103,6 +122,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     model: 'google/gemma-4-31b-it:free',
     effort: 'high',
     disableExperimentalBetas: true,
+    telemetryExpectation: 'optional',
   },
 };
 
@@ -113,6 +133,7 @@ export interface WorkerSecrets {
   MINIMAX_API_KEY: string;
   MIMO_API_KEY: string;
   DASHSCOPE_API_KEY: string;
+  KIMI_API_KEY: string;
   OPENROUTER_API_KEY: string;
 }
 

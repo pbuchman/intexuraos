@@ -3,18 +3,27 @@
  * When initial LLM response fails validation, these build repair prompts.
  */
 
+import type { PromptBuilder } from '../shared/types.js';
+
+export interface ValidationRepairPromptInput {
+  originalPrompt: string;
+  invalidResponse: string;
+  errorMessage: string;
+}
+
 /**
- * Build a repair prompt for input quality validation.
+ * Repair prompt for input quality validation.
  *
  * Used when validateInput() receives an invalid LLM response.
  */
-// Prompt version: 1.2.0
-export function buildValidationRepairPrompt(
-  originalPrompt: string,
-  invalidResponse: string,
-  errorMessage: string
-): string {
-  return `This is a repair attempt. If this also fails, the request will be rejected. Prioritize correctness over completeness.
+export const validationRepairPrompt: PromptBuilder<ValidationRepairPromptInput> = {
+  name: 'input-validation-repair',
+  description: 'Asks the LLM to fix a malformed input-quality validation response',
+  version: '1.2.0',
+
+  build(input: ValidationRepairPromptInput): string {
+    const { originalPrompt, invalidResponse, errorMessage } = input;
+    return `This is a repair attempt. If this also fails, the request will be rejected. Prioritize correctness over completeness.
 
 The previous response was invalid. Please fix it.
 
@@ -53,21 +62,23 @@ EXAMPLES:
 }
 
 Output the corrected JSON:`;
-}
+  },
+};
 
 /**
- * Build a repair prompt for input improvement.
+ * Repair prompt for input improvement.
  *
  * Used when improveInput() receives an invalid LLM response
  * (e.g., includes explanations, JSON formatting, or unwanted prefixes).
  */
-// Prompt version: 1.2.0
-export function buildImprovementRepairPrompt(
-  originalPrompt: string,
-  invalidResponse: string,
-  errorMessage: string
-): string {
-  return `This is a repair attempt. If this also fails, the request will be rejected. Prioritize correctness over completeness.
+export const improvementRepairPrompt: PromptBuilder<ValidationRepairPromptInput> = {
+  name: 'input-improvement-repair',
+  description: 'Asks the LLM to fix a malformed input-improvement response',
+  version: '1.2.0',
+
+  build(input: ValidationRepairPromptInput): string {
+    const { originalPrompt, invalidResponse, errorMessage } = input;
+    return `This is a repair attempt. If this also fails, the request will be rejected. Prioritize correctness over completeness.
 
 The previous response was invalid. Please fix it.
 
@@ -101,4 +112,5 @@ WHAT MAKES A GOOD IMPROVED PROMPT:
 - Preserves the original intent and language
 
 Output ONLY the improved prompt text:`;
-}
+  },
+};

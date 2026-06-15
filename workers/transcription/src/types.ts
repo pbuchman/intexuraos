@@ -2,6 +2,8 @@
  * Event and configuration types for the transcription worker.
  */
 
+import { loadRequiredEnv } from './__shims__/common-worker.js';
+
 /**
  * Event received from Pub/Sub when audio is stored in GCS.
  * Published by whatsapp-service after audio is stored.
@@ -81,6 +83,9 @@ export interface TranscriptionConfig {
   /** Pub/Sub topic for transcription completed events. */
   transcriptionCompletedTopic: string;
 
+  /** Pub/Sub topic for transcription dead-letter events (parse / schema failures). */
+  transcriptionDlqTopic: string;
+
   /** GCP project ID for GCS operations. */
   gcpProjectId: string;
 
@@ -90,46 +95,31 @@ export interface TranscriptionConfig {
 
 /**
  * Load and validate configuration from environment variables.
- * @throws {Error} if required variables are missing
+ *
+ * Aggregates ALL missing required vars into a single error so deployers see
+ * the full list at once instead of N restart cycles. Empty strings count as
+ * missing (per `loadRequiredEnv` contract).
+ *
+ * @throws {Error} if any required variable is missing or empty
  */
 export function loadConfig(): TranscriptionConfig {
-  const speechmaticsApiKey = process.env['INTEXURAOS_SPEECHMATICS_APP_API_KEY'];
-  if (speechmaticsApiKey === undefined || speechmaticsApiKey === '') {
-    throw new Error('INTEXURAOS_SPEECHMATICS_APP_API_KEY is required');
-  }
-
-  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
-  if (internalAuthToken === undefined || internalAuthToken === '') {
-    throw new Error('INTEXURAOS_INTERNAL_AUTH_TOKEN is required');
-  }
-
-  const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
-  if (userServiceUrl === undefined || userServiceUrl === '') {
-    throw new Error('INTEXURAOS_USER_SERVICE_URL is required');
-  }
-
-  const transcriptionCompletedTopic =
-    process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC'];
-  if (transcriptionCompletedTopic === undefined || transcriptionCompletedTopic === '') {
-    throw new Error('INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC is required');
-  }
-
-  const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
-  if (gcpProjectId === undefined || gcpProjectId === '') {
-    throw new Error('INTEXURAOS_GCP_PROJECT_ID is required');
-  }
-
-  const mediaBucket = process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'];
-  if (mediaBucket === undefined || mediaBucket === '') {
-    throw new Error('INTEXURAOS_WHATSAPP_MEDIA_BUCKET is required');
-  }
+  const env = loadRequiredEnv({
+    INTEXURAOS_SPEECHMATICS_APP_API_KEY: { required: true },
+    INTEXURAOS_INTERNAL_AUTH_TOKEN: { required: true },
+    INTEXURAOS_USER_SERVICE_URL: { required: true },
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC: { required: true },
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC: { required: true },
+    INTEXURAOS_GCP_PROJECT_ID: { required: true },
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET: { required: true },
+  });
 
   return {
-    speechmaticsApiKey,
-    internalAuthToken,
-    userServiceUrl,
-    transcriptionCompletedTopic,
-    gcpProjectId,
-    mediaBucket,
+    speechmaticsApiKey: env.INTEXURAOS_SPEECHMATICS_APP_API_KEY,
+    internalAuthToken: env.INTEXURAOS_INTERNAL_AUTH_TOKEN,
+    userServiceUrl: env.INTEXURAOS_USER_SERVICE_URL,
+    transcriptionCompletedTopic: env.INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC,
+    transcriptionDlqTopic: env.INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC,
+    gcpProjectId: env.INTEXURAOS_GCP_PROJECT_ID,
+    mediaBucket: env.INTEXURAOS_WHATSAPP_MEDIA_BUCKET,
   };
 }

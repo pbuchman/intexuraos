@@ -10,7 +10,7 @@ import { type EventParams, type CalendarIdQuery } from './calendarHelpers.js';
 
 export const eventDeleteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.delete<{ Params: EventParams; Querystring: CalendarIdQuery }>(
-    '/calendar/events/:eventId',
+    '/events/:eventId',
     {
       schema: {
         operationId: 'deleteCalendarEvent',

@@ -348,7 +348,7 @@ describe('pricingRoutes', () => {
     it('returns 401 for missing Authorization bearer header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/llm-usage/pricing',
+        url: '/pricing',
       });
 
       expect(response.statusCode).toBe(401);
@@ -362,7 +362,7 @@ describe('pricingRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/llm-usage/pricing',
+        url: '/pricing',
         headers: { authorization: `Bearer ${makeTestToken('user-123')}` },
       });
 
@@ -399,7 +399,7 @@ describe('pricingRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/llm-usage/pricing',
+        url: '/pricing',
         headers: { authorization: `Bearer ${makeTestToken('user-123')}` },
       });
 

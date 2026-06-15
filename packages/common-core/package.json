@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/common-core",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,8 +8,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./code-task-worker-types": "./src/codeTaskWorkerTypes.ts",
-    "./errors": "./src/errors.ts"
+    "./errors": "./src/errors.ts",
+    "./redaction": "./src/redaction.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

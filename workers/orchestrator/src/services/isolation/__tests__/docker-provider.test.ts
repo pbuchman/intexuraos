@@ -187,6 +187,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     MINIMAX_API_KEY: 'test-minimax-key',
     MIMO_API_KEY: 'test-mimo-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
+    KIMI_API_KEY: 'test-kimi-key',
     OPENROUTER_API_KEY: 'test-openrouter-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
@@ -531,6 +532,9 @@ describe('DockerProvider', () => {
       );
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
       expect(tmpfs['/repo/node_modules']).toContain(`uid=${String(process.getuid?.() ?? 1000)}`);
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContain('NPM_CONFIG_IGNORE_SCRIPTS=true');
+      expect(envArr).toContain('npm_config_ignore_scripts=true');
     });
 
     it('enables crash forensics settings when forensicsMode is configured', async () => {
@@ -741,7 +745,7 @@ describe('DockerProvider', () => {
     it('handles non-existent worker gracefully', async () => {
       await expect(provider.destroyWorker('non-existent')).resolves.not.toThrow();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        { taskId: 'non-existent' },
+        { taskId: 'non-existent', _skipSentry: true },
         'Worker not found for destroy'
       );
     });
@@ -955,6 +959,88 @@ describe('DockerProvider', () => {
       // Worker should be back in active map, removed from preserved
       expect(await provider.listWorkers()).toHaveLength(1);
       expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('attach path leaves lockfileSha256 unset when worktree has no pnpm-lock.yaml (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      const config = createTestConfig({ taskId: 'preserved-task-no-lock' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('preserved-task-no-lock');
+
+      // Make existsSync return false specifically for pnpm-lock.yaml so the
+      // attach-time snapshot returns null and the spread-conditional skips the
+      // lockfileSha256 entry (covers the null branch on the attach path).
+      (fsModule.existsSync as Mock).mockImplementation((p: unknown) => {
+        if (typeof p === 'string' && p.endsWith('pnpm-lock.yaml')) {
+          return false;
+        }
+        return true;
+      });
+
+      try {
+        await provider.createWorker(
+          createTestConfig({
+            taskId: 'preserved-task-no-lock',
+            continueSession: true,
+          })
+        );
+      } finally {
+        (fsModule.existsSync as Mock).mockImplementation(() => true);
+      }
+
+      // No drift event because no snapshot was taken at attach time.
+      const driftCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftCall).toBeUndefined();
+    });
+
+    it('emits lockfile-drift on resume path when pnpm-lock changes between attach and teardown (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+
+      // Path-keyed mock — robust against any incidental readFileSync calls.
+      let lockState = 'lock-resume-v1';
+      (fsModule.readFileSync as Mock).mockImplementation((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from(lockState);
+        }
+        if (
+          typeof filePath === 'string' &&
+          filePath.includes('code-worker-forensics-seccomp.json')
+        ) {
+          return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+        }
+        return '';
+      });
+
+      // Stand up + preserve a worker so the next createWorker takes the
+      // resumeFromPreserved → attachToExistingContainer path.
+      const initialConfig = createTestConfig({ taskId: 'resume-drift-task' });
+      await provider.createWorker(initialConfig);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-drift-task');
+
+      (mockLogger.warn as Mock).mockClear();
+
+      // Resume — attachToExistingContainer captures sha('lock-resume-v1').
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'resume-drift-task',
+          continueSession: true,
+          onComplete: vi.fn(),
+        })
+      );
+      // Tamper before the run-attempt teardown fires.
+      lockState = 'lock-resume-v2-tampered';
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftWarnCall).toBeDefined();
     });
 
     it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
@@ -1403,6 +1489,27 @@ describe('DockerProvider', () => {
       expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic');
     });
 
+    it('sets native Kimi Code env vars for kimi worker', async () => {
+      const config = createTestConfig({ workerType: 'kimi' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+
+      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='))).toBe(
+        'ANTHROPIC_API_KEY=test-kimi-key'
+      );
+      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='))).toBe(
+        'ANTHROPIC_BASE_URL=https://api.kimi.com/coding'
+      );
+      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='))).toBe(
+        'ANTHROPIC_MODEL=kimi-for-coding'
+      );
+      expect(envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='))).toBe(
+        'CLAUDE_CODE_EFFORT_LEVEL=high'
+      );
+    });
+
     it('sets ANTHROPIC_MODEL for sonnet worker', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
@@ -1421,6 +1528,16 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
+    });
+
+    it('sets ANTHROPIC_MODEL for mimo-pro worker', async () => {
+      const config = createTestConfig({ workerType: 'mimo-pro' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=mimo-v2.5-pro');
     });
 
     it('sets OpenRouter env vars for openrouter-free worker', async () => {
@@ -1721,7 +1838,10 @@ describe('DockerProvider', () => {
       await provider.createWorker(createTestConfig());
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ imageName: expect.stringContaining(':latest') }),
+        expect.objectContaining({
+          imageName: expect.stringContaining(':latest'),
+          _skipSentry: true,
+        }),
         expect.stringContaining('mutable tag')
       );
     });
@@ -2877,6 +2997,7 @@ describe('DockerProvider', () => {
               MINIMAX_API_KEY: 'test',
               MIMO_API_KEY: 'test',
               DASHSCOPE_API_KEY: 'test',
+              KIMI_API_KEY: 'test',
               OPENROUTER_API_KEY: 'test',
             },
           })
@@ -2956,6 +3077,7 @@ describe('DockerProvider', () => {
             MINIMAX_API_KEY: 'test',
             MIMO_API_KEY: 'test',
             DASHSCOPE_API_KEY: 'test',
+            KIMI_API_KEY: 'test',
             OPENROUTER_API_KEY: 'test',
           },
         })
@@ -2978,6 +3100,20 @@ describe('DockerProvider', () => {
       await provider.createWorker(createTestConfig());
 
       expect(fsModule.mkdirSync).toHaveBeenCalledWith(expect.stringContaining('pnpm-store'), {
+        recursive: true,
+      });
+    });
+
+    it('creates host cache directories used by package-manager bind mounts', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.mkdirSync as Mock).mockClear();
+
+      await provider.createWorker(createTestConfig());
+
+      expect(fsModule.mkdirSync).toHaveBeenCalledWith(expect.stringContaining('cache/pnpm'), {
+        recursive: true,
+      });
+      expect(fsModule.mkdirSync).toHaveBeenCalledWith(expect.stringContaining('cache/corepack'), {
         recursive: true,
       });
     });
@@ -3139,6 +3275,33 @@ describe('DockerProvider', () => {
         expect.objectContaining({ taskId: 'test-task-123' }),
         'Container wait error'
       );
+    });
+
+    it('does not overwrite status when worker is destroyed before wait resolves', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const onComplete = vi.fn();
+
+      const handle = await nonManagedProvider.createWorker(createTestConfig({ onComplete }));
+      expect(handle.status).toBe('running');
+
+      // Remove the worker from the map BEFORE wait() resolves. This is the
+      // race we want to cover: the .then() callback runs but workers.get()
+      // returns undefined, so handle.status must not be overwritten.
+      await nonManagedProvider.destroyWorker('test-task-123');
+
+      // Simulate a pre-existing terminal status (e.g. set by waitForCompletion
+      // when a timeout fires) — the .then() must not clobber it.
+      handle.status = 'timeout';
+
+      mocks.resolveContainerWait({ StatusCode: 137 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(handle.status).toBe('timeout');
+      expect(onComplete).toHaveBeenCalledWith(137);
     });
   });
 
@@ -3623,6 +3786,128 @@ describe('DockerProvider', () => {
         expect.objectContaining({ taskId: 'test-task-123' }),
         'Failed to persist attempt exec stream chunk'
       );
+    });
+
+    it('emits lockfile-drift warning without forensics write when no forensics path (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      // Path-keyed mock that mutates between create-time snapshot and
+      // teardown-time snapshot to simulate the LLM tampering with pnpm-lock.yaml
+      // during the attempt. Keying by path (not call order) keeps this test
+      // robust against any incidental readFileSync calls that may be added
+      // elsewhere in the create/teardown path.
+      let lockState = 'lock-v1';
+      (fsModule.readFileSync as Mock).mockImplementation((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from(lockState);
+        }
+        if (
+          typeof filePath === 'string' &&
+          filePath.includes('code-worker-forensics-seccomp.json')
+        ) {
+          return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+        }
+        return '';
+      });
+      // After createWorker captures sha('lock-v1'), the teardown will read
+      // 'lock-v2-tampered' and detect drift.
+      const tamperBeforeTeardown = (): void => {
+        lockState = 'lock-v2-tampered';
+      };
+
+      (fsModule.promises.writeFile as Mock).mockClear();
+
+      const onCompleteSpy = vi.fn();
+      // Tamper as soon as the worker is created (synchronous; createWorker
+      // already snapshotted by this point).
+      await provider.createWorker(createTestConfig({ onComplete: onCompleteSpy }));
+      tamperBeforeTeardown();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftWarnCall).toBeDefined();
+
+      const writeFileCalls = (fsModule.promises.writeFile as Mock).mock.calls;
+      const driftWrite = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).endsWith('lockfile-drift.txt')
+      );
+      expect(driftWrite).toBeUndefined();
+    });
+
+    it('skips lockfile snapshot when worktree has no pnpm-lock.yaml (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      // Make existsSync return false specifically for pnpm-lock.yaml so
+      // snapshotLockfile() returns null at create time. Other existsSync
+      // calls (.git, etc.) keep their default `true`.
+      const originalExistsSync = (fsModule.existsSync as Mock).getMockImplementation();
+      (fsModule.existsSync as Mock).mockImplementation((p: unknown) => {
+        if (typeof p === 'string' && p.endsWith('pnpm-lock.yaml')) {
+          return false;
+        }
+        return originalExistsSync ? originalExistsSync(p) : true;
+      });
+
+      try {
+        await provider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // No lockfile-drift warn emitted (snapshot returned null, so no tracking).
+        const driftCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+          const ctx = call[0] as { event?: string } | undefined;
+          return ctx?.event === 'lockfile-drift';
+        });
+        expect(driftCall).toBeUndefined();
+      } finally {
+        (fsModule.existsSync as Mock).mockImplementation(() => true);
+      }
+    });
+
+    it('emits lockfile-drift warning + writes lockfile-drift.txt when pnpm-lock changes (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      // Path-keyed mock that mutates between create-time and teardown-time
+      // snapshots — survives any incidental readFileSync calls that may be
+      // added elsewhere in the create/teardown path.
+      let lockState = 'lock-v1';
+      (fsModule.readFileSync as Mock).mockImplementation((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from(lockState);
+        }
+        if (
+          typeof filePath === 'string' &&
+          filePath.includes('code-worker-forensics-seccomp.json')
+        ) {
+          return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+        }
+        return '';
+      });
+
+      (fsModule.promises.writeFile as Mock).mockClear();
+
+      await forensicsProvider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+      lockState = 'lock-v2-tampered';
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftWarnCall).toBeDefined();
+
+      const writeFileCalls = (fsModule.promises.writeFile as Mock).mock.calls;
+      const driftWrite = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).endsWith('lockfile-drift.txt')
+      );
+      expect(driftWrite).toBeDefined();
     });
   });
 

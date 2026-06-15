@@ -36,9 +36,9 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import { err, ok } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
@@ -52,13 +52,12 @@ import type { LogLineRepository } from '../../domain/repositories/logLineReposit
 import crypto from 'node:crypto';
 import { fetchWithAuth, type UserServiceClient } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -67,7 +66,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import type { GitHubPRClient, PullRequestStatus, PullRequestFile, PullRequestCommit, GitHubPullRequestListItem, GitHubPullRequestDetails, GitHubPRClientError } from '../../domain/ports/gitHubPRClient.js';
 import type { GitHubPRSummaryRepository } from '../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { GitHubPRSummary } from '../../domain/models/gitHubPRSummary.js';
@@ -333,11 +332,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
@@ -388,7 +383,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -407,7 +401,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -989,7 +983,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(completeResponse.statusCode).toBe(200);
       expect(lineStoreSpy).toHaveBeenCalledOnce();
       const flushedLines = lineStoreSpy.mock.calls[0]?.[1];
-      expect(flushedLines?.[0]?.text).toBe(rawFragment);
+      expect(flushedLines?.[0]?.text).toBe('[error] boom');
     });
 
     it('does not flush extra log lines on task completion when Codex logs already ended with a newline', async () => {
@@ -1060,7 +1054,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(completeResponse.statusCode).toBe(200);
       expect(lineStoreSpy).toHaveBeenCalledTimes(1);
-      expect(lineStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe(rawLine.trimEnd());
+      expect(lineStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe(
+        '[codex] Turn completed | input: ? tokens (0% cached) | output: 1 tokens',
+      );
     });
 
     it('logs an error when flushing pending Codex log lines fails on task completion', async () => {
@@ -5277,8 +5273,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
-    describe('plan PR auto-merge on review pass', () => {
-      // Shared setup for auto-merge tests
+    describe('plan PR NOT merged on review pass', () => {
       async function createPlanningTaskWithPrUrl(traceId: string, prUrl: string): Promise<import('../../domain/models/codeTask.js').CodeTask> {
         const result = await codeTaskRepo.create({
           userId: 'user-123',
@@ -5322,84 +5317,11 @@ describe('POST /internal/webhooks/task-complete', () => {
         return result.value;
       }
 
-      it('auto-merges plan PR when plan review passes and planning_pr_url exists', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_ok', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_ok_review');
-
-        // Install fresh gitHubPRClient mock with mergePullRequest
-        const { gitHubPRClient: ghClient } = installPRNotificationServices();
-        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
-          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
-        );
-        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
-          ok({ sha: 'abc123', merged: true })
-        );
-
-        const payload = {
-          taskId: reviewTask.id,
-          status: 'completed' as const,
-          result: {
-            summary: 'Plan review passed',
-            review_comments_posted: '0',
-            review_types: 'plan-review',
-            needs_remediation: '0',
-            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
-          },
-        };
-
-        const response = await sendLabelPayload(payload);
-
-        expect(response.statusCode).toBe(200);
-        expect(ghClient.mergePullRequest).toHaveBeenCalledWith(
-          'ghp_test_token',
-          'pbuchman',
-          'intexuraos',
-          1654,
-          'merge',
-          expect.stringContaining('[plan]'),
-        );
-      });
-
-      it('succeeds even when plan PR auto-merge fails', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_fail', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_fail_review');
+      it('does NOT merge plan PR when plan review passes (plan PR stays open for user review comments)', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_no_automerge_pass', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_no_automerge_pass_review');
 
         const { gitHubPRClient: ghClient } = installPRNotificationServices();
-        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
-          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
-        );
-        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
-          err({ code: 'API_ERROR' as const, message: 'Merge conflict' })
-        );
-
-        const payload = {
-          taskId: reviewTask.id,
-          status: 'completed' as const,
-          result: {
-            summary: 'Plan review passed',
-            review_comments_posted: '0',
-            review_types: 'plan-review',
-            needs_remediation: '0',
-            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
-          },
-        };
-
-        const response = await sendLabelPayload(payload);
-
-        // Webhook still succeeds — merge failure is best-effort
-        expect(response.statusCode).toBe(200);
-      });
-
-      it('skips plan PR merge when GitHub token is unavailable', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_no_token', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_token_review');
-
-        installPRNotificationServices();
-        // Override getOAuthToken to return an error (no token available)
-        const { userServiceClient: uc } = getServices();
-        vi.mocked(uc.getOAuthToken).mockResolvedValue(
-          err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'Connection not found' })
-        );
 
         const payload = {
           taskId: reviewTask.id,
@@ -5416,58 +5338,14 @@ describe('POST /internal/webhooks/task-complete', () => {
         const response = await sendLabelPayload(payload);
 
         expect(response.statusCode).toBe(200);
-        // mergePullRequest should not have been called since we have no token
-        const { gitHubPRClient: ghClient } = getServices();
         expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
       });
 
-      it('skips plan PR merge when planning task has no planning_pr_url', async () => {
-        const result = await codeTaskRepo.create({
-          userId: 'user-123',
-          prompt: 'Plan the task',
-          sanitizedPrompt: 'Plan the task',
-          systemPromptHash: 'plan-auto',
-          workerType: 'auto',
-          workerLocation: 'mac',
-          repository: 'pbuchman/intexuraos',
-          baseBranch: 'development',
-          traceId: 'trace_plan_merge_no_url',
-          prNumber: 1654,
-          webhookSecret: 'test-webhook-secret',
-          agentType: 'planning',
-          linearIssueId: 'INT-500',
-        });
-        if (!result.ok) throw new Error('Failed to create planning task');
-        // Update result to have empty planning_pr_url
-        await codeTaskRepo.update(result.value.id, { result: { planning_pr_url: '' } });
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_url_review');
+      it('does NOT merge plan PR when plan review requires remediation', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_no_automerge_remediation', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_no_automerge_remediation_review');
 
-        installPRNotificationServices();
-
-        const payload = {
-          taskId: reviewTask.id,
-          status: 'completed' as const,
-          result: {
-            summary: 'Plan review passed',
-            review_comments_posted: '0',
-            review_types: 'plan-review',
-            needs_remediation: '0',
-            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
-          },
-        };
-
-        const response = await sendLabelPayload(payload);
-
-        expect(response.statusCode).toBe(200);
-        const { gitHubPRClient: ghClient } = getServices();
-        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
-      });
-
-      it('does NOT auto-merge plan PR when review requires remediation', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_remediation', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_remediation_review');
-
-        installPRNotificationServices();
+        const { gitHubPRClient: ghClient } = installPRNotificationServices();
 
         const payload = {
           taskId: reviewTask.id,
@@ -5484,8 +5362,36 @@ describe('POST /internal/webhooks/task-complete', () => {
         const response = await sendLabelPayload(payload);
 
         expect(response.statusCode).toBe(200);
-        const { gitHubPRClient: ghClient } = getServices();
         expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+
+      it('does NOT add ready-to-merge label on plan review pass (plan PR is not ready to merge)', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_no_label', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_no_label_review');
+
+        installPRNotificationServices();
+        const { linearAgentClient: lac } = getServices();
+        const updateSpy = vi.mocked(lac.updateIssueMetadata);
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        const readyToMergeCalls = updateSpy.mock.calls.filter(
+          (call) => Array.isArray(call[0].addLabels) && call[0].addLabels.includes('ready-to-merge'),
+        );
+        expect(readyToMergeCalls).toHaveLength(0);
       });
     });
 
@@ -7418,11 +7324,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
@@ -7473,7 +7375,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -7492,7 +7393,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -7783,11 +7684,7 @@ describe('POST /internal/logs', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
@@ -7838,7 +7735,6 @@ describe('POST /internal/logs', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -7857,7 +7753,7 @@ describe('POST /internal/logs', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -8086,7 +7982,7 @@ describe('POST /internal/logs', () => {
     expect(storedEntries?.[1]?.text).toBe('[claude] Hello');
   });
 
-  it('stores raw Codex JSON log lines without Claude formatting', async () => {
+  it('stores readable Codex log lines while preserving raw chunks', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
       prompt: 'Review the PR',
@@ -8140,7 +8036,76 @@ describe('POST /internal/logs', () => {
     expect(entryStoreSpy).toHaveBeenCalledOnce();
     const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
     expect(storedEntries).toHaveLength(1);
-    expect(storedEntries?.[0]?.text).toBe(jsonContent.trimEnd());
+    expect(storedEntries?.[0]?.text).toBe('[msg] READY');
+  });
+
+  it('stores readable Codex file change log lines', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Review the PR',
+      sanitizedPrompt: 'Review the PR',
+      systemPromptHash: 'default',
+      workerType: 'codex',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_codex_file_change_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const jsonContent = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_105',
+        type: 'file_change',
+        changes: [
+          {
+            path: '/repo/apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts',
+            kind: 'update',
+          },
+        ],
+        status: 'completed',
+      },
+    }) + '\n';
+
+    const payload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 1,
+          content: jsonContent,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).toHaveBeenCalledOnce();
+    const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
+    expect(storedEntries).toHaveLength(1);
+    expect(storedEntries?.[0]?.text).toBe(
+      '[file] update apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts',
+    );
   });
 
   it('does not cache the Claude fallback when runtime lookup fails transiently for a Codex task', async () => {
@@ -8230,7 +8195,7 @@ describe('POST /internal/logs', () => {
     });
 
     expect(secondResponse.statusCode).toBe(200);
-    expect(entryStoreSpy.mock.calls[1]?.[1]?.[0]?.text).toBe(secondJson.trimEnd());
+    expect(entryStoreSpy.mock.calls[1]?.[1]?.[0]?.text).toBe('[msg] SECOND');
   });
 
   it('validates HMAC signature', async () => {
@@ -8421,7 +8386,7 @@ describe('POST /internal/logs', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('rejects logs without internal auth header', async () => {
+  it('accepts logs signed with the task secret without internal auth header', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
       prompt: 'Fix the bug',
@@ -8462,9 +8427,10 @@ describe('POST /internal/logs', () => {
       payload,
     });
 
-    expect(response.statusCode).toBe(401);
+    expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
-    expect(body.error.code).toBe('UNAUTHORIZED');
+    expect(body.received).toBe(true);
+    expect(body.acknowledgedSequences).toEqual([1]);
   });
 
   it('returns UNKNOWN_TASK when findById fails during HMAC secret lookup for logs (L1387)', async () => {
@@ -8660,11 +8626,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
@@ -8715,7 +8677,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -8734,7 +8695,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -9534,8 +9495,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -9581,7 +9541,6 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -9600,7 +9559,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -10749,6 +10708,78 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.value.error?.message).toContain('non-negative integer');
   });
 
+  it('soft-defaults review_comments_posted to "0" when review_id is present (INT-1570)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-int-1570-soft', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        pr: 'https://github.com/pbuchman/intexuraos/pull/1964',
+        review_id: '4175520278',
+        review_types: 'plan_review',
+        // review_comments_posted intentionally omitted
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    // Review tasks transition to 'reviewed' (not 'completed') on success.
+    expect(g.value.status).toBe('reviewed');
+    expect(g.value.error).toBeUndefined();
+  });
+
+  it('still hard-fails review when review_id is empty string and review_comments_posted is missing (INT-1570)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-int-1570-empty', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        review_id: '   ',
+        review_types: 'plan_review',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('REVIEW_AGENT_ENFORCEMENT_FAILED');
+  });
+
   it('fails execution when result is missing (no payload)', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
@@ -11351,8 +11382,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -11373,7 +11403,6 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       linearIssueService: LinearIssueService; statusMirrorService: StatusMirrorService; metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -11392,7 +11421,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
     app = await buildServer();
   });
@@ -11401,8 +11430,21 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
 
   it('returns 500 when turnMetricsRepo.store fails', async () => {
     vi.spyOn(getServices().turnMetricsRepo, 'store').mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'fail' }));
+    await getServices().codeTaskRepo.create({
+      id: 'task_123',
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_metrics_store_fail',
+      webhookSecret: 'test-webhook-secret',
+    });
     const payload = { taskId: 'task_123', attempt: 1, timestamp: new Date().toISOString() };
-    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orch-secret');
+    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/turn-metrics', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(500);
   });
@@ -11411,6 +11453,19 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
     const services = getServices();
     const storeSpy = vi.spyOn(services.turnMetricsRepo, 'store').mockResolvedValue(ok(undefined));
     const lineSpy = vi.spyOn(services.logLineRepo, 'storeBatch').mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'fail' }));
+    await services.codeTaskRepo.create({
+      id: 'task_123',
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_metrics_lines_fail',
+      webhookSecret: 'test-webhook-secret',
+    });
     const payload = {
       taskId: 'task_123', attempt: 1, timestamp: new Date().toISOString(),
       cpuTimeSeconds: 10, cpuCores: 4, peakMemoryMB: 512, wallTimeSeconds: 15,
@@ -11418,7 +11473,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       totalInputTokens: 1000, totalOutputTokens: 500, totalCacheReadTokens: 200,
       totalCacheCreationTokens: 100, apiCallCount: 5, cpuUtilizationPercent: 50, idlePercent: 10,
     };
-    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orch-secret');
+    const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-webhook-secret');
     const response = await app.inject({ method: 'POST', url: '/internal/turn-metrics', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
     expect(response.statusCode).toBe(200);
     storeSpy.mockRestore();
@@ -11520,11 +11575,7 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
@@ -11575,7 +11626,6 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -11594,7 +11644,7 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();

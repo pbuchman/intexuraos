@@ -1,0 +1,22 @@
+{
+  "data": {
+    "outcome": "planned",
+    "superpowers_writing_plans_used": true,
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1423/evaluate-requirements-for-multi-repository-support-in-code-agent",
+    "complex_task": false,
+    "plan_doc": true,
+    "subtask_urls": [],
+    "plan_pr": "https://github.com/pbuchman/intexuraos/pull/1889",
+    "parallel_breakdown_proof": "",
+    "memory_ids_used": [
+      "mem_9ff146f5-98a7-457e-acdf-e5a380d11c82",
+      "mem_c32726ac-a879-443f-8368-5ef4a964d722"
+    ],
+    "memory_ids_rejected": ["mem_186473cf-81ba-4b1a-a8c3-563086097ef5"],
+    "memory_usage_summary": "Dispatched three parallel Explore subagents (orchestrator, web UI, infra/auth) to produce an independent multi-layer inventory (per mem_9ff146f5), and the plan explicitly calls out the exact env-var contracts (INTEXURAOS_REPOSITORY_URL, INTEXURAOS_GITHUB_APP_INSTALLATION_ID, INTEXURAOS_USAGE_WEBHOOK_URL) that must change or be re-keyed per task (per mem_c32726ac).",
+    "clarification_message": "",
+    "summary": "* Task: scope the work to make IntexuraOS capable of running code tasks against repositories other than pbuchman/intexuraos, covering UX and configuration.\n  * Decision: PLAN-DOC (investigation deliverable, no subtasks, single plan document plus evidence PR).\n  * Artifacts: `docs/plans/2026-04-20-multi-repo-support-investigation.md`, planning branch `plan/int-1423-multi-repo-support`, PR #1889 targeting `development`, Linear issue description updated to point at the plan, original description archived as a Linear comment.\n  * Findings: orchestrator is hardcoded single-repo at bootstrap; dispatch contract, web UI, GitHub App token pool, worker bootstrap, and Firestore indexes all need changes. Task model already carries a `repository` field, so display-side is mostly ready.\n  * Estimate: 22–31 engineer-days full product (~5–7 weeks one engineer, ~3 weeks with two), or ~2 weeks for a same-org MVP reusing the existing GitHub App installation."
+  },
+  "missingRequired": [],
+  "warnings": []
+}

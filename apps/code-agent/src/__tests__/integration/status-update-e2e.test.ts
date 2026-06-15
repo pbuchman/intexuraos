@@ -128,7 +128,6 @@ describe('StatusUpdateClient <-> updateTaskStatusRoute end-to-end', () => {
       statusMirrorService: {} as never,
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
-      cleanupTaskLogs: {} as never,
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,

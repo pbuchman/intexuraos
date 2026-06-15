@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { monthLabelPl, shiftMonth } from '@/utils/digestDates.js';
+import { monthLabelEn, shiftMonth } from '@/utils/digestDates.js';
 
 interface MonthPickerProps {
   readonly month: string; // YYYY-MM
@@ -7,12 +7,12 @@ interface MonthPickerProps {
 }
 
 export function MonthPicker({ month, onChange }: MonthPickerProps): React.JSX.Element {
-  const label = monthLabelPl(month);
+  const label = monthLabelEn(month);
   return (
     <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800">
       <button
         type="button"
-        aria-label="Poprzedni miesiąc"
+        aria-label="Previous month"
         onClick={(): void => { onChange(shiftMonth(month, -1)); }}
         className="rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
       >
@@ -23,7 +23,7 @@ export function MonthPicker({ month, onChange }: MonthPickerProps): React.JSX.El
       </span>
       <button
         type="button"
-        aria-label="Następny miesiąc"
+        aria-label="Next month"
         onClick={(): void => { onChange(shiftMonth(month, 1)); }}
         className="rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
       >

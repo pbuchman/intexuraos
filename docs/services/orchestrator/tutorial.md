@@ -113,7 +113,7 @@ INFO: Repository validation passed
 INFO: Code worker auth active { expiresInMinutes: 210, subscriptionType: 'max' }
 INFO: Codex worker auth active { authMode: 'chatgpt', expiresInMinutes: 190 }
 INFO: Completion verification configuration { completionMaxAttempts: 3, verifier: '...' }
-INFO: Agent compliance validator configuration { complianceValidatorModel: 'xiaomi/mimo-v2-pro' }
+INFO: Agent compliance validator configuration { complianceValidatorModel: 'xiaomi/mimo-v2.5-pro' }
 INFO: Orchestrator HTTP server started { port: 8199 }
 INFO: No interrupted tasks to recover
 INFO: Starting heartbeat manager { intervalMs: 600000 }
@@ -169,7 +169,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo), `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
+The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo Pro 2.5), `glm`, `qwen` (Alibaba Cloud DashScope), `kimi` (Kimi Code), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
 
 ```bash
 BODY='{
@@ -308,7 +308,7 @@ curl -X POST http://localhost:8199/tasks/ask-001/message ...
 
 ### Step 8: Submit a task with mimo-pro
 
-For cost-effective execution via Xiaomi MiMo:
+For cost-effective execution via Xiaomi MiMo Pro 2.5:
 
 ```bash
 BODY='{
@@ -394,7 +394,7 @@ pnpm --filter orchestrator typecheck
 Build the test image first:
 
 ```bash
-cd workers/code-worker
+cd docker/code-worker
 docker build -t code-worker:test -f Dockerfile.test .
 cd ../..
 ```
@@ -484,6 +484,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `Cannot find module '@intexuraos'`                | Packages not built                    | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |
 | `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var              | Add to `.envrc.local` and run `direnv allow`                                                                                                      |
+| `INTEXURAOS_KIMI_APP_API_KEY not set`             | Missing required Kimi Code key        | Populate the Secret Manager version, run `./scripts/sync-secrets.sh --add-new`, then `direnv allow`                                               |
 | `TASK_COMPLETION_VERIFIER_FAILED`                 | All validation models unreachable     | Check network connectivity and API keys for configured validation models                                                                          |
 | `503 docker_unavailable`                          | Docker daemon not responding          | Check Docker Desktop is running                                                                                                                   |
 | `503 auth_unavailable`                            | Worker auth not ready                 | Check `workerAuths` in health endpoint; run `claude login` or `codex-login.sh`                                                                    |

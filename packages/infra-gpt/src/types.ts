@@ -41,8 +41,6 @@ export interface GptConfig {
   model: string;
   /** User ID for usage tracking and analytics */
   userId: string;
-  /** Optional research ID for correlating audit logs to a research run */
-  researchId?: string;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */

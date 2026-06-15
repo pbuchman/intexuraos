@@ -10,9 +10,13 @@ describe('ALL_REVIEW_TYPES', () => {
     expect(ALL_REVIEW_TYPES).toContain('test_quality');
   });
 
+  it('includes documentation', () => {
+    expect(ALL_REVIEW_TYPES).toContain('documentation');
+  });
+
   it('includes all expected review types', () => {
     expect([...ALL_REVIEW_TYPES]).toEqual(
-      expect.arrayContaining(['code_quality', 'security', 'architecture', 'plan_review', 'test_quality']),
+      expect.arrayContaining(['code_quality', 'security', 'architecture', 'plan_review', 'test_quality', 'documentation']),
     );
   });
 });
@@ -22,13 +26,17 @@ describe('LLM_TOOL_REVIEW_TYPES', () => {
     expect(LLM_TOOL_REVIEW_TYPES).toContain('test_quality');
   });
 
+  it('includes documentation', () => {
+    expect(LLM_TOOL_REVIEW_TYPES).toContain('documentation');
+  });
+
   it('excludes plan_review', () => {
     expect(LLM_TOOL_REVIEW_TYPES).not.toContain('plan_review');
   });
 
-  it('includes code_quality, security, architecture, and test_quality', () => {
+  it('includes code_quality, security, architecture, test_quality, and documentation', () => {
     expect([...LLM_TOOL_REVIEW_TYPES]).toEqual(
-      expect.arrayContaining(['code_quality', 'security', 'architecture', 'test_quality']),
+      expect.arrayContaining(['code_quality', 'security', 'architecture', 'test_quality', 'documentation']),
     );
   });
 });

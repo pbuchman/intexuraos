@@ -1383,7 +1383,7 @@ describe('LLM triage retry for pull_request events', () => {
 
     expect(evaluateEvent).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ eventId: prEvent.id }),
+      expect.objectContaining({ eventId: prEvent.id, _skipSentry: true }),
       'LLM triage failed for pull_request event, retrying with correction context'
     );
     // Second call should include correctionContext
@@ -1446,11 +1446,11 @@ describe('LLM triage retry for pull_request events', () => {
     );
     // Both warns fire: retry warn first, then the existing 'LLM triage failed' warn
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ eventId: prEvent.id }),
+      expect.objectContaining({ eventId: prEvent.id, _skipSentry: true }),
       'LLM triage failed for pull_request event, retrying with correction context'
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ eventId: prEvent.id }),
+      expect.objectContaining({ eventId: prEvent.id, _skipSentry: true }),
       'LLM triage failed'
     );
   });
@@ -1788,12 +1788,15 @@ describe('LLM retry for pull_request events', () => {
     }
 
     function createRemediationCodeTaskRepo(task: { status: string; completedAt?: Date; requiresReReview?: boolean } | null): Partial<CodeTaskRepository> {
+      const findOriginTaskByPR = vi.fn().mockResolvedValue(ok(null));
       if (task === null) {
         return {
+          findOriginTaskByPR,
           findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
         };
       }
       return {
+        findOriginTaskByPR,
         findRecentRemediationForPR: vi.fn().mockResolvedValue(ok({
           id: 'task-rem-1',
           agentType: 'remediation',
@@ -2033,6 +2036,7 @@ describe('LLM retry for pull_request events', () => {
 
     it('proceeds with review when codeTaskRepo query fails', async () => {
       const codeTaskRepo: Partial<CodeTaskRepository> = {
+        findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
         findRecentRemediationForPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Connection failed' })),
       };
       const deps = createFakeDeps({

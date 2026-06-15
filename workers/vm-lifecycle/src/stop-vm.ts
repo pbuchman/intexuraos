@@ -1,11 +1,15 @@
 import { InstancesClient } from '@google-cloud/compute';
+import * as Sentry from '@sentry/node';
+import { IntexuraOSError, type ErrorCode } from '@intexuraos/common-core';
 import { logger } from './logger.js';
 import { VM_CONFIG } from './config.js';
+import { isExpectedStartupNetworkError } from './errors.js';
 
 export interface StopVmResult {
   success: boolean;
   message: string;
   runningTasksAtShutdown?: number;
+  errorCode?: ErrorCode;
 }
 
 export async function stopVm(): Promise<StopVmResult> {
@@ -44,9 +48,11 @@ export async function stopVm(): Promise<StopVmResult> {
       if (shutdownResponse.ok) {
         const data = (await shutdownResponse.json()) as {
           status: string;
-          runningTasks: number;
+          runningTasks: unknown;
         };
-        runningTasks = data.runningTasks;
+        if (typeof data.runningTasks === 'number') {
+          runningTasks = data.runningTasks;
+        }
         logger.info({ runningTasks }, 'Orchestrator acknowledged shutdown');
 
         if (runningTasks > 0) {
@@ -54,8 +60,13 @@ export async function stopVm(): Promise<StopVmResult> {
           await waitForTasksToComplete();
         }
       }
-    } catch {
-      logger.warn({}, 'Orchestrator unresponsive, proceeding with forced shutdown');
+    } catch (error) {
+      if (isExpectedStartupNetworkError(error)) {
+        logger.warn({ err: error }, 'Orchestrator unresponsive, proceeding with forced shutdown');
+      } else {
+        logger.error({ err: error }, 'Unexpected error contacting orchestrator shutdown endpoint');
+        Sentry.captureException(error);
+      }
     }
 
     const [operation] = await instancesClient.stop({
@@ -72,11 +83,18 @@ export async function stopVm(): Promise<StopVmResult> {
       runningTasksAtShutdown: runningTasks,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error({ error: message }, 'Failed to stop VM');
+    if (error instanceof IntexuraOSError) {
+      logger.error({ err: error, code: error.code }, 'Failed to stop VM');
+      return {
+        success: false,
+        message: error.message,
+        errorCode: error.code,
+      };
+    }
+    logger.error({ err: error }, 'Failed to stop VM');
     return {
       success: false,
-      message: `Failed to stop VM: ${message}`,
+      message: `Failed to stop VM: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -101,8 +119,13 @@ async function waitForTasksToComplete(): Promise<void> {
 
         logger.info({ running: data.running }, 'Tasks still running, waiting...');
       }
-    } catch {
-      logger.info({}, 'Orchestrator no longer responding, proceeding');
+    } catch (error) {
+      if (isExpectedStartupNetworkError(error)) {
+        logger.warn({ err: error }, 'Orchestrator no longer responding, proceeding');
+      } else {
+        logger.error({ err: error }, 'Unexpected error polling orchestrator health, proceeding');
+        Sentry.captureException(error);
+      }
       return;
     }
 

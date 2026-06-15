@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LlmProviders } from '@intexuraos/llm-contract';
+import { MISSING_PROMPT_TYPE_SENTINEL } from '../../../domain/models/dailyAggregate.js';
 import { sha256Truncated, toDateString, computeAggregateId } from '../../../infra/firestore/aggregateKeyUtils.js';
 import { createTestEvent } from '../../helpers.js';
 
@@ -42,7 +43,7 @@ describe('aggregateKeyUtils', () => {
       const id = computeAggregateId(event);
       const parts = id.split('__');
 
-      expect(parts).toHaveLength(11);
+      expect(parts).toHaveLength(12);
       expect(parts[0]).toBe('2026-04-10');
       expect(parts[1]).toBe('user');
       expect(parts[2]).toBe(sha256Truncated('user_abc'));
@@ -53,7 +54,34 @@ describe('aggregateKeyUtils', () => {
       expect(parts[7]).toBe(LlmProviders.Anthropic);
       expect(parts[8]).toBe(sha256Truncated('claude-sonnet-4-20250514'));
       expect(parts[9]).toBe('generate');
-      expect(parts[10]).toBe('true');
+      expect(parts[10]).toBe(sha256Truncated(MISSING_PROMPT_TYPE_SENTINEL));
+      expect(parts[11]).toBe('true');
+    });
+
+    it('includes promptType in the aggregate id when present', () => {
+      const event = createTestEvent({
+        request: {
+          provider: LlmProviders.Anthropic,
+          model: 'claude-sonnet-4-20250514',
+          operation: 'generate',
+          success: true,
+          durationMs: 100,
+          promptType: 'plan-analysis',
+        },
+      });
+
+      const id = computeAggregateId(event);
+      const parts = id.split('__');
+
+      expect(parts[10]).toBe(sha256Truncated('plan-analysis'));
+    });
+
+    it('uses the missing prompt type sentinel when promptType is absent', () => {
+      const event = createTestEvent();
+
+      const id = computeAggregateId(event);
+
+      expect(id.split('__')[10]).toBe(sha256Truncated(MISSING_PROMPT_TYPE_SENTINEL));
     });
 
     it('uses false for unsuccessful requests', () => {
@@ -67,14 +95,14 @@ describe('aggregateKeyUtils', () => {
     describe('source.client slash safety', () => {
       it('produces an id with no "/" even when source.client contains slashes', () => {
         const event = createTestEvent({
-          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2.5-pro', environment: 'dev' },
         });
         expect(computeAggregateId(event)).not.toMatch(/\//);
       });
 
       it('is deterministic for the same input', () => {
         const event = createTestEvent({
-          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2.5-pro', environment: 'dev' },
         });
         expect(computeAggregateId(event)).toBe(computeAggregateId(event));
       });

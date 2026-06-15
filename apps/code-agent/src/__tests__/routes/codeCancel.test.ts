@@ -19,11 +19,11 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -34,7 +34,7 @@ import type { LogLineRepository } from '../../domain/repositories/logLineReposit
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import { ok } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -42,8 +42,7 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -148,10 +147,6 @@ describe('POST /code/cancel', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       workerSettingsRepo: createWorkerSettingsRepository({
@@ -206,7 +201,6 @@ describe('POST /code/cancel', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
@@ -226,7 +220,7 @@ describe('POST /code/cancel', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user so cancelOnWorker receives credentials
@@ -259,7 +253,7 @@ describe('POST /code/cancel', () => {
     it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         payload: {
           taskId: 'task-123',
         },
@@ -279,7 +273,7 @@ describe('POST /code/cancel', () => {
     it('returns 401 with invalid X-Internal-Auth header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           'x-internal-auth': 'invalid-token',
         },
@@ -296,7 +290,7 @@ describe('POST /code/cancel', () => {
     it('returns 404 for non-existent task', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -335,7 +329,7 @@ describe('POST /code/cancel', () => {
       // Try to cancel as unknown-user
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -375,7 +369,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -413,7 +407,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -451,7 +445,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -489,7 +483,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -540,7 +534,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -585,7 +579,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -632,7 +626,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -678,7 +672,7 @@ describe('POST /code/cancel', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/cancel',
+        url: '/cancel',
         headers: {
           authorization: 'Bearer test-token',
         },

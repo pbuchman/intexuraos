@@ -232,7 +232,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const holder = chainNext !== undefined ? 'backfill' : 'manual';
       const result = await runDigestForGroup(
         { llmClient, logger, modelId },
-        { userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, date, holder },
+        { userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, outputLanguage: subscription.outputLanguage, date, holder },
       );
 
       if (chainNext !== undefined) {
@@ -315,7 +315,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           const llm = buildLlmClient(sub.userId);
           const r = await runDigestForGroup(
             { llmClient: llm, logger, modelId: getDigestModel() },
-            { userId: sub.userId, groupKey: sub.groupKey, groupTitlePrefix: sub.groupTitlePrefix, date, holder: 'cron' },
+            { userId: sub.userId, groupKey: sub.groupKey, groupTitlePrefix: sub.groupTitlePrefix, outputLanguage: sub.outputLanguage, date, holder: 'cron' },
           );
           return r.ok ? 1 as const : 0 as const;
         }),
@@ -332,7 +332,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.get<{ Params: BackfillRunParams }>(
-    '/notifications/digests/backfill/:runId',
+    '/digests/backfill/:runId',
     {
       schema: {
         operationId: 'getBackfillRun',
@@ -370,7 +370,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.get<{ Querystring: DigestsQuerystring }>(
-    '/notifications/digests',
+    '/digests',
     {
       schema: {
         operationId: 'listDigests',
@@ -417,7 +417,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.get<{ Params: DigestParams }>(
-    '/notifications/digests/:groupKey/:date',
+    '/digests/:groupKey/:date',
     {
       schema: {
         operationId: 'getDigestByDate',
@@ -453,7 +453,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.post<{ Body: UserRunBody }>(
-    '/notifications/digests/run',
+    '/digests/run',
     {
       schema: {
         operationId: 'userRunDigest',
@@ -483,7 +483,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const modelId = getDigestModel();
       const result = await runDigestForGroup(
         { llmClient, logger, modelId },
-        { userId: user.userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, date, holder: 'manual' },
+        { userId: user.userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, outputLanguage: subscription.outputLanguage, date, holder: 'manual' },
       );
       if (!result.ok) {
         if (result.error.code === 'lock-held') {
@@ -508,7 +508,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }
 
   fastify.post<{ Body: UserBackfillBody }>(
-    '/notifications/digests/backfill',
+    '/digests/backfill',
     {
       schema: {
         operationId: 'userStartBackfill',
@@ -570,7 +570,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: DigestParams }>(
-    '/notifications/digests/:groupKey/:date/state',
+    '/digests/:groupKey/:date/state',
     {
       schema: {
         operationId: 'getDigestState',

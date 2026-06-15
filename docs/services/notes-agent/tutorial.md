@@ -36,7 +36,7 @@ Before starting, ensure you have:
 ### Step 1.1: Create a Note
 
 ```bash
-curl -X POST http://localhost:8121/notes \
+curl -X POST http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -74,7 +74,7 @@ The notes-agent authenticated your JWT, extracted your `userId` from the `sub` c
 **Save the note ID for the next steps:**
 
 ```bash
-NOTE_ID=$(curl -s -X POST http://localhost:8121/notes \
+NOTE_ID=$(curl -s -X POST http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -94,7 +94,7 @@ echo "Created note: $NOTE_ID"
 ### Step 2.1: List All Your Notes
 
 ```bash
-curl -s http://localhost:8121/notes \
+curl -s http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -124,7 +124,7 @@ Notes are returned ordered by `updatedAt` descending — most recently updated f
 ### Step 2.2: Get a Specific Note
 
 ```bash
-curl -s http://localhost:8121/notes/$NOTE_ID \
+curl -s http://localhost:8121/$NOTE_ID \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -139,7 +139,7 @@ curl -s http://localhost:8121/notes/$NOTE_ID \
 PATCH requests allow partial updates. You can update `title`, `content`, and `tags` independently.
 
 ```bash
-curl -s -X PATCH http://localhost:8121/notes/$NOTE_ID \
+curl -s -X PATCH http://localhost:8121/$NOTE_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -176,7 +176,7 @@ The following fields are immutable after creation: `status`, `source`, `sourceId
 ### Step 4.1: Delete the Note
 
 ```bash
-curl -s -X DELETE http://localhost:8121/notes/$NOTE_ID \
+curl -s -X DELETE http://localhost:8121/$NOTE_ID \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -192,7 +192,7 @@ curl -s -X DELETE http://localhost:8121/notes/$NOTE_ID \
 ### Step 4.2: Verify Deletion
 
 ```bash
-curl -s http://localhost:8121/notes/$NOTE_ID \
+curl -s http://localhost:8121/$NOTE_ID \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -246,7 +246,7 @@ curl -s -X POST http://localhost:8121/internal/notes \
 
 ### Key Differences from Public Endpoint
 
-| Aspect       | Public (`POST /notes`)               | Internal (`POST /internal/notes`)  |
+| Aspect       | Public (`POST /`)               | Internal (`POST /internal/notes`)  |
 | ------------ | ------------------------------------ | ---------------------------------- |
 | Auth         | Bearer JWT (userId from `sub` claim) | `X-Internal-Auth` header           |
 | userId       | Extracted from JWT automatically     | Provided in request body           |
@@ -263,13 +263,13 @@ Tags are stored and returned with each note. While server-side tag filtering is 
 
 ```bash
 # Work note
-curl -s -X POST http://localhost:8121/notes \
+curl -s -X POST http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Sprint Review","content":"Demo went well","tags":["work","sprint"],"source":"manual","sourceId":"m-1"}'
 
 # Personal note
-curl -s -X POST http://localhost:8121/notes \
+curl -s -X POST http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Grocery List","content":"Milk, eggs, bread","tags":["personal","shopping"],"source":"manual","sourceId":"m-2"}'
@@ -278,7 +278,7 @@ curl -s -X POST http://localhost:8121/notes \
 ### Step 6.2: Filter by Tag (Client-Side)
 
 ```bash
-curl -s http://localhost:8121/notes \
+curl -s http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   | jq '.data[] | select(.tags | index("work"))'
 ```
@@ -324,7 +324,7 @@ Test your understanding:
 ### Exercise 1: Three Tags
 
 ```bash
-curl -s -X POST http://localhost:8121/notes \
+curl -s -X POST http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Tagged Note","content":"Testing tags","tags":["alpha","beta","gamma"],"source":"manual","sourceId":"ex-1"}' \
@@ -336,7 +336,7 @@ curl -s -X POST http://localhost:8121/notes \
 
 ```bash
 # Create two notes
-ID1=$(curl -s -X POST http://localhost:8121/notes \
+ID1=$(curl -s -X POST http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"First Note","content":"Created first","tags":[],"source":"manual","sourceId":"ex-2a"}' \
@@ -344,20 +344,20 @@ ID1=$(curl -s -X POST http://localhost:8121/notes \
 
 sleep 1
 
-ID2=$(curl -s -X POST http://localhost:8121/notes \
+ID2=$(curl -s -X POST http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Second Note","content":"Created second","tags":[],"source":"manual","sourceId":"ex-2b"}' \
   | jq -r '.data.id')
 
 # Update the first note
-curl -s -X PATCH http://localhost:8121/notes/$ID1 \
+curl -s -X PATCH http://localhost:8121/$ID1 \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"First Note (Updated)"}' > /dev/null
 
 # List and check order — first note should now be at index 0
-curl -s http://localhost:8121/notes \
+curl -s http://localhost:8121/ \
   -H "Authorization: Bearer $TOKEN" \
   | jq '.data[0].title'
 # Expected: "First Note (Updated)"
@@ -377,7 +377,7 @@ RESOURCE_URL=$(curl -s -X POST http://localhost:8121/internal/notes \
 INTERNAL_NOTE_ID=$(echo $RESOURCE_URL | sed 's|/#/notes/||')
 
 # Retrieve via public endpoint
-curl -s http://localhost:8121/notes/$INTERNAL_NOTE_ID \
+curl -s http://localhost:8121/$INTERNAL_NOTE_ID \
   -H "Authorization: Bearer $TOKEN" | jq '.data.title'
 # Expected: "From Internal"
 ```

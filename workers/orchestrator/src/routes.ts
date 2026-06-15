@@ -6,7 +6,8 @@ import type { IsolationProvider } from './services/isolation/types.js';
 import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
 import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
-import type { CreateTaskRequest } from './types/api.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import type { CreateTaskRequest, ProviderApiKeyHealth } from './types/api.js';
 import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
 
 interface TaskParams {
@@ -57,14 +58,18 @@ export function registerRoutes(
   logger: Logger,
   getStatus?: () => OrchestratorStatus,
   workerAuthRegistry?: WorkerAuthRegistry,
-  isolationProvider?: IsolationProvider
+  isolationProvider?: IsolationProvider,
+  providerApiKeys: Record<string, ProviderApiKeyHealth> = {}
 ): void {
   const nonceCache: NonceCache = {};
 
   // Emit one concise line per completed HTTP request.
   app.addHook('onResponse', async (request, reply) => {
     const level = reply.statusCode >= 500 ? 'error' : reply.statusCode >= 400 ? 'warn' : 'info';
-    logger[level]({}, `${request.method} ${String(reply.statusCode)} ${request.url}`);
+    logger[level](
+      reply.statusCode >= 400 && reply.statusCode < 500 ? { [SKIP_SENTRY_KEY]: true } : {},
+      `${request.method} ${String(reply.statusCode)} ${request.url}`
+    );
   });
 
   const verifyDispatchSignature = async (
@@ -172,6 +177,8 @@ export function registerRoutes(
       }),
       ...(parsed.reviewTypes !== undefined && { reviewTypes: parsed.reviewTypes }),
       ...(parsed.retriedFrom !== undefined && { retriedFrom: parsed.retriedFrom }),
+      // INT-1585: forward optional per-task timeout override
+      ...(parsed.timeoutHours !== undefined && { timeoutHours: parsed.timeoutHours }),
     };
 
     logger.info(
@@ -313,12 +320,14 @@ export function registerRoutes(
     /* v8 ignore stop @preserve */
 
     reply.send({
+      healthContractVersion: 1,
       status: getStatus?.() ?? 'ready',
       capacity,
       running,
       available: capacity - running,
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
       workerAuths,
+      providerApiKeys,
       dockerHealthy: healthDetails.docker,
       diskHealthy: healthDetails.disk,
     });

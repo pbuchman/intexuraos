@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  getErrorMessage,
-  resolvePlanDocumentPathFromLinearContext,
-  type Logger,
-} from '@intexuraos/common-core';
+import { getErrorMessage, type Logger } from '@intexuraos/common-core';
+import { resolvePlanDocumentPathFromLinearContext } from '@intexuraos/code-task-domain';
 
 export { resolvePlanDocumentPathFromLinearContext };
 

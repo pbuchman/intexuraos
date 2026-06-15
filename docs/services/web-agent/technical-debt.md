@@ -124,7 +124,6 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 | 2026-03-12 | ZAI provider removed from LLM contract                    | Chinese LLMs now via Alibaba Cloud Model Studio                  |
 | 2026-02-22 | Release v3.1.0 (version bump only)                        | Package version updated to 3.1.0                                 |
 | 2026-02-19 | PromptBuilder lacked version enforcement                  | Added `version: '1.0.0'` to both prompts; CI-enforced            |
-| 2026-02-16 | No distributed tracing                                    | Added Dash0 OpenTelemetry via transparent preload module         |
 | 2026-02-15 | `CRAWL4AI_API_KEY` nonstandard naming                     | Renamed to `CRAWL4AI_APP_API_KEY` per APP convention             |
 | 2026-02-15 | Platform ZAI model too slow (29s) for summarization       | Switched default platform fallback to Gemini 2.5 Flash           |
 | 2026-02-09 | No summarization fallback for users without API key       | Added platform Gemini fallback (ZAI removed in v3.3.0)           |
@@ -195,19 +194,6 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 **Trade-off:** May need periodic header updates as Chrome versions change.
 
-### Dash0 OpenTelemetry Preload
-
-**Decision:** Load OpenTelemetry instrumentation via `--import ./dist/otel-register.js` in the Dockerfile CMD.
-
-**Rationale:**
-
-- Transparent to application code --- no imports or setup needed in `index.ts`
-- No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset
-- All services use the same `infra-otel` package pattern
-
-**Trade-off:** Requires `otel-register.js` to be built and copied alongside `index.js` in the Dockerfile.
-
----
 
 ## Related
 

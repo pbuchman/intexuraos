@@ -38,6 +38,7 @@ describe('createOpenRouterClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     nock.cleanAll();
+    mockUsageSink.clear();
   });
 
   afterEach(() => {
@@ -417,6 +418,43 @@ describe('createOpenRouterClient', () => {
         expect(result.error.code).toBe('TIMEOUT');
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          promptType: 'research-web-search',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {
@@ -572,7 +610,7 @@ describe('createOpenRouterClient', () => {
     });
 
     it('handles 429 rate limit error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL).post('/chat/completions').times(3).reply(429, 'Rate limited');
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -591,7 +629,7 @@ describe('createOpenRouterClient', () => {
     });
 
     it('handles 503 overloaded error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(503, 'Service overloaded');
+      nock(API_BASE_URL).post('/chat/completions').times(3).reply(503, 'Service overloaded');
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -610,7 +648,10 @@ describe('createOpenRouterClient', () => {
     });
 
     it('handles timeout error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').replyWithError(new Error('Request timeout'));
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .times(3)
+        .replyWithError(new Error('Request timeout'));
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -625,6 +666,31 @@ describe('createOpenRouterClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'recovered' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 2 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('hi', { promptType: 'test-prompt' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('recovered');
       }
     });
 
@@ -1143,6 +1209,76 @@ describe('createOpenRouterClient', () => {
 
       const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(callArg['promptType']).toBe('test-prompt');
+    });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', {
+        promptType: 'test-prompt',
+        correlation: { researchId: 'r-1', taskId: 't-2' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          correlation: { researchId: 'r-1', taskId: 't-2' },
+        })
+      );
+    });
+
+    it('omits correlation from usage logger when not provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', { promptType: 'test-prompt' });
+
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(lastCall).not.toHaveProperty('correlation');
     });
   });
 });

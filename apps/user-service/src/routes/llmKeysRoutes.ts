@@ -7,7 +7,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getProviderForModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../infra/encryption.js';
 import { getServices } from '../services.js';
@@ -133,6 +133,8 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /users/:uid/settings/llm-keys' });
+
       try {
         const user = await requireAuth(request, reply);
         if (!user) {
@@ -282,6 +284,11 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'PATCH /users/:uid/settings/llm-keys',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -398,6 +405,11 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /users/:uid/settings/llm-keys/:provider/test',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -542,6 +554,8 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /users/:uid/settings/llm-keys/:provider' });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;

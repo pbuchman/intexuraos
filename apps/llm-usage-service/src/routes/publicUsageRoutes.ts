@@ -34,7 +34,7 @@ interface QueryBody {
 
 export const publicUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
   app.post(
-    '/llm-usage/events/list',
+    '/events/list',
     {
       schema: {
         operationId: 'publicListUsageEvents',
@@ -128,7 +128,7 @@ export const publicUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
   );
 
   app.get(
-    '/llm-usage/events/:eventId',
+    '/events/:eventId',
     {
       schema: {
         operationId: 'publicGetUsageEvent',
@@ -208,7 +208,7 @@ export const publicUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
   );
 
   app.post(
-    '/llm-usage/query',
+    '/query',
     {
       schema: {
         operationId: 'publicQueryUsage',

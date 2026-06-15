@@ -28,7 +28,7 @@ describe('Notion Integration Routes', () => {
     it('returns 401 UNAUTHORIZED when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         payload: {
           notionToken: 'secret-notion-token',
         },
@@ -48,7 +48,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-notion-token',
@@ -81,7 +81,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -102,7 +102,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'invalid-notion-token',
@@ -127,7 +127,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'valid-token',
@@ -150,7 +150,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'valid-token',
@@ -173,7 +173,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/notion/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -193,7 +193,7 @@ describe('Notion Integration Routes', () => {
       // First connect
       await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
@@ -203,7 +203,7 @@ describe('Notion Integration Routes', () => {
       // Then check status
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/notion/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -226,7 +226,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/notion/status',
+        url: '/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -244,7 +244,7 @@ describe('Notion Integration Routes', () => {
     it('returns 401 UNAUTHORIZED when no auth token provided', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/notion/disconnect',
+        url: '/disconnect',
       });
 
       expect(response.statusCode).toBe(401);
@@ -262,7 +262,7 @@ describe('Notion Integration Routes', () => {
       // First connect
       await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
@@ -272,7 +272,7 @@ describe('Notion Integration Routes', () => {
       // Then disconnect
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/notion/disconnect',
+        url: '/disconnect',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -291,7 +291,7 @@ describe('Notion Integration Routes', () => {
       // Set up a connection first
       await ctx.app.inject({
         method: 'POST',
-        url: '/notion/connect',
+        url: '/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
@@ -303,7 +303,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/notion/disconnect',
+        url: '/disconnect',
         headers: { authorization: `Bearer ${token}` },
       });
 

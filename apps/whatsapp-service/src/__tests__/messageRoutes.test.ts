@@ -14,7 +14,7 @@ describe('WhatsApp Message Routes', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
       });
 
       expect(response.statusCode).toBe(401);
@@ -31,7 +31,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -70,7 +70,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -121,7 +121,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -166,7 +166,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -225,7 +225,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -272,7 +272,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -308,7 +308,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages?limit=5&cursor=prev-cursor-token',
+        url: '/messages?limit=5&cursor=prev-cursor-token',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -326,7 +326,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -350,7 +350,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages',
+        url: '/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -368,7 +368,7 @@ describe('WhatsApp Message Routes', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages/some-id/media',
+        url: '/messages/some-id/media',
       });
 
       expect(response.statusCode).toBe(401);
@@ -385,7 +385,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages/non-existent-id/media',
+        url: '/messages/non-existent-id/media',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -418,7 +418,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        url: `/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -443,7 +443,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        url: `/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -475,7 +475,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        url: `/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -522,7 +522,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${messageId}/media`,
+        url: `/messages/${messageId}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -564,7 +564,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${messageId}/media`,
+        url: `/messages/${messageId}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -586,7 +586,7 @@ describe('WhatsApp Message Routes', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages/some-id/thumbnail',
+        url: '/messages/some-id/thumbnail',
       });
 
       expect(response.statusCode).toBe(401);
@@ -603,7 +603,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/messages/non-existent-id/thumbnail',
+        url: '/messages/non-existent-id/thumbnail',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -631,7 +631,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        url: `/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -658,7 +658,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        url: `/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -691,7 +691,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        url: `/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -733,7 +733,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${messageId}/thumbnail`,
+        url: `/messages/${messageId}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -776,7 +776,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${messageId}/thumbnail`,
+        url: `/messages/${messageId}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -798,7 +798,7 @@ describe('WhatsApp Message Routes', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/whatsapp/messages/some-id',
+        url: '/messages/some-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -815,7 +815,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/whatsapp/messages/non-existent-id',
+        url: '/messages/non-existent-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -849,7 +849,7 @@ describe('WhatsApp Message Routes', () => {
       // User2 tries to delete it
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}`,
+        url: `/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -885,7 +885,7 @@ describe('WhatsApp Message Routes', () => {
       // Delete the message
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/whatsapp/messages/${messageId}`,
+        url: `/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -934,7 +934,7 @@ describe('WhatsApp Message Routes', () => {
       // Delete the message
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/whatsapp/messages/${messageId}`,
+        url: `/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -980,7 +980,7 @@ describe('WhatsApp Message Routes', () => {
       // Delete the message
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/whatsapp/messages/${messageId}`,
+        url: `/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1016,7 +1016,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/whatsapp/messages/${messageId}`,
+        url: `/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1057,7 +1057,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/whatsapp/messages/${messageId}`,
+        url: `/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 

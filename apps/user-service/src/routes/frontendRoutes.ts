@@ -7,7 +7,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth, tryAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth, tryAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { loadAuth0Config } from './shared.js';
 
@@ -66,6 +66,8 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /auth/login' });
+
       const config = loadAuth0Config();
       if (config === null) {
         return await reply.fail(
@@ -150,6 +152,8 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /auth/logout' });
+
       const config = loadAuth0Config();
       if (config === null) {
         return await reply.fail(
@@ -248,6 +252,8 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /auth/me' });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;

@@ -1,4 +1,7 @@
 import type { AppConfig } from '@/types';
+import { WEB_SERVICE_URLS } from './config.generated';
+
+type ServiceEnvVar = (typeof WEB_SERVICE_URLS)[number]['envVar'];
 
 function getEnvVar(key: string): string {
   const value = import.meta.env[key] as string | undefined;
@@ -15,29 +18,40 @@ function getServiceUrl(envVar: string, apiPath: string): string {
   return getEnvVar(envVar);
 }
 
+function getGeneratedServiceUrls(): Record<ServiceEnvVar, string> {
+  return Object.fromEntries(
+    WEB_SERVICE_URLS.map(({ envVar, apiPath }) => [envVar, getServiceUrl(envVar, apiPath)])
+  ) as Record<ServiceEnvVar, string>;
+}
+
 export function getConfig(): AppConfig {
+  const serviceUrls = getGeneratedServiceUrls();
+
   return {
     auth0Domain: getEnvVar('INTEXURAOS_AUTH0_DOMAIN'),
     auth0ClientId: getEnvVar('INTEXURAOS_AUTH0_SPA_CLIENT_ID'),
     authAudience: getEnvVar('INTEXURAOS_AUTH_AUDIENCE'),
-    authServiceUrl: getServiceUrl('INTEXURAOS_USER_SERVICE_URL', '/api/user'),
-    whatsappServiceUrl: getServiceUrl('INTEXURAOS_WHATSAPP_SERVICE_URL', '/api/whatsapp'),
-    notionServiceUrl: getServiceUrl('INTEXURAOS_NOTION_SERVICE_URL', '/api/notion'),
-    mobileNotificationsServiceUrl: getServiceUrl('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL', '/api/notifications'),
-    ResearchAgentUrl: getServiceUrl('INTEXURAOS_RESEARCH_AGENT_URL', '/api/research'),
-    commandsAgentServiceUrl: getServiceUrl('INTEXURAOS_COMMANDS_AGENT_URL', '/api/commands'),
-    actionsAgentUrl: getServiceUrl('INTEXURAOS_ACTIONS_AGENT_URL', '/api/actions'),
-    notesAgentUrl: getServiceUrl('INTEXURAOS_NOTES_AGENT_URL', '/api/notes'),
-    todosAgentUrl: getServiceUrl('INTEXURAOS_TODOS_AGENT_URL', '/api/todos'),
-    bookmarksAgentUrl: getServiceUrl('INTEXURAOS_BOOKMARKS_AGENT_URL', '/api/bookmarks'),
-    calendarAgentUrl: getServiceUrl('INTEXURAOS_CALENDAR_AGENT_URL', '/api/calendar'),
-    linearAgentUrl: getServiceUrl('INTEXURAOS_LINEAR_AGENT_URL', '/api/linear'),
-    codeAgentUrl: getServiceUrl('INTEXURAOS_CODE_AGENT_URL', '/api/code'),
-    chatAgentUrl: getServiceUrl('INTEXURAOS_CHAT_AGENT_URL', '/api/chat'),
-    cronAgentUrl: getServiceUrl('INTEXURAOS_CRON_AGENT_URL', '/api/cron-agent'),
-    hellscriptAgentUrl: getServiceUrl('INTEXURAOS_HELLSCRIPT_AGENT_URL', '/api/hellscript-agent'),
-    appSettingsServiceUrl: getServiceUrl('INTEXURAOS_APP_SETTINGS_SERVICE_URL', '/api/settings'),
-    llmUsageServiceUrl: getServiceUrl('INTEXURAOS_LLM_USAGE_SERVICE_URL', '/api/llm-usage'),
+    authServiceUrl: serviceUrls.INTEXURAOS_USER_SERVICE_URL,
+    whatsappServiceUrl: serviceUrls.INTEXURAOS_WHATSAPP_SERVICE_URL,
+    notionServiceUrl: serviceUrls.INTEXURAOS_NOTION_SERVICE_URL,
+    mobileNotificationsServiceUrl: serviceUrls.INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL,
+    fishingAssistantServiceUrl: serviceUrls.INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL,
+    ResearchAgentUrl: serviceUrls.INTEXURAOS_RESEARCH_AGENT_URL,
+    commandsAgentServiceUrl: serviceUrls.INTEXURAOS_COMMANDS_AGENT_URL,
+    actionsAgentUrl: serviceUrls.INTEXURAOS_ACTIONS_AGENT_URL,
+    notesAgentUrl: serviceUrls.INTEXURAOS_NOTES_AGENT_URL,
+    todosAgentUrl: serviceUrls.INTEXURAOS_TODOS_AGENT_URL,
+    bookmarksAgentUrl: serviceUrls.INTEXURAOS_BOOKMARKS_AGENT_URL,
+    calendarAgentUrl: serviceUrls.INTEXURAOS_CALENDAR_AGENT_URL,
+    linearAgentUrl: serviceUrls.INTEXURAOS_LINEAR_AGENT_URL,
+    codeAgentUrl: serviceUrls.INTEXURAOS_CODE_AGENT_URL,
+    chatAgentUrl: serviceUrls.INTEXURAOS_CHAT_AGENT_URL,
+    cronAgentUrl: serviceUrls.INTEXURAOS_CRON_AGENT_URL,
+    hellscriptAgentUrl: serviceUrls.INTEXURAOS_HELLSCRIPT_AGENT_URL,
+    appSettingsServiceUrl: serviceUrls.INTEXURAOS_APP_SETTINGS_SERVICE_URL,
+    llmUsageServiceUrl: serviceUrls.INTEXURAOS_LLM_USAGE_SERVICE_URL,
+    imageServiceUrl: serviceUrls.INTEXURAOS_IMAGE_SERVICE_URL,
+    webAgentUrl: serviceUrls.INTEXURAOS_WEB_AGENT_URL,
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),
     firebaseAuthDomain: getEnvVar('INTEXURAOS_FIREBASE_AUTH_DOMAIN'),

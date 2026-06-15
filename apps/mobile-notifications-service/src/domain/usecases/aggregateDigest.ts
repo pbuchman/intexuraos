@@ -2,8 +2,8 @@ import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import {
-  buildDigestPrompt,
-  buildDigestRepairPrompt,
+  digestPrompt,
+  digestRepairPrompt,
   type DigestPromptInput,
 } from '@intexuraos/llm-prompts';
 import {
@@ -31,7 +31,7 @@ export async function aggregateDigest(
   deps: AggregateDigestDeps,
   input: AggregateDigestInput,
 ): Promise<Result<AggregationOutput, DigestError>> {
-  const initialPrompt = buildDigestPrompt(input);
+  const initialPrompt = digestPrompt.build(input);
 
   const initial = await callAndParse(deps, initialPrompt, PROMPT_TYPE_AGGREGATE);
   if (initial.kind === 'ok') return ok(initial.value);
@@ -42,10 +42,15 @@ export async function aggregateDigest(
 
   for (let attempt = 1; attempt <= MAX_REPAIR_ATTEMPTS; attempt += 1) {
     deps.logger.warn(
-      { attempt, errorMessage: lastErrorMessage },
+      { attempt, errorMessage: lastErrorMessage, _skipSentry: true },
       'aggregateDigest: invalid response, will repair',
     );
-    const repairPrompt = buildDigestRepairPrompt(initialPrompt, lastResponseContent, lastErrorMessage);
+    const repairPrompt = digestRepairPrompt.build({
+      originalPrompt: initialPrompt,
+      invalidResponse: lastResponseContent,
+      errorMessage: lastErrorMessage,
+      outputLanguage: input.outputLanguage,
+    });
     const repaired = await callAndParse(deps, repairPrompt, PROMPT_TYPE_REPAIR);
     if (repaired.kind === 'ok') return ok(repaired.value);
     if (repaired.kind === 'llm-error') return err(llmCallFailed(repaired.message));

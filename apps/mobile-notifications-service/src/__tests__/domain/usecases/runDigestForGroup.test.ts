@@ -14,7 +14,15 @@ const noopLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(
 // COLD_START_EXAMPLE uses readonly tuple literals; cast to mutable types for use in fakes
 const EXAMPLE_SUMMARY = COLD_START_EXAMPLE.dailySummary as unknown as DailySummary;
 
-function fakeNotificationRepo(messages: readonly { sender: string; text: string; postTime: string; title: string; app: string }[]): NotificationRepository {
+interface FakeNotificationMessage {
+  readonly sender?: string | null;
+  readonly text: string;
+  readonly postTime: string;
+  readonly title: string;
+  readonly app: string;
+}
+
+function fakeNotificationRepo(messages: readonly FakeNotificationMessage[]): NotificationRepository {
   return {
     findByUserIdPaginated: async () => ({
       ok: true as const,
@@ -30,6 +38,20 @@ function fakeNotificationRepo(messages: readonly { sender: string; text: string;
     findById: async () => ({ ok: true as const, value: null }),
     existsByNotificationIdAndUserId: async () => ({ ok: true as const, value: false }),
     delete: async () => ({ ok: true as const, value: undefined }),
+  };
+}
+
+function runInput(
+  overrides: Partial<Parameters<typeof runDigestForGroup>[1]> = {},
+): Parameters<typeof runDigestForGroup>[1] {
+  return {
+    userId: 'u',
+    groupKey: 'g',
+    groupTitlePrefix: 'G',
+    outputLanguage: 'Polish',
+    date: '2026-04-15',
+    holder: 'manual',
+    ...overrides,
   };
 }
 
@@ -49,7 +71,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'or:google/gemini-3-flash-preview' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -82,7 +104,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'or:google/gemini-3-flash-preview' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -114,9 +136,73 @@ describe('runDigestForGroup', () => {
     });
     await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(capturedPromptDate).toBe('2026-04-15');
+  });
+
+  it('passes outputLanguage into aggregateDigest prompt input', async () => {
+    let capturedPrompt = '';
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    const originalGenerate = llm.generate.bind(llm);
+    llm.generate = async (
+      prompt: string,
+      options?: GenerateOptions,
+    ): Promise<Result<GenerateResult, LLMError>> => {
+      capturedPrompt = prompt;
+      return originalGenerate(prompt, options);
+    };
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+
+    await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      runInput({ outputLanguage: 'Polish' }),
+    );
+
+    expect(capturedPrompt).toContain('Target output language: Polish');
+  });
+
+  it('uses digest sender fallback for production senderless notifications without substituting title', async () => {
+    const messageText = 'Senderless bite report from bridge';
+    const notificationTitle = 'Do Not Use Notification Title';
+    let capturedPrompt = '';
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    const originalGenerate = llm.generate.bind(llm);
+    llm.generate = async (
+      prompt: string,
+      options?: GenerateOptions,
+    ): Promise<Result<GenerateResult, LLMError>> => {
+      capturedPrompt = prompt;
+      return originalGenerate(prompt, options);
+    };
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([
+        {
+          title: notificationTitle,
+          app: 'com.whatsapp',
+          text: messageText,
+          postTime: '1776380400',
+        },
+      ]),
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(capturedPrompt).toContain(`Unknown sender: ${messageText}`);
+    expect(capturedPrompt).not.toContain(`${notificationTitle}: ${messageText}`);
+    expect(capturedPrompt).not.toContain(notificationTitle);
   });
 
   it('returns persistence-failed when lock acquire returns err', async () => {
@@ -132,7 +218,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -152,7 +238,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -173,7 +259,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -195,7 +281,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -215,7 +301,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -232,7 +318,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -254,7 +340,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -280,7 +366,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -308,7 +394,7 @@ describe('runDigestForGroup', () => {
     });
     await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'grupa-wedkarska-skool', groupTitlePrefix: 'Grupa Wędkarska Skool', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'grupa-wedkarska-skool', groupTitlePrefix: 'Grupa Wędkarska Skool', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(capturedTitleFilter).toBe('Grupa Wędkarska Skool');
   });
@@ -333,7 +419,7 @@ describe('runDigestForGroup', () => {
 
     await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'grupa-wedkarska-skool', groupTitlePrefix: 'Grupa Wędkarska Skool', date: '2026-04-17', holder: 'manual' },
+      { userId: 'u', groupKey: 'grupa-wedkarska-skool', groupTitlePrefix: 'Grupa Wędkarska Skool', outputLanguage: 'Polish', date: '2026-04-17', holder: 'manual' },
     );
 
     // 2026-04-17 CEST (UTC+2): from = 2026-04-16T22:00:00Z .. to = 2026-04-17T22:00:00Z
@@ -358,7 +444,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'cron' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'cron' },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -392,7 +478,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(result.ok).toBe(true);
     expect(sent).toHaveLength(1);
@@ -420,7 +506,7 @@ describe('runDigestForGroup', () => {
     });
     await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(notifier.sendDigestReady).not.toHaveBeenCalled();
   });
@@ -437,7 +523,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(result.ok).toBe(false);
     expect(notifier.sendDigestReady).not.toHaveBeenCalled();
@@ -461,7 +547,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(result.ok).toBe(true);
   });
@@ -483,7 +569,7 @@ describe('runDigestForGroup', () => {
     });
     const result = await runDigestForGroup(
       { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish', date: '2026-04-15', holder: 'manual' },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;

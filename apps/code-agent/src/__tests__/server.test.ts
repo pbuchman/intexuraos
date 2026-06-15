@@ -19,9 +19,9 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreCodeTaskRepository } from '../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../domain/services/linearIssueService.js';
@@ -29,7 +29,7 @@ import type { CodeTaskRepository } from '../domain/repositories/codeTaskReposito
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
 import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { ok } from '@intexuraos/common-core';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
@@ -41,7 +41,6 @@ import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js';
@@ -51,7 +50,7 @@ import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from './helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../infra/firestore/gitHubPRSummariesRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../infra/firestore/firestoreTurnMetricsRepository.js';
 
 describe('server configuration', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -119,11 +118,7 @@ describe('server configuration', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       linearIssueService: createLinearIssueService({
         linearAgentClient: createLinearAgentHttpClient({
@@ -185,7 +180,6 @@ describe('server configuration', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -204,7 +198,7 @@ describe('server configuration', () => {
       taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -257,6 +251,9 @@ describe('server configuration', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.status).toBe('ok');
-    expect(body.service).toBe('code-agent');
+    expect(body.serviceName).toBe('code-agent');
+    expect(body.version).toBe('0.0.1');
+    expect(Array.isArray(body.checks)).toBe(true);
+    expect(body.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });

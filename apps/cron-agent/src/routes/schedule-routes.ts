@@ -188,7 +188,7 @@ function mapErrorCode(code: ScheduleError['code']): 'NOT_FOUND' | 'INVALID_REQUE
 
 export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
-    '/cron/services',
+    '/services',
     {
       schema: {
         operationId: 'listCronServices',
@@ -225,7 +225,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Querystring: ListSchedulesQuery }>(
-    '/cron/schedules',
+    '/schedules',
     {
       schema: {
         operationId: 'listSchedules',
@@ -284,7 +284,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Body: CreateScheduleBody }>(
-    '/cron/schedules',
+    '/schedules',
     {
       schema: {
         operationId: 'createSchedule',
@@ -331,7 +331,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: ScheduleParams }>(
-    '/cron/schedules/:id',
+    '/schedules/:id',
     {
       schema: {
         operationId: 'getSchedule',
@@ -372,7 +372,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: ScheduleParams; Body: UpdateScheduleBody }>(
-    '/cron/schedules/:id',
+    '/schedules/:id',
     {
       schema: {
         operationId: 'updateSchedule',
@@ -425,7 +425,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete<{ Params: ScheduleParams }>(
-    '/cron/schedules/:id',
+    '/schedules/:id',
     {
       schema: {
         operationId: 'deleteSchedule',
@@ -471,7 +471,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: ScheduleParams }>(
-    '/cron/schedules/:id/trigger',
+    '/schedules/:id/trigger',
     {
       schema: {
         operationId: 'triggerSchedule',

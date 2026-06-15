@@ -11,13 +11,14 @@
  * Based on design doc: docs/designs/INT-156-code-action-type.md
  */
 
-import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { detectWorkerTypeFromMessage } from '../utils/workerTypeDetection.js';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { CodeAgentClient } from '../ports/codeAgentClient.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'crypto';
 

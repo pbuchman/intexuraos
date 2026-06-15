@@ -21,6 +21,7 @@ function stripAnsi(str) {
 const VITEST_PATTERNS = [
   /^\s*$/,
   /^>/,
+  /^\$\s+vitest run(?:\s|$)/,
   /^\s*(RUN|PASS|FAIL)\b/,
   /Coverage enabled with/,
   /^\s*[✓✗×↓]/,
@@ -35,6 +36,7 @@ const VITEST_PATTERNS = [
   /^\(Use `node --trace-deprecation \.\.\.` to show where the warning was created\)$/,
   /^\d+:\d+:\d+\s*(AM|PM)\s*\[vite\]/,
   /^\s*Plugin: vite:/,
+  /^blob report written to .*\.vitest-reports\/blob-\d+-\d+\.json$/,
 ];
 
 function isVitestLine(line) {

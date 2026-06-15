@@ -15,12 +15,12 @@ describe('retryableErrors', () => {
       expect(isRetryableErrorCode('network_error')).toBe(true);
     });
 
-    it('returns false for at_capacity', () => {
-      expect(isRetryableErrorCode('at_capacity')).toBe(false);
+    it('returns true for at_capacity', () => {
+      expect(isRetryableErrorCode('at_capacity')).toBe(true);
     });
 
-    it('returns false for worker_busy', () => {
-      expect(isRetryableErrorCode('worker_busy')).toBe(false);
+    it('returns true for worker_busy', () => {
+      expect(isRetryableErrorCode('worker_busy')).toBe(true);
     });
 
     it('returns false for dispatch_failed', () => {

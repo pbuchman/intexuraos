@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { IntexuraOSError } from '@intexuraos/common-core';
 
 import type { SerializedTask } from '../../../domain/issueGrouping/index.js';
 import {
@@ -382,6 +383,19 @@ describe('deriveAggregateStatus', () => {
     const pipeline = derivePipeline(tasks);
     expect(pipeline.steps.some((s) => s.state === 'actionable')).toBe(true);
     expect(deriveAggregateStatus(tasks, pipeline)).toBe('needs-action');
+  });
+
+  it('returns active when execution completed and no review cleared it yet', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-execution',
+        agentType: 'execution',
+        status: 'implemented',
+        updatedAt: '2026-03-05T10:00:00.000Z',
+      }),
+    ];
+    const pipeline = derivePipeline(tasks);
+    expect(deriveAggregateStatus(tasks, pipeline)).toBe('active');
   });
 
   it('returns failed when latest non-archived task is failed', () => {
@@ -1252,6 +1266,18 @@ describe('cursor encoding/decoding', () => {
   it('throws on non-numeric index', () => {
     const bad = Buffer.from(JSON.stringify({ index: 'abc' })).toString('base64url');
     expect(() => decodeCursor(bad)).toThrow('Invalid cursor index');
+  });
+
+  it('throws IntexuraOSError with INVALID_REQUEST/400 on invalid cursor', () => {
+    const bad = Buffer.from(JSON.stringify({ index: -1 })).toString('base64url');
+    try {
+      decodeCursor(bad);
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(IntexuraOSError);
+      expect((e as IntexuraOSError).code).toBe('INVALID_REQUEST');
+      expect((e as IntexuraOSError).httpStatus).toBe(400);
+    }
   });
 });
 

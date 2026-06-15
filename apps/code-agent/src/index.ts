@@ -1,6 +1,7 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
+import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { getServices, initServices } from './services.js';
@@ -17,7 +18,9 @@ const REQUIRED_ENV = [
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
-  'INTEXURAOS_SERVICE_URL', // Webhook callback URL — orchestrator calls this to report task status
+  'INTEXURAOS_SERVICE_URL', // Public code-agent API URL
+  'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL', // Worker callback URL base for internal code-task callbacks
+  'INTEXURAOS_WEB_APP_URL', // Public web app URL for user-facing links
 ];
 
 /**
@@ -26,8 +29,8 @@ const REQUIRED_ENV = [
  * - INTEXURAOS_WHATSAPP_SERVICE_URL, INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: WhatsApp integration
  * - INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC: PR triage Pub/Sub topic
  * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_ACTIONS_AGENT_URL: Service integrations
- * - INTEXURAOS_SERVICE_URL: Worker configuration
- * - INTEXURAOS_WEB_URL: Web app URL for generating task links (defaults to https://intexuraos.cloud)
+ * - INTEXURAOS_SERVICE_URL: Public service URL
+ * - INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: Worker callback URL base
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
  * - INTEXURAOS_ENABLE_METRICS: Set to 'true' to enable Cloud Monitoring metrics (requires monitoring.metricWriter IAM role)
  */
@@ -43,7 +46,7 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_USER_SERVICE_URL',
-  'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_OPENROUTER_APP_API_KEY',
   'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
   'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
   'INTEXURAOS_LLM_USAGE_SERVICE_URL', // Usage event forwarding to llm-usage-service
@@ -79,8 +82,10 @@ async function main(): Promise<void> {
     webhookVerifySecret: config.webhookVerifySecret,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
+    codeTaskCallbackBaseUrl: config.codeTaskCallbackBaseUrl,
+    webAppUrl: config.webAppUrl,
     userServiceUrl: config.userServiceUrl,
-    geminiAppApiKey: config.geminiAppApiKey,
+    openRouterAppApiKey: config.openRouterAppApiKey,
     openaiAppApiKey: config.openaiAppApiKey,
     llmUsageServiceUrl: config.llmUsageServiceUrl,
   });
@@ -91,15 +96,9 @@ async function main(): Promise<void> {
 
   const app = await buildServer();
 
-  const close = (): void => {
-    app.close().then(
-      () => process.exit(0),
-      () => process.exit(1)
-    );
-  };
-
-  process.on('SIGTERM', close);
-  process.on('SIGINT', close);
+  // Drain registered usage sinks on SIGTERM/SIGINT before exit so the 500ms
+  // batching window doesn't lose events when Cloud Run scales down.
+  installUsageSinkShutdownHandler({ app, logger });
 
   await app.listen({ port: config.port, host: '0.0.0.0' });
 }

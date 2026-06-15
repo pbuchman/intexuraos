@@ -237,7 +237,7 @@ function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType;
 
 Nearly every package and app in the monorepo depends on `common-core`:
 
-**Packages (18):** `common-http`, `http-server`, `infra-pubsub`, `infra-firestore`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-notion`, `infra-perplexity`, `infra-sentry`, `infra-whatsapp`, `internal-clients`, `llm-utils`, `llm-prompts`, `llm-pricing`, `llm-factory`, `llm-contract`, `infra-otel`
+**Packages (17):** `common-http`, `http-server`, `infra-pubsub`, `infra-firestore`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-notion`, `infra-perplexity`, `infra-sentry`, `infra-whatsapp`, `internal-clients`, `llm-utils`, `llm-prompts`, `llm-pricing`, `llm-factory`, `llm-contract`
 
 **Apps (18):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `web`, `web-agent`, `whatsapp-service`
 

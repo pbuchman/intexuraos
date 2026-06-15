@@ -2,7 +2,7 @@
 
 ## Overview
 
-LLM Usage Service ingests, stores, and aggregates LLM API usage events from across IntexuraOS. It runs on Cloud Run as a Fastify application backed by three Firestore collections (`llm_usage_events`, `llm_usage_daily_aggregates`, `llm_pricing`). It supports five LLM providers: Anthropic, OpenAI, Google, Perplexity, and OpenRouter.
+LLM Usage Service ingests, stores, and aggregates LLM API usage events from across IntexuraOS. It is a Fastify application backed by three Firestore collections (`llm_usage_events`, `llm_usage_daily_aggregates`, `llm_pricing`). It supports five LLM providers: Anthropic, OpenAI, Google, Perplexity, and OpenRouter.
 
 ## Architecture
 
@@ -74,20 +74,17 @@ sequenceDiagram
     Service-->>-Caller: { accepted, duplicates, rejected }
 ```
 
-## Recent Changes
+## Release 3.7.0 Changes
 
 | Commit       | Description                                                             | Date        |
 | ------------ | ----------------------------------------------------------------------- | ----------- |
-| `ece85903c`  | Reject `request.promptType` as a groupBy option (returned 500)          | 2 days ago  |
-| `606417bb0`  | Add `promptType` to groupBy options (later reverted at query layer)     | 6 days ago  |
-| `7ec9b2209`  | Add `promptType` to UsageEvent schema                                   | 6 days ago  |
-| `a4f53cd70`  | Remove LLM pricing from 9 remaining apps (centralized in this service)  | 6 days ago  |
-| `b16dd53b2`  | Enforce discriminated union on schemaVersion in request validation      | 7 days ago  |
-| `9da689e4a`  | Add pricing cache, v2 event enrichment, and route refactoring           | 7 days ago  |
-| `a83fd2f54`  | Add consolidated cost calculation service                               | 8 days ago  |
-| `35072bc91`  | Widen try/catch to cover doc-ref construction in event creation         | 8 days ago  |
-| `fbe13bda8`  | Hash `source.client` in aggregate doc-id for Firestore path safety      | 8 days ago  |
-| `806c0d7e2`  | Add GET /internal/pricing route and backfill endpoint                   | 11 days ago |
+| `c9a599334` | Add research usage cost summary and prompt-type aggregate grouping       | 2026-05-05  |
+| `2b1c2b24d` | Fix the shared v2 usage event contract, including image billing metadata | 2026-05-05  |
+| `d0cbaa2a4` | Complete usage attribution across research/image usage flows             | 2026-05-06  |
+| `70fd49d92` | Normalize public API resource paths used by web/API clients              | 2026-06-03  |
+| `9a4a9436c` | Preserve MiMo Pro 2.5 model/client identifiers in usage reporting        | 2026-06-09  |
+| `512596250` | Fail fast on unknown models outside production and add Claude 4.7 pricing | 2026-04-25  |
+| PR #2109/#2110 | Remove retired tracing vendor runtime wiring and settle the Hetzner PM2/nginx surface | 2026-06-08 |
 
 ## API Endpoints
 
@@ -95,16 +92,17 @@ sequenceDiagram
 
 | Method | Path                         | Purpose                        |
 | ------ | ---------------------------- | ------------------------------ |
-| POST   | `/llm-usage/events/list`     | List usage events (paginated)  |
-| GET    | `/llm-usage/events/:eventId` | Get a single usage event by ID |
-| POST   | `/llm-usage/query`           | Query aggregated usage data    |
-| GET    | `/llm-usage/pricing`         | Get all LLM pricing            |
+| POST   | `/events/list`     | List usage events (paginated)  |
+| GET    | `/events/:eventId` | Get a single usage event by ID |
+| POST   | `/query`           | Query aggregated usage data    |
+| GET    | `/pricing`         | Get all LLM pricing            |
 
 ### Internal Endpoints (X-Internal-Auth)
 
 | Method | Path                                | Purpose                                     | Caller               |
 | ------ | ----------------------------------- | ------------------------------------------- | -------------------- |
 | POST   | `/internal/usage/events`            | Ingest usage events (v2 schema)             | Any internal service |
+| POST   | `/internal/usage/research-cost-summary` | Summarize LLM usage cost for a research run | Internal services |
 | POST   | `/internal/webhooks/usage-events`   | Ingest usage events (orchestrator, HMAC)    | Orchestrator         |
 | POST   | `/internal/pricing`                 | Write pricing for a provider                | Admin tooling        |
 | GET    | `/internal/pricing`                 | Read all pricing (for consumer boot)        | Any internal service |
@@ -130,14 +128,14 @@ sequenceDiagram
 | `owner`       | `{ type: 'user' \                                                  | 'system', id: string }`                         | Event owner |
 | `source`      | `{ service, component, client, environment, workerLocation? }`     | Call origin metadata                            |
 | `request`     | `{ provider, model, operation, success, durationMs, promptType? }` | LLM request metadata                            |
-| `usage`       | `UsageTokens`                                                      | Token counts (input, output, cache, reasoning)  |
+| `usage`       | `UsageTokens`                                                      | Token counts plus web-search, grounding, and image metadata |
 | `cost`        | `{ billedUsd, providerReportedUsd, calculatedUsd, pricingSource }` | Resolved cost data                              |
 | `correlation` | `{ requestId, traceId, taskId, researchId, attempt, sessionId }`   | Traceability fields                             |
 | `error`       | `{ code, message } \                                               | null`                                           | Error details if the LLM call failed |
 
 **Operation Values:** `research`, `generate`, `image_generation`, `tool_calling`, `other`
 
-**Pricing Source Values:** `provider_reported`, `calculated`, `mixed`, `external`
+**Pricing Source Values:** Stored events allow `provider_reported`, `calculated`, `missing`, `mixed`, and `external`; ingestion currently produces `provider_reported`, `calculated`, or `missing`.
 
 ### UsageEventInput (ingested, schemaVersion: 2)
 
@@ -145,7 +143,7 @@ Same as UsageEvent but without `receivedAt`, `ingress` (server-set), and with a 
 
 ### DailyUsageAggregate
 
-Pre-computed daily rollups keyed by a composite ID: `{date}__{ownerType}__{ownerIdHash}__{service}__{component}__{clientHash}__{environment}__{provider}__{modelHash}__{operation}__{success}`. Uses Firestore `FieldValue.increment()` for atomic counter updates.
+Pre-computed daily rollups keyed by a composite ID: `{date}__{ownerType}__{ownerIdHash}__{service}__{component}__{clientHash}__{environment}__{provider}__{modelHash}__{operation}__{promptTypeHash}__{success}`. Uses Firestore `FieldValue.increment()` for atomic counter updates.
 
 **Metrics:** `calls`, `costUsd`, `inputTokens`, `outputTokens`, `totalTokens`, `cacheReadTokens`, `cacheWriteTokens`, `cachedTokens`, `reasoningTokens`, `thinkingTokens`, `webSearchCalls`, `imageCount`
 
@@ -159,9 +157,15 @@ Pre-computed daily rollups keyed by a composite ID: `{date}__{ownerType}__{owner
 | `sortBy`    | `{ field, direction }?` | Sort by any metric field                                        |
 | `limit`     | `number?`               | Max rows (default 100, max 500)                                 |
 
-**Allowed groupBy:** `day`, `owner.type`, `owner.id`, `source.service`, `source.component`, `source.client`, `request.provider`, `request.model`, `request.operation`, `request.success`
+**Allowed groupBy:** `day`, `owner.type`, `owner.id`, `source.service`, `source.component`, `source.client`, `request.provider`, `request.model`, `request.operation`, `request.promptType`, `request.success`
 
 **Allowed sortBy:** `calls`, `costUsd`, `inputTokens`, `outputTokens`, `totalTokens`, `cacheReadTokens`, `cacheWriteTokens`, `cachedTokens`, `reasoningTokens`, `thinkingTokens`, `webSearchCalls`, `imageCount`
+
+### ResearchCostSummaryRequest
+
+`POST /internal/usage/research-cost-summary` accepts `researchId` plus optional `owner` and `timeRange`. It returns totals, ordered event rows, and `diagnostics.missingAttribution`; missing-attribution diagnostics are populated only when both `owner` and `timeRange` are present, using events that match those guards but have `correlation.researchId === null`.
+
+Rows include provider, model, operation, prompt type, success, request ID, token counters, web-search count, image count, billed USD, and pricing source.
 
 ## Cost Calculation
 
@@ -173,9 +177,11 @@ Provider-specific cost logic in `costCalculation.ts`:
 | Google      | Thinking tokens at output price, grounding flat fee, image generation             |
 | OpenAI      | Cached tokens subtracted from input (0.5x multiplier), web search fee, images     |
 | Perplexity  | Minimum 1 web search call per request, per-call request fee                       |
-| OpenRouter  | Standard input/output token pricing                                               |
+| OpenRouter  | Standard input/output token pricing when no provider-reported cost is supplied    |
 
-All prices stored as per-million-tokens. Calculation uses scaled integer math with `Math.round()` for precision.
+Token prices are stored as per-million-token input/output fields. `ModelPricing.imagePricing` stores per-image USD prices by size. Calculation uses scaled integer math with `Math.round()` for token precision. Image costs use `usage.imageCount` and optional `usage.imageSize`; older events without `imageSize` fall back to `1024x1024`.
+
+Unknown model behavior depends on `NODE_ENV`. In production, a pending-cost event whose provider/model has no pricing entry is stored with `pricingSource: 'missing'`, `billedUsd: 0`, and `calculatedUsd: 0`. Outside production, the event is rejected with `PRICING_MISSING` and the ingest use case throws after processing the rest of the batch, so development and test environments fail fast when new models are not represented in pricing.
 
 ## Dependencies
 
@@ -198,11 +204,17 @@ All prices stored as per-million-tokens. Calculation uses scaled integer math wi
 | `INTEXURAOS_GCP_PROJECT_ID`       | GCP project for Firestore           | Yes      |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`  | Token for internal service auth     | Yes      |
 | `INTEXURAOS_ORCHESTRATOR_SECRET`  | HMAC secret for webhook validation  | Yes      |
+| `INTEXURAOS_SERVICE_URL`          | OpenAPI server URL                  | No       |
 | `INTEXURAOS_SENTRY_DSN`           | Sentry error tracking DSN           | No       |
 | `INTEXURAOS_ENVIRONMENT`          | Environment identifier              | No       |
+| `NODE_ENV`                        | Production/non-production pricing behavior switch | No       |
 | `PORT`                            | Server port (default 8080)          | No       |
 | `HOST`                            | Server host (default 0.0.0.0)       | No       |
 | `LOG_LEVEL`                       | Logging level (default info)        | No       |
+
+## Deployment Surface
+
+The Hetzner production runtime runs `llm-usage-service` under PM2 on port `8132`. Nginx exposes the public API under `/api/llm-usage` and proxies that prefix to the service-relative public routes such as `/query`, `/events/list`, `/events/:eventId`, and `/pricing`. Internal callers use service URLs such as `INTEXURAOS_LLM_USAGE_SERVICE_URL` and service-relative internal paths.
 
 ## Firestore Collections
 
@@ -220,8 +232,9 @@ All prices stored as per-million-tokens. Calculation uses scaled integer math wi
 - **Webhook auth uses HMAC-SHA256** with a 15-minute replay window. The signature covers `{timestamp}.{rawBody}`.
 - **schemaVersion discriminated union**: Input events must have `schemaVersion: 2`. Stored events are normalized to `schemaVersion: 1`. Sending `schemaVersion: 1` on the input endpoint returns a 400.
 - **Orchestrator webhook requires `source.service === 'orchestrator'`** and `source.workerLocation` — enforced by the `OrchestratorUsageEventInput` JSON schema.
-- **`request.promptType` is stored on raw events** but not propagated to daily aggregates, so it cannot be used as a `groupBy` dimension in aggregate queries.
+- **`request.promptType` is part of daily aggregate keys**. Events without a prompt type use the internal `__missing__` sentinel in aggregate rows.
 - **Perplexity cost calculation floors webSearchCalls to 1** — Perplexity always charges at least one request fee per API call, even when the event reports 0 web search calls.
+- **Unknown models fail fast outside production**. Production keeps the event with `pricingSource: 'missing'` and zero cost so reporting remains complete; development and test reject and throw to force pricing data updates.
 
 ## File Structure
 
@@ -241,6 +254,7 @@ apps/llm-usage-service/src/
 │   │   ├── costCalculation.ts  # Provider-specific cost calculation
 │   │   └── pricingCache.ts     # TTL-based pricing cache
 │   └── usecases/
+│       ├── getResearchCostSummary.ts # Summarize research-run usage cost
 │       ├── getUsageEvent.ts    # Get single event by ID
 │       ├── ingestUsageEvents.ts# Ingest + enrich + aggregate
 │       ├── listUsageEvents.ts  # Paginated event listing

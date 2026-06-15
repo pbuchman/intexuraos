@@ -41,7 +41,7 @@
 
 | Claude hook behavior                                                    | Current Claude owner            | Codex bucket                                                    | Retained? | Codex owner                                   | Observable evidence                                                                                      |
 | ----------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------- | --------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Session-start build and env readiness (`session-start-build.sh`)        | Repo hook at session start      | Codex-side startup/bootstrap logic                              | Yes       | `workers/code-worker/entrypoint.sh`           | `[entrypoint] Bootstrap evidence: ...` plus startup log lines for GCP auth, secret sync, and env loading |
+| Session-start build and env readiness (`session-start-build.sh`)        | Repo hook at session start      | Codex-side startup/bootstrap logic                              | Yes       | `docker/code-worker/entrypoint.sh`            | `[entrypoint] Bootstrap evidence: ...` plus startup log lines for GCP auth, secret sync, and env loading |
 | CI output capture reminders (`validate-ci-output-capture.sh`)           | PreToolUse block                | Orchestrator/runtime contract                                   | Yes       | Execution prompt + completion/deep validation | Transcript shows `pnpm run ci:tracked`; deep validator checks final claims against transcript            |
 | Terraform emulator clearing (`validate-terraform.sh`)                   | PreToolUse block                | Orchestrator/runtime contract                                   | Yes       | Execution prompt + repo rules                 | Transcript shows compliant Terraform invocation when used; prompt explicitly instructs the rule          |
 | GCloud resource-creation guardrail (`validate-gcloud-resources.sh`)     | PreToolUse block                | Orchestrator/runtime contract                                   | Yes       | Execution prompt + repo rules                 | Transcript shows Terraform-based path or absence of forbidden direct creation                            |
@@ -62,7 +62,7 @@
 ## Task 1: Add retained Codex parity evidence to the worker runtime
 
 **Files:**
-- Modify: `workers/code-worker/entrypoint.sh`
+- Modify: `docker/code-worker/entrypoint.sh`
 - Test: `workers/orchestrator/src/services/isolation/__tests__/worker-image.test.ts`
 
 - [ ] **Step 1: Write the failing evidence test**

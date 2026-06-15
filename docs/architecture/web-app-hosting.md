@@ -69,21 +69,17 @@ Implementation: `apps/web/src/App.tsx` uses `HashRouter`.
 
 ---
 
-## Deployment (Cloud Build)
+## Deployment (Hetzner)
 
-Script: `cloudbuild/scripts/deploy-web.sh`
+Script: `scripts/hetzner/deploy-web.sh`
 
-It uploads the build output to:
+It renders production `/api/*` service URLs from `apps/web/service-manifest.json`, builds the Vite bundle, and publishes the output to the Hetzner nginx web root:
 
-- `gs://intexuraos-web-${ENVIRONMENT}/`
-
-using:
-
-- `gsutil -m rsync -r -d apps/web/dist/ gs://.../`
+- `/var/www/intexuraos/web/dist`
 
 ### Content-type fixes
 
-The script also sets `Content-Type:image/png` for common PNG paths.
+Retained public GCS bucket routes such as `/share/*` and `/images/*` are served through nginx proxy rules, not the old web bucket.
 
 ---
 

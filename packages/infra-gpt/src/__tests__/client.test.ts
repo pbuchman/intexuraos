@@ -60,6 +60,7 @@ const TEST_MODEL = 'gpt-4o';
 describe('createGptClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUsageSink.clear();
   });
 
   describe('research', () => {
@@ -298,6 +299,31 @@ describe('createGptClient', () => {
         })
       );
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'ok',
+        output: [],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          promptType: 'research-web-search',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {
@@ -501,7 +527,91 @@ describe('createGptClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'image_generation',
+          model: LlmModels.GPTImage1,
+          promptType: 'image-generation',
           success: true,
+          usage: expect.objectContaining({ imageCount: 1, imageSize: '1024x1024' }),
+        })
+      );
+    });
+
+    it('forwards image generation correlation to usage logger on success', async () => {
+      const imageB64 = Buffer.from('fake-image-data').toString('base64');
+      mockImagesGenerate.mockResolvedValue({
+        data: [{ b64_json: imageB64 }],
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat', {
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-123' },
+          success: true,
+          usage: expect.objectContaining({ imageCount: 1, imageSize: '1024x1024' }),
+        })
+      );
+    });
+
+    it('logs failed image generation with imageCount zero when response has no image data', async () => {
+      mockImagesGenerate.mockResolvedValue({ data: [{}] });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat');
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          model: LlmModels.GPTImage1,
+          promptType: 'image-generation',
+          success: false,
+          usage: expect.objectContaining({ imageCount: 0, imageSize: '1024x1024' }),
+        })
+      );
+    });
+
+    it('forwards image generation correlation to usage logger on failure', async () => {
+      mockImagesGenerate.mockResolvedValue({ data: [{}] });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat', {
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-123' },
+          success: false,
+          usage: expect.objectContaining({ imageCount: 0, imageSize: '1024x1024' }),
         })
       );
     });
@@ -735,21 +845,60 @@ describe('createGptClient', () => {
     });
 
     it('handles timeout error in generate via APIError', async () => {
-      mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(408, 'Connection timeout'));
+      vi.useFakeTimers();
+      try {
+        mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(408, 'Connection timeout'));
 
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
+        const client = createGptClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+        const promise = client.generate('Test prompt', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('TIMEOUT');
-        expect(result.error.message).toContain('timeout');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('TIMEOUT');
+          expect(result.error.message).toContain('timeout');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      vi.useFakeTimers();
+      try {
+        mockChatCompletionsCreate
+          .mockRejectedValueOnce(new MockAPIError(429, 'Rate limited'))
+          .mockResolvedValueOnce({
+            choices: [{ message: { content: 'recovered' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          });
+
+        const client = createGptClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        const promise = client.generate('hi', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(2);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('recovered');
+        }
+      } finally {
+        vi.useRealTimers();
       }
     });
 
@@ -855,5 +1004,47 @@ describe('createGptClient', () => {
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(
       expect.objectContaining({ promptType: 'test-prompt' })
     );
+  });
+
+  it('forwards per-call correlation to usage logger when provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ correlation: { researchId: 'r-1' } })
+    );
+  });
+
+  it('omits correlation from usage logger when not provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(lastCall).not.toHaveProperty('correlation');
   });
 });

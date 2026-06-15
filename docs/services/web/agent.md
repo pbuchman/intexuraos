@@ -46,7 +46,7 @@ interface ActionButton {
   id: string;
   label: string;
   endpoint: {
-    path: string; // e.g., /actions/{actionId}/approve
+    path: string; // e.g., /{actionId}/execute relative to actionsAgentUrl
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     body?: Record<string, unknown>;
   };
@@ -76,7 +76,7 @@ interface Action {
 
 ### Manage Code Tasks
 
-**Endpoint:** `GET /code/tasks` from code-agent
+**Endpoint:** `GET /tasks` from code-agent
 
 **When to use:** When user creates, views, or manages code generation tasks
 
@@ -191,7 +191,7 @@ interface GitHubEventLogListRow {
 
 ### GitHub PR Events (Lazy-Loaded Summaries)
 
-**Endpoint:** `GET /code/github-pr-events` from code-agent
+**Endpoint:** `GET /github-pr-events` from code-agent
 
 **When to use:** When user views detailed GitHub pull request activity for code tasks
 
@@ -205,7 +205,7 @@ interface GitHubEventLogListRow {
 
 ### Manage Worker Settings
 
-**Endpoint:** `GET /code/worker-settings` from code-agent
+**Endpoint:** `GET /worker-settings` from code-agent
 
 **When to use:** When user configures code execution workers
 
@@ -272,7 +272,7 @@ type CodeTaskWorkerType =
 - Labels shown as colored badges
 - Assignee names displayed with emerald green badges (null values handled gracefully)
 - Real-time Firestore updates (no polling)
-- Webhook secret configuration (`GET/POST/DELETE /linear/webhook-config`)
+- Webhook secret configuration (`GET/POST/DELETE /webhook-config`)
 
 ### Intex Chat
 
@@ -296,7 +296,7 @@ type CodeTaskWorkerType =
 | Notion               | notion-service               | `/#/settings/notion`          |
 | WhatsApp             | whatsapp-service             | `/#/settings/whatsapp`        |
 | Google Calendar      | calendar-agent               | `/#/settings/calendar`        |
-| Linear               | linear-agent                 | `/#/settings/linear`          |
+| Linear               | linear-agent                 | `/#/settings/`          |
 | GitHub               | code-agent / user-service    | `/#/settings/github`          |
 | Mobile Notifications | mobile-notifications-service | `/#/settings/mobile`          |
 | API Keys             | user-service                 | `/#/settings/api-keys`        |
@@ -509,7 +509,7 @@ None. The web app is a consumer only — it does not publish Pub/Sub events.
 | `/#/settings/mobile`                      | Yes  | Mobile notifications                |
 | `/#/settings/notion`                      | Yes  | Notion connection                   |
 | `/#/settings/calendar`                    | Yes  | Google Calendar connection          |
-| `/#/settings/linear`                      | Yes  | Linear + webhook config             |
+| `/#/settings/`                      | Yes  | Linear + webhook config             |
 | `/#/settings/github`                      | Yes  | GitHub connection                   |
 | `/#/settings/code`                        | Yes  | Worker configuration                |
 | `/#/settings/api-keys`                    | Yes  | API key management                  |

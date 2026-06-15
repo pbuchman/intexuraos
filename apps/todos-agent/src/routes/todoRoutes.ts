@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createTodo } from '../domain/usecases/createTodo.js';
 import { getTodo } from '../domain/usecases/getTodo.js';
@@ -242,7 +242,7 @@ function parseDate(dateStr: string | null | undefined): Date | null {
 
 export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get<{ Querystring: ListTodosQuery }>(
-    '/todos',
+    '/',
     {
       schema: {
         operationId: 'listTodos',
@@ -264,6 +264,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Querystring: ListTodosQuery }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /todos' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -293,7 +295,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Body: CreateTodoBody }>(
-    '/todos',
+    '/',
     {
       schema: {
         operationId: 'createTodo',
@@ -315,6 +317,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: CreateTodoBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -350,7 +357,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: TodoParams }>(
-    '/todos/:id',
+    '/:id',
     {
       schema: {
         operationId: 'getTodo',
@@ -372,6 +379,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /todos/:id' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -388,7 +397,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on get-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -401,7 +410,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: TodoParams; Body: UpdateTodoBody }>(
-    '/todos/:id',
+    '/:id',
     {
       schema: {
         operationId: 'updateTodo',
@@ -427,6 +436,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoParams; Body: UpdateTodoBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'PATCH /todos/:id',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -450,7 +464,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on update-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -463,7 +477,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete<{ Params: TodoParams }>(
-    '/todos/:id',
+    '/:id',
     {
       schema: {
         operationId: 'deleteTodo',
@@ -485,6 +499,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /todos/:id' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -501,7 +517,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on delete-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -514,7 +530,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams; Body: CreateTodoItemBody }>(
-    '/todos/:id/items',
+    '/:id/items',
     {
       schema: {
         operationId: 'addTodoItem',
@@ -540,6 +556,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoParams; Body: CreateTodoItemBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/items',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -561,7 +582,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on add-item route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -575,7 +596,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: TodoItemParams; Body: UpdateTodoItemBody }>(
-    '/todos/:id/items/:itemId',
+    '/:id/items/:itemId',
     {
       schema: {
         operationId: 'updateTodoItem',
@@ -601,6 +622,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoItemParams; Body: UpdateTodoItemBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'PATCH /todos/:id/items/:itemId',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -635,7 +661,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete<{ Params: TodoItemParams }>(
-    '/todos/:id/items/:itemId',
+    '/:id/items/:itemId',
     {
       schema: {
         operationId: 'deleteTodoItem',
@@ -657,6 +683,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoItemParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /todos/:id/items/:itemId' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -685,7 +713,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams; Body: ReorderItemsBody }>(
-    '/todos/:id/items/reorder',
+    '/:id/items/reorder',
     {
       schema: {
         operationId: 'reorderTodoItems',
@@ -711,6 +739,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoParams; Body: ReorderItemsBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/items/reorder',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -742,7 +775,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams }>(
-    '/todos/:id/archive',
+    '/:id/archive',
     {
       schema: {
         operationId: 'archiveTodo',
@@ -764,6 +797,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/archive',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -794,7 +832,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams }>(
-    '/todos/:id/unarchive',
+    '/:id/unarchive',
     {
       schema: {
         operationId: 'unarchiveTodo',
@@ -816,6 +854,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/unarchive',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -832,7 +875,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on unarchive-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -845,7 +888,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post<{ Params: TodoParams }>(
-    '/todos/:id/cancel',
+    '/:id/cancel',
     {
       schema: {
         operationId: 'cancelTodo',
@@ -867,6 +910,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/cancel',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

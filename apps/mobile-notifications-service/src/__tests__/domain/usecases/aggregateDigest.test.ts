@@ -26,6 +26,7 @@ describe('aggregateDigest', () => {
         userId: 'google-oauth2|test',
         groupKey: 'grupa-wedkarska-skool',
         date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null,
         last3Summaries: [],
         todaysMessages: [],
@@ -44,11 +45,18 @@ describe('aggregateDigest', () => {
       { type: 'content', value: '{"dailySummary": "this is not an object"}' },
       { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
     ]);
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
 
     const result = await aggregateDigest(
-      { llmClient, logger: noopLogger },
+      { llmClient, logger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -57,6 +65,34 @@ describe('aggregateDigest', () => {
     expect(llmClient.calls).toHaveLength(2);
     expect(llmClient.calls[0]?.options?.promptType).toBe(PROMPT_TYPE_AGGREGATE);
     expect(llmClient.calls[1]?.options?.promptType).toBe(PROMPT_TYPE_REPAIR);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 1, _skipSentry: true }),
+      'aggregateDigest: invalid response, will repair',
+    );
+  });
+
+  it('passes the target output language into initial and repair prompts', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: 'not json' },
+      { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u',
+        groupKey: 'grupa-wedkarska-skool',
+        date: '2026-04-15',
+        outputLanguage: 'Polish',
+        previousState: null,
+        last3Summaries: [],
+        todaysMessages: [{ sender: 'Mateusz', text: 'Zanęta zaczęła pracować.', postTimeSec: 1776380400 }],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(llmClient.calls[0]?.prompt).toContain('Target output language: Polish');
+    expect(llmClient.calls[1]?.prompt).toContain('Target output language: Polish');
   });
 
   it('returns repair-exhausted when LLM never produces valid JSON', async () => {
@@ -71,6 +107,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -90,6 +127,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -109,6 +147,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -129,6 +168,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'grupa-wedkarska-skool', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null,
         last3Summaries: [],
         todaysMessages: [],
@@ -138,7 +178,7 @@ describe('aggregateDigest', () => {
     expect(result.ok).toBe(true);
     // Verify the prompt embedded an empty-state placeholder (not "null")
     const prompt = llmClient.calls[0]?.prompt ?? '';
-    expect(prompt).toContain('previousState (lub {} dla cold start)');
+    expect(prompt).toContain('previousState (or {} for cold start)');
   });
 
   it('handles previousState = empty object equivalently to null', async () => {
@@ -150,6 +190,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'grupa-wedkarska-skool', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: {},
         last3Summaries: [],
         todaysMessages: [],

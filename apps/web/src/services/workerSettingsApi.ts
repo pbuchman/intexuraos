@@ -19,7 +19,7 @@ import type {
 export async function getWorkerSettings(accessToken: string): Promise<WorkerSettingsResponse> {
   return await apiRequest<WorkerSettingsResponse>(
     config.codeAgentUrl,
-    '/code/worker-settings',
+    '/worker-settings',
     accessToken
   );
 }
@@ -33,7 +33,7 @@ export async function addWorker(
 ): Promise<AddWorkerResponse> {
   return await apiRequest<AddWorkerResponse>(
     config.codeAgentUrl,
-    '/code/worker-settings/workers',
+    '/worker-settings/workers',
     accessToken,
     {
       method: 'POST',
@@ -52,7 +52,7 @@ export async function updateWorker(
 ): Promise<UpdateWorkerResponse> {
   return await apiRequest<UpdateWorkerResponse>(
     config.codeAgentUrl,
-    `/code/worker-settings/workers/${workerName}`,
+    `/worker-settings/workers/${workerName}`,
     accessToken,
     {
       method: 'PATCH',
@@ -70,7 +70,7 @@ export async function deleteWorker(
 ): Promise<DeleteWorkerResponse> {
   return await apiRequest<DeleteWorkerResponse>(
     config.codeAgentUrl,
-    `/code/worker-settings/workers/${workerName}`,
+    `/worker-settings/workers/${workerName}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -85,7 +85,7 @@ export async function reorderWorkers(
 ): Promise<ReorderWorkersResponse> {
   return await apiRequest<ReorderWorkersResponse>(
     config.codeAgentUrl,
-    '/code/worker-settings/priority',
+    '/worker-settings/priority',
     accessToken,
     {
       method: 'PUT',
@@ -103,7 +103,7 @@ export async function testWorkerConnectivity(
 ): Promise<TestWorkerConnectivityResponse> {
   return await apiRequest<TestWorkerConnectivityResponse>(
     config.codeAgentUrl,
-    `/code/worker-settings/workers/${workerName}/test`,
+    `/worker-settings/workers/${workerName}/test`,
     accessToken,
     { method: 'POST' }
   );
@@ -119,7 +119,7 @@ export async function updateDefaultWorkerType(
 ): Promise<UpdateDefaultWorkerTypeResponse> {
   return await apiRequest<UpdateDefaultWorkerTypeResponse>(
     config.codeAgentUrl,
-    `/code/worker-settings/default-${category}-worker-type`,
+    `/worker-settings/default-${category}-worker-type`,
     accessToken,
     { method: 'PATCH', body: { workerType } },
   );

@@ -1,11 +1,45 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildSynthesisPrompt,
+  synthesisPrompt,
   type ExternalReport,
   type SynthesisReport,
   type AdditionalSource,
 } from '../synthesisPrompt.js';
 import type { SynthesisContext } from '../../synthesis/contextTypes.js';
+
+/**
+ * Test helper that mirrors the previous positional `buildSynthesisPrompt(...)`
+ * signature on top of the new `synthesisPrompt.build({...})` PromptBuilder.
+ *
+ * The third positional argument may be either a SynthesisContext (modern path)
+ * or an array of AdditionalSource (legacy path) — both are forwarded to the
+ * appropriate fields on `SynthesisPromptInput`.
+ */
+function buildSynthesisPrompt(
+  originalPrompt: string,
+  reports: (SynthesisReport | undefined)[],
+  ctxOrAdditionalSources?: SynthesisContext | (AdditionalSource | undefined)[],
+  additionalSources?: (AdditionalSource | undefined)[]
+): string {
+  if (
+    ctxOrAdditionalSources !== undefined &&
+    !Array.isArray(ctxOrAdditionalSources) &&
+    'synthesis_goals' in ctxOrAdditionalSources
+  ) {
+    return synthesisPrompt.build({
+      originalPrompt,
+      reports,
+      ctx: ctxOrAdditionalSources,
+      ...(additionalSources !== undefined && { additionalSources }),
+    });
+  }
+  const legacy = Array.isArray(ctxOrAdditionalSources) ? ctxOrAdditionalSources : undefined;
+  return synthesisPrompt.build({
+    originalPrompt,
+    reports,
+    ...(legacy !== undefined && { additionalSources: legacy }),
+  });
+}
 
 const createTestSynthesisContext = (overrides?: Partial<SynthesisContext>): SynthesisContext => ({
   language: 'en',
@@ -31,6 +65,14 @@ const createTestSynthesisContext = (overrides?: Partial<SynthesisContext>): Synt
   },
   red_flags: [],
   ...overrides,
+});
+
+describe('synthesisPrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(synthesisPrompt.name).toBe('research-synthesis');
+    expect(synthesisPrompt.description).toContain('synthesis');
+    expect(synthesisPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
 });
 
 describe('buildSynthesisPrompt', () => {

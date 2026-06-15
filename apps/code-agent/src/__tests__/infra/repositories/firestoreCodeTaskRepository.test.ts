@@ -6,7 +6,7 @@ import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@i
 import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
-import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../../../domain/models/codeTask.js';
 import type { CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 
@@ -61,6 +61,10 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.dedupKey).toMatch(/^[a-f0-9]{16}$/);
       expect(result.value.createdAt).toBeDefined();
       expect(result.value.updatedAt).toBeDefined();
+
+      const stored = await fakeFirestore.collection('code_tasks').doc(result.value.id).get();
+      expect(stored.get('schemaVersion')).toBe(1);
+      expect(stored.get('schemaUpdatedAt')).toBeInstanceOf(Timestamp);
     });
 
     it('creates task with dispatched status when initialStatus is dispatched', async () => {
@@ -750,6 +754,82 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.id).toBe('task_external-tx');
       expect(result.value.status).toBe('queued');
     });
+
+    it('persists dispatchSchedule with Date notBeforeAt converted to Timestamp (INT-1468)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const notBeforeAt = new Date('2026-04-24T22:00:00Z');
+      const input = createTaskInput({
+        dispatchSchedule: {
+          notBeforeAt,
+          source: 'user_scheduled',
+          timezone: 'UTC',
+          localDateTime: '2026-04-24T22:00',
+          derivedBy: 'user_input',
+        },
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const schedule = result.value.dispatchSchedule;
+      expect(schedule).toBeDefined();
+      if (schedule === undefined) return;
+      expect(schedule.notBeforeAt).toBeInstanceOf(Timestamp);
+      expect(schedule.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+      expect(schedule.source).toBe('user_scheduled');
+      expect(schedule.timezone).toBe('UTC');
+      expect(schedule.localDateTime).toBe('2026-04-24T22:00');
+      expect(schedule.derivedBy).toBe('user_input');
+    });
+
+    it('omits dispatchSchedule when not provided (back-compat)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.create(createTaskInput());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.dispatchSchedule).toBeUndefined();
+    });
+
+    it('accepts a pre-converted Timestamp for dispatchSchedule.notBeforeAt without double conversion', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const notBeforeAt = Timestamp.fromDate(new Date('2026-04-24T22:00:00Z'));
+      const input = createTaskInput({
+        dispatchSchedule: {
+          notBeforeAt,
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const schedule = result.value.dispatchSchedule;
+      expect(schedule).toBeDefined();
+      if (schedule === undefined) return;
+      expect(schedule.notBeforeAt).toBeInstanceOf(Timestamp);
+      expect(schedule.notBeforeAt.toMillis()).toBe(notBeforeAt.toMillis());
+      expect(schedule.source).toBe('user_scheduled');
+      expect(schedule.derivedBy).toBe('user_input');
+    });
   });
 
   describe('findById', () => {
@@ -1102,6 +1182,41 @@ describe('firestoreCodeTaskRepository', () => {
       if (result.value.prClosedAt !== undefined) {
         expect(result.value.prClosedAt.toDate()).toStrictEqual(prClosedAt);
       }
+    });
+
+    it('updates dispatchSchedule with retry_cooloff source (INT-1468)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const notBeforeAt = new Date('2026-04-24T22:00:00Z');
+      const result = await repo.update(created.value.id, {
+        dispatchSchedule: {
+          notBeforeAt,
+          source: 'retry_cooloff',
+          sourceText: 'resets 10pm (UTC)',
+          derivedBy: 'llm',
+          derivedFromTaskId: 'task_prev',
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const schedule = result.value.dispatchSchedule;
+      expect(schedule).toBeDefined();
+      if (schedule === undefined) return;
+      expect(schedule.notBeforeAt).toBeInstanceOf(Timestamp);
+      expect(schedule.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+      expect(schedule.source).toBe('retry_cooloff');
+      expect(schedule.sourceText).toBe('resets 10pm (UTC)');
+      expect(schedule.derivedBy).toBe('llm');
+      expect(schedule.derivedFromTaskId).toBe('task_prev');
     });
   });
 
@@ -2170,207 +2285,6 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value.requiresReReview).toBe(true);
-    });
-  });
-
-  describe('findArchivableTasks', () => {
-    it('returns tasks before cutoff with logsArchived=false', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      await repo.update(created.value.id, {
-        status: 'planned',
-        completedAt: new Date('2024-01-01'),
-      });
-
-      const cutoff = new Date('2024-06-01');
-      const result = await repo.findArchivableTasks(cutoff, 100);
-
-      expect(result.ok).toBe(true);
-    });
-
-    it('returns empty array when none exist', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const result = await repo.findArchivableTasks(new Date(), 100);
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value).toEqual([]);
-    });
-
-    it('respects limit parameter', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      await repo.create(createTaskInput({ prompt: 'Task 1' }));
-      await repo.create(createTaskInput({ prompt: 'Task 2' }));
-
-      const result = await repo.findArchivableTasks(new Date(), 1);
-
-      expect(result.ok).toBe(true);
-    });
-  });
-
-  describe('archiveTaskLogs', () => {
-    it('updates task with logsArchived=true', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      await repo.update(created.value.id, {
-        status: 'planned',
-        completedAt: new Date(),
-      });
-
-      const result = await repo.archiveTaskLogs(created.value.id, 500);
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.logCount).toBe(0);
-      expect(result.value.archivedAt).toBeInstanceOf(Date);
-    });
-
-    it('returns NOT_FOUND for non-existent task', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const result = await repo.archiveTaskLogs('non-existent', 500);
-
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error.code).toBe('NOT_FOUND');
-    });
-
-    it('deletes documents from logs subcollection when present', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      // Seed logs subcollection with 3 documents (batchSize=2 triggers both branches)
-      const logsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/logs`);
-      for (let i = 1; i <= 3; i++) {
-        await logsCollection.doc(`log-${i}`).set({ content: `log entry ${i}` });
-      }
-
-      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
-      const result = await repo.archiveTaskLogs(created.value.id, 2);
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.logCount).toBe(3);
-      expect(result.value.archivedAt).toBeInstanceOf(Date);
-
-      // Verify logs were deleted
-      const logsSnapshot = await logsCollection.get();
-      expect(logsSnapshot.docs).toHaveLength(0);
-    });
-
-    it('deletes documents from log_lines subcollection when present', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      // Seed log_lines subcollection with 3 documents (batchSize=2 triggers both branches)
-      const logLinesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_lines`);
-      for (let i = 1; i <= 3; i++) {
-        await logLinesCollection.doc(`line-${i}`).set({ content: `line ${i}` });
-      }
-
-      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
-      const result = await repo.archiveTaskLogs(created.value.id, 2);
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.logCount).toBe(3);
-
-      // Verify log_lines were deleted
-      const logLinesSnapshot = await logLinesCollection.get();
-      expect(logLinesSnapshot.docs).toHaveLength(0);
-    });
-
-    it('deletes documents from log_entries subcollection when present', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      // Seed log_entries subcollection with 3 documents (batchSize=2 triggers both branches)
-      const logEntriesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_entries`);
-      for (let i = 1; i <= 3; i++) {
-        await logEntriesCollection.doc(`entry-${i}`).set({ message: `entry ${i}` });
-      }
-
-      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
-      const result = await repo.archiveTaskLogs(created.value.id, 2);
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.logCount).toBe(3);
-
-      // Verify log_entries were deleted
-      const logEntriesSnapshot = await logEntriesCollection.get();
-      expect(logEntriesSnapshot.docs).toHaveLength(0);
-    });
-
-    it('deletes documents from turn_metrics subcollection when present', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      // Seed turn_metrics subcollection with 3 documents (batchSize=2 triggers both branches)
-      const turnMetricsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/turn_metrics`);
-      for (let i = 1; i <= 3; i++) {
-        await turnMetricsCollection.doc(`metric-${i}`).set({ tokens: i * 100 });
-      }
-
-      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
-      const result = await repo.archiveTaskLogs(created.value.id, 2);
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.logCount).toBe(3);
-
-      // Verify turn_metrics were deleted
-      const turnMetricsSnapshot = await turnMetricsCollection.get();
-      expect(turnMetricsSnapshot.docs).toHaveLength(0);
     });
   });
 
@@ -3553,50 +3467,6 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
-  describe('archiveTaskLogs with exact batch boundary', () => {
-    it('does not commit remainder when subcollection docs divide evenly into batches', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create(createTaskInput());
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      // Seed exactly 2 logs (matching batchSize=2 so remainder is 0)
-      const logsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/logs`);
-      for (let i = 1; i <= 2; i++) {
-        await logsCollection.doc(`log-${i}`).set({ content: `log entry ${i}` });
-      }
-
-      // Seed exactly 2 log_lines
-      const logLinesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_lines`);
-      for (let i = 1; i <= 2; i++) {
-        await logLinesCollection.doc(`line-${i}`).set({ content: `line ${i}` });
-      }
-
-      // Seed exactly 2 log_entries
-      const logEntriesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_entries`);
-      for (let i = 1; i <= 2; i++) {
-        await logEntriesCollection.doc(`entry-${i}`).set({ message: `entry ${i}` });
-      }
-
-      // Seed exactly 2 turn_metrics
-      const turnMetricsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/turn_metrics`);
-      for (let i = 1; i <= 2; i++) {
-        await turnMetricsCollection.doc(`metric-${i}`).set({ tokens: i * 100 });
-      }
-
-      // batchSize=2 with exactly 2 docs: all commit in loop, remainder=0 skips the if
-      const result = await repo.archiveTaskLogs(created.value.id, 2);
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.value.logCount).toBe(8);
-    });
-  });
-
   describe('findLatestExecutionTaskByPR 50-doc exhaustion warning', () => {
     it('logs warning when 50 docs are scanned without finding an execution-eligible task', async () => {
       const repo = createFirestoreCodeTaskRepository({
@@ -4037,6 +3907,293 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value).toBeNull();
+    });
+  });
+
+  describe('hasOtherDispatchedOrRunningForLinearIssue', () => {
+    it('returns hasActive false when only the candidate exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+      // Move candidate to dispatched so its self-row is in the result set.
+      await repo.update(candidate.value.id, { status: 'dispatched' });
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive true and the sibling id when a non-self sibling is dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-1529',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+      if (!sibling.ok) return;
+      await repo.update(sibling.value.id, { status: 'dispatched' });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe('sibling');
+    });
+
+    it('returns hasActive true when sibling is running', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-1529',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+      if (!sibling.ok) return;
+      await repo.update(sibling.value.id, { status: 'running' });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(true);
+    });
+
+    it('excludes queued siblings (uses DISPATCHED_OR_RUNNING_STATUSES)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Sibling stays queued — should NOT block candidate.
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-1529',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive false for a different Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-9999',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+      if (!sibling.ok) return;
+      await repo.update(sibling.value.id, { status: 'dispatched' });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(false);
+    });
+  });
+
+  describe('claimForDispatch', () => {
+    it('claims a queued task and transitions status to dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-claim' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update('task-claim', {
+        dispatchStatus: {
+          state: 'waiting',
+          reason: 'workers_unreachable',
+          terminal: false,
+          severity: 'warning',
+          message: 'Workers are temporarily unreachable.',
+          remediation: 'The scheduler will retry automatically.',
+          workerNames: ['home-mac'],
+          firstSeenAt: Timestamp.now(),
+          lastSeenAt: Timestamp.now(),
+          nextAction: 'will_retry_automatically',
+        },
+      });
+
+      const result = await repo.claimForDispatch('task-claim');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBe(true);
+
+      const after = await repo.findById('task-claim');
+      expect(after.ok).toBe(true);
+      if (!after.ok) return;
+      expect(after.value.status).toBe('dispatched');
+      expect(after.value.dispatchedAt).toBeDefined();
+      expect(after.value.dispatchStatus).toBeUndefined();
+    });
+
+    it('returns false when task is already dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-already' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update('task-already', { status: 'dispatched' });
+
+      const result = await repo.claimForDispatch('task-already');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBe(false);
+    });
+
+    it('returns false when task is running', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-running' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update('task-running', { status: 'running' });
+
+      const result = await repo.claimForDispatch('task-running');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBe(false);
+    });
+
+    it('returns false when task does not exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.claimForDispatch('does-not-exist');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBe(false);
+    });
+
+    it('exactly one of two parallel claim calls wins for the same task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-race' }));
+      expect(created.ok).toBe(true);
+
+      const [a, b] = await Promise.all([
+        repo.claimForDispatch('task-race'),
+        repo.claimForDispatch('task-race'),
+      ]);
+
+      expect(a.ok).toBe(true);
+      expect(b.ok).toBe(true);
+      if (!a.ok || !b.ok) return;
+
+      const claimedCount = [a.value, b.value].filter((r): r is true => r === true).length;
+      const alreadyClaimedCount = [a.value, b.value].filter(
+        (r): r is false => r === false,
+      ).length;
+
+      expect(claimedCount).toBe(1);
+      expect(alreadyClaimedCount).toBe(1);
     });
   });
 });

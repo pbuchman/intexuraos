@@ -7,7 +7,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Logger } from 'pino';
 import { LlmModels, LlmProviders, type ResearchModel } from '@intexuraos/llm-contract';
 import {
-  buildModelExtractionPrompt,
+  modelExtractionPrompt,
   parseModelExtractionResponse,
   parseModelExtractionResponseWithLogging,
   MODEL_KEYWORDS,
@@ -17,7 +17,15 @@ import {
   type ModelExtractionPromptDeps,
 } from '../modelExtractionPrompt.js';
 
-describe('buildModelExtractionPrompt', () => {
+describe('modelExtractionPrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(modelExtractionPrompt.name).toBe('research-model-extraction');
+    expect(modelExtractionPrompt.description).toContain('model');
+    expect(modelExtractionPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+describe('modelExtractionPrompt.build', () => {
   const createTestDeps = (
     overrides?: Partial<ModelExtractionPromptDeps>
   ): ModelExtractionPromptDeps => ({
@@ -45,7 +53,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('includes user message in prompt', () => {
     const deps = createTestDeps({ userMessage: 'My custom research query' });
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('## User Message');
     expect(result).toContain('"My custom research query"');
@@ -53,7 +61,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('lists available models with display names and providers', () => {
     const deps = createTestDeps();
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('## Available Models');
     expect(result).toContain(`- ${LlmModels.Gemini25Pro}: Gemini 2.5 Pro (${LlmProviders.Google})`);
@@ -62,7 +70,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('includes keywords for each model', () => {
     const deps = createTestDeps();
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('Keywords: gemini pro, gemini-pro, pro');
     expect(result).toContain('Keywords: gpt, gpt-5, openai, chatgpt');
@@ -87,7 +95,7 @@ describe('buildModelExtractionPrompt', () => {
         },
       ],
     });
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain(
       `${LlmModels.Gemini25Pro}: Gemini 2.5 Pro (${LlmProviders.Google}) (provider default)`
@@ -99,7 +107,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('includes synthesis models in constraints', () => {
     const deps = createTestDeps();
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('## Constraints');
     expect(result).toContain(
@@ -109,7 +117,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('includes default synthesis model fallback instruction', () => {
     const deps = createTestDeps();
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain(
       `If user requests a model for synthesis that doesn't support it, use ${DEFAULT_SYNTHESIS_MODEL} instead`
@@ -118,7 +126,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('includes provider defaults section', () => {
     const deps = createTestDeps();
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('## Provider Defaults');
     expect(result).toContain(`- ${LlmProviders.Google}: ${LlmModels.Gemini25Pro}`);
@@ -137,7 +145,7 @@ describe('buildModelExtractionPrompt', () => {
         },
       ],
     });
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     // Should not have google in defaults since no model is marked as default
     expect(result).not.toContain(`- ${LlmProviders.Google}:`);
@@ -145,7 +153,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('includes special cases instructions', () => {
     const deps = createTestDeps();
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('## Special Cases');
     expect(result).toContain('"all models"');
@@ -155,7 +163,7 @@ describe('buildModelExtractionPrompt', () => {
 
   it('includes response format specification', () => {
     const deps = createTestDeps();
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('## Response Format');
     expect(result).toContain('"selectedModels": ["model-id-1", "model-id-2"]');
@@ -181,7 +189,7 @@ describe('buildModelExtractionPrompt', () => {
         },
       ],
     });
-    const result = buildModelExtractionPrompt(deps);
+    const result = modelExtractionPrompt.build(deps);
 
     // Both models should be listed
     expect(result).toContain(LlmModels.Gemini25Pro);

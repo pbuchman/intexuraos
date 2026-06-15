@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   CheckCircle2,
   Clock,
   Copy,
@@ -137,6 +138,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
       <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} />
 
       <MemoActiveProgressCard task={task} />
+      <MemoDispatchStatusCard task={task} />
 
       {task.parentTaskId !== undefined && task.followUpReason === 'execution_implement' ? (
         <DesignTaskBanner parentTaskId={task.parentTaskId} />
@@ -225,6 +227,80 @@ const MemoTaskHeader = memo(TaskHeader);
 const MemoLogStream = memo(LogStream);
 const MemoNextSteps = memo(NextSteps);
 const MemoTaskActions = memo(TaskActions);
+function formatDispatchTimestamp(value: string): string {
+  return new Date(value).toLocaleString();
+}
+
+const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task: CodeTask }): React.JSX.Element | null {
+  const dispatchStatus = task.dispatchStatus;
+  if (dispatchStatus === undefined) return null;
+
+  const isTerminal = dispatchStatus.terminal;
+  const title = isTerminal ? 'Dispatch Failed' : 'Dispatch Waiting';
+  const nextActionText =
+    dispatchStatus.nextAction === 'will_retry_automatically'
+      ? 'This task will retry automatically.'
+      : dispatchStatus.nextAction === 'retry_after_fix'
+        ? 'Fix the blocker, then retry this task.'
+        : dispatchStatus.nextAction === 'wait_until_scheduled'
+          ? 'This task is waiting for its scheduled dispatch time.'
+          : 'This task is waiting for another active task to finish.';
+  const workerText = dispatchStatus.workerNames.length > 0
+    ? `Workers: ${dispatchStatus.workerNames.join(', ')}`
+    : null;
+  const timeText = [
+    `First seen: ${formatDispatchTimestamp(dispatchStatus.firstSeenAt)}`,
+    `Last seen: ${formatDispatchTimestamp(dispatchStatus.lastSeenAt)}`,
+    dispatchStatus.lastAttemptAt !== undefined ? `Last attempt: ${formatDispatchTimestamp(dispatchStatus.lastAttemptAt)}` : null,
+  ].filter((value): value is string => value !== null).join(' | ');
+  const terminalCause = dispatchStatus.terminalCause;
+  const healthDetails = dispatchStatus.workerHealthDetails ?? [];
+
+  return (
+    <Card className={`mb-6 ${isTerminal ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30' : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30'}`}>
+      <div className="flex items-start gap-3">
+        <AlertTriangle className={`mt-0.5 h-5 w-5 flex-shrink-0 ${isTerminal ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <h3 className={`font-medium ${isTerminal ? 'text-red-900 dark:text-red-200' : 'text-amber-900 dark:text-amber-200'}`}>
+              {title}
+            </h3>
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${isTerminal ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'}`}>
+              {dispatchStatus.reason}
+            </span>
+          </div>
+          <p className={`text-sm ${isTerminal ? 'text-red-800 dark:text-red-300' : 'text-amber-800 dark:text-amber-300'}`}>
+            {dispatchStatus.message}
+          </p>
+          <p className={`mt-2 text-sm font-medium ${isTerminal ? 'text-red-900 dark:text-red-200' : 'text-amber-900 dark:text-amber-200'}`}>
+            {nextActionText}
+          </p>
+          <p className={`mt-1 text-sm ${isTerminal ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}`}>
+            {dispatchStatus.remediation}
+          </p>
+          {workerText !== null ? (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{workerText}</p>
+          ) : null}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{timeText}</p>
+          {terminalCause !== undefined ? (
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              Final cause: {terminalCause.reason} - {terminalCause.message}
+            </p>
+          ) : null}
+          {healthDetails.map((detail) => (
+            <p key={`${detail.workerName}-${detail.tag}`} className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              {detail.workerName}: {detail.tag}
+              {detail.error !== undefined ? ` - ${detail.error}` : ''}
+              {detail.missingFields !== undefined && detail.missingFields.length > 0
+                ? ` (${detail.missingFields.join(', ')})`
+                : ''}
+            </p>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}, (prev, next) => prev.task.dispatchStatus === next.task.dispatchStatus);
 const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { task: CodeTask }): React.JSX.Element | null {
   const context = task.executionMemoryContext;
   const postRun = task.executionMemoryPostRun;

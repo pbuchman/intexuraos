@@ -108,4 +108,70 @@ describe('ConfirmSubmitModal', () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it('renders custom timeout row when timeoutHours differs from default (INT-1585)', () => {
+    render(
+      <ConfirmSubmitModal
+        isOpen
+        taskTitle="Long task"
+        workerType="auto"
+        taskMode="execution"
+        timeoutHours={8}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Custom timeout:/i)).toBeInTheDocument();
+    expect(screen.getByText('8 hours')).toBeInTheDocument();
+  });
+
+  it('omits custom timeout row when timeoutHours equals default (INT-1585)', () => {
+    render(
+      <ConfirmSubmitModal
+        isOpen
+        taskTitle="Default task"
+        workerType="auto"
+        taskMode="execution"
+        timeoutHours={5}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/Custom timeout:/i)).toBeNull();
+  });
+
+  it('omits custom timeout row when timeoutHours is undefined (INT-1585)', () => {
+    render(
+      <ConfirmSubmitModal
+        isOpen
+        taskTitle="No-timeout task"
+        workerType="auto"
+        taskMode="planning"
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/Custom timeout:/i)).toBeNull();
+  });
+
+  it('renders the Dispatches preview when schedule prop is provided', () => {
+    render(
+      <ConfirmSubmitModal
+        isOpen
+        taskTitle="Scheduled task"
+        workerType="auto"
+        taskMode="execution"
+        schedule={{
+          localDateTime: '2026-04-24T22:00',
+          timezone: 'UTC',
+          notBeforeAt: '2026-04-24T22:00:00.000Z',
+        }}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/^Dispatches /)).toBeInTheDocument();
+    expect(screen.getByText(/Added to queue immediately/i)).toBeInTheDocument();
+  });
 });

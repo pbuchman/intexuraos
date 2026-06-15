@@ -49,7 +49,7 @@ describe('server', () => {
       const token = await createToken({ sub: 'test-user' });
       const response = await ctx.app.inject({
         method: 'OPTIONS',
-        url: '/hellscript/buffers',
+        url: '/buffers',
         headers: {
           origin: 'https://example.com',
           'access-control-request-method': 'GET',

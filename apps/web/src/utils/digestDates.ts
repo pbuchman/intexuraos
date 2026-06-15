@@ -47,12 +47,12 @@ export function shiftMonth(monthIso: string, delta: number): string {
   return `${String(d.getUTCFullYear())}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-export function monthLabelPl(monthIso: string): string {
+export function monthLabelEn(monthIso: string): string {
   const parts = monthIso.split('-').map((s) => parseInt(s, 10));
   const y = parts[0];
   const m = parts[1];
   if (y === undefined || m === undefined) return monthIso;
-  const label = new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  const label = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(Date.UTC(y, m - 1, 15)));
   return label;
 }

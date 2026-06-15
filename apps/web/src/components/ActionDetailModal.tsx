@@ -22,6 +22,7 @@ import { formatDateTime } from '@/utils/dateFormat';
 import { ConfigurableActionButton } from './ConfigurableActionButton';
 import { CalendarPreviewCard } from './CalendarPreviewCard';
 import { Button } from './ui/Button';
+import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/context/AuthContext';
 import { updateAction, resolveDuplicateAction, getActionPreview } from '@/services/commandsApi';
 import { BookmarkConflictModal } from './BookmarkConflictModal';
@@ -143,18 +144,6 @@ export function ActionDetailModal({
     },
     [getAccessToken, action.id, action.type, onActionUpdated, selectedType]
   );
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return (): void => {
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
 
   // Fetch calendar preview for calendar actions, with polling when pending
   useEffect(() => {
@@ -328,18 +317,17 @@ export function ActionDetailModal({
     }
   }, [conflictInfo, action, getAccessToken, onActionUpdated]);
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={handleBackdropClick}
+    <Modal
+      open
+      onOpenChange={(o): void => {
+        if (!o) onClose();
+      }}
+      title={action.title}
+      hideTitle
+      padded={false}
+      contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl dark:bg-slate-800"
     >
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl dark:bg-slate-800">
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-4 dark:border-slate-700">
           <div className="flex items-start gap-3">
@@ -590,7 +578,6 @@ export function ActionDetailModal({
             </div>
           </div>
         )}
-      </div>
 
       {/* Conflict Modal */}
       {conflictInfo !== null && (
@@ -608,6 +595,6 @@ export function ActionDetailModal({
           }}
         />
       )}
-    </div>
+    </Modal>
   );
 }

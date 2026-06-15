@@ -105,7 +105,7 @@ describe('POST /internal/auto-archive-merged-tasks', () => {
     expect(body.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('accepts OIDC Bearer token (Cloud Run validates)', async () => {
+  it('rejects Bearer tokens that are not valid Google OIDC tokens (INT-1531)', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/auto-archive-merged-tasks',
@@ -114,9 +114,9 @@ describe('POST /internal/auto-archive-merged-tasks', () => {
       },
     });
 
-    // Cloud Run validates OIDC tokens at infra layer; at application level,
-    // Bearer presence is accepted as "scheduler authenticated"
-    expect(response.statusCode).toBe(200);
+    // INT-1531: Bearer tokens are now verified against Google's JWKS at the
+    // application layer (audience = INTEXURAOS_SERVICE_URL). A fake token is rejected.
+    expect(response.statusCode).toBe(401);
   });
 
   it('passes mergeDays from request body to use case', async () => {

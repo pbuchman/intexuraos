@@ -75,16 +75,10 @@ variable "github_connection_name" {
   type        = string
 }
 
-variable "enable_load_balancer" {
-  description = "Enable Cloud Load Balancer with CDN for web app SPA hosting"
+variable "enable_legacy_cloud_run_async_consumers" {
+  description = "Keep legacy Cloud Run-targeted Pub/Sub pushes and app Scheduler jobs active. Disable after Hetzner async cutover."
   type        = bool
-  default     = true
-}
-
-variable "web_app_domain" {
-  description = "Domain name for the web app"
-  type        = string
-  default     = "intexuraos.cloud"
+  default     = false
 }
 
 variable "audit_llms" {
@@ -97,6 +91,25 @@ variable "alert_email" {
   description = "Email address for monitoring alerts. Set to null to disable alerts."
   type        = string
   default     = null
+}
+
+variable "slack_auth_token" {
+  description = "Slack bot OAuth token (xoxb-...) for the monitoring Slack notification channel. Leave null to skip provisioning the Slack channel."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "slack_channel_name" {
+  description = "Slack channel for monitoring alerts (e.g. \"#alerts\")."
+  type        = string
+  default     = "#alerts"
+}
+
+variable "service_urls" {
+  description = "Generated service URL map emitted from apps/web/service-manifest.json for drift visibility."
+  type        = map(string)
+  default     = {}
 }
 
 # -----------------------------------------------------------------------------
@@ -139,6 +152,13 @@ locals {
     mobile_notifications_service = {
       name      = "intexuraos-mobile-notifications-service"
       app_path  = "apps/mobile-notifications-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
+    fishing_assistant_service = {
+      name      = "intexuraos-fishing-assistant-service"
+      app_path  = "apps/fishing-assistant-service"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -270,37 +290,61 @@ locals {
     project     = "intexuraos"
   }
 
-  # Cloud Run URL suffix - project-specific, determined by GCP
-  cloud_run_url_suffix = "cj44trunra-lm.a.run.app"
+  public_origin                   = "https://intexuraos.cloud"
+  retired_cloud_run_push_endpoint = "https://retired-cloud-run.invalid"
+  retired_cloud_run_push_audience = local.retired_cloud_run_push_endpoint
 
-  # Common env vars for ALL services (URLs + project ID)
-  # Uses computed URLs to avoid circular dependencies
-  common_service_env_vars = {
-    INTEXURAOS_ENVIRONMENT                      = var.environment
-    INTEXURAOS_RUNTIME                          = "prod"
-    INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
-    INTEXURAOS_USER_SERVICE_URL                 = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_NOTION_SERVICE_URL               = "https://${local.services.notion_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_WHATSAPP_SERVICE_URL             = "https://${local.services.whatsapp_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = "https://${local.services.mobile_notifications_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_RESEARCH_AGENT_URL               = "https://${local.services.research_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_COMMANDS_AGENT_URL               = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_ACTIONS_AGENT_URL                = "https://${local.services.actions_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_IMAGE_SERVICE_URL                = "https://${local.services.image_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_NOTES_AGENT_URL                  = "https://${local.services.notes_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_TODOS_AGENT_URL                  = "https://${local.services.todos_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_BOOKMARKS_AGENT_URL              = "https://${local.services.bookmarks_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_CODE_AGENT_URL                   = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_APP_SETTINGS_SERVICE_URL         = "https://${local.services.app_settings_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_CALENDAR_AGENT_URL               = "https://${local.services.calendar_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_WEB_AGENT_URL                    = "https://${local.services.web_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_LINEAR_AGENT_URL                 = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_CHAT_AGENT_URL                   = "https://${local.services.chat_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_CRON_AGENT_URL                   = "https://${local.services.cron_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_HELLSCRIPT_AGENT_URL             = "https://${local.services.hellscript_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_LLM_USAGE_SERVICE_URL            = "https://${local.services.llm_usage_service.name}-${local.cloud_run_url_suffix}"
+  hetzner_runtime_env_vars = {
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = "${local.public_origin}/api/code"
   }
+
+  hetzner_runtime_secret_names = toset([
+    "INTEXURAOS_AUTH0_CLIENT_ID",
+    "INTEXURAOS_AUTH0_DOMAIN",
+    "INTEXURAOS_AUTH0_SPA_CLIENT_ID",
+    "INTEXURAOS_AUTH_AUDIENCE",
+    "INTEXURAOS_AUTH_ISSUER",
+    "INTEXURAOS_AUTH_JWKS_URL",
+    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID",
+    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
+    "INTEXURAOS_ENCRYPTION_KEY",
+    "INTEXURAOS_FIREBASE_API_KEY",
+    "INTEXURAOS_FIREBASE_AUTH_DOMAIN",
+    "INTEXURAOS_FIREBASE_PROJECT_ID",
+    "INTEXURAOS_GEMINI_APP_API_KEY",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID",
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
+    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
+    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID",
+    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
+    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
+    "INTEXURAOS_GUEST_SESSION_SECRET",
+    "INTEXURAOS_INTERNAL_AUTH_TOKEN",
+    "INTEXURAOS_OPENAI_APP_API_KEY",
+    "INTEXURAOS_OPENROUTER_APP_API_KEY",
+    "INTEXURAOS_ORCHESTRATOR_SECRET",
+    "INTEXURAOS_SENTRY_DSN",
+    "INTEXURAOS_SENTRY_DSN_WEB",
+    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
+    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
+    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
+    "INTEXURAOS_WHATSAPP_APP_SECRET",
+    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
+    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
+    "INTEXURAOS_WHATSAPP_WABA_ID",
+  ])
+
+  cloud_run_secret_manager_excluded_names = toset([
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
+    "INTEXURAOS_KIMI_APP_API_KEY",
+  ])
 }
 
 # -----------------------------------------------------------------------------
@@ -337,10 +381,14 @@ resource "google_project_service" "apis" {
 module "artifact_registry" {
   source = "../../modules/artifact-registry"
 
-  project_id  = var.project_id
-  region      = var.region
-  environment = var.environment
-  labels      = local.common_labels
+  project_id                            = var.project_id
+  region                                = var.region
+  environment                           = var.environment
+  labels                                = local.common_labels
+  cleanup_policy_dry_run                = false
+  cleanup_keep_count                    = 1
+  cleanup_delete_older_than             = "259200s"
+  code_worker_cleanup_delete_older_than = "86400s"
 
   depends_on = [google_project_service.apis]
 }
@@ -376,30 +424,6 @@ module "shared_content" {
   research_agent_service_account = module.iam.service_accounts["research_agent"]
 
   depends_on = [google_project_service.apis, module.iam]
-}
-
-# -----------------------------------------------------------------------------
-# Web App Bucket (SPA hosting with Load Balancer)
-# -----------------------------------------------------------------------------
-
-module "web_app" {
-  source = "../../modules/web-app"
-
-  project_id           = var.project_id
-  region               = var.region
-  environment          = var.environment
-  labels               = local.common_labels
-  enable_load_balancer = var.enable_load_balancer
-  domain               = var.web_app_domain
-
-  use_custom_certificate    = true
-  ssl_certificate_path      = "${path.module}/../../certs/intexuraos.cloud/fullchain.pem"
-  ssl_private_key_secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
-
-  shared_content_bucket_name = module.shared_content.bucket_name
-  images_bucket_name         = module.generated_images_bucket.bucket_name
-
-  depends_on = [google_project_service.apis, module.secret_manager, module.shared_content, module.generated_images_bucket]
 }
 
 # -----------------------------------------------------------------------------
@@ -511,10 +535,12 @@ module "secret_manager" {
     "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"
     # LLM API keys
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
+    "INTEXURAOS_GUEST_SESSION_SECRET"   = "HS256 secret used to sign chat-agent guest session JWTs (at least 32 bytes of entropy)"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
-    "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro API key for orchestrator worker containers"
+    "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro 2.5 API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
+    "INTEXURAOS_KIMI_APP_API_KEY"       = "Kimi Code API key for orchestrator kimi worker containers"
     "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to code worker containers"
@@ -529,12 +555,97 @@ module "secret_manager" {
     # Orchestrator repository management (INT-515)
     "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
-    # Dash0 OpenTelemetry observability
-    "INTEXURAOS_DASH0_OTLP_ENDPOINT" = "Dash0 OTLP HTTP ingress endpoint for OpenTelemetry"
-    "INTEXURAOS_DASH0_AUTH_TOKEN"    = "Dash0 Bearer auth token for OTLP export"
+    # Grafana Cloud observability
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN" = "Grafana Cloud service account token for dashboard provisioning"
+    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL"   = "Grafana Cloud stack URL for hosted dashboards"
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN"    = "Grafana Cloud Logs write token for Alloy collectors"
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL"      = "Grafana Cloud Loki push endpoint for Alloy collectors"
+    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME" = "Grafana Cloud Logs instance ID used as Loki basic auth username"
   }
 
   depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret" "cloudflare_dns_api_token" {
+  secret_id = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
+  labels    = local.common_labels
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_service_account" "hetzner_provisioner" {
+  account_id   = "ixos-hetzner-provisioner-${var.environment}"
+  display_name = "IntexuraOS Hetzner Provisioner (${var.environment})"
+  description  = "Service account used by the Hetzner VM to load runtime secrets and certbot DNS credentials"
+}
+
+resource "google_service_account" "hetzner_runtime" {
+  account_id   = "ixos-hetzner-runtime-${var.environment}"
+  display_name = "IntexuraOS Hetzner Runtime (${var.environment})"
+  description  = "Union runtime service account for PM2 services on the Hetzner VM"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {
+  for_each = local.hetzner_runtime_secret_names
+
+  secret_id = module.secret_manager.secret_ids[each.value]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_cloudflare_dns" {
+  secret_id = google_secret_manager_secret.cloudflare_dns_api_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_ssl_private_key" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_runtime_secrets" {
+  for_each = local.hetzner_runtime_secret_names
+
+  secret_id = module.secret_manager.secret_ids[each.value]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_project_iam_member" "hetzner_runtime_project_roles" {
+  for_each = toset([
+    "roles/datastore.user",
+    "roles/firebaseauth.admin",
+    "roles/logging.logWriter",
+    "roles/pubsub.publisher",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_service_account_iam_member" "hetzner_runtime_token_creator" {
+  service_account_id = google_service_account.hetzner_runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_storage_bucket_iam_member" "hetzner_runtime_bucket_object_admin" {
+  for_each = {
+    generated_images = module.generated_images_bucket.bucket_name
+    shared_content   = module.shared_content.bucket_name
+    whatsapp_media   = module.whatsapp_media_bucket.bucket_name
+  }
+
+  bucket = each.value
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.hetzner_runtime.email}"
 }
 
 # -----------------------------------------------------------------------------
@@ -548,7 +659,10 @@ module "iam" {
   environment = var.environment
   services    = local.services
 
-  secret_ids = module.secret_manager.secret_ids
+  secret_ids = {
+    for name, secret_id in module.secret_manager.secret_ids : name => secret_id
+    if !contains(local.cloud_run_secret_manager_excluded_names, name)
+  }
 
   depends_on = [
     google_project_service.apis,
@@ -569,26 +683,6 @@ module "claude_code_dev" {
 }
 
 # -----------------------------------------------------------------------------
-# Common Service Secrets (must be after secret_manager module)
-# -----------------------------------------------------------------------------
-
-locals {
-  # Secrets that ALL services need
-  common_service_secrets = {
-    INTEXURAOS_AUTH_JWKS_URL         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER           = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN   = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN            = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-    INTEXURAOS_MINIMAX_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
-    INTEXURAOS_GEMINI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
-    INTEXURAOS_DASHSCOPE_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
-    INTEXURAOS_DASH0_OTLP_ENDPOINT   = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
-    INTEXURAOS_DASH0_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
-  }
-}
-
-# -----------------------------------------------------------------------------
 # Pub/Sub Topics
 # -----------------------------------------------------------------------------
 
@@ -597,14 +691,15 @@ locals {
 module "pubsub_media_cleanup" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-media-cleanup-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/media-cleanup"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/whatsapp/pubsub/media-cleanup"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = module.whatsapp_service.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
@@ -614,7 +709,6 @@ module "pubsub_media_cleanup" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.whatsapp_service,
   ]
 }
 
@@ -622,14 +716,15 @@ module "pubsub_media_cleanup" {
 module "pubsub_whatsapp_webhook_process" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-webhook-process-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-whatsapp-webhook-process-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/process-webhook"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/whatsapp/pubsub/process-webhook"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = module.whatsapp_service.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 120
 
   publisher_service_accounts = {
@@ -647,14 +742,15 @@ module "pubsub_whatsapp_webhook_process" {
 module "pubsub_srt_transcription_completed" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-srt-transcription-completed-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-srt-transcription-completed-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = module.whatsapp_service.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 120
 
   publisher_service_accounts = {}
@@ -666,7 +762,11 @@ module "pubsub_srt_transcription_completed" {
 }
 
 # Topic for audio stored events (whatsapp-service → transcription Cloud Function)
-# No push subscription needed — the Cloud Function subscribes via event trigger.
+# Delivery is via an explicit push subscription (defined below) so we can attach
+# a dead_letter_policy. Cloud Functions Gen2 event triggers create their own
+# Eventarc-managed subscription that cannot have a dead_letter_policy attached
+# via Terraform — hence the function is HTTP-triggered and we wire the push
+# subscription manually.
 resource "google_pubsub_topic" "audio_stored" {
   name    = "intexuraos-audio-stored-${var.environment}"
   project = var.project_id
@@ -683,18 +783,70 @@ resource "google_pubsub_topic_iam_member" "whatsapp_publishes_audio_stored" {
   member  = "serviceAccount:${module.iam.service_accounts["whatsapp_service"]}"
 }
 
+# Dead-letter topic for transcription audio-stored consumer (Subtask G of
+# docs/plans/2026-04-24-workers-layer-refactor.md). Messages land here when
+# Pub/Sub gives up redelivering after max_delivery_attempts on the push
+# subscription, OR when the transcription worker explicitly publishes a parse
+# failure via INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC (Subtask C).
+resource "google_pubsub_topic" "transcription_dlq" {
+  name    = "intexuraos-transcription-audio-stored-dlq-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Pub/Sub service agent must be able to publish to the DLQ topic for the
+# subscription-level dead_letter_policy to function.
+resource "google_pubsub_topic_iam_member" "pubsub_publishes_transcription_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.transcription_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+# Grant the transcription Cloud Function SA permission to publish to its DLQ
+# topic. This supports the application-level DLQ publisher implemented in
+# Subtask C (workers/transcription/src/dlq-publisher.ts).
+resource "google_pubsub_topic_iam_member" "transcription_publishes_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.transcription_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# DLQ inspection subscription — pull subscription with 7-day retention for
+# manual / tooling-driven incident review. Per parent plan §5, this is the
+# anchor for a future BigQuery log sink.
+resource "google_pubsub_subscription" "transcription_dlq_inspect" {
+  name    = "intexuraos-transcription-audio-stored-dlq-${var.environment}-inspect"
+  topic   = google_pubsub_topic.transcription_dlq.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600
+  message_retention_duration = "604800s" # 7 days
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  depends_on = [google_pubsub_topic.transcription_dlq]
+}
+
 # Topic for commands ingest (whatsapp -> commands-agent)
 module "pubsub_commands_ingest" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-commands-ingest-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-commands-ingest-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.commands_agent.service_url}/internal/commands"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/commands"
   push_service_account_email = module.iam.service_accounts["commands_agent"]
-  push_audience              = module.commands_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -703,7 +855,6 @@ module "pubsub_commands_ingest" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.commands_agent,
   ]
 }
 
@@ -711,14 +862,15 @@ module "pubsub_commands_ingest" {
 module "pubsub_actions_queue" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-actions-queue-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-actions-queue-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/process"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/actions/process"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
-  push_audience              = module.actions_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
 
   publisher_service_accounts = {
     commands_agent = module.iam.service_accounts["commands_agent"]
@@ -728,7 +880,6 @@ module "pubsub_actions_queue" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.actions_agent,
   ]
 }
 
@@ -736,14 +887,15 @@ module "pubsub_actions_queue" {
 module "pubsub_research_process" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-research-process-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-research-process-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-research"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/llm/pubsub/process-research"
   push_service_account_email = module.iam.service_accounts["research_agent"]
-  push_audience              = module.research_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 600 # Max allowed by GCP (research processing can take several minutes)
 
   publisher_service_accounts = {
@@ -753,7 +905,6 @@ module "pubsub_research_process" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.research_agent,
   ]
 }
 
@@ -761,14 +912,15 @@ module "pubsub_research_process" {
 module "pubsub_llm_analytics" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-llm-analytics-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-llm-analytics-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/report-analytics"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/llm/pubsub/report-analytics"
   push_service_account_email = module.iam.service_accounts["research_agent"]
-  push_audience              = module.research_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 300
 
   publisher_service_accounts = {
@@ -778,7 +930,6 @@ module "pubsub_llm_analytics" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.research_agent,
   ]
 }
 
@@ -786,14 +937,15 @@ module "pubsub_llm_analytics" {
 module "pubsub_llm_call" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-llm-call-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-llm-call-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-llm-call"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/llm/pubsub/process-llm-call"
   push_service_account_email = module.iam.service_accounts["research_agent"]
-  push_audience              = module.research_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 600
 
   publisher_service_accounts = {
@@ -803,7 +955,6 @@ module "pubsub_llm_call" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.research_agent,
   ]
 }
 
@@ -811,14 +962,15 @@ module "pubsub_llm_call" {
 module "pubsub_whatsapp_send" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-send-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-whatsapp-send-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/send-message"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/whatsapp/pubsub/send-message"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = module.whatsapp_service.service_url
+  push_audience              = local.retired_cloud_run_push_audience
 
   publisher_service_accounts = {
     actions_agent   = module.iam.service_accounts["actions_agent"]
@@ -830,7 +982,6 @@ module "pubsub_whatsapp_send" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.whatsapp_service,
   ]
 }
 
@@ -838,14 +989,15 @@ module "pubsub_whatsapp_send" {
 module "pubsub_approval_reply" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-approval-reply-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-approval-reply-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/approval-reply"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/actions/approval-reply"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
-  push_audience              = module.actions_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -854,497 +1006,27 @@ module "pubsub_approval_reply" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.actions_agent,
   ]
 }
 
 
 # -----------------------------------------------------------------------------
-# Cloud Run Services
+# Additional Retained Pub/Sub Topics
 # -----------------------------------------------------------------------------
-
-module "user_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.user_service.name
-  service_account = module.iam.service_accounts["user_service"]
-  port            = local.services.user_service.port
-  min_scale       = local.services.user_service.min_scale
-  max_scale       = local.services.user_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/user-service:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_AUTH0_DOMAIN               = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
-    INTEXURAOS_AUTH0_CLIENT_ID            = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY       = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
-    INTEXURAOS_ENCRYPTION_KEY             = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
-    INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"]
-    INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET"]
-    INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI  = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"]
-    INTEXURAOS_GITHUB_OAUTH_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"]
-    INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET"]
-  })
-
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_WEB_APP_URL = "https://${var.web_app_domain}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Notion Service - Notion integration management and webhooks
-module "notion_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.notion_service.name
-  service_account = module.iam.service_accounts["notion_service"]
-  port            = local.services.notion_service.port
-  min_scale       = local.services.notion_service.min_scale
-  max_scale       = local.services.notion_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notion-service:latest"
-
-  secrets = local.common_service_secrets
-
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# WhatsApp Service - WhatsApp Business Cloud API webhooks
-module "whatsapp_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.whatsapp_service.name
-  service_account = module.iam.service_accounts["whatsapp_service"]
-  port            = local.services.whatsapp_service.port
-  min_scale       = local.services.whatsapp_service.min_scale
-  max_scale       = local.services.whatsapp_service.max_scale
-  labels          = local.common_labels
-  timeout         = "900s"
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/whatsapp-service:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_WHATSAPP_VERIFY_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_VERIFY_TOKEN"]
-    INTEXURAOS_WHATSAPP_APP_SECRET      = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_APP_SECRET"]
-    INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
-    INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
-    INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
-  })
-
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = "intexuraos-whatsapp-media-cleanup-${var.environment}"
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = "intexuraos-whatsapp-media-cleanup-${var.environment}-push"
-    INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
-    INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
-    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC         = google_pubsub_topic.audio_stored.name
-    INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC        = "intexuraos-whatsapp-send-${var.environment}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-    module.whatsapp_media_bucket,
-    module.pubsub_commands_ingest,
-    google_pubsub_topic.audio_stored,
-  ]
-}
-
-# Mobile Notifications Service - Mobile device notification capture
-module "mobile_notifications_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.mobile_notifications_service.name
-  service_account = module.iam.service_accounts["mobile_notifications_service"]
-  port            = local.services.mobile_notifications_service.port
-  min_scale       = local.services.mobile_notifications_service.min_scale
-  max_scale       = local.services.mobile_notifications_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/mobile-notifications-service:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
-  })
-
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_DIGEST_LLM_MODEL           = "or:google/gemini-3-flash-preview"
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_WEB_APP_URL                = "https://${var.web_app_domain}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - WhatsApp Digest Yesterday (Daily at 01:00 UTC)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_run_service_iam_member" "scheduler_invokes_mobile_notifications_service" {
-  project  = var.project_id
-  location = var.region
-  service  = local.services.mobile_notifications_service.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-
-  depends_on = [module.mobile_notifications_service]
-}
-
-resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
-  name        = "mobile-notifications-digest-yesterday-${var.environment}"
-  description = "Daily WhatsApp digest aggregation at 02:00 CET / 03:00 CEST"
-  schedule    = "0 1 * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.mobile_notifications_service.service_url}/internal/notifications/digest/run-yesterday"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.mobile_notifications_service.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 3
-    min_backoff_duration = "30s"
-    max_backoff_duration = "300s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_mobile_notifications_service,
-    module.mobile_notifications_service,
-  ]
-}
-
-# API Docs Hub - Aggregated OpenAPI documentation
-module "api_docs_hub" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.api_docs_hub.name
-  service_account = module.iam.service_accounts["api_docs_hub"]
-  port            = local.services.api_docs_hub.port
-  min_scale       = local.services.api_docs_hub.min_scale
-  max_scale       = local.services.api_docs_hub.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/api-docs-hub:latest"
-
-  secrets = local.common_service_secrets
-
-  # OpenAPI URLs use module outputs (api_docs_hub depends on all services anyway)
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_USER_SERVICE_OPENAPI_URL                 = "${module.user_service.service_url}/openapi.json"
-    INTEXURAOS_NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
-    INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
-    INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
-    INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
-    INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL               = "${module.commands_agent.service_url}/openapi.json"
-    INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
-    INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
-    INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL         = "${module.app_settings_service.service_url}/openapi.json"
-    INTEXURAOS_NOTES_AGENT_OPENAPI_URL                  = "${module.notes_agent.service_url}/openapi.json"
-    INTEXURAOS_TODOS_AGENT_OPENAPI_URL                  = "${module.todos_agent.service_url}/openapi.json"
-    INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL              = "${module.bookmarks_agent.service_url}/openapi.json"
-    INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL               = "${module.calendar_agent.service_url}/openapi.json"
-    INTEXURAOS_CHAT_AGENT_OPENAPI_URL                   = "${module.chat_agent.service_url}/openapi.json"
-    INTEXURAOS_CODE_AGENT_OPENAPI_URL                   = "${module.code_agent.service_url}/openapi.json"
-    INTEXURAOS_LINEAR_AGENT_OPENAPI_URL                 = "${module.linear_agent.service_url}/openapi.json"
-    INTEXURAOS_WEB_AGENT_OPENAPI_URL                    = "${module.web_agent.service_url}/openapi.json"
-    INTEXURAOS_CRON_AGENT_OPENAPI_URL                   = "${module.cron_agent.service_url}/openapi.json"
-    INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL             = "${module.hellscript_agent.service_url}/openapi.json"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-    module.user_service,
-    module.notion_service,
-    module.whatsapp_service,
-    module.mobile_notifications_service,
-    module.research_agent,
-    module.commands_agent,
-    module.actions_agent,
-    module.image_service,
-    module.notes_agent,
-    module.todos_agent,
-    module.bookmarks_agent,
-    module.calendar_agent,
-    module.chat_agent,
-    module.cron_agent,
-    module.hellscript_agent,
-    module.llm_usage_service,
-  ]
-}
-
-# Research Agent - Multi-LLM research with synthesis
-module "research_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.research_agent.name
-  service_account = module.iam.service_accounts["research_agent"]
-  port            = local.services.research_agent.port
-  min_scale       = local.services.research_agent.min_scale
-  max_scale       = local.services.research_agent.max_scale
-  labels          = local.common_labels
-  timeout         = "900s"
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/research-agent:latest"
-
-  secrets = local.common_service_secrets
-
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC = "intexuraos-research-process-${var.environment}"
-    INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC    = "intexuraos-llm-analytics-${var.environment}"
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_PUBSUB_LLM_CALL_TOPIC         = "intexuraos-llm-call-${var.environment}"
-    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
-    INTEXURAOS_SHARED_CONTENT_BUCKET         = module.shared_content.bucket_name
-    INTEXURAOS_SHARE_BASE_URL                = "https://${var.web_app_domain}/share/research"
-    INTEXURAOS_NOTION_SERVICE_URL            = module.notion_service.service_url
-    INTEXURAOS_IMAGE_PUBLIC_BASE_URL         = "https://${var.web_app_domain}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-    module.shared_content,
-  ]
-}
-
-# Commands Agent - Command ingestion and classification
-module "commands_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.commands_agent.name
-  service_account = module.iam.service_accounts["commands_agent"]
-  port            = local.services.commands_agent.port
-  min_scale       = local.services.commands_agent.min_scale
-  max_scale       = local.services.commands_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/commands-agent:latest"
-
-  secrets = local.common_service_secrets
-
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE = "intexuraos-actions-queue-${var.environment}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Actions Agent - Processes action events (research, todo, etc.)
-module "actions_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.actions_agent.name
-  service_account = module.iam.service_accounts["actions_agent"]
-  port            = local.services.actions_agent.port
-  min_scale       = local.services.actions_agent.min_scale
-  max_scale       = local.services.actions_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/actions-agent:latest"
-
-  secrets = local.common_service_secrets
-
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE          = "intexuraos-actions-queue-${var.environment}"
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC = "intexuraos-calendar-preview-${var.environment}"
-    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Image Service - Thumbnail prompt generation and image creation
-module "image_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.image_service.name
-  service_account = module.iam.service_accounts["image_service"]
-  port            = local.services.image_service.port
-  min_scale       = local.services.image_service.min_scale
-  max_scale       = local.services.image_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/image-service:latest"
-
-  secrets = local.common_service_secrets
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_IMAGE_BUCKET          = module.generated_images_bucket.bucket_name
-    INTEXURAOS_IMAGE_PUBLIC_BASE_URL = "https://${var.web_app_domain}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-    module.generated_images_bucket,
-  ]
-}
-
-# Notes Agent - User-scoped notes CRUD
-module "notes_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.notes_agent.name
-  service_account = module.iam.service_accounts["notes_agent"]
-  port            = local.services.notes_agent.port
-  min_scale       = local.services.notes_agent.min_scale
-  max_scale       = local.services.notes_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notes-agent:latest"
-
-  secrets  = local.common_service_secrets
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# todos Agent - User-scoped todos CRUD
-module "todos_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.todos_agent.name
-  service_account = module.iam.service_accounts["todos_agent"]
-  port            = local.services.todos_agent.port
-  min_scale       = local.services.todos_agent.min_scale
-  max_scale       = local.services.todos_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/todos-agent:latest"
-
-  secrets = local.common_service_secrets
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_TODOS_PROCESSING_TOPIC = "intexuraos-todos-processing-${var.environment}"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Bookmarks Agent - User-scoped bookmarks CRUD
-module "bookmarks_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.bookmarks_agent.name
-  service_account = module.iam.service_accounts["bookmarks_agent"]
-  port            = local.services.bookmarks_agent.port
-  min_scale       = local.services.bookmarks_agent.min_scale
-  max_scale       = local.services.bookmarks_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/bookmarks-agent:latest"
-
-  secrets = local.common_service_secrets
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_PUBSUB_BOOKMARK_ENRICH     = "intexuraos-bookmark-enrich-${var.environment}"
-    INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE  = "intexuraos-bookmark-summarize-${var.environment}"
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_USER_SERVICE_URL           = module.user_service.service_url
-    INTEXURAOS_APP_SETTINGS_SERVICE_URL   = module.app_settings_service.service_url
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-    module.user_service,
-    module.app_settings_service,
-  ]
-}
 
 # Pub/Sub for bookmark enrichment (link preview fetching)
 module "pubsub_bookmark_enrich" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-bookmark-enrich-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-bookmark-enrich-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/enrich"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/bookmarks/pubsub/enrich"
   push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
-  push_audience              = module.bookmarks_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
@@ -1354,7 +1036,6 @@ module "pubsub_bookmark_enrich" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.bookmarks_agent,
   ]
 }
 
@@ -1362,14 +1043,15 @@ module "pubsub_bookmark_enrich" {
 module "pubsub_bookmark_summarize" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-bookmark-summarize-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-bookmark-summarize-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/summarize"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/bookmarks/pubsub/summarize"
   push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
-  push_audience              = module.bookmarks_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 120
 
   # 6-hour retry window for transient Crawl4AI errors
@@ -1384,7 +1066,6 @@ module "pubsub_bookmark_summarize" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.bookmarks_agent,
   ]
 }
 
@@ -1392,14 +1073,15 @@ module "pubsub_bookmark_summarize" {
 module "pubsub_todos_processing" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-todos-processing-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-todos-processing-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.todos_agent.service_url}/internal/todos/pubsub/todos-processing"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/todos/pubsub/todos-processing"
   push_service_account_email = module.iam.service_accounts["todos_agent"]
-  push_audience              = module.todos_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
@@ -1409,7 +1091,6 @@ module "pubsub_todos_processing" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.todos_agent,
   ]
 }
 
@@ -1417,14 +1098,15 @@ module "pubsub_todos_processing" {
 module "pubsub_calendar_preview" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-calendar-preview-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-calendar-preview-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.calendar_agent.service_url}/internal/calendar/generate-preview"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/calendar/generate-preview"
   push_service_account_email = module.iam.service_accounts["calendar_agent"]
-  push_audience              = module.calendar_agent.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 120
 
   publisher_service_accounts = {
@@ -1434,391 +1116,11 @@ module "pubsub_calendar_preview" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.calendar_agent,
-  ]
-}
-
-# App Settings Service - Centralized configuration management (pricing, etc.)
-module "app_settings_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.app_settings_service.name
-  service_account = module.iam.service_accounts["app_settings_service"]
-  port            = local.services.app_settings_service.port
-  min_scale       = local.services.app_settings_service.min_scale
-  max_scale       = local.services.app_settings_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/app-settings-service:latest"
-
-  secrets  = local.common_service_secrets
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Code Agent - Code execution service (INT-156)
-module "code_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.code_agent.name
-  service_account = module.iam.service_accounts["code_agent"]
-  port            = local.services.code_agent.port
-  min_scale       = local.services.code_agent.min_scale
-  max_scale       = local.services.code_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_WEBHOOK_VERIFY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
-    INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
-    INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
-    INTEXURAOS_OPENAI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
-  })
-
-  env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC     = "intexuraos-pr-triage-${var.environment}"
-    INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "true"
-    INTEXURAOS_QUEUE_MAX_SIZE             = "50"
-    INTEXURAOS_QUEUE_TTL_MINUTES          = "1440"
-    INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS   = "3"
-    INTEXURAOS_RETRY_QUEUE_TTL_MINUTES    = "10"
-    INTEXURAOS_ENABLE_METRICS             = "true"
-  })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Calendar Agent - Google Calendar integration
-module "calendar_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.calendar_agent.name
-  service_account = module.iam.service_accounts["calendar_agent"]
-  port            = local.services.calendar_agent.port
-  min_scale       = local.services.calendar_agent.min_scale
-  max_scale       = local.services.calendar_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/calendar-agent:latest"
-
-  secrets  = local.common_service_secrets
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Linear Agent - Linear issue creation and management
-module "linear_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.linear_agent.name
-  service_account = module.iam.service_accounts["linear_agent"]
-  port            = local.services.linear_agent.port
-  min_scale       = local.services.linear_agent.min_scale
-  max_scale       = local.services.linear_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/linear-agent:latest"
-
-  secrets  = local.common_service_secrets
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
   ]
 }
 
 # -----------------------------------------------------------------------------
-# Cloud Scheduler - Linear Sync (Hourly) (INT-444)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_run_service_iam_member" "scheduler_invokes_linear_agent" {
-  project  = var.project_id
-  location = var.region
-  service  = local.services.linear_agent.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-
-  depends_on = [module.linear_agent]
-}
-
-resource "google_cloud_scheduler_job" "linear_sync_hourly" {
-  name        = "intexuraos-linear-sync-hourly-${var.environment}"
-  description = "Sync all Linear issues for all connected users hourly"
-  schedule    = "0 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/sync-all"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_linear_agent,
-    module.linear_agent,
-  ]
-}
-
-resource "google_cloud_scheduler_job" "linear_issues_prune_hourly" {
-  name        = "intexuraos-linear-issues-prune-hourly-${var.environment}"
-  description = "Prune redundant Linear issues when count exceeds threshold"
-  schedule    = "30 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/prune-issues"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "120s"
-    min_backoff_duration = "10s"
-    max_backoff_duration = "60s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_linear_agent,
-    module.linear_agent,
-  ]
-}
-
-# Chat Agent - In-app AI assistant with RAG
-module "chat_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.chat_agent.name
-  service_account = module.iam.service_accounts["chat_agent"]
-  port            = local.services.chat_agent.port
-  min_scale       = local.services.chat_agent.min_scale
-  max_scale       = local.services.chat_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_OPENAI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
-  })
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Web Agent - Link preview and Open Graph metadata extraction
-module "web_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.web_agent.name
-  service_account = module.iam.service_accounts["web_agent"]
-  port            = local.services.web_agent.port
-  min_scale       = local.services.web_agent.min_scale
-  max_scale       = local.services.web_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_CLOUDFLARE_ACCOUNT_ID = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_ACCOUNT_ID"]
-    INTEXURAOS_CLOUDFLARE_API_TOKEN  = module.secret_manager.secret_ids["INTEXURAOS_CLOUDFLARE_API_TOKEN"]
-  })
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Cron Agent - LLM-driven recurring schedule execution
-module "cron_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.cron_agent.name
-  service_account = module.iam.service_accounts["cron_agent"]
-  port            = local.services.cron_agent.port
-  min_scale       = local.services.cron_agent.min_scale
-  max_scale       = local.services.cron_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/cron-agent:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_GEMINI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
-  })
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Hellscript Agent - Thought buffers with materialized state
-module "hellscript_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.hellscript_agent.name
-  service_account = module.iam.service_accounts["hellscript_agent"]
-  port            = local.services.hellscript_agent.port
-  min_scale       = local.services.hellscript_agent.min_scale
-  max_scale       = local.services.hellscript_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/hellscript-agent:latest"
-
-  secrets  = local.common_service_secrets
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-module "llm_usage_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.llm_usage_service.name
-  service_account = module.iam.service_accounts["llm_usage_service"]
-  port            = local.services.llm_usage_service.port
-  min_scale       = local.services.llm_usage_service.min_scale
-  max_scale       = local.services.llm_usage_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-usage-service:latest"
-
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_ORCHESTRATOR_SECRET = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
-  })
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Cron Agent Tick (Every Minute)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_run_service_iam_member" "scheduler_invokes_cron_agent" {
-  project  = var.project_id
-  location = var.region
-  service  = local.services.cron_agent.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-
-  depends_on = [module.cron_agent]
-}
-
-resource "google_cloud_scheduler_job" "cron_agent_tick" {
-  name        = "intexuraos-cron-agent-tick-${var.environment}"
-  description = "Trigger cron-agent tick every minute to evaluate due schedules"
-  schedule    = "*/1 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.cron_agent.service_url}/internal/cron/tick"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.cron_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    min_backoff_duration = "10s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_cron_agent,
-    module.cron_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Build Trigger
+# Retained Cloud Build Triggers
 # -----------------------------------------------------------------------------
 
 module "cloud_build" {
@@ -1833,14 +1135,12 @@ module "cloud_build" {
   github_connection_name = var.github_connection_name
 
   artifact_registry_url   = module.artifact_registry.repository_url
-  web_app_bucket          = module.web_app.bucket_name
   functions_source_bucket = google_storage_bucket.cloud_functions_source.name
 
   depends_on = [
     google_project_service.apis,
     module.artifact_registry,
     module.static_assets,
-    module.web_app,
     google_storage_bucket.cloud_functions_source,
   ]
 }
@@ -1870,422 +1170,21 @@ module "github_wif" {
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  project_id  = var.project_id
-  environment = var.environment
-  alert_email = var.alert_email
+  project_id         = var.project_id
+  environment        = var.environment
+  alert_email        = var.alert_email
+  slack_auth_token   = var.slack_auth_token
+  slack_channel_name = var.slack_channel_name
 
   depends_on = [
     google_project_service.apis,
   ]
 }
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Retry Pending Commands
-# -----------------------------------------------------------------------------
 
 resource "google_service_account" "cloud_scheduler" {
   account_id   = "intexuraos-scheduler-${var.environment}"
   display_name = "Cloud Scheduler Service Account"
-  description  = "Service account for Cloud Scheduler to invoke Cloud Run endpoints"
-}
-
-resource "google_cloud_run_service_iam_member" "scheduler_invokes_commands_agent" {
-  project  = var.project_id
-  location = var.region
-  service  = local.services.commands_agent.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-
-  depends_on = [module.commands_agent]
-}
-
-resource "google_cloud_scheduler_job" "retry_pending_commands" {
-  name        = "intexuraos-retry-pending-commands-${var.environment}"
-  description = "Retry classification for commands stuck in pending_classification status"
-  schedule    = "*/5 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.commands_agent.service_url}/internal/retry-pending"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.commands_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_commands_agent,
-    module.commands_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Retry Pending Actions
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_run_service_iam_member" "scheduler_invokes_actions_agent" {
-  project  = var.project_id
-  location = var.region
-  service  = local.services.actions_agent.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-
-  depends_on = [module.actions_agent]
-}
-
-resource "google_cloud_scheduler_job" "retry_pending_actions" {
-  name        = "intexuraos-retry-pending-actions-${var.environment}"
-  description = "Retry processing for actions stuck in pending status"
-  schedule    = "*/5 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.actions_agent.service_url}/internal/actions/retry-pending"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.actions_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_actions_agent,
-    module.actions_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Drain Task Queue (INT-619)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_run_service_iam_member" "scheduler_invokes_code_agent" {
-  project  = var.project_id
-  location = var.region
-  service  = local.services.code_agent.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-
-  depends_on = [module.code_agent]
-}
-
-resource "google_cloud_scheduler_job" "drain_task_queue" {
-  name        = "intexuraos-drain-task-queue-${var.environment}"
-  description = "Drain queued code tasks when workers become available"
-  schedule    = "*/1 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/drain-queue"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count = 0
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
-  name        = "intexuraos-merge-conflict-reconcile-${var.environment}"
-  description = "Check mergeability of all open PRs and dispatch conflict resolution tasks"
-  schedule    = "*/1 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/merge-conflicts/reconcile"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count = 0
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    # Reuses the existing IAM binding that grants the scheduler SA Cloud Run invoker
-    # rights on code-agent — no separate IAM member resource is needed.
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-resource "google_cloud_scheduler_job" "merge_queue_tick" {
-  name        = "intexuraos-merge-queue-tick-${var.environment}"
-  description = "Process one merge cycle for all active merge queue watches"
-  schedule    = "*/1 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/merge-queue/tick"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count = 0
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-resource "google_cloud_scheduler_job" "code_tasks_zombie_sweep" {
-  name        = "intexuraos-code-tasks-zombie-sweep-${var.environment}"
-  description = "Sweep stuck code tasks with stale lastHeartbeat and mark them interrupted"
-  schedule    = "*/5 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/code/detect-zombies"
-    body        = base64encode("{}")
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Archive Stale Issue Groups (Hourly)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_scheduler_job" "archive_stale_groups" {
-  name        = "intexuraos-archive-stale-groups-${var.environment}"
-  description = "Archive issue groups with no activity for 7+ days"
-  schedule    = "0 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/archive-stale-groups"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Auto-Archive Merged Tasks Daily (INT-1174)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_scheduler_job" "auto_archive_merged_tasks" {
-  name        = "intexuraos-auto-archive-merged-tasks-${var.environment}"
-  description = "Archive code tasks whose PRs were merged 7+ days ago"
-  schedule    = "0 4 * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/auto-archive-merged-tasks"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Execution Memory Post-Run Processing (INT-1098)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_scheduler_job" "execution_memory_process" {
-  name        = "intexuraos-execution-memory-process-${var.environment}"
-  description = "Process pending execution memory post-run evaluations and distillations"
-  schedule    = "*/5 * * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/execution-memory/process"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Execution Memory Sweep Errored (INT-1352)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_scheduler_job" "execution_memory_sweep_errored" {
-  name        = "intexuraos-execution-memory-sweep-errored-${var.environment}"
-  description = "Sweep permanently errored execution memory post-run tasks and requeue for retry"
-  schedule    = "0 */6 * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/execution-memory/sweep-errored"
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Scheduler - Execution Memory Prune Stale (INT-1352)
-# -----------------------------------------------------------------------------
-
-resource "google_cloud_scheduler_job" "execution_memory_prune_stale" {
-  name        = "intexuraos-execution-memory-prune-stale-${var.environment}"
-  description = "Archive aged zero-application execution memories to reduce corpus noise"
-  schedule    = "0 3 * * 0"
-  time_zone   = "UTC"
-  region      = var.region
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.code_agent.service_url}/internal/execution-memory/prune-stale"
-
-    body = base64encode("{\"maxAgeDays\":30}")
-
-    headers = {
-      "Content-Type" = "application/json"
-    }
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.code_agent.service_url
-    }
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
-    module.code_agent,
-  ]
+  description  = "Service account for retained Cloud Scheduler jobs and Cloud Function invocations"
 }
 
 # -----------------------------------------------------------------------------
@@ -2372,7 +1271,7 @@ resource "google_storage_bucket_object" "function_placeholder" {
 resource "google_service_account" "cloud_functions" {
   account_id   = "intexuraos-functions-${var.environment}"
   display_name = "Cloud Functions Service Account"
-  description  = "Service account for Cloud Functions (vm-lifecycle, log-cleanup)"
+  description  = "Service account for Cloud Functions (vm-lifecycle)"
 
   depends_on = [google_project_service.apis]
 }
@@ -2550,98 +1449,12 @@ resource "google_cloud_scheduler_job" "vm_stop" {
 }
 
 # -----------------------------------------------------------------------------
-# Cloud Functions - Log Cleanup (90-day retention)
-# -----------------------------------------------------------------------------
-
-# Pub/Sub topic for log cleanup trigger
-resource "google_pubsub_topic" "log_cleanup" {
-  name    = "intexuraos-log-cleanup-${var.environment}"
-  project = var.project_id
-  labels  = local.common_labels
-
-  depends_on = [google_project_service.apis]
-}
-
-# Grant Cloud Scheduler permission to publish to the topic
-resource "google_pubsub_topic_iam_member" "scheduler_publishes_log_cleanup" {
-  project = var.project_id
-  topic   = google_pubsub_topic.log_cleanup.name
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-}
-
-module "function_log_cleanup" {
-  source = "../../modules/cloud-function"
-
-  project_id    = var.project_id
-  region        = var.region
-  environment   = var.environment
-  function_name = "intexuraos-log-cleanup-${var.environment}"
-  description   = "Clean up old execution logs (90-day retention)"
-  entry_point   = "cleanupLogs"
-  runtime       = "nodejs22"
-
-  source_bucket   = google_storage_bucket.cloud_functions_source.name
-  source_object   = "log-cleanup/function.zip"
-  service_account = google_service_account.cloud_functions.email
-
-  trigger_type = "pubsub"
-  pubsub_topic = google_pubsub_topic.log_cleanup.id
-
-  timeout_seconds  = 540
-  available_memory = "512M"
-
-  env_vars = {
-    INTEXURAOS_ENVIRONMENT    = var.environment
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
-    INTEXURAOS_CODE_AGENT_URL = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
-  }
-
-  secrets = {
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  }
-
-  labels = local.common_labels
-
-  depends_on = [
-    google_project_service.apis,
-    google_storage_bucket_object.function_placeholder,
-    google_service_account.cloud_functions,
-    google_pubsub_topic.log_cleanup,
-    google_secret_manager_secret_iam_member.functions_internal_auth_token,
-  ]
-}
-
-# Cloud Scheduler - Trigger log cleanup at 3 AM UTC daily
-resource "google_cloud_scheduler_job" "log_cleanup" {
-  name        = "intexuraos-log-cleanup-${var.environment}"
-  description = "Trigger log cleanup at 3 AM UTC daily"
-  schedule    = "0 3 * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  pubsub_target {
-    topic_name = google_pubsub_topic.log_cleanup.id
-    data       = base64encode(jsonencode({ trigger = "scheduled" }))
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_pubsub_topic.log_cleanup,
-    google_pubsub_topic_iam_member.scheduler_publishes_log_cleanup,
-  ]
-}
-
-# -----------------------------------------------------------------------------
 # Cloud Functions - Transcription Worker
 # -----------------------------------------------------------------------------
+# (Log-cleanup function and its Pub/Sub topic, DLQ, push subscription, and
+# Cloud Scheduler job were removed when retention moved to native Firestore TTL.
+# See terraform/modules/firestore/ttl.tf for the replacement.)
+
 
 resource "google_service_account" "transcription_function" {
   account_id   = "ixos-transcription-fn-${var.environment}"
@@ -2697,14 +1510,15 @@ resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
 module "pubsub_transcription_completed" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-transcription-completed-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-transcription-completed-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = module.whatsapp_service.service_url
+  push_audience              = local.retired_cloud_run_push_audience
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
@@ -2714,7 +1528,6 @@ module "pubsub_transcription_completed" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.whatsapp_service,
     google_service_account.transcription_function,
   ]
 }
@@ -2734,8 +1547,15 @@ module "function_transcription" {
   source_object   = "transcription/function.zip"
   service_account = google_service_account.transcription_function.email
 
-  trigger_type = "pubsub"
-  pubsub_topic = google_pubsub_topic.audio_stored.id
+  # HTTP trigger + Pub/Sub push subscription (see audio_stored_push below).
+  # We do NOT use the cloud-function module's pubsub event trigger here because
+  # Cloud Functions Gen2 auto-creates the underlying Eventarc subscription and
+  # Terraform cannot attach a dead_letter_policy to it. Routing via an
+  # explicitly-managed push subscription is the only way to satisfy Subtask G's
+  # acceptance criterion that "the target subscription has a dead_letter_policy
+  # block".
+  trigger_type    = "http"
+  invoker_members = ["serviceAccount:${google_service_account.transcription_function.email}"]
 
   timeout_seconds    = 540 # 9 minutes - max for Gen2 Cloud Functions
   available_memory   = "512M"
@@ -2745,7 +1565,8 @@ module "function_transcription" {
     INTEXURAOS_ENVIRONMENT                          = var.environment
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
-    INTEXURAOS_USER_SERVICE_URL                     = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC       = google_pubsub_topic.transcription_dlq.name
+    INTEXURAOS_USER_SERVICE_URL                     = "${local.public_origin}/api/user"
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
   }
 
@@ -2762,12 +1583,59 @@ module "function_transcription" {
     google_storage_bucket_object.function_placeholder,
     google_service_account.transcription_function,
     google_pubsub_topic.audio_stored,
+    google_pubsub_topic.transcription_dlq,
     module.pubsub_transcription_completed,
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
     google_secret_manager_secret_iam_member.transcription_sentry_dsn,
     google_storage_bucket_iam_member.transcription_media_reader,
     google_project_iam_member.transcription_eventarc,
+  ]
+}
+
+# Push subscription that delivers audio-stored events to the transcription
+# Cloud Function with a dead_letter_policy. After 5 failed delivery attempts
+# Pub/Sub forwards the message to transcription_dlq for incident review.
+resource "google_pubsub_subscription" "audio_stored_push" {
+  name    = "intexuraos-audio-stored-${var.environment}-push"
+  topic   = google_pubsub_topic.audio_stored.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600 # 10 minutes — matches transcription timeout
+  message_retention_duration = "604800s"
+
+  push_config {
+    push_endpoint = module.function_transcription.function_uri
+
+    oidc_token {
+      service_account_email = google_service_account.transcription_function.email
+      audience              = module.function_transcription.function_uri
+    }
+
+    attributes = {
+      x-goog-version = "v1"
+    }
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  dead_letter_policy {
+    dead_letter_topic     = google_pubsub_topic.transcription_dlq.id
+    max_delivery_attempts = 5
+  }
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  depends_on = [
+    module.function_transcription,
+    google_pubsub_topic.transcription_dlq,
+    google_pubsub_topic_iam_member.pubsub_publishes_transcription_dlq,
   ]
 }
 
@@ -2791,51 +1659,6 @@ output "artifact_registry_url" {
   value       = module.artifact_registry.repository_url
 }
 
-output "user_service_url" {
-  description = "User Service URL"
-  value       = module.user_service.service_url
-}
-
-output "notion_service_url" {
-  description = "Notion Service URL"
-  value       = module.notion_service.service_url
-}
-
-output "whatsapp_service_url" {
-  description = "WhatsApp Service URL"
-  value       = module.whatsapp_service.service_url
-}
-
-output "mobile_notifications_service_url" {
-  description = "Mobile Notifications Service URL"
-  value       = module.mobile_notifications_service.service_url
-}
-
-output "api_docs_hub_url" {
-  description = "API Docs Hub URL"
-  value       = module.api_docs_hub.service_url
-}
-
-output "research_agent_url" {
-  description = "Research Agent URL"
-  value       = module.research_agent.service_url
-}
-
-output "commands_agent_url" {
-  description = "Commands Agent Service URL"
-  value       = module.commands_agent.service_url
-}
-
-output "actions_agent_url" {
-  description = "Actions Agent Service URL"
-  value       = module.actions_agent.service_url
-}
-
-output "image_service_url" {
-  description = "Image Service URL"
-  value       = module.image_service.service_url
-}
-
 output "firestore_database" {
   description = "Firestore database name"
   value       = module.firestore.database_name
@@ -2854,31 +1677,6 @@ output "static_assets_bucket_name" {
 output "static_assets_public_url" {
   description = "Static assets public base URL"
   value       = module.static_assets.public_base_url
-}
-
-output "web_app_bucket_name" {
-  description = "Web app bucket name"
-  value       = module.web_app.bucket_name
-}
-
-output "web_app_url" {
-  description = "Web app public URL"
-  value       = module.web_app.website_url
-}
-
-output "web_app_load_balancer_ip" {
-  description = "Web app load balancer IP (configure DNS A record to point to this)"
-  value       = module.web_app.load_balancer_ip
-}
-
-output "web_app_dns_a_record_hint" {
-  description = "DNS A record hint for web app"
-  value       = module.web_app.web_app_dns_a_record_hint
-}
-
-output "web_app_cert_name" {
-  description = "Managed SSL certificate name for web app"
-  value       = module.web_app.web_app_cert_name
 }
 
 output "whatsapp_media_bucket_name" {
@@ -2917,26 +1715,6 @@ output "github_wif_provider" {
   value       = module.github_wif.workload_identity_provider
 }
 
-output "notes_agent_url" {
-  description = "Notes Agent URL"
-  value       = module.notes_agent.service_url
-}
-
-output "todos_agent_url" {
-  description = "Todos Agent URL"
-  value       = module.todos_agent.service_url
-}
-
-output "bookmarks_agent_url" {
-  description = "Bookmarks Agent URL"
-  value       = module.bookmarks_agent.service_url
-}
-
-output "calendar_agent_url" {
-  description = "Calendar Agent URL"
-  value       = module.calendar_agent.service_url
-}
-
 output "monitoring_dashboard_id" {
   description = "Monitoring dashboard ID"
   value       = module.monitoring.dashboard_id
@@ -2960,16 +1738,6 @@ output "function_vm_start_uri" {
 output "function_vm_stop_uri" {
   description = "VM Stop Cloud Function HTTP endpoint"
   value       = module.function_vm_stop.function_uri
-}
-
-output "function_log_cleanup_name" {
-  description = "Log Cleanup Cloud Function name"
-  value       = module.function_log_cleanup.function_name
-}
-
-output "pubsub_log_cleanup_topic" {
-  description = "Pub/Sub topic for log cleanup trigger"
-  value       = google_pubsub_topic.log_cleanup.name
 }
 
 output "function_transcription_name" {

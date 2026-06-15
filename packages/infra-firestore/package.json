@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-firestore",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -14,7 +14,7 @@
     "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@intexuraos/common-core": "workspace:*",
-    "@google-cloud/firestore": "^7.10.0"
+    "@google-cloud/firestore": "catalog:",
+    "@intexuraos/common-core": "workspace:*"
   }
 }

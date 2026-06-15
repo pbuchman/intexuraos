@@ -5,7 +5,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { handleValidationError } from '@intexuraos/common-http';
+import { logIncomingRequest, handleValidationError } from '@intexuraos/common-http';
 import { refreshAccessToken, type RefreshAccessTokenErrorCode } from '../domain/identity/index.js';
 import { refreshTokenRequestSchema } from './schemas.js';
 import { loadAuth0Config } from './shared.js';
@@ -87,6 +87,11 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'POST /auth/refresh',
+        bodyPreviewLength: 200,
+      });
+
       // Validate configuration
       const config = loadAuth0Config();
       if (config === null) {

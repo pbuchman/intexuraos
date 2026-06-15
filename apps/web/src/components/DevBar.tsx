@@ -116,7 +116,7 @@ export function DevBar(): React.JSX.Element | null {
     setCommand('');
 
     try {
-      await request<{ command: unknown }>(config.commandsAgentServiceUrl, '/commands', {
+      await request<{ command: unknown }>(config.commandsAgentServiceUrl, '/', {
         method: 'POST',
         body: {
           text: commandText,

@@ -66,6 +66,7 @@ describe('Orchestrator Types', () => {
 
     it('validates HealthResponse structure', () => {
       const health: HealthResponse = {
+        healthContractVersion: 1,
         status: 'ready',
         capacity: 5,
         running: 2,
@@ -89,6 +90,7 @@ describe('Orchestrator Types', () => {
             lastRefreshAt: '2026-03-26T11:50:00.000Z',
           },
         },
+        providerApiKeys: {},
       };
 
       expect(health.status).toBe('ready');

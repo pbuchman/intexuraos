@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-sentry",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,9 +15,14 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "@sentry/node": "^8.42.0",
+    "@sentry/node": "^8.42.0"
+  },
+  "peerDependencies": {
     "fastify": "^5.2.0",
-    "pino": "^10.1.0",
-    "pino-opentelemetry-transport": "^2.0.0"
+    "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "fastify": "catalog:",
+    "pino": "catalog:"
   }
 }

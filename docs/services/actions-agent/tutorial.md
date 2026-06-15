@@ -50,7 +50,7 @@ curl -X POST https://YOUR_DOMAIN/auth/oauth/token \
 ### Step 1.2: List your actions
 
 ```bash
-curl -X GET https://actions-agent.intexuraos.com/actions \
+curl -X GET https://actions-agent.intexuraos.com/ \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -84,7 +84,7 @@ curl -X GET https://actions-agent.intexuraos.com/actions \
 
 ### What Just Happened?
 
-The GET `/actions` endpoint returns all actions owned by the authenticated user. Each action has a type (what kind of work it represents), a status (where it is in its lifecycle), and a confidence score (how certain the AI was about the classification).
+The GET `/` endpoint returns all actions owned by the authenticated user. Each action has a type (what kind of work it represents), a status (where it is in its lifecycle), and a confidence score (how certain the AI was about the classification).
 
 ### Checkpoint
 
@@ -177,7 +177,7 @@ Send a command via WhatsApp and practice approving/rejecting by tapping the butt
 Move an action from `awaiting_approval` to `processing` (manual approval via API):
 
 ```bash
-curl -X PATCH https://actions-agent.intexuraos.com/actions/ACTION_ID \
+curl -X PATCH https://actions-agent.intexuraos.com/ACTION_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "processing"}'
@@ -186,7 +186,7 @@ curl -X PATCH https://actions-agent.intexuraos.com/actions/ACTION_ID \
 ### Reject an action
 
 ```bash
-curl -X PATCH https://actions-agent.intexuraos.com/actions/ACTION_ID \
+curl -X PATCH https://actions-agent.intexuraos.com/ACTION_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "rejected"}'
@@ -197,7 +197,7 @@ curl -X PATCH https://actions-agent.intexuraos.com/actions/ACTION_ID \
 If the AI classified incorrectly, change the type:
 
 ```bash
-curl -X PATCH https://actions-agent.intexuraos.com/actions/ACTION_ID \
+curl -X PATCH https://actions-agent.intexuraos.com/ACTION_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"type": "todo"}'
@@ -208,7 +208,7 @@ This logs the transition for ML training and re-routes the action.
 ### Execute an action synchronously
 
 ```bash
-curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
+curl -X POST https://actions-agent.intexuraos.com/ACTION_ID/execute \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -299,7 +299,7 @@ curl -X GET "https://actions-agent.intexuraos.com/actions?status=failed" \
 **Skip (reject the new link):**
 
 ```bash
-curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/resolve-duplicate \
+curl -X POST https://actions-agent.intexuraos.com/ACTION_ID/resolve-duplicate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action": "skip"}'
@@ -308,7 +308,7 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/resolve-dupl
 **Update (refresh existing bookmark with new OG metadata):**
 
 ```bash
-curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/resolve-duplicate \
+curl -X POST https://actions-agent.intexuraos.com/ACTION_ID/resolve-duplicate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action": "update"}'
@@ -323,7 +323,7 @@ Calendar actions support previewing before execution.
 ### Get action preview
 
 ```bash
-curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
+curl -X GET https://actions-agent.intexuraos.com/ACTION_ID/preview \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -468,7 +468,7 @@ curl -X GET "https://actions-agent.intexuraos.com/actions?status=completed" \
 ### Exercise 2 (Medium): Batch Fetch
 
 ```bash
-curl -X POST https://actions-agent.intexuraos.com/actions/batch \
+curl -X POST https://actions-agent.intexuraos.com/batch \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"actionIds": ["id1", "id2", "id3", "id4", "id5", "id6", "id7", "id8", "id9", "id10"]}'

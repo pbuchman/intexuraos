@@ -35,7 +35,7 @@ The core operation in Hellscript is "impose" — sending an utterance to a buffe
 ### Step 1.1: Send Your First Thought
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -74,7 +74,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 ```bash
 BUFFER_ID="<your-buffer-id>"
 
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -86,7 +86,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 ### Step 2.2: Add a Third Thought
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -98,7 +98,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 ### Step 2.3: Check Your Buffer
 
 ```bash
-curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/buffers/$BUFFER_ID \
+curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/buffers/$BUFFER_ID \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -113,7 +113,7 @@ Before generating a draft, set up platform-specific writing preferences.
 ### Step 3.1: Set LinkedIn Style Instructions
 
 ```bash
-curl -X PUT https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/writing-config/linkedin/style \
+curl -X PUT https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-config/linkedin/style \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -137,7 +137,7 @@ curl -X PUT https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscri
 Upload a sample that represents your desired writing voice:
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/writing-config/linkedin/samples \
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-config/linkedin/samples \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -165,7 +165,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 ### Step 3.3: Verify Your Configuration
 
 ```bash
-curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/writing-config \
+curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-config \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -178,7 +178,7 @@ curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/writ
 ### Step 4.1: Request a LinkedIn Draft
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -222,7 +222,7 @@ Re-send the impose with the `category` field to resolve this.
 Retrieve the workspace to see your generated draft:
 
 ```bash
-curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/buffers/$BUFFER_ID \
+curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/buffers/$BUFFER_ID \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -233,7 +233,7 @@ The `draftVersions` array now contains version 1 with the generated markdown, st
 Add another thought and request a new draft — the agent generates version 2, incorporating the new material while building on the previous draft:
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -241,7 +241,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
     \"utterance\": \"Also emphasize that we achieved zero downtime during the migration\"
   }"
 
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscript/impose \
+curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -355,7 +355,7 @@ Test your understanding:
 
 ```bash
 # First thought creates the buffer
-RESPONSE=$(curl -s -X POST .../hellscript/impose \
+RESPONSE=$(curl -s -X POST .../impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"utterance": "Remote work increases productivity for deep tasks"}')
@@ -363,49 +363,49 @@ RESPONSE=$(curl -s -X POST .../hellscript/impose \
 BUFFER_ID=$(echo $RESPONSE | jq -r '.data.bufferId')
 
 # Second and third thoughts
-curl -s -X POST .../hellscript/impose \
+curl -s -X POST .../impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"But collaboration suffers without intentional rituals\"}"
 
-curl -s -X POST .../hellscript/impose \
+curl -s -X POST .../impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"The hybrid model is the pragmatic middle ground\"}"
 
 # Verify — title should be "Remote work increases productivity for deep tasks"
-curl -s .../hellscript/buffers -H "Authorization: Bearer $TOKEN" | jq '.data[0].title'
+curl -s .../buffers -H "Authorization: Bearer $TOKEN" | jq '.data[0].title'
 ```
 
 ### Exercise 2: Cross-Category Drafts
 
 ```bash
 # Set LinkedIn style
-curl -s -X PUT .../hellscript/writing-config/linkedin/style \
+curl -s -X PUT .../writing-config/linkedin/style \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "Professional, detailed, 1000+ words with section headers"}'
 
 # Set Threads style
-curl -s -X PUT .../hellscript/writing-config/threads/style \
+curl -s -X PUT .../writing-config/threads/style \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "Punchy, opinionated, under 500 characters, no headers"}'
 
 # Generate LinkedIn draft
-curl -s -X POST .../hellscript/impose \
+curl -s -X POST .../impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"Write the draft\", \"category\": \"linkedin\"}"
 
 # Generate Threads draft
-curl -s -X POST .../hellscript/impose \
+curl -s -X POST .../impose \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"bufferId\": \"$BUFFER_ID\", \"utterance\": \"Write the draft\", \"category\": \"threads\"}"
 
 # Compare in workspace
-curl -s .../hellscript/buffers/$BUFFER_ID -H "Authorization: Bearer $TOKEN" | jq '.data.draftVersions'
+curl -s .../buffers/$BUFFER_ID -H "Authorization: Bearer $TOKEN" | jq '.data.draftVersions'
 ```
 
 ### Exercise 3: Complete Workflow

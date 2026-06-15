@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import { getErrorCauseChain, type Logger } from '@intexuraos/common-core';
 import { stripDockerHeaders, stripBulkMetadata } from './log-formatter.js';
+import { deriveCallbackBaseUrl } from './callback-url.js';
 
 export interface LogForwarderConfig {
   logBasePath: string;
@@ -23,6 +24,7 @@ export interface ForwardingState {
   timer: NodeJS.Timeout | null;
   pollTimer: NodeJS.Timeout | null;
   webhookSecret: string;
+  callbackBaseUrl: string;
 }
 
 interface QueuedLogChunk {
@@ -39,6 +41,8 @@ export class LogForwarder {
   private readonly forwarders = new Map<string, ForwardingState>();
 
   private readonly taskSecrets = new Map<string, string>();
+
+  private readonly taskCallbackBaseUrls = new Map<string, string>();
 
   constructor(
     private readonly config: LogForwarderConfig,
@@ -66,8 +70,14 @@ export class LogForwarder {
    * Register a task's webhook secret before starting log forwarding.
    * Must be called before appendChunk or startForwarding.
    */
-  registerTask(taskId: string, webhookSecret: string): void {
+  registerTask(taskId: string, webhookSecret: string, webhookUrl?: string): void {
     this.taskSecrets.set(taskId, webhookSecret);
+    if (webhookUrl !== undefined) {
+      this.taskCallbackBaseUrls.set(
+        taskId,
+        deriveCallbackBaseUrl(webhookUrl, this.config.codeAgentUrl)
+      );
+    }
   }
 
   /**
@@ -75,6 +85,7 @@ export class LogForwarder {
    */
   unregisterTask(taskId: string): void {
     this.taskSecrets.delete(taskId);
+    this.taskCallbackBaseUrls.delete(taskId);
   }
 
   /**
@@ -111,6 +122,8 @@ export class LogForwarder {
     this.logger.info({ taskId, logFilePath }, 'Starting log forwarding');
 
     const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
+    const callbackBaseUrl =
+      this.taskCallbackBaseUrls.get(taskId) ?? this.config.codeAgentUrl.replace(/\/+$/, '');
 
     const state: ForwardingState = {
       taskId,
@@ -125,6 +138,7 @@ export class LogForwarder {
       timer: null,
       pollTimer: null,
       webhookSecret,
+      callbackBaseUrl,
     };
 
     this.forwarders.set(taskId, state);
@@ -198,6 +212,8 @@ export class LogForwarder {
     // Create state if it doesn't exist (Docker mode doesn't call startForwarding)
     if (state === undefined) {
       const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
+      const callbackBaseUrl =
+        this.taskCallbackBaseUrls.get(taskId) ?? this.config.codeAgentUrl.replace(/\/+$/, '');
       state = {
         taskId,
         logFilePath: '',
@@ -211,6 +227,7 @@ export class LogForwarder {
         timer: null,
         pollTimer: null,
         webhookSecret,
+        callbackBaseUrl,
       };
       this.forwarders.set(taskId, state);
 
@@ -250,6 +267,8 @@ export class LogForwarder {
 
     if (state === undefined) {
       const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
+      const callbackBaseUrl =
+        this.taskCallbackBaseUrls.get(taskId) ?? this.config.codeAgentUrl.replace(/\/+$/, '');
       state = {
         taskId,
         logFilePath: '',
@@ -263,6 +282,7 @@ export class LogForwarder {
         timer: null,
         pollTimer: null,
         webhookSecret,
+        callbackBaseUrl,
       };
       this.forwarders.set(taskId, state);
 
@@ -420,9 +440,8 @@ export class LogForwarder {
       );
     } else {
       state.droppedChunks += chunks.length;
-      const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
       this.logger.error(
-        { taskId, count: chunks.length, url: `${baseUrl}/internal/logs` },
+        { taskId, count: chunks.length, url: `${state.callbackBaseUrl}/internal/logs` },
         'Failed to upload log chunks after retries'
       );
     }
@@ -435,7 +454,10 @@ export class LogForwarder {
     },
     webhookSecret: string
   ): Promise<{ success: boolean }> {
-    const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
+    const state = this.forwarders.get(payload.taskId);
+    /* v8 ignore start -- ts-type: optional chaining and nullish coalescing fallback; production registerTask always defines callbackBaseUrl before flushing @preserve */
+    const baseUrl = state?.callbackBaseUrl ?? this.config.codeAgentUrl.replace(/\/+$/, '');
+    /* v8 ignore stop @preserve */
     const url = `${baseUrl}/internal/logs`;
     const jsonBody = JSON.stringify(payload);
     const timestamp = Math.floor(Date.now() / 1000);

@@ -22,7 +22,7 @@ export async function getCommands(
     params.set('cursor', options.cursor);
   }
   const queryString = params.toString();
-  const path = queryString !== '' ? `/commands?${queryString}` : '/commands';
+  const path = queryString !== '' ? `/?${queryString}` : '/';
 
   return await apiRequest<CommandsResponse>(config.commandsAgentServiceUrl, path, accessToken);
 }
@@ -42,7 +42,7 @@ export async function getActions(
     params.set('status', options.status.join(','));
   }
   const queryString = params.toString();
-  const path = queryString !== '' ? `/actions?${queryString}` : '/actions';
+  const path = queryString !== '' ? `/?${queryString}` : '/';
 
   return await apiRequest<ActionsResponse>(config.actionsAgentUrl, path, accessToken);
 }
@@ -57,7 +57,7 @@ export async function updateAction(
 ): Promise<Action> {
   const response = await apiRequest<{ action: Action }>(
     config.actionsAgentUrl,
-    `/actions/${actionId}`,
+    `/${actionId}`,
     accessToken,
     {
       method: 'PATCH',
@@ -70,7 +70,7 @@ export async function updateAction(
 export async function deleteAction(accessToken: string, actionId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.actionsAgentUrl,
-    `/actions/${actionId}`,
+    `/${actionId}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -79,7 +79,7 @@ export async function deleteAction(accessToken: string, actionId: string): Promi
 export async function archiveAction(accessToken: string, actionId: string): Promise<Action> {
   const response = await apiRequest<{ action: Action }>(
     config.actionsAgentUrl,
-    `/actions/${actionId}`,
+    `/${actionId}`,
     accessToken,
     {
       method: 'PATCH',
@@ -92,7 +92,7 @@ export async function archiveAction(accessToken: string, actionId: string): Prom
 export async function deleteCommand(accessToken: string, commandId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.commandsAgentServiceUrl,
-    `/commands/${commandId}`,
+    `/${commandId}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -101,7 +101,7 @@ export async function deleteCommand(accessToken: string, commandId: string): Pro
 export async function archiveCommand(accessToken: string, commandId: string): Promise<Command> {
   const response = await apiRequest<{ command: Command }>(
     config.commandsAgentServiceUrl,
-    `/commands/${commandId}`,
+    `/${commandId}`,
     accessToken,
     {
       method: 'PATCH',
@@ -120,7 +120,7 @@ export async function batchGetActions(accessToken: string, actionIds: string[]):
 
   const response = await apiRequest<{ actions: Action[] }>(
     config.actionsAgentUrl,
-    '/actions/batch',
+    '/batch',
     accessToken,
     {
       method: 'POST',
@@ -136,7 +136,7 @@ export async function createCommand(
 ): Promise<Command> {
   const response = await apiRequest<{ command: Command }>(
     config.commandsAgentServiceUrl,
-    '/commands',
+    '/',
     accessToken,
     {
       method: 'POST',
@@ -157,7 +157,7 @@ export async function resolveDuplicateAction(
     resource_url?: string;
   }>(
     config.actionsAgentUrl,
-    `/actions/${actionId}/resolve-duplicate`,
+    `/${actionId}/resolve-duplicate`,
     accessToken,
     {
       method: 'POST',
@@ -177,7 +177,7 @@ export async function getActionPreview(
 ): Promise<CalendarPreview | null> {
   const response = await apiRequest<{ preview: CalendarPreview | null }>(
     config.actionsAgentUrl,
-    `/actions/${actionId}/preview`,
+    `/${actionId}/preview`,
     accessToken
   );
   return response.preview;

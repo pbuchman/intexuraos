@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-claude",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,6 +18,7 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
     "@anthropic-ai/sdk": "^0.52.0"
   }
 }

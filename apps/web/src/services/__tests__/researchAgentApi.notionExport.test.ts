@@ -61,7 +61,7 @@ describe('exportToNotion', () => {
 
     expect(apiRequestMock).toHaveBeenCalledWith(
       'http://localhost:8080',
-      `/research/${mockResearchId}/export-notion`,
+      `/${mockResearchId}/export-notion`,
       mockAccessToken,
       { method: 'POST' }
     );

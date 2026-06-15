@@ -26,7 +26,7 @@ describe('Server', () => {
       // Check that bookmark routes are registered (requires auth, so just check not 404)
       const bookmarksResponse = await ctx.app.inject({
         method: 'GET',
-        url: '/bookmarks',
+        url: '/',
       });
       // Should not be 404 (route exists) - will be 401 due to auth
       expect(bookmarksResponse.statusCode).not.toBe(404);
@@ -115,7 +115,7 @@ describe('Server', () => {
     it('CORS headers are present on responses', async () => {
       const response = await ctx.app.inject({
         method: 'OPTIONS',
-        url: '/bookmarks',
+        url: '/',
         headers: {
           origin: 'https://example.com',
           'access-control-request-method': 'GET',

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1907",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1454",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_7f5c6f87-0534-48b7-b474-2b48ade8af1a",
+      "mem_44f8dac8-00e7-4392-9550-37c07cde2b26"
+    ],
+    "memory_ids_rejected": ["mem_1fe20107-647d-403b-81aa-bff5cf99dfc5"],
+    "memory_usage_summary": "Memories [2] and [3] directly shaped the adoption-path check: rehydrateWorktreeForAdoption prioritizes the persistent worktree on disk over the volatile `.git/worktrees/<id>` metadata (mem [2]) and deliberately uses a non-strict pre-check that repairs rather than rejects when metadata is missing (mem [3]).",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "(1) superpowers:code-reviewer — independent spec + code-quality review of initial commit 755ea9d7; (2) superpowers:code-reviewer — re-review of fixup commit 8dfd9e32 confirming no remaining issues.",
+    "skill_sequence_proof": "Invoked superpowers:subagent-driven-development first (per mandatory first-skill rule) to plan the fix; then executed implementation; then invoked superpowers:requesting-code-review which dispatched superpowers:code-reviewer twice (round 1 raised 2 Important + 4 Minor findings; addressed all; round 2 returned \"no remaining issues\"). Commit order matches: 755ea9d7 (implementation) → 8dfd9e32 (review fixes) → PR created.",
+    "failure_reason": "",
+    "summary": "* Added `isWorktreeRegistered` + `repairWorktree` to `WorktreeManager` and wired them into `TaskDispatcher.adoptTask` so an orchestrator restart that drops `.git/worktrees/<taskId>/` metadata repairs it via `git worktree repair` before the new container starts.\n  * When repair fails, `adoptTask` finalizes the task with a new terminal error code `WORKTREE_LOST` (remediation `contact_support`), skipping doomed attempts 2/3 instead of silently burning them.\n  * Wired `WORKTREE_LOST` into `apps/code-agent/.../classifyFailure` as `fail`, placed above the orchestrator-remediation fallback so a stray `retry` hint can't resurrect a permanently-broken task.\n  * Post-repair `symbolic-ref HEAD` diagnostic surfaces the latent \"repair succeeded but branch ref lost → detached HEAD\" case with a warn log.\n  * 15260 tests pass, full `pnpm run ci:tracked` green, PR #1907 open."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

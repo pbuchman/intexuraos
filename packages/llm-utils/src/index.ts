@@ -4,9 +4,6 @@
  * Utility functions for LLM operations across IntexuraOS.
  */
 
-// Redaction utilities
-export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
-
 // LLM parse error utilities
 export {
   createLlmParseError,
@@ -16,3 +13,19 @@ export {
   formatZodErrors,
   type LlmParseErrorDetails,
 } from './parseError.js';
+
+// LLM provider call timing helper
+export { measureLlmCall, type MeasureLlmCallResult } from './measureLlmCall.js';
+
+// Retry helper for transient LLM errors
+export { withRetry, type WithRetryOptions } from './withRetry.js';
+
+// Structured-output helper: markdown-strip + JSON.parse + Zod + repair loop
+export {
+  generateStructured,
+  type GenerateStructuredParams,
+  type GenerateStructuredOutput,
+  type StructuredClient,
+  type StructuredError,
+  type StructuredGenerateResult,
+} from './generateStructured.js';

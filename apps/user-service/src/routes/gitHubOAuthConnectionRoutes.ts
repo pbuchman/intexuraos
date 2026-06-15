@@ -214,6 +214,8 @@ export const gitHubOAuthConnectionRoutes: FastifyPluginCallback = (fastify, _opt
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /oauth/connections/github/status' });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -285,6 +287,8 @@ export const gitHubOAuthConnectionRoutes: FastifyPluginCallback = (fastify, _opt
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /oauth/connections/github' });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;

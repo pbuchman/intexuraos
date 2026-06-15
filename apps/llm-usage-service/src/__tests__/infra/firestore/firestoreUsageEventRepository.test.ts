@@ -446,4 +446,110 @@ describe('FirestoreUsageEventRepository', () => {
       }
     });
   });
+
+  describe('findResearchCostSummaryEvents', () => {
+    it('queries correlated research events and missing-attribution diagnostics with owner/time guard', async () => {
+      const correlated = createTestEvent({
+        eventId: 'evt_correlated',
+        correlation: {
+          requestId: 'req_1',
+          traceId: null,
+          taskId: null,
+          researchId: 'research-123',
+          attempt: null,
+          sessionId: null,
+        },
+      });
+      const missing = createTestEvent({
+        eventId: 'evt_missing',
+        correlation: {
+          requestId: 'req_missing',
+          traceId: null,
+          taskId: null,
+          researchId: null,
+          attempt: null,
+          sessionId: null,
+        },
+      });
+      mockQuery = createMockQuery();
+      mockQuery.get
+        .mockResolvedValueOnce({ docs: [toMockDoc(correlated)] })
+        .mockResolvedValueOnce({ docs: [toMockDoc(missing)] });
+      mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));
+
+      const result = await repo.findResearchCostSummaryEvents({
+        researchId: 'research-123',
+        owner: { type: 'user', id: 'user_123' },
+        timeRange: {
+          from: '2026-05-05T07:52:00.000Z',
+          to: '2026-05-05T07:57:00.000Z',
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.correlatedEvents.map((event) => event.eventId)).toEqual(['evt_correlated']);
+        expect(result.value.missingAttributionEvents.map((event) => event.eventId)).toEqual(['evt_missing']);
+      }
+      expect(mockQuery.where).toHaveBeenCalledWith('correlation.researchId', '==', 'research-123');
+      expect(mockQuery.where).toHaveBeenCalledWith('correlation.researchId', '==', null);
+      expect(mockQuery.where).toHaveBeenCalledWith('owner.type', '==', 'user');
+      expect(mockQuery.where).toHaveBeenCalledWith('owner.id', '==', 'user_123');
+      expect(mockQuery.where).toHaveBeenCalledWith('occurredAt', '>=', '2026-05-05T07:52:00.000Z');
+      expect(mockQuery.where).toHaveBeenCalledWith('occurredAt', '<=', '2026-05-05T07:57:00.000Z');
+      expect(mockQuery.orderBy).toHaveBeenCalledWith('occurredAt', 'asc');
+      expect(mockQuery.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns only correlated events when owner or timeRange is absent', async () => {
+      const correlated = createTestEvent({
+        eventId: 'evt_correlated',
+        correlation: {
+          requestId: 'req_1',
+          traceId: null,
+          taskId: null,
+          researchId: 'research-123',
+          attempt: null,
+          sessionId: null,
+        },
+      });
+      mockQuery = createMockQuery([toMockDoc(correlated)]);
+      mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));
+
+      const result = await repo.findResearchCostSummaryEvents({ researchId: 'research-123' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.correlatedEvents).toHaveLength(1);
+        expect(result.value.missingAttributionEvents).toHaveLength(0);
+      }
+      expect(mockQuery.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns Firestore errors from research summary queries', async () => {
+      mockQuery = createMockQuery();
+      mockQuery.get.mockRejectedValueOnce({ code: 13, message: 'summary failed' });
+      mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));
+
+      const result = await repo.findResearchCostSummaryEvents({ researchId: 'research-123' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toEqual({ code: '13', message: 'summary failed' });
+      }
+    });
+
+    it('returns UNKNOWN for research summary Firestore errors without code or message', async () => {
+      mockQuery = createMockQuery();
+      mockQuery.get.mockRejectedValueOnce({});
+      mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));
+
+      const result = await repo.findResearchCostSummaryEvents({ researchId: 'research-123' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toEqual({ code: 'UNKNOWN', message: 'Unknown Firestore error' });
+      }
+    });
+  });
 });

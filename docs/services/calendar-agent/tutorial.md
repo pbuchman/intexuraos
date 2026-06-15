@@ -13,7 +13,7 @@ Learn to manage Google Calendar events through IntexuraOS with preview support.
 List your upcoming calendar events:
 
 ```bash
-curl -X GET "https://calendar-agent.intexuraos.com/calendar/events?timeMin=2026-01-24T00:00:00Z&maxResults=10" \
+curl -X GET "https://calendar-agent.intexuraos.com/events?timeMin=2026-01-24T00:00:00Z&maxResults=10" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -36,7 +36,7 @@ curl -X GET "https://calendar-agent.intexuraos.com/calendar/events?timeMin=2026-
           "timeZone": "America/New_York"
         },
         "status": "confirmed",
-        "htmlLink": "https://www.google.com/calendar/event?eid=event123"
+        "htmlLink": "https://www.google.com/event?eid=event123"
       }
     ]
   }
@@ -50,7 +50,7 @@ curl -X GET "https://calendar-agent.intexuraos.com/calendar/events?timeMin=2026-
 Create a new timed event:
 
 ```bash
-curl -X POST https://calendar-agent.intexuraos.com/calendar/events \
+curl -X POST https://calendar-agent.intexuraos.com/events \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -95,7 +95,7 @@ curl -X POST https://calendar-agent.intexuraos.com/calendar/events \
 **All-day event:**
 
 ```bash
-curl -X POST https://calendar-agent.intexuraos.com/calendar/events \
+curl -X POST https://calendar-agent.intexuraos.com/events \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -233,7 +233,7 @@ curl -X POST "https://calendar-agent.intexuraos.com/internal/calendar/process-ac
   "data": {
     "status": "completed",
     "message": "Event \"Dentist appointment\" created successfully",
-    "resourceUrl": "https://www.google.com/calendar/event?eid=abc123"
+    "resourceUrl": "https://www.google.com/event?eid=abc123"
   }
 }
 ```
@@ -308,7 +308,7 @@ The `text` field contains the full user prompt for LLM extraction. When omitted,
 Find free time slots across multiple calendars:
 
 ```bash
-curl -X POST https://calendar-agent.intexuraos.com/calendar/freebusy \
+curl -X POST https://calendar-agent.intexuraos.com/freebusy \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -353,7 +353,7 @@ curl -X POST https://calendar-agent.intexuraos.com/calendar/freebusy \
 **Update event:**
 
 ```bash
-curl -X PATCH https://calendar-agent.intexuraos.com/calendar/events/event123 \
+curl -X PATCH https://calendar-agent.intexuraos.com/events/event123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -367,7 +367,7 @@ Only provided fields are updated. Other fields remain unchanged.
 **Delete event:**
 
 ```bash
-curl -X DELETE https://calendar-agent.intexuraos.com/calendar/events/event123 \
+curl -X DELETE https://calendar-agent.intexuraos.com/events/event123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -376,7 +376,7 @@ curl -X DELETE https://calendar-agent.intexuraos.com/calendar/events/event123 \
 List events that failed extraction:
 
 ```bash
-curl -X GET "https://calendar-agent.intexuraos.com/calendar/failed-events?limit=10" \
+curl -X GET "https://calendar-agent.intexuraos.com/failed-events?limit=10" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -408,7 +408,7 @@ curl -X GET "https://calendar-agent.intexuraos.com/calendar/failed-events?limit=
 If the failed event has start and end times, retry creating it directly:
 
 ```bash
-curl -X POST "https://calendar-agent.intexuraos.com/calendar/failed-events/failed-001/retry" \
+curl -X POST "https://calendar-agent.intexuraos.com/failed-events/failed-001/retry" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -447,7 +447,7 @@ The failed event record is automatically deleted after successful retry.
 Dismiss a failed event from the review queue:
 
 ```bash
-curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/failed-001" \
+curl -X DELETE "https://calendar-agent.intexuraos.com/failed-events/failed-001" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

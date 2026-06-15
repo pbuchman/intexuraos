@@ -1,5 +1,5 @@
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 
 interface KeywordRule {
   readonly pattern: RegExp;

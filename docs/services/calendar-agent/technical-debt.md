@@ -34,12 +34,12 @@ No service-level changes. Two package-level updates touched calendar-agent test 
 
 Split the monolithic `calendarRoutes.ts` into six focused route files, each responsible for a single resource or operation type:
 
-- `eventQueryRoutes.ts` — GET /calendar/events, GET /calendar/events/:eventId
-- `eventCreateRoutes.ts` — POST /calendar/events
-- `eventUpdateRoutes.ts` — PATCH /calendar/events/:eventId
-- `eventDeleteRoutes.ts` — DELETE /calendar/events/:eventId
-- `freeBusyRoutes.ts` — POST /calendar/freebusy
-- `failedEventRoutes.ts` — GET/DELETE/POST /calendar/failed-events
+- `eventQueryRoutes.ts` — GET /events, GET /events/:eventId
+- `eventCreateRoutes.ts` — POST /events
+- `eventUpdateRoutes.ts` — PATCH /events/:eventId
+- `eventDeleteRoutes.ts` — DELETE /events/:eventId
+- `freeBusyRoutes.ts` — POST /freebusy
+- `failedEventRoutes.ts` — GET/DELETE/POST /failed-events
 
 The original `calendarRoutes.ts` now serves as a barrel file that registers all sub-route plugins. Shared types and builder functions were extracted to `calendarHelpers.ts`, and error handling was extracted to `calendarErrorHandler.ts`.
 
@@ -113,14 +113,6 @@ Standardized platform LLM API key env vars to use `_APP_` naming convention:
 
 - `INTEXURAOS_GEMINI_APP_API_KEY` (was `INTEXURAOS_GEMINI_API_KEY`)
 
-### Dash0 OpenTelemetry Integration
-
-**Status:** Complete
-
-Added Dash0 OpenTelemetry instrumentation for distributed tracing across services. Enables request correlation from Pub/Sub through the LLM extraction pipeline.
-
----
-
 ## Recent Improvements (v2.1.0 era)
 
 ### INT-311: Failed Event Delete/Retry
@@ -129,8 +121,8 @@ Added Dash0 OpenTelemetry instrumentation for distributed tracing across service
 
 Added two new public endpoints for managing failed event extractions:
 
-- `DELETE /calendar/failed-events/:id` — permanently remove a failed event from the review queue
-- `POST /calendar/failed-events/:id/retry` — retry creating a calendar event using stored extraction data
+- `DELETE /failed-events/:id` — permanently remove a failed event from the review queue
+- `POST /failed-events/:id/retry` — retry creating a calendar event using stored extraction data
 
 Both endpoints enforce user ownership (returns 404 if the event belongs to a different user). Retry requires both start and end times to be present (returns 422 if missing).
 
@@ -280,7 +272,6 @@ No deprecated API usage detected.
 | 2026-02-23 | Error responses used 500 instead of 502                | Fixed internal endpoint schemas to use 502                               |
 | 2026-02-23 | No synchronous preview generation available            | Added POST /internal/calendar/preview endpoint                           |
 | 2026-02-20 | processAction returned internal /#/calendar URL        | Now uses Google Calendar htmlLink as resourceUrl                         |
-| 2026-02-16 | No distributed tracing across service boundaries       | Added Dash0 OpenTelemetry integration                                    |
 | 2026-02-15 | API key env vars inconsistently named                  | Standardized to APP naming convention                                    |
 | 2026-03-12 | ZAI provider and GLM-4.7 models in LLM contract        | Removed ZAI; Chinese LLMs now via Alibaba DashScope                      |
 | 2026-02-15 | Single LLM with no fallback on unavailability          | Added multi-model with Gemini fallback                                   |

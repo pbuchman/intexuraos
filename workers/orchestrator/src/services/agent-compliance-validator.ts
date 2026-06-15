@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { createLlmParseError, formatZodErrors, logLlmParseError } from '@intexuraos/llm-utils';
-import type { ExecutionAgentData } from './completion-verifier.js';
+import type { PromptBuilder } from './prompt-builder.js';
 import {
   AgentComplianceReportSchema,
   type AgentComplianceReport,
@@ -27,7 +27,22 @@ export const AGENT_COMPLIANCE_PROMPT_VERSION = '1.0.0';
 const MAX_TRANSCRIPT_TOKENS_CHARS = 720_000;
 const TEMP_COMMENT_DIR_PREFIX = 'orchestrator-compliance-validation-';
 
-export type ExecutionAgentClaims = Omit<ExecutionAgentData, 'agentType'>;
+/**
+ * Shape of the agent's self-reported claims, as passed to the compliance
+ * validator. Post-INT-1470 this is a hand-written shape instead of being
+ * derived from the retired LLM-verifier `ExecutionAgentData` type.
+ */
+export interface ExecutionAgentClaims {
+  outcome: 'implemented' | 'already_completed' | 'failed';
+  superpowers_subagent_driven_dev: 'used' | 'not used';
+  superpowers_requesting_code_review: 'used' | 'not used';
+  gh_pr_url: string;
+  failure_reason: string;
+  memory_ids_used: string;
+  memory_ids_rejected: string;
+  memory_usage_summary: string;
+  summary: string;
+}
 
 const SEVERITY_EMOJI: Record<ComplianceSeverity, string> = {
   critical: '\u{1F534} Critical',
@@ -82,14 +97,15 @@ export type CompliancePromptResult =
 // Note: LlmGenerateClient.generate() accepts only a string prompt — no responseFormat option.
 // JSON mode is enforced entirely via prompt instructions ("Return ONLY valid JSON…") and the
 // stripCodeFences + Zod-parse repair loop in OrchestratorAgentComplianceValidator.
-export function buildCompliancePrompt(input: CompliancePromptInput): CompliancePromptResult {
-  if (input.formattedTranscript.length > MAX_TRANSCRIPT_TOKENS_CHARS) {
-    return { ok: false, reason: 'TRANSCRIPT_TOO_LONG' };
-  }
-  const claimsJson = JSON.stringify(input.agentClaims, null, 2);
-  return {
-    ok: true as const,
-    prompt: [
+export const compliancePrompt: PromptBuilder<CompliancePromptInput> = {
+  name: 'agent-compliance-validation',
+  description:
+    'Post-execution compliance validator that analyzes a session transcript and emits a structured report',
+  version: '1.0.0',
+
+  build(input: CompliancePromptInput): string {
+    const claimsJson = JSON.stringify(input.agentClaims, null, 2);
+    return [
       '[agent-compliance-prompt v' + AGENT_COMPLIANCE_PROMPT_VERSION + ']',
       'You are a post-execution compliance validator for the IntexuraOS Agent-Based Code Task Execution Flow.',
       'Analyze the full session transcript below and produce a structured Agent Compliance Report.',
@@ -143,8 +159,20 @@ export function buildCompliancePrompt(input: CompliancePromptInput): ComplianceP
       '',
       '=== Full Session Transcript ===',
       input.formattedTranscript,
-    ].join('\n'),
-  };
+    ].join('\n');
+  },
+};
+
+/**
+ * Wrapper that performs the transcript-length guard before delegating to
+ * `compliancePrompt.build`. Returns a discriminated union so callers can
+ * branch on whether the transcript was short enough to render.
+ */
+export function prepareCompliancePrompt(input: CompliancePromptInput): CompliancePromptResult {
+  if (input.formattedTranscript.length > MAX_TRANSCRIPT_TOKENS_CHARS) {
+    return { ok: false, reason: 'TRANSCRIPT_TOO_LONG' };
+  }
+  return { ok: true, prompt: compliancePrompt.build(input) };
 }
 
 export function renderComplianceMarkdown(
@@ -323,7 +351,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
     input: ComplianceValidationInput,
     onProgress?: (message: string) => void
   ): Promise<ComplianceValidationResult | null> {
-    const promptResult = buildCompliancePrompt({
+    const promptResult = prepareCompliancePrompt({
       formattedTranscript: input.formattedTranscript,
       agentClaims: input.agentClaims,
       workerType: input.workerType,

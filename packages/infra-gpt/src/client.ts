@@ -49,20 +49,51 @@ import {
   type ImageSize,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
+import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
 export interface GenerateOptions {
   promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
 }
 
-export type GptClient = Omit<LLMClient, 'generate'> & {
+/**
+ * Per-call options for {@link GptClient.research}. Carries correlation
+ * overrides so the emitted usage event can be attributed to the originating
+ * researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  /** Semantic identifier for what the research prompt was used for. */
+  promptType?: string;
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export type GptClient = Omit<LLMClient, 'generate' | 'research'> & {
+  research(prompt: string, options?: ResearchOptions): Promise<Result<ResearchResult, GptError>>;
   generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, GptError>>;
 };
 
 const MAX_TOKENS = 8192;
 const IMAGE_MODEL = LlmModels.GPTImage1;
 const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
+const RESEARCH_PROMPT_TYPE = 'research-web-search';
+const IMAGE_PROMPT_TYPE = 'image-generation';
 
 /**
  * Creates a configured OpenAI GPT client.
@@ -94,19 +125,24 @@ export function createGptClient(config: GptConfig): GptClient {
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
+    durationMs: number,
     errorMessage?: string,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation'],
+    modelOverride?: string
   ): void {
     void usageLogger.log({
       userId,
       provider: LlmProviders.OpenAI,
-      model,
+      model: modelOverride ?? model,
       callType,
       usage,
       success,
+      durationMs,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -141,7 +177,11 @@ export function createGptClient(config: GptConfig): GptClient {
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, GptError>> {
+      const start = Date.now();
       try {
         const response = await client.responses.create({
           model,
@@ -163,10 +203,19 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.reasoningTokens
         );
 
-        trackUsage('research', usage, true);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
+          options?.correlation
+        );
 
         return ok({ content, sources, usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -174,7 +223,15 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
+          options?.correlation
+        );
         return err(mapGptError(error));
       }
     },
@@ -183,45 +240,19 @@ export function createGptClient(config: GptConfig): GptClient {
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, GptError>> {
-      try {
-        const response = await client.chat.completions.create({
-          model,
-          max_completion_tokens: MAX_TOKENS,
-          messages: [{ role: 'user', content: prompt }],
-        });
-
-        const text = response.choices[0]?.message.content ?? '';
-        const usageDetails = extractUsageDetails(response.usage);
-        const usage = normalizeUsage(
-          usageDetails.inputTokens,
-          usageDetails.outputTokens,
-          usageDetails.cachedTokens,
-          0,
-          usageDetails.reasoningTokens
-        );
-
-        trackUsage('generate', usage, true, undefined, options.promptType);
-
-        return ok({ content: text, usage });
-      } catch (error) {
-        const errorMsg = getErrorMessage(error);
-        const emptyUsage: NormalizedUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-        };
-        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
-        return err(mapGptError(error));
-      }
+      return await withRetry(() => generateOnce(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
     },
 
     async generateImage(
       prompt: string,
       options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GptError>> {
+      const start = Date.now();
+      const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
       try {
-        const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
         // gpt-image-1 returns base64 data in response.data[0].b64_json by default
         const response = await client.images.generate({
           model: IMAGE_MODEL,
@@ -236,6 +267,24 @@ export function createGptClient(config: GptConfig): GptClient {
 
         if (b64Data === undefined) {
           const errorMsg = 'No image data in response';
+          const usage: NormalizedUsage = {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costUsd: 0,
+            imageCount: 0,
+            imageSize: size,
+          };
+          trackUsage(
+            'image_generation',
+            usage,
+            false,
+            Date.now() - start,
+            errorMsg,
+            options?.promptType ?? IMAGE_PROMPT_TYPE,
+            options?.correlation,
+            IMAGE_MODEL
+          );
           return err({ code: 'API_ERROR', message: errorMsg });
         }
 
@@ -256,24 +305,104 @@ export function createGptClient(config: GptConfig): GptClient {
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
+          imageCount: 1,
+          imageSize: size,
         };
 
-        trackUsage('image_generation', usage, true);
+        trackUsage(
+          'image_generation',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          options?.promptType ?? IMAGE_PROMPT_TYPE,
+          options?.correlation,
+          IMAGE_MODEL
+        );
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
+          imageCount: 0,
+          imageSize: size,
         };
-        trackUsage('image_generation', emptyUsage, false, errorMsg);
+        trackUsage(
+          'image_generation',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          options?.promptType ?? IMAGE_PROMPT_TYPE,
+          options?.correlation,
+          IMAGE_MODEL
+        );
         return err(mapGptError(error));
       }
     },
   };
+
+  async function generateOnce(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, GptError>> {
+    const start = Date.now();
+    try {
+      const { result, durationMs } = await measureLlmCall(async () => {
+        const response = await client.chat.completions.create({
+          model,
+          max_completion_tokens: MAX_TOKENS,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const text = response.choices[0]?.message.content ?? '';
+        const usageDetails = extractUsageDetails(response.usage);
+        const usage = normalizeUsage(
+          usageDetails.inputTokens,
+          usageDetails.outputTokens,
+          usageDetails.cachedTokens,
+          0,
+          usageDetails.reasoningTokens
+        );
+        return { content: text, usage, cachedTokens: usageDetails.cachedTokens };
+      });
+
+      trackUsage(
+        'generate',
+        result.usage,
+        true,
+        durationMs,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
+
+      return ok({ content: result.content, usage: result.usage });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const errorMsg = getErrorMessage(error);
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        options.promptType,
+        options.correlation
+      );
+      return err(mapGptError(error));
+    }
+  }
 }
 
 function mapGptError(error: unknown): GptError {

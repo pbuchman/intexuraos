@@ -1,0 +1,19 @@
+{
+  "name": "@intexuraos/code-task-domain",
+  "version": "3.7.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker-types": "./src/codeTaskWorkerTypes.ts",
+    "./review-types": "./src/codeTaskReviewTypes.ts",
+    "./timeout": "./src/codeTaskTimeout.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
+  }
+}

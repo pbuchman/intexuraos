@@ -1,0 +1,114 @@
+/**
+ * Private fetch utility for linear-agent HTTP calls.
+ *
+ * Centralizes AbortController + timeout, header construction, JSON body
+ * serialization, and envelope parsing. Returns a discriminated union so
+ * callers can map to their own Result types with method-specific log messages
+ * and error codes.
+ *
+ * NOT exported from any index — endpoint modules import directly.
+ */
+
+import { sendInternalRequest } from '@intexuraos/internal-clients';
+
+export type LinearFetchResult<T> =
+  | { kind: 'ok'; data: T }
+  | { kind: 'http-error'; status: number; errorText: string }
+  | { kind: 'invalid-body'; body: unknown }
+  | { kind: 'timeout' }
+  | { kind: 'network-error'; error: unknown };
+
+export interface FetchLinearAgentOptions {
+  url: string;
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  internalAuthToken: string;
+  timeoutMs: number;
+  userId?: string;
+  body?: unknown;
+  /** When true (default), `success: true` without `data` is invalid-body.
+   *  When false, returns `{ kind: 'ok', data: undefined }`. */
+  requireData?: boolean;
+}
+
+// Callers map each LinearFetchResult kind to their own error code / log level.
+// Shapes differ per endpoint (404 → NOT_FOUND for some, 429 → RATE_LIMITED for
+// others, log level varies), so only the silent-endpoint mapping is shared
+// (see `mapSilentFetchResult`); logging endpoints map inline.
+//
+// Overload contract: pass `requireData: false` as a literal to accept
+// `{ success: true }` responses with no `data` field. All other callers
+// fall through to the `requireData: true` overload.
+export function fetchLinearAgent<T>(
+  options: FetchLinearAgentOptions & { requireData: false }
+): Promise<LinearFetchResult<T | undefined>>;
+export function fetchLinearAgent<T>(
+  options: FetchLinearAgentOptions
+): Promise<LinearFetchResult<T>>;
+export async function fetchLinearAgent<T>(
+  options: FetchLinearAgentOptions
+): Promise<LinearFetchResult<T | undefined>> {
+  const {
+    url,
+    method,
+    internalAuthToken,
+    timeoutMs,
+    userId,
+    body,
+    requireData = true,
+  } = options;
+  const parsedUrl = new URL(url);
+  const baseUrl = parsedUrl.origin;
+  const path = `${parsedUrl.pathname}${parsedUrl.search}`;
+
+  try {
+    const transport = await sendInternalRequest({
+      baseUrl,
+      path,
+      method,
+      token: internalAuthToken,
+      logger: { warn: () => undefined },
+      ...(userId !== undefined ? { headers: { 'X-User-Id': userId } } : {}),
+      ...(body !== undefined ? { jsonBody: body } : {}),
+      timeoutMs,
+    });
+
+    if (!transport.ok) {
+      if (transport.error.code === 'TIMEOUT') {
+        return { kind: 'timeout' };
+      }
+      return {
+        kind: 'network-error',
+        error: new Error(transport.error.message),
+      };
+    }
+
+    if (!transport.response.ok) {
+      return {
+        kind: 'http-error',
+        status: transport.response.status,
+        errorText: transport.rawText,
+      };
+    }
+
+    const parsed = transport.body as { success?: boolean; data?: unknown };
+
+    // Two paths to `invalid-body`: (1) success !== true, (2) success === true
+    // but data is absent AND caller opted in to requireData. When
+    // requireData is false, the latter is a legal `ok` response with
+    // undefined data.
+    if (parsed.success !== true) {
+      return { kind: 'invalid-body', body: parsed };
+    }
+
+    if (parsed.data === undefined) {
+      if (!requireData) {
+        return { kind: 'ok', data: undefined };
+      }
+      return { kind: 'invalid-body', body: parsed };
+    }
+
+    return { kind: 'ok', data: parsed.data as T };
+  } catch (error) {
+    return { kind: 'network-error', error };
+  }
+}

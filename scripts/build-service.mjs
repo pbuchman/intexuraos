@@ -13,6 +13,53 @@ if (!service) {
   process.exit(1);
 }
 
+function readCatalogVersions() {
+  const workspaceYaml = readFileSync(resolve(rootDir, 'pnpm-workspace.yaml'), 'utf8');
+  const lines = workspaceYaml.split('\n');
+  const catalog = new Map();
+  let inCatalog = false;
+
+  for (const line of lines) {
+    if (!inCatalog) {
+      if (line.trim() === 'catalog:') {
+        inCatalog = true;
+      }
+      continue;
+    }
+
+    if (!line.startsWith('  ')) {
+      break;
+    }
+
+    const match = line.match(/^\s{2}(?:'([^']+)'|([^:]+)):\s*(.+)$/);
+    if (!match) {
+      continue;
+    }
+
+    const key = match[1] ?? match[2]?.trim();
+    const value = match[3]?.trim();
+    if (key && value) {
+      catalog.set(key, value);
+    }
+  }
+
+  return catalog;
+}
+
+const catalogVersions = readCatalogVersions();
+
+function resolveDependencyVersion(dep, version) {
+  if (version === 'catalog:') {
+    const resolved = catalogVersions.get(dep);
+    if (!resolved) {
+      throw new Error(`Missing catalog version for dependency: ${dep}`);
+    }
+    return resolved;
+  }
+
+  return version;
+}
+
 /**
  * Recursively collect all pnpm dependencies from workspace packages.
  * @intexuraos/* packages are bundled, their pnpm deps must be external.
@@ -87,7 +134,7 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
       const subExternals = collectExternalDepsWithVersions(dep, visited);
       subExternals.forEach((v, k) => externals.set(k, v));
     } else {
-      externals.set(dep, version);
+      externals.set(dep, resolveDependencyVersion(dep, version));
     }
   }
 
@@ -96,9 +143,6 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
 
 // Collect all external pnpm deps (including transitive from workspace packages)
 const serviceDeps = collectExternalDeps(`@intexuraos/${service}`);
-// Always include infra-otel's deps (OTel preload is built separately for all services)
-const otelDeps = collectExternalDeps('@intexuraos/infra-otel');
-otelDeps.forEach((dep) => serviceDeps.add(dep));
 const externalPackages = [...serviceDeps];
 
 // Detect service directory (apps, workers, or packages)
@@ -150,11 +194,80 @@ if (bundledNpmPackages.size > 0) {
   process.exit(1);
 }
 
+// Detect external packages that are referenced by the bundle but not
+// resolvable from `<serviceDir>/dist/` via Node's module resolution.
+//
+// This check applies ONLY to services that run `node dist/index.js`
+// directly from the source tree (e.g. orchestrator on home-dev systemd),
+// where there is no separate `pnpm install` step from the generated
+// `dist/package.json`. Cloud Functions / Cloud Run paths are exempt
+// because their deploy pipelines run a fresh install inside the deployed
+// `dist/`.
+//
+// For source-tree-run services, every referenced external must be hoisted
+// into the service's own `node_modules` tree. Under pnpm strict isolation,
+// only direct deps are hoisted — transitive deps from @intexuraos/infra-*
+// workspace packages (e.g. `@sentry/node`, dynamic transports) are NOT
+// symlinked, so Node throws ERR_MODULE_NOT_FOUND at startup.
+//
+// We scan the bundle source for string-literal references rather than the
+// esbuild metafile because the failure mode covers both static imports and
+// dynamic targets passed as strings (e.g.
+// `pino.transport({ target: 'some-transport' })`), which
+// never appear in metafile.outputs.imports.
+
+/**
+ * Services that run `node dist/index.js` directly from the source tree
+ * with no separate install step. Add a service here when it adopts a
+ * deploy path that does not run `pnpm install --prod` inside `dist/`.
+ */
+const SOURCE_TREE_RUN_SERVICES = new Set(['orchestrator']);
+function canResolveFrom(pkg, fromDir) {
+  let dir = fromDir;
+  while (true) {
+    if (existsSync(resolve(dir, 'node_modules', pkg, 'package.json'))) return true;
+    const parent = dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+if (SOURCE_TREE_RUN_SERVICES.has(service)) {
+  const distDir = resolve(rootDir, `${serviceDir}/dist`);
+  const distOutputPath = resolve(rootDir, `${serviceDir}/dist/index.js`);
+  const bundleSource = readFileSync(distOutputPath, 'utf8');
+
+  // A package is "referenced" if its exact name appears as a quoted string
+  // in the bundle. Quoted-only matching avoids substring false positives
+  // from unrelated specifiers (e.g. `@sentry/node-foo` matching `@sentry/node`).
+  function isReferenced(pkg, source) {
+    const patterns = [`"${pkg}"`, `'${pkg}'`, `\`${pkg}\``];
+    return patterns.some((p) => source.includes(p));
+  }
+
+  const referencedExternals = externalPackages.filter((pkg) => isReferenced(pkg, bundleSource));
+  const unresolvable = referencedExternals.filter((pkg) => !canResolveFrom(pkg, distDir));
+  if (unresolvable.length > 0) {
+    console.error(
+      '\nERROR: external packages referenced by dist/index.js not resolvable from dist/:'
+    );
+    for (const pkg of unresolvable) {
+      console.error(`  - ${pkg}`);
+    }
+    console.error(
+      `\nThese packages are referenced by the bundle but pnpm has not symlinked` +
+        ` them into ${serviceDir}/node_modules. Under strict isolation, only` +
+        ` direct dependencies of the service are hoisted there — transitive` +
+        ` deps from @intexuraos/infra-* workspace packages are not.` +
+        `\n\nFix: Add the package(s) to ${serviceDir}/package.json dependencies` +
+        ` so pnpm symlinks them where Node ESM can resolve them.\n`
+    );
+    process.exit(1);
+  }
+}
+
 // Generate production package.json with all pnpm dependencies (including transitive)
 const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
-// Always include infra-otel's deps for the OTel preload module
-const otelDepsWithVersions = collectExternalDepsWithVersions('@intexuraos/infra-otel');
-otelDepsWithVersions.forEach((v, k) => depsWithVersions.set(k, v));
 const prodPackageJson = {
   name: `@intexuraos/${service}-prod`,
   version: '1.0.0',
@@ -166,25 +279,6 @@ writeFileSync(
   resolve(rootDir, `${serviceDir}/dist/package.json`),
   JSON.stringify(prodPackageJson, null, 2)
 );
-
-// Build OTel preload module (separate entry point for --import flag)
-const otelRegisterPath = resolve(rootDir, 'packages/infra-otel/src/register.ts');
-if (existsSync(otelRegisterPath)) {
-  await esbuild.build({
-    entryPoints: [otelRegisterPath],
-    bundle: true,
-    platform: 'node',
-    target: 'node22',
-    format: 'esm',
-    outfile: resolve(rootDir, `${serviceDir}/dist/otel-register.js`),
-    external: externalPackages,
-    sourcemap: true,
-    mainFields: ['module', 'main'],
-    conditions: ['import', 'node'],
-    absWorkingDir: rootDir,
-  });
-  console.log('Built OTel preload: dist/otel-register.js');
-}
 
 console.log(`Built ${service}`);
 console.log(

@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"00000000-0000-0000-0000-000000000000"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"PULL_REQUEST_AGENT_FINAL:\n- pr: https://github.com/example/repo/pull/1\n- ci_evidence: pnpm run ci:tracked successful\n- linear_issue: https://linear.app/example/issue/INT-1\n- comment_replied: yes\n- tracking_comment_id: 42\n- tracking_comment: updated\n- total_pr_comments_posted: 1\n- memory_ids_used: none\n- memory_ids_rejected: none\n- memory_usage_summary: none\n- summary: Fixture for codex extractor unit tests."}}
+{"type":"turn.completed","usage":{"input_tokens":15530,"cached_input_tokens":2432,"output_tokens":134,"reasoning_output_tokens":14}}
+2026-04-27T15:07:23.143714Z ERROR codex_core::session: failed to record rollout items: thread 00000000-0000-0000-0000-000000000000 not found

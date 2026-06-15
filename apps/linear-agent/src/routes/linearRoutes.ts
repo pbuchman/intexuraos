@@ -9,6 +9,7 @@ import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { listIssues, fullSync, retryFailedIssue, getIssueComments, getIssueDetail, confirmPruneDeletion } from '../domain/index.js';
 import { handleLinearError } from './routeUtils.js';
+import { loadConfig } from '../config.js';
 
 interface ConnectionBody {
   apiKey: string;
@@ -20,9 +21,14 @@ interface ValidateBody {
   apiKey: string;
 }
 
+function buildLinearWebhookUrl(serviceUrl: string): string {
+  const baseUrl = serviceUrl.endsWith('/') ? serviceUrl.slice(0, -1) : serviceUrl;
+  return `${baseUrl}/webhooks`;
+}
+
 export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Get connection status
-  fastify.get('/linear/connection', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/connection', async (request: FastifyRequest, reply: FastifyReply) => {
     logIncomingRequest(request);
     const user = await requireAuth(request, reply);
     if (user === null) {
@@ -41,7 +47,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // Validate API key and get teams
   fastify.post<{ Body: ValidateBody }>(
-    '/linear/connection/validate',
+    '/connection/validate',
     async (request: FastifyRequest<{ Body: ValidateBody }>, reply: FastifyReply) => {
       logIncomingRequest(request);
       const { apiKey } = request.body;
@@ -58,7 +64,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // Save connection
   fastify.post<{ Body: ConnectionBody }>(
-    '/linear/connection',
+    '/connection',
     async (request: FastifyRequest<{ Body: ConnectionBody }>, reply: FastifyReply) => {
       logIncomingRequest(request);
       const user = await requireAuth(request, reply);
@@ -79,7 +85,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   // Disconnect
-  fastify.delete('/linear/connection', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.delete('/connection', async (request: FastifyRequest, reply: FastifyReply) => {
     logIncomingRequest(request);
     const user = await requireAuth(request, reply);
     if (user === null) {
@@ -98,7 +104,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // List issues (grouped for dashboard)
   fastify.get<{ Querystring: { includeArchive?: string } }>(
-    '/linear/issues',
+    '/issues',
     async (
       request: FastifyRequest<{ Querystring: { includeArchive?: string } }>,
       reply: FastifyReply
@@ -131,7 +137,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // List failed issue extractions
   fastify.get(
-    '/linear/failed-issues',
+    '/failed-issues',
     {
       schema: {
         operationId: 'listFailedIssues',
@@ -210,7 +216,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   // Delete a failed issue
-  fastify.delete('/linear/failed-issues/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.delete('/failed-issues/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     logIncomingRequest(request);
     const user = await requireAuth(request, reply);
     if (user === null) {
@@ -247,7 +253,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   });
 
   // Retry creating a Linear issue from a failed attempt
-  fastify.post('/linear/failed-issues/:id/retry', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/failed-issues/:id/retry', async (request: FastifyRequest, reply: FastifyReply) => {
     logIncomingRequest(request);
     const user = await requireAuth(request, reply);
     if (user === null) {
@@ -295,7 +301,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // Get single issue by identifier
   fastify.get(
-    '/linear/issues/:identifier',
+    '/issues/:identifier',
     {
       schema: {
         operationId: 'getLinearIssue',
@@ -423,7 +429,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // Get comments for an issue
   fastify.get(
-    '/linear/issues/:identifier/comments',
+    '/issues/:identifier/comments',
     {
       schema: {
         operationId: 'getLinearIssueComments',
@@ -549,7 +555,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // Full sync endpoint for user-triggered sync
   fastify.post(
-    '/linear/sync',
+    '/sync',
     {
       schema: {
         operationId: 'fullSync',
@@ -650,7 +656,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Webhook configuration endpoints
   // GET /linear/webhook-config - Get webhook URL and secret status
   fastify.get(
-    '/linear/webhook-config',
+    '/webhook-config',
     {
       schema: {
         operationId: 'getWebhookConfig',
@@ -707,8 +713,9 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Linear not connected');
       }
 
+      const config = loadConfig();
       return await reply.ok({
-        webhookUrl: 'https://intexuraos-linear-agent-cj44trunra-lm.a.run.app/linear/webhook',
+        webhookUrl: buildLinearWebhookUrl(config.serviceUrl),
         hasWebhookSecret: conn.webhookSecret !== null,
         teamId: conn.teamId,
       });
@@ -717,7 +724,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // POST /linear/webhook-config - Set webhook secret
   fastify.post(
-    '/linear/webhook-config',
+    '/webhook-config',
     {
       schema: {
         operationId: 'setWebhookConfig',
@@ -806,7 +813,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // DELETE /linear/webhook-config - Remove webhook secret
   fastify.delete(
-    '/linear/webhook-config',
+    '/webhook-config',
     {
       schema: {
         operationId: 'deleteWebhookConfig',
@@ -873,7 +880,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // GET /linear/prune-candidates — List all stored prune candidates for user review
   fastify.get(
-    '/linear/prune-candidates',
+    '/prune-candidates',
     {
       schema: {
         operationId: 'listPruneCandidates',
@@ -950,7 +957,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   // DELETE /linear/prune-candidates — Confirm and execute deletion of all stored candidates
   fastify.delete(
-    '/linear/prune-candidates',
+    '/prune-candidates',
     {
       schema: {
         operationId: 'deletePruneCandidates',
@@ -1049,4 +1056,3 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
-

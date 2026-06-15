@@ -18,7 +18,7 @@
 
 ### List Actions
 
-**Endpoint:** `GET /actions`
+**Endpoint:** `GET /`
 
 **When to use:** Retrieve all actions for the current user, optionally filtered by status.
 
@@ -68,7 +68,7 @@ interface ListActionsResponse {
 
 ### Update Action
 
-**Endpoint:** `PATCH /actions/:actionId`
+**Endpoint:** `PATCH /:actionId`
 
 **When to use:** Change action status (approve, reject, archive) or correct misclassified action type.
 
@@ -93,7 +93,7 @@ interface UpdateActionResponse {
 
 ```json
 // Request
-// PATCH /actions/abc-123
+// PATCH /abc-123
 { "type": "todo" }
 
 // Response
@@ -111,7 +111,7 @@ interface UpdateActionResponse {
 
 ### Execute Action
 
-**Endpoint:** `POST /actions/:actionId/execute`
+**Endpoint:** `POST /:actionId/execute`
 
 **When to use:** Synchronously execute an action and wait for completion.
 
@@ -141,7 +141,7 @@ interface ExecuteActionResponse {
 
 ```json
 // Request
-// POST /actions/abc-123/execute
+// POST /abc-123/execute
 
 // Response
 {
@@ -157,7 +157,7 @@ interface ExecuteActionResponse {
 
 ### Batch Get Actions
 
-**Endpoint:** `POST /actions/batch`
+**Endpoint:** `POST /batch`
 
 **When to use:** Fetch multiple actions by ID in a single request (max 50).
 
@@ -179,7 +179,7 @@ interface BatchGetActionsResponse {
 
 ### Get Calendar Preview
 
-**Endpoint:** `GET /actions/:actionId/preview`
+**Endpoint:** `GET /:actionId/preview`
 
 **When to use:** Retrieve a generated preview for a calendar action before approving it. Previews are generated synchronously when the approval message is sent, so this endpoint is primarily for UI display.
 
@@ -201,7 +201,7 @@ interface GetPreviewResponse {
 
 ### Resolve Duplicate Bookmark
 
-**Endpoint:** `POST /actions/:actionId/resolve-duplicate`
+**Endpoint:** `POST /:actionId/resolve-duplicate`
 
 **When to use:** When a link action fails with `DUPLICATE_URL` error code, choose to skip or update.
 
@@ -225,7 +225,7 @@ interface ResolveDuplicateResponse {
 
 ### Delete Action
 
-**Endpoint:** `DELETE /actions/:actionId`
+**Endpoint:** `DELETE /:actionId`
 
 **When to use:** Permanently remove an action.
 

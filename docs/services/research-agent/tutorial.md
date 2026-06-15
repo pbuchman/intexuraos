@@ -41,7 +41,7 @@ export BASE_URL="https://your-research-agent-url"
 ### Step 1.1: Submit a Research Request
 
 ```bash
-curl -s -X POST "$BASE_URL/research" \
+curl -s -X POST "$BASE_URL/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -91,7 +91,7 @@ Research processing is asynchronous. Poll the status endpoint until the research
 ### Step 2.1: Check Research Status
 
 ```bash
-curl -s "$BASE_URL/research/$RESEARCH_ID" \
+curl -s "$BASE_URL/$RESEARCH_ID" \
   -H "Authorization: Bearer $TOKEN" | jq '.data.status'
 ```
 
@@ -107,7 +107,7 @@ pending -> processing -> synthesizing -> completed
 
 ```bash
 while true; do
-  STATUS=$(curl -s "$BASE_URL/research/$RESEARCH_ID" \
+  STATUS=$(curl -s "$BASE_URL/$RESEARCH_ID" \
     -H "Authorization: Bearer $TOKEN" | jq -r '.data.status')
   echo "Status: $STATUS"
   if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
@@ -120,7 +120,7 @@ done
 ### Step 2.3: Read the Completed Result
 
 ```bash
-curl -s "$BASE_URL/research/$RESEARCH_ID" \
+curl -s "$BASE_URL/$RESEARCH_ID" \
   -H "Authorization: Bearer $TOKEN" \
   | jq '{
       title: .data.title,
@@ -144,7 +144,7 @@ Sometimes one or more models fail while others succeed. Research Agent holds pro
 When polling, check for `awaiting_confirmation`:
 
 ```bash
-curl -s "$BASE_URL/research/$RESEARCH_ID" \
+curl -s "$BASE_URL/$RESEARCH_ID" \
   -H "Authorization: Bearer $TOKEN" \
   | jq '{
       status: .data.status,
@@ -176,7 +176,7 @@ Send a confirmation with one of three decisions:
 | `cancel`  | Mark the research as failed                      |
 
 ```bash
-curl -s -X POST "$BASE_URL/research/$RESEARCH_ID/confirm" \
+curl -s -X POST "$BASE_URL/$RESEARCH_ID/confirm" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "decision": "proceed" }' | jq .
@@ -193,7 +193,7 @@ If you have an OpenRouter API key configured, you can access 15 curated frontier
 ### Step 4.1: List Available Models
 
 ```bash
-curl -s "$BASE_URL/research/openrouter/models" \
+curl -s "$BASE_URL/openrouter/models" \
   -H "Authorization: Bearer $TOKEN" | jq '.data.models[] | {id, name, provider, contextLength}'
 ```
 
@@ -219,7 +219,7 @@ curl -s "$BASE_URL/research/openrouter/models" \
 OpenRouter models use the `or:` prefix in the selectedModels array:
 
 ```bash
-curl -s -X POST "$BASE_URL/research" \
+curl -s -X POST "$BASE_URL/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -242,7 +242,7 @@ Enhancement lets you expand a completed research without re-running models that 
 ### Step 5.1: Add a New Model and Context
 
 ```bash
-curl -s -X POST "$BASE_URL/research/$RESEARCH_ID/enhance" \
+curl -s -X POST "$BASE_URL/$RESEARCH_ID/enhance" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -272,7 +272,7 @@ export ENHANCED_ID="res_enhanced456"
 
 # Poll until complete
 while true; do
-  STATUS=$(curl -s "$BASE_URL/research/$ENHANCED_ID" \
+  STATUS=$(curl -s "$BASE_URL/$ENHANCED_ID" \
     -H "Authorization: Bearer $TOKEN" | jq -r '.data.status')
   echo "Status: $STATUS"
   [ "$STATUS" = "completed" ] && break
@@ -280,7 +280,7 @@ while true; do
 done
 
 # Read result
-curl -s "$BASE_URL/research/$ENHANCED_ID" \
+curl -s "$BASE_URL/$ENHANCED_ID" \
   -H "Authorization: Bearer $TOKEN" \
   | jq '{
       title: .data.title,
@@ -303,9 +303,9 @@ curl -s "$BASE_URL/research/$ENHANCED_ID" \
 | Status stuck at `processing`     | Check Pub/Sub subscription delivery — the LLM call topic may be backlogged                                         |
 | Status `failed`, all models down | At least one API key is missing or invalid — check user-service keys                                               |
 | `enhance` returns `NO_CHANGES`   | You must provide at least one of: additionalModels, additionalContexts, synthesisModel change, or removeContextIds |
-| Notion export not appearing      | Confirm `POST /research/settings/notion` was called with a valid page ID                                           |
+| Notion export not appearing      | Confirm `POST /settings/notion` was called with a valid page ID                                           |
 | OpenRouter models endpoint 404   | OpenRouter API key not configured in user-service — add one first                                                  |
-| OpenRouter model rejected        | The model ID is not on the curated allowlist — check `GET /research/openrouter/models` for valid IDs               |
+| OpenRouter model rejected        | The model ID is not on the curated allowlist — check `GET /openrouter/models` for valid IDs               |
 
 ---
 
@@ -313,9 +313,9 @@ curl -s "$BASE_URL/research/$ENHANCED_ID" \
 
 Now that you understand the basics:
 
-1. Configure Notion export via `POST /research/settings/notion` to get automatic research archiving
-2. Explore the draft workflow — use `POST /research/draft` to create a review-before-run flow
-3. Use `POST /research/validate-input` to check prompt quality before submitting
+1. Configure Notion export via `POST /settings/notion` to get automatic research archiving
+2. Explore the draft workflow — use `POST /draft` to create a review-before-run flow
+3. Use `POST /validate-input` to check prompt quality before submitting
 4. Read the [Technical Reference](technical.md) for full API schemas and the complete status lifecycle
 5. See how [actions-agent](../actions-agent/technical.md) triggers draft research from natural language commands
 
@@ -335,7 +335,7 @@ Test your understanding:
 ### Exercise 1: Highest-Cost Research
 
 ```bash
-curl -s "$BASE_URL/research" \
+curl -s "$BASE_URL/" \
   -H "Authorization: Bearer $TOKEN" \
   | jq '[.data.items[]] | sort_by(.totalCostUsd // 0) | reverse | first | {id, title, totalCostUsd}'
 ```
@@ -343,7 +343,7 @@ curl -s "$BASE_URL/research" \
 ### Exercise 2: Skip Synthesis
 
 ```bash
-curl -s -X POST "$BASE_URL/research" \
+curl -s -X POST "$BASE_URL/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

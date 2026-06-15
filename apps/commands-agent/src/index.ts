@@ -1,5 +1,6 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
+import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
@@ -13,6 +14,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_PUBSUB_ACTIONS_QUEUE',
+  'INTEXURAOS_SERVICE_URL', // INT-1531: audience for Cloud Scheduler OIDC token verification
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -36,19 +38,9 @@ async function main(): Promise<void> {
 
   const app = await buildServer();
 
-  const close = (): void => {
-    app.close().then(
-      () => {
-        process.exit(0);
-      },
-      () => {
-        process.exit(1);
-      }
-    );
-  };
-
-  process.on('SIGTERM', close);
-  process.on('SIGINT', close);
+  // Drain registered usage sinks on SIGTERM/SIGINT before exit so the 500ms
+  // batching window doesn't lose events when Cloud Run scales down.
+  installUsageSinkShutdownHandler({ app, logger: app.log });
 
   const port = Number(process.env['PORT']) || 8080;
   await app.listen({ port, host: '0.0.0.0' });

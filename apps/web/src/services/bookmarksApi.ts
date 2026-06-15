@@ -33,21 +33,21 @@ export async function listBookmarks(
   filters: ListBookmarksFilters = {}
 ): Promise<Bookmark[]> {
   const query = buildQueryString(filters);
-  return await apiRequest<Bookmark[]>(config.bookmarksAgentUrl, `/bookmarks${query}`, accessToken);
+  return await apiRequest<Bookmark[]>(config.bookmarksAgentUrl, `/${query}`, accessToken);
 }
 
 export async function createBookmark(
   accessToken: string,
   request: CreateBookmarkRequest
 ): Promise<Bookmark> {
-  return await apiRequest<Bookmark>(config.bookmarksAgentUrl, '/bookmarks', accessToken, {
+  return await apiRequest<Bookmark>(config.bookmarksAgentUrl, '/', accessToken, {
     method: 'POST',
     body: request,
   });
 }
 
 export async function getBookmark(accessToken: string, id: string): Promise<Bookmark> {
-  return await apiRequest<Bookmark>(config.bookmarksAgentUrl, `/bookmarks/${id}`, accessToken);
+  return await apiRequest<Bookmark>(config.bookmarksAgentUrl, `/${id}`, accessToken);
 }
 
 export async function updateBookmark(
@@ -55,7 +55,7 @@ export async function updateBookmark(
   id: string,
   request: UpdateBookmarkRequest
 ): Promise<Bookmark> {
-  return await apiRequest<Bookmark>(config.bookmarksAgentUrl, `/bookmarks/${id}`, accessToken, {
+  return await apiRequest<Bookmark>(config.bookmarksAgentUrl, `/${id}`, accessToken, {
     method: 'PATCH',
     body: request,
   });
@@ -64,7 +64,7 @@ export async function updateBookmark(
 export async function deleteBookmark(accessToken: string, id: string): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.bookmarksAgentUrl,
-    `/bookmarks/${id}`,
+    `/${id}`,
     accessToken,
     {
       method: 'DELETE',
@@ -75,7 +75,7 @@ export async function deleteBookmark(accessToken: string, id: string): Promise<v
 export async function archiveBookmark(accessToken: string, id: string): Promise<Bookmark> {
   return await apiRequest<Bookmark>(
     config.bookmarksAgentUrl,
-    `/bookmarks/${id}/archive`,
+    `/${id}/archive`,
     accessToken,
     {
       method: 'POST',
@@ -86,7 +86,7 @@ export async function archiveBookmark(accessToken: string, id: string): Promise<
 export async function unarchiveBookmark(accessToken: string, id: string): Promise<Bookmark> {
   return await apiRequest<Bookmark>(
     config.bookmarksAgentUrl,
-    `/bookmarks/${id}/unarchive`,
+    `/${id}/unarchive`,
     accessToken,
     {
       method: 'POST',

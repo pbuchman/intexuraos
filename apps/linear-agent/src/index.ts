@@ -4,6 +4,7 @@
 
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
+import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
@@ -14,6 +15,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_SERVICE_URL',
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_CODE_AGENT_URL',
 ];
@@ -47,6 +49,10 @@ async function main(): Promise<void> {
   const app = await buildServer();
   const port = Number(process.env['PORT'] ?? 8080);
   const host = '0.0.0.0';
+
+  // Drain registered usage sinks on SIGTERM/SIGINT before exit so the 500ms
+  // batching window doesn't lose events when Cloud Run scales down.
+  installUsageSinkShutdownHandler({ app, logger: app.log });
 
   await app.listen({ port, host });
   app.log.info(`Linear Agent listening on ${host}:${String(port)}`);

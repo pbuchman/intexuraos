@@ -214,6 +214,8 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /oauth/connections/google/status' });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -285,6 +287,8 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /oauth/connections/google' });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;

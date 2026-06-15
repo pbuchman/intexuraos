@@ -18,6 +18,18 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 
 const COLLECTION_NAME = 'dispatch_retries';
 
+function timestampLikeToMillis(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object' && 'toDate' in value) {
+    const maybeTimestamp = value as { toDate?: () => unknown };
+    if (typeof maybeTimestamp.toDate !== 'function') return null;
+    const date = maybeTimestamp.toDate();
+    return date instanceof Date ? date.getTime() : null;
+  }
+  return null;
+}
+
 export function createFirestoreDispatchRetryRepository(deps: {
   logger: Logger;
 }): DispatchRetryRepository {
@@ -107,9 +119,35 @@ export function createFirestoreDispatchRetryRepository(deps: {
         if (data['userId'] !== undefined) entry.userId = data['userId'] as string;
         if (data['message'] !== undefined) entry.message = data['message'] as string;
         if (data['lastAttemptAt'] !== undefined) entry.lastAttemptAt = data['lastAttemptAt'] as DispatchRetry['createdAt'];
+        if (data['processingStartedAt'] !== undefined) entry.processingStartedAt = data['processingStartedAt'] as DispatchRetry['createdAt'];
         return ok(entry);
       } catch (error) {
         logger.error({ error }, 'Failed to find oldest dispatch retry entry');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async claimForProcessing(
+      id: string,
+      staleBefore: Date,
+    ): Promise<Result<boolean, DispatchRetryRepositoryError>> {
+      try {
+        return ok(await firestore.runTransaction(async (txn) => {
+          const docRef = collection.doc(id);
+          const snap = await txn.get(docRef);
+          if (!snap.exists) return false;
+          const processingStartedAt = timestampLikeToMillis(snap.get('processingStartedAt'));
+          if (processingStartedAt !== null && processingStartedAt > staleBefore.getTime()) {
+            return false;
+          }
+          txn.update(docRef, { processingStartedAt: new Date() });
+          return true;
+        }));
+      } catch (error) {
+        logger.error({ error, id }, 'Failed to claim dispatch retry entry');
         return err({
           code: 'FIRESTORE_ERROR',
           message: getErrorMessage(error, 'Unknown error'),
@@ -132,13 +170,14 @@ export function createFirestoreDispatchRetryRepository(deps: {
 
     async update(
       id: string,
-      fields: { attempts: number; lastAttemptAt: Date; lastError: string }
+      fields: { attempts: number; lastAttemptAt: Date; lastError: string; processingStartedAt?: Date | null }
     ): Promise<Result<void, DispatchRetryRepositoryError>> {
       try {
         await collection.doc(id).update({
           attempts: fields.attempts,
           lastAttemptAt: fields.lastAttemptAt,
           lastError: fields.lastError,
+          ...(fields.processingStartedAt !== undefined && { processingStartedAt: fields.processingStartedAt }),
         });
         return ok(undefined);
       } catch (error) {

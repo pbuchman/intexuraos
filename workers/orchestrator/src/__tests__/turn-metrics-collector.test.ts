@@ -628,6 +628,69 @@ describe('TurnMetricsCollector', () => {
       mockFetch.mockRestore();
     });
 
+    it('publishes to the task-scoped callback base when webhookUrl is provided', async () => {
+      mockReadFile
+        .mockResolvedValueOnce('usage_usec 1000000\n')
+        .mockResolvedValueOnce('1048576\n')
+        .mockResolvedValueOnce('200000 100000\n');
+
+      async function* emptyGlob(): AsyncGenerator<string> {
+        // yield nothing
+      }
+      mockGlob.mockReturnValueOnce(emptyGlob() as never);
+
+      const mockFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+      } as Response);
+
+      await collector.collectAndPublish({
+        ...params,
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+      });
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://intexuraos.cloud/api/code/internal/turn-metrics');
+
+      mockFetch.mockRestore();
+    });
+
+    it('signs task-scoped turn metrics with the task webhook secret', async () => {
+      mockReadFile
+        .mockResolvedValueOnce('usage_usec 1000000\n')
+        .mockResolvedValueOnce('1048576\n')
+        .mockResolvedValueOnce('200000 100000\n');
+
+      async function* emptyGlob(): AsyncGenerator<string> {
+        // yield nothing
+      }
+      mockGlob.mockReturnValueOnce(emptyGlob() as never);
+
+      const mockFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+      } as Response);
+
+      await collector.collectAndPublish({
+        ...params,
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        webhookSecret: 'task-turn-metrics-secret',
+      } as Parameters<TurnMetricsCollector['collectAndPublish']>[0] & { webhookSecret: string });
+
+      const [, fetchOpts] = mockFetch.mock.calls[0] as [string, RequestInit];
+      const headers = fetchOpts.headers as Record<string, string>;
+      const timestamp = headers['X-Request-Timestamp'] ?? '';
+      const signature = headers['X-Request-Signature'] ?? '';
+      const expected = crypto
+        .createHmac('sha256', 'task-turn-metrics-secret')
+        .update(`${timestamp}.${fetchOpts.body as string}`)
+        .digest('hex');
+
+      expect(signature).toBe(expected);
+
+      mockFetch.mockRestore();
+    });
+
     it('sets utilization and idle to 0 when wall time is 0', async () => {
       mockReadFile
         .mockResolvedValueOnce('usage_usec 1000000\n')

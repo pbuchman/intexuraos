@@ -1,0 +1,21 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1921",
+    "review_id": "4165143642",
+    "review_comments_posted": 3,
+    "review_types": ["code_quality", "security", "architecture", "test_quality"],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "Tests (2/3) and Tests (3/3) pending, Lint pending, E2E Isolation pending; others passed",
+    "needs_remediation": true,
+    "memory_ids_used": [],
+    "memory_ids_rejected": [
+      "mem_38af51c0-cc01-4025-b236-59887db29639",
+      "mem_b5eda4c1-8f95-4ec8-8732-f769a543a9e8",
+      "mem_3e3d1d29-c69a-4dc5-abed-62fbcf59d9c4"
+    ],
+    "memory_usage_summary": "No memories were applicable to this task — all 3 were rejected as irrelevant refactoring/routing memories for a code extraction task.",
+    "summary": "* Well-executed refactoring reducing 701-line route handler to 89 lines with proper use case extraction\n  * Security preserved: HMAC-SHA256 verification runs first, no secrets exposed\n  * Architecture concern: domain use case imports extractEventUrl/extractEventSummary from routes layer — should move to domain/utils/\n  * Test coverage concern: v8 ignore on error path claims \"unreachable\" but describes test-fake limitation, branch is testable\n  * Minor test quality issues: `as never` type assertions, missing explicit unit tests for parse error and fire-and-forget handlers\n  * Overall: Clean refactor with two addressable follow-up items (layer boundary, test gap)"
+  },
+  "missingRequired": [],
+  "warnings": []
+}

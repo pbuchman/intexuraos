@@ -10,7 +10,7 @@ import { FirestoreExecutionRepository } from './infra/firestore-execution-reposi
 import { OpenApiToolRegistry } from './infra/openapi-tool-registry.js';
 import { createGeminiClient, createGeminiToolCallingClient } from '@intexuraos/infra-gemini';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink, installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
@@ -95,15 +95,9 @@ async function main(): Promise<void> {
   const app = await buildServer();
   const port = config.port;
 
-  const close = (): void => {
-    app.close().then(
-      () => process.exit(0),
-      () => process.exit(1)
-    );
-  };
-
-  process.on('SIGTERM', close);
-  process.on('SIGINT', close);
+  // Drain registered usage sinks on SIGTERM/SIGINT before exit so the 500ms
+  // batching window doesn't lose events when Cloud Run scales down.
+  installUsageSinkShutdownHandler({ app, logger });
 
   await app.listen({ port, host: '0.0.0.0' });
 }

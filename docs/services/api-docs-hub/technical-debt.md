@@ -98,7 +98,6 @@ None.
 | 2026-03-15 | Package version bump to 3.3.0                     | Release v3.3.0 — no source changes, package.json version updated          |
 | 2026-03-07 | Package version bump to 3.2.0                     | Release v3.2.0 — no source changes, package.json version updated          |
 | 2026-02-22 | Missing code-agent, linear-agent, web-agent specs | Added 3 new `INTEXURAOS_*_OPENAPI_URL` env vars, bumped spec to 0.0.5     |
-| 2026-02-16 | Dash0 OTel integration                            | `@intexuraos/infra-otel` added; log pipeline forwards to Dash0 via OTLP   |
 | 2026-02-16 | Dev-mode log formatting                           | `createLogStream()` now emits human-readable output under PM2             |
 | 2026-02-14 | Broken start:local script                         | Fixed to use `tsx` instead of `node --experimental-strip-types`           |
 | 2026-02-01 | Chat Agent spec missing                           | Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` env var (INT-431)               |

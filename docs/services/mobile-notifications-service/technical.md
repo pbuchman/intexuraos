@@ -2,7 +2,7 @@
 
 ## Overview
 
-Mobile-notifications-service receives push notification data from Android devices via webhook, validates device signatures using SHA-256 hash comparison, deduplicates notifications, and stores them in Firestore. It also runs a WhatsApp group digest pipeline that aggregates daily messages into AI-generated summaries using LLM calls, persists group state across days, and delivers digest-ready notifications via Pub/Sub to WhatsApp. Runs on Cloud Run with Fastify. Local port: 8114.
+Mobile-notifications-service receives push notification data from Android devices via webhook, validates device signatures using SHA-256 hash comparison, deduplicates notifications, and stores them in Firestore. It also runs a WhatsApp group digest pipeline that aggregates daily messages into AI-generated summaries using LLM calls, persists group state across days, and delivers digest-ready notifications via Pub/Sub to WhatsApp. Production runs behind Hetzner nginx at `https://intexuraos.cloud/api/notifications`; development runs at `https://dev.intexuraos.cloud/api/notifications`. Service port: 8114.
 
 ## Architecture
 
@@ -67,7 +67,7 @@ sequenceDiagram
     participant Firestore
 
     Device->>Tasker: Notification event
-    Tasker->>+Service: POST /webhooks (signature header)
+    Tasker->>+Service: POST /api/notifications/webhooks (signature header)
     Service->>Service: SHA-256 hash signature
     Service->>Firestore: Lookup signatureHash
     Firestore-->>Service: SignatureConnection (userId)
@@ -121,6 +121,17 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 | Removed 5-batch cap in title filter           | Title filter now iterates through all matching batches                                                    | INT-1398, PR #1843        |
 | Notification message filter + dedup           | Added filterAndDedupeNotifications utility for cleaning raw notifications                                 | INT-1395, PR #1844        |
 
+### v3.7.0 — Fishing Assistant Digest Evidence Support
+
+The service now exposes digest-subscription, digest-evidence, latest-state, and cleaned group-message internal endpoints consumed by `fishing-assistant-service` through `@intexuraos/internal-clients`.
+
+| Change                                      | Description                                                                                                                         | Reference                  |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Notification evidence routes                | Added internal routes for digest subscription listing, digest querying, digest lookup, latest group state lookup, and group messages | Commit `879c0811f`         |
+| Fishing Assistant history retrieval support | Extended group-message querying with date ranges, term filtering, cursor handling, and larger raw scan support                      | INT-1628, PR #2091         |
+| Digest output language preservation         | Subscription `outputLanguage` is passed through regeneration and evidence Markdown labels, preserving the configured Polish output   | INT-1618, commit `a42cfbc9a` |
+| Notification digest UI copy                 | Digest-ready WhatsApp CTA text is English: `View Full Digest`                                                                       | Commit `eb8bbc673`         |
+
 ### Previous (pre-v3.5.0)
 
 | Commit    | Change                                                    | Date       |
@@ -136,34 +147,34 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 
 | Method | Path                            | Purpose                     | Auth         |
 | ------ | ------------------------------- | --------------------------- | ------------ |
-| POST   | `/mobile-notifications/connect` | Create signature connection | Bearer token |
-| GET    | `/mobile-notifications/status`  | Get connection status       | Bearer token |
+| POST   | `/connect` | Create signature connection | Bearer token |
+| GET    | `/status`  | Get connection status       | Bearer token |
 
 ### Notifications
 
 | Method | Path                                     | Purpose             | Auth         |
 | ------ | ---------------------------------------- | ------------------- | ------------ |
-| GET    | `/mobile-notifications`                  | List notifications  | Bearer token |
-| DELETE | `/mobile-notifications/:notification_id` | Delete notification | Bearer token |
+| GET    | `/`                  | List notifications  | Bearer token |
+| DELETE | `/:notification_id` | Delete notification | Bearer token |
 
 ### Filters
 
 | Method | Path                               | Purpose                    | Auth         | Response       |
 | ------ | ---------------------------------- | -------------------------- | ------------ | -------------- |
-| GET    | `/notifications/filters`           | Get filter options + saved | Bearer token | 200 OK         |
-| POST   | `/notifications/filters/saved`     | Create saved filter        | Bearer token | 201 Created    |
-| DELETE | `/notifications/filters/saved/:id` | Delete saved filter        | Bearer token | 204 No Content |
+| GET    | `/filters`           | Get filter options + saved | Bearer token | 200 OK         |
+| POST   | `/filters/saved`     | Create saved filter        | Bearer token | 201 Created    |
+| DELETE | `/filters/saved/:id` | Delete saved filter        | Bearer token | 204 No Content |
 
 ### Digest (User-Facing)
 
 | Method | Path                                           | Purpose                            | Auth         |
 | ------ | ---------------------------------------------- | ---------------------------------- | ------------ |
-| GET    | `/notifications/digests`                       | List digests for date range        | Bearer token |
-| GET    | `/notifications/digests/:groupKey/:date`       | Get single digest                  | Bearer token |
-| GET    | `/notifications/digests/:groupKey/:date/state` | Get group state snapshot           | Bearer token |
-| POST   | `/notifications/digests/run`                   | Regenerate digest for group + date | Bearer token |
-| POST   | `/notifications/digests/backfill`              | Start backfill run for date range  | Bearer token |
-| GET    | `/notifications/digests/backfill/:runId`       | Get backfill run status            | Bearer token |
+| GET    | `/digests`                       | List digests for date range        | Bearer token |
+| GET    | `/digests/:groupKey/:date`       | Get single digest                  | Bearer token |
+| GET    | `/digests/:groupKey/:date/state` | Get group state snapshot           | Bearer token |
+| POST   | `/digests/run`                   | Regenerate digest for group + date | Bearer token |
+| POST   | `/digests/backfill`              | Start backfill run for date range  | Bearer token |
+| GET    | `/digests/backfill/:runId`       | Get backfill run status            | Bearer token |
 
 ### Digest (Internal)
 
@@ -171,6 +182,11 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 | ------ | ---------------------------------------------- | ------------------------------------------------ | --------------------- |
 | POST   | `/internal/notifications/digest/run`           | Run digest for (userId, groupKey, date)          | Internal token        |
 | POST   | `/internal/notifications/digest/run-yesterday` | Run digest for all subscriptions (CET yesterday) | OIDC / Internal token |
+| POST   | `/internal/notifications/digest-subscriptions/list` | List digest groups owned by a user          | Internal token        |
+| POST   | `/internal/notifications/digests/query`        | Query digest evidence by date range              | Internal token        |
+| POST   | `/internal/notifications/digests/get`          | Get one digest evidence item by date             | Internal token        |
+| POST   | `/internal/notifications/digest-state/get`     | Get latest group state for a digest group        | Internal token        |
+| POST   | `/internal/notifications/group-messages/query` | Query cleaned WhatsApp group messages            | Internal token        |
 
 ### Internal
 
@@ -182,7 +198,7 @@ End-to-end pipeline that processes WhatsApp group messages into AI-generated dig
 
 | Method | Path                             | Purpose                          | Auth      |
 | ------ | -------------------------------- | -------------------------------- | --------- |
-| POST   | `/mobile-notifications/webhooks` | Receive push from mobile devices | Signature |
+| POST   | `/webhooks` | Receive push from mobile devices | Signature |
 
 ### System
 
@@ -202,8 +218,8 @@ interface WebhookPayload {
   notification_id: string; // Idempotency key (unique per user)
   title: string;           // Notification title
   text: string;            // Notification body/content
-  timestamp: number;       // Unix milliseconds from device
-  post_time: string;       // Post time string from device
+  timestamp: number;       // Unix seconds from device
+  post_time: string;       // Unix seconds as string from device
 }
 ```
 
@@ -235,6 +251,109 @@ interface QueryNotificationsBody {
 
 Internal response maps `text` to `body` and `receivedAt` to `timestamp` for compatibility with consumers.
 
+## Fishing Assistant Evidence Endpoints
+
+These routes are internal-only and require `X-Internal-Auth`. Each route verifies the requested `(userId, groupKey)` against `DIGEST_SUBSCRIPTIONS` before returning digest or group-message data.
+
+### List Digest Subscriptions
+
+`POST /internal/notifications/digest-subscriptions/list`
+
+```typescript
+interface SubscriptionListBody {
+  userId: string;
+}
+
+interface SubscriptionListResponse {
+  items: Array<{
+    groupKey: string;
+    displayName: string; // currently the groupKey
+  }>;
+}
+```
+
+### Query Digest Evidence
+
+`POST /internal/notifications/digests/query`
+
+```typescript
+interface DigestQueryBody {
+  userId: string;
+  groupKey: string;
+  dateFrom: string; // YYYY-MM-DD
+  dateTo: string;   // YYYY-MM-DD
+  terms?: string[];
+  limit?: number;   // 1-100, default 30
+  cursor?: string;
+}
+
+interface DigestEvidenceItem {
+  groupKey: string;
+  date: string;
+  title: string;
+  summaryMarkdown: string;
+  messageCount: number;
+}
+```
+
+The route reads persisted digests from `notification_daily_digests`, formats each summary as Markdown using the subscription `outputLanguage`, filters against optional lowercase search terms, and returns `{ items, truncated, nextCursor? }`.
+
+### Get Digest Evidence
+
+`POST /internal/notifications/digests/get`
+
+```typescript
+interface DigestGetBody {
+  userId: string;
+  groupKey: string;
+  date: string; // YYYY-MM-DD
+}
+```
+
+Returns one `DigestEvidenceItem` or a 404 response when no digest exists for the requested date.
+
+### Get Latest Digest State
+
+`POST /internal/notifications/digest-state/get`
+
+```typescript
+interface DigestStateGetBody {
+  userId: string;
+  groupKey: string;
+}
+```
+
+Returns the latest persisted `GroupState` for the subscription, or a 404 response when no state exists.
+
+### Query Group Messages
+
+`POST /internal/notifications/group-messages/query`
+
+```typescript
+interface GroupMessagesQueryBody {
+  userId: string;
+  groupKey: string;
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  terms?: string[];
+  limit?: number; // 1-500, default 100
+  cursor?: string;
+}
+
+interface GroupMessageEvidence {
+  messageRef: string;
+  groupKey: string;
+  date: string;
+  postTimeSec: number;
+  senderLabel?: string | null;
+  text: string;
+  quote: string;
+}
+```
+
+Callers provide either `date` or `dateFrom`/`dateTo`. The route computes Europe/Warsaw day bounds, scans WhatsApp notifications matching the subscription `groupTitlePrefix`, cleans and deduplicates them through `filterAndDedupeNotifications`, applies optional term matching to message text, and returns `{ messages, totalRaw, totalCleaned, returned, truncated, nextCursor? }`. Raw scanning is capped at 5,000 notifications per request; page cursors preserve both upstream notification cursor and matched-message offset.
+
 ## Domain Models
 
 ### Notification
@@ -248,8 +367,8 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 | `app`            | string | App package name                       |
 | `title`          | string | Notification title                     |
 | `text`           | string | Notification body content              |
-| `timestamp`      | number | Unix milliseconds from device          |
-| `postTime`       | string | Post time string from device           |
+| `timestamp`      | number | Unix seconds from device               |
+| `postTime`       | string | Unix seconds as string from device     |
 | `receivedAt`     | string | ISO 8601 server-side receipt timestamp |
 | `notificationId` | string | Idempotency key (device-provided)      |
 
@@ -310,6 +429,7 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 | `userId`           | string | Subscribed user ID                                    |
 | `groupKey`         | string | Group identifier slug                                 |
 | `groupTitlePrefix` | string | WhatsApp group title prefix for notification matching |
+| `outputLanguage`   | `"English"` or `"Polish"` | Language used for generated digest summaries, group state text, and fishing digest Markdown labels |
 
 Currently hard-coded in `digestSubscriptions.ts`. See Future Plans in `technical-debt.md`.
 
@@ -335,15 +455,19 @@ Day boundaries are computed using `Europe/Warsaw` timezone (CET/CEST). The `cetD
 
 ### LLM Aggregation
 
-`aggregateDigest` sends a prompt to OpenRouter with the day's filtered messages, previous group state, and last 3 summaries. The response is validated against a Zod schema (`AggregationOutputSchema`). If validation fails, up to 3 repair attempts are made using `buildDigestRepairPrompt`. LLM usage is reported to `llm-usage-service` via `HttpInternalAuthUsageSink`.
+`aggregateDigest` sends a prompt to OpenRouter with the day's filtered messages, previous group state, last 3 summaries, and the subscription `outputLanguage`. All human-readable summary and group-state fields must be generated in that target language; for `grupa-wedkarska-skool`, the target is Polish. If previous state or prior summaries contain English from earlier generations, the prompt requires translated/normalized Polish carry-forward text rather than copying English. The response is validated against a Zod schema (`AggregationOutputSchema`). If validation fails, up to 3 repair attempts are made using `buildDigestRepairPrompt`. LLM usage is reported to `llm-usage-service` via `HttpInternalAuthUsageSink`.
 
 ### Message Filtering
 
 `filterAndDedupeNotifications` removes meta-rows (e.g., "3 new messages"), drops entries with invalid `postTime`, and deduplicates by (sender, text) within a 90-second window.
 
+The Fishing Assistant group-message endpoint reuses the same cleaning path, so chat evidence and digest generation operate over the same normalized WhatsApp notification shape.
+
 ### Backfill Chaining
 
 Backfill processes dates sequentially via self-referential HTTP calls. Each completed day triggers the next via `POST /internal/notifications/digest/run` with a `chainNext` payload. Progress is tracked in `notification_digest_backfill_runs`.
+
+After changing digest prompt language behavior, rerun the affected date range through the existing backfill/regeneration flow so `notification_daily_digests` and `notification_group_states` are overwritten in the target language. Existing generation numbers increment; WhatsApp notifications remain suppressed for regenerations.
 
 ### Daily Cron
 
@@ -376,6 +500,7 @@ Backfill processes dates sequentially via self-referential HTTP calls. Each comp
 | Service               | Endpoint                             | Purpose                        |
 | --------------------- | ------------------------------------ | ------------------------------ |
 | Self (backfill chain) | `/internal/notifications/digest/run` | Sequential day-by-day backfill |
+| fishing-assistant-service | `/internal/notifications/digest-subscriptions/list`, `/internal/notifications/digests/query`, `/internal/notifications/digests/get`, `/internal/notifications/digest-state/get`, `/internal/notifications/group-messages/query` | Digest history and raw-message evidence retrieval |
 
 ## Configuration
 
@@ -401,7 +526,7 @@ Backfill processes dates sequentially via self-referential HTTP calls. Each comp
 
 - **Signature security** — Plaintext signature returned only on creation. Store it securely. The service stores only the SHA-256 hash. Lost tokens require creating a new connection.
 
-- **Single signature per user** — Creating a new connection (`POST /mobile-notifications/connect`) deletes all existing signatures for the user first. Only one active signature per user at a time.
+- **Single signature per user** — Creating a new connection (`POST /connect`) deletes all existing signatures for the user first. Only one active signature per user at a time.
 
 - **Hash comparison** — Webhook signatures are compared as SHA-256 hashes; plaintext is never stored or logged.
 
@@ -409,17 +534,17 @@ Backfill processes dates sequentially via self-referential HTTP calls. Each comp
 
 - **Title filter is in-memory** — The `title` filter uses case-insensitive substring matching performed in application code after the Firestore query. The 5-batch cap was removed in v3.6.0 — it now iterates all batches.
 
-- **Filter defaults** — `GET /notifications/filters` returns an empty options document if no notifications have been received yet; it never returns 404.
+- **Filter defaults** — `GET /filters` returns an empty options document if no notifications have been received yet; it never returns 404.
 
-- **Response contract** — All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. `DELETE /notifications/filters/saved/:id` uses raw `reply.send()` with 204 (`@allow-raw-send`).
+- **Response contract** — All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. `DELETE /filters/saved/:id` uses raw `reply.send()` with 204 (`@allow-raw-send`).
 
-- **DELETE notification returns 200** — `DELETE /mobile-notifications/:notification_id` returns `{ success: true, data: {} }` (not 204).
+- **DELETE notification returns 200** — `DELETE /:notification_id` returns `{ success: true, data: {} }` (not 204).
 
 - **Filter options best-effort** — When a notification is saved, filter options (app, device, source) are updated via Firestore `arrayUnion`. If this update fails, the notification is still accepted; the failure is logged as non-critical.
 
 - **Cursor encoding** — Pagination cursors are base64-encoded JSON containing `receivedAt` and `id`. Invalid cursors are silently ignored (treated as no cursor).
 
-- **Raw body capture** — The webhook endpoint (`/mobile-notifications/webhooks`) captures the raw request body in a `preParsing` hook for debugging JSON parse errors.
+- **Raw body capture** — The webhook endpoint (`/webhooks`) captures the raw request body in a `preParsing` hook for debugging JSON parse errors.
 
 - **Digest CET timezone** — Day boundaries use `Europe/Warsaw`. A date of `2026-04-15` resolves to midnight-to-midnight in CET/CEST, not UTC.
 
@@ -429,7 +554,7 @@ Backfill processes dates sequentially via self-referential HTTP calls. Each comp
 
 - **Digest subscriptions are hard-coded** — `DIGEST_SUBSCRIPTIONS` is a constant array in `digestSubscriptions.ts`. Adding a group requires a code change.
 
-- **run-yesterday dual auth** — The daily cron endpoint accepts both OIDC Bearer tokens (Cloud Scheduler) and `x-internal-auth` header (direct internal calls). The OIDC check validates JWT structure as defence-in-depth; actual Cloud Run IAM binding handles the primary auth.
+- **run-yesterday dual auth** — The daily cron endpoint accepts both OIDC Bearer tokens (Cloud Scheduler) and `x-internal-auth` header (direct internal calls). Production nginx verifies scheduler OIDC tokens at the edge for `/internal/notifications/*`.
 
 - **Backfill chain self-calls** — Backfill uses `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` to POST to itself. If the URL is misconfigured, backfill silently fails after the first day.
 
@@ -453,12 +578,12 @@ apps/mobile-notifications-service/src/
     firestore/             # All Firestore repository implementations (7 repositories)
     notification/          # WhatsAppDigestNotifier + formatDigestMessage
   routes/
-    connectRoutes.ts       # POST /mobile-notifications/connect
-    statusRoutes.ts        # GET /mobile-notifications/status
-    notificationRoutes.ts  # GET /mobile-notifications, DELETE /mobile-notifications/:id
-    filterRoutes.ts        # GET/POST/DELETE /notifications/filters/...
-    webhookRoutes.ts       # POST /mobile-notifications/webhooks
-    internalRoutes.ts      # POST /internal/mobile-notifications/query
+    connectRoutes.ts       # POST /connect
+    statusRoutes.ts        # GET /status
+    notificationRoutes.ts  # GET /, DELETE /:id
+    filterRoutes.ts        # GET/POST/DELETE /filters/...
+    webhookRoutes.ts       # POST /webhooks
+    internalRoutes.ts      # Internal notification query and Fishing Assistant digest evidence routes
     digestRoutes.ts        # All digest endpoints (internal + user-facing + backfill)
     digestSchemas.ts       # Request/response schemas for digest routes
     schemas.ts             # OpenAPI schema definitions

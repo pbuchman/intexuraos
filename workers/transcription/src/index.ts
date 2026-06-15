@@ -3,165 +3,111 @@
  *
  * Subscribes to the audio-stored Pub/Sub topic and triggers transcription.
  * Registered as a CloudEvent handler for Pub/Sub push subscriptions.
+ *
+ * Pure handler logic lives in `handler.ts` so it can be unit-tested with
+ * fake dependencies. This file only wires the real dependencies together
+ * and registers the handler with `withObservability`, which translates the
+ * handler's `AckResult` into Pub/Sub Ack / Nack / DeadLetter semantics —
+ * parse and schema failures publish to the DLQ topic instead of being
+ * silently ACKed (Subtask C of `docs/plans/2026-04-24-workers-layer-refactor.md`).
  */
 import * as functions from '@google-cloud/functions-framework';
-import type { CloudEvent } from '@google-cloud/functions-framework';
 import { Storage } from '@google-cloud/storage';
-import { err, ok } from '@intexuraos/common-core';
-import { logger } from './logger.js';
-import { loadConfig, type AudioStoredEvent } from './types.js';
-import { transcribeAudio } from './main.js';
+import { initWorker } from '@intexuraos/infra-sentry';
+import { loadConfig } from './types.js';
 import { createTranscriptionProvider } from './providers/provider-factory.js';
 import { createTranscriptionCompletedPublisher } from './publishers/transcription-completed-publisher.js';
+import { createTranscriptionDlqPublisher } from './publishers/transcription-dlq-publisher.js';
+import {
+  createAudioStoredHandler,
+  err,
+  fetchUserProvider,
+  ok,
+  type PubSubData,
+} from './handler.js';
+import { withObservability, type WorkerLogger } from './__shims__/common-worker.js';
 
-/**
- * Pub/Sub CloudEvent data structure.
- */
-interface PubSubData {
-  message: {
-    data?: string;
-    attributes?: Record<string, string>;
-  };
-}
+const release = process.env['K_REVISION'] ?? 'unknown';
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+const { logger: baseLogger, flush } = initWorker({
+  serviceName: 'transcription',
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  ...(sentryDsn !== undefined ? { sentryDsn } : {}),
+  release,
+});
+const logger = baseLogger.child({ service: 'transcription', release });
 
-/**
- * Fetch user's transcription provider preference from user-service.
- * Defaults to 'speechmatics' if not configured or on error.
- */
-async function fetchUserProvider(
-  userId: string,
-  userServiceUrl: string,
-  internalAuthToken: string
-): Promise<string> {
-  try {
-    const response = await fetch(
-      `${userServiceUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
-      {
-        headers: { 'X-Internal-Auth': internalAuthToken },
-      }
-    );
+process.on('SIGTERM', () => {
+  void flush();
+});
 
-    if (!response.ok) {
-      logger.warn(
-        { event: 'fetch_provider_error', userId, status: response.status },
-        'Failed to fetch user settings, defaulting to speechmatics'
-      );
-      return 'speechmatics';
-    }
-
-    const body = (await response.json()) as {
-      success: boolean;
-      data: {
-        transcriptionPreferences?: {
-          provider?: string;
-        };
-      };
-    };
-
-    return body.data.transcriptionPreferences?.provider ?? 'speechmatics';
-  } catch {
-    logger.warn(
-      { event: 'fetch_provider_network_error', userId },
-      'Network error fetching user settings, defaulting to speechmatics'
-    );
-    return 'speechmatics';
-  }
-}
-
-/* v8 ignore start -- module-init: config, storage and publisher initialized at cold start @preserve */
 const config = loadConfig();
 const storage = new Storage({ projectId: config.gcpProjectId });
-const publisher = createTranscriptionCompletedPublisher({
+const completedPublisher = createTranscriptionCompletedPublisher({
   projectId: config.gcpProjectId,
   topicName: config.transcriptionCompletedTopic,
   logger,
 });
-/* v8 ignore stop @preserve */
+const dlqPublisher = createTranscriptionDlqPublisher({
+  projectId: config.gcpProjectId,
+  topicName: config.transcriptionDlqTopic,
+  logger,
+});
+
+const handler = createAudioStoredHandler({
+  baseLogger: logger as unknown as WorkerLogger,
+  fetchUserProvider: (userId, reqLogger) =>
+    fetchUserProvider(userId, config.userServiceUrl, config.internalAuthToken, reqLogger),
+  generateSignedUrl: async (gcsPath: string) => {
+    try {
+      const bucket = storage.bucket(config.mediaBucket);
+      const file = bucket.file(gcsPath);
+      const [url] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + 4 * 3600 * 1000,
+      });
+      return ok(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate signed URL';
+      return err({ message });
+    }
+  },
+  createProvider: (providerName, reqLogger) =>
+    createTranscriptionProvider(providerName, config.speechmaticsApiKey, reqLogger),
+  publishCompleted: (event) => completedPublisher.publishCompleted(event),
+});
 
 /**
- * Validate that a parsed Pub/Sub payload has all required AudioStoredEvent fields.
- * Guards against schema drift between whatsapp-service and this worker.
+ * Forward dead-letter requests from `withObservability` to the DLQ publisher.
+ *
+ * Throws if the publish itself fails so the wrapper degrades to Nack
+ * (Pub/Sub redelivers and the subscription's dead-letter policy eventually
+ * routes the message to the platform-managed DLQ). Silently swallowing a
+ * publish failure here would re-introduce the silent-ACK bug this subtask
+ * is fixing.
  */
-function isAudioStoredEvent(event: { type?: string }): event is AudioStoredEvent {
-  const obj = event as Record<string, unknown>;
-  return (
-    obj['type'] === 'whatsapp.audio.stored' &&
-    typeof obj['userId'] === 'string' &&
-    typeof obj['messageId'] === 'string' &&
-    typeof obj['mediaId'] === 'string' &&
-    typeof obj['gcsPath'] === 'string' &&
-    typeof obj['mimeType'] === 'string' &&
-    typeof obj['timestamp'] === 'string'
-  );
+async function publishDeadLetter(payload: unknown, reason: string): Promise<void> {
+  const result = await dlqPublisher.publish(payload, reason);
+  if (!result.ok) {
+    logger.error(
+      { event: 'dlq_publish_error', reason, error: result.error },
+      'Failed to publish dead-letter event'
+    );
+    throw new Error(`DLQ publish failed: ${result.error.message}`);
+  }
 }
 
-/**
- * Handle an audio stored event from Pub/Sub.
- */
-async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
-  const messageData = event.data?.message.data;
-  if (messageData === undefined) {
-    logger.error({ event: 'missing_message_data', eventId: event.id }, 'No message data in event');
-    return;
-  }
-
-  let audioEvent;
-  try {
-    const decoded = Buffer.from(messageData, 'base64').toString('utf-8');
-    audioEvent = JSON.parse(decoded) as { type?: string };
-  } catch {
-    logger.error({ event: 'parse_error', eventId: event.id }, 'Failed to parse Pub/Sub message');
-    return;
-  }
-
-  // First check: log the actual unexpected type value for debugging. isAudioStoredEvent also
-  // checks the type literal, but this explicit guard provides a more targeted log message
-  // that captures what wrong type was received.
-  if (audioEvent.type !== 'whatsapp.audio.stored') {
-    logger.warn(
-      { event: 'unexpected_event_type', type: audioEvent.type, eventId: event.id },
-      'Unexpected event type, ignoring'
-    );
-    return;
-  }
-
-  // Second check: validate remaining required fields (userId, messageId, mediaId, gcsPath,
-  // mimeType, timestamp). After the type guard above, isAudioStoredEvent's type check always
-  // passes — this guard only fails when non-type required fields are missing.
-  if (!isAudioStoredEvent(audioEvent)) {
-    logger.warn(
-      { event: 'invalid_event_schema', eventId: event.id },
-      'Audio stored event is missing required fields, ignoring'
-    );
-    return;
-  }
-
-  await transcribeAudio(
-    audioEvent,
-    {
-      fetchUserProvider: (userId: string) =>
-        fetchUserProvider(userId, config.userServiceUrl, config.internalAuthToken),
-      generateSignedUrl: async (gcsPath: string) => {
-        try {
-          const bucket = storage.bucket(config.mediaBucket);
-          const file = bucket.file(gcsPath);
-          const [url] = await file.getSignedUrl({
-            version: 'v4',
-            action: 'read',
-            expires: Date.now() + 4 * 3600 * 1000,
-          });
-          return ok(url);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to generate signed URL';
-          return err({ message });
-        }
-      },
-      createProvider: (providerName: string) =>
-        createTranscriptionProvider(providerName, config.speechmaticsApiKey, logger),
-      publishEvent: (e) => publisher.publishCompleted(e),
-    },
-    logger
-  );
-}
-
-functions.cloudEvent('transcribeAudio', handleAudioStored);
+// `withObservability` constructs its own logger for the `worker_request_*`
+// envelope lines (per §3.3) — that logger is intentionally separate from the
+// Sentry-integrated `initWorker` logger above, which the handler uses for
+// domain logs via `deps.baseLogger`. Sentry is initialized at module scope
+// by `initWorker`, so warn/error lines on either logger flow through the
+// same DSN configured below.
+functions.cloudEvent<PubSubData>(
+  'transcribeAudio',
+  withObservability<PubSubData>('transcription', handler, {
+    dlqPublish: publishDeadLetter,
+    ...(sentryDsn !== undefined ? { sentryDsn } : {}),
+  })
+);

@@ -1,4 +1,4 @@
-import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
+import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
 import type { CodeTaskExecutionMemoryContext, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Worker types (shared by TaskActions + NextSteps) ---
@@ -12,7 +12,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   opus: 'Opus',
   sonnet: 'Sonnet',
   minimax: 'Minimax',
-  'mimo-pro': 'MiMo Pro',
+  'mimo-pro': 'MiMo Pro 2.5',
   glm: 'GLM',
   qwen: 'Qwen',
   kimi: 'Kimi',
@@ -53,6 +53,7 @@ export const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
   'orchestrator-unreachable': 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
   'tunnel-down':              'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
   unknown:                    'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
+  disabled:                   'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
 };
 
 export const LINEAR_STATE_STYLES: Record<string, string> = {

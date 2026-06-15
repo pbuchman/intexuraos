@@ -50,7 +50,7 @@ export const OPENROUTER_ALLOWED_MODELS = [
   { id: 'openai/gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI', promptPerToken: '0.0000025', completionPerToken: '0.000015' },
   { id: 'openai/gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI', promptPerToken: '0.00000075', completionPerToken: '0.0000045' },
   // Xiaomi
-  { id: 'xiaomi/mimo-v2-pro', name: 'MiMo V2 Pro', provider: 'Xiaomi', promptPerToken: '0.000001', completionPerToken: '0.000003' },
+  { id: 'xiaomi/mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'Xiaomi', promptPerToken: '0.000000435', completionPerToken: '0.00000087' },
   // Z.ai
   { id: 'z-ai/glm-5-turbo', name: 'GLM 5 Turbo', provider: 'Z.ai', promptPerToken: '0.00000096', completionPerToken: '0.0000032' },
 ] as const;

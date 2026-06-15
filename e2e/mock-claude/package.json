@@ -8,10 +8,11 @@
     "dev": "npx tsx --watch index.ts"
   },
   "dependencies": {
+    "@intexuraos/code-task-domain": "workspace:*",
     "@intexuraos/common-core": "workspace:*",
     "axios": "^1.7.9",
     "express": "^4.18.2",
-    "pino": "^9.0.0",
+    "pino": "catalog:",
     "pino-pretty": "^11.0.0"
   },
   "devDependencies": {

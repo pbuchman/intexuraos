@@ -74,6 +74,7 @@ function createMockUsageServiceClient(): UsageServiceClient {
     fetchPricing: vi.fn<UsageServiceClient['fetchPricing']>(),
     listUsageEvents: vi.fn<UsageServiceClient['listUsageEvents']>(),
     getUsageEvent: vi.fn<UsageServiceClient['getUsageEvent']>(),
+    getResearchCostSummary: vi.fn<UsageServiceClient['getResearchCostSummary']>(),
   };
 }
 
@@ -123,7 +124,6 @@ describe('POST /internal/webhooks/usage-events', () => {
       statusMirrorService: {} as never,
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
-      cleanupTaskLogs: {} as never,
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,
@@ -458,7 +458,6 @@ describe('POST /internal/webhooks/usage-events', () => {
       statusMirrorService: {} as never,
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
-      cleanupTaskLogs: {} as never,
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,

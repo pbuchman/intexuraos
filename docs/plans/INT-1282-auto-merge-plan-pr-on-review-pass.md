@@ -1,5 +1,7 @@
 # Auto-Merge Plan PR When Plan Review Passes
 
+> **⚠️ Reversed by INT-1424 (2026-04-21).** The plan-PR auto-merge added by this plan has been removed from the review-completion webhook. Plan PRs now stay open after a passing review and are merged only when the user explicitly clicks "Code" in the dashboard (via `submitToExecutionAgent`). See `docs/plans/INT-1424-no-auto-merge-plan-pr-on-review-pass.md` for rationale and the reversal change set.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Auto-merge plan PRs into `development` when the plan review passes, so plan docs are available immediately and the user doesn't have to manually merge before clicking "Implement."

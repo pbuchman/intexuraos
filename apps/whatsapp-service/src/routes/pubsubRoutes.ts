@@ -729,35 +729,45 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             'Processing webhook event'
           );
 
+          let payload: WebhookPayload;
           try {
-            const payload = JSON.parse(eventData.payload) as WebhookPayload;
-            const services = getServices();
-
-            const processWebhookEventUseCase = new ProcessWebhookEventUseCase({
-              webhookEventRepository: services.webhookEventRepository,
-              userMappingRepository: services.userMappingRepository,
-              messageRepository: services.messageRepository,
-              outboundMessageRepository: services.outboundMessageRepository,
-              mediaStorage: services.mediaStorage,
-              whatsappCloudApi: services.whatsappCloudApi,
-              thumbnailGenerator: services.thumbnailGenerator,
-              eventPublisher: services.eventPublisher,
-            });
-
-            await processWebhookEventUseCase.execute(
-              payload,
-              { id: eventData.eventId },
-              request.log
-            );
-
-            request.log.info({ eventId: eventData.eventId }, 'Webhook processing completed');
+            payload = JSON.parse(eventData.payload) as WebhookPayload;
           } catch (error) {
             request.log.error(
               { eventId: eventData.eventId, error: getErrorMessage(error) },
-              'Failed to process webhook event'
+              'Failed to parse webhook event payload'
             );
+            return await reply.ok({});
           }
 
+          const services = getServices();
+
+          const processWebhookEventUseCase = new ProcessWebhookEventUseCase({
+            webhookEventRepository: services.webhookEventRepository,
+            userMappingRepository: services.userMappingRepository,
+            messageRepository: services.messageRepository,
+            outboundMessageRepository: services.outboundMessageRepository,
+            mediaStorage: services.mediaStorage,
+            whatsappCloudApi: services.whatsappCloudApi,
+            thumbnailGenerator: services.thumbnailGenerator,
+            eventPublisher: services.eventPublisher,
+          });
+
+          const result = await processWebhookEventUseCase.execute(
+            payload,
+            { id: eventData.eventId },
+            request.log
+          );
+
+          if (result?.ok === false && result.retryable) {
+            request.log.error(
+              { eventId: eventData.eventId, failureDetails: result.failureDetails },
+              'Webhook processing failed with retryable error'
+            );
+            return await reply.fail('INTERNAL_ERROR', result.failureDetails);
+          }
+
+          request.log.info({ eventId: eventData.eventId }, 'Webhook processing completed');
           return await reply.ok({});
         }
 

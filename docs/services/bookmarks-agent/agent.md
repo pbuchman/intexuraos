@@ -9,7 +9,7 @@
 | Attribute | Value                                                                                             |
 | --------- | ------------------------------------------------------------------------------------------------- |
 | Name      | bookmarks-agent                                                                                   |
-| Version   | 3.6.0                                                                                             |
+| Version   | 3.7.0                                                                                             |
 | Port      | 8124                                                                                              |
 | Role      | Link Intelligence Service                                                                         |
 | Goal      | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
@@ -20,7 +20,7 @@
 
 ### Create Bookmark (Public)
 
-**Endpoint:** `POST /bookmarks`
+**Endpoint:** `POST /`
 **Auth:** Bearer token
 
 **When to use:** When creating a bookmark directly from the web dashboard. Does NOT trigger enrichment pipeline.
@@ -110,7 +110,7 @@ interface CreateBookmarkInternalOutput {
 
 ### List Bookmarks
 
-**Endpoint:** `GET /bookmarks`
+**Endpoint:** `GET /`
 **Auth:** Bearer token
 
 **When to use:** To retrieve all bookmarks for the authenticated user, optionally filtered.
@@ -127,7 +127,7 @@ interface ListBookmarksQuery {
 
 ### Get Bookmark
 
-**Endpoint:** `GET /bookmarks/:id`
+**Endpoint:** `GET /:id`
 **Auth:** Bearer token
 
 **When to use:** To retrieve a single bookmark by ID. Returns 403 if the bookmark belongs to a different user.
@@ -141,7 +141,7 @@ interface ListBookmarksQuery {
 
 ### Update Bookmark
 
-**Endpoint:** `PATCH /bookmarks/:id`
+**Endpoint:** `PATCH /:id`
 **Auth:** Bearer token
 
 **When to use:** To update user-editable fields (title, description, tags, archived).
@@ -180,14 +180,14 @@ interface UpdateBookmarkInternalInput {
 
 ### Delete Bookmark
 
-**Endpoint:** `DELETE /bookmarks/:id`
+**Endpoint:** `DELETE /:id`
 **Auth:** Bearer token
 
 **When to use:** To permanently delete a bookmark. This is a hard delete.
 
 ### Archive / Unarchive
 
-**Endpoint:** `POST /bookmarks/:id/archive` | `POST /bookmarks/:id/unarchive`
+**Endpoint:** `POST /:id/archive` | `POST /:id/unarchive`
 **Auth:** Bearer token
 
 **When to use:** To soft-delete (archive) or restore (unarchive) a bookmark. Idempotent — archiving an already-archived bookmark returns success.
@@ -270,7 +270,7 @@ interface Bookmark {
 
 ```
 1. POST /internal/bookmarks -> get bookmark ID
-2. Poll GET /bookmarks/:id until ogFetchStatus !== 'pending'
+2. Poll GET /:id until ogFetchStatus !== 'pending'
 3. Bookmark now has ogPreview and aiSummary populated
 4. User receives WhatsApp notification automatically (marked important)
 ```
@@ -278,11 +278,13 @@ interface Bookmark {
 ### Pattern 2: Handle Duplicate URL
 
 ```
-1. POST /internal/bookmarks or POST /bookmarks
+1. POST /internal/bookmarks or POST /
 2. If 409 CONFLICT response:
    a. Extract existingBookmarkId from error.details
-   b. GET /bookmarks/:existingBookmarkId to retrieve existing bookmark
+   b. GET /:existingBookmarkId to retrieve existing bookmark
 ```
+
+Use this same pattern when a WhatsApp bookmark command is replayed after webhook recovery. Recovery may repeat the service-to-service create call, and bookmarks-agent intentionally treats the same userId+url as an existing bookmark rather than creating another record.
 
 ### Pattern 3: Find Failed Enrichments and Retry
 
@@ -347,7 +349,7 @@ WhatsApp message delivered to user (bypasses notification level filter)
 
 ## Integration Notes
 
-### From actions-agent
+### From WhatsApp and actions-agent
 
 When processing a `link` action from WhatsApp:
 
@@ -367,6 +369,8 @@ const response = await fetch(`${BOOKMARKS_AGENT_URL}/internal/bookmarks`, {
 });
 ```
 
+For recovered WhatsApp webhook processing, callers should keep the bookmarked URL stable across retries. bookmarks-agent only de-duplicates by `userId` and `url`; `sourceId` is stored for provenance but is not the duplicate key.
+
 ### WhatsApp Delivery Message Format
 
 After AI summarization, the service publishes a WhatsApp message with `important: true`:
@@ -385,4 +389,4 @@ The title line is omitted if no title is available. `correlationId` is `bookmark
 
 ---
 
-**Last updated:** 2026-04-22 (v3.6.0 documentation refresh)
+**Last updated:** 2026-06-12 (v3.7.0 service-doc refresh)

@@ -19,11 +19,11 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -35,16 +35,15 @@ import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { ok, err } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -150,11 +149,7 @@ describe('POST /code/ask-agent/start', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -208,7 +203,6 @@ describe('POST /code/ask-agent/start', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
@@ -228,7 +222,7 @@ describe('POST /code/ask-agent/start', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user
@@ -255,7 +249,7 @@ describe('POST /code/ask-agent/start', () => {
     it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         payload: {
           prompt: 'What is the architecture?',
         },
@@ -277,7 +271,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer invalid-token',
         },
@@ -294,7 +288,7 @@ describe('POST /code/ask-agent/start', () => {
     it('creates task with valid request', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -323,7 +317,7 @@ describe('POST /code/ask-agent/start', () => {
     it('returns 400 when prompt is missing', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -336,7 +330,7 @@ describe('POST /code/ask-agent/start', () => {
     it('returns 400 when prompt is empty string', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -348,7 +342,7 @@ describe('POST /code/ask-agent/start', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('returns WORKER_NOT_CONFIGURED when no workers are enabled', async () => {
+    it('returns a failed task id when no workers are enabled', async () => {
       // Use a different user that has no workers configured
       mockedJwtVerify.mockResolvedValueOnce({
         payload: { sub: 'user-with-no-workers', email: 'noworkers@example.com' },
@@ -357,7 +351,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -367,15 +361,50 @@ describe('POST /code/ask-agent/start', () => {
       });
 
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+    });
+
+    it('returns a failed task id when worker settings fetch fails after task creation', async () => {
+      vi.spyOn(getServices().workerSettingsRepo, 'getSettings').mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'read failed' }),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/ask-agent/start',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Ask something while settings are unavailable',
+        },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+
+      const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+      expect(taskResult.ok).toBe(true);
+      if (taskResult.ok) {
+        expect(taskResult.value.status).toBe('failed');
+        expect(taskResult.value.dispatchStatus).toEqual(expect.objectContaining({
+          reason: 'dispatch_failed',
+          terminal: true,
+        }));
+      }
     });
 
     it('returns CONFLICT when duplicate prompt is detected', async () => {
       // Submit the same prompt twice to trigger dedup
       await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -386,7 +415,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -400,14 +429,14 @@ describe('POST /code/ask-agent/start', () => {
       expect(body.error.code).toBe('CONFLICT');
     });
 
-    it('returns QUEUE_FULL when task queue is full', async () => {
+    it('returns a failed task id when task queue is full', async () => {
       vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
         err({ code: 'queue_full', message: 'Task queue is full' }),
       );
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -417,8 +446,10 @@ describe('POST /code/ask-agent/start', () => {
       });
 
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.codeTaskId).toMatch(/^task_/);
     });
 
     it('returns INTERNAL_ERROR when enqueue fails with unexpected error', async () => {
@@ -428,7 +459,7 @@ describe('POST /code/ask-agent/start', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/ask-agent/start',
+        url: '/ask-agent/start',
         headers: {
           authorization: 'Bearer test-token',
         },

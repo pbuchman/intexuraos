@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
 import { ok, err } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createWhatsAppNotifier, buildTaskUrl, type WhatsAppNotifierConfig } from '../../../infra/services/whatsappNotifierImpl.js';
 import type { CodeTask, TaskError, TaskResult } from '../../../domain/models/codeTask.js';
 
@@ -17,11 +17,15 @@ describe('WhatsAppNotifier', () => {
 
   let mockPublisher: WhatsAppSendPublisher;
   let linearIssueTitles: Map<string, string>;
+  let originalWebAppUrl: string | undefined;
   let mockLinearAgentClient: {
     fetchIssueForDisplay: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
+
     mockPublisher = {
       publishSendMessage: vi.fn(),
     } as unknown as WhatsAppSendPublisher;
@@ -52,6 +56,11 @@ describe('WhatsAppNotifier', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   const createMockTask = (overrides: MockTaskOverrides = {}): CodeTask => {
@@ -86,9 +95,12 @@ describe('WhatsAppNotifier', () => {
     return task;
   };
 
-  const createMockConfig = (): WhatsAppNotifierConfig => ({
+  const createMockConfig = (
+    overrides: Partial<WhatsAppNotifierConfig> = {}
+  ): WhatsAppNotifierConfig => ({
     whatsappPublisher: mockPublisher,
     linearAgentClient: mockLinearAgentClient as unknown as NonNullable<WhatsAppNotifierConfig['linearAgentClient']>,
+    ...overrides,
   });
 
   const createMockResult = (overrides?: Partial<TaskResult>): TaskResult => ({
@@ -103,9 +115,26 @@ describe('WhatsAppNotifier', () => {
       expect(buildTaskUrl('task-123')).toBe('https://intexuraos.cloud/#/code-tasks/task-123');
     });
 
+    it('builds task links from the configured web app URL', () => {
+      expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud')).toBe(
+        'https://dev.intexuraos.cloud/#/code-tasks/task-123'
+      );
+    });
+
+    it('normalizes one trailing slash from the configured web app URL', () => {
+      expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud/')).toBe(
+        'https://dev.intexuraos.cloud/#/code-tasks/task-123'
+      );
+    });
+
+    it('falls back to the default web app URL when configured web app URL is empty', () => {
+      expect(buildTaskUrl('task-123', '')).toBe('https://intexuraos.cloud/#/code-tasks/task-123');
+    });
+
     it('handles task IDs with special characters', () => {
       expect(buildTaskUrl('task_abc-def')).toBe('https://intexuraos.cloud/#/code-tasks/task_abc-def');
     });
+
   });
 
   describe('formatCompletionMessage', () => {
@@ -128,6 +157,7 @@ describe('WhatsAppNotifier', () => {
           message: expect.stringContaining('✅ Fix login bug'),
           ctaUrl: { displayText: 'View Pull Request', url: 'https://github.com/pbuchman/intexuraos/pull/123' },
           correlationId: 'trace-123',
+          important: true,
         })
       );
 
@@ -162,6 +192,29 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View Progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
+      });
+    });
+
+    it('uses configured web app URL for View Progress ctaUrl', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+        result: createMockResult({
+          prUrl: undefined as unknown as string,
+        }),
+      });
+
+      const notifier = createWhatsAppNotifier({
+        ...createMockConfig(),
+        webAppUrl: 'https://dev.intexuraos.cloud/',
+      });
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.ctaUrl).toEqual({
+        displayText: 'View Progress',
+        url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',
       });
     });
 
@@ -540,12 +593,9 @@ describe('WhatsAppNotifier', () => {
           displayText: 'View Progress',
           url: 'https://intexuraos.cloud/#/code-tasks/task-123',
         },
+        important: true,
       });
     });
-
-    // Note: notifyTaskComplete builds the publish params via a local variable
-    // (publishParams) so it is NOT modified for INT-1418 importance flagging.
-    // See apps/code-agent/src/infra/services/whatsappNotifierImpl.ts:140-150.
 
     it('returns error when notification fails', async () => {
       const task = createMockTask({
@@ -558,6 +608,68 @@ describe('WhatsAppNotifier', () => {
       );
 
       const result = await notifier.notifyTaskComplete('user-123', task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
+
+  describe('notifyTaskDispatchBlocked', () => {
+    it('sends an actionable dispatch blocker notification with a task link when a task id is present', async () => {
+      const notifier = createWhatsAppNotifier({
+        ...createMockConfig(),
+        webAppUrl: 'https://dev.intexuraos.cloud/',
+      });
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskDispatchBlocked('user-123', {
+        workerType: 'codex-xhigh',
+        reason: 'codex_auth_unavailable',
+        affectedTaskCount: 2,
+        exampleTaskId: 'task-123',
+        message: 'No reachable worker has active Codex auth for codex-xhigh.',
+        remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
+        workerNames: ['home-dev'],
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs).toEqual(
+        expect.objectContaining({
+          userId: 'user-123',
+          ctaUrl: {
+            displayText: 'View Task',
+            url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',
+          },
+          important: true,
+        })
+      );
+      expect(callArgs.message).toContain('Code task dispatch blocked');
+      expect(callArgs.message).toContain('Worker type: codex-xhigh');
+      expect(callArgs.message).toContain('Reason: codex_auth_unavailable');
+      expect(callArgs.message).toContain('Affected queued tasks: 2');
+      expect(callArgs.message).toContain('Example task: task-123');
+      expect(callArgs.message).toContain('Workers: home-dev');
+      expect(callArgs.message).toContain('Refresh Codex/ChatGPT authentication');
+    });
+
+    it('returns notification_failed when dispatch blocker publish fails', async () => {
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyTaskDispatchBlocked('user-123', {
+        workerType: 'sonnet',
+        reason: 'claude_auth_unavailable',
+        affectedTaskCount: 1,
+        message: 'No reachable worker has active Claude auth for sonnet.',
+        remediation: 'Refresh Claude authentication on a worker that can run this task.',
+        workerNames: [],
+      });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -645,6 +757,9 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('Repository:');
       expect(callArgs.message).not.toContain('Branch:');
       expect(callArgs.correlationId).toBe('test-trace-id');
+      // Task start is not an actionable user moment; the `important` flag
+      // MUST NOT be set so the delivery channel does not interrupt the user.
+      expect(callArgs.important).toBeUndefined();
     });
 
     it('sends notification with Cancel and View buttons when cancelNonce is set', async () => {
@@ -1080,7 +1195,7 @@ describe('WhatsAppNotifier', () => {
       expect(result.ok).toBe(true);
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('⏰ Fix login bug');
-      expect(callArgs.message).toContain('Workers were still busy');
+      expect(callArgs.message).toContain('timed out before a worker could start');
       expect(callArgs.correlationId).toBe('trace-123');
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View Progress',

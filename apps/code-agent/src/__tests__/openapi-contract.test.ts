@@ -17,9 +17,9 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../infra/repositories/firestoreLogLineRepository.js';
+import { createFirestoreCodeTaskRepository } from '../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../infra/firestore/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../domain/services/linearIssueService.js';
@@ -27,7 +27,7 @@ import type { CodeTaskRepository } from '../domain/repositories/codeTaskReposito
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
 import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { ok } from '@intexuraos/common-core';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
@@ -39,7 +39,6 @@ import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js';
@@ -48,7 +47,7 @@ import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRep
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from './helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../infra/firestore/firestoreTurnMetricsRepository.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -116,11 +115,7 @@ describe('OpenAPI contract', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       linearIssueService: createLinearIssueService({
         linearAgentClient: createLinearAgentHttpClient({
@@ -180,7 +175,6 @@ describe('OpenAPI contract', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerHealthProbe: WorkerHealthProbe;
@@ -199,7 +193,7 @@ describe('OpenAPI contract', () => {
       taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -248,18 +242,18 @@ describe('OpenAPI contract', () => {
     expect(schema.paths).toHaveProperty('/internal/code-tasks/zombies');
 
     // Verify public endpoints exist
-    expect(schema.paths).toHaveProperty('/code/tasks');
-    expect(schema.paths).toHaveProperty('/code/tasks/{taskId}');
-    expect(schema.paths).toHaveProperty('/code/cancel');
+    expect(schema.paths).toHaveProperty('/tasks');
+    expect(schema.paths).toHaveProperty('/tasks/{taskId}');
+    expect(schema.paths).toHaveProperty('/cancel');
 
     // Verify HTTP methods
     expect(schema.paths['/internal/code/process']).toHaveProperty('post');
     expect(schema.paths['/internal/code-tasks/{taskId}']).toHaveProperty('patch');
     expect(schema.paths['/internal/code-tasks/linear/{linearIssueId}/active']).toHaveProperty('get');
     expect(schema.paths['/internal/code-tasks/zombies']).toHaveProperty('get');
-    expect(schema.paths['/code/tasks']).toHaveProperty('get');
-    expect(schema.paths['/code/tasks/{taskId}']).toHaveProperty('get');
-    expect(schema.paths['/code/cancel']).toHaveProperty('post');
+    expect(schema.paths['/tasks']).toHaveProperty('get');
+    expect(schema.paths['/tasks/{taskId}']).toHaveProperty('get');
+    expect(schema.paths['/cancel']).toHaveProperty('post');
   });
 
   it('includes response schemas for all endpoints', async () => {
@@ -281,7 +275,7 @@ describe('OpenAPI contract', () => {
     expect(processPostEndpoint.responses).toHaveProperty('500');
 
     // Verify GET /code/tasks/{taskId} responses
-    const getByIdEndpoint = schema.paths['/code/tasks/{taskId}'].get;
+    const getByIdEndpoint = schema.paths['/tasks/{taskId}'].get;
     expect(getByIdEndpoint.responses).toHaveProperty('200');
     expect(getByIdEndpoint.responses).toHaveProperty('404');
 
@@ -306,16 +300,16 @@ describe('OpenAPI contract', () => {
     expect(processEndpoint.tags).toContain('internal');
 
     // Check that public endpoints have 'public' tag
-    const tasksListEndpoint = schema.paths['/code/tasks'].get;
+    const tasksListEndpoint = schema.paths['/tasks'].get;
     expect(tasksListEndpoint.tags).toContain('public');
 
-    const cancelEndpoint = schema.paths['/code/cancel'].post;
+    const cancelEndpoint = schema.paths['/cancel'].post;
     expect(cancelEndpoint.tags).toContain('public');
 
     // Check operation IDs
     expect(processEndpoint.operationId).toBe('processCodeAction');
-    expect(schema.paths['/code/tasks/{taskId}'].get.operationId).toBe('getCodeTask');
-    expect(schema.paths['/code/tasks'].get.operationId).toBe('listCodeTasks');
+    expect(schema.paths['/tasks/{taskId}'].get.operationId).toBe('getCodeTask');
+    expect(schema.paths['/tasks'].get.operationId).toBe('listCodeTasks');
     expect(cancelEndpoint.operationId).toBe('cancelCodeTask');
   });
 });

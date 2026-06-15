@@ -9,16 +9,16 @@ const mockLogger: Logger = {
   debug: () => undefined,
 };
 
-// Mock child_process execSync
-const mockExecSync = vi.fn();
+// Mock child_process execFileSync (argv-form spawn — no shell)
+const mockExecFileSync = vi.fn();
 
 vi.mock('node:child_process', () => ({
-  execSync: mockExecSync,
+  execFileSync: mockExecFileSync,
 }));
 
 describe('SensitiveFileGuard', () => {
   beforeEach(() => {
-    mockExecSync.mockReset();
+    mockExecFileSync.mockReset();
   });
 
   it('should detect .env files as sensitive', async () => {
@@ -52,7 +52,7 @@ describe('SensitiveFileGuard', () => {
   describe('checkAndRevert', () => {
     it('should return empty result when no files changed', async () => {
       const guard = new SensitiveFileGuard(mockLogger);
-      mockExecSync.mockReturnValue('');
+      mockExecFileSync.mockReturnValue('');
 
       const result = await guard.checkAndRevert('/path/to/worktree', 1);
 
@@ -61,16 +61,17 @@ describe('SensitiveFileGuard', () => {
         remaining: [],
         allSensitive: false,
       });
-      expect(mockExecSync).toHaveBeenCalledWith('git diff --name-only HEAD~1 HEAD', {
-        cwd: '/path/to/worktree',
-        encoding: 'utf-8',
-      });
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'git',
+        ['diff', '--name-only', 'HEAD~1', 'HEAD'],
+        { cwd: '/path/to/worktree', encoding: 'utf-8' }
+      );
     });
 
     it('should revert sensitive files', async () => {
       const guard = new SensitiveFileGuard(mockLogger);
-      mockExecSync.mockImplementation((command) => {
-        if (typeof command === 'string' && command.includes('git diff')) {
+      mockExecFileSync.mockImplementation((file, args) => {
+        if (file === 'git' && Array.isArray(args) && args.includes('diff')) {
           return '.env\nsrc/index.ts\ncredentials.json\n';
         }
         return '';
@@ -81,18 +82,20 @@ describe('SensitiveFileGuard', () => {
       expect(result.reverted).toEqual(['.env', 'credentials.json']);
       expect(result.remaining).toEqual(['src/index.ts']);
       expect(result.allSensitive).toBe(false);
-      expect(mockExecSync).toHaveBeenCalledWith('git checkout HEAD~1 -- ".env"', {
+      expect(mockExecFileSync).toHaveBeenCalledWith('git', ['checkout', 'HEAD~1', '--', '.env'], {
         cwd: '/path/to/worktree',
       });
-      expect(mockExecSync).toHaveBeenCalledWith('git checkout HEAD~1 -- "credentials.json"', {
-        cwd: '/path/to/worktree',
-      });
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'git',
+        ['checkout', 'HEAD~1', '--', 'credentials.json'],
+        { cwd: '/path/to/worktree' }
+      );
     });
 
     it('should set allSensitive to true when all changed files are reverted', async () => {
       const guard = new SensitiveFileGuard(mockLogger);
-      mockExecSync.mockImplementation((command) => {
-        if (typeof command === 'string' && command.includes('git diff')) {
+      mockExecFileSync.mockImplementation((file, args) => {
+        if (file === 'git' && Array.isArray(args) && args.includes('diff')) {
           return '.env\ncredentials.json\n';
         }
         return '';
@@ -114,11 +117,11 @@ describe('SensitiveFileGuard', () => {
       };
       const guard = new SensitiveFileGuard(errorLogger);
 
-      mockExecSync.mockImplementation((command) => {
-        if (typeof command === 'string' && command.includes('git diff')) {
+      mockExecFileSync.mockImplementation((file, args) => {
+        if (file === 'git' && Array.isArray(args) && args.includes('diff')) {
           return '.env\nsrc/index.ts';
         }
-        if (typeof command === 'string' && command.includes('git checkout')) {
+        if (file === 'git' && Array.isArray(args) && args.includes('checkout')) {
           throw new Error('Git checkout failed');
         }
         return '';
@@ -145,11 +148,11 @@ describe('SensitiveFileGuard', () => {
       const guard = new SensitiveFileGuard(errorLogger);
 
       let checkoutCount = 0;
-      mockExecSync.mockImplementation((command) => {
-        if (typeof command === 'string' && command.includes('git diff')) {
+      mockExecFileSync.mockImplementation((file, args) => {
+        if (file === 'git' && Array.isArray(args) && args.includes('diff')) {
           return '.env\ncredentials.json\nsrc/index.ts';
         }
-        if (typeof command === 'string' && command.includes('git checkout')) {
+        if (file === 'git' && Array.isArray(args) && args.includes('checkout')) {
           checkoutCount++;
           if (checkoutCount === 1) {
             return ''; // First succeeds
@@ -172,17 +175,50 @@ describe('SensitiveFileGuard', () => {
 
     it('should use correct commit count in git commands', async () => {
       const guard = new SensitiveFileGuard(mockLogger);
-      mockExecSync.mockReturnValue('.env\n');
+      mockExecFileSync.mockReturnValue('.env\n');
 
       await guard.checkAndRevert('/path/to/worktree', 3);
 
-      expect(mockExecSync).toHaveBeenCalledWith('git diff --name-only HEAD~3 HEAD', {
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'git',
+        ['diff', '--name-only', 'HEAD~3', 'HEAD'],
+        { cwd: '/path/to/worktree', encoding: 'utf-8' }
+      );
+      expect(mockExecFileSync).toHaveBeenCalledWith('git', ['checkout', 'HEAD~3', '--', '.env'], {
         cwd: '/path/to/worktree',
-        encoding: 'utf-8',
       });
-      expect(mockExecSync).toHaveBeenCalledWith('git checkout HEAD~3 -- ".env"', {
+    });
+
+    it('passes filenames containing shell metacharacters as literal argv (no shell expansion)', async () => {
+      const guard = new SensitiveFileGuard(mockLogger);
+      // Filename that would execute `id` if interpolated into a shell.
+      // Matches the **/.env.* sensitive pattern so checkout is invoked.
+      const evil = '.env.$(id)';
+      mockExecFileSync.mockImplementation((file, args) => {
+        if (file === 'git' && Array.isArray(args) && args.includes('diff')) {
+          return `${evil}\n`;
+        }
+        return '';
+      });
+
+      await guard.checkAndRevert('/path/to/worktree', 1);
+
+      // The checkout call must receive the evil filename as a literal argv element,
+      // not as part of a shell-interpreted command string.
+      expect(mockExecFileSync).toHaveBeenCalledWith('git', ['checkout', 'HEAD~1', '--', evil], {
         cwd: '/path/to/worktree',
       });
+    });
+
+    it('passes commitCount as numeric ref, not interpolated', async () => {
+      const guard = new SensitiveFileGuard(mockLogger);
+      mockExecFileSync.mockReturnValue('.env\n');
+      await guard.checkAndRevert('/path/to/worktree', 5);
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'git',
+        ['diff', '--name-only', 'HEAD~5', 'HEAD'],
+        { cwd: '/path/to/worktree', encoding: 'utf-8' }
+      );
     });
   });
 });

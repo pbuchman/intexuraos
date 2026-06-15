@@ -1,13 +1,21 @@
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Clock, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Clock, Loader2 } from 'lucide-react';
 import { Layout } from '@/components';
 import { useDispatchQueue } from '@/hooks';
 import { useTimeTick } from '@/hooks';
-import { formatRelative } from '@/utils/dateFormat';
+import { formatAbsoluteDateTime, formatRelative } from '@/utils/dateFormat';
 import { getAgentTypeLabel } from '@/utils/issueGroups';
 
+function formatReason(reason: string): string {
+  return reason.replaceAll('_', ' ');
+}
+
+function affectedTasksText(count: number): string {
+  return count === 1 ? '1 affected task' : `${String(count)} affected tasks`;
+}
+
 export function DispatchQueuePage(): React.JSX.Element {
-  const { tasks, totalQueued, maxQueueSize, loading, error } = useDispatchQueue();
+  const { tasks, systemStatuses, totalQueued, maxQueueSize, loading, error } = useDispatchQueue();
   // Re-render every 30s so time-ago labels stay fresh
   useTimeTick(30000);
 
@@ -46,6 +54,57 @@ export function DispatchQueuePage(): React.JSX.Element {
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+          </div>
+        ) : null}
+
+        {/* System status */}
+        {!loading && systemStatuses.length > 0 ? (
+          <div className="space-y-2">
+            {systemStatuses.map((status) => {
+              const isCritical = status.severity === 'critical';
+              return (
+                <div
+                  key={status.id}
+                  className={isCritical
+                    ? 'rounded-lg border border-red-200 bg-red-50 p-4 text-red-900 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100'
+                    : 'rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <AlertTriangle className={isCritical ? 'mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-300' : 'mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-300'} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                          <span>Dispatch blocked</span>
+                          <span className="rounded bg-white/70 px-1.5 py-0.5 text-xs font-medium dark:bg-black/20">
+                            {status.workerType}
+                          </span>
+                          <span className="rounded bg-white/70 px-1.5 py-0.5 text-xs font-medium dark:bg-black/20">
+                            {formatReason(status.reason)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm">{status.message}</p>
+                        <p className="mt-1 text-sm font-medium">{status.remediation}</p>
+                        {status.workerNames.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {status.workerNames.map((workerName) => (
+                              <span
+                                key={workerName}
+                                className="rounded bg-white/70 px-1.5 py-0.5 text-xs dark:bg-black/20"
+                              >
+                                {workerName}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                    <span className="rounded bg-white/70 px-2 py-1 text-xs font-semibold dark:bg-black/20">
+                      {affectedTasksText(status.affectedTaskCount)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : null}
 
@@ -99,6 +158,18 @@ export function DispatchQueuePage(): React.JSX.Element {
                     <p className="text-xs text-slate-400 dark:text-slate-500">
                       Queued {formatRelative(task.queuedAt)}
                     </p>
+                    {task.dispatchEligibleAt !== undefined ? (
+                      <>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          Dispatches {formatAbsoluteDateTime(task.dispatchEligibleAt)}
+                        </p>
+                        {task.dispatchScheduleText !== undefined ? (
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                            {task.dispatchScheduleText}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : null}
                   </div>
                 </div>
               </Link>

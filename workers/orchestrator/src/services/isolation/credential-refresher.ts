@@ -2,6 +2,13 @@ import * as os from 'node:os';
 import type Docker from 'dockerode';
 import type { Logger } from '@intexuraos/common-core';
 
+const CLAUDE_REFRESH_COMMAND = [
+  'set -e',
+  'mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.agents/skills',
+  'if [ -d /opt/claude-defaults ]; then cp -r /opt/claude-defaults/. /home/claude/; fi',
+  'exec claude --print --model haiku "reply ok"',
+].join('\n');
+
 function getHostUserString(): { uid: number; gid: number; userString: string } {
   const info = os.userInfo();
   const uid = info.uid;
@@ -34,8 +41,8 @@ export class CredentialRefresher {
       container = await this.docker.createContainer({
         Image: this.config.imageName,
         name: `claude-cred-refresh-${String(Date.now())}`,
-        Entrypoint: ['claude'],
-        Cmd: ['--print', '--model', 'haiku', 'reply ok'],
+        Entrypoint: ['/bin/bash', '-lc'],
+        Cmd: [CLAUDE_REFRESH_COMMAND],
         User: userString,
         Tty: false,
         HostConfig: {

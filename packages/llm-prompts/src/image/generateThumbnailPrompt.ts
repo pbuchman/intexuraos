@@ -4,7 +4,7 @@
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { LLMError, GenerateResult } from '@intexuraos/llm-contract';
+import type { GenerateResult, LLMCorrelationOptions, LLMError } from '@intexuraos/llm-contract';
 import { thumbnailPrompt } from './thumbnailPrompt.js';
 
 /**
@@ -14,7 +14,7 @@ import { thumbnailPrompt } from './thumbnailPrompt.js';
 interface GeneratingClient {
   generate(
     prompt: string,
-    options: { promptType: string }
+    options: { promptType: string; correlation?: LLMCorrelationOptions | undefined }
   ): Promise<Result<GenerateResult, LLMError>>;
 }
 
@@ -42,6 +42,11 @@ export interface ThumbnailPromptError {
 export interface ThumbnailPromptResult {
   thumbnailPrompt: ThumbnailPrompt;
   usage: GenerateResult['usage'];
+}
+
+export interface ThumbnailPromptOptions {
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 const VALID_REALISM_VALUES: RealismStyle[] = [
@@ -133,12 +138,14 @@ function parseThumbnailPromptResponse(
 
 export async function generateThumbnailPrompt(
   client: GeneratingClient,
-  text: string
+  text: string,
+  options: ThumbnailPromptOptions = {}
 ): Promise<Result<ThumbnailPromptResult, ThumbnailPromptError>> {
   const fullPrompt = thumbnailPrompt.build({ text });
 
   const generateResult = await client.generate(fullPrompt, {
-    promptType: 'image-thumbnail-prompt',
+    promptType: options.promptType ?? 'image-thumbnail-prompt',
+    ...(options.correlation !== undefined && { correlation: options.correlation }),
   });
 
   if (!generateResult.ok) {

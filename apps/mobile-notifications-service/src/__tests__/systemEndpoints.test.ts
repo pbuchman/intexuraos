@@ -80,9 +80,9 @@ describe('System Endpoints', () => {
     };
     expect(spec.openapi).toMatch(/^3\./);
     expect(spec.info.title).toBe('mobile-notifications-service');
-    expect(spec.paths['/mobile-notifications/connect']).toBeDefined();
-    expect(spec.paths['/mobile-notifications/webhooks']).toBeDefined();
-    expect(spec.paths['/mobile-notifications']).toBeDefined();
-    expect(spec.paths['/mobile-notifications/{notification_id}']).toBeDefined();
+    expect(spec.paths['/connect']).toBeDefined();
+    expect(spec.paths['/webhooks']).toBeDefined();
+    expect(spec.paths['/']).toBeDefined();
+    expect(spec.paths['/{notification_id}']).toBeDefined();
   });
 });

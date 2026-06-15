@@ -1,10 +1,18 @@
 /**
- * Tests for buildResearchPrompt.
+ * Tests for researchPrompt.
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildResearchPrompt } from '../researchPrompt.js';
+import { researchPrompt } from '../researchPrompt.js';
 import type { ResearchContext } from '../contextTypes.js';
+
+/** Compatibility wrapper for the previous positional `buildResearchPrompt(...)` signature. */
+function buildResearchPrompt(userPrompt: string, ctx?: ResearchContext): string {
+  return researchPrompt.build({
+    userPrompt,
+    ...(ctx !== undefined && { ctx }),
+  });
+}
 
 const createTestResearchContext = (overrides?: Partial<ResearchContext>): ResearchContext => ({
   language: 'en',
@@ -43,6 +51,14 @@ const createTestResearchContext = (overrides?: Partial<ResearchContext>): Resear
   },
   red_flags: [],
   ...overrides,
+});
+
+describe('researchPrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(researchPrompt.name).toBe('research-query');
+    expect(researchPrompt.description).toContain('research');
+    expect(researchPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
 });
 
 describe('buildResearchPrompt', () => {

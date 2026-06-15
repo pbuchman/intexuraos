@@ -18,6 +18,7 @@ describe('loadConfig', () => {
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_SERVICE_URL'];
 
     const config = loadConfig();
 
@@ -25,6 +26,7 @@ describe('loadConfig', () => {
     expect(config.gcpProjectId).toBe('');
     expect(config.userServiceUrl).toBe('');
     expect(config.internalAuthToken).toBe('');
+    expect(config.serviceUrl).toBe('');
   });
 
   it('uses env vars when provided', () => {
@@ -32,6 +34,7 @@ describe('loadConfig', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'my-project';
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret-token';
+    process.env['INTEXURAOS_SERVICE_URL'] = 'https://intexuraos.cloud/api/linear';
 
     const config = loadConfig();
 
@@ -39,5 +42,6 @@ describe('loadConfig', () => {
     expect(config.gcpProjectId).toBe('my-project');
     expect(config.userServiceUrl).toBe('http://user-service');
     expect(config.internalAuthToken).toBe('secret-token');
+    expect(config.serviceUrl).toBe('https://intexuraos.cloud/api/linear');
   });
 });

@@ -321,7 +321,7 @@ describe('GET /notifications/digests', () => {
   it('returns 401 without auth', async () => {
     setMockServices({});
     const app = await buildServer();
-    const res = await app.inject({ method: 'GET', url: '/notifications/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15' });
+    const res = await app.inject({ method: 'GET', url: '/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15' });
     expect(res.statusCode).toBe(401);
     await app.close();
   });
@@ -339,7 +339,7 @@ describe('GET /notifications/digests', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15',
+      url: '/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -366,7 +366,7 @@ describe('GET /notifications/digests', () => {
     const app = await buildServer();
     await app.inject({
       method: 'GET',
-      url: '/notifications/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15&cursor=tok123',
+      url: '/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15&cursor=tok123',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(capturedCursor).toBe('tok123');
@@ -378,7 +378,7 @@ describe('GET /notifications/digests/:groupKey/:date', () => {
   it('returns 401 without auth', async () => {
     setMockServices({});
     const app = await buildServer();
-    const res = await app.inject({ method: 'GET', url: '/notifications/digests/g/2026-04-15' });
+    const res = await app.inject({ method: 'GET', url: '/digests/g/2026-04-15' });
     expect(res.statusCode).toBe(401);
     await app.close();
   });
@@ -396,7 +396,7 @@ describe('GET /notifications/digests/:groupKey/:date', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/g/2026-04-15',
+      url: '/digests/g/2026-04-15',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(404);
@@ -416,7 +416,7 @@ describe('GET /notifications/digests/:groupKey/:date', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/g/2026-04-15',
+      url: '/digests/g/2026-04-15',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -431,7 +431,7 @@ describe('GET /notifications/digests/:groupKey/:date/state', () => {
   it('returns 401 without auth', async () => {
     setMockServices({});
     const app = await buildServer();
-    const res = await app.inject({ method: 'GET', url: '/notifications/digests/g/2026-04-15/state' });
+    const res = await app.inject({ method: 'GET', url: '/digests/g/2026-04-15/state' });
     expect(res.statusCode).toBe(401);
     await app.close();
   });
@@ -448,7 +448,7 @@ describe('GET /notifications/digests/:groupKey/:date/state', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/g/2026-04-15/state',
+      url: '/digests/g/2026-04-15/state',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(404);
@@ -467,7 +467,7 @@ describe('GET /notifications/digests/:groupKey/:date/state', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/g/2026-04-15/state',
+      url: '/digests/g/2026-04-15/state',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -482,7 +482,7 @@ describe('GET /notifications/digests/backfill/:runId', () => {
   it('returns 401 without auth', async () => {
     setMockServices({});
     const app = await buildServer();
-    const res = await app.inject({ method: 'GET', url: '/notifications/digests/backfill/bf_001' });
+    const res = await app.inject({ method: 'GET', url: '/digests/backfill/bf_001' });
     expect(res.statusCode).toBe(401);
     await app.close();
   });
@@ -501,7 +501,7 @@ describe('GET /notifications/digests/backfill/:runId', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/backfill/bf_001',
+      url: '/digests/backfill/bf_001',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(404);
@@ -529,7 +529,7 @@ describe('GET /notifications/digests/backfill/:runId', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/backfill/bf_001',
+      url: '/digests/backfill/bf_001',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -553,7 +553,7 @@ describe('GET /notifications/digests/backfill/:runId', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/backfill/bf_001',
+      url: '/digests/backfill/bf_001',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(500);
@@ -575,7 +575,7 @@ describe('GET /notifications/digests (error path)', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15',
+      url: '/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(500);
@@ -597,7 +597,7 @@ describe('GET /notifications/digests/:groupKey/:date (error path)', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/g/2026-04-15',
+      url: '/digests/g/2026-04-15',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(500);
@@ -618,7 +618,7 @@ describe('GET /notifications/digests/:groupKey/:date/state (error path)', () => 
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/notifications/digests/g/2026-04-15/state',
+      url: '/digests/g/2026-04-15/state',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(500);
@@ -673,7 +673,7 @@ describe('POST /notifications/digests/run', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/run',
+      url: '/digests/run',
       payload: { groupKey: 'g', date: '2026-04-15' },
     });
     expect(res.statusCode).toBe(401);
@@ -719,7 +719,7 @@ describe('POST /notifications/digests/run', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/run',
+      url: '/digests/run',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', date: '2026-04-15' },
     });
@@ -729,6 +729,65 @@ describe('POST /notifications/digests/run', () => {
     expect(body.data.generation).toBe(2);
     expect(body.data.regenerated).toBe(true);
     await app.close();
+  });
+
+  it('uses the subscription output language when regenerating a digest', async () => {
+    let capturedPrompt = '';
+    vi.doMock('@intexuraos/llm-factory', async (): Promise<typeof import('@intexuraos/llm-factory')> => {
+      const actual = await vi.importActual<typeof import('@intexuraos/llm-factory')>('@intexuraos/llm-factory');
+      return {
+        ...actual,
+        createLlmClient: () => ({
+          generate: async (prompt: string): Promise<{ ok: true; value: { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } } }> => {
+            capturedPrompt = prompt;
+            return { ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } };
+          },
+        }),
+      } as typeof import('@intexuraos/llm-factory');
+    });
+    vi.resetModules();
+    const { buildServer: freshBuildServer } = await import('../../server.js');
+    const { setMockServices: freshSetMockServices } = await import('../helpers/mockServices.js');
+    const { __resetUsageSinkForTests: freshResetSink } = await import('../../routes/digestRoutes.js');
+    freshResetSink();
+    freshSetMockServices({
+      digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish' }],
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: true } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: { ...EXAMPLE_PERSISTED, generation: 2 } }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await freshBuildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/digests/run',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { groupKey: 'g', date: '2026-04-15' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(capturedPrompt).toContain('Target output language: Polish');
+    await app.close();
+    vi.doUnmock('@intexuraos/llm-factory');
   });
 
   it('returns 500 when digest run fails with non-lock-held error', async () => {
@@ -760,7 +819,7 @@ describe('POST /notifications/digests/run', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/run',
+      url: '/digests/run',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', date: '2026-04-15' },
     });
@@ -797,7 +856,7 @@ describe('POST /notifications/digests/run', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/run',
+      url: '/digests/run',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', date: '2026-04-15' },
     });
@@ -814,7 +873,7 @@ describe('POST /notifications/digests/backfill', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/backfill',
+      url: '/digests/backfill',
       payload: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-03' },
     });
     expect(res.statusCode).toBe(401);
@@ -838,7 +897,7 @@ describe('POST /notifications/digests/backfill', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/backfill',
+      url: '/digests/backfill',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-03' },
     });
@@ -867,7 +926,7 @@ describe('POST /notifications/digests/backfill', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/backfill',
+      url: '/digests/backfill',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-03' },
     });
@@ -891,7 +950,7 @@ describe('POST /notifications/digests/backfill', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/backfill',
+      url: '/digests/backfill',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-03' },
     });
@@ -916,7 +975,7 @@ describe('POST /notifications/digests/backfill', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/backfill',
+      url: '/digests/backfill',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-03' },
     });
@@ -931,7 +990,7 @@ describe('POST /notifications/digests/backfill', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/backfill',
+      url: '/digests/backfill',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'g', fromDate: '2026-04-05', toDate: '2026-04-01' },
     });
@@ -1089,7 +1148,7 @@ describe('unknown subscription returns 400', () => {
     const token = await createToken({ sub: 'google-oauth2|test-user' });
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/run',
+      url: '/digests/run',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'unknown', date: '2026-04-15' },
     });
@@ -1103,7 +1162,7 @@ describe('unknown subscription returns 400', () => {
     const token = await createToken({ sub: 'google-oauth2|test-user' });
     const res = await app.inject({
       method: 'POST',
-      url: '/notifications/digests/backfill',
+      url: '/digests/backfill',
       headers: { authorization: `Bearer ${token}` },
       payload: { groupKey: 'unknown', fromDate: '2026-04-01', toDate: '2026-04-03' },
     });

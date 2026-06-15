@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1907
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1454
+- Review iterations: 2
+- execution_memory_ids_used: mem_7f5c6f87-0534-48b7-b474-2b48ade8af1a,mem_44f8dac8-00e7-4392-9550-37c07cde2b26
+- execution_memory_ids_rejected: mem_1fe20107-647d-403b-81aa-bff5cf99dfc5
+- execution_memory_usage_summary: Memories [2] and [3] directly shaped the adoption-path check: rehydrateWorktreeForAdoption prioritizes the persistent worktree on disk over the volatile `.git/worktrees/<id>` metadata (mem [2]) and deliberately uses a non-strict pre-check that repairs rather than rejects when metadata is missing (mem [3]).
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: (1) superpowers:code-reviewer — independent spec + code-quality review of initial commit 755ea9d7; (2) superpowers:code-reviewer — re-review of fixup commit 8dfd9e32 confirming no remaining issues.
+- Skill sequence proof: Invoked superpowers:subagent-driven-development first (per mandatory first-skill rule) to plan the fix; then executed implementation; then invoked superpowers:requesting-code-review which dispatched superpowers:code-reviewer twice (round 1 raised 2 Important + 4 Minor findings; addressed all; round 2 returned "no remaining issues"). Commit order matches: 755ea9d7 (implementation) → 8dfd9e32 (review fixes) → PR created.
+- Summary:
+  * Added `isWorktreeRegistered` + `repairWorktree` to `WorktreeManager` and wired them into `TaskDispatcher.adoptTask` so an orchestrator restart that drops `.git/worktrees/<taskId>/` metadata repairs it via `git worktree repair` before the new container starts.
+  * When repair fails, `adoptTask` finalizes the task with a new terminal error code `WORKTREE_LOST` (remediation `contact_support`), skipping doomed attempts 2/3 instead of silently burning them.
+  * Wired `WORKTREE_LOST` into `apps/code-agent/.../classifyFailure` as `fail`, placed above the orchestrator-remediation fallback so a stray `retry` hint can't resurrect a permanently-broken task.
+  * Post-repair `symbolic-ref HEAD` diagnostic surfaces the latent "repair succeeded but branch ref lost → detached HEAD" case with a warn log.
+  * 15260 tests pass, full `pnpm run ci:tracked` green, PR #1907 open.

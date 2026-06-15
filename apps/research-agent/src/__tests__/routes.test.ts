@@ -117,7 +117,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('POST /research returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/research',
+      url: '/',
       payload: {
         prompt: 'Test prompt',
         selectedModels: [LlmModels.Gemini25Pro],
@@ -134,7 +134,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('GET /research returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/research',
+      url: '/',
     });
 
     expect(response.statusCode).toBe(401);
@@ -146,7 +146,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('GET /research/:id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/research/test-id',
+      url: '/test-id',
     });
 
     expect(response.statusCode).toBe(401);
@@ -158,7 +158,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('POST /research/draft returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/research/draft',
+      url: '/draft',
       payload: {
         prompt: 'Test prompt',
       },
@@ -173,7 +173,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('PATCH /research/:id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'PATCH',
-      url: '/research/test-id',
+      url: '/test-id',
       payload: {
         prompt: 'Updated prompt',
       },
@@ -188,7 +188,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('DELETE /research/:id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'DELETE',
-      url: '/research/test-id',
+      url: '/test-id',
     });
 
     expect(response.statusCode).toBe(401);
@@ -200,7 +200,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('POST /research/:id/confirm returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/research/test-id/confirm',
+      url: '/test-id/confirm',
       payload: { action: 'proceed' },
     });
 
@@ -213,7 +213,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('POST /research/:id/retry returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/research/test-id/retry',
+      url: '/test-id/retry',
     });
 
     expect(response.statusCode).toBe(401);
@@ -225,7 +225,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('PATCH /research/:id/favourite returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'PATCH',
-      url: '/research/test-id/favourite',
+      url: '/test-id/favourite',
       payload: { favourite: true },
     });
 
@@ -238,7 +238,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('POST /research/:id/enhance returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/research/test-id/enhance',
+      url: '/test-id/enhance',
       payload: {
         additionalModels: [LlmModels.O4MiniDeepResearch],
       },
@@ -253,7 +253,7 @@ describe('Research Routes - Unauthenticated', () => {
   it('DELETE /research/:id/share returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'DELETE',
-      url: '/research/test-id/share',
+      url: '/test-id/share',
     });
 
     expect(response.statusCode).toBe(401);
@@ -373,7 +373,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -397,7 +397,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -418,7 +418,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Improved prompt with more context and details',
@@ -441,7 +441,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -462,7 +462,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -487,7 +487,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -512,7 +512,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -533,7 +533,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -558,7 +558,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt for title generation',
@@ -587,7 +587,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'This is a test prompt that will be used as fallback title',
@@ -611,7 +611,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -637,7 +637,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -657,7 +657,7 @@ describe('Research Routes - Authenticated', () => {
     it('returns 401 without auth', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         payload: {
           prompt: 'Test prompt',
         },
@@ -675,7 +675,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -702,7 +702,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
@@ -736,7 +736,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-456',
+        url: '/draft-456',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -768,7 +768,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'New prompt for title generation test that is long enough',
@@ -787,7 +787,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/nonexistent',
+        url: '/nonexistent',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
@@ -811,7 +811,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
@@ -834,7 +834,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/research-123',
+        url: '/research-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
@@ -850,7 +850,7 @@ describe('Research Routes - Authenticated', () => {
     it('returns 401 without auth', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         payload: {
           prompt: 'Updated prompt',
         },
@@ -873,7 +873,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt with input contexts',
@@ -905,7 +905,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
@@ -941,7 +941,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
@@ -961,7 +961,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -982,7 +982,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1011,7 +1011,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1041,7 +1041,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research?limit=2&cursor=abc',
+        url: '/?limit=2&cursor=abc',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1054,7 +1054,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1073,7 +1073,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: `/research/${research.id}`,
+        url: `/${research.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1099,7 +1099,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: `/research/${research.id}`,
+        url: `/${research.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1123,7 +1123,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research/nonexistent-id',
+        url: '/nonexistent-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1140,7 +1140,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: `/research/${research.id}`,
+        url: `/${research.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1156,7 +1156,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research/test-id',
+        url: '/test-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1175,7 +1175,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1193,7 +1193,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
       });
 
       expect(response.statusCode).toBe(401);
@@ -1207,7 +1207,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/nonexistent-id/approve',
+        url: '/nonexistent-id/approve',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1224,7 +1224,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1241,7 +1241,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1257,7 +1257,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/test-id/approve',
+        url: '/test-id/approve',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1275,7 +1275,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1296,7 +1296,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1322,7 +1322,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1344,7 +1344,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1367,7 +1367,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/approve`,
+        url: `/${research.id}/approve`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1385,7 +1385,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/research/${research.id}`,
+        url: `/${research.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1400,7 +1400,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/research/nonexistent-id',
+        url: '/nonexistent-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1417,7 +1417,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/research/${research.id}`,
+        url: `/${research.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1435,7 +1435,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/research/${research.id}`,
+        url: `/${research.id}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1470,7 +1470,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus46] },
       });
@@ -1487,7 +1487,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/nonexistent/enhance',
+        url: '/nonexistent/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus46] },
       });
@@ -1505,7 +1505,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus46] },
       });
@@ -1523,7 +1523,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus46] },
       });
@@ -1541,7 +1541,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -1559,7 +1559,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { synthesisModel: LlmModels.ClaudeOpus46 },
       });
@@ -1577,7 +1577,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalContexts: [{ content: 'Additional context' }] },
       });
@@ -1597,7 +1597,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { removeContextIds: ['ctx-1'] },
       });
@@ -1615,7 +1615,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus46] },
       });
@@ -1634,7 +1634,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus46] },
       });
@@ -1657,7 +1657,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { synthesisModel: LlmModels.ClaudeOpus46 },
       });
@@ -1682,7 +1682,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalContexts: [{ content: 'New context' }] },
       });
@@ -1705,7 +1705,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${source.id}/enhance`,
+        url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus46] },
       });
@@ -1722,7 +1722,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/some-research-id/enhance',
+        url: '/some-research-id/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalContexts: [{ content: 'New context' }] },
       });
@@ -1756,7 +1756,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/research/${research.id}/share`,
+        url: `/${research.id}/share`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1770,7 +1770,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/research/nonexistent-id/share',
+        url: '/nonexistent-id/share',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1787,7 +1787,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/research/${research.id}/share`,
+        url: `/${research.id}/share`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1804,7 +1804,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/research/${research.id}/share`,
+        url: `/${research.id}/share`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1850,7 +1850,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -1882,7 +1882,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -1903,7 +1903,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'retry' },
       });
@@ -1934,7 +1934,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'retry' },
       });
@@ -1959,7 +1959,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -1981,7 +1981,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'cancel' },
       });
@@ -2006,7 +2006,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/nonexistent-id/confirm',
+        url: '/nonexistent-id/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2024,7 +2024,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2042,7 +2042,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2077,7 +2077,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2100,7 +2100,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2119,7 +2119,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2138,7 +2138,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2157,7 +2157,7 @@ describe('Research Routes - Authenticated', () => {
 
       await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -2212,7 +2212,7 @@ describe('Research Routes - Authenticated', () => {
 
         const response = await newApp.inject({
           method: 'POST',
-          url: `/research/${research.id}/confirm`,
+          url: `/${research.id}/confirm`,
           headers: { authorization: `Bearer ${token}` },
           payload: { action: 'proceed' },
         });
@@ -2248,7 +2248,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/confirm`,
+        url: `/${research.id}/confirm`,
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'retry' },
       });
@@ -2298,7 +2298,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2338,7 +2338,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2377,7 +2377,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2419,7 +2419,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2441,7 +2441,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2459,7 +2459,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/nonexistent-id/retry',
+        url: '/nonexistent-id/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2476,7 +2476,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2494,7 +2494,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2512,7 +2512,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/retry`,
+        url: `/${research.id}/retry`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -2574,7 +2574,7 @@ describe('Research Routes - Authenticated', () => {
 
         const response = await newApp.inject({
           method: 'POST',
-          url: `/research/${research.id}/retry`,
+          url: `/${research.id}/retry`,
           headers: { authorization: `Bearer ${token}` },
         });
 
@@ -2598,7 +2598,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt for validation',
@@ -2621,7 +2621,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -2685,7 +2685,7 @@ describe('Research Routes - Authenticated', () => {
       try {
         const response = await newApp.inject({
           method: 'POST',
-          url: '/research/validate-input',
+          url: '/validate-input',
           headers: { authorization: `Bearer ${token}` },
           payload: {
             prompt: 'Weak prompt',
@@ -2774,7 +2774,7 @@ describe('Research Routes - Authenticated', () => {
       try {
         const response = await newApp.inject({
           method: 'POST',
-          url: '/research/validate-input',
+          url: '/validate-input',
           headers: { authorization: `Bearer ${token}` },
           payload: {
             prompt: 'Weak prompt',
@@ -2864,7 +2864,7 @@ describe('Research Routes - Authenticated', () => {
       try {
         const response = await newApp.inject({
           method: 'POST',
-          url: '/research/validate-input',
+          url: '/validate-input',
           headers: { authorization: `Bearer ${token}` },
           payload: {
             prompt: 'Weak prompt',
@@ -2953,7 +2953,7 @@ describe('Research Routes - Authenticated', () => {
       try {
         const response = await newApp.inject({
           method: 'POST',
-          url: '/research/validate-input',
+          url: '/validate-input',
           headers: { authorization: `Bearer ${token}` },
           payload: {
             prompt: 'Test prompt',
@@ -2999,7 +2999,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -3015,7 +3015,7 @@ describe('Research Routes - Authenticated', () => {
     it('requires authentication', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         payload: {
           prompt: 'Test prompt',
         },
@@ -3032,7 +3032,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           // Missing required prompt field
@@ -3053,7 +3053,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/improve-input',
+        url: '/improve-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -3117,7 +3117,7 @@ describe('Research Routes - Authenticated', () => {
       try {
         const response = await newApp.inject({
           method: 'POST',
-          url: '/research/improve-input',
+          url: '/improve-input',
           headers: { authorization: `Bearer ${token}` },
           payload: {
             prompt: 'Original prompt',
@@ -3162,7 +3162,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/improve-input',
+        url: '/improve-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -3178,7 +3178,7 @@ describe('Research Routes - Authenticated', () => {
     it('requires authentication', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/research/improve-input',
+        url: '/improve-input',
         payload: {
           prompt: 'Test prompt',
         },
@@ -3195,7 +3195,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/improve-input',
+        url: '/improve-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           // Missing required prompt field
@@ -3214,7 +3214,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/improve-input',
+        url: '/improve-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -3235,7 +3235,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -3257,7 +3257,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/test-research-123/favourite',
+        url: '/test-research-123/favourite',
         headers: { authorization: `Bearer ${token}` },
         payload: { favourite: true },
       });
@@ -3278,7 +3278,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/test-research-123/favourite',
+        url: '/test-research-123/favourite',
         headers: { authorization: `Bearer ${token}` },
         payload: { favourite: false },
       });
@@ -3297,7 +3297,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/non-existent/favourite',
+        url: '/non-existent/favourite',
         headers: { authorization: `Bearer ${token}` },
         payload: { favourite: true },
       });
@@ -3315,7 +3315,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/test-research-123/favourite',
+        url: '/test-research-123/favourite',
         headers: { authorization: `Bearer ${token}` },
         payload: { favourite: true },
       });
@@ -3334,7 +3334,7 @@ describe('Research Routes - Authenticated', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/test-research-123/favourite',
+        url: '/test-research-123/favourite',
         headers: { authorization: `Bearer ${token}` },
         payload: { favourite: true },
       });
@@ -5627,7 +5627,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -5646,7 +5646,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -5668,7 +5668,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -5690,7 +5690,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'This is a test prompt for draft',
@@ -5743,7 +5743,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'This is a very long test prompt that will be used as a fallback title when generation fails',
@@ -5777,7 +5777,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'New prompt that will be used as title since api keys failed',
@@ -5833,7 +5833,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/draft-123',
+        url: '/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'New long prompt that should become the title when generation fails',
@@ -5882,7 +5882,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/confirm',
+        url: '/research-123/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'proceed' },
       });
@@ -5923,7 +5923,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/confirm',
+        url: '/research-123/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: { action: 'retry' },
       });
@@ -5955,7 +5955,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/retry',
+        url: '/research-123/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -5985,7 +5985,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/retry',
+        url: '/research-123/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6014,7 +6014,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/retry',
+        url: '/research-123/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6042,7 +6042,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/retry',
+        url: '/research-123/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6073,7 +6073,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/enhance',
+        url: '/research-123/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           additionalModels: [LlmModels.O4MiniDeepResearch],
@@ -6102,7 +6102,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/research/research-123/share',
+        url: '/research-123/share',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6132,7 +6132,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/research/research-123/share',
+        url: '/research-123/share',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6179,7 +6179,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: { prompt: 'Test prompt' },
       });
@@ -6237,7 +6237,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: { prompt: 'hi', includeImprovement: true },
       });
@@ -6266,7 +6266,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research?limit=5',
+        url: '/?limit=5',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6289,7 +6289,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/research?cursor=some-cursor',
+        url: '/?cursor=some-cursor',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6335,7 +6335,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/improve-input',
+        url: '/improve-input',
         headers: { authorization: `Bearer ${token}` },
         payload: { prompt: 'Test prompt' },
       });
@@ -6363,7 +6363,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft-123/approve',
+        url: '/draft-123/approve',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6387,7 +6387,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft-123/approve',
+        url: '/draft-123/approve',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6423,7 +6423,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft-123/approve',
+        url: '/draft-123/approve',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6440,7 +6440,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/nonexistent-123/enhance',
+        url: '/nonexistent-123/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           additionalModels: [LlmModels.O4MiniDeepResearch],
@@ -6461,7 +6461,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt for JWT name claim',
@@ -6482,7 +6482,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt for JWT email claim',
@@ -6506,7 +6506,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt for JWT both claims',
@@ -6527,7 +6527,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt without JWT claims',
@@ -6551,7 +6551,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research',
+        url: '/',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt for synthesisModel fallback',
@@ -6588,7 +6588,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/research-123/retry',
+        url: '/research-123/retry',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6640,7 +6640,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6667,7 +6667,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/non-existent-id/export-notion',
+        url: '/non-existent-id/export-notion',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6684,7 +6684,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6702,7 +6702,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6720,7 +6720,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6737,7 +6737,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6767,7 +6767,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6791,7 +6791,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6807,7 +6807,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
       });
 
       expect(response.statusCode).toBe(401);
@@ -6822,7 +6822,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/some-id/export-notion',
+        url: '/some-id/export-notion',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6840,7 +6840,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6858,7 +6858,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6891,7 +6891,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/export-notion`,
+        url: `/${research.id}/export-notion`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -6918,7 +6918,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Draft with name claim',
@@ -6941,7 +6941,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Draft with email claim',
@@ -6967,7 +6967,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/draft',
+        url: '/draft',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Draft with both claims',
@@ -6992,7 +6992,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/research/some-id',
+        url: '/some-id',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
@@ -7013,7 +7013,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/validate-input',
+        url: '/validate-input',
         headers: { authorization: `Bearer ${token}` },
         payload: { prompt: 'Test prompt' },
       });
@@ -7032,7 +7032,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/test-research-123/enhance',
+        url: '/test-research-123/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
       });
@@ -7048,7 +7048,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/research/nonexistent-id/enhance',
+        url: '/nonexistent-id/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
       });
@@ -7066,7 +7066,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/enhance`,
+        url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -7084,7 +7084,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/enhance`,
+        url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
       });
@@ -7102,7 +7102,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/enhance`,
+        url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
       });
@@ -7122,7 +7122,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/enhance`,
+        url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
       });
@@ -7141,7 +7141,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/research/${research.id}/enhance`,
+        url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
       });

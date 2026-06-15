@@ -174,10 +174,10 @@ Webhooks allow your service to receive incoming messages and status updates.
 
 ### Callback URL Concept
 
-You need a publicly accessible HTTPS endpoint that Meta will call. This will be implemented in a future IntexuraOS service. For now, document your planned URL:
+You need a publicly accessible HTTPS endpoint that Meta will call. The canonical IntexuraOS callback URL is:
 
 ```
-https://your-service.run.app/webhooks/whatsapp
+https://intexuraos.cloud/api/whatsapp/webhooks
 ```
 
 ### Configure Webhook in Meta Dashboard
@@ -194,7 +194,7 @@ https://your-service.run.app/webhooks/whatsapp
 When you save, Meta sends a GET request to your callback URL:
 
 ```
-GET /webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=CHALLENGE
+GET /webhooks?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=CHALLENGE
 ```
 
 Your service must:
@@ -522,8 +522,8 @@ The `whatsapp-service` app provides webhook endpoints for receiving WhatsApp eve
 
 | Method | Path                 | Purpose                           | Auth         |
 | ------ | -------------------- | --------------------------------- | ------------ |
-| GET    | `/webhooks/whatsapp` | Webhook verification (Meta setup) | Verify token |
-| POST   | `/webhooks/whatsapp` | Receive webhook events            | Signature    |
+| GET    | `/webhooks` | Webhook verification (Meta setup) | Verify token |
+| POST   | `/webhooks` | Receive webhook events            | Signature    |
 | GET    | `/health`            | Health check                      | None         |
 
 ### Webhook Verification Flow
@@ -531,7 +531,7 @@ The `whatsapp-service` app provides webhook endpoints for receiving WhatsApp eve
 When you configure the webhook URL in Meta's dashboard, Meta sends a GET request:
 
 ```
-GET /webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=CHALLENGE
+GET /webhooks?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=CHALLENGE
 ```
 
 The service:
@@ -545,7 +545,7 @@ The service:
 For incoming messages and status updates, Meta sends POST requests:
 
 ```
-POST /webhooks/whatsapp
+POST /webhooks
 X-Hub-Signature-256: sha256=<hex-digest>
 Content-Type: application/json
 ```

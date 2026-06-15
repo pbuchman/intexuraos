@@ -1,5 +1,5 @@
 import type { Logger } from '@intexuraos/common-core';
-import { isErr } from '@intexuraos/common-core';
+import { getErrorMessage, isErr } from '@intexuraos/common-core';
 import type { UsageEventInput, UsageEvent, UsageIngestResponse, RejectedEvent } from '../models/usageEvent.js';
 import type { UsageEventRepository } from '../repositories/usageEventRepository.js';
 import type { UsageAggregateRepository } from '../repositories/usageAggregateRepository.js';
@@ -23,6 +23,7 @@ export async function ingestUsageEvents(
   let accepted = 0;
   let duplicates = 0;
   const rejected: RejectedEvent[] = [];
+  const pricingMissingEvents: { provider: string; model: string }[] = [];
 
   const receivedAt = new Date().toISOString();
 
@@ -32,7 +33,33 @@ export async function ingestUsageEvents(
       continue;
     }
 
-    const fullEvent = enrichEvent(input, receivedAt, ingress, await resolveCost(input, pricingCache, logger));
+    let resolvedCost: ResolvedCost;
+    try {
+      resolvedCost = await resolveCost(input, pricingCache, logger);
+    } catch (e) {
+      const message = getErrorMessage(e);
+      logger.error(
+        {
+          eventId: input.eventId,
+          provider: input.request.provider,
+          model: input.request.model,
+          err: message,
+        },
+        'resolveCost threw; rejecting event with PRICING_MISSING',
+      );
+      rejected.push({
+        index: i,
+        code: 'PRICING_MISSING',
+        message,
+      });
+      pricingMissingEvents.push({
+        provider: input.request.provider,
+        model: input.request.model,
+      });
+      continue;
+    }
+
+    const fullEvent = enrichEvent(input, receivedAt, ingress, resolvedCost);
 
     const createResult = await usageEventRepository.createEvent(fullEvent);
     if (!createResult.ok) {
@@ -70,6 +97,18 @@ export async function ingestUsageEvents(
     'Usage event ingestion complete',
   );
 
+  // In non-production, fail-fast at end-of-loop so good events in the batch are
+  // still processed before the throw. This preserves the dev signal while not
+  // dropping work mid-batch.
+  if (process.env['NODE_ENV'] !== 'production' && pricingMissingEvents.length > 0) {
+    const summary = pricingMissingEvents
+      .map((e) => `${e.provider}/${e.model}`)
+      .join(', ');
+    throw new Error(
+      `Pricing missing for unknown model(s): ${summary}. Add an entry to llm-pricing or mark as unsupported.`,
+    );
+  }
+
   return { accepted, duplicates, rejected };
 }
 
@@ -77,7 +116,7 @@ interface ResolvedCost {
   billedUsd: number;
   providerReportedUsd: number | null;
   calculatedUsd: number | null;
-  pricingSource: 'provider_reported' | 'calculated';
+  pricingSource: 'provider_reported' | 'calculated' | 'missing';
 }
 
 async function resolveCost(
@@ -108,14 +147,19 @@ async function resolveCost(
   }
 
   logger.warn(
-    { provider: input.request.provider, model: input.request.model },
-    'No pricing found for model; defaulting cost to 0',
+    { provider: input.request.provider, model: input.request.model, _skipSentry: true },
+    'No pricing found for model — emitting pricingSource:missing',
   );
+  if (process.env['NODE_ENV'] !== 'production') {
+    throw new Error(
+      `Pricing missing for unknown model ${input.request.provider}/${input.request.model}. Add an entry to llm-pricing or mark as unsupported.`,
+    );
+  }
   return {
     billedUsd: 0,
     providerReportedUsd: null,
     calculatedUsd: 0,
-    pricingSource: 'calculated',
+    pricingSource: 'missing',
   };
 }
 

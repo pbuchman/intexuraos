@@ -25,7 +25,7 @@ describe('WhatsApp Verification Routes', () => {
     it('returns 401 when no authorization header', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         payload: {
           phoneNumber: '+12125551234',
         },
@@ -45,7 +45,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -64,7 +64,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: 'not-a-phone',
@@ -97,7 +97,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125551234',
@@ -130,7 +130,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125559999',
@@ -164,7 +164,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125558888',
@@ -199,7 +199,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125557777',
@@ -221,7 +221,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125551111',
@@ -250,7 +250,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125552222',
@@ -272,7 +272,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125553333',
@@ -295,7 +295,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125554001',
@@ -311,7 +311,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125554003',
@@ -327,7 +327,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/send',
+        url: '/verify/send',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumber: '+12125554004',
@@ -342,7 +342,7 @@ describe('WhatsApp Verification Routes', () => {
     it('returns 401 when no authorization header', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         payload: {
           verificationId: 'some-id',
           code: '123456',
@@ -363,7 +363,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           code: '123456',
@@ -384,7 +384,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'some-id',
@@ -406,7 +406,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'nonexistent-id',
@@ -439,7 +439,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'other-user-verification',
@@ -473,7 +473,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'already-verified',
@@ -506,7 +506,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'max-attempts-verification',
@@ -539,7 +539,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'expired-status-verification',
@@ -572,7 +572,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'expired-time-verification',
@@ -605,7 +605,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'reaching-max-verification',
@@ -638,7 +638,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'wrong-code-verification',
@@ -673,7 +673,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'lockout-verification',
@@ -706,7 +706,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'success-verification',
@@ -731,7 +731,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'any-id',
@@ -766,7 +766,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'increment-fail-verification',
@@ -795,7 +795,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/whatsapp/verify/confirm',
+        url: '/verify/confirm',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           verificationId: 'update-fail-verification',
@@ -811,7 +811,7 @@ describe('WhatsApp Verification Routes', () => {
     it('returns 401 when no authorization header', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/12125551234',
+        url: '/verify/status/12125551234',
       });
 
       expect(response.statusCode).toBe(401);
@@ -828,7 +828,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/%20',
+        url: '/verify/status/%20',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -858,7 +858,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/12125551234',
+        url: '/verify/status/12125551234',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -889,7 +889,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/12125555555',
+        url: '/verify/status/12125555555',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -914,7 +914,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/12125556666',
+        url: '/verify/status/12125556666',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -935,7 +935,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/12125557777',
+        url: '/verify/status/12125557777',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -965,7 +965,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/+12125558888',
+        url: '/verify/status/+12125558888',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -984,7 +984,7 @@ describe('WhatsApp Verification Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/whatsapp/verify/status/12125559999',
+        url: '/verify/status/12125559999',
         headers: { authorization: `Bearer ${token}` },
       });
 

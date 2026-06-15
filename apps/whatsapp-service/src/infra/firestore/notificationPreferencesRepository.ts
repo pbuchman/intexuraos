@@ -1,13 +1,13 @@
 /**
  * Firestore repository for per-user WhatsApp notification preferences.
  *
- * Shares the `whatsapp_user_mappings/{userId}` doc with userMappingRepository
- * but is the sole owner of the `notificationLevel` field. Callers of
- * userMappingRepository must NEVER surface `notificationLevel` to the public
- * WhatsAppUserMappingPublic projection — this repository is the only path.
+ * Owns the `whatsapp_notification_preferences/{userId}` collection exclusively.
+ * This repository MUST NEVER read or write `whatsapp_user_mappings`.
+ * The structural separation (separate collection) is the enforcement mechanism —
+ * notificationLevel is now physically isolated from the user-mapping document.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { getFirestore, withSchemaVersion } from '@intexuraos/infra-firestore';
 import type { WhatsAppError } from '../../domain/whatsapp/index.js';
 import {
   DEFAULT_NOTIFICATION_LEVEL,
@@ -16,15 +16,14 @@ import {
   type NotificationPreferences,
 } from '../../domain/whatsapp/index.js';
 
-const COLLECTION_NAME = 'whatsapp_user_mappings';
+const COLLECTION_NAME = 'whatsapp_notification_preferences';
 
-interface WhatsAppUserMappingRawDoc {
+interface WhatsAppNotificationPreferencesDoc {
   userId?: string;
-  phoneNumbers?: string[];
-  connected?: boolean;
+  notificationLevel?: unknown;
+  schemaVersion?: number;
   createdAt?: string;
   updatedAt?: string;
-  notificationLevel?: unknown;
 }
 
 export async function getPreferences(
@@ -37,7 +36,7 @@ export async function getPreferences(
       return ok({ notificationLevel: DEFAULT_NOTIFICATION_LEVEL });
     }
 
-    const data = doc.data() as WhatsAppUserMappingRawDoc | undefined;
+    const data = doc.data() as WhatsAppNotificationPreferencesDoc | undefined;
     const raw = data?.notificationLevel;
     const level: NotificationLevel = isNotificationLevel(raw) ? raw : DEFAULT_NOTIFICATION_LEVEL;
     return ok({ notificationLevel: level });
@@ -57,20 +56,24 @@ export async function savePreferences(
     const db = getFirestore();
     const docRef = db.collection(COLLECTION_NAME).doc(userId);
     const now = new Date().toISOString();
-    const existing = await docRef.get();
 
-    if (existing.exists) {
-      await docRef.update({ notificationLevel: level, updatedAt: now });
-    } else {
-      await docRef.set({
+    const existing = await docRef.get();
+    const existingData = existing.exists
+      ? (existing.data() as WhatsAppNotificationPreferencesDoc | undefined)
+      : undefined;
+    const createdAt = existingData?.createdAt ?? now;
+
+    const body = withSchemaVersion(
+      {
         userId,
-        phoneNumbers: [],
-        connected: false,
-        createdAt: now,
-        updatedAt: now,
         notificationLevel: level,
-      });
-    }
+        createdAt,
+        updatedAt: now,
+      },
+      1
+    );
+
+    await docRef.set(body, { merge: true });
 
     return ok({ notificationLevel: level });
   } catch (error) {

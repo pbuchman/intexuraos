@@ -1,22 +1,10 @@
-/**
- * Review type constants — single source of truth.
- *
- * ALL_REVIEW_TYPES: the complete set used by validation and event storage.
- * LLM_TOOL_REVIEW_TYPES: the subset exposed to the LLM tool enum.
- *
- * plan_review is excluded from the LLM tool enum because plan-only PRs
- * are handled separately from LLM triage.
- */
+import {
+  CODE_TASK_REVIEW_TYPES,
+  LLM_TRIAGE_REVIEW_TYPES,
+  type CodeTaskReviewType,
+} from '@intexuraos/code-task-domain';
 
-export const ALL_REVIEW_TYPES = [
-  'code_quality',
-  'security',
-  'architecture',
-  'plan_review',
-  'test_quality',
-] as const;
-export type ReviewType = (typeof ALL_REVIEW_TYPES)[number];
+export const ALL_REVIEW_TYPES = CODE_TASK_REVIEW_TYPES;
+export type ReviewType = CodeTaskReviewType;
 
-export const LLM_TOOL_REVIEW_TYPES = ALL_REVIEW_TYPES.filter(
-  (t): t is Exclude<ReviewType, 'plan_review'> => t !== 'plan_review',
-);
+export const LLM_TOOL_REVIEW_TYPES = LLM_TRIAGE_REVIEW_TYPES;

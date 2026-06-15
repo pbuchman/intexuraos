@@ -11,7 +11,7 @@ import type { Logger } from 'pino';
 import { err } from '@intexuraos/common-core';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
-import type { PRTriageEvent } from '@intexuraos/infra-pubsub';
+import type { PRTriageEvent } from '@intexuraos/pr-triage-pubsub-client';
 import type { UnifiedEvaluator } from '../../../domain/services/unifiedEvaluator.js';
 import type { GitHubPREventRepository } from '../../../domain/repositories/gitHubPREventRepository.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
@@ -95,7 +95,6 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
       metricsClient: {} as never,
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
-      cleanupTaskLogs: {} as never,
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       workerSettingsRepo: {} as never,

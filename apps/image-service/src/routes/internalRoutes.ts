@@ -47,7 +47,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for generate prompt');
       }
 
-      const { text, model, userId } = request.body;
+      const { text, model, userId, promptType, correlation } = request.body;
       request.log.info(
         { model, userId, textLength: text.length },
         'Processing prompt generation request'
@@ -60,7 +60,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         { userServiceClient, createPromptGenerator, logger: request.log },
         modelConfig
       );
-      const result = await useCase({ text, model, userId });
+      const result = await useCase({
+        text,
+        model,
+        userId,
+        ...(promptType !== undefined && { promptType }),
+        ...(correlation !== undefined && { correlation }),
+      });
 
       if (!result.ok) {
         if (result.error.code === 'API_KEYS_UNAVAILABLE') {
@@ -106,7 +112,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for generate image');
       }
 
-      const { prompt, model, userId, title } = request.body;
+      const { prompt, model, userId, title, promptType, correlation } = request.body;
       request.log.info(
         { model, userId, promptLength: prompt.length },
         'Processing image generation request'
@@ -126,7 +132,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
         modelConfig
       );
-      const result = await useCase({ prompt, model: model as ImageGenerationModel, userId, title });
+      const result = await useCase({
+        prompt,
+        model: model as ImageGenerationModel,
+        userId,
+        ...(title !== undefined && { title }),
+        ...(promptType !== undefined && { promptType }),
+        ...(correlation !== undefined && { correlation }),
+      });
 
       if (!result.ok) {
         if (result.error.code === 'API_KEYS_UNAVAILABLE') {

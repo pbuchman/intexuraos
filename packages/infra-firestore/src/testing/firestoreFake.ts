@@ -15,13 +15,18 @@
  *   });
  */
 
-import { FieldValue } from '@google-cloud/firestore';
+import { FieldPath, FieldValue } from '@google-cloud/firestore';
 import type { CollectionReference, DocumentData, WriteResult } from '@google-cloud/firestore';
+import { IntexuraOSError } from '@intexuraos/common-core';
 
 /**
  * In-memory document storage.
  */
 type DocumentStore = Map<string, Map<string, DocumentData>>;
+
+function isDocumentIdField(field: unknown): field is FieldPath {
+  return field instanceof FieldPath && field.isEqual(FieldPath.documentId());
+}
 
 /**
  * Check if a value is a FieldValue.delete() sentinel.
@@ -304,7 +309,7 @@ class FakeQuerySnapshotWithCount extends FakeQuerySnapshot {
  */
 class FakeQuery {
   private filters: { field: string; op: string; value: unknown }[] = [];
-  private ordering: { field: string; direction: 'asc' | 'desc' }[] = [];
+  private ordering: { field: string | FieldPath; direction: 'asc' | 'desc' }[] = [];
   private limitCount: number | null = null;
   private startAfterValue: unknown = null;
   private countRequested = false;
@@ -321,7 +326,7 @@ class FakeQuery {
     return query;
   }
 
-  orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): FakeQuery {
+  orderBy(field: string | FieldPath, direction: 'asc' | 'desc' = 'asc'): FakeQuery {
     const query = this.clone();
     query.ordering.push({ field, direction });
     return query;
@@ -407,10 +412,8 @@ class FakeQuery {
     if (this.ordering.length > 0) {
       docs.sort((a, b) => {
         for (const order of this.ordering) {
-          const aData = a.data();
-          const bData = b.data();
-          const aVal: unknown = aData?.[order.field];
-          const bVal: unknown = bData?.[order.field];
+          const aVal = this.getOrderedValue(a, order.field);
+          const bVal = this.getOrderedValue(b, order.field);
           if (aVal === bVal) continue;
           // Compare values as numbers or strings (for dates)
           let cmp: number;
@@ -454,9 +457,14 @@ class FakeQuery {
     if (this.startAfterValue !== null && this.ordering.length > 0) {
       const orderField = this.ordering[0]?.field;
       if (orderField !== undefined) {
+        const startValue = this.resolveStartAfterValue(orderField);
+        if (startValue === undefined) {
+          return this.countRequested
+            ? Promise.resolve(new FakeQuerySnapshotWithCount(docs))
+            : Promise.resolve(new FakeQuerySnapshot(docs));
+        }
         const startIndex = docs.findIndex((doc) => {
-          const data = doc.data();
-          return data?.[orderField] === this.startAfterValue;
+          return this.getOrderedValue(doc, orderField) === startValue;
         });
         if (startIndex >= 0) {
           docs = docs.slice(startIndex + 1);
@@ -484,6 +492,37 @@ class FakeQuery {
     query.startAfterValue = this.startAfterValue;
     query.countRequested = this.countRequested;
     return query;
+  }
+
+  private getOrderedValue(doc: FakeDocumentSnapshot, field: string | FieldPath): unknown {
+    if (isDocumentIdField(field)) {
+      return doc.id;
+    }
+
+    const data = doc.data();
+    return data?.[field];
+  }
+
+  private resolveStartAfterValue(field: string | FieldPath): unknown {
+    const startAfterValue = this.startAfterValue;
+    if (
+      startAfterValue !== null &&
+      typeof startAfterValue === 'object' &&
+      'data' in startAfterValue &&
+      typeof startAfterValue.data === 'function'
+    ) {
+      const snapshotLike = startAfterValue as {
+        id?: unknown;
+        data: () => Record<string, unknown> | undefined;
+      };
+      if (isDocumentIdField(field)) {
+        return snapshotLike.id;
+      }
+
+      return snapshotLike.data()?.[field];
+    }
+
+    return this.startAfterValue;
   }
 }
 
@@ -561,7 +600,10 @@ class FakeDocumentReference {
     const collection = this.store.get(this.collectionName);
     const existing = collection?.get(this.docId);
     if (existing === undefined) {
-      throw new Error(`Document ${this.collectionName}/${this.docId} does not exist`);
+      throw new IntexuraOSError(
+        'NOT_FOUND',
+        `Document ${this.collectionName}/${this.docId} does not exist`
+      );
     }
     const updated = { ...existing } as Record<string, unknown>;
     for (const key of Object.keys(data)) {
@@ -725,7 +767,10 @@ class FakeTransaction {
     const existing = this.pendingWrites.get(key)?.data ?? collection?.get(docRef.id);
 
     if (existing === undefined) {
-      throw new Error(`Document ${docRef._collectionName}/${docRef.id} does not exist`);
+      throw new IntexuraOSError(
+        'NOT_FOUND',
+        `Document ${docRef._collectionName}/${docRef.id} does not exist`
+      );
     }
 
     const updated = { ...existing } as Record<string, unknown>;

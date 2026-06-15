@@ -19,7 +19,7 @@ import { FirestoreGroupStateRepository } from './infra/firestore/firestoreGroupS
 import { FirestoreDigestLockRepository } from './infra/firestore/firestoreDigestLockRepository.js';
 import { FirestoreBackfillRunRepository } from './infra/firestore/firestoreBackfillRunRepository.js';
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import { createWhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { createWhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { DigestNotifier } from './domain/services/digestNotifier.js';
 import { NoopDigestNotifier } from './domain/services/digestNotifier.js';
 import { WhatsAppDigestNotifier } from './infra/notification/index.js';

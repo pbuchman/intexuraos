@@ -67,7 +67,7 @@ describe('GET /actions', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/actions',
+      url: '/',
     });
 
     expect(response.statusCode).toBe(200);
@@ -95,7 +95,7 @@ describe('GET /actions', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/actions?status=pending,completed',
+      url: '/?status=pending,completed',
     });
 
     expect(response.statusCode).toBe(200);
@@ -153,7 +153,7 @@ describe('GET /actions/:actionId/preview', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/actions/action-cal/preview',
+      url: '/action-cal/preview',
     });
 
     expect(response.statusCode).toBe(502);
@@ -207,7 +207,7 @@ describe('GET /actions/:actionId/preview', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/actions/action-cal/preview',
+      url: '/action-cal/preview',
     });
 
     expect(response.statusCode).toBe(200);
@@ -247,7 +247,7 @@ describe('GET /actions/:actionId/preview', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/actions/action-other/preview',
+      url: '/action-other/preview',
     });
 
     expect(response.statusCode).toBe(404);
@@ -286,7 +286,7 @@ describe('GET /actions/:actionId/preview', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/actions/action-note/preview',
+      url: '/action-note/preview',
     });
 
     expect(response.statusCode).toBe(400);
