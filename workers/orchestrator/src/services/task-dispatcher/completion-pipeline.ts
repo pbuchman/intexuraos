@@ -30,6 +30,7 @@ import type { DispatcherContext } from './dispatcher-context.js';
 import { verifyCompletion } from '../completion-verifier.js';
 import type { WorkerRuntime } from '../runtime/index.js';
 import type { ResumeSummaryExtractor } from '../completion-verifier.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { withTimeout } from '../../with-timeout.js';
 import { WORKER_DESTROY_TIMEOUT_MS } from './retry-logic.js';
 
@@ -470,7 +471,12 @@ export class CompletionPipeline {
     // codes 137/139) are terminal — finalize as TASK_RUNTIME_HARD_ERROR.
     if (verification.kind === 'hard-error') {
       ctx.logger.warn(
-        { taskId: task.taskId, code: verification.code, message: verification.message },
+        {
+          taskId: task.taskId,
+          code: verification.code,
+          message: verification.message,
+          [SKIP_SENTRY_KEY]: true,
+        },
         'Verifier hard error'
       );
       ctx.appendOrchestratorTaskLog(

@@ -5,4 +5,5 @@ coverage
 .tsbuildinfo
 .pnpm-store
 docs/
-
+# Migration files are immutable after their manifest checksum is recorded.
+migrations/*.mjs

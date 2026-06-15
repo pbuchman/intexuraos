@@ -45,9 +45,15 @@ describe('aggregateDigest', () => {
       { type: 'content', value: '{"dailySummary": "this is not an object"}' },
       { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
     ]);
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
 
     const result = await aggregateDigest(
-      { llmClient, logger: noopLogger },
+      { llmClient, logger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
         outputLanguage: 'Polish',
@@ -59,6 +65,10 @@ describe('aggregateDigest', () => {
     expect(llmClient.calls).toHaveLength(2);
     expect(llmClient.calls[0]?.options?.promptType).toBe(PROMPT_TYPE_AGGREGATE);
     expect(llmClient.calls[1]?.options?.promptType).toBe(PROMPT_TYPE_REPAIR);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 1, _skipSentry: true }),
+      'aggregateDigest: invalid response, will repair',
+    );
   });
 
   it('passes the target output language into initial and repair prompts', async () => {

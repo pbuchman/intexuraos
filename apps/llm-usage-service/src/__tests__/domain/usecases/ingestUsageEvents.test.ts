@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { Logger } from '@intexuraos/common-core';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import { LlmModels } from '@intexuraos/llm-contract';
@@ -23,7 +24,19 @@ describe('ingestUsageEvents', () => {
   let eventRepo: FakeUsageEventRepository;
   let aggregateRepo: FakeUsageAggregateRepository;
   let pricingCache: FakePricingCache;
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() } as never;
+  type LoggerMock = Logger & {
+    info: ReturnType<typeof vi.fn<Logger['info']>>;
+    warn: ReturnType<typeof vi.fn<Logger['warn']>>;
+    error: ReturnType<typeof vi.fn<Logger['error']>>;
+    debug: ReturnType<typeof vi.fn<Logger['debug']>>;
+  };
+
+  const logger: LoggerMock = {
+    info: vi.fn<Logger['info']>(),
+    warn: vi.fn<Logger['warn']>(),
+    error: vi.fn<Logger['error']>(),
+    debug: vi.fn<Logger['debug']>(),
+  };
 
   const anthropicPricing: ModelPricing = {
     inputPricePerMillion: 3.0,
@@ -31,12 +44,13 @@ describe('ingestUsageEvents', () => {
   };
 
   beforeEach(() => {
+    vi.clearAllMocks();
     eventRepo = new FakeUsageEventRepository();
     aggregateRepo = new FakeUsageAggregateRepository();
     pricingCache = new FakePricingCache();
   });
 
-  function makeDeps(): { logger: typeof logger; usageEventRepository: FakeUsageEventRepository; usageAggregateRepository: FakeUsageAggregateRepository; pricingCache: FakePricingCache } {
+  function makeDeps(): { logger: Logger; usageEventRepository: FakeUsageEventRepository; usageAggregateRepository: FakeUsageAggregateRepository; pricingCache: FakePricingCache } {
     return { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo, pricingCache };
   }
 
@@ -168,6 +182,14 @@ describe('ingestUsageEvents', () => {
         expect(event?.cost.calculatedUsd).toBe(0);
         expect(event?.cost.pricingSource).toBe('missing');
         expect(event?.cost.providerReportedUsd).toBeNull();
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: LlmProviders.Anthropic,
+            model: 'claude-unknown-v99',
+            _skipSentry: true,
+          }),
+          'No pricing found for model — emitting pricingSource:missing',
+        );
       } finally {
         if (originalNodeEnv === undefined) {
           delete process.env['NODE_ENV'];

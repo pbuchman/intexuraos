@@ -274,6 +274,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
                   primaryModel: defaultModel,
                   fallbackModel: fallbackModelRaw,
                   error: primaryResult.error,
+                  _skipSentry: true,
                 },
                 'Primary model failed, attempting fallback'
               );

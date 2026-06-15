@@ -6,6 +6,7 @@ import type { IsolationProvider } from './services/isolation/types.js';
 import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
 import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CreateTaskRequest, ProviderApiKeyHealth } from './types/api.js';
 import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
 
@@ -65,7 +66,10 @@ export function registerRoutes(
   // Emit one concise line per completed HTTP request.
   app.addHook('onResponse', async (request, reply) => {
     const level = reply.statusCode >= 500 ? 'error' : reply.statusCode >= 400 ? 'warn' : 'info';
-    logger[level]({}, `${request.method} ${String(reply.statusCode)} ${request.url}`);
+    logger[level](
+      reply.statusCode >= 400 && reply.statusCode < 500 ? { [SKIP_SENTRY_KEY]: true } : {},
+      `${request.method} ${String(reply.statusCode)} ${request.url}`
+    );
   });
 
   const verifyDispatchSignature = async (
