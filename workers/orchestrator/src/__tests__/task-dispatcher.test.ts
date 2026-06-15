@@ -9673,6 +9673,7 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['msg-completed-task'];
       if (!task) throw new Error('Task not found');
       task.status = 'completed';
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await statePersistence.save(state);
 
       const result = await dispatcher.sendMessage('msg-completed-task', 'Follow-up');
@@ -9705,6 +9706,7 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['msg-failed-task'];
       if (!task) throw new Error('Task not found');
       task.status = 'failed';
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000001';
       await statePersistence.save(state);
 
       const result = await dispatcher.sendMessage('msg-failed-task', 'Retry please');
@@ -10894,7 +10896,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
-    it('proceeds with inactivity restart when destroyWorker hangs indefinitely', async () => {
+    it('finalizes failure instead of restarting when destroyWorker hangs indefinitely', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       vi.mocked(mockIsolationProvider.destroyWorker).mockImplementationOnce(
@@ -10911,9 +10913,17 @@ describe('TaskDispatcher', () => {
         'Failed to destroy worker for inactivity restart'
       );
       const task = await dispatcher.getTask('destroy-hang-test');
-      expect(task?.inactivityRestartCount).toBe(1);
+      expect(task?.status).toBe('failed');
+      expect(mockStatusUpdateClient.commit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'destroy-hang-test',
+          status: 'failed',
+          error: expect.objectContaining({ code: 'TASK_INACTIVITY_RESTART_FAILED' }),
+        })
+      );
 
       warnSpy.mockRestore();
+      vi.mocked(mockIsolationProvider.destroyWorker).mockImplementation(async () => undefined);
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
