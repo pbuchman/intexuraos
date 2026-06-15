@@ -1,4 +1,5 @@
 import type { RuntimeAttemptState, RuntimeEvent, RuntimeLogProcessor } from '../types.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 export interface ClaudeAttemptState extends RuntimeAttemptState {
   logBuffer: string;
@@ -96,7 +97,7 @@ function parseClaudeLogLine(state: ClaudeAttemptState, line: string): RuntimeEve
 
   if (trimmed.includes('<tool_use_error>')) {
     state.logger.warn(
-      { taskId: state.taskId },
+      { taskId: state.taskId, [SKIP_SENTRY_KEY]: true },
       'Claude tool_use_error in stream (non-fatal sibling call failure)'
     );
     return [];

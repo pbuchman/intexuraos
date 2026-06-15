@@ -42,7 +42,7 @@ export async function aggregateDigest(
 
   for (let attempt = 1; attempt <= MAX_REPAIR_ATTEMPTS; attempt += 1) {
     deps.logger.warn(
-      { attempt, errorMessage: lastErrorMessage },
+      { attempt, errorMessage: lastErrorMessage, _skipSentry: true },
       'aggregateDigest: invalid response, will repair',
     );
     const repairPrompt = digestRepairPrompt.build({

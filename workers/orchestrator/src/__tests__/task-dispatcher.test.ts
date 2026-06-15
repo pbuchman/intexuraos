@@ -2549,6 +2549,13 @@ describe('TaskDispatcher', () => {
       expect(appendedLogs).toContain('Task failed: TASK_RUNTIME_HARD_ERROR');
       expect(appendedLogs).toContain('hit your limit');
       expect(appendedLogs).toContain('No EXECUTION_AGENT_FINAL');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'int-1576-verifier-hard-error-rate-limit',
+          _skipSentry: true,
+        }),
+        'Verifier hard error'
+      );
     });
 
     it('INT-1457: normal-path generic runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR', async () => {

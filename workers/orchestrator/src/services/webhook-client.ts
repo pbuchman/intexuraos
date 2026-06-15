@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { getErrorCauseChain, type Result, type Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { StatePersistence } from './state-persistence.js';
 import type { PendingWebhook } from '../types/state.js';
 import { normalizeInternalCallbackUrl } from './callback-url.js';
@@ -68,6 +69,7 @@ export class WebhookClient {
             errorType: lastError.type,
             errorMessage: lastError.message,
             attempt: attempt + 1,
+            [SKIP_SENTRY_KEY]: true,
           },
           'Webhook delivery attempt failed'
         );
@@ -150,6 +152,7 @@ export class WebhookClient {
               errorType: errorType.type,
               errorMessage: errorType.message,
               attempt: attempt + 1,
+              [SKIP_SENTRY_KEY]: true,
             },
             'Pending webhook retry attempt failed'
           );

@@ -147,7 +147,7 @@ async function resolveCost(
   }
 
   logger.warn(
-    { provider: input.request.provider, model: input.request.model },
+    { provider: input.request.provider, model: input.request.model, _skipSentry: true },
     'No pricing found for model — emitting pricingSource:missing',
   );
   if (process.env['NODE_ENV'] !== 'production') {

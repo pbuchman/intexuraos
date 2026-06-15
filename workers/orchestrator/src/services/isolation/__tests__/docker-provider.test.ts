@@ -745,7 +745,7 @@ describe('DockerProvider', () => {
     it('handles non-existent worker gracefully', async () => {
       await expect(provider.destroyWorker('non-existent')).resolves.not.toThrow();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        { taskId: 'non-existent' },
+        { taskId: 'non-existent', _skipSentry: true },
         'Worker not found for destroy'
       );
     });
@@ -1838,7 +1838,10 @@ describe('DockerProvider', () => {
       await provider.createWorker(createTestConfig());
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ imageName: expect.stringContaining(':latest') }),
+        expect.objectContaining({
+          imageName: expect.stringContaining(':latest'),
+          _skipSentry: true,
+        }),
         expect.stringContaining('mutable tag')
       );
     });

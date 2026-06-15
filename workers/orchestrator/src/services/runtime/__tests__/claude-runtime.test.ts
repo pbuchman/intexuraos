@@ -176,7 +176,7 @@ describe('Claude runtime contract', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(
-      { taskId: 'task-5' },
+      { taskId: 'task-5', _skipSentry: true },
       'Claude tool_use_error in stream (non-fatal sibling call failure)'
     );
     expect(events).toContainEqual(

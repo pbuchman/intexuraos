@@ -754,6 +754,10 @@ describe('reconcilePRSummaries', () => {
     const logger = createLogger();
     const result = await reconcilePRSummaries(deps, logger);
     expect(result.skipped).toBe(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: 'owner/repo', _skipSentry: true }),
+      'Failed to list open PRs for repo during reconcile; skipping repo'
+    );
   });
 
   it('closes PR summary when PR is no longer open', async () => {

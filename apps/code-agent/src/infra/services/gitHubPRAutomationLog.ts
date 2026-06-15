@@ -99,7 +99,7 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
       if (existing === undefined) {
         return await createNewComment(token, owner, repo, prRef, eventLine, timestamp, effectiveUserId);
       }
-      return await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, event, prRef, existing.eventCount, timestamp);
+      return await appendToExistingComment(token, owner, repo, existing.commentId, eventLine, event, prRef, existing.eventCount, timestamp, effectiveUserId);
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       logger.warn(
@@ -188,11 +188,19 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
     event: AutomationEvent,
     prRef: PRRef,
     currentEventCount: number,
-    now: string
+    now: string,
+    effectiveUserId: string
   ): Promise<AutomationLogRecordResult> {
     const getResult = await gitHubPRClient.getIssueComment(token, owner, repo, commentId);
 
     if (!getResult.ok) {
+      if (isRecoverableStaleCommentError(getResult.error)) {
+        logger.info(
+          { repository: prRef.repository, prNumber: prRef.prNumber, commentId, error: getResult.error },
+          'Automation log: existing comment unavailable, posting replacement'
+        );
+        return await createNewComment(token, owner, repo, prRef, eventLine, now, effectiveUserId);
+      }
       logger.warn(
         { repository: prRef.repository, prNumber: prRef.prNumber, commentId, error: getResult.error },
         'Automation log: failed to GET existing comment for append'
@@ -212,6 +220,13 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
     const patchResult = await gitHubPRClient.updateIssueComment(token, owner, repo, commentId, updatedBody);
 
     if (!patchResult.ok) {
+      if (isRecoverableStaleCommentError(patchResult.error)) {
+        logger.info(
+          { repository: prRef.repository, prNumber: prRef.prNumber, commentId, error: patchResult.error },
+          'Automation log: existing comment cannot be patched, posting replacement'
+        );
+        return await createNewComment(token, owner, repo, prRef, eventLine, now, effectiveUserId);
+      }
       logger.warn(
         { repository: prRef.repository, prNumber: prRef.prNumber, commentId, error: patchResult.error },
         'Automation log: failed to PATCH existing comment'
@@ -224,6 +239,10 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
       updatedAt: now,
     });
     return ok(undefined);
+  }
+
+  function isRecoverableStaleCommentError(error: { code: string }): boolean {
+    return error.code === 'NOT_FOUND' || error.code === 'UNAUTHORIZED';
   }
 
   function isDuplicateIdempotentEvent(existingBody: string, event: AutomationEvent): boolean {

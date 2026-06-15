@@ -28,7 +28,7 @@ export async function handleFallback(
   logger: Logger,
 ): Promise<void> {
   if (event.eventType === 'issue_comment' || event.eventType === 'pull_request_review' || event.eventType === 'pull_request_review_comment') {
-    logger.warn({ eventId: event.id }, 'Fallback: dispatching comment event');
+    logger.warn({ eventId: event.id, _skipSentry: true }, 'Fallback: dispatching comment event');
 
     // Record automation log: triage_failed with fallback dispatch
     const userId = await resolveUserId(deps, event);
@@ -103,7 +103,7 @@ export async function handleLlmTriage(
     ].join('\n');
 
     logger.warn(
-      { eventId: event.id, error: llmResult.error },
+      { eventId: event.id, error: llmResult.error, _skipSentry: true },
       'LLM triage failed for pull_request event, retrying with correction context'
     );
     llmResult = await deps.evaluateEvent(event, correctionContext);
@@ -111,7 +111,7 @@ export async function handleLlmTriage(
 
   if (!llmResult.ok) {
     logger.warn(
-      { eventId: event.id, error: llmResult.error },
+      { eventId: event.id, error: llmResult.error, _skipSentry: true },
       'LLM triage failed'
     );
 

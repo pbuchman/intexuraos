@@ -149,6 +149,7 @@ describe('getLlmClient fallback behavior', () => {
         userId: 'user123',
         primaryModel: PRIMARY_MODEL,
         fallbackModel: FALLBACK_MODEL,
+        _skipSentry: true,
       }),
       'Primary model failed, attempting fallback'
     );

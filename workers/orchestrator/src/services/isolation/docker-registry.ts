@@ -1,6 +1,7 @@
 import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 export interface DockerRegistryConfig {
   imageName: string;
@@ -114,7 +115,7 @@ export class DockerRegistry {
       );
       if (imageName.includes(':latest')) {
         this.logger.warn(
-          { taskId, imageName },
+          { taskId, imageName, [SKIP_SENTRY_KEY]: true },
           'Worker image uses mutable tag :latest — consider pinning to digest for reproducibility'
         );
       }
