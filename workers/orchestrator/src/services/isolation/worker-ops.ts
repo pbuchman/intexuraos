@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { ContainerStatsSnapshot, ResourceUsage } from './types.js';
 import type { WorkerEntry } from './worker-entry-types.js';
 
@@ -145,7 +146,7 @@ export async function destroyWorker(input: DestroyWorkerInput): Promise<void> {
     logger,
   } = input;
   if (worker === undefined) {
-    logger.warn({ taskId }, 'Worker not found for destroy');
+    logger.warn({ taskId, [SKIP_SENTRY_KEY]: true }, 'Worker not found for destroy');
     return;
   }
   logger.info({ taskId, forceKill }, 'Stopping worker container');

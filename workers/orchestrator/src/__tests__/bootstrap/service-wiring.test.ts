@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import {
   CREDENTIAL_REFRESH_BUFFER_MS,
   runCredentialRefreshTick,
+  resolveSettingsLocalTemplatePath,
 } from '../../bootstrap/service-wiring.js';
 import type { WorkerAuthRegistry } from '../../services/worker-auth/index.js';
 
@@ -133,5 +134,13 @@ describe('runCredentialRefreshTick', () => {
 
     // Called once per provider (claude, codex)
     expect(bufferArgs[0]).toBe(CREDENTIAL_REFRESH_BUFFER_MS);
+  });
+});
+
+describe('resolveSettingsLocalTemplatePath', () => {
+  it('points at the docker code-worker config-defaults directory', () => {
+    expect(resolveSettingsLocalTemplatePath('/repo')).toBe(
+      '/repo/docker/code-worker/config-defaults/settings.local.json'
+    );
   });
 });

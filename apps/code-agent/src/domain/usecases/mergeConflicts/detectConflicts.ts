@@ -736,7 +736,7 @@ export async function reconcilePRSummaries(
     );
     if (!openPRsResult.ok) {
       logger.warn(
-        { error: openPRsResult.error, repository },
+        { error: openPRsResult.error, repository, _skipSentry: true },
         'Failed to list open PRs for repo during reconcile; skipping repo'
       );
       counters.skipped += repoSummaries.length;

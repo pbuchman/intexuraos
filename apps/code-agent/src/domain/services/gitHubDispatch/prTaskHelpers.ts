@@ -94,12 +94,12 @@ export async function reusePreservedContainer(
       return { success: true, dispatched: true };
     }
     logger.warn(
-      { taskId: preserved.id, error: sendResult.error },
+      { taskId: preserved.id, error: sendResult.error, _skipSentry: true },
       'Failed to send message to preserved container, falling through to new task',
     );
   } catch (error) {
     logger.warn(
-      { taskId: preserved.id, error },
+      { taskId: preserved.id, error, _skipSentry: true },
       'Error sending to preserved container, falling through',
     );
   }

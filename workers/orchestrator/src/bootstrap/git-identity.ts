@@ -61,3 +61,70 @@ export function readRepoGitConfig(repoPath: string, key: string): string | undef
     return undefined;
   }
 }
+
+/**
+ * Writes a key to a specific repository's *local* git config.
+ * Returns false for invalid paths or git failures so bootstrap can keep
+ * running and surface the effective identity in logs.
+ */
+export function setRepoGitConfig(repoPath: string, key: string, value: string): boolean {
+  if (!isAbsolute(repoPath)) {
+    return false;
+  }
+  try {
+    execFileSync('git', ['-C', repoPath, 'config', '--local', key, value], {
+      encoding: 'utf-8',
+      timeout: GIT_CONFIG_TIMEOUT_MS,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface RepoGitIdentityReconcileResult {
+  repoUserName: string | undefined;
+  repoUserEmail: string | undefined;
+  appliedName: boolean;
+  appliedEmail: boolean;
+  effectiveName: string | undefined;
+  effectiveEmail: string | undefined;
+}
+
+/**
+ * Aligns repo-local git identity with the identity passed to worker containers.
+ * Repo config has highest precedence inside worktrees, so writing the resolved
+ * identity removes stale local overrides instead of only warning about them.
+ */
+export function reconcileRepoGitIdentity(
+  repoPath: string,
+  identity: { gitUserName: string | undefined; gitUserEmail: string | undefined }
+): RepoGitIdentityReconcileResult {
+  const repoUserName = readRepoGitConfig(repoPath, 'user.name');
+  const repoUserEmail = readRepoGitConfig(repoPath, 'user.email');
+  const appliedName =
+    identity.gitUserName !== undefined
+      ? setRepoGitConfig(repoPath, 'user.name', identity.gitUserName)
+      : false;
+  const appliedEmail =
+    identity.gitUserEmail !== undefined
+      ? setRepoGitConfig(repoPath, 'user.email', identity.gitUserEmail)
+      : false;
+  const effectiveName =
+    identity.gitUserName === undefined || (repoUserName !== undefined && !appliedName)
+      ? repoUserName
+      : identity.gitUserName;
+  const effectiveEmail =
+    identity.gitUserEmail === undefined || (repoUserEmail !== undefined && !appliedEmail)
+      ? repoUserEmail
+      : identity.gitUserEmail;
+
+  return {
+    repoUserName,
+    repoUserEmail,
+    appliedName,
+    appliedEmail,
+    effectiveName,
+    effectiveEmail,
+  };
+}

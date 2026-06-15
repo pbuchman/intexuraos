@@ -51,9 +51,10 @@ import {
 import { createMetricsClient, type MetricsClient } from '../metrics.js';
 import type { BootstrapEnvConfig } from './env-config.js';
 import { logWorkerAuthStartupStatus } from './api-key-validator.js';
-import { readRepoGitConfig } from './git-identity.js';
+import { reconcileRepoGitIdentity } from './git-identity.js';
 import { ensureDirectoryExists } from './fs-utils.js';
 import type { ProviderApiKeyHealth } from '../types/api.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 const DOCKER_NETWORK_NAME = 'code-worker-net';
 const TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
@@ -81,6 +82,10 @@ export interface WiredServices {
   workerAuthRegistry: WorkerAuthRegistry;
   isolationProvider: IsolationProvider;
   providerApiKeys: Record<string, ProviderApiKeyHealth>;
+}
+
+export function resolveSettingsLocalTemplatePath(repoPath: string): string {
+  return join(repoPath, 'docker', 'code-worker', 'config-defaults', 'settings.local.json');
 }
 
 /**
@@ -114,13 +119,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     {
       repositoryPath: repoPath,
       worktreeBasePath: config.worktreeBasePath,
-      settingsLocalTemplatePath: join(
-        repoPath,
-        'workers',
-        'code-worker',
-        'config-defaults',
-        'settings.local.json'
-      ),
+      settingsLocalTemplatePath: resolveSettingsLocalTemplatePath(repoPath),
     },
     logger
   );
@@ -137,21 +136,35 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
 
   logger.info({ gitUserName, gitUserEmail }, 'Git identity for worker containers');
 
-  const repoUserName = readRepoGitConfig(repoPath, 'user.name');
-  const repoUserEmail = readRepoGitConfig(repoPath, 'user.email');
-  if (repoUserName !== undefined || repoUserEmail !== undefined) {
+  const repoIdentity = reconcileRepoGitIdentity(repoPath, { gitUserName, gitUserEmail });
+  if (
+    (repoIdentity.repoUserName !== undefined || repoIdentity.repoUserEmail !== undefined) &&
+    !repoIdentity.appliedName &&
+    !repoIdentity.appliedEmail
+  ) {
     logger.warn(
-      { repoUserName, repoUserEmail },
+      {
+        repoUserName: repoIdentity.repoUserName,
+        repoUserEmail: repoIdentity.repoUserEmail,
+        [SKIP_SENTRY_KEY]: true,
+      },
       'Repository has local git user config — this OVERRIDES the identity passed to containers. ' +
-        'Run: git -C <repo> config --unset user.name && git -C <repo> config --unset user.email'
+        'No resolved worker identity was available to reconcile it automatically.'
+    );
+  } else if (repoIdentity.appliedName || repoIdentity.appliedEmail) {
+    logger.info(
+      {
+        previousRepoUserName: repoIdentity.repoUserName,
+        previousRepoUserEmail: repoIdentity.repoUserEmail,
+        appliedName: repoIdentity.appliedName,
+        appliedEmail: repoIdentity.appliedEmail,
+      },
+      'Repository git identity reconciled to worker identity'
     );
   }
-  const effectiveName = repoUserName ?? gitUserName ?? 'NOT SET';
-  const effectiveEmail = repoUserEmail ?? gitUserEmail ?? 'NOT SET';
-  logger.info(
-    { effectiveName, effectiveEmail },
-    'Effective git identity for commits (repo-level > global > env var)'
-  );
+  const effectiveName = repoIdentity.effectiveName ?? 'NOT SET';
+  const effectiveEmail = repoIdentity.effectiveEmail ?? 'NOT SET';
+  logger.info({ effectiveName, effectiveEmail }, 'Effective git identity for commits');
 
   const { secretsBasePath } = config;
   if (env.keepContainersAlive) {

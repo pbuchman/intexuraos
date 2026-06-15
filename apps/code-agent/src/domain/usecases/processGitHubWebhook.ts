@@ -287,7 +287,7 @@ export async function processGitHubWebhook(
     const sigPreview = signatureHeader !== undefined && signatureHeader !== ''
       ? signatureHeader.slice(0, 20)
       : undefined;
-    logger.warn({ signature: sigPreview }, 'Invalid GitHub webhook signature');
+    logger.warn({ signature: sigPreview, _skipSentry: true }, 'Invalid GitHub webhook signature');
     return { ok: false, reason: 'invalid_signature', message: 'Invalid webhook signature' };
   }
 
