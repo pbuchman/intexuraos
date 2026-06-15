@@ -135,6 +135,7 @@ export class TaskRunner {
         void this.handleRuntimeEvents(task, runtime.flushAttemptState(runtimeAttemptState));
         ctx.taskExitCodes.set(task.taskId, exitCode);
         ctx.attemptCompletionSignals.add(task.taskId);
+        ctx.activityTimeoutManager.stop(task.taskId);
         ctx.appendOrchestratorTaskLog(
           task.taskId,
           `Worker attempt completed: exitCode=${String(exitCode)}`
@@ -296,6 +297,7 @@ export class TaskRunner {
         if (!ctx.attemptCompletionSignals.has(taskId)) {
           ctx.taskExitCodes.set(taskId, event.exitCode);
           ctx.attemptCompletionSignals.add(taskId);
+          ctx.activityTimeoutManager.stop(taskId);
           ctx.logger.info(
             { taskId, exitCode: event.exitCode },
             'Detected runtime stream result; signaling attempt completion'
@@ -307,6 +309,7 @@ export class TaskRunner {
       if (!ctx.attemptCompletionSignals.has(taskId)) {
         ctx.taskExitCodes.set(taskId, event.exitCode);
         ctx.attemptCompletionSignals.add(taskId);
+        ctx.activityTimeoutManager.stop(taskId);
         ctx.logger.info(
           { taskId, exitCode: event.exitCode },
           'Detected runtime stream result; signaling attempt completion'

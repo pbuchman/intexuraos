@@ -31,6 +31,27 @@ describe('TaskRunner', () => {
       expect(harness.ctx.lastOutputAt.has('task-1')).toBe(true);
     });
 
+    it('stops activity timeout when worker attempt completes', async () => {
+      const task = makeTask();
+
+      await runner.startWorkerAttempt(task, {
+        prompt: 'do thing',
+        continueSession: false,
+      });
+      const workerConfig = harness.createWorker.mock.calls[0]?.[0] as
+        | { onComplete?: (exitCode: number) => void }
+        | undefined;
+      if (workerConfig?.onComplete === undefined) {
+        throw new Error('createWorker did not receive onComplete');
+      }
+
+      workerConfig.onComplete(0);
+
+      expect(harness.ctx.taskExitCodes.get('task-1')).toBe(0);
+      expect(harness.ctx.attemptCompletionSignals.has('task-1')).toBe(true);
+      expect(harness.activityTimeoutManager.stop).toHaveBeenCalledWith('task-1');
+    });
+
     it('error path: returns ok:false on createWorker failure and logs the failure', async () => {
       const task = makeTask();
       harness.createWorker.mockRejectedValueOnce(new Error('docker exploded'));

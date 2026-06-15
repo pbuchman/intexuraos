@@ -173,5 +173,35 @@ describe('CompletionPipeline', () => {
       expect(harness.runningCount.value).toBe(0);
       expect(harness.webhookSend).toHaveBeenCalled();
     });
+
+    it('persists and sends terminal status even when Docker cleanup hangs', async () => {
+      vi.useFakeTimers();
+      harness.runningCount.value = 1;
+      const task = makeTask({ taskId: 'final-cleanup-hangs' });
+      harness.tasks.set(task.taskId, task);
+      const commit = vi.fn().mockResolvedValue({ ok: true, value: undefined });
+      (harness.ctx.statusUpdateClient as unknown as { commit: typeof commit }).commit = commit;
+      harness.destroyWorker.mockImplementationOnce(() => new Promise<void>(() => undefined));
+
+      const finalizePromise = cp.finalizeTask(task, 'completed', {
+        result: { branch: 'b', commits: 1, summary: 'done' },
+      });
+      void finalizePromise.catch(() => undefined);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(task.status).toBe('completed');
+      expect(harness.saveTask).toHaveBeenCalledWith(task);
+      expect(commit).toHaveBeenCalledWith(expect.objectContaining({ taskId: task.taskId }));
+      await Promise.resolve();
+      await Promise.resolve();
+      const terminalWebhookCall = harness.webhookSend.mock.calls.find((call) => {
+        const input = call[0] as { payload?: { status?: string; taskId?: string } } | undefined;
+        return input?.payload?.taskId === task.taskId && input.payload.status === 'completed';
+      });
+      expect(terminalWebhookCall).toBeDefined();
+      await vi.advanceTimersByTimeAsync(31_000);
+      vi.useRealTimers();
+    });
   });
 });
