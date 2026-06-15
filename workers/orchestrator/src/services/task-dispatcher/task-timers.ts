@@ -7,6 +7,7 @@ import {
   COMPLETION_CHECK_INTERVAL_MS,
   ACTIVITY_HEARTBEAT_THRESHOLD_MS,
   WORKER_DESTROY_TIMEOUT_MS,
+  DOCKER_LIVENESS_CHECK_TIMEOUT_MS,
 } from './retry-logic.js';
 import type { DispatcherContext } from './dispatcher-context.js';
 
@@ -196,9 +197,8 @@ export class TaskTimers {
               return;
             }
 
-            // Check if Docker container is still running
-            const isRunning = await ctx.isolation.provider.isWorkerRunning(taskId);
             const attemptCompleted = ctx.attemptCompletionSignals.has(taskId);
+            const isRunning = attemptCompleted ? false : await this.isWorkerRunningBounded(taskId);
 
             // Emit activity heartbeat when no Docker output for threshold duration
             const lastActivity = ctx.lastOutputAt.get(taskId);
@@ -245,6 +245,22 @@ export class TaskTimers {
     ctx.activeTasks.set(`${taskId}-monitor`, checkInterval);
     // INT-1551 §E.7: cancel completion poll if shutdown signal fires.
     this.attachShutdownAbort(checkInterval, true);
+  }
+
+  private async isWorkerRunningBounded(taskId: string): Promise<boolean> {
+    try {
+      return await withTimeout(
+        this.ctx.isolation.provider.isWorkerRunning(taskId),
+        DOCKER_LIVENESS_CHECK_TIMEOUT_MS,
+        `Docker liveness check timed out after ${String(DOCKER_LIVENESS_CHECK_TIMEOUT_MS / 1000)}s`
+      );
+    } catch (error) {
+      this.ctx.logger.warn(
+        { taskId, error, _skipSentry: true },
+        'Docker liveness check timed out; treating worker as still running'
+      );
+      return true;
+    }
   }
 
   /**
