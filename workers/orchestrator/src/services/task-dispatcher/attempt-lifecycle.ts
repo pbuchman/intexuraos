@@ -552,10 +552,28 @@ export class AttemptLifecycle {
         `destroyWorker timed out after ${String(WORKER_DESTROY_TIMEOUT_MS / 1000)}s`
       );
     } catch (destroyError) {
+      const message = getErrorMessage(destroyError);
       ctx.logger.warn(
         { taskId, error: destroyError },
         'Failed to destroy worker for inactivity restart'
       );
+      ctx.appendOrchestratorTaskLog(
+        taskId,
+        `Failed to destroy worker for inactivity restart: ${message}`
+      );
+      const result = await ctx.checkForResult(task);
+      const error: TaskError = {
+        code: 'TASK_INACTIVITY_RESTART_FAILED',
+        message: `Failed to destroy worker before inactivity restart: ${message}`,
+        remediation: { action: 'retry' },
+      };
+      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for result on failed inactivity restart finalization @preserve */
+      await ctx.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      /* v8 ignore stop @preserve */
+      return;
     }
     ctx.appendOrchestratorTaskLog(taskId, 'Worker destroyed for inactivity restart');
 

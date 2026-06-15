@@ -53,6 +53,29 @@ describe('AttemptLifecycle', () => {
       // After it resolves the flag must be cleared.
       expect(harness.ctx.inactivityRestartInProgress.has('task-1')).toBe(false);
     });
+
+    it('finalizes failure instead of resuming when destroyWorker fails', async () => {
+      const task = makeTask({ runtimeSessionId: 'session-1' });
+      harness.tasks.set(task.taskId, task);
+      harness.destroyWorker.mockRejectedValueOnce(new Error('docker stuck'));
+
+      await al.doHandleInactivityRestart(task.taskId);
+
+      expect(harness.ctx.startWorkerAttempt).not.toHaveBeenCalled();
+      expect(harness.ctx.finalizeTask).toHaveBeenCalledWith(
+        task,
+        'failed',
+        expect.objectContaining({
+          error: expect.objectContaining({
+            code: 'TASK_INACTIVITY_RESTART_FAILED',
+          }),
+        })
+      );
+      expect(harness.appendOrchestratorTaskLog).not.toHaveBeenCalledWith(
+        task.taskId,
+        'Worker destroyed for inactivity restart'
+      );
+    });
   });
 
   describe('executeTaskSetup', () => {
