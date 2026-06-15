@@ -4,7 +4,7 @@
 >
 > **Linear:** [INT-1423](https://linear.app/pbuchman/issue/INT-1423/evaluate-requirements-for-multi-repository-support-in-code-agent)
 >
-> **Revision note:** This update replaces stale path and line references from the original 2026-04-20 plan, restores the occurrence audit, and adds the required subagent planning, review, implementation, and remediation process.
+> **Revision note:** This update replaces stale path and line references from the original 2026-04-20 plan, restores the occurrence audit, adds the required subagent planning/review/implementation/remediation process, and closes the Review 1 production-readiness gaps around GitHub App callbacks, migration, access verification, missing `.claude/`, and verification autodetection.
 
 ---
 
@@ -64,7 +64,7 @@ The main architectural claims remain true, but the original evidence was stale. 
 
 - The orchestrator binds to one repo at bootstrap: `workers/orchestrator/src/start.ts:95`, `:101`, and `:138`.
 - Repo URL/path are global env config: `workers/orchestrator/src/bootstrap/env-config.ts:141` and optional path at `:201`.
-- GitHub App installation is singleton config: `workers/orchestrator/src/bootstrap/env-config.ts:146`, `workers/orchestrator/src/bootstrap/service-wiring.ts:102`, and `workers/orchestrator/src/github/token-service.ts:21`.
+- GitHub App installation is singleton config: `workers/orchestrator/src/bootstrap/env-config.ts:147`, `workers/orchestrator/src/bootstrap/service-wiring.ts:102`, and `workers/orchestrator/src/github/token-service.ts:21`.
 - `WorktreeManager` is wired to one repository path: `workers/orchestrator/src/bootstrap/service-wiring.ts:118`, `workers/orchestrator/src/services/worktree-manager.ts:23`, and `:112`.
 - `CodeTask` already carries `repository` and `baseBranch`: `apps/code-agent/src/domain/models/codeTask.ts:275`.
 - Public submit and Ask Agent still default to IntexuraOS: `apps/code-agent/src/routes/code/task-routes.ts:1686`, `apps/code-agent/src/domain/usecases/processCodeAction.ts:365`, and `apps/code-agent/src/domain/usecases/startAskAgent.ts:87`.
@@ -107,7 +107,7 @@ The orchestrator still starts with one repository and one installation:
 | --- | --- | --- |
 | Repo URL | `workers/orchestrator/src/bootstrap/env-config.ts:141` reads `INTEXURAOS_REPOSITORY_URL`. | One process cannot choose a repo per task. |
 | Repo path | `workers/orchestrator/src/start.ts:95`, `:101`, `:138` derive one repo path and call `ensureRepository` once. | All worktrees come from the same source clone. |
-| Installation ID | `workers/orchestrator/src/bootstrap/env-config.ts:146` reads `INTEXURAOS_GITHUB_INSTALLATION_ID`. | One GitHub App installation cannot represent arbitrary repos/orgs. |
+| Installation ID | `workers/orchestrator/src/bootstrap/env-config.ts:147` reads `INTEXURAOS_GITHUB_INSTALLATION_ID`. | One GitHub App installation cannot represent arbitrary repos/orgs. |
 | Token service | `workers/orchestrator/src/bootstrap/service-wiring.ts:102` constructs one `GitHubTokenService`. | Token minting is not keyed by task repository/install. |
 | Worktree manager | `workers/orchestrator/src/bootstrap/service-wiring.ts:118` constructs one `WorktreeManager` with one `repositoryPath`. | `repository` in the task payload is metadata, not checkout input. |
 | Settings template | `workers/orchestrator/src/bootstrap/service-wiring.ts:87` resolves the template from `<repo>/docker/code-worker/config-defaults/settings.local.json`. | External repos will not ship IntexuraOS worker defaults. |
@@ -151,7 +151,7 @@ Webhook-derived flows are closer than manual submit because they can carry the e
 - `apps/code-agent/src/infra/github-event-parser.ts:14` only allows `intexuraos/*` and `*/intexuraos` style repositories.
 - `apps/code-agent/src/domain/usecases/processGitHubWebhook.ts:132` applies that filter before dispatch logic can create tasks.
 - `apps/code-agent/src/services.ts:93` notes that `RepositoryScopeRule` is not wired because the route handler already filters.
-- `apps/code-agent/src/domain/services/gitHubDispatch/prTaskHelpers.ts:27` has an `owner === 'intexuraos'` special case.
+- `apps/code-agent/src/domain/services/gitHubDispatch/prTaskHelpers.ts:34` has an `owner === 'intexuraos'` special case.
 
 The webhook gate must be replaced by connected-repository validation. The allowed repository set should come from installation/repository records, not regexes.
 
@@ -256,6 +256,91 @@ User or webhook
    - Replace hardcoded final evidence text with a verification command selected from connected repository config or task metadata.
    - Keep `pnpm run ci:tracked` as the IntexuraOS default only.
 
+### Production-Grade Decisions for Review 1 Gaps
+
+These decisions must be in the implementation scope before the first execution slice starts.
+
+#### GitHub App Installation Callback Routing
+
+The code-agent service owns GitHub App installation routing because it owns task creation, connected repository validation, webhook processing, and dispatch payload construction. User-service remains the owner of GitHub OAuth identity only.
+
+Implementation details:
+
+- Add code-agent routes in a new repository route module registered from `apps/code-agent/src/routes/index.ts`.
+- Public dev/prod URLs route through nginx as `/api/code/repositories/connect/initiate` and `/api/code/repositories/connect/callback`; the Fastify route paths remain `/repositories/connect/initiate` and `/repositories/connect/callback`.
+- `POST /repositories/connect/initiate` requires the normal Auth0 user, creates a signed one-use state containing `userId`, nonce, and expiry, and returns the GitHub App install/configure URL.
+- `GET /repositories/connect/callback` receives GitHub's `installation_id`, `setup_action`, and state query parameters, validates state, loads installation metadata, persists/updates connected repositories, then redirects to the web settings page.
+- The callback must call `logIncomingRequest()` and must not be implemented in user-service. It may call user-service internal GitHub OAuth token endpoints to verify the connecting user's GitHub identity.
+
+#### Existing Task Migration and Legacy Fallback
+
+Existing `code_tasks` documents already store `repository`, but they do not have `repositoryConnectionId`. The migration must preserve historical task visibility and avoid silent arbitrary-repo fallback.
+
+Implementation details:
+
+- Add an immutable Firestore migration that pre-seeds a deterministic connected repository record for `pbuchman/intexuraos` with its GitHub repository ID, default branch, clone URL, current installation ID, and `verificationCommand: "pnpm run ci:tracked"`.
+- Backfill `repositoryConnectionId` on existing `code_tasks` where `repository === "pbuchman/intexuraos"` and the field is missing. Keep the existing `repository` string as a historical display snapshot.
+- During the rollout window, read/dispatch paths may resolve missing `repositoryConnectionId` only when `repository === "pbuchman/intexuraos"` by using the pre-seeded record. This fallback must emit a structured warning/metric and must not apply to any other repository.
+- New task creation after the repository routes land must require a validated connected repository record. A missing connection ID is rejected unless the request is on an explicitly flagged legacy IntexuraOS path.
+- Disconnecting a repository blocks new tasks but does not hide historical tasks; task detail/list APIs continue using the stored repository snapshot for old records.
+
+#### Organization-Level Access Verification
+
+Connected repositories must be proven through both installation metadata and the connecting user's GitHub authority. Relying on a repository string in the request is not sufficient.
+
+Connect-time verification:
+
+- Use a GitHub App JWT to call `GET /app/installations/{installation_id}` and confirm the installation account and target type.
+- Use an installation token to call `GET /installation/repositories` and persist only repositories actually granted to the app installation.
+- Resolve the connecting user's GitHub login and user access token through user-service's existing GitHub OAuth connection.
+- For user-account installations, require the installation account login to match the connected GitHub user, or require repository-level `admin` permission for every selected repository.
+- For organization installations, call `GET /user/memberships/orgs/{org}` with the user's GitHub token and require `state === "active"` plus `role === "admin"` before connecting org-wide access. For selected repository access, also call `GET /repos/{owner}/{repo}/collaborators/{username}/permission` and require base `permission === "admin"` for each selected repo.
+
+Task-creation verification:
+
+- Require `ConnectedRepository.status === "active"`.
+- Require the Auth0 user to match `connectedByUserId` or an allowed user/team entry on the connected repository record.
+- Refresh GitHub membership/permission checks on a short TTL or when GitHub returns 401/403 during dispatch; mark the repository `suspended` if verification fails.
+
+#### Worker Behavior Without `.claude/CLAUDE.md`
+
+Repositories without `.claude/CLAUDE.md` are supported, but they do not receive injected project rules in the target worktree.
+
+Implementation details:
+
+- The orchestrator passes a worker-owned default instruction file or prompt fragment from the code-worker image/config, not from the target repository.
+- If `/repo/.claude/CLAUDE.md` exists, the worker loads it as target-repo instructions. If it is missing, the prompt explicitly records `repoInstructions: "absent"` and tells the worker to infer conventions from repository files plus the connected repository verification profile.
+- The worker must not create or mutate `/repo/.claude/CLAUDE.md` or `/repo/.claude/settings.local.json` automatically. Any "install starter IntexuraOS repo config" action must be an explicit user action from the repository settings UI and must create a normal PR.
+- Missing `.claude/` is not a task failure by itself. It is an observability signal shown on task detail and included in execution logs.
+
+#### Verification Command Resolution and Autodetection
+
+Verification command selection must be deterministic, observable, and conservative. The worker should not invent repo commands at final-response time.
+
+Resolution order:
+
+1. Task-level override from an authorized internal flow.
+2. `ConnectedRepository.verificationCommand`.
+3. `.intexuraos/config.yaml` with a reviewed schema, loaded from the checked-out target repo.
+4. Safe autodetection from a fixed allowlist.
+5. No command resolved.
+
+Safe autodetection allowlist:
+
+| Signal | Verification command |
+| --- | --- |
+| `package.json` script `ci:tracked` plus `pnpm-lock.yaml` | `pnpm run ci:tracked` |
+| `package.json` script `test` plus `pnpm-lock.yaml` | `pnpm test` |
+| `package.json` script `test` plus `package-lock.json` | `npm test` |
+| `package.json` script `test` plus `yarn.lock` | `yarn test` |
+| `bun.lock` or `bun.lockb` with test script | `bun test` |
+| `go.mod` | `go test ./...` |
+| `Cargo.toml` | `cargo test` |
+| `pyproject.toml`, `pytest.ini`, or `tox.ini` with pytest/tox config | `python -m pytest` or `tox`, selected by config presence |
+| `Makefile` with an explicit `test:` target | `make test` |
+
+If no command resolves, the code-agent must mark the task as `verificationProfile: "unconfigured"`. Planning-only tasks may continue, but execution/PR-delivery tasks are not production-ready for that repository until the user configures a verification command or accepts an explicitly unverified mode.
+
 ---
 
 ## 5. Endpoint Changes
@@ -282,7 +367,8 @@ User or webhook
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /repositories` | List repositories connected and available to the current user. |
-| `POST /repositories/connect/callback` | Persist repositories returned by the GitHub App installation callback. |
+| `POST /repositories/connect/initiate` | Create a signed state and return the GitHub App install/configure URL. |
+| `GET /repositories/connect/callback` | Code-agent callback for GitHub App installation/configuration redirects; persists repositories returned by the installation. |
 | `DELETE /repositories/:id` | Disconnect a repository for future tasks while preserving historical tasks. |
 
 ### Removed
@@ -325,9 +411,9 @@ Ownership:
 Deliverables:
 
 - `ConnectedRepository` domain model and serializer.
-- Repository connect/list/disconnect use cases.
+- Repository connect initiation, callback, list, and disconnect use cases owned by code-agent.
 - Server-side validation service used by every task creation path.
-- Access policy for historical tasks after disconnect.
+- GitHub App installation metadata verification, user/org access verification, and access policy for historical tasks after disconnect.
 - Tests for authorization, missing repo, disconnected repo, and legacy IntexuraOS fallback.
 
 ### Slice B: GitHub App Installation and Token Routing
@@ -376,7 +462,8 @@ Deliverables:
 
 - Settings defaults no longer sourced from target repo.
 - Entry point no longer writes tracked target-repo config unless explicitly allowed.
-- Repo bootstrap command is selected from `.intexuraos/config.yaml`, connected-repo config, or safe autodetection.
+- Repositories without `.claude/CLAUDE.md` run with worker-owned default instructions and an explicit `repoInstructions: "absent"` signal.
+- Repo bootstrap and verification commands are selected from task override, connected-repo config, `.intexuraos/config.yaml`, or the fixed autodetection allowlist.
 - Final evidence prompts support repo-specific verification commands.
 
 ### Slice E: Code-Agent Task Creation and Webhook Flows
@@ -433,20 +520,21 @@ Deliverables:
 
 - `connected_repositories` collection entry.
 - Repository-aware indexes for task lists and Ask Agent active queries.
-- Backfill/migration strategy for existing IntexuraOS tasks.
+- Pre-seeded `pbuchman/intexuraos` repository record, `repositoryConnectionId` backfill for existing IntexuraOS tasks, and explicit legacy fallback removal criteria.
 - Rollout checklist and pilot repo validation steps.
 
 ---
 
 ## 7. Rollout Plan
 
-1. Land the connected repository model and read-only listing with `pbuchman/intexuraos` pre-seeded.
-2. Add repository fields to web submit and code-agent routes while still defaulting legacy callers explicitly.
-3. Add orchestrator repo cache and installation token pool behind `INTEXURAOS_MULTI_REPO=1`.
-4. Update prompts and worker bootstrap to use repo-specific verification and safe target-repo config behavior.
-5. Enable dev with one pilot external repository in the same GitHub installation.
-6. Add GitHub App installation callback and test a repository in a different installation account.
-7. Enable production behind a repo allowlist and monitor clone cache size, token refresh failures, webhook drops, and task success rate.
+1. Land the connected repository model and code-agent-owned connect/list/callback routes with `pbuchman/intexuraos` pre-seeded.
+2. Run the immutable migration that backfills `repositoryConnectionId` for existing IntexuraOS tasks and enables the explicit legacy fallback metric.
+3. Add repository fields to web submit and code-agent routes while still defaulting legacy callers only through the flagged IntexuraOS path.
+4. Add orchestrator repo cache and installation token pool behind `INTEXURAOS_MULTI_REPO=1`.
+5. Update prompts and worker bootstrap to support missing `.claude/`, repo-specific verification, and safe target-repo config behavior.
+6. Enable dev with one pilot external repository in the same GitHub installation and a configured verification command.
+7. Exercise the GitHub App installation callback with a repository in a different installation account and verify org/repo admin checks.
+8. Enable production behind a repo allowlist and monitor clone cache size, token refresh failures, webhook drops, permission refresh failures, fallback usage, and task success rate.
 
 ---
 
@@ -455,11 +543,12 @@ Deliverables:
 | Risk | Mitigation |
 | --- | --- |
 | Clone cache disk growth | Add cache size metrics, LRU cleanup, and per-repo fetch locks. |
-| Incorrect repo access | Validate every task through connected repository records and GitHub installation metadata. |
+| Incorrect repo access | Validate every task through connected repository records, GitHub installation metadata, org membership, and repository admin permission checks. |
 | Wrong installation token | Key token pool by installation ID and add tests for two repos in different installations. |
 | Worker mutates external repo config | Keep worker defaults outside target repo and write only ephemeral runtime files. |
-| Repo without Node/pnpm support | Use repo-declared bootstrap or safe autodetect/no-op fallback. |
-| Existing IntexuraOS tasks regress | Keep explicit legacy fallback during migration and test IntexuraOS end to end. |
+| Repo without `.claude/CLAUDE.md` | Run with worker-owned default instructions, emit `repoInstructions: "absent"`, and do not mutate target-repo config. |
+| Repo without Node/pnpm support | Use repo-declared bootstrap or the fixed verification autodetection allowlist; block production PR delivery when no verification command resolves. |
+| Existing IntexuraOS tasks regress | Backfill `repositoryConnectionId`, keep explicit legacy fallback during migration, and test IntexuraOS end to end. |
 | Webhook spam from unconnected repos | Replace regex allowlist with connected-repo lookup before task creation. |
 | Ask Agent cross-repo collision | Scope active Ask Agent sessions by user and repository. |
 | Hardcoded final CI evidence | Make verification evidence text dynamic from task/repo verification command. |
@@ -491,7 +580,7 @@ Classifications:
 | Occurrence | Classification | Action |
 | --- | --- | --- |
 | `workers/orchestrator/src/bootstrap/env-config.ts:141` `INTEXURAOS_REPOSITORY_URL` | `R-CHANGE` | Stop requiring one runtime repo URL for all tasks. |
-| `workers/orchestrator/src/bootstrap/env-config.ts:146` `INTEXURAOS_GITHUB_INSTALLATION_ID` | `R-CHANGE` | Replace singleton install source with connected-repo installation routing. |
+| `workers/orchestrator/src/bootstrap/env-config.ts:147` `INTEXURAOS_GITHUB_INSTALLATION_ID` | `R-CHANGE` | Replace singleton install source with connected-repo installation routing. |
 | `workers/orchestrator/src/start.ts:95`, `:101`, `:138` single repo path and `ensureRepository` | `R-CHANGE` | Lazily ensure/cache the selected task repository. |
 | `workers/orchestrator/src/bootstrap/service-wiring.ts:87` settings template from target repo | `R-CHANGE` | Move runtime settings defaults out of target repo. |
 | `workers/orchestrator/src/bootstrap/service-wiring.ts:102`, `:118` singleton token/worktree services | `R-CHANGE` | Wire token pool and repo-aware worktree manager. |
@@ -511,7 +600,7 @@ Classifications:
 | `apps/code-agent/src/infra/services/taskDispatcherImpl.ts:54`, `:118` forwards repo/base only | `R-CHANGE` | Include repo URL and installation context. |
 | `apps/code-agent/src/infra/github-event-parser.ts:14` repository regex allowlist | `R-CHANGE` | Replace with connected repository lookup. |
 | `apps/code-agent/src/domain/usecases/processGitHubWebhook.ts:132` applies regex gate | `R-CHANGE` | Validate installation/repository record. |
-| `apps/code-agent/src/domain/services/gitHubDispatch/prTaskHelpers.ts:27` `owner === 'intexuraos'` | `R-CHANGE` | Use connected repository primary owner/account metadata. |
+| `apps/code-agent/src/domain/services/gitHubDispatch/prTaskHelpers.ts:34` `owner === 'intexuraos'` | `R-CHANGE` | Use connected repository primary owner/account metadata. |
 | `apps/code-agent/src/domain/services/gitHubDispatch/ciFailureDispatch.ts:81` GitHub.com PR URL | `D-DISPLAY` | Keep for GitHub.com-only scope. |
 | `apps/code-agent/src/domain/issueGrouping/labelHelpers.ts:100` dynamic task repo URL | `D-DISPLAY` | Keep. |
 | `apps/code-agent/src/domain/constants/gitHubBots.ts:8` IntexuraOS bot names | `R-PARAM` | Keep if one GitHub App bot owns all connected repos; revisit if multiple apps. |
@@ -542,7 +631,7 @@ Classifications:
 Most load-bearing current references:
 
 - Orchestrator single-repo bootstrap: `workers/orchestrator/src/bootstrap/env-config.ts:141`, `workers/orchestrator/src/start.ts:95`, `:101`, `:138`.
-- Single installation ID: `workers/orchestrator/src/bootstrap/env-config.ts:146`, `workers/orchestrator/src/bootstrap/service-wiring.ts:102`, `workers/orchestrator/src/services/isolation/token-refresher.ts:7`, `:72`.
+- Single installation ID: `workers/orchestrator/src/bootstrap/env-config.ts:147`, `workers/orchestrator/src/bootstrap/service-wiring.ts:102`, `workers/orchestrator/src/services/isolation/token-refresher.ts:7`, `:72`.
 - Worktree singleton: `workers/orchestrator/src/bootstrap/service-wiring.ts:118`, `workers/orchestrator/src/services/worktree-manager.ts:23`, `:112`.
 - Settings template from target repo: `workers/orchestrator/src/bootstrap/service-wiring.ts:87`, `workers/orchestrator/src/services/worktree-manager.ts:166`.
 - Code task model already carries repo metadata: `apps/code-agent/src/domain/models/codeTask.ts:275`.
