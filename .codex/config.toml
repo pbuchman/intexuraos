@@ -1,3 +1,14 @@
+[features]
+collab = true
+
+[marketplaces.superpowers-marketplace]
+source_type = "git"
+source = "https://github.com/obra/superpowers-marketplace.git"
+ref = "main"
+
+[plugins."superpowers@superpowers-marketplace"]
+enabled = true
+
 [mcp_servers.linear]
 url = "https://mcp.linear.app/mcp"
 bearer_token_env_var = "LINEAR_API_KEY"
