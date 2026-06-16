@@ -359,6 +359,23 @@ describe('system-prompt', () => {
     expect(result).toContain('[INT-123 Fix login bug]');
   });
 
+  it('execution prompt requires PR descriptions to include code change statistics', () => {
+    const result = executionPrompt.build({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+    });
+
+    const prDescriptionIndex = result.indexOf('### PR Description Format');
+    const statsRequirementIndex = result.indexOf('### Mandatory PR Code Statistics');
+
+    expect(prDescriptionIndex).toBeGreaterThanOrEqual(0);
+    expect(statsRequirementIndex).toBeGreaterThan(prDescriptionIndex);
+    expect(statsRequirementIndex - prDescriptionIndex).toBeLessThan(1_000);
+    expect(result).toContain('total lines of code changed');
+    expect(result).toContain('breakdown by language');
+    expect(result).toContain('docs, tests, production code, and scripts');
+  });
+
   it('execution prompt uses the real Linear MCP comment tool', () => {
     const result = executionPrompt.build({
       ...baseParams,
@@ -1267,8 +1284,8 @@ describe('system-prompt', () => {
     expect(planningPrompt.version).toBe('7.0.1');
   });
 
-  it('execution prompt version is 10.0.0', () => {
-    expect(executionPrompt.version).toBe('10.0.0');
+  it('execution prompt version is 11.0.0', () => {
+    expect(executionPrompt.version).toBe('11.0.0');
   });
 
   it('remediation prompt version is 4.0.1', () => {

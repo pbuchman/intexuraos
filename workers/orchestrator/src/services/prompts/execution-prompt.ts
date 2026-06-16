@@ -22,7 +22,7 @@ Use these evidence lines when judging whether retained Codex parity actually exe
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '10.0.0',
+  version: '11.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -124,6 +124,12 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 - Model: \`${modelName ?? 'default'}\`
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
+
+### Mandatory PR Code Statistics
+Every PR description MUST include code change statistics:
+- total lines of code changed
+- breakdown by language
+- separation by docs, tests, production code, and scripts
 
 ### Already-Completed Detection
 If you discover that the requested work has ALREADY been implemented and
