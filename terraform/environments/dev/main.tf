@@ -589,6 +589,12 @@ resource "google_service_account" "hetzner_runtime" {
   description  = "Union runtime service account for PM2 services on the Hetzner VM"
 }
 
+resource "google_service_account" "whatsapp_private_sync" {
+  account_id   = "intexuraos-wa-private-sync-${var.environment}"
+  display_name = "IntexuraOS Private WhatsApp Sync (${var.environment})"
+  description  = "External bridge caller identity for private WhatsApp sync ingestion"
+}
+
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {
   for_each = local.hetzner_runtime_secret_names
 
@@ -634,6 +640,12 @@ resource "google_service_account_iam_member" "hetzner_runtime_token_creator" {
   service_account_id = google_service_account.hetzner_runtime.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_service_account_iam_member" "whatsapp_private_sync_token_creator" {
+  service_account_id = google_service_account.whatsapp_private_sync.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.whatsapp_private_sync.email}"
 }
 
 resource "google_storage_bucket_iam_member" "hetzner_runtime_bucket_object_admin" {
@@ -1667,6 +1679,11 @@ output "firestore_database" {
 output "service_accounts" {
   description = "Service account emails"
   value       = module.iam.service_accounts
+}
+
+output "whatsapp_private_sync_service_account" {
+  description = "Service account email allowed to call production private WhatsApp sync ingest"
+  value       = google_service_account.whatsapp_private_sync.email
 }
 
 output "static_assets_bucket_name" {

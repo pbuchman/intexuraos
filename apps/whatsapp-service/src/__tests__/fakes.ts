@@ -33,7 +33,10 @@ import type {
   PhoneVerification,
   PhoneVerificationRepository,
   PhoneVerificationStatus,
+  PrivateWhatsAppIngestOutcome,
+  PrivateWhatsAppRepository,
   SendMessageResult,
+  StorePrivateWhatsAppMessageInput,
   TextMessageSendResult,
   ThumbnailGeneratorPort,
   ThumbnailResult,
@@ -568,6 +571,62 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.shouldFailFindById = false;
     this.shouldFailFindByWaMessageId = false;
     this.nextCursorToReturn = undefined;
+  }
+}
+
+/**
+ * Fake private WhatsApp repository for sync route and use case tests.
+ */
+export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository {
+  private readonly stored = new Map<string, StorePrivateWhatsAppMessageInput>();
+  private failNextError: WhatsAppError | null = null;
+
+  failNext(error: WhatsAppError): void {
+    this.failNextError = error;
+  }
+
+  storeIncomingMessage(
+    input: StorePrivateWhatsAppMessageInput
+  ): Promise<Result<PrivateWhatsAppIngestOutcome, WhatsAppError>> {
+    if (this.failNextError !== null) {
+      const error = this.failNextError;
+      this.failNextError = null;
+      return Promise.resolve(err(error));
+    }
+
+    const existing = this.stored.get(input.message.matrixEventId);
+    const chatId = `chat:${input.sourceAccountId}:${input.chat.matrixRoomId}`;
+    const messageId = `message:${input.sourceAccountId}:${input.message.matrixEventId}`;
+
+    if (existing !== undefined) {
+      return Promise.resolve(
+        ok({
+          outcome: 'duplicate',
+          chatId,
+          messageId,
+          matrixEventId: input.message.matrixEventId,
+        })
+      );
+    }
+
+    this.stored.set(input.message.matrixEventId, input);
+    return Promise.resolve(
+      ok({
+        outcome: 'created',
+        chatId,
+        messageId,
+        matrixEventId: input.message.matrixEventId,
+      })
+    );
+  }
+
+  getAll(): StorePrivateWhatsAppMessageInput[] {
+    return Array.from(this.stored.values());
+  }
+
+  clear(): void {
+    this.stored.clear();
+    this.failNextError = null;
   }
 }
 

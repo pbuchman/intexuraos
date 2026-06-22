@@ -34,6 +34,10 @@ apps/*/.env
 .claude/settings.local.json
 .claude/settings.local.*.json
 
+# Codex local hooks
+.codex/hooks.json
+.codex/hooks/
+
 # GCP Service Account Keys
 *service-account*.json
 gcp-*.json

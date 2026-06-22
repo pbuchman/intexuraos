@@ -13,6 +13,7 @@ import { preferencesRoutes } from './preferencesRoutes.js';
 import { createPubsubRoutes } from './pubsubRoutes.js';
 import { verificationRoutes } from './verificationRoutes.js';
 import { internalRoutes } from './internalRoutes.js';
+import { privateSyncRoutes } from './privateSyncRoutes.js';
 
 /**
  * Creates routes plugin with config.
@@ -29,6 +30,7 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(verificationRoutes);
     fastify.register(createPubsubRoutes());
     fastify.register(internalRoutes);
+    fastify.register(privateSyncRoutes);
     done();
   };
 }

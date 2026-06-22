@@ -216,7 +216,9 @@ describe('Hetzner nginx runtime config', () => {
 
     expect(config).toContain('access_by_lua_file /etc/nginx/lua/jwt-verify.lua;');
     expect(verifier).toContain('EXPECTED_AUD = "https://intexuraos.cloud"');
-    expect(verifier).toContain('ALLOWED_SERVICE_ACCOUNTS');
+    expect(verifier).toContain('GLOBAL_ALLOWED_SERVICE_ACCOUNTS');
+    expect(verifier).toContain('ROUTE_ALLOWED_SERVICE_ACCOUNTS');
+    expect(verifier).toContain('ngx.var.uri');
     expect(verifier).toContain(
       'intexuraos-scheduler-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
@@ -241,6 +243,28 @@ describe('Hetzner nginx runtime config', () => {
     expect(verifier).toContain('ngx.var.edge_internal_auth_token = internal_auth_token');
     expect(verifier).not.toContain('ngx.req.set_header("X-Internal-Auth"');
     expect(verifier).toContain('/etc/intexuraos/internal-auth-token');
+
+    const globalAllowlist = verifier.slice(
+      verifier.indexOf('GLOBAL_ALLOWED_SERVICE_ACCOUNTS'),
+      verifier.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS')
+    );
+    const routeAllowlist = verifier.slice(verifier.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS'));
+    expect(globalAllowlist).not.toContain(
+      'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+    expect(routeAllowlist).toContain('["/internal/whatsapp/private/events"]');
+    expect(routeAllowlist).toContain(
+      'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+
+    const allowFunction = verifier.slice(
+      verifier.indexOf('local function is_service_account_allowed'),
+      verifier.indexOf('local auth_header')
+    );
+    const routeLookupIndex = allowFunction.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]');
+    const globalLookupIndex = allowFunction.indexOf('GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email]');
+    expect(routeLookupIndex).toBeGreaterThanOrEqual(0);
+    expect(globalLookupIndex).toBeGreaterThan(routeLookupIndex);
   });
 });
 
@@ -565,6 +589,7 @@ describe('Hetzner async edge cutover', () => {
     expect(devTerraform).not.toContain('local.async_edge_audience');
     expect(prTriageTerraform).not.toContain('local.hetzner_edge_origin');
     expect(hetznerMain).toContain('activate_hetzner_async_consumers');
+    expect(hetznerMain).toContain('"/internal/whatsapp/private/events"');
     expect(hetznerPubsub).toContain('google_pubsub_subscription" "hetzner_push"');
     expect(hetznerPubsub).toContain(
       'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
