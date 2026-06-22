@@ -10,6 +10,7 @@ import { resetServices, setServices } from '../services.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import {
   FakeEventPublisher,
+  FakePrivateWhatsAppRepository,
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
   FakeMessageSender,
@@ -471,6 +472,7 @@ export interface TestContext {
   outboundMessageRepository: FakeOutboundMessageRepository;
   phoneVerificationRepository: FakePhoneVerificationRepository;
   notificationPreferencesRepository: FakeNotificationPreferencesRepository;
+  privateWhatsAppRepository: FakePrivateWhatsAppRepository;
   messageSender: FakeMessageSender;
   linkPreviewFetcher: FakeLinkPreviewFetcherPort;
 }
@@ -491,6 +493,7 @@ export function setupTestContext(): TestContext {
     phoneVerificationRepository: null as unknown as FakePhoneVerificationRepository,
     notificationPreferencesRepository:
       null as unknown as FakeNotificationPreferencesRepository,
+    privateWhatsAppRepository: null as unknown as FakePrivateWhatsAppRepository,
     messageSender: null as unknown as FakeMessageSender,
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
   };
@@ -513,6 +516,7 @@ export function setupTestContext(): TestContext {
     context.outboundMessageRepository = new FakeOutboundMessageRepository();
     context.phoneVerificationRepository = new FakePhoneVerificationRepository();
     context.notificationPreferencesRepository = new FakeNotificationPreferencesRepository();
+    context.privateWhatsAppRepository = new FakePrivateWhatsAppRepository();
     context.messageSender = new FakeMessageSender();
     context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
 
@@ -529,6 +533,7 @@ export function setupTestContext(): TestContext {
       outboundMessageRepository: context.outboundMessageRepository,
       phoneVerificationRepository: context.phoneVerificationRepository,
       notificationPreferencesRepository: context.notificationPreferencesRepository,
+      privateWhatsAppRepository: context.privateWhatsAppRepository,
     });
 
     clearJwksCache();

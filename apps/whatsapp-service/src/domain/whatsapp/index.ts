@@ -38,6 +38,22 @@ export type {
   PhoneVerificationStatus,
 } from './models/PhoneVerification.js';
 
+export type {
+  PrivateWhatsAppChat,
+  PrivateWhatsAppChatInput,
+  PrivateWhatsAppChatType,
+  PrivateWhatsAppDeliveryMode,
+  PrivateWhatsAppIngestEventResult,
+  PrivateWhatsAppIngestOutcome,
+  PrivateWhatsAppIngestResult,
+  PrivateWhatsAppMediaInfo,
+  PrivateWhatsAppMessage,
+  PrivateWhatsAppMessageDirection,
+  PrivateWhatsAppMessageInput,
+  PrivateWhatsAppMessageType,
+  StorePrivateWhatsAppMessageInput,
+} from './models/PrivateWhatsApp.js';
+
 // Ports
 export type {
   WhatsAppUserMapping,
@@ -75,6 +91,8 @@ export type {
 } from './ports/outboundMessageRepository.js';
 
 export type { NotificationPreferencesRepository } from './ports/notificationPreferencesRepository.js';
+
+export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepository.js';
 
 // Events
 export type {
@@ -132,6 +150,13 @@ export {
   type RetryPendingWebhookEventsInput,
   type RetryPendingWebhookEventsResult,
 } from './usecases/retryPendingWebhookEvents.js';
+
+export {
+  IngestPrivateWhatsAppEventsUseCase,
+  type IngestPrivateWhatsAppEventInput,
+  type IngestPrivateWhatsAppEventsDeps,
+  type IngestPrivateWhatsAppEventsInput,
+} from './usecases/ingestPrivateWhatsAppEvents.js';
 
 export {
   shouldDeliverMessage,

@@ -84,6 +84,7 @@ locals {
     "/internal/notifications/digest/run-yesterday"      = "mobile-notifications-service"
     "/internal/retry-pending"                           = "commands-agent"
     "/internal/todos/pubsub/todos-processing"           = "todos-agent"
+    "/internal/whatsapp/private/events"                 = "whatsapp-service"
     "/internal/whatsapp/pubsub/media-cleanup"           = "whatsapp-service"
     "/internal/whatsapp/pubsub/process-webhook"         = "whatsapp-service"
     "/internal/whatsapp/pubsub/send-message"            = "whatsapp-service"

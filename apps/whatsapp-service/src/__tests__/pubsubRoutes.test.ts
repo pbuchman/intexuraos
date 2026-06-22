@@ -8,6 +8,7 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
   FakeEventPublisher,
+  FakePrivateWhatsAppRepository,
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
   FakeMessageSender,
@@ -98,6 +99,7 @@ describe('Pub/Sub Routes', () => {
       outboundMessageRepository,
       phoneVerificationRepository: new FakePhoneVerificationRepository(),
       notificationPreferencesRepository: prefs,
+      privateWhatsAppRepository: new FakePrivateWhatsAppRepository(),
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
