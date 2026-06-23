@@ -4,6 +4,7 @@ packages:
   - 'workers/*'
   - 'migrations'
   - 'tools/log-server'
+  - 'tools/whatsapp-private-matrix-sync'
   - 'tools/sample-data'
   - 'e2e'
   - 'e2e/mock-claude'
