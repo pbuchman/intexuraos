@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "110",
+  "lastReservedId": "111",
   "entries": [
     {
       "id": "001",
@@ -550,6 +550,11 @@
       "id": "110",
       "name": "whatsapp-webhook-retry-indexes",
       "checksum": "sha256:71172362d85eb9b83bb165aa398d23f19c3f8b9629864fa87d6ef631fd3de632"
+    },
+    {
+      "id": "111",
+      "name": "private-whatsapp-sender-day-indexes",
+      "checksum": "sha256:dc59ce6a66641389040aa0e53922d79552d12f58034deb41cab19978d81079c0"
     }
   ]
 }

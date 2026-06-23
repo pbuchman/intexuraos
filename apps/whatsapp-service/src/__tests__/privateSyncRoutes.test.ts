@@ -333,4 +333,330 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.data.accepted).toBe(1);
     expect(body.data.messages[0]?.outcome).toBe('created');
   });
+
+  it('requires internal auth for private WhatsApp message range queries', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/messages?sourceAccountId=pbuchman-private-whatsapp',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns private WhatsApp messages for an internal sender range query without logging message bodies', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    commonHttpState.logIncomingRequest.mockClear();
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url:
+        '/internal/whatsapp/private/messages?sourceAccountId=pbuchman-private-whatsapp&senderKey=phone:%2B48123456789&from=2026-06-22T00:00:00.000Z&to=2026-06-23T00:00:00.000Z&eventDayKey=2026-06-22&limit=20&cursor=test-cursor',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        messages: { matrixEventId: string; senderKey: string; text?: string }[];
+        nextCursor?: string;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.messages).toMatchObject([
+      {
+        matrixEventId: '$event-1',
+        senderKey: 'phone:+48123456789',
+        text: 'hello from private whatsapp',
+      },
+    ]);
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_messages_query',
+          hasSourceAccountId: true,
+          hasSenderKey: true,
+          hasEventDayKey: true,
+          hasCursor: true,
+          limit: 20,
+        }),
+      })
+    );
+    expect(JSON.stringify(commonHttpState.logIncomingRequest.mock.calls)).not.toContain(
+      'hello from private whatsapp'
+    );
+  });
+
+  it('rejects invalid private WhatsApp message range query parameters after coarse logging', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/messages?sourceAccountId=pbuchman-private-whatsapp&limit=abc',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_messages_query',
+          limit: 50,
+        }),
+      })
+    );
+  });
+
+  it('returns a standard error envelope when private message range query fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private WhatsApp message query failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/messages?sourceAccountId=pbuchman-private-whatsapp',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('requires internal auth for private WhatsApp sender-day queries', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/sender-days?sourceAccountId=pbuchman-private-whatsapp',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns private WhatsApp sender-day aggregates for internal summary preparation', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url:
+        '/internal/whatsapp/private/sender-days?sourceAccountId=pbuchman-private-whatsapp&senderKey=phone:%2B48123456789&fromDay=2026-06-22&toDay=2026-06-22&limit=10&cursor=test-cursor',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        senderDays: {
+          senderKey: string;
+          eventDayKey: string;
+          messageCount: number;
+          summaryStatus: string;
+        }[];
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.senderDays).toMatchObject([
+      {
+        senderKey: 'phone:+48123456789',
+        eventDayKey: '2026-06-22',
+        messageCount: 1,
+        summaryStatus: 'not_started',
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain('hello from private whatsapp');
+  });
+
+  it('rejects invalid private WhatsApp sender-day query parameters after coarse logging', async () => {
+    commonHttpState.logIncomingRequest.mockClear();
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/sender-days?limit=abc',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_sender_days_query',
+          hasSourceAccountId: false,
+          limit: 50,
+        }),
+      })
+    );
+  });
+
+  it('returns a standard error envelope when private sender-day query fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private WhatsApp sender-day query failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/sender-days?sourceAccountId=pbuchman-private-whatsapp',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('requires internal auth for private WhatsApp aggregate rebuilds', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/aggregates/rebuild',
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('runs a private WhatsApp aggregate rebuild through an internal endpoint', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    commonHttpState.logIncomingRequest.mockClear();
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/aggregates/rebuild',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        from: '2026-06-22T00:00:00.000Z',
+        to: '2026-06-23T00:00:00.000Z',
+        limit: 100,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        scannedMessages: number;
+        senderDayCount: number;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data).toMatchObject({
+      scannedMessages: 1,
+      senderDayCount: 1,
+    });
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_aggregates_rebuild',
+          hasSourceAccountId: true,
+          hasFrom: true,
+          hasTo: true,
+          limit: 100,
+        }),
+      })
+    );
+    expect(JSON.stringify(commonHttpState.logIncomingRequest.mock.calls)).not.toContain(
+      'hello from private whatsapp'
+    );
+  });
+
+  it('rejects invalid private WhatsApp aggregate rebuild bodies after coarse logging', async () => {
+    commonHttpState.logIncomingRequest.mockClear();
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/aggregates/rebuild',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        limit: 'abc',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_aggregates_rebuild',
+          hasSourceAccountId: false,
+          limit: 50,
+        }),
+      })
+    );
+  });
+
+  it('logs non-object private WhatsApp aggregate rebuild bodies without inspecting contents', async () => {
+    commonHttpState.logIncomingRequest.mockClear();
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/aggregates/rebuild',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'internal_whatsapp_private_aggregates_rebuild',
+          bodyType: 'undefined',
+        },
+      })
+    );
+  });
+
+  it('returns a standard error envelope when private aggregate rebuild fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private WhatsApp aggregate rebuild failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/aggregates/rebuild',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
 });
