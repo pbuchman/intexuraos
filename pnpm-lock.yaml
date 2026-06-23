@@ -2121,6 +2121,12 @@ importers:
         specifier: ^4.18.2
         version: 4.22.1
 
+  tools/whatsapp-private-matrix-sync:
+    dependencies:
+      google-auth-library:
+        specifier: ^10.0.0
+        version: 10.5.0
+
   tools/sample-data:
     dependencies:
       '@google-cloud/pubsub':
