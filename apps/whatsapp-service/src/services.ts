@@ -22,6 +22,7 @@ import type {
   NotificationPreferencesRepository,
   OutboundMessageRepository,
   PhoneVerificationRepository,
+  PrivateWhatsAppRepository,
   ThumbnailGeneratorPort,
   WhatsAppCloudApiPort,
   WhatsAppMessageRepository,
@@ -30,6 +31,7 @@ import type {
   WhatsAppWebhookEventRepository,
 } from './domain/whatsapp/index.js';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
+import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
 
 /**
  * Configuration for service initialization.
@@ -74,6 +76,7 @@ export interface ServiceContainer {
   outboundMessageRepository: OutboundMessageRepository;
   phoneVerificationRepository: PhoneVerificationRepository;
   notificationPreferencesRepository: NotificationPreferencesRepository;
+  privateWhatsAppRepository: PrivateWhatsAppRepository;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
@@ -113,6 +116,7 @@ export function getServices(): ServiceContainer {
     outboundMessageRepository: createOutboundMessageRepository(),
     phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
+    privateWhatsAppRepository: createPrivateWhatsAppRepository(),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(
