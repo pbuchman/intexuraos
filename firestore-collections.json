@@ -46,6 +46,14 @@
       "owner": "whatsapp-service",
       "description": "Read-only private WhatsApp messages synchronized from Matrix/mautrix bridge events. Separate from WhatsApp Business API messages and mobile notifications."
     },
+    "whatsapp_private_senders": {
+      "owner": "whatsapp-service",
+      "description": "Per-private-WhatsApp-sender profile aggregate keyed by source account and sender identity."
+    },
+    "whatsapp_private_sender_days": {
+      "owner": "whatsapp-service",
+      "description": "Per-private-WhatsApp-sender daily aggregates for time-range reads and future daily summaries."
+    },
     "mobile_notifications": {
       "owner": "mobile-notifications-service",
       "description": "Mobile push notifications received from user devices"
