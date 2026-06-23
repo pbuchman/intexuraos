@@ -306,7 +306,7 @@ All routes verified against `apps/*/src/routes/`. Auth: `Bearer` = Auth0 JWT, `I
 | POST   | `/internal/calendar/generate-preview`  | Internal | internalRoutes.ts | OK     |
 | GET    | `/internal/calendar/preview/:actionId` | Internal | internalRoutes.ts | OK     |
 
-### chat-agent
+### retired-chat-service
 
 | Method | Path    | Auth   | Route File    | Status |
 | ------ | ------- | ------ | ------------- | ------ |
@@ -450,7 +450,7 @@ Worker runs as Cloud Functions. No HTTP endpoints.
 | POST   | `/internal/llm/pubsub/report-analytics` | OIDC     | internalRoutes.ts | OK     |
 | POST   | `/internal/llm/pubsub/process-llm-call` | OIDC     | internalRoutes.ts | OK     |
 
-### todos-agent
+### retired-checklist-service
 
 | Method | Path                                      | Auth     | Route File        | Status |
 | ------ | ----------------------------------------- | -------- | ----------------- | ------ |
@@ -467,7 +467,7 @@ Worker runs as Cloud Functions. No HTTP endpoints.
 | POST   | `/todos/:id/unarchive`                    | Bearer   | todoRoutes.ts     | OK     |
 | POST   | `/todos/:id/cancel`                       | Bearer   | todoRoutes.ts     | OK     |
 | POST   | `/internal/todos`                         | Internal | internalRoutes.ts | OK     |
-| POST   | `/internal/todos/pubsub/todos-processing` | OIDC     | pubsubRoutes.ts   | OK     |
+| POST   | `/internal/todos/pubsub/retired-checklist-processing` | OIDC     | pubsubRoutes.ts   | OK     |
 
 ### user-service
 
@@ -539,7 +539,7 @@ Internal HTTP calls verified against both caller docs and callee code.
 | Caller           | Method | Target Endpoint                                | Callee           | Match |
 | ---------------- | ------ | ---------------------------------------------- | ---------------- | ----- |
 | orchestrator     | POST   | `/internal/research/draft`                     | research-agent   | OK    |
-| orchestrator     | POST   | `/internal/todos`                              | todos-agent      | OK    |
+| orchestrator     | POST   | `/internal/todos`                              | retired-checklist-service      | OK    |
 | orchestrator     | POST   | `/internal/notes`                              | notes-agent      | OK    |
 | orchestrator     | POST   | `/internal/bookmarks`                          | bookmarks-agent  | OK    |
 | orchestrator     | POST   | `/internal/actions`                            | actions-agent    | OK    |
@@ -553,7 +553,7 @@ Internal HTTP calls verified against both caller docs and callee code.
 | calendar-agent   | GET    | `/internal/users/:uid/oauth/google/token`      | user-service     | OK    |
 | research-agent   | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
 | image-service    | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
-| todos-agent      | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
+| retired-checklist-service      | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
 | linear-agent     | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
 | bookmarks-agent  | POST   | `/internal/link-previews`                      | web-agent        | OK    |
 | whatsapp-service | POST   | `/internal/images/generate`                    | image-service    | OK    |
@@ -649,17 +649,17 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 | web-agent      | `/internal/users/{id}/llm-keys`          | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
 | calendar-agent | `/internal/users/:id/oauth/google/token` | `/internal/users/:uid/oauth/google/token` | `/internal/users/:uid/oauth/google/token` | OK    |
 | calendar-agent | `/internal/users/:id/llm-client`         | N/A (does not exist)                      | N/A (does not exist)                      | FAIL  |
-| todos-agent    | `/internal/users/:userId/llm-client`     | N/A (does not exist)                      | N/A (does not exist)                      | FAIL  |
+| retired-checklist-service    | `/internal/users/:userId/llm-client`     | N/A (does not exist)                      | N/A (does not exist)                      | FAIL  |
 | image-service  | `/internal/users/:userId/api-keys`       | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | FAIL  |
 | linear-agent   | `/internal/user/llm-client`              | N/A (does not exist)                      | N/A (does not exist)                      | FAIL  |
-| chat-agent     | (via `@intexuraos/internal-clients`)     | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
+| retired-chat-service     | (via `@intexuraos/internal-clients`)     | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
 | commands-agent | (via `@intexuraos/internal-clients`)     | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
 
 **Details on FAIL cases:**
 
 1. **calendar-agent docs reference `/internal/users/:id/llm-client`** -- This endpoint does not exist in user-service. The actual mechanism is the `@intexuraos/internal-clients` package which calls `/internal/users/:uid/llm-keys` and `/internal/users/:uid/settings` to build an LLM client. The docs incorrectly describe this as a single endpoint.
 
-2. **todos-agent docs reference `/internal/users/:userId/llm-client`** -- Same issue. The actual internal-clients package calls two separate user-service endpoints.
+2. **retired-checklist-service docs reference `/internal/users/:userId/llm-client`** -- Same issue. The actual internal-clients package calls two separate user-service endpoints.
 
 3. **image-service docs reference `/internal/users/:userId/api-keys`** -- The actual endpoint is `/internal/users/:uid/llm-keys`. The path `api-keys` does not exist.
 
@@ -813,12 +813,12 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 | POST   | `/internal/bookmarks/pubsub/enrich`     | Yes  | Yes  |
 | POST   | `/internal/bookmarks/pubsub/summarize`  | Yes  | Yes  |
 
-### todos-agent
+### retired-checklist-service
 
 | Method | Path                                      | Docs | Code |
 | ------ | ----------------------------------------- | ---- | ---- |
 | POST   | `/internal/todos`                         | Yes  | Yes  |
-| POST   | `/internal/todos/pubsub/todos-processing` | Yes  | Yes  |
+| POST   | `/internal/todos/pubsub/retired-checklist-processing` | Yes  | Yes  |
 
 ### calendar-agent
 
@@ -890,7 +890,7 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 
 ### D1: Phantom `/llm-client` Endpoint in 3 Service Docs
 
-**Affected docs:** `calendar-agent/technical.md`, `todos-agent/technical.md`, `linear-agent/technical.md`
+**Affected docs:** `calendar-agent/technical.md`, `retired-checklist-service/technical.md`, `linear-agent/technical.md`
 
 **Problem:** These docs list a dependency endpoint `/internal/users/:id/llm-client` (or variants) on user-service. This endpoint does not exist. The actual mechanism is the `@intexuraos/internal-clients` package, which composes an LLM client by calling:
 
@@ -981,7 +981,7 @@ The following services from the analyzed set have no cross-service HTTP discrepa
 - **calendar-agent** -- All 3 endpoints match between docs and code (caller-side docs issue only)
 - **web-agent** -- Both endpoints match between docs and code
 - **image-service** -- All 3 endpoints match between docs and code (caller-side docs issue only)
-- **chat-agent** -- No internal endpoints (public only, verified)
+- **retired-chat-service** -- No internal endpoints (public only, verified)
 - **orchestrator** -- Not a Cloud Run service; HTTP contract with code-agent verified
 
 ---
@@ -994,6 +994,6 @@ The following services from the analyzed set have no cross-service HTTP discrepa
 | HIGH     | D7          | `docs/services/code-agent/technical.md`                      |
 | MEDIUM   | D4          | `docs/services/actions-agent/technical.md`                   |
 | MEDIUM   | D5          | `docs/services/linear-agent/technical.md`                    |
-| LOW      | D1          | `calendar-agent`, `todos-agent`, `linear-agent` technical.md |
+| LOW      | D1          | `calendar-agent`, `retired-checklist-service`, `linear-agent` technical.md |
 | LOW      | D2          | `docs/services/image-service/technical.md`                   |
 | LOW      | D3          | `docs/services/linear-agent/technical.md`                    |

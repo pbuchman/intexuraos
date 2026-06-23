@@ -58,14 +58,11 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
   INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL: 'http://localhost:8122/openapi.json',
   INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
-  INTEXURAOS_TODOS_AGENT_OPENAPI_URL: 'http://localhost:8123/openapi.json',
   INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://localhost:8124/openapi.json',
   INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
-  INTEXURAOS_CHAT_AGENT_OPENAPI_URL: 'http://localhost:8129/openapi.json',
   INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'https://dev.intexuraos.cloud/api/code/openapi.json',
   INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://localhost:8126/openapi.json',
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://localhost:8127/openapi.json',
-  INTEXURAOS_CRON_AGENT_OPENAPI_URL: 'http://localhost:8130/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://localhost:8131/openapi.json',
 };
 
@@ -161,10 +158,6 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_SERVICE_URL: 'http://localhost:8117',
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
   },
-  'todos-agent': {
-    INTEXURAOS_TODOS_PROCESSING_TOPIC:
-      process.env.INTEXURAOS_TODOS_PROCESSING_TOPIC ?? 'todos-processing',
-  },
   'user-service': {
     INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY,
     INTEXURAOS_ENCRYPTION_KEY: process.env.INTEXURAOS_ENCRYPTION_KEY,
@@ -176,12 +169,6 @@ const SERVICE_ENV_MAPPINGS = {
   'web-agent': {
     INTEXURAOS_CLOUDFLARE_ACCOUNT_ID: process.env.INTEXURAOS_CLOUDFLARE_ACCOUNT_ID,
     INTEXURAOS_CLOUDFLARE_API_TOKEN: process.env.INTEXURAOS_CLOUDFLARE_API_TOKEN,
-  },
-  'chat-agent': {
-    // OpenAI API key for embeddings (from .envrc)
-    INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
-    // HS256 secret used to sign guest session JWTs (>=32 bytes; from .envrc)
-    INTEXURAOS_GUEST_SESSION_SECRET: process.env.INTEXURAOS_GUEST_SESSION_SECRET,
   },
   'fishing-assistant-service': {
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
@@ -270,7 +257,6 @@ module.exports = {
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),
-    createServiceConfig('cron-agent', 8130),
     createServiceConfig('hellscript-agent', 8131),
     createServiceConfig('llm-usage-service', 8132),
 
@@ -280,11 +266,9 @@ module.exports = {
     createServiceConfig('commands-agent', 8117, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('actions-agent', 8118, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('todos-agent', 8123, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('chat-agent', 8129, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('web-agent', 8127, { waitForService: 'http://localhost:8122/health' }),
 
     // Aggregates `/openapi.json` from every other service — register last so

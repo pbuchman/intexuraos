@@ -81,7 +81,6 @@ gh pr list --state merged --base development --json number,title,body,mergedAt,a
 - [ ] Prepend `CHANGELOG.md` entry
 - [ ] Verify `/tmp/release-notes-X.Y.Z.md`
 - [ ] Run `pnpm run ci:tracked` and fix all failures
-- [ ] Refresh RAG embeddings unless `--skip-docs`
 - [ ] Run pre-commit release validation
 - [ ] Dispatch final `xhigh` release auditor and fix critical findings
 - [ ] Confirm a real `INT-XXX` exists, or get explicit user permission to proceed without one before branch or PR creation

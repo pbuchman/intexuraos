@@ -17,7 +17,7 @@ No HTTP endpoints are created, modified, or removed by this plan. `apps/web` is 
 - **Modified:** none.
 - **Created:** none.
 - **Removed:** none.
-- **Unchanged:** all service endpoints consumed via `config.ts` (`authServiceUrl`, `whatsappServiceUrl`, `notionServiceUrl`, `mobileNotificationsServiceUrl`, `ResearchAgentUrl`, `commandsAgentServiceUrl`, `actionsAgentUrl`, `notesAgentUrl`, `todosAgentUrl`, `bookmarksAgentUrl`, `calendarAgentUrl`, `linearAgentUrl`, `codeAgentUrl`, `chatAgentUrl`, `cronAgentUrl`, `hellscriptAgentUrl`, `appSettingsServiceUrl`, `llmUsageServiceUrl`).
+- **Unchanged:** all service endpoints consumed via `config.ts` (`authServiceUrl`, `whatsappServiceUrl`, `notionServiceUrl`, `mobileNotificationsServiceUrl`, `ResearchAgentUrl`, `commandsAgentServiceUrl`, `actionsAgentUrl`, `notesAgentUrl`, `retiredChecklistServiceUrl`, `bookmarksAgentUrl`, `calendarAgentUrl`, `linearAgentUrl`, `codeAgentUrl`, `retiredChatServiceUrl`, `retiredSchedulerServiceUrl`, `hellscriptAgentUrl`, `appSettingsServiceUrl`, `llmUsageServiceUrl`).
 
 ---
 

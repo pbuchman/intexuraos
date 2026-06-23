@@ -1,5 +1,4 @@
 import {
-  Activity,
   Bell,
   Bot,
   Calendar,
@@ -66,11 +65,6 @@ export const linearItems: NavItem[] = [
 export const llmUsageItems: NavItem[] = [
   { to: '/llm-usage', label: 'Events', icon: List },
   { to: '/llm-usage/pricing', label: 'Pricing', icon: DollarSign },
-];
-
-export const cronAgentItems: NavItem[] = [
-  { to: '/cron-agent', label: 'Schedules', icon: List },
-  { to: '/cron-agent/executions', label: 'Executions', icon: Activity },
 ];
 
 export const fishingAssistantItems: NavItem[] = [

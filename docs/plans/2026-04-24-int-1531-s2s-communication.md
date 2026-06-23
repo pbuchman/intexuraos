@@ -59,7 +59,7 @@ packages/
       linear-agent/                   # NEW
       calendar-service/               # NEW
       notes-agent/                    # NEW
-      todos-agent/                    # NEW
+      retired-checklist-service/                    # NEW
       bookmarks-agent/                # NEW
       github-pr/                      # NEW (moved from apps/code-agent/src/infra/http/github-pr/)
   http-contracts/
@@ -69,7 +69,7 @@ packages/
         userService.ts
         calendarService.ts
         notesAgent.ts
-        todosAgent.ts
+        retiredChecklistService.ts
         bookmarksAgent.ts
         linearAgent.ts
         codeAgent.ts
@@ -934,7 +934,7 @@ For every consumer in `apps/*/src/infra/http/*HttpClient.ts`, create a correspon
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `calendar-service/client.ts` | `actions-agent/src/infra/http/calendarServiceHttpClient.ts`                                                   | has the richest existing client (timeout logic) — use as reference                                                         |
 | `notes-agent/client.ts`      | `actions-agent/src/infra/http/notesServiceHttpClient.ts`                                                      |                                                                                                                            |
-| `todos-agent/client.ts`      | `actions-agent/src/infra/http/todosServiceHttpClient.ts`                                                      |                                                                                                                            |
+| `retired-checklist-service/client.ts`      | `actions-agent/src/infra/http/todosServiceHttpClient.ts`                                                      |                                                                                                                            |
 | `bookmarks-agent/client.ts`  | `actions-agent/src/infra/http/bookmarksServiceHttpClient.ts`                                                  |                                                                                                                            |
 | `linear-agent/client.ts`     | `actions-agent/src/infra/http/linearAgentHttpClient.ts`, `code-agent/src/infra/http/linearAgentHttpClient.ts` | two current copies → one canonical                                                                                         |
 | `code-agent/client.ts`       | `actions-agent/src/infra/http/codeAgentHttpClient.ts`, `linear-agent/src/infra/http/codeAgentHttpClient.ts`   | two current copies                                                                                                         |

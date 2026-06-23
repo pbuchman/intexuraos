@@ -26,7 +26,7 @@ The hub does not store copies of each specification. When you select a service, 
 
 ### Instant Discoverability
 
-A developer's first visit to the docs hub reveals the full surface area of IntexuraOS in one glance. The dropdown lists every service by name — User Service, Research Agent, Code Agent, Cron Agent, Hellscript Agent, and fifteen more. For someone new to the platform, this is the fastest way to understand what exists and where to start.
+A developer's first visit to the docs hub reveals the full surface area of IntexuraOS in one glance. The dropdown lists every service by name — User Service, Research Agent, Code Agent, Hellscript Agent, and the rest of the active API surface. For someone new to the platform, this is the fastest way to understand what exists and where to start.
 
 ### Self-Contained Configuration
 

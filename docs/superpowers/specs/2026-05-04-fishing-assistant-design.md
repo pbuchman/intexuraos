@@ -57,8 +57,8 @@ The new service does not own mobile notification storage or digest generation. I
 - Response envelope: `reply.ok(...)` and `reply.fail(...)`
 - Incoming route logging: `logIncomingRequest(...)`
 - Firestore vector storage: `FieldValue.vector(...)`
-- Embedding client pattern: `apps/chat-agent/src/infra/llm/embeddingClient.ts`
-- Vector repository pattern: `apps/chat-agent/src/infra/firestore/embeddingRepository.ts`
+- Embedding client pattern: `apps/retired-chat-service/src/infra/llm/embeddingClient.ts`
+- Vector repository pattern: `apps/retired-chat-service/src/infra/firestore/embeddingRepository.ts`
 - Web layout/navigation: `apps/web/src/components/Sidebar.tsx`
 - Chat-like two-pane UI: `apps/web/src/pages/HellscriptConversationPage.tsx`
 - Composer behavior: `HellscriptComposer` and `code-tasks/MessageInput`

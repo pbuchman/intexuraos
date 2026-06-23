@@ -118,7 +118,6 @@ export function formatRelative(isoDate: string): string {
 /**
  * Format relative time from a nullable ISO date string.
  * Returns 'Never' for null values. Supports future dates.
- * Use for: Cron schedule next/last execution timestamps
  */
 export function formatRelativeNullable(isoDate: string | null): string {
   if (isoDate === null) return 'Never';

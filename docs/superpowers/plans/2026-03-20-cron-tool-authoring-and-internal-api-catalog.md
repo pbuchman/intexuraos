@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make cron schedules easier to author by letting users pick concrete tools in the UI, while expanding cron-agent so it can use every internal API documented in api-docs-hub.
+**Goal:** Make cron schedules easier to author by letting users pick concrete tools in the UI, while expanding retired-scheduler-service so it can use every internal API documented in api-docs-hub.
 
-**Architecture:** Introduce one shared internal service catalog in `packages/common-core` so both cron-agent and api-docs-hub agree on the same internal API list. Keep the current cron execution model, but add a structured `preferredTools` field that the web UI can edit and cron-agent can use to bias tool selection. Expose tool parameter schemas from `/cron/services` so the UI can inject a readable tool template into the schedule instruction instead of making the user guess argument names.
+**Architecture:** Introduce one shared internal service catalog in `packages/common-core` so both retired-scheduler-service and api-docs-hub agree on the same internal API list. Keep the current cron execution model, but add a structured `preferredTools` field that the web UI can edit and retired-scheduler-service can use to bias tool selection. Expose tool parameter schemas from `/cron/services` so the UI can inject a readable tool template into the schedule instruction instead of making the user guess argument names.
 
 **Tech Stack:** TypeScript, Fastify, Firestore, React, Vitest, Fastify Swagger/OpenAPI, shared workspace packages.
 
@@ -17,7 +17,7 @@ Today cron schedules are powerful but awkward to author:
 - The user can pick services, but not specific tools.
 - The user has to type tool names and argument shapes from memory.
 - Cron-agent only had a narrow allowlist instead of the full internal API set.
-- api-docs-hub and cron-agent could drift because they did not share the same internal API catalog.
+- api-docs-hub and retired-scheduler-service could drift because they did not share the same internal API catalog.
 
 The implementation should stay simple:
 
@@ -38,34 +38,34 @@ The implementation should stay simple:
 
 | File                                                                 | Responsibility                                                                    |
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `packages/common-core/src/internalServiceCatalog.ts`                 | Shared list of internal services and env vars used by cron-agent and api-docs-hub |
+| `packages/common-core/src/internalServiceCatalog.ts`                 | Shared list of internal services and env vars used by retired-scheduler-service and api-docs-hub |
 | `packages/common-core/src/__tests__/internalServiceCatalog.test.ts`  | Covers trimming and blank-value filtering for the shared OpenAPI source builder   |
-| `apps/web/src/pages/cron-agent/PreferredToolChips.tsx`               | Shared chip list UI for selected preferred tools                                  |
-| `apps/web/src/pages/cron-agent/toolPromptTemplates.ts`               | Builds inserted tool snippets and manages preferred tool arrays                   |
+| `apps/web/src/pages/retired-scheduler-service/PreferredToolChips.tsx`               | Shared chip list UI for selected preferred tools                                  |
+| `apps/web/src/pages/retired-scheduler-service/toolPromptTemplates.ts`               | Builds inserted tool snippets and manages preferred tool arrays                   |
 | `apps/web/src/__tests__/CronScheduleNewPage.test.tsx`                | Covers clicking a tool, prompt injection, and request payload shape               |
 | `apps/api-docs-hub/src/__tests__/server.test.ts`                     | Smoke test for health + Swagger JSON/UI endpoints                                 |
-| `apps/cron-agent/src/domain/__tests__/types.test.ts`                 | Covers schedule-action normalization when `preferredTools` is omitted             |
+| `apps/retired-scheduler-service/src/domain/__tests__/types.test.ts`                 | Covers schedule-action normalization when `preferredTools` is omitted             |
 
 ### Modified files
 
 | File                                                            | Change                                                                       |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `apps/cron-agent/src/config.ts`                                 | Build the allowed service list from the shared internal service catalog      |
-| `apps/cron-agent/src/domain/types.ts`                           | Add `preferredTools` and normalization helpers                               |
-| `apps/cron-agent/src/domain/use-cases/manage-schedule.ts`       | Validate and persist `preferredTools` against selected services              |
-| `apps/cron-agent/src/domain/use-cases/execute-action.ts`        | Bias tool ordering and prompting toward preferred tools                      |
-| `apps/cron-agent/src/prompts/execute-action-prompt.ts`          | Explain preferred-tool intent in plain language to the model                 |
-| `apps/cron-agent/src/infra/openapi-tool-registry.ts`            | Return tool parameter schemas and build tools from the full shared catalog   |
-| `apps/cron-agent/src/infra/firestore-schedule-repository.ts`    | Normalize legacy schedules that do not yet store `preferredTools`            |
-| `apps/cron-agent/src/routes/schedule-routes.ts`                 | Round-trip `preferredTools` and return tool `parameters` in `/cron/services` |
+| `apps/retired-scheduler-service/src/config.ts`                                 | Build the allowed service list from the shared internal service catalog      |
+| `apps/retired-scheduler-service/src/domain/types.ts`                           | Add `preferredTools` and normalization helpers                               |
+| `apps/retired-scheduler-service/src/domain/use-cases/manage-schedule.ts`       | Validate and persist `preferredTools` against selected services              |
+| `apps/retired-scheduler-service/src/domain/use-cases/execute-action.ts`        | Bias tool ordering and prompting toward preferred tools                      |
+| `apps/retired-scheduler-service/src/prompts/execute-action-prompt.ts`          | Explain preferred-tool intent in plain language to the model                 |
+| `apps/retired-scheduler-service/src/infra/openapi-tool-registry.ts`            | Return tool parameter schemas and build tools from the full shared catalog   |
+| `apps/retired-scheduler-service/src/infra/firestore-schedule-repository.ts`    | Normalize legacy schedules that do not yet store `preferredTools`            |
+| `apps/retired-scheduler-service/src/routes/schedule-routes.ts`                 | Round-trip `preferredTools` and return tool `parameters` in `/cron/services` |
 | `apps/api-docs-hub/src/config.ts`                               | Reuse the shared OpenAPI source catalog                                      |
 | `apps/api-docs-hub/tsconfig.json`                               | Include the shared catalog source in typecheck input                         |
-| `apps/web/src/types/cronAgent.ts`                               | Add `preferredTools` and tool parameter schema types                         |
+| `apps/web/src/types/retiredSchedulerService.ts`                               | Add `preferredTools` and tool parameter schema types                         |
 | `apps/web/src/hooks/useScheduleActions.ts`                      | Send and receive `preferredTools` in create/update flows                     |
-| `apps/web/src/pages/cron-agent/CronScheduleNewPage.tsx`         | Add preferred-tool state and tool-template injection                         |
-| `apps/web/src/pages/cron-agent/CronScheduleViewPage.tsx`        | Allow editing preferred tools from the schedule detail page                  |
-| `apps/web/src/pages/cron-agent/ServiceSelector.tsx`             | Make tools clickable and show the preferred tool chips                       |
-| `apps/web/src/pages/cron-agent/AvailableToolsPanel.tsx`         | Show selected preferred tools and insertable tool cards                      |
+| `apps/web/src/pages/retired-scheduler-service/CronScheduleNewPage.tsx`         | Add preferred-tool state and tool-template injection                         |
+| `apps/web/src/pages/retired-scheduler-service/CronScheduleViewPage.tsx`        | Allow editing preferred tools from the schedule detail page                  |
+| `apps/web/src/pages/retired-scheduler-service/ServiceSelector.tsx`             | Make tools clickable and show the preferred tool chips                       |
+| `apps/web/src/pages/retired-scheduler-service/AvailableToolsPanel.tsx`         | Show selected preferred tools and insertable tool cards                      |
 | `packages/common-core/src/index.ts`                             | Export the shared internal service catalog                                   |
 
 ## Task 1: Shared Internal Service Catalog
@@ -74,7 +74,7 @@ The implementation should stay simple:
 - Create: `packages/common-core/src/internalServiceCatalog.ts`
 - Create: `packages/common-core/src/__tests__/internalServiceCatalog.test.ts`
 - Modify: `packages/common-core/src/index.ts`
-- Modify: `apps/cron-agent/src/config.ts`
+- Modify: `apps/retired-scheduler-service/src/config.ts`
 - Modify: `apps/api-docs-hub/src/config.ts`
 - Modify: `apps/api-docs-hub/tsconfig.json`
 
@@ -82,18 +82,18 @@ The implementation should stay simple:
 - [ ] **Step 2: Export helpers for building service definitions from base URLs**
 - [ ] **Step 3: Export helpers for building api-docs-hub OpenAPI sources from explicit OpenAPI URLs**
 - [ ] **Step 4: Add a focused test that proves blank OpenAPI URLs are skipped and non-blank values are trimmed**
-- [ ] **Step 5: Update cron-agent and api-docs-hub to consume the shared catalog instead of keeping separate lists**
+- [ ] **Step 5: Update retired-scheduler-service and api-docs-hub to consume the shared catalog instead of keeping separate lists**
 
 ## Task 2: Persist Preferred Tools In Cron-Agent
 
 **Files:**
-- Modify: `apps/cron-agent/src/domain/types.ts`
-- Modify: `apps/cron-agent/src/domain/use-cases/manage-schedule.ts`
-- Modify: `apps/cron-agent/src/infra/firestore-schedule-repository.ts`
-- Modify: `apps/cron-agent/src/routes/schedule-routes.ts`
-- Create: `apps/cron-agent/src/domain/__tests__/types.test.ts`
-- Modify: `apps/cron-agent/src/domain/use-cases/__tests__/manage-schedule.test.ts`
-- Modify: `apps/cron-agent/src/routes/__tests__/schedule-routes.test.ts`
+- Modify: `apps/retired-scheduler-service/src/domain/types.ts`
+- Modify: `apps/retired-scheduler-service/src/domain/use-cases/manage-schedule.ts`
+- Modify: `apps/retired-scheduler-service/src/infra/firestore-schedule-repository.ts`
+- Modify: `apps/retired-scheduler-service/src/routes/schedule-routes.ts`
+- Create: `apps/retired-scheduler-service/src/domain/__tests__/types.test.ts`
+- Modify: `apps/retired-scheduler-service/src/domain/use-cases/__tests__/manage-schedule.test.ts`
+- Modify: `apps/retired-scheduler-service/src/routes/__tests__/schedule-routes.test.ts`
 
 - [ ] **Step 1: Extend schedule action types with `preferredTools: string[]`**
 - [ ] **Step 2: Add one normalizer so missing `preferredTools` becomes `[]` and duplicates are removed**
@@ -104,9 +104,9 @@ The implementation should stay simple:
 ## Task 3: Bias Execution Toward Preferred Tools
 
 **Files:**
-- Modify: `apps/cron-agent/src/domain/use-cases/execute-action.ts`
-- Modify: `apps/cron-agent/src/prompts/execute-action-prompt.ts`
-- Modify: `apps/cron-agent/src/domain/use-cases/__tests__/execute-action.test.ts`
+- Modify: `apps/retired-scheduler-service/src/domain/use-cases/execute-action.ts`
+- Modify: `apps/retired-scheduler-service/src/prompts/execute-action-prompt.ts`
+- Modify: `apps/retired-scheduler-service/src/domain/use-cases/__tests__/execute-action.test.ts`
 
 - [ ] **Step 1: Reorder the declared tools so preferred tools appear first**
 - [ ] **Step 2: Add a plain-language preferred-tools section to the prompt**
@@ -116,14 +116,14 @@ The implementation should stay simple:
 ## Task 4: Make Tool Selection Clear In The Web UI
 
 **Files:**
-- Create: `apps/web/src/pages/cron-agent/PreferredToolChips.tsx`
-- Create: `apps/web/src/pages/cron-agent/toolPromptTemplates.ts`
-- Modify: `apps/web/src/pages/cron-agent/CronScheduleNewPage.tsx`
-- Modify: `apps/web/src/pages/cron-agent/CronScheduleViewPage.tsx`
-- Modify: `apps/web/src/pages/cron-agent/ServiceSelector.tsx`
-- Modify: `apps/web/src/pages/cron-agent/AvailableToolsPanel.tsx`
+- Create: `apps/web/src/pages/retired-scheduler-service/PreferredToolChips.tsx`
+- Create: `apps/web/src/pages/retired-scheduler-service/toolPromptTemplates.ts`
+- Modify: `apps/web/src/pages/retired-scheduler-service/CronScheduleNewPage.tsx`
+- Modify: `apps/web/src/pages/retired-scheduler-service/CronScheduleViewPage.tsx`
+- Modify: `apps/web/src/pages/retired-scheduler-service/ServiceSelector.tsx`
+- Modify: `apps/web/src/pages/retired-scheduler-service/AvailableToolsPanel.tsx`
 - Modify: `apps/web/src/hooks/useScheduleActions.ts`
-- Modify: `apps/web/src/types/cronAgent.ts`
+- Modify: `apps/web/src/types/retiredSchedulerService.ts`
 - Create: `apps/web/src/__tests__/CronScheduleNewPage.test.tsx`
 
 - [ ] **Step 1: Extend frontend types so tools include `parameters` and actions include `preferredTools`**
@@ -139,18 +139,18 @@ The implementation should stay simple:
 
 - [ ] **Step 1: Add a smoke test for `/health`, `/docs/json`, and `/docs`**
 - [ ] **Step 2: Keep the assertions simple and readable so the behavior is obvious**
-- [ ] **Step 3: Use the same shared catalog inputs in both cron-agent and api-docs-hub so the docs view and runtime stay aligned**
+- [ ] **Step 3: Use the same shared catalog inputs in both retired-scheduler-service and api-docs-hub so the docs view and runtime stay aligned**
 
 ## Verification
 
 - [ ] Run `pnpm --filter @intexuraos/common-core typecheck`
-- [ ] Run `pnpm --filter @intexuraos/cron-agent typecheck`
+- [ ] Run `pnpm --filter @intexuraos/retired-scheduler-service typecheck`
 - [ ] Run `pnpm --filter @intexuraos/api-docs-hub typecheck`
 - [ ] Run `pnpm --filter @intexuraos/web typecheck`
-- [ ] Run `pnpm --filter @intexuraos/cron-agent test -- src/__tests__/config.test.ts src/infra/__tests__/openapi-tool-registry.test.ts src/domain/use-cases/__tests__/manage-schedule.test.ts src/domain/use-cases/__tests__/execute-action.test.ts src/routes/__tests__/schedule-routes.test.ts`
+- [ ] Run `pnpm --filter @intexuraos/retired-scheduler-service test -- src/__tests__/config.test.ts src/infra/__tests__/openapi-tool-registry.test.ts src/domain/use-cases/__tests__/manage-schedule.test.ts src/domain/use-cases/__tests__/execute-action.test.ts src/routes/__tests__/schedule-routes.test.ts`
 - [ ] Run `pnpm exec vitest run src/__tests__/CronScheduleNewPage.test.tsx --config vitest.config.ts` from `apps/web`
 - [ ] Run `pnpm run verify:workspace:tracked common-core`
-- [ ] Run `pnpm run verify:workspace:tracked cron-agent`
+- [ ] Run `pnpm run verify:workspace:tracked retired-scheduler-service`
 - [ ] Run `pnpm run verify:workspace:tracked api-docs-hub`
 - [ ] Run `pnpm run verify:workspace:tracked web`
 - [ ] Run `pnpm run ci:tracked`
@@ -162,6 +162,6 @@ The implementation should stay simple:
 - Cron-agent still accepts schedules created before this feature.
 - `/cron/services` returns enough tool schema data for the frontend to generate a tool template.
 - Cron-agent can use all internal APIs that are represented in the shared internal API catalog.
-- api-docs-hub and cron-agent read from the same internal API catalog source.
+- api-docs-hub and retired-scheduler-service read from the same internal API catalog source.
 
 Plan complete and saved to `docs/superpowers/plans/2026-03-20-cron-tool-authoring-and-internal-api-catalog.md`. Ready to execute?

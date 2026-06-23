@@ -118,7 +118,6 @@ describe('useActionConfig', () => {
         ],
       },
       note: { actions: [] },
-      todo: { actions: [] },
       link: { actions: [] },
       calendar: { actions: [] },
       reminder: { actions: [] },

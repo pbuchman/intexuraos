@@ -26,6 +26,7 @@ import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import {
   aggregateIndexes,
+  aggregateRules,
   normalizeVectorFields,
   writeAggregatedFirestoreArtifacts,
 } from './lib/firestore-artifacts.mjs';
@@ -321,4 +322,4 @@ if (isMain) {
   });
 }
 
-export { aggregateIndexes, normalizeVectorFields };
+export { aggregateIndexes, aggregateRules, normalizeVectorFields };

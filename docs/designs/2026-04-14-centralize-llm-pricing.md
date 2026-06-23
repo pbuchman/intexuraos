@@ -50,7 +50,7 @@
 | --------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------ | ----------------------------------------------------- |
 | `packages/llm-factory/src/llmClientFactory.ts`                  | 54-73   | `LlmClientConfig.pricing: ModelPricing` — **required** field                   | **Remove** `pricing` field from config                |
 | `packages/infra-gemini/src/toolCallingClient.ts`                | 49-57   | `ToolCallingClientConfig.pricing: ModelPricing`                                | **Remove** `pricing` field                            |
-| `apps/chat-agent/src/services.ts`                               | 113-150 | Fetches pricing at boot, creates `PricingContext`, passes to `createLlmClient` | **Remove** pricing fetch and context                  |
+| `apps/retired-chat-service/src/services.ts`                               | 113-150 | Fetches pricing at boot, creates `PricingContext`, passes to `createLlmClient` | **Remove** pricing fetch and context                  |
 | `apps/code-agent/src/services.ts`                               | 96      | Uses `TOOL_CALLING_PRICING` constant                                           | **Remove** — no local pricing needed                  |
 | `apps/code-agent/src/services.ts`                               | 363-369 | Stub `pricingContext` that throws                                              | **Delete** entirely                                   |
 | `apps/research-agent/src/services.ts`                           | 84      | `pricingContext: IPricingContext` in ServiceContainer                          | **Remove** from container                             |
@@ -252,7 +252,7 @@ Strategy: Use `z.discriminatedUnion('schemaVersion', [v1Schema, v2Schema])` at t
 | 1   | `packages/internal-clients/src/user-service/client.ts`          | 208    | `config.pricingContext.getPricing(Gemini25Flash)` (platform fallback) | **Yes** — remove pricing param  |
 | 2   | `packages/internal-clients/src/user-service/client.ts`          | 260    | `resolvePricing(model)` via `buildClientForModel()`                   | **Yes** — remove pricing param  |
 | 3   | `packages/internal-clients/src/user-service/client.ts`          | 285    | `resolvePricing(defaultModel)` (main client creation)                 | **Yes** — remove pricing param  |
-| 4   | `apps/chat-agent/src/services.ts`                               | 144    | `pricingContext.getPricing(Gemini25Flash)`                            | **Yes** — remove pricing param  |
+| 4   | `apps/retired-chat-service/src/services.ts`                               | 144    | `pricingContext.getPricing(Gemini25Flash)`                            | **Yes** — remove pricing param  |
 | 5   | `workers/orchestrator/src/services/validation-model-clients.ts` | 110    | `getDefaultAllowlistPricing(rawId) ?? ZERO_PRICING` (OpenRouter)      | **Yes** — remove pricing param  |
 | 6   | `workers/orchestrator/src/services/validation-model-clients.ts` | 138    | `GEMINI_VALIDATION_PRICING` (Gemini)                                  | **Yes** — remove pricing param  |
 
@@ -402,7 +402,7 @@ Rationale:
 
 1. **llm-usage-service: Server-side cost calculation** — Add cost calculator, accept v2 events, dual-schema support
 2. **packages: Remove pricing from client APIs** — Update `llm-factory`, `llm-pricing`, `llm-contract`, `infra-*` packages
-3. **apps: Remove pricing from consumers** — Update `chat-agent`, `code-agent`, `research-agent`, `actions-agent`, `calendar-agent`, `commands-agent`, `hellscript-agent`, `image-service`, `linear-agent`, `todos-agent`, `user-service`, `web-agent`, `cron-agent`, `internal-clients`
+3. **apps: Remove pricing from consumers** — Update `retired-chat-service`, `code-agent`, `research-agent`, `actions-agent`, `calendar-agent`, `commands-agent`, `hellscript-agent`, `image-service`, `linear-agent`, `retired-checklist-service`, `user-service`, `web-agent`, `retired-scheduler-service`, `internal-clients`
 4. **workers: Remove pricing from orchestrator** — Update `orchestrator` validation clients
 
 **Phase 2 (sequential, after Phase 1 merges):**
@@ -529,13 +529,13 @@ Remove `pricing: ModelPricing` from `LlmClientConfig` and `ToolCallingClientConf
 
 ### Child Issue 3: apps — Remove Pricing from Consumer Services
 
-**Scope:** `apps/chat-agent/`, `apps/code-agent/`, `apps/research-agent/`, `apps/actions-agent/`, `apps/calendar-agent/`, `apps/commands-agent/`, `apps/hellscript-agent/`, `apps/image-service/`, `apps/linear-agent/`, `apps/todos-agent/`, `apps/user-service/`, `apps/web-agent/`, `apps/cron-agent/`
+**Scope:** `apps/retired-chat-service/`, `apps/code-agent/`, `apps/research-agent/`, `apps/actions-agent/`, `apps/calendar-agent/`, `apps/commands-agent/`, `apps/hellscript-agent/`, `apps/image-service/`, `apps/linear-agent/`, `apps/retired-checklist-service/`, `apps/user-service/`, `apps/web-agent/`, `apps/retired-scheduler-service/`
 
 **Description:**
 Remove pricing-related boot-time logic, `pricingContext` from service containers, and pricing params from LLM adapter factories across ALL consumer services.
 
 **Implementation:**
-1. `chat-agent`: Remove `fetchAllPricingWithRetry()` call at boot. Remove `createPricingContext()`. Remove `pricing` from `createLlmClient()` call.
+1. `retired-chat-service`: Remove `fetchAllPricingWithRetry()` call at boot. Remove `createPricingContext()`. Remove `pricing` from `createLlmClient()` call.
 2. `code-agent`: Delete `GEMINI_TOOL_CALLING_PRICING` constant. Delete stub `pricingContext` object. Remove `pricing` from `createToolCallingClient()` call. Remove `pricingContext` from `createUserServiceClient()`.
 3. `research-agent`: Remove `pricingContext: IPricingContext` from `ServiceContainer`. Remove `pricing: ModelPricing` param from all 5 factory functions in `LlmAdapterFactory.ts`. Remove `pricing` param from all adapter constructors (GeminiAdapter, ClaudeAdapter, etc.). Remove boot-time pricing fetch.
 4. `actions-agent`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from service container config.
@@ -544,10 +544,10 @@ Remove pricing-related boot-time logic, `pricingContext` from service containers
 7. `hellscript-agent`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from config.
 8. `image-service`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from `serviceContainer`, `serviceFactory`, and all `getPricing()` calls for image models.
 9. `linear-agent`: Remove `IPricingContext` import + `pricingContext` from service container and config.
-10. `todos-agent`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from service container config.
+10. `retired-checklist-service`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from service container config.
 11. `user-service`: Remove `PricingContext` type + `pricingContext` param from `initializeServices()`. Remove all `pricingContext.getPricing()` calls for validation model pricing.
 12. `web-agent`: Remove `IPricingContext` import + `pricingContext` from service container and dependencies config.
-13. `cron-agent`: Remove `TOOL_CALLING_PRICING` import from `@intexuraos/infra-gemini`. Remove `pricing` from both `createGeminiClient()` and `createGeminiToolCallingClient()` calls.
+13. `retired-scheduler-service`: Remove `TOOL_CALLING_PRICING` import from `@intexuraos/infra-gemini`. Remove `pricing` from both `createGeminiClient()` and `createGeminiToolCallingClient()` calls.
 
 **Contract with other issues:**
 - Depends on Child Issue 2 (packages) being complete (or developed against the same branch)
@@ -556,7 +556,7 @@ Remove pricing-related boot-time logic, `pricingContext` from service containers
 - No changes to HTTP endpoints or domain logic
 
 **Test Requirements:**
-- `chat-agent/src/__tests__/services.test.ts` updated to remove pricing mocks
+- `retired-chat-service/src/__tests__/services.test.ts` updated to remove pricing mocks
 - `code-agent` tests updated to remove pricing-related test fixtures
 - `research-agent` adapter tests updated to remove pricing from constructor args
 - `image-service` tests updated to remove `FakePricingContext` usage

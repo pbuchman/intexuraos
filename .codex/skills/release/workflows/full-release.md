@@ -323,21 +323,7 @@ This must pass completely before committing. If it fails, fix every failure and 
 
 The controller owns the CI gate. For bounded CI failures, dispatch a `worker` subagent with `reasoning_effort: high`; escalate to `xhigh` after repeated failure. Give the worker the failing output and a narrow write scope. The controller reruns `pnpm run ci:tracked`.
 
-### 6.5 Refresh RAG Embeddings
-
-Skip when `--skip-docs` is used.
-
-```bash
-FIRESTORE_EMULATOR_HOST="" \
-GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY \
-pnpm run embed-docs
-```
-
-Embedding failures do not block the release, but report the exact command and error so it can be rerun.
-
-### 6.6 Pre-Commit Validation
+### 6.5 Pre-Commit Validation
 
 Verify before staging:
 
@@ -352,7 +338,7 @@ Verify before staging:
 
 Before committing, dispatch a final `explorer` subagent with `reasoning_effort: xhigh` as Final Release Auditor. It must check the planned release artifacts against `reference/subagent-execution.md`, this workflow, and `.claude/CLAUDE.md`. Fix all critical findings before staging.
 
-### 6.7 Commit and PR to Development
+### 6.6 Commit and PR to Development
 
 ```bash
 RELEASE_ISSUE_ID="INT-XXX" # Use a real issue ID from user input or release context.
@@ -372,7 +358,7 @@ gh pr create --base development --head "$(git branch --show-current)" \
 
 Do not fabricate Linear issue IDs. If the user explicitly permits a release PR without a Linear issue, use a descriptive branch and PR title without `INT-XXX`, and document that explicit permission in the PR body.
 
-### 6.8 After Merge to Main: Tag and GitHub Release
+### 6.7 After Merge to Main: Tag and GitHub Release
 
 After the release PR has merged to `development` and the normal protected flow has put the release commit on `origin/main`, tag the main commit:
 
@@ -392,7 +378,7 @@ gh release create "v$NEW_VERSION" \
   --target main
 ```
 
-### 6.9 Post-Release Validation
+### 6.8 Post-Release Validation
 
 Run all checks:
 
@@ -418,7 +404,7 @@ git branch --show-current
 
 All checks must pass. Fix failed checks before reporting the release complete.
 
-### 6.10 Summary
+### 6.9 Summary
 
 Use `templates/release-summary.md` and include:
 

@@ -36,9 +36,9 @@ describe('HandleApprovalReplyUseCase', () => {
     id: 'action-1',
     userId: 'user-1',
     commandId: 'cmd-1',
-    type: 'todo',
+    type: 'note',
     confidence: 0.85,
-    title: 'Test todo action',
+    title: 'Test note action',
     status: 'awaiting_approval',
     payload: {},
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -49,8 +49,8 @@ describe('HandleApprovalReplyUseCase', () => {
     id: 'approval-msg-1',
     wamid: 'wamid-123',
     actionId: 'action-1',
-    actionType: 'todo',
-    actionTitle: 'Test todo action',
+    actionType: 'note',
+    actionTitle: 'Test note action',
     userId: 'user-1',
     sentAt: '2026-01-01T00:00:00.000Z',
   };
@@ -385,7 +385,7 @@ describe('HandleApprovalReplyUseCase', () => {
         const messages = whatsappPublisher.getSentMessages();
         expect(messages).toHaveLength(1);
         expect(messages[0]?.message).toContain('Approved!');
-        expect(messages[0]?.message).toContain('todo');
+        expect(messages[0]?.message).toContain('note');
       });
 
       it('returns error for invalid button ID format', async () => {
@@ -516,7 +516,7 @@ describe('HandleApprovalReplyUseCase', () => {
 
         const messages = whatsappPublisher.getSentMessages();
         const convertMessage = messages.find((m) => m.message.includes('Converting'));
-        expect(convertMessage?.message).toContain('Converting todo to Linear issue');
+        expect(convertMessage?.message).toContain('Converting note to Linear issue');
       });
     });
   });
@@ -940,13 +940,13 @@ describe('HandleApprovalReplyUseCase', () => {
     });
   });
 
-  describe('todo action execution after approval', () => {
-    it('calls executeTodoAction directly when approving via button', async () => {
-      const todoAction: Action = {
-        id: 'todo-action-1',
-        type: 'todo',
+  describe('note action execution after approval', () => {
+    it('calls executeNoteAction directly when approving via button', async () => {
+      const noteAction: Action = {
+        id: 'note-action-1',
+        type: 'note',
         userId: 'user-1',
-        title: 'Test todo',
+        title: 'Test note',
         status: 'awaiting_approval',
         confidence: 0.95,
         commandId: 'cmd-1',
@@ -954,14 +954,14 @@ describe('HandleApprovalReplyUseCase', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         payload: {},
       };
-      await actionRepository.save(todoAction);
+      await actionRepository.save(noteAction);
 
       const executeCalls: string[] = [];
-      const mockExecuteTodoAction = async (
+      const mockExecuteNoteAction = async (
         actionId: string
       ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
         executeCalls.push(actionId);
-        return ok({ status: 'completed' as const, message: 'Todo created!' });
+        return ok({ status: 'completed' as const, message: 'Note created!' });
       };
 
       const useCaseWithExecute = createHandleApprovalReplyUseCase({
@@ -970,15 +970,15 @@ describe('HandleApprovalReplyUseCase', () => {
         whatsappPublisher,
         actionEventPublisher,
         logger: createMockLogger(),
-        executeTodoAction: mockExecuteTodoAction,
-        });
+        executeNoteAction: mockExecuteNoteAction,
+      });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
         replyText: '',
         userId: 'user-1',
-        actionId: 'todo-action-1',
-        buttonId: 'approve:todo-action-1',
+        actionId: 'note-action-1',
+        buttonId: 'approve:note-action-1',
       });
 
       expect(result.ok).toBe(true);
@@ -987,16 +987,16 @@ describe('HandleApprovalReplyUseCase', () => {
       }
 
       expect(executeCalls).toHaveLength(1);
-      expect(executeCalls[0]).toBe('todo-action-1');
+      expect(executeCalls[0]).toBe('note-action-1');
       expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
     });
 
-    it('falls back to publishing event when executeTodoAction is not provided', async () => {
-      const todoAction: Action = {
-        id: 'todo-action-2',
-        type: 'todo',
+    it('falls back to publishing event when executeNoteAction is not provided', async () => {
+      const noteAction: Action = {
+        id: 'note-action-2',
+        type: 'note',
         userId: 'user-1',
-        title: 'Test todo',
+        title: 'Test note',
         status: 'awaiting_approval',
         confidence: 0.95,
         commandId: 'cmd-1',
@@ -1004,29 +1004,29 @@ describe('HandleApprovalReplyUseCase', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         payload: {},
       };
-      await actionRepository.save(todoAction);
+      await actionRepository.save(noteAction);
 
       const result = await useCase({
         replyToWamid: 'wamid-123',
         replyText: '',
         userId: 'user-1',
-        actionId: 'todo-action-2',
-        buttonId: 'approve:todo-action-2',
+        actionId: 'note-action-2',
+        buttonId: 'approve:note-action-2',
       });
 
       expect(result.ok).toBe(true);
 
       const publishedEvents = actionEventPublisher.getPublishedEvents();
       expect(publishedEvents).toHaveLength(1);
-      expect(publishedEvents[0]?.actionType).toBe('todo');
+      expect(publishedEvents[0]?.actionType).toBe('note');
     });
 
-    it('logs error when executeTodoAction returns error result', async () => {
-      const todoAction: Action = {
-        id: 'todo-action-error',
-        type: 'todo',
+    it('logs error when executeNoteAction returns error result', async () => {
+      const noteAction: Action = {
+        id: 'note-action-error',
+        type: 'note',
         userId: 'user-1',
-        title: 'Test todo that will fail',
+        title: 'Test note that will fail',
         status: 'awaiting_approval',
         confidence: 0.95,
         commandId: 'cmd-1',
@@ -1034,14 +1034,14 @@ describe('HandleApprovalReplyUseCase', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         payload: {},
       };
-      await actionRepository.save(todoAction);
+      await actionRepository.save(noteAction);
 
       const executeCalls: string[] = [];
-      const mockExecuteTodoAction = async (
+      const mockExecuteNoteAction = async (
         actionId: string
       ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
         executeCalls.push(actionId);
-        return err(new Error('Failed to create todo'));
+        return err(new Error('Failed to create note'));
       };
 
       const useCaseWithExecute = createHandleApprovalReplyUseCase({
@@ -1050,19 +1050,19 @@ describe('HandleApprovalReplyUseCase', () => {
         whatsappPublisher,
         actionEventPublisher,
         logger: createMockLogger(),
-        executeTodoAction: mockExecuteTodoAction,
-        });
+        executeNoteAction: mockExecuteNoteAction,
+      });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
         replyText: '',
         userId: 'user-1',
-        actionId: 'todo-action-error',
-        buttonId: 'approve:todo-action-error',
+        actionId: 'note-action-error',
+        buttonId: 'approve:note-action-error',
       });
 
       expect(executeCalls).toHaveLength(1);
-      expect(executeCalls[0]).toBe('todo-action-error');
+      expect(executeCalls[0]).toBe('note-action-error');
 
       expect(result.ok).toBe(true);
       if (result.ok) {

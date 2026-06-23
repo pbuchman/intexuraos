@@ -20,7 +20,7 @@ The user's assumption that **only Orchestrator and Code-Agent** have excluded V8
 | ------------------------------------ | ------------------------- | -------- | ---------------- |
 | `PENDING-workers-orchestrator`       | workers/orchestrator      | 12 files | 118 blocks       |
 | `PENDING-apps-code-agent`            | apps/code-agent           | 21 files | 198 blocks       |
-| `PENDING-apps-todos-agent`           | apps/todos-agent          | 1 file   | 1 block          |
+| `PENDING-apps-retired-checklist-service`           | apps/retired-checklist-service          | 1 file   | 1 block          |
 | `PENDING-apps-whatsapp-service` (x2) | apps/whatsapp-service     | 3 files  | 3 blocks         |
 | `PENDING-packages-internal-clients`  | packages/internal-clients | 1 file   | 0 blocks (stale) |
 | `INT-900`                            | apps/image-service        | 1 file   | 2 blocks         |
@@ -31,7 +31,7 @@ The user's assumption that **only Orchestrator and Code-Agent** have excluded V8
 
 These stale file-level entries are cleaned up automatically when their parent override key is removed.
 
-**Small residual entries** (1-3 blocks): `todos-agent` (1), `whatsapp-service` (3), `image-service` (2) = 6 blocks total across 3 services.
+**Small residual entries** (1-3 blocks): `retired-checklist-service` (1), `whatsapp-service` (3), `image-service` (2) = 6 blocks total across 3 services.
 
 **Duplicate JSON key:** `PENDING-apps-whatsapp-service` appears twice in `v8-ignore-overrides.json` (lines 34 and 42) with identical content. `JSON.parse` silently drops the first occurrence. The cleanup should edit the raw file to remove both entries.
 
@@ -212,21 +212,21 @@ Use `vi.useFakeTimers()` to control `sendMessage`/`recoverPendingResumeTask` tim
 **Output:**
 1. All 198 V8 ignore start/stop comment pairs removed from source files.
 2. New/extended test files covering every previously-ignored branch.
-3. `v8-ignore-overrides.json` updated: `PENDING-apps-code-agent` entry removed. Also remove remaining stale/small entries: `PENDING-apps-todos-agent` (1 block — write test and remove), `PENDING-apps-whatsapp-service` (3 blocks — write tests and remove, note: duplicate key in JSON), `INT-900` (2 blocks in image-service — write tests and remove).
+3. `v8-ignore-overrides.json` updated: `PENDING-apps-code-agent` entry removed. Also remove remaining stale/small entries: `PENDING-apps-retired-checklist-service` (1 block — write test and remove), `PENDING-apps-whatsapp-service` (3 blocks — write tests and remove, note: duplicate key in JSON), `INT-900` (2 blocks in image-service — write tests and remove).
 4. After this subtask completes, `v8-ignore-overrides.json` should contain an empty `overrides` object: `{"_comment": "...", "overrides": {}}`.
 5. `pnpm run verify:workspace:tracked -- code-agent` passes with 100% branch coverage.
-6. `pnpm run ci:tracked` passes (including all affected workspaces: todos-agent, whatsapp-service, image-service).
+6. `pnpm run ci:tracked` passes (including all affected workspaces: retired-checklist-service, whatsapp-service, image-service).
 
 **Dependencies on other subtasks:** None. This subtask is fully independent. The orchestrator subtask modifies different entries in `v8-ignore-overrides.json`.
 
 **Shared artifacts modified:**
-- `v8-ignore-overrides.json` — removes `PENDING-apps-code-agent`, `PENDING-apps-todos-agent`, `PENDING-apps-whatsapp-service` (both duplicate entries), and `INT-900` entries. After both subtasks complete, the overrides object should be empty.
+- `v8-ignore-overrides.json` — removes `PENDING-apps-code-agent`, `PENDING-apps-retired-checklist-service`, `PENDING-apps-whatsapp-service` (both duplicate entries), and `INT-900` entries. After both subtasks complete, the overrides object should be empty.
 
 ### Cross-service cleanup (6 blocks)
 
 These are small enough to include in this subtask:
 
-1. **`apps/todos-agent/src/domain/usecases/reorderTodoItems.ts`** — 1 block (ts-type or upstream). Write one test in the existing test file.
+1. **`apps/retired-checklist-service/src/domain/usecases/reorderTodoItems.ts`** — 1 block (ts-type or upstream). Write one test in the existing test file.
 2. **`apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts`** — 2 blocks. Write Firestore fake tests.
 3. **`apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts`** — 1 block. Write Firestore fake test.
 4. **`apps/image-service/src/serviceFactory.ts`** — 2 blocks. Test env var fallback branches with `process.env` manipulation.
@@ -297,7 +297,7 @@ Pass input where the regex match succeeds but capture group 2 is absent.
 - [ ] **Step 5:** Address `schema` (8), `auth-guard` (6), `async-timing` (4), `regex` (1) blocks.
 - [ ] **Step 6:** Remove all V8 ignore start/stop comment pairs from source files.
 - [ ] **Step 7:** Run `pnpm run verify:workspace:tracked -- code-agent` to verify 100% branch coverage.
-- [ ] **Step 8:** Address the 6 cross-service blocks (todos-agent, whatsapp-service, image-service). Write tests, remove V8 ignores, verify each workspace.
+- [ ] **Step 8:** Address the 6 cross-service blocks (retired-checklist-service, whatsapp-service, image-service). Write tests, remove V8 ignores, verify each workspace.
 - [ ] **Step 9:** Update `v8-ignore-overrides.json`: remove all remaining entries so the overrides object is empty.
 - [ ] **Step 10:** Run `pnpm run ci:tracked` to verify everything passes.
 - [ ] **Step 11:** Commit with descriptive message referencing INT-1070.

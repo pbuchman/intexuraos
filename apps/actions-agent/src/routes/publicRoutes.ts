@@ -9,7 +9,7 @@ const actionSchema = {
     id: { type: 'string' },
     userId: { type: 'string' },
     commandId: { type: 'string' },
-    type: { type: 'string', enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'] },
+    type: { type: 'string', enum: ['research', 'note', 'link', 'calendar', 'reminder', 'linear'] },
     confidence: { type: 'number' },
     title: { type: 'string' },
     status: {
@@ -151,7 +151,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             status: { type: 'string', enum: ['processing', 'rejected', 'archived'] },
             type: {
               type: 'string',
-              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'],
+              enum: ['research', 'note', 'link', 'calendar', 'reminder', 'linear'],
               description: 'New action type (only for pending/awaiting_approval actions)',
             },
           },
@@ -491,7 +491,6 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         >
       > = {
         research: services.executeResearchActionUseCase,
-        todo: services.executeTodoActionUseCase,
         note: services.executeNoteActionUseCase,
         link: services.executeLinkActionUseCase,
         linear: services.executeLinearActionUseCase,
@@ -778,4 +777,3 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
-

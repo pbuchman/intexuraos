@@ -75,7 +75,7 @@ The monorepo contains 29 packages:
 | `@intexuraos/linear-domain`               | Shared Linear domain contracts                                              |
 | `@intexuraos/pr-triage-pubsub-client`     | Typed Pub/Sub client for PR triage messages                                 |
 | `@intexuraos/service-catalog`             | Service registry metadata                                                   |
-| `@intexuraos/todos-pubsub-client`         | Typed Pub/Sub client for todos messages                                     |
+| `@intexuraos/retired-checklist-pubsub-client`         | Typed Pub/Sub client for todos messages                                     |
 | `@intexuraos/whatsapp-pubsub-client`      | Typed Pub/Sub client for WhatsApp messages                                  |
 
 ### LLM Utilities (`llm-*`)

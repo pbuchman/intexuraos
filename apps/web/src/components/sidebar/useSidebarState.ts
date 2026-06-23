@@ -23,8 +23,6 @@ export interface SidebarState {
   setIsLinearOpen: (next: boolean) => void;
   isLlmUsageOpen: boolean;
   setIsLlmUsageOpen: (next: boolean) => void;
-  isCronAgentOpen: boolean;
-  setIsCronAgentOpen: (next: boolean) => void;
   isFishingAssistantOpen: boolean;
   setIsFishingAssistantOpen: (next: boolean) => void;
   savedFilters: SavedNotificationFilter[];
@@ -53,9 +51,6 @@ export function useSidebarState(): SidebarState {
   );
   const [isLlmUsageOpen, setIsLlmUsageOpen] = useState(() =>
     window.location.hash.includes('/llm-usage')
-  );
-  const [isCronAgentOpen, setIsCronAgentOpen] = useState(() =>
-    window.location.hash.includes('/cron-agent')
   );
   const [isFishingAssistantOpen, setIsFishingAssistantOpen] = useState(() =>
     window.location.hash.includes('/fishing-assistant')
@@ -129,12 +124,6 @@ export function useSidebarState(): SidebarState {
   useEffect(() => {
     if (location.pathname.startsWith('/llm-usage')) {
       setIsLlmUsageOpen(true);
-    }
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (location.pathname.startsWith('/cron-agent')) {
-      setIsCronAgentOpen(true);
     }
   }, [location.pathname]);
 
@@ -219,8 +208,6 @@ export function useSidebarState(): SidebarState {
     setIsLinearOpen,
     isLlmUsageOpen,
     setIsLlmUsageOpen,
-    isCronAgentOpen,
-    setIsCronAgentOpen,
     isFishingAssistantOpen,
     setIsFishingAssistantOpen,
     savedFilters,

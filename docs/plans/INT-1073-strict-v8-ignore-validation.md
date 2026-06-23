@@ -349,7 +349,7 @@ When updating an explanation, follow these patterns:
 - `src/domain/usecases/executeLinearAction.ts`
 - `src/domain/usecases/executeNoteAction.ts`
 - `src/domain/usecases/executeResearchAction.ts`
-- `src/domain/usecases/executeTodoAction.ts`
+- retired per-type action executors
 
 **apps/app-settings-service** (1 fix):
 - `src/infra/firestore/usageStatsRepository.ts`
@@ -357,14 +357,14 @@ When updating an explanation, follow these patterns:
 **apps/calendar-agent** (6 fixes):
 - `src/infra/firestore/calendarPreviewRepository.ts`
 
-**apps/chat-agent** (1 fix):
+**apps/retired-chat-service** (1 fix):
 - `src/routes/chatRoutes.ts`
 
 **apps/code-agent** (5 fixes):
 - `src/routes/webhookRoutes.ts`
 - `src/routes/webhooks/github.ts`
 
-**apps/cron-agent** (1 fix):
+**apps/retired-scheduler-service** (1 fix):
 - `src/infra/firestore-execution-repository.ts`
 
 **apps/data-insights-agent** (1 fix):

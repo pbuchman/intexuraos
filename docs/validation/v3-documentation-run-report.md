@@ -107,7 +107,7 @@ Cross-report consistency analysis across all 10 validation reports. Key findings
 
 **Coverage gaps identified:**
 
-- No validator checked LLM cost tracking for out-of-contract models (image-service `gpt-4.1`, chat-agent `text-embedding-3-small`)
+- No validator checked LLM cost tracking for out-of-contract models (image-service `gpt-4.1`, retired-chat-service `text-embedding-3-small`)
 - No validator checked scheduler job → endpoint authentication alignment
 - No validator checked DLQ consumer or alerting configuration
 - No validator for OpenAPI spec accuracy vs HTTP contracts
@@ -152,7 +152,7 @@ Cross-report consistency analysis across all 10 validation reports. Key findings
 | MA-15 | docs               | Fix model count inconsistency: `overview.md` says "17 models" (should be 16 in contract or 18 actual); `index.md` also says "17".                                                                   | ai-models               |
 | MA-16 | test fixtures      | Fix `o4-mini` → `o4-mini-deep-research`; fix `gemini-2.0-flash-exp` → `gemini-2.0-flash` in test fixtures.                                                                                          | ai-models               |
 | MA-17 | docs (6 services)  | Regenerate Pub/Sub topic names in technical.md for: actions-agent, bookmarks-agent, commands-agent, data-insights-agent, research-agent, whatsapp-service. Current names are outdated vs Terraform. | pubsub                  |
-| MA-18 | todos-agent        | Consider renaming `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` for naming consistency with all other topic env vars.                                            | pubsub                  |
+| MA-18 | retired-checklist-service        | Consider renaming `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` for naming consistency with all other topic env vars.                                            | pubsub                  |
 | MA-19 | bookmarks-agent    | Add `_TOPIC` suffix to `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`.                                                                                              | pubsub                  |
 | MA-20 | firestore          | Remove stale index entries `dataSource` and `compositeFeeds` from `firestore.indexes.json`.                                                                                                         | firestore               |
 | MA-21 | firestore          | Remove or implement `user_spend` registry entry and domain model (no repository, no use-case references).                                                                                           | firestore               |
@@ -196,7 +196,7 @@ The following areas were NOT covered by any of the 10 validators and represent b
 
 | Gap                                          | Risk                                                                                          | Suggested v4 Validator                            |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| LLM cost tracking for out-of-contract models | `gpt-4.1` (image-service) and `text-embedding-3-small` (chat-agent) may bypass llm-pricing    | `llm-cost-tracking-validation`                    |
+| LLM cost tracking for out-of-contract models | `gpt-4.1` (image-service) and `text-embedding-3-small` (retired-chat-service) may bypass llm-pricing    | `llm-cost-tracking-validation`                    |
 | Scheduler job → endpoint auth alignment      | 7 Cloud Scheduler jobs target endpoints; none cross-validated against route-auth patterns     | `scheduler-auth-validation`                       |
 | DLQ consumer/alerting                        | 14 DLQ topics have pull subscriptions; no service is known to process them                    | `dlq-consumer-validation`                         |
 | OpenAPI spec accuracy                        | api-docs-hub aggregates specs from 15 services; specs not compared to HTTP contracts registry | `openapi-spec-validation`                         |

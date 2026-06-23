@@ -163,66 +163,6 @@
       "description": "Technical-Debt documentation for calendar-agent"
     },
     {
-      "path": "services/chat-agent/features.md",
-      "title": "Chat Agent",
-      "category": "services",
-      "description": "Features documentation for chat-agent"
-    },
-    {
-      "path": "services/chat-agent/technical.md",
-      "title": "Chat Agent \u2014 Technical Reference",
-      "category": "services",
-      "description": "Technical documentation for chat-agent"
-    },
-    {
-      "path": "services/chat-agent/tutorial.md",
-      "title": "Chat Agent \u2014 Getting Started",
-      "category": "services",
-      "description": "Tutorial documentation for chat-agent"
-    },
-    {
-      "path": "services/chat-agent/agent.md",
-      "title": "chat-agent \u2014 Agent Interface",
-      "category": "services",
-      "description": "Agent documentation for chat-agent"
-    },
-    {
-      "path": "services/chat-agent/technical-debt.md",
-      "title": "Chat Agent \u2014 Technical Debt",
-      "category": "services",
-      "description": "Technical-Debt documentation for chat-agent"
-    },
-    {
-      "path": "services/cron-agent/features.md",
-      "title": "Cron Agent",
-      "category": "services",
-      "description": "Features documentation for cron-agent"
-    },
-    {
-      "path": "services/cron-agent/technical.md",
-      "title": "Cron Agent \u2014 Technical Reference",
-      "category": "services",
-      "description": "Technical documentation for cron-agent"
-    },
-    {
-      "path": "services/cron-agent/tutorial.md",
-      "title": "Cron Agent \u2014 Tutorial",
-      "category": "services",
-      "description": "Tutorial documentation for cron-agent"
-    },
-    {
-      "path": "services/cron-agent/agent.md",
-      "title": "cron-agent \u2014 Agent Interface",
-      "category": "services",
-      "description": "Agent documentation for cron-agent"
-    },
-    {
-      "path": "services/cron-agent/technical-debt.md",
-      "title": "Cron Agent \u2014 Technical Debt",
-      "category": "services",
-      "description": "Technical-Debt documentation for cron-agent"
-    },
-    {
       "path": "services/code-worker/features.md",
       "title": "Code Worker",
       "category": "services",
@@ -551,36 +491,6 @@
       "title": "Research Agent \u2014 Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for research-agent"
-    },
-    {
-      "path": "services/todos-agent/features.md",
-      "title": "Todos Agent",
-      "category": "services",
-      "description": "Features documentation for todos-agent"
-    },
-    {
-      "path": "services/todos-agent/technical.md",
-      "title": "Todos Agent \u2014 Technical Reference",
-      "category": "services",
-      "description": "Technical documentation for todos-agent"
-    },
-    {
-      "path": "services/todos-agent/tutorial.md",
-      "title": "Todos Agent \u2014 Tutorial",
-      "category": "services",
-      "description": "Tutorial documentation for todos-agent"
-    },
-    {
-      "path": "services/todos-agent/agent.md",
-      "title": "Todos Agent \u2014 Agent Interface",
-      "category": "services",
-      "description": "Agent documentation for todos-agent"
-    },
-    {
-      "path": "services/todos-agent/technical-debt.md",
-      "title": "Todos Agent \u2014 Technical Debt",
-      "category": "services",
-      "description": "Technical-Debt documentation for todos-agent"
     },
     {
       "path": "services/transcription/features.md",

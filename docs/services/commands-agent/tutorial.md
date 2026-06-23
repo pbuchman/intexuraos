@@ -41,7 +41,7 @@ export BASE="https://commands-agent.dev.intexuraos.cloud"
 curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"text": "Create a todo to review the Q1 report", "source": "pwa-shared"}' \
+  -d '{"text": "Create a note to review the Q1 report", "source": "pwa-shared"}' \
   | jq .
 ```
 
@@ -56,13 +56,13 @@ curl -s -X POST "$BASE/" \
       "userId": "auth0|...",
       "sourceType": "pwa-shared",
       "externalId": "1710000000000-abc1234",
-      "text": "Create a todo to review the Q1 report",
+      "text": "Create a note to review the Q1 report",
       "timestamp": "2026-03-15T10:00:00.000Z",
       "status": "classified",
       "classification": {
-        "type": "todo",
+        "type": "note",
         "confidence": 0.95,
-        "reasoning": "Explicit 'create a todo' instruction detected — Step 2 override.",
+        "reasoning": "Explicit 'create a note' instruction detected — Step 2 override.",
         "promptVersion": "2.1.0",
         "classifiedAt": "2026-03-15T10:00:01.234Z"
       },
@@ -76,7 +76,7 @@ curl -s -X POST "$BASE/" \
 
 ### What Just Happened?
 
-The service ran the 5-step classification prompt against your text. It detected "Create a todo" in Step 2 (explicit intent override) and assigned type `todo` with high confidence. It then called actions-agent to create the action, stored the action ID on the command, and returned both together.
+The service ran the 5-step classification prompt against your text. It detected "Create a note" in Step 2 (explicit intent override) and assigned type `note` with high confidence. It then called actions-agent to create the action, stored the action ID on the command, and returned both together.
 
 Note the `id` format: `pwa-shared:{externalId}`. This composite key is the deduplication mechanism — if you post the same `externalId` twice, the second call returns the existing command unchanged.
 
@@ -98,7 +98,7 @@ curl -s "$BASE/" \
 {
   "id": "pwa-shared:1710000000000-abc1234",
   "status": "classified",
-  "type": "todo",
+  "type": "note",
   "confidence": 0.95
 }
 ```
@@ -126,12 +126,12 @@ curl -s -X POST "$BASE/" \
 curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"text": "create a todo to research https://example.com", "source": "pwa-shared"}' \
+  -d '{"text": "create a note to research https://example.com", "source": "pwa-shared"}' \
   | jq '.data.command.classification.type'
-# Expected: "todo" (not "research", not "link")
+# Expected: "note" (not "research", not "link")
 ```
 
-**Checkpoint:** The third command should return `"todo"` — the explicit "create a todo" instruction wins over both URL presence and the word "research."
+**Checkpoint:** The third command should return `"note"` — the explicit "create a note" instruction wins over both URL presence and the word "research."
 
 ---
 
@@ -315,25 +315,25 @@ Now that you understand the command lifecycle:
 
 Test your understanding:
 
-1. **Easy:** Create a command with Polish text "stworz zadanie: kupic mleko" and verify it classifies as `todo`
+1. **Easy:** Create a command with Polish text "stworz notatke: kupic mleko" and verify it classifies as `note`
 2. **Medium:** Create a command with text "research this https://example.com/report" and verify it classifies as `research` (not `link`) — explain why based on the 5-step process
 3. **Hard:** Submit the same command twice using the same `externalId` and verify the command ID is identical on both responses
 
 <details>
 <summary>Solutions</summary>
 
-### Exercise 1: Polish todo
+### Exercise 1: Polish note
 
 ```bash
 curl -s -X POST "$BASE/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"text": "stworz zadanie: kupic mleko", "source": "pwa-shared"}' \
+  -d '{"text": "stworz notatke: kupic mleko", "source": "pwa-shared"}' \
   | jq '.data.command.classification.type'
-# Expected: "todo"
+# Expected: "note"
 ```
 
-"stworz zadanie" is a Step 1 explicit prefix match in Polish.
+"stworz notatke" is a Step 1 explicit prefix match in Polish.
 
 ### Exercise 2: Explicit intent overrides URL
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { aggregateIndexes, normalizeVectorFields } from '../../scripts/migrate.mjs'; // @allow-missing-js -- .mjs import
+import { aggregateIndexes, aggregateRules, normalizeVectorFields } from '../../scripts/migrate.mjs'; // @allow-missing-js -- .mjs import
 
 describe('aggregateIndexes', () => {
   it('skips regular single-field indexes (auto-created by Firestore)', () => {
@@ -470,5 +470,30 @@ describe('normalizeVectorFields', () => {
       fieldPath: 'embedding',
       vectorConfig: { dimension: 1536, flat: {} },
     });
+  });
+});
+
+describe('aggregateRules', () => {
+  it('drops collection rules whose path is in removedRulePaths', () => {
+    const sourceMigration = {
+      rules: {
+        collections: {
+          'doc_embeddings/{chunkId}': {
+            read: 'isAuthenticated()',
+          },
+          'profiles/{profileId}': {
+            read: 'isAuthenticated()',
+          },
+        },
+      },
+    };
+    const cleanupMigration = {
+      removedRulePaths: ['doc_embeddings/{chunkId}'],
+    };
+
+    const result = aggregateRules([sourceMigration, cleanupMigration]);
+
+    expect(result.collections).not.toHaveProperty('doc_embeddings/{chunkId}');
+    expect(result.collections).toHaveProperty('profiles/{profileId}');
   });
 });

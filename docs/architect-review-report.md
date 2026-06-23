@@ -484,8 +484,8 @@ Findings:
 ### itemExtractionPrompt v1.2.0
 
 File: `packages/llm-prompts/src/todos/itemExtractionPrompt.ts`
-Parser: `packages/llm-prompts/src/todos/contextSchemas.ts`, `apps/todos-agent/src/infra/gemini/todoItemExtractionService.ts`
-Consumer(s): `apps/todos-agent/src/infra/gemini/todoItemExtractionService.ts`
+Parser: `packages/llm-prompts/src/todos/contextSchemas.ts`, `apps/retired-checklist-service/src/infra/gemini/todoItemExtractionService.ts`
+Consumer(s): `apps/retired-checklist-service/src/infra/gemini/todoItemExtractionService.ts`
 
 | Dimension                   | Score      | Evidence                                                                                                                           |
 | --------------------------- | ---------: | ---------------------------------------------------------------------------------------------------------------------------------- |

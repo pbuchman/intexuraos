@@ -28,7 +28,6 @@ All internal endpoints follow the pattern:
 | `app-settings-service`         | (no prefix — direct)              | Pricing and configuration lookup             |
 | `bookmarks-agent`              | `bookmarks`                       | Bookmark management and enrichment           |
 | `calendar-agent`               | `calendar`                        | Calendar event generation and preview        |
-| `chat-agent`                   | (no internal routes)              | RAG-based chat assistant                     |
 | `code-agent`                   | (no internal routes)              | Code execution and GitHub integration        |
 | `commands-agent`               | `commands`                        | Command creation and status                  |
 | `image-service`                | `images`                          | AI image generation and storage              |
@@ -37,7 +36,6 @@ All internal endpoints follow the pattern:
 | `notes-agent`                  | `notes`                           | Note management                              |
 | `notion-service`               | `notion`                          | Notion integration and page preview          |
 | `research-agent`               | `llm`, `research`                 | LLM orchestration and research processing    |
-| `todos-agent`                  | `todos`                           | Todo management                              |
 | `user-service`                 | `users`                           | User settings, LLM API keys, OAuth tokens    |
 | `web-agent`                    | `link-previews`, `page-summaries` | Web scraping and link preview                |
 | `whatsapp-service`             | (webhook receiver)                | WhatsApp inbound webhook handling            |

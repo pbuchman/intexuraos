@@ -7,7 +7,6 @@ export * from './calendar-agent/index.js';
 export * from './code-agent/index.js';
 export * from './commands-agent/index.js';
 export * from './notes-agent/index.js';
-export * from './todos-agent/index.js';
 export * from './linear-agent/index.js';
 export * from './research-agent/index.js';
 export * from './web-agent/index.js';

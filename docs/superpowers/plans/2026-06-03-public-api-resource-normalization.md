@@ -48,14 +48,14 @@ Keep all public mounts unchanged. Normalize service-local public routes as follo
 | `actions-agent` | `/api/actions` | `/actions/*` | `/`, `/:actionId`, `/:actionId/execute`, `/:actionId/resolve-duplicate`, `/batch` |
 | `commands-agent` | `/api/commands` | `/commands/*` | `/`, `/:commandId` |
 | `notes-agent` | `/api/notes` | `/notes/*` | `/`, `/:noteId` |
-| `todos-agent` | `/api/todos` | `/todos/*` | `/`, `/:todoId`, item/reorder subroutes without `/todos` prefix |
+| `retired-checklist-service` | `/api/todos` | `/todos/*` | `/`, `/:todoId`, item/reorder subroutes without `/todos` prefix |
 | `bookmarks-agent` | `/api/bookmarks` | `/bookmarks/*` | `/`, `/:bookmarkId`, refresh/summarize subroutes; keep `/images/proxy` if still routed by this service |
 | `calendar-agent` | `/api/calendar` | `/calendar/*` | `/events`, `/events/:id`, `/freebusy`, `/failed-events/*` |
-| `chat-agent` | `/api/chat` | `/chat` | `/`; keep `/guest-session` |
+| `retired-chat-service` | `/api/chat` | `/chat` | `/`; keep `/guest-session` |
 | `mobile-notifications-service` | `/api/notifications` | `/mobile-notifications/*`, `/notifications/*` | `/`, `/:notificationId`, `/connect`, `/status`, `/webhooks`, `/filters/*`, `/digests/*` |
 | `notion-service` | `/api/notion` | `/notion/*`, `/notion-webhooks` | `/connect`, `/status`, `/disconnect`, `/webhooks` |
 | `fishing-assistant-service` | `/api/fishing-assistant` | `/fishing/*`, `/fishing-assistant/status` | `/status`, `/chats/*`, `/digests/*`, `/digest-groups`, `/folders/*`, `/pages/*` |
-| `cron-agent` | `/api/cron-agent` | `/cron/*` | `/services`, `/schedules/*`, `/executions/*` |
+| `retired-scheduler-service` | `/api/retired-scheduler-service` | `/cron/*` | `/services`, `/schedules/*`, `/executions/*` |
 | `hellscript-agent` | `/api/hellscript-agent` | `/hellscript/*` | `/buffers`, `/impose`, `/writing-config/*` |
 | `llm-usage-service` | `/api/llm-usage` | `/llm-usage/*` | `/query`, `/pricing`, `/events/list`, `/events/:eventId` |
 
@@ -89,7 +89,7 @@ Leave unchanged:
    - Extracts Fastify route literals from `apps/*/src`.
    - Ignores `/internal/*`, `/health`, `/openapi.json`, and `/docs`.
    - Fails if a public service-local route starts with that service mount's resource segment.
-   - Includes known alias checks such as `mobile-notifications-service` using `/mobile-notifications/*`, `fishing-assistant-service` using `/fishing/*`, `cron-agent` using `/cron/*`, and `hellscript-agent` using `/hellscript/*`.
+   - Includes known alias checks such as `mobile-notifications-service` using `/mobile-notifications/*`, `fishing-assistant-service` using `/fishing/*`, `retired-scheduler-service` using `/cron/*`, and `hellscript-agent` using `/hellscript/*`.
 5. Extend the verifier to scan frontend usage in `apps/web/src` and `apps/web/src/config/action-config.yaml`, failing calls like `apiRequest(config.linearAgentUrl, '/linear/...')`.
 6. Wire the verifier into the repository's verification path in the same style as existing scripts.
 7. Refactor backend Fastify public route literals to the canonical local paths in the route table.
@@ -142,7 +142,7 @@ pnpm --filter research-agent test
 pnpm --filter actions-agent test
 pnpm --filter commands-agent test
 pnpm --filter mobile-notifications-service test
-pnpm --filter cron-agent test
+pnpm --filter retired-scheduler-service test
 pnpm run verify:service-wiring
 pnpm run ci:tracked
 ```

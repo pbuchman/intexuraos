@@ -13,7 +13,6 @@ import {
   HelpCircle,
   Link,
   Loader2,
-  ListTodo,
   Search,
   X,
 } from 'lucide-react';
@@ -42,7 +41,6 @@ interface ActionDetailModalProps {
 }
 
 const ACTION_TYPES: CommandType[] = [
-  'todo',
   'research',
   'note',
   'link',
@@ -55,8 +53,6 @@ const ACTION_TYPES: CommandType[] = [
 function getTypeIcon(type: CommandType): React.JSX.Element {
   const iconClass = 'h-5 w-5';
   switch (type) {
-    case 'todo':
-      return <ListTodo className={iconClass} />;
     case 'research':
       return <Search className={iconClass} />;
     case 'note':

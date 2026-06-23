@@ -7,7 +7,6 @@ import {
   FileText,
   HelpCircle,
   Link,
-  ListTodo,
   Mic,
   MessageSquare,
   Search,
@@ -23,8 +22,6 @@ interface CommandDetailModalProps {
 function getTypeIcon(type: CommandType): React.JSX.Element {
   const iconClass = 'h-5 w-5';
   switch (type) {
-    case 'todo':
-      return <ListTodo className={iconClass} />;
     case 'research':
       return <Search className={iconClass} />;
     case 'note':

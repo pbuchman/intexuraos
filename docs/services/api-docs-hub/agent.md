@@ -112,7 +112,7 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 
 ---
 
-## Available Service Specs (20)
+## Available Service Specs (17)
 
 | Service                          | Env Var Key                                               |
 | -------------------------------- | --------------------------------------------------------- |
@@ -125,15 +125,12 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 | Actions Agent API                | `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                    |
 | Image Service API                | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                    |
 | Notes Agent API                  | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                      |
-| Todos Agent API                  | `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                      |
 | Application Settings API         | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`             |
 | Bookmarks Agent API              | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`                  |
 | Calendar Agent API               | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`                   |
-| Chat Agent API                   | `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                       |
 | Code Agent API                   | `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                       |
 | Linear Agent API                 | `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                     |
 | Web Agent API                    | `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                        |
-| Cron Agent API                   | `INTEXURAOS_CRON_AGENT_OPENAPI_URL`                       |
 | Hellscript Agent API             | `INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL`                 |
 
 ---

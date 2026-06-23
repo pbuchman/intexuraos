@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prevent the `x-guest-session`-header rate-limit bypass in `apps/chat-agent` so an attacker cannot generate unlimited billed LLM calls by rotating the guest UUID per request.
+**Goal:** Prevent the `x-guest-session`-header rate-limit bypass in `apps/retired-chat-service` so an attacker cannot generate unlimited billed LLM calls by rotating the guest UUID per request.
 
 **Architecture:**
-1. Replace the client-generated guest UUID with a **server-signed JWT guest session** (HS256 via `jose`, 24h TTL, opaque `sub`). The token is issued by a new `POST /guest-session` endpoint on `chat-agent` and returned to the web app, which stores it in `localStorage` instead of a raw UUID.
+1. Replace the client-generated guest UUID with a **server-signed JWT guest session** (HS256 via `jose`, 24h TTL, opaque `sub`). The token is issued by a new `POST /guest-session` endpoint on `retired-chat-service` and returned to the web app, which stores it in `localStorage` instead of a raw UUID.
 2. In `POST /chat`, verify the guest session token signature and key the existing per-sub rate limiter on the **verified `sub` claim**, so rotating the header has no effect.
 3. Add `@fastify/rate-limit` as an **IP-based floor** on both `/chat` and `/guest-session` so the attacker cannot simply request unlimited fresh signed tokens per second. The existing in-memory guest limiter is preserved as the per-session layer and continues to have an LRU eviction cap to prevent the unbounded-Map leak.
 
@@ -22,56 +22,56 @@
 ## File Structure
 
 **New files:**
-- `apps/chat-agent/src/infra/guestSession/guestSessionSigner.ts` — HS256 sign/verify with `jose`, opaque sub generation, expiry.
-- `apps/chat-agent/src/infra/guestSession/guestSessionSigner.test.ts` — unit tests for sign/verify, expiry, tamper detection, malformed input.
-- `apps/chat-agent/src/infra/guestSession/index.ts` — barrel.
-- `apps/chat-agent/src/routes/guestSessionRoutes.ts` — `POST /guest-session` route.
-- `apps/chat-agent/src/__tests__/guestSessionRoutes.test.ts` — route tests.
+- `apps/retired-chat-service/src/infra/guestSession/guestSessionSigner.ts` — HS256 sign/verify with `jose`, opaque sub generation, expiry.
+- `apps/retired-chat-service/src/infra/guestSession/guestSessionSigner.test.ts` — unit tests for sign/verify, expiry, tamper detection, malformed input.
+- `apps/retired-chat-service/src/infra/guestSession/index.ts` — barrel.
+- `apps/retired-chat-service/src/routes/guestSessionRoutes.ts` — `POST /guest-session` route.
+- `apps/retired-chat-service/src/__tests__/guestSessionRoutes.test.ts` — route tests.
 
 **Modified files:**
-- `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.ts` — add LRU eviction cap (bounded Map).
-- `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.test.ts` — add eviction test.
-- `apps/chat-agent/src/routes/chatRoutes.ts` — verify signed guest session; key limiter on verified `sub`.
-- `apps/chat-agent/src/routes/index.ts` — register new route.
-- `apps/chat-agent/src/services.ts` — add `guestSessionSigner` to `ServiceContainer`; register env var `INTEXURAOS_GUEST_SESSION_SECRET`.
-- `apps/chat-agent/src/server.ts` — register `@fastify/rate-limit` plugin.
-- `apps/chat-agent/src/index.ts` — add `INTEXURAOS_GUEST_SESSION_SECRET` to `REQUIRED_ENV`.
-- `apps/chat-agent/package.json` — promote `jose` to dep; add `@fastify/rate-limit`.
-- `apps/chat-agent/src/__tests__/routes.test.ts` — update guest tests to use signed token; add sub-rotation-bypass test.
-- `apps/chat-agent/src/__tests__/fakes.fixture.ts` — add fake signer.
-- `apps/chat-agent/src/__tests__/services.test.ts` — update null-field list with `guestSessionSigner`.
+- `apps/retired-chat-service/src/infra/rateLimit/guestRateLimiter.ts` — add LRU eviction cap (bounded Map).
+- `apps/retired-chat-service/src/infra/rateLimit/guestRateLimiter.test.ts` — add eviction test.
+- `apps/retired-chat-service/src/routes/chatRoutes.ts` — verify signed guest session; key limiter on verified `sub`.
+- `apps/retired-chat-service/src/routes/index.ts` — register new route.
+- `apps/retired-chat-service/src/services.ts` — add `guestSessionSigner` to `ServiceContainer`; register env var `INTEXURAOS_GUEST_SESSION_SECRET`.
+- `apps/retired-chat-service/src/server.ts` — register `@fastify/rate-limit` plugin.
+- `apps/retired-chat-service/src/index.ts` — add `INTEXURAOS_GUEST_SESSION_SECRET` to `REQUIRED_ENV`.
+- `apps/retired-chat-service/package.json` — promote `jose` to dep; add `@fastify/rate-limit`.
+- `apps/retired-chat-service/src/__tests__/routes.test.ts` — update guest tests to use signed token; add sub-rotation-bypass test.
+- `apps/retired-chat-service/src/__tests__/fakes.fixture.ts` — add fake signer.
+- `apps/retired-chat-service/src/__tests__/services.test.ts` — update null-field list with `guestSessionSigner`.
 - `apps/web/src/services/chatService.ts` — replace local UUID generation with call to `/guest-session` endpoint; store signed token instead of raw UUID.
 - `apps/web/src/services/chatService.test.ts` (if exists — otherwise no new test is required per web-app coverage exception, but add if present).
-- `apps/web/src/config.ts` — no new URL needed (reuses `chatAgentUrl`), verify only.
+- `apps/web/src/config.ts` — no new URL needed (reuses `retiredChatServiceUrl`), verify only.
 - `terraform/environments/dev/main.tf` — add `INTEXURAOS_GUEST_SESSION_SECRET` to `chat_agent` secrets and to `common_service_secrets` declaration.
-- `ecosystem.config.cjs` — add `INTEXURAOS_GUEST_SESSION_SECRET` to chat-agent env.
-- `docs/services/chat-agent/features.md` — document the guest session flow.
+- `ecosystem.config.cjs` — add `INTEXURAOS_GUEST_SESSION_SECRET` to retired-chat-service env.
+- `docs/services/retired-chat-service/features.md` — document the guest session flow.
 
-**Files that change together:** The three env-var locations (`apps/chat-agent/src/index.ts`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`) MUST all be updated in the same commit per CLAUDE.md rules.
+**Files that change together:** The three env-var locations (`apps/retired-chat-service/src/index.ts`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`) MUST all be updated in the same commit per CLAUDE.md rules.
 
 ---
 
 ## Background & Constraints
 
-- Current bypass (`apps/chat-agent/src/routes/chatRoutes.ts:138–150`): limiter key is the raw `x-guest-session` header. Attacker rotates UUID per request.
-- Current limiter (`apps/chat-agent/src/infra/rateLimit/guestRateLimiter.ts`): unbounded `Map` — second vulnerability (memory DoS).
+- Current bypass (`apps/retired-chat-service/src/routes/chatRoutes.ts:138–150`): limiter key is the raw `x-guest-session` header. Attacker rotates UUID per request.
+- Current limiter (`apps/retired-chat-service/src/infra/rateLimit/guestRateLimiter.ts`): unbounded `Map` — second vulnerability (memory DoS).
 - Web client (`apps/web/src/services/chatService.ts:29–40`): generates UUID client-side and persists in `localStorage`.
-- `chat-agent` currently runs at `max_scale=1` in dev. A shared multi-pod store (Redis/Firestore-backed rate-limit store) is **out of scope** for this ticket — documented below as a follow-up. The signed-session approach alone closes the cost-attack vector even at multi-pod, because the only way to mint a new `sub` is to call `/guest-session`, which is itself IP-limited. Per-pod in-memory layers are acceptable at current scale.
-- `jose` is already a devDep (`apps/chat-agent/package.json:38`); we must promote it to dep because it is imported from production code.
-- Env var `INTEXURAOS_GUEST_SESSION_SECRET` must be added in all three locations: `apps/chat-agent/src/index.ts` `REQUIRED_ENV`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`.
+- `retired-chat-service` currently runs at `max_scale=1` in dev. A shared multi-pod store (Redis/Firestore-backed rate-limit store) is **out of scope** for this ticket — documented below as a follow-up. The signed-session approach alone closes the cost-attack vector even at multi-pod, because the only way to mint a new `sub` is to call `/guest-session`, which is itself IP-limited. Per-pod in-memory layers are acceptable at current scale.
+- `jose` is already a devDep (`apps/retired-chat-service/package.json:38`); we must promote it to dep because it is imported from production code.
+- Env var `INTEXURAOS_GUEST_SESSION_SECRET` must be added in all three locations: `apps/retired-chat-service/src/index.ts` `REQUIRED_ENV`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`.
 
 ---
 
 ## Task 1 — Add `guestSessionSigner` with unit tests (TDD)
 
 **Files:**
-- Create: `apps/chat-agent/src/infra/guestSession/guestSessionSigner.ts`
-- Create: `apps/chat-agent/src/infra/guestSession/guestSessionSigner.test.ts`
-- Create: `apps/chat-agent/src/infra/guestSession/index.ts`
+- Create: `apps/retired-chat-service/src/infra/guestSession/guestSessionSigner.ts`
+- Create: `apps/retired-chat-service/src/infra/guestSession/guestSessionSigner.test.ts`
+- Create: `apps/retired-chat-service/src/infra/guestSession/index.ts`
 
 - [ ] **Step 1: Write the failing test file**
 
-Create `apps/chat-agent/src/infra/guestSession/guestSessionSigner.test.ts`:
+Create `apps/retired-chat-service/src/infra/guestSession/guestSessionSigner.test.ts`:
 
 ```ts
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -144,12 +144,12 @@ describe('guestSessionSigner', () => {
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- guestSessionSigner`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- guestSessionSigner`
 Expected: FAIL with "Cannot find module './guestSessionSigner.js'".
 
 - [ ] **Step 3: Implement the signer**
 
-Create `apps/chat-agent/src/infra/guestSession/guestSessionSigner.ts`:
+Create `apps/retired-chat-service/src/infra/guestSession/guestSessionSigner.ts`:
 
 ```ts
 /**
@@ -184,7 +184,7 @@ export interface GuestSessionSignerConfig {
   ttlSeconds: number;
 }
 
-const ISSUER = 'intexuraos-chat-agent';
+const ISSUER = 'intexuraos-retired-chat-service';
 const AUDIENCE = 'intexuraos-guest-chat';
 
 export function createGuestSessionSigner(
@@ -245,7 +245,7 @@ export function createGuestSessionSigner(
 
 - [ ] **Step 4: Create barrel export**
 
-Create `apps/chat-agent/src/infra/guestSession/index.ts`:
+Create `apps/retired-chat-service/src/infra/guestSession/index.ts`:
 
 ```ts
 export {
@@ -259,14 +259,14 @@ export {
 
 - [ ] **Step 5: Run tests — all green**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- guestSessionSigner`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- guestSessionSigner`
 Expected: 6 tests pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/chat-agent/src/infra/guestSession
-git commit -m "feat(chat-agent): add guestSessionSigner for signed JWT sessions [INT-1520]"
+git add apps/retired-chat-service/src/infra/guestSession
+git commit -m "feat(retired-chat-service): add guestSessionSigner for signed JWT sessions [INT-1520]"
 ```
 
 ---
@@ -274,12 +274,12 @@ git commit -m "feat(chat-agent): add guestSessionSigner for signed JWT sessions 
 ## Task 2 — Add LRU eviction to `guestRateLimiter` (TDD)
 
 **Files:**
-- Modify: `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.ts`
-- Modify: `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.test.ts`
+- Modify: `apps/retired-chat-service/src/infra/rateLimit/guestRateLimiter.ts`
+- Modify: `apps/retired-chat-service/src/infra/rateLimit/guestRateLimiter.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.test.ts` (append to existing describe block):
+Add to `apps/retired-chat-service/src/infra/rateLimit/guestRateLimiter.test.ts` (append to existing describe block):
 
 ```ts
   describe('unbounded map protection', () => {
@@ -302,12 +302,12 @@ Add to `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.test.ts` (append to
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- guestRateLimiter`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- guestRateLimiter`
 Expected: FAIL — "maxSessions" unknown option OR eviction never occurs.
 
 - [ ] **Step 3: Add LRU eviction to the limiter**
 
-Modify `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.ts`:
+Modify `apps/retired-chat-service/src/infra/rateLimit/guestRateLimiter.ts`:
 
 ```ts
 const HOUR_MS = 60 * 60 * 1000;
@@ -377,14 +377,14 @@ export function createGuestRateLimiter(config?: GuestRateLimiterConfig): GuestRa
 
 - [ ] **Step 4: Run tests — all green**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- guestRateLimiter`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- guestRateLimiter`
 Expected: all previous tests + new eviction test pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/chat-agent/src/infra/rateLimit
-git commit -m "fix(chat-agent): cap guestRateLimiter Map size to prevent memory DoS [INT-1520]"
+git add apps/retired-chat-service/src/infra/rateLimit
+git commit -m "fix(retired-chat-service): cap guestRateLimiter Map size to prevent memory DoS [INT-1520]"
 ```
 
 ---
@@ -392,11 +392,11 @@ git commit -m "fix(chat-agent): cap guestRateLimiter Map size to prevent memory 
 ## Task 3 — Promote `jose` to dep and add `@fastify/rate-limit`
 
 **Files:**
-- Modify: `apps/chat-agent/package.json`
+- Modify: `apps/retired-chat-service/package.json`
 
 - [ ] **Step 1: Update package.json**
 
-Modify `apps/chat-agent/package.json`:
+Modify `apps/retired-chat-service/package.json`:
 
 ```json
 {
@@ -434,14 +434,14 @@ Expected: lockfile updates, no errors.
 
 - [ ] **Step 3: Build (verify dist exists)**
 
-Run: `pnpm --filter @intexuraos/chat-agent build`
+Run: `pnpm --filter @intexuraos/retired-chat-service build`
 Expected: success.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/chat-agent/package.json pnpm-lock.yaml
-git commit -m "chore(chat-agent): add @fastify/rate-limit and promote jose to dep [INT-1520]"
+git add apps/retired-chat-service/package.json pnpm-lock.yaml
+git commit -m "chore(retired-chat-service): add @fastify/rate-limit and promote jose to dep [INT-1520]"
 ```
 
 ---
@@ -449,11 +449,11 @@ git commit -m "chore(chat-agent): add @fastify/rate-limit and promote jose to de
 ## Task 4 — Add env var `INTEXURAOS_GUEST_SESSION_SECRET` in all three locations
 
 **Files:**
-- Modify: `apps/chat-agent/src/index.ts`
+- Modify: `apps/retired-chat-service/src/index.ts`
 - Modify: `terraform/environments/dev/main.tf`
 - Modify: `ecosystem.config.cjs`
 
-- [ ] **Step 1: Update REQUIRED_ENV in `apps/chat-agent/src/index.ts`**
+- [ ] **Step 1: Update REQUIRED_ENV in `apps/retired-chat-service/src/index.ts`**
 
 Modify lines 7–17:
 
@@ -477,7 +477,7 @@ const REQUIRED_ENV = [
 In the secret-manager secrets map (near line 513, `INTEXURAOS_OPENAI_APP_API_KEY`), add:
 
 ```hcl
-"INTEXURAOS_GUEST_SESSION_SECRET" = "HS256 secret used to sign chat-agent guest session JWTs (at least 32 bytes of entropy)"
+"INTEXURAOS_GUEST_SESSION_SECRET" = "HS256 secret used to sign retired-chat-service guest session JWTs (at least 32 bytes of entropy)"
 ```
 
 In the `chat_agent` module's `secrets = merge(...)` block (near line 1654), add:
@@ -491,7 +491,7 @@ In the `chat_agent` module's `secrets = merge(...)` block (near line 1654), add:
 
 - [ ] **Step 3: Add env var to `ecosystem.config.cjs`**
 
-In the `chat-agent` app entry, add `INTEXURAOS_GUEST_SESSION_SECRET` to the env (read from the home-dev `.env` file per existing pattern). Refer to `.claude/reference/env-vars-patterns.md` for exact shape — mirror the pattern used for `INTEXURAOS_GEMINI_APP_API_KEY`.
+In the `retired-chat-service` app entry, add `INTEXURAOS_GUEST_SESSION_SECRET` to the env (read from the home-dev `.env` file per existing pattern). Refer to `.claude/reference/env-vars-patterns.md` for exact shape — mirror the pattern used for `INTEXURAOS_GEMINI_APP_API_KEY`.
 
 - [ ] **Step 4: Generate the actual secret value**
 
@@ -508,8 +508,8 @@ Also add to `home-dev/.env` for PM2 dev environment.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/chat-agent/src/index.ts terraform/environments/dev/main.tf ecosystem.config.cjs
-git commit -m "feat(chat-agent): declare INTEXURAOS_GUEST_SESSION_SECRET env var [INT-1520]"
+git add apps/retired-chat-service/src/index.ts terraform/environments/dev/main.tf ecosystem.config.cjs
+git commit -m "feat(retired-chat-service): declare INTEXURAOS_GUEST_SESSION_SECRET env var [INT-1520]"
 ```
 
 ---
@@ -517,13 +517,13 @@ git commit -m "feat(chat-agent): declare INTEXURAOS_GUEST_SESSION_SECRET env var
 ## Task 5 — Wire `guestSessionSigner` into `ServiceContainer`
 
 **Files:**
-- Modify: `apps/chat-agent/src/services.ts`
-- Modify: `apps/chat-agent/src/__tests__/services.test.ts`
-- Modify: `apps/chat-agent/src/__tests__/fakes.fixture.ts`
+- Modify: `apps/retired-chat-service/src/services.ts`
+- Modify: `apps/retired-chat-service/src/__tests__/services.test.ts`
+- Modify: `apps/retired-chat-service/src/__tests__/fakes.fixture.ts`
 
 - [ ] **Step 1: Write the failing test for services bootstrap**
 
-Add to `apps/chat-agent/src/__tests__/services.test.ts`, next to the other `initializeServices` tests:
+Add to `apps/retired-chat-service/src/__tests__/services.test.ts`, next to the other `initializeServices` tests:
 
 ```ts
   it('throws when INTEXURAOS_GUEST_SESSION_SECRET is missing', () => {
@@ -541,12 +541,12 @@ guestSessionSigner: null as unknown as ServiceContainer['guestSessionSigner'],
 
 - [ ] **Step 2: Run — verify it fails**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- services.test.ts`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- services.test.ts`
 Expected: FAIL — `guestSessionSigner` not in `ServiceContainer`.
 
 - [ ] **Step 3: Add `guestSessionSigner` to ServiceContainer**
 
-Modify `apps/chat-agent/src/services.ts`:
+Modify `apps/retired-chat-service/src/services.ts`:
 
 ```ts
 import { createGuestSessionSigner, type GuestSessionSigner } from './infra/guestSession/index.js';
@@ -588,7 +588,7 @@ And add to the container literal:
 
 - [ ] **Step 4: Add fake to test fixture**
 
-Modify `apps/chat-agent/src/__tests__/fakes.fixture.ts`. Add above `setupFakeServices`:
+Modify `apps/retired-chat-service/src/__tests__/fakes.fixture.ts`. Add above `setupFakeServices`:
 
 ```ts
 export class FakeGuestSessionSigner implements GuestSessionSigner {
@@ -633,14 +633,14 @@ Also update the return type and `import { ok, err } from '@intexuraos/common-cor
 
 - [ ] **Step 5: Run tests — all green**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- services.test.ts`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- services.test.ts`
 Expected: pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/chat-agent/src/services.ts apps/chat-agent/src/__tests__
-git commit -m "feat(chat-agent): wire guestSessionSigner into ServiceContainer [INT-1520]"
+git add apps/retired-chat-service/src/services.ts apps/retired-chat-service/src/__tests__
+git commit -m "feat(retired-chat-service): wire guestSessionSigner into ServiceContainer [INT-1520]"
 ```
 
 ---
@@ -648,14 +648,14 @@ git commit -m "feat(chat-agent): wire guestSessionSigner into ServiceContainer [
 ## Task 6 — Add `POST /guest-session` route (TDD)
 
 **Files:**
-- Create: `apps/chat-agent/src/routes/guestSessionRoutes.ts`
-- Create: `apps/chat-agent/src/__tests__/guestSessionRoutes.test.ts`
-- Modify: `apps/chat-agent/src/routes/index.ts`
-- Modify: `apps/chat-agent/src/server.ts` — register the new route.
+- Create: `apps/retired-chat-service/src/routes/guestSessionRoutes.ts`
+- Create: `apps/retired-chat-service/src/__tests__/guestSessionRoutes.test.ts`
+- Modify: `apps/retired-chat-service/src/routes/index.ts`
+- Modify: `apps/retired-chat-service/src/server.ts` — register the new route.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `apps/chat-agent/src/__tests__/guestSessionRoutes.test.ts`:
+Create `apps/retired-chat-service/src/__tests__/guestSessionRoutes.test.ts`:
 
 ```ts
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
@@ -697,12 +697,12 @@ describe('POST /guest-session', () => {
 
 - [ ] **Step 2: Run — verify it fails**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- guestSessionRoutes`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- guestSessionRoutes`
 Expected: FAIL — 404 on `/guest-session`.
 
 - [ ] **Step 3: Implement route**
 
-Create `apps/chat-agent/src/routes/guestSessionRoutes.ts`:
+Create `apps/retired-chat-service/src/routes/guestSessionRoutes.ts`:
 
 ```ts
 /**
@@ -765,14 +765,14 @@ export const guestSessionRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
 - [ ] **Step 4: Export and register**
 
-Modify `apps/chat-agent/src/routes/index.ts`:
+Modify `apps/retired-chat-service/src/routes/index.ts`:
 
 ```ts
 export { chatRoutes } from './chatRoutes.js';
 export { guestSessionRoutes } from './guestSessionRoutes.js';
 ```
 
-Modify `apps/chat-agent/src/server.ts` — after `await app.register(chatRoutes);`:
+Modify `apps/retired-chat-service/src/server.ts` — after `await app.register(chatRoutes);`:
 
 ```ts
 await app.register(guestSessionRoutes);
@@ -786,14 +786,14 @@ import { chatRoutes, guestSessionRoutes } from './routes/index.js';
 
 - [ ] **Step 5: Run test — passes**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- guestSessionRoutes`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- guestSessionRoutes`
 Expected: pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/chat-agent/src/routes apps/chat-agent/src/server.ts apps/chat-agent/src/__tests__/guestSessionRoutes.test.ts
-git commit -m "feat(chat-agent): add POST /guest-session to issue signed tokens [INT-1520]"
+git add apps/retired-chat-service/src/routes apps/retired-chat-service/src/server.ts apps/retired-chat-service/src/__tests__/guestSessionRoutes.test.ts
+git commit -m "feat(retired-chat-service): add POST /guest-session to issue signed tokens [INT-1520]"
 ```
 
 ---
@@ -801,12 +801,12 @@ git commit -m "feat(chat-agent): add POST /guest-session to issue signed tokens 
 ## Task 7 — Register `@fastify/rate-limit` as IP floor (TDD)
 
 **Files:**
-- Modify: `apps/chat-agent/src/server.ts`
-- Create test: extend `apps/chat-agent/src/__tests__/routes.test.ts` with an IP-limit test.
+- Modify: `apps/retired-chat-service/src/server.ts`
+- Create test: extend `apps/retired-chat-service/src/__tests__/routes.test.ts` with an IP-limit test.
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `apps/chat-agent/src/__tests__/routes.test.ts` under a new `describe('IP rate limiting')`:
+Add to `apps/retired-chat-service/src/__tests__/routes.test.ts` under a new `describe('IP rate limiting')`:
 
 ```ts
   describe('IP rate limiting', () => {
@@ -828,12 +828,12 @@ Add to `apps/chat-agent/src/__tests__/routes.test.ts` under a new `describe('IP 
 
 - [ ] **Step 2: Run — verify it fails**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- routes.test.ts`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- routes.test.ts`
 Expected: FAIL — all responses are 200.
 
 - [ ] **Step 3: Register `@fastify/rate-limit`**
 
-Modify `apps/chat-agent/src/server.ts`. Add import:
+Modify `apps/retired-chat-service/src/server.ts`. Add import:
 
 ```ts
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -865,14 +865,14 @@ Also enable `trustProxy` in the Fastify factory (Cloud Run puts the client IP in
 
 - [ ] **Step 4: Run test — passes**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- routes.test.ts`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- routes.test.ts`
 Expected: the new test passes; existing tests still pass. If existing guest tests trip the IP limit because of shared IP, supply unique `x-forwarded-for` per test case.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/chat-agent/src/server.ts apps/chat-agent/src/__tests__/routes.test.ts
-git commit -m "feat(chat-agent): add @fastify/rate-limit IP floor [INT-1520]"
+git add apps/retired-chat-service/src/server.ts apps/retired-chat-service/src/__tests__/routes.test.ts
+git commit -m "feat(retired-chat-service): add @fastify/rate-limit IP floor [INT-1520]"
 ```
 
 ---
@@ -880,12 +880,12 @@ git commit -m "feat(chat-agent): add @fastify/rate-limit IP floor [INT-1520]"
 ## Task 8 — `POST /chat` now verifies signed guest session (TDD)
 
 **Files:**
-- Modify: `apps/chat-agent/src/routes/chatRoutes.ts`
-- Modify: `apps/chat-agent/src/__tests__/routes.test.ts`
+- Modify: `apps/retired-chat-service/src/routes/chatRoutes.ts`
+- Modify: `apps/retired-chat-service/src/__tests__/routes.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `apps/chat-agent/src/__tests__/routes.test.ts` in the guest describe block:
+Add to `apps/retired-chat-service/src/__tests__/routes.test.ts` in the guest describe block:
 
 ```ts
     it('rejects an x-guest-session header that is not a valid signed token (401)', async () => {
@@ -932,12 +932,12 @@ Add to `apps/chat-agent/src/__tests__/routes.test.ts` in the guest describe bloc
 
 - [ ] **Step 2: Run — verify it fails**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- routes.test.ts`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- routes.test.ts`
 Expected: FAIL — 200 returned for invalid tokens, limiter keyed on raw header.
 
 - [ ] **Step 3: Update `chatRoutes.ts`**
 
-Modify the guest branch in `apps/chat-agent/src/routes/chatRoutes.ts` (lines 136–157):
+Modify the guest branch in `apps/retired-chat-service/src/routes/chatRoutes.ts` (lines 136–157):
 
 ```ts
       } else {
@@ -978,14 +978,14 @@ Every call in `routes.test.ts` that sets `'x-guest-session': 'guest-session-123'
 
 - [ ] **Step 5: Run — passes**
 
-Run: `pnpm --filter @intexuraos/chat-agent test -- routes.test.ts`
+Run: `pnpm --filter @intexuraos/retired-chat-service test -- routes.test.ts`
 Expected: all pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/chat-agent/src/routes/chatRoutes.ts apps/chat-agent/src/__tests__
-git commit -m "fix(chat-agent): verify signed guest session; rate-limit by verified sub [INT-1520]"
+git add apps/retired-chat-service/src/routes/chatRoutes.ts apps/retired-chat-service/src/__tests__
+git commit -m "fix(retired-chat-service): verify signed guest session; rate-limit by verified sub [INT-1520]"
 ```
 
 ---
@@ -1015,7 +1015,7 @@ export async function getOrCreateGuestSessionToken(): Promise<string> {
     // localStorage unavailable — fall through to fetch
   }
 
-  const response = await fetch(`${config.chatAgentUrl}/guest-session`, {
+  const response = await fetch(`${config.retiredChatServiceUrl}/guest-session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -1060,7 +1060,7 @@ Expected: pass.
 
 ```bash
 git add apps/web/src/services/chatService.ts
-git commit -m "feat(web): fetch signed guest session token from chat-agent [INT-1520]"
+git commit -m "feat(web): fetch signed guest session token from retired-chat-service [INT-1520]"
 ```
 
 ---
@@ -1068,7 +1068,7 @@ git commit -m "feat(web): fetch signed guest session token from chat-agent [INT-
 ## Task 10 — Update service docs
 
 **Files:**
-- Modify: `docs/services/chat-agent/features.md`
+- Modify: `docs/services/retired-chat-service/features.md`
 
 - [ ] **Step 1: Document the guest session flow**
 
@@ -1091,8 +1091,8 @@ The signing secret is provided via `INTEXURAOS_GUEST_SESSION_SECRET` (Secret Man
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/services/chat-agent/features.md
-git commit -m "docs(chat-agent): document signed guest session flow [INT-1520]"
+git add docs/services/retired-chat-service/features.md
+git commit -m "docs(retired-chat-service): document signed guest session flow [INT-1520]"
 ```
 
 ---
@@ -1139,4 +1139,4 @@ PR body must include the standard header (Linear link, code-task link, Worker Ty
 2. **No placeholders:** every step has concrete code/commands.
 3. **Type consistency:** `GuestSessionSigner.issue` returns `{ token, sub, expiresAt }` consistently in Tasks 1, 5, 6, 8, 9.
 4. **Env var rule:** Task 4 touches all three locations in one commit.
-5. **Parallelism:** one execution agent — web changes strictly depend on chat-agent `/guest-session` being deployed, so no subtask split.
+5. **Parallelism:** one execution agent — web changes strictly depend on retired-chat-service `/guest-session` being deployed, so no subtask split.

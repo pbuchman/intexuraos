@@ -90,8 +90,8 @@ raw `reply.code().send()` vs `{ error }`), and at least two bloated route files 
   `/health`/`/openapi.json` with subtle variations. Per-service OpenAPI components
   are redeclared despite existing shared `registerCoreSchemas`.
 - **Use-case directory naming + `MinimalLogger` drift** (Minor) — `calendar-agent`
-  uses `useCases`, `cron-agent` uses `use-cases`, everyone else uses `usecases`;
-  `notes-agent` and `todos-agent` redeclare `MinimalLogger` instead of importing
+  uses `useCases`, `retired-scheduler-service` uses `use-cases`, everyone else uses `usecases`;
+  `notes-agent` and `retired-checklist-service` redeclare `MinimalLogger` instead of importing
   `Logger` from `common-core` (direct CLAUDE.md violation).
 - **Oversized route files with domain leakage** (Important) —
   `apps/code-agent/src/routes/code/task-routes.ts` is 3,260 LoC;
@@ -108,13 +108,13 @@ raw `reply.code().send()` vs `{ error }`), and at least two bloated route files 
   services, optional in others; several services (`notion-service`,
   `whatsapp-service`, `linear-agent`) have no SIGTERM/SIGINT handlers at all;
   `actions-agent`'s `main().catch()` swallows startup errors.
-- **REQUIRED_ENV anti-patterns** (Minor) — `apps/actions-agent`, `apps/todos-agent`,
+- **REQUIRED_ENV anti-patterns** (Minor) — `apps/actions-agent`, `apps/retired-checklist-service`,
   `apps/linear-agent` cast env values `as string` or use `?? ''` fallbacks after
   `validateRequiredEnv`, defeating validation.
 - **Inconsistent HTTP error shape** (Minor) — 34 occurrences across 8 files use
   `reply.code(401).send({ error })` instead of the standard `reply.fail(...)`
   envelope.
-- **CRUD repository duplication** (Minor) — `notes-agent`, `todos-agent`,
+- **CRUD repository duplication** (Minor) — `notes-agent`, `retired-checklist-service`,
   `bookmarks-agent`, `commands-agent` each maintain ~150-LoC near-identical CRUD
   repos.
 - **Inconsistent routes aggregation** (Cosmetic) — three styles: `routes/index.ts`,
@@ -290,7 +290,7 @@ bypass versioning. No infra client implements retry/backoff. No prompt caching.
 - **Prompt versioning rule bypassed by plain functions** (High) —
   `scripts/verify-prompt-versions.mjs:22` regex only matches typed
   `PromptBuilder<>`. Un-versioned plain-function prompts exist in research,
-  synthesis, digest, validation-repair, chat-agent system, code-agent triage,
+  synthesis, digest, validation-repair, retired-chat-service system, code-agent triage,
   code-agent cooloff, web-agent summary-repair.
 - **Orchestrator maintains its own duplicate `PromptBuilder` interface** (Medium) —
   `workers/orchestrator/src/services/prompt-builder.ts` drifts from package.
@@ -378,7 +378,7 @@ carries 50 v8 ignores rooted in an under-powered fake.
   `fakes.ts`; `FakeLogger`, `FakeAuth`, `FakeHttpClient`, `FakeFirestore`-+-
   Timestamp shims duplicated.
 - **Workspace vitest configs drop the root `setupFiles`** (High) —
-  `apps/chat-agent/vitest.config.ts`, `apps/cron-agent`, `apps/hellscript-agent`,
+  `apps/retired-chat-service/vitest.config.ts`, `apps/retired-scheduler-service`, `apps/hellscript-agent`,
   `apps/web`, `e2e`, `migrations`, `packages/infra-otel`,
   `packages/internal-clients` all miss the global Firebase/Notion/fetch setup.
 - **Two packages declare coverage with no thresholds** (Medium) — `infra-otel`,
@@ -412,7 +412,7 @@ env-var contract is manually maintained and drift is visible today.
 - **Secret Manager secrets declared but never mounted** (High) — 8 secrets in
   `main.tf:520-531` have no consumers.
 - **Services missing from `ecosystem.config.cjs`** (High) — `api-docs-hub`,
-  `cron-agent`, `hellscript-agent`, `llm-usage-service`, `web-agent`.
+  `retired-scheduler-service`, `hellscript-agent`, `llm-usage-service`, `web-agent`.
 - **Dead env var `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`** (Medium) — set in
   Terraform, read nowhere.
 - **`api-docs-hub` missing `validateRequiredEnv`** (Medium).

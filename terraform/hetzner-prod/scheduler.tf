@@ -39,19 +39,6 @@ locals {
       min_backoff_duration = "10s"
       max_backoff_duration = "60s"
     }
-    cron_agent_tick = {
-      job_name             = "intexuraos-cron-agent-tick-prod-hetzner"
-      description          = "Trigger cron-agent tick every minute via Hetzner edge"
-      schedule             = "*/1 * * * *"
-      time_zone            = "UTC"
-      path                 = "/internal/cron/tick"
-      body                 = null
-      headers              = {}
-      retry_count          = 1
-      max_retry_duration   = null
-      min_backoff_duration = "10s"
-      max_backoff_duration = "30s"
-    }
     retry_pending_commands = {
       job_name             = "intexuraos-retry-pending-commands-prod-hetzner"
       description          = "Retry classification for commands stuck in pending_classification via Hetzner edge"

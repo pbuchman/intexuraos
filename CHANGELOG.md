@@ -125,7 +125,7 @@
 - OpenRouter integration with backend infrastructure, frontend model selection, and pricing display (INT-1011)
 - Code task backend pagination and group-level Firestore aggregation for Linear issue representation (INT-1173, INT-1184)
 - Batch archive selection and V3 loading UX for code tasks (INT-1166, INT-1218)
-- Cron Agent utilizing internal APIs to handle user tasks on schedule with security validation (INT-1288)
+- Retired Scheduler Service utilizing internal APIs to handle user tasks on schedule with security validation (INT-1288)
 - Cloudflare Browser Rendering for web-agent, replacing Crawl4AI for JS-rendered pages (INT-1153)
 - Per-agent-type worker settings for independent performance and cost tuning (INT-1124)
 - Ask Agent for interactive back-and-forth Claude Code sessions from the UI (INT-1293)
@@ -181,7 +181,7 @@
 ### Added
 
 - Hellscript Agent with backend service, web UI, and Terraform infrastructure (INT-1032)
-- Cron Agent backend service for scheduled task execution (INT-957)
+- Retired Scheduler Service backend service for scheduled task execution (INT-957)
 - Merge Queue for automatic PR queuing and merging (INT-1020)
 - Review agent plan awareness for requirements validation (INT-1038)
 - Merge conflict detection via dedicated cron reconciliation job (INT-1023)
@@ -492,7 +492,7 @@
 - Added Orchestrator worker for Docker-isolated Claude Code execution — spawns containers with git worktree isolation, Anthropic OAuth credential management, state persistence across restarts, and GitHub App token rotation (INT-272)
 - Added two-phase execution model: Phase 1 design agent enriches Linear issues and creates subissues, Phase 2 strict execution agent implements code, runs CI, creates PR, and updates Linear (INT-486)
 - Added LLM-based completion verifier (Gemini) that checks each worker attempt against a completion contract with automatic resume via `--continue` for incomplete tasks
-- Added Intex Chat with real-time conversational AI — full `chat-agent` service with WebSocket support, conversation history, and guest sessions (INT-431)
+- Added Intex Chat with real-time conversational AI — full `retired-chat-service` service with WebSocket support, conversation history, and guest sessions (INT-431)
 - Added dark mode across web application with `ThemeContext` provider and Tailwind `dark:` classes
 - Added task retry mechanism with context preservation, `retriedFrom` linking, and 1-minute cool-off period (INT-524)
 - Added task messaging for running and completed tasks — messages queue during execution and trigger `--continue` resume on terminal tasks
@@ -581,7 +581,7 @@
 
 ## 1.4.0
 
-- Added Todos Agent for task management with Pub/Sub processing
+- Added Retired Checklist Service for task management with Pub/Sub processing
 - Added Notes Agent for note-taking with tags and sources
 - Added App Settings Service for centralized LLM pricing
 - Added Image Service for prompt generation and image generation via multiple providers

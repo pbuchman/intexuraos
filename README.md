@@ -15,7 +15,7 @@
   </p>
 </div>
 
-> 58-component TypeScript monorepo — 23 app workspaces, 6 workers, 29 shared packages — built and maintained by a single developer under strict engineering discipline: 100% branch coverage as a CI gate, cross-LLM verification where no model evaluates its own output, 27 CI verification scripts, and 26 Claude Code hooks enforcing quality at every stage. The system takes a WhatsApp voice note and turns it into a tested pull request. It researches topics across 15 AI models from 5 core providers. It schedules, tracks tasks, and manages project issues — all from a single voice or text command.
+> 55-component TypeScript monorepo — 20 app workspaces, 6 workers, 29 shared packages — built and maintained by a single developer under strict engineering discipline: 100% branch coverage as a CI gate, cross-LLM verification where no model evaluates its own output, 27 CI verification scripts, and 26 Claude Code hooks enforcing quality at every stage. The system takes a WhatsApp voice note and turns it into a tested pull request. It researches topics across 15 AI models from 5 core providers. It tracks tasks and manages project issues — all from a single voice or text command.
 >
 > IntexuraOS does not use AI as a feature. It deploys AI agents that use software as a tool. The platform researches, schedules, manages tasks, and **writes and ships its own code**.
 
@@ -24,7 +24,7 @@
 |                                  |                                                                                                             |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | **Cross-LLM Verification**       | Writer and verifier are always different providers — Claude executes, Gemini verifies, TypeScript validates |
-| **58 Components, One Developer** | 23 app services, 6 workers, 29 packages in a strict TypeScript monorepo                                     |
+| **55 Components, One Developer** | 20 app services, 6 workers, 29 packages in a strict TypeScript monorepo                                     |
 | **Autonomous Code Pipeline**     | WhatsApp voice note → intent classification → Docker-isolated execution → tested PR                         |
 | **Container Isolation**          | Non-root, all capabilities dropped, network-restricted, read-only secrets per task                          |
 | **26 Claude Code Hooks**         | 1 SessionStart, 15 PreToolUse, 7 PostToolUse, 3 Stop — enforcing patterns before code is written            |
@@ -32,7 +32,7 @@
 | **Prompt Versioning**            | Semver-versioned prompts with SHA-256 audit trail and CI-enforced bump validation                           |
 | **Multi-Provider AI Council**    | 15 models across 5 core providers queried in parallel with attributed synthesis                             |
 | **Result Type Discipline**       | Every operation returns typed success or failure — no silent crashes, no unhandled exceptions               |
-| **Event-Driven Architecture**    | 41 Pub/Sub topics decoupling 23 app services with crash-safe state persistence                              |
+| **Event-Driven Architecture**    | 40 Pub/Sub topics decoupling 20 app services with crash-safe state persistence                              |
 
 **[The Self-Building System](#the-self-building-system)** · **[Cross-LLM Verification](#cross-llm-verification-pipeline)** · **[The Council of AI](#the-council-of-ai)** · **[Architecture](#architecture)** · **[Engineering Standards](#engineering-standards)** · **[Voice-First Intelligence](#voice-first-intelligence)** · **[Getting Started](#getting-started)** · **[Documentation](#documentation)**
 
@@ -180,7 +180,7 @@ _This section is for developers and builders evaluating the system internals. As
 
 ### From Voice to Merged Code
 
-58 components — 23 app services, 6 workers, and 29 shared packages — all in a single repository with strict TypeScript. Many of these operate as autonomous agents and services. The architecture exists because one person needed leverage: each specialist handles one domain, so research output can feed a code task, a code task result can be pushed to project tracking and WhatsApp simultaneously, and the full loop closes without a human switching tools. No single-domain tool — coding assistant, research chatbot, or project tracker — can replicate this chain.
+55 components — 20 app services, 6 workers, and 29 shared packages — all in a single repository with strict TypeScript. Many of these operate as autonomous agents and services. The architecture exists because one person needed leverage: each specialist handles one domain, so research output can feed a code task, a code task result can be pushed to project tracking and WhatsApp simultaneously, and the full loop closes without a human switching tools. No single-domain tool — coding assistant, research chatbot, or project tracker — can replicate this chain.
 
 ```mermaid
 graph TD
@@ -198,14 +198,12 @@ graph TD
     subgraph "Specialist Agents"
         RES[Research Agent]
         CODE3[Code Agent]
-        TODO[Todos Agent]
         CAL[Calendar Agent]
         LIN3[Linear Agent]
         BOOK[Bookmarks Agent]
         NOTE[Notes Agent]
         IMG[Image Service]
         WEBAG[Web Agent]
-        CHAT[Chat Agent]
     end
 
     subgraph "Code Execution"
@@ -256,7 +254,7 @@ Not a target. A gate. Every branch in every service is either tested or explicit
 
 ### Strict TypeScript
 
-The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 58 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
+The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 55 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
 
 ### Automated Cross-Linking
 
@@ -282,7 +280,7 @@ Hooks encode the patterns that would otherwise live only in a developer's head �
 Automated gates that run on every commit, covering:
 
 - Branch coverage enforcement (100% or documented exemption)
-- TypeScript strict mode compliance across all 58 components
+- TypeScript strict mode compliance across all 55 components
 - API contract validation and cross-service consistency
 - Environment variable verification (no missing vars in deployment)
 - Cross-linking between project tracking, error monitoring, and code changes
@@ -354,7 +352,6 @@ You submit tasks while walking, while commuting, while thinking of something els
 | **OpenRouter Integration**   | Route tasks through OpenRouter models with backend infrastructure and pricing display          |
 | **Ask Agent**                | Interactive back-and-forth Claude Code sessions directly from the UI                           |
 | **Code Task Groups**         | Backend grouping and pagination of code tasks by Linear issue representation                   |
-| **Cron Agent**               | Internal API integration for executing user tasks on schedule with security validation         |
 | **Cloudflare Web Research**  | Replaced Crawl4AI with Cloudflare Browser Rendering for JS-rendered pages                      |
 | **Auto-Archive**             | Merged code tasks archived automatically — batch archive and loading UX improvements           |
 | **Linear Issue Cleanup**     | AI-powered stale issue detection with review UI and scheduled pruning                          |
@@ -368,7 +365,6 @@ You submit tasks while walking, while commuting, while thinking of something els
 | **Hellscript Agent**                   | A new scripting service with backend, web UI, and infrastructure for authoring Hellscript tasks |
 | **Merge Queue**                        | Pull requests are queued and auto-merged in order without conflicts                             |
 | **Review Agent Plan Awareness**        | Code reviews check whether implementation matches the original plan                             |
-| **Cron Agent**                         | Schedule and execute recurring tasks automatically with a dedicated service                     |
 | **Merge Conflict Cron Reconciliation** | Conflict detection moved to a dedicated cron job for reliable, non-blocking operation           |
 
 #### v3.3.0
@@ -413,7 +409,7 @@ You need three things: a WhatsApp account, a Google account, and a web browser.
 2. **Link your Google account** for calendar access.
 3. **Send your first message** — typed or spoken — and the system handles it immediately.
 
-The platform provides fallback AI model access, so you can run research, generate bookmarks, and use the chat assistant before configuring your own API keys. For coding tasks, connect a worker machine — any Mac or Linux computer. For project tracking, connect Linear. For research exports, connect Notion. Each integration is optional and independent.
+The platform provides fallback AI model access, so you can run research and generate bookmarks before configuring your own API keys. For coding tasks, connect a worker machine — any Mac or Linux computer. For project tracking, connect Linear. For research exports, connect Notion. Each integration is optional and independent.
 
 ### For Developers
 
@@ -442,7 +438,7 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 | Document                                                    | Description                                                                               |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | **[Platform Overview](docs/overview.md)**                   | What IntexuraOS does — specialized agents and services, from voice notes to finished code |
-| **[Services Catalog](docs/services/index.md)**              | All 23 app services + 6 workers + 29 packages with technical details                      |
+| **[Services Catalog](docs/services/index.md)**              | All 20 app services + 6 workers + 29 packages with technical details                      |
 | **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 15 models across 5 core providers                                          |
 | **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step cloud and local environment setup                                            |
 
@@ -459,9 +455,7 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 | **[commands-agent](docs/services/commands-agent/features.md)**                             | 8-category intent classification with URL isolation and Polish support          |
 | **[actions-agent](docs/services/actions-agent/features.md)**                               | Confidence-based dispatch — auto-execute or ask for approval                    |
 | **[whatsapp-service](docs/services/whatsapp-service/features.md)**                         | Voice transcription, message routing, interactive approval workflows            |
-| **[chat-agent](docs/services/chat-agent/features.md)**                                     | In-app AI assistant with documentation Q&A and guest access                     |
 | **[calendar-agent](docs/services/calendar-agent/features.md)**                             | Voice-to-calendar with preview, multilingual dates, failed event recovery       |
-| **[todos-agent](docs/services/todos-agent/features.md)**                                   | Auto-structured tasks with priority and deadline extraction                     |
 | **[notes-agent](docs/services/notes-agent/features.md)**                                   | Tag-based notes from dashboard or voice commands                                |
 | **[bookmarks-agent](docs/services/bookmarks-agent/features.md)**                           | Link saving with AI-generated summary and metadata extraction                   |
 | **[linear-agent](docs/services/linear-agent/features.md)**                                 | Voice-to-issue with AI-generated titles and urgency mapping                     |
@@ -507,5 +501,5 @@ IntexuraOS is what happens when a single engineer builds agents that work for hi
 ---
 
 <div align="center">
-  <sub>23 app services. 6 workers. 29 packages. 15 AI models. 26 hooks. 27 CI scripts. 100% branch coverage. One developer.</sub>
+  <sub>20 app services. 6 workers. 29 packages. 15 AI models. 26 hooks. 27 CI scripts. 100% branch coverage. One developer.</sub>
 </div>

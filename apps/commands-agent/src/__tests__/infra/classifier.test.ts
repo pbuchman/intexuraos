@@ -45,15 +45,15 @@ describe('GeminiClassifier', () => {
   });
 
   describe('classify', () => {
-    it('classifies todo command correctly', async () => {
+    it('classifies note command correctly', async () => {
       mockGenerate.mockResolvedValue(
-        ok(generateResult(jsonResponse('todo', 0.95, 'Buy groceries')))
+        ok(generateResult(jsonResponse('note', 0.95, 'Buy groceries')))
       );
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('I need to buy groceries');
 
-      expect(classificationResult.type).toBe('todo');
+      expect(classificationResult.type).toBe('note');
       expect(classificationResult.confidence).toBe(0.95);
       expect(classificationResult.title).toBe('Buy groceries');
     });
@@ -120,7 +120,7 @@ describe('GeminiClassifier', () => {
     });
 
     it('passes prompt containing the text to generate', async () => {
-      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, 'Test'))));
+      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('note', 0.9, 'Test'))));
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       await classifier.classify('test message');
@@ -187,6 +187,19 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.type).toBe('note');
     });
 
+    it('returns note when the LLM returns the removed todo type', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('todo', 0.95, 'Buy groceries')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
+      const classificationResult = await classifier.classify('buy groceries');
+
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
+      expect(classificationResult.reasoning).toContain('Invalid response format');
+    });
+
     it('classifies code command correctly', async () => {
       mockGenerate.mockResolvedValue(
         ok(generateResult(jsonResponse('code', 0.92, 'Fix login bug')))
@@ -201,7 +214,7 @@ describe('GeminiClassifier', () => {
     });
 
     it('rejects confidence greater than 1', async () => {
-      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 1.5, 'Test'))));
+      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('note', 1.5, 'Test'))));
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
@@ -212,7 +225,7 @@ describe('GeminiClassifier', () => {
     });
 
     it('rejects negative confidence', async () => {
-      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', -0.5, 'Test'))));
+      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('note', -0.5, 'Test'))));
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
@@ -224,13 +237,13 @@ describe('GeminiClassifier', () => {
 
     it('extracts JSON from response with surrounding text', async () => {
       mockGenerate.mockResolvedValue(
-        ok(generateResult(`Here is the classification: ${jsonResponse('todo', 0.9, 'Test')} done.`))
+        ok(generateResult(`Here is the classification: ${jsonResponse('research', 0.9, 'Test')} done.`))
       );
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.type).toBe('todo');
+      expect(classificationResult.type).toBe('research');
       expect(classificationResult.confidence).toBe(0.9);
     });
 
@@ -239,7 +252,7 @@ describe('GeminiClassifier', () => {
       JSON.parse = (): null => null;
 
       try {
-        mockGenerate.mockResolvedValue(ok(generateResult('{"type": "todo"}')));
+        mockGenerate.mockResolvedValue(ok(generateResult('{"type": "note"}')));
 
         const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
         const classificationResult = await classifier.classify('test');
@@ -252,7 +265,7 @@ describe('GeminiClassifier', () => {
     });
 
     it('uses defaults for missing confidence, title, and reasoning', async () => {
-      mockGenerate.mockResolvedValue(ok(generateResult('{"type": "todo"}')));
+      mockGenerate.mockResolvedValue(ok(generateResult('{"type": "note"}')));
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
@@ -266,7 +279,7 @@ describe('GeminiClassifier', () => {
 
     it('rejects title exceeding 200 characters', async () => {
       const longTitle = 'A'.repeat(201);
-      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, longTitle))));
+      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('note', 0.9, longTitle))));
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
@@ -281,7 +294,7 @@ describe('GeminiClassifier', () => {
     it('accepts long reasoning without truncation', async () => {
       const longReasoning = 'B'.repeat(600);
       mockGenerate.mockResolvedValue(
-        ok(generateResult(jsonResponse('todo', 0.9, 'Test', longReasoning)))
+        ok(generateResult(jsonResponse('note', 0.9, 'Test', longReasoning)))
       );
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
@@ -293,7 +306,7 @@ describe('GeminiClassifier', () => {
 
     it('handles non-string title in response', async () => {
       mockGenerate.mockResolvedValue(
-        ok(generateResult('{"type": "todo", "confidence": 0.9, "title": 123}'))
+        ok(generateResult('{"type": "note", "confidence": 0.9, "title": 123}'))
       );
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
@@ -309,7 +322,7 @@ describe('GeminiClassifier', () => {
     it('handles non-string reasoning in response', async () => {
       mockGenerate.mockResolvedValue(
         ok(
-          generateResult('{"type": "todo", "confidence": 0.9, "title": "Test", "reasoning": true}')
+          generateResult('{"type": "note", "confidence": 0.9, "title": "Test", "reasoning": true}')
         )
       );
 
@@ -324,7 +337,7 @@ describe('GeminiClassifier', () => {
 
     it('handles non-number confidence in response', async () => {
       mockGenerate.mockResolvedValue(
-        ok(generateResult('{"type": "todo", "confidence": "high", "title": "Test"}'))
+        ok(generateResult('{"type": "note", "confidence": "high", "title": "Test"}'))
       );
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
@@ -484,4 +497,3 @@ describe('GeminiClassifier', () => {
     });
   });
 });
-

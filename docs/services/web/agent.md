@@ -274,19 +274,6 @@ type CodeTaskWorkerType =
 - Real-time Firestore updates (no polling)
 - Webhook secret configuration (`GET/POST/DELETE /webhook-config`)
 
-### Intex Chat
-
-**Endpoint:** `POST /chat` from chat-agent
-
-**When to use:** When user interacts with the AI chat assistant
-
-**Features:**
-
-- Floating action button (FAB) with resizable panel (desktop) and bottom sheet (mobile)
-- Authenticated and guest modes (`X-Guest-Session` header with server-side rate limiting)
-- Command creation flow: chat can suggest actions that create commands via commands-agent
-- Session and panel size persistence in localStorage
-
 ### Manage Integration Settings
 
 **Integrations covered:**
@@ -449,15 +436,13 @@ None. The web app is a consumer only — it does not publish Pub/Sub events.
 | ---------------------------- | ----------------------------------- | ----------------------------------------- |
 | user-service                 | Authentication, settings, API keys  | Cannot authenticate or load settings      |
 | actions-agent                | Action CRUD operations              | Cannot view or execute actions            |
-| commands-agent               | Command viewing + chat creation     | Cannot see command queue or use chat      |
+| commands-agent               | Command viewing                     | Cannot see command queue                  |
 | research-agent               | Research reports + Notion settings  | Cannot view research history              |
-| todos-agent                  | Todo management                     | Cannot manage todos                       |
 | notes-agent                  | Note management                     | Cannot manage notes                       |
 | bookmarks-agent              | Bookmark management                 | Cannot manage bookmarks                   |
 | calendar-agent               | Calendar integration                | Cannot view or manage events              |
 | linear-agent                 | Linear integration + webhooks       | Cannot view or manage issues              |
 | code-agent                   | Code tasks, workers, PR events      | Cannot manage code tasks or workers       |
-| chat-agent                   | AI chat assistant                   | Cannot use Intex Chat                     |
 | whatsapp-service             | WhatsApp connection + verification  | Cannot connect WhatsApp                   |
 | notion-service               | Notion connection                   | Cannot connect Notion                     |
 | mobile-notifications-service | Push notification management        | Cannot manage push devices                |
@@ -495,8 +480,6 @@ None. The web app is a consumer only — it does not publish Pub/Sub events.
 | `/#/code-tasks/:id/view`                  | Yes  | Code task detail v2 (current)       |
 | `/#/code-tasks/:id`                       | Yes  | Code task detail v1 (legacy)        |
 | `/#/code-tasks/pr-events`                 | Yes  | GitHub event decision log           |
-| `/#/my-todos`                             | Yes  | Todos                               |
-| `/#/todos/:id`                            | Yes  | Redirect to `/my-todos?id=`         |
 | `/#/my-notes`                             | Yes  | Notes                               |
 | `/#/notes/:id`                            | Yes  | Redirect to `/my-notes?id=`         |
 | `/#/my-bookmarks`                         | Yes  | Bookmarks                           |

@@ -16,7 +16,6 @@
  *   - llm-call
  *   - bookmark-enrich
  *   - bookmark-summarize
- *   - todos-processing
  *   - calendar-preview
  *   - all (publishes one of each)
  */
@@ -184,16 +183,6 @@ const EVENTS = {
       type: 'bookmarks.summarize',
       bookmarkId: 'bookmark-' + Date.now(),
       userId: 'test-user-303',
-    },
-  },
-  'todos-processing': {
-    topic: 'todos-processing-local',
-    data: {
-      type: 'todos.processing.created',
-      todoId: 'todo-' + Date.now(),
-      userId: 'test-user-202',
-      correlationId: 'corr-' + Date.now(),
-      timestamp: new Date().toISOString(),
     },
   },
   'calendar-preview': {

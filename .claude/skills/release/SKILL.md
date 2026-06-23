@@ -1,6 +1,6 @@
 ---
 name: release
-description: Orchestrate a 6-phase release workflow with automated service documentation, high-level docs updates, README "What's New" section, website improvements, RAG embeddings refresh, and semantic versioning. Use when preparing a new release.
+description: Orchestrate a 6-phase release workflow with automated service documentation, high-level docs updates, README "What's New" section, website improvements, and semantic versioning. Use when preparing a new release.
 argument-hint: '[--skip-docs | --phase N | --collect]'
 ---
 
@@ -43,14 +43,14 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Phase Overview
 
-| Phase | Name            | Interaction  | Key Actions                                                                                          |
-| ----- | --------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
-| 1     | Kickoff         | User Input   | Run semver analysis, single prioritization touchpoint                                                |
-| 2     | Service Docs    | Silent Batch | Spawn service-scribe agents in parallel                                                              |
-| 3     | High-Level Docs | Automatic    | Auto-update docs/overview.md via release-docs-updater agent                                          |
-| 4     | README          | Automatic    | Auto-generate "What's New" from High-priority items                                                  |
-| 5     | Website         | Automatic    | Auto-update WhatsNewSection in HomePage.tsx from High-priority features                              |
-| 6     | Finalize        | Automatic    | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
+| Phase | Name            | Interaction  | Key Actions                                                                          |
+| ----- | --------------- | ------------ | ------------------------------------------------------------------------------------ |
+| 1     | Kickoff         | User Input   | Run semver analysis, single prioritization touchpoint                                |
+| 2     | Service Docs    | Silent Batch | Spawn service-scribe agents in parallel                                              |
+| 3     | High-Level Docs | Automatic    | Auto-update docs/overview.md via release-docs-updater agent                          |
+| 4     | README          | Automatic    | Auto-generate "What's New" from High-priority items                                  |
+| 5     | Website         | Automatic    | Auto-update WhatsNewSection in HomePage.tsx from High-priority features              |
+| 6     | Finalize        | Automatic    | **Bump ALL versions**, CI check, commit, merge dev→main, tag on main, GitHub Release |
 
 ## Tool Verification (Fail Fast)
 
@@ -153,31 +153,14 @@ README "What's New" section accumulates features across a MAJOR version:
 1. **Update ALL package.json versions** — root, apps/\*, packages/\*, workers/\* (CRITICAL)
 2. **Update CHANGELOG.md** using sorted type subcategories (see Changelog Format below)
 3. Run `pnpm run ci:tracked` — MUST pass
-4. **Refresh RAG embeddings** — re-embed all docs into production Firestore (see below)
-5. Stage & commit on `development`
-6. Push `development` to remote
-7. **Merge `development` → `main`** — via existing PR or direct merge
-8. **Tag on `main`** — tag the merge commit, not `development` (CRITICAL)
-9. Push tag to remote
-10. **Create GitHub Release** — with categorized release notes from Step 7.1
-11. **Post-release validation** — verify tag on main, GitHub Release exists, CHANGELOG committed, versions match, on development branch
-12. Display release summary (including release URL and validation results)
-
-#### RAG Embeddings Refresh (Step 4)
-
-After CI passes (docs are finalized), re-generate embeddings for the chat-agent RAG pipeline:
-
-```bash
-FIRESTORE_EMULATOR_HOST="" \
-GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY \
-pnpm run embed-docs
-```
-
-This reads all `docs/**/*.md`, chunks by headers, generates OpenAI embeddings, and uploads to the `doc_embeddings` Firestore collection. Stale embeddings (from deleted docs) are cleaned automatically.
-
-**Skip condition:** If `--skip-docs` was used, skip this step too (no doc changes to re-embed).
+4. Stage & commit on `development`
+5. Push `development` to remote
+6. **Merge `development` → `main`** — via existing PR or direct merge
+7. **Tag on `main`** — tag the merge commit, not `development` (CRITICAL)
+8. Push tag to remote
+9. **Create GitHub Release** — with categorized release notes from Step 7.1
+10. **Post-release validation** — verify tag on main, GitHub Release exists, CHANGELOG committed, versions match, on development branch
+11. Display release summary (including release URL and validation results)
 
 **Failure handling:** Log the error but do NOT block the release. Embeddings can be re-run manually after release.
 

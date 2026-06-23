@@ -86,7 +86,7 @@ All other components were incremental updates preserving existing user insights.
 
 #### HTTP Contracts (12 discrepancies)
 
-1. **Phantom `/llm-client` endpoint** (HIGH): 4 services (calendar-agent, todos-agent, linear-agent, image-service) document a non-existent `/internal/users/:id/llm-client` endpoint. The actual pattern uses `@intexuraos/internal-clients` which calls two separate user-service endpoints (`/llm-keys` + `/settings`).
+1. **Phantom `/llm-client` endpoint** (HIGH): 4 services (calendar-agent, retired-checklist-service, linear-agent, image-service) document a non-existent `/internal/users/:id/llm-client` endpoint. The actual pattern uses `@intexuraos/internal-clients` which calls two separate user-service endpoints (`/llm-keys` + `/settings`).
 
 2. **Undocumented endpoints** (MEDIUM): 3 endpoints exist in code but not in documentation tables (e.g., `PATCH /internal/actions/:actionId/status` in actions-agent).
 
@@ -99,7 +99,7 @@ All other components were incremental updates preserving existing user insights.
 
 #### AI Models (2 discrepancies)
 
-1. **Model count mismatch** (HIGH): `overview.md` claims "17 models" but llm-contract defines 16, and 18 are actually in use (2 outside the registry: `gpt-4.1` in image-service, `text-embedding-3-small` in chat-agent).
+1. **Model count mismatch** (HIGH): `overview.md` claims "17 models" but llm-contract defines 16, and 18 are actually in use (2 outside the registry: `gpt-4.1` in image-service, `text-embedding-3-small` in retired-chat-service).
 
 2. **Unregistered models** (MEDIUM): 2 models used in code but not in the llm-contract registry.
 

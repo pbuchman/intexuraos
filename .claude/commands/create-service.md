@@ -298,7 +298,7 @@ export interface ServiceContainer {
 export interface ServiceConfig {
   // Add config fields as needed
   // exampleApiKey: string;
-  // todosAgentUrl: string;
+  // exampleServiceUrl: string;
   // internalAuthToken: string;
 }
 
@@ -314,10 +314,10 @@ export function initServices(config: ServiceConfig): void {
     // Pattern 1: Module-level logger (infra adapters with single purpose)
     // No logger passing needed - created at file scope in adapter
     // Pattern 2: Factory config logger (HTTP clients for internal services)
-    // todosClient: createTodosServiceHttpClient({
-    //   baseUrl: config.todosAgentUrl,
+    // exampleClient: createExampleServiceHttpClient({
+    //   baseUrl: config.exampleServiceUrl,
     //   internalAuthToken: config.internalAuthToken,
-    //   logger: pino({ name: 'todosClient' }), // Required in production
+    //   logger: pino({ name: 'exampleClient' }), // Required in production
     // }),
     // Pattern 3: Constructor injection (reusable packages)
     // linkPreviewFetcher: new OpenGraphFetcher(

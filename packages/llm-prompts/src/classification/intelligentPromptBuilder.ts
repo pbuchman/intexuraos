@@ -6,7 +6,6 @@
 import type { PromptBuilder, PromptDeps } from '../types.js';
 
 export type CommandCategory =
-  | 'todo'
   | 'research'
   | 'note'
   | 'link'
@@ -155,7 +154,7 @@ export const intelligentClassifierPrompt: PromptBuilder<
 > = {
   name: 'intelligent-command-classification',
   description: 'Classifies user messages using historical examples and learned corrections',
-  version: '3.1.0',
+  version: '4.0.0',
 
   build(input: IntelligentClassifierPromptInput, deps?: IntelligentClassifierPromptDeps): string {
     const maxExamplesPerCategory = deps?.maxExamplesPerCategory ?? 5;
@@ -184,7 +183,7 @@ This classification determines how the message is routed:
 - **code** → Code execution agent (automatically creates a Linear issue for tracking)
 - **linear** → Issue creation only, without code execution
 - **research** → Multi-model research pipeline
-- **todo/note/link/calendar/reminder** → Direct item creation in the respective system
+- **note/link/calendar/reminder** → Direct item creation in the respective system
 
 ## CRITICAL: URL Keyword Isolation
 **Keywords inside URLs must be IGNORED for classification purposes.**
@@ -194,12 +193,12 @@ This classification determines how the message is routed:
 
 ## STEP 1: Explicit Prefix Override
 If message STARTS with a category keyword (with or without colon), use that category.
-Prefixes: linear, todo, note, research, reminder, link, calendar
-Polish: do lineara, zadanie, notatka, zbadaj, przypomnij
+Prefixes: linear, note, research, reminder, link, calendar
+Polish: do lineara, notatka, zbadaj, przypomnij
 
 Examples:
 - "linear: buy groceries" → linear (user override)
-- "todo: meeting tomorrow" → todo (user override)
+- "note: meeting tomorrow" → note (user override)
 - "do lineara: fix bug" → linear
 
 ## STEP 2: Explicit Intent Command Detection (HIGH PRIORITY)
@@ -209,7 +208,6 @@ These phrases OVERRIDE category signals from URL content or incidental keywords.
 **Explicit command phrases (confidence 0.90+):**
 - **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "create link", "create bookmark", "zapisz link", "dodaj zakładkę"
 - **code**: "implement", "build", "code", "write code", "develop", "create endpoint", "create code task", "create coding task", "zaimplementuj", "napisz kod", "zbuduj", "stwórz code task"
-- **todo**: "create todo", "add todo", "add task", "make todo", "stwórz zadanie", "dodaj zadanie"
 - **research**: "perform research", "do research", "research this", "investigate", "create research", "create research task", "zbadaj", "sprawdź"
 - **note**: "create note", "save note", "make note", "write note", "create node" (common typo for "note"), "stwórz notatkę", "zapisz notatkę"
 - **reminder**: "set reminder", "remind me", "create reminder", "przypomnij mi", "stwórz przypomnienie"
@@ -217,8 +215,7 @@ These phrases OVERRIDE category signals from URL content or incidental keywords.
 
 Examples:
 - "save bookmark https://research-world.com" → link (explicit "save bookmark" overrides "research" in URL)
-- "create todo to research competitors" → todo (explicit "create todo" overrides "research" keyword)
-- "perform research on todo apps" → research (explicit "perform research" overrides "todo" keyword)
+- "perform research on task apps" → research (explicit "perform research" overrides incidental task wording)
 - "save note about the research meeting" → note (explicit "save note" is the command)
 - "create code task to fix the login bug" → code (explicit "create code task")
 - "create calendar event for team standup" → calendar (explicit "create calendar event")
@@ -255,22 +252,12 @@ URLs indicate the user is sharing/saving a link, not asking for research or crea
 ## STEP 5: Category Detection (if no URL and no explicit intent)
 Apply in this priority order:
 
-**todo** — Action to complete, including actions with deadlines
-An action verb (send, buy, prepare, sign up, finish, complete, order, call, submit, create, write, review) signals a task to do. A deadline or date does NOT make it a calendar event.
-- "buy groceries" → todo
-- "finish the report" → todo
-- "call mom" → todo (no time specified)
-- "Send contract to Meridian Group by Friday" → todo (action with deadline, not a time-slot event)
-- "Sign up for AWS certification exam — deadline March 10th" → todo (action with deadline)
-
 **calendar** — Named event that occupies a time slot
 Calendar is ONLY for events you attend or block time for: a meeting, appointment, dinner, flight, exam session, call at a specific time, concert, class. The event must occupy a time slot on your schedule.
 Signals: meeting, appointment, dinner, lunch, flight, concert, class, exam session, call at [time]
 - "Board meeting Thursday at 2pm" → calendar (named event occupying a time slot)
 - "dentist appointment next Tuesday 10am" → calendar (named appointment)
 - "Team standup tomorrow 9:30am" → calendar (named recurring event)
-
-CALENDAR vs TODO TIEBREAKER: When a message contains BOTH an action verb AND time signals, prefer **todo** unless the message describes a named event to attend that occupies a time slot. Having a deadline does NOT make something a calendar event.
 
 **reminder** — Request to be reminded about something
 Signals: remind me, przypomnij, don't forget
@@ -330,7 +317,6 @@ export function toClassificationExample(
   source: CommandExampleSource
 ): ClassificationExample | null {
   const validTypes: CommandCategory[] = [
-    'todo',
     'research',
     'note',
     'link',
@@ -370,7 +356,6 @@ export function toClassificationCorrection(
   source: TransitionSource
 ): ClassificationCorrection | null {
   const validTypes: CommandCategory[] = [
-    'todo',
     'research',
     'note',
     'link',

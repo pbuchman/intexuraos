@@ -89,10 +89,10 @@ describe('processCommand usecase', () => {
       userServiceClient.setApiKeys(userId, { google: 'google-key' });
 
       classifier.setResult({
-        type: 'todo',
+        type: 'note',
         confidence: 0.9,
         title: 'Test Task',
-        reasoning: 'Todo task',
+        reasoning: 'Note task',
         promptVersion: '1.0.0',
       });
 
@@ -119,7 +119,7 @@ describe('processCommand usecase', () => {
       // Command should still be classified successfully
       expect(result.isNew).toBe(true);
       expect(result.command.status).toBe('classified');
-      expect(result.command.classification?.type).toBe('todo');
+      expect(result.command.classification?.type).toBe('note');
 
       // Action was created despite publish failure
       const actions = actionsAgentClient.getCreatedActions();
@@ -189,7 +189,7 @@ describe('processCommand usecase', () => {
         createdAt: '2025-01-01T12:00:00.000Z',
         updatedAt: '2025-01-01T12:00:00.000Z',
         classification: {
-          type: 'todo' as const,
+          type: 'note' as const,
           confidence: 0.9,
           reasoning: 'Test',
           promptVersion: '1.0.0',

@@ -1,7 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { HandleResearchActionUseCase } from './handleResearchAction.js';
-import type { HandleTodoActionUseCase } from './handleTodoAction.js';
 import type { HandleNoteActionUseCase } from './handleNoteAction.js';
 import type { HandleLinkActionUseCase } from './handleLinkAction.js';
 import type { HandleCalendarActionUseCase } from './handleCalendarAction.js';
@@ -14,7 +13,6 @@ export interface ActionHandler {
 
 export interface ActionHandlerRegistry {
   research: HandleResearchActionUseCase;
-  todo: HandleTodoActionUseCase;
   note: HandleNoteActionUseCase;
   link: HandleLinkActionUseCase;
   calendar: HandleCalendarActionUseCase;

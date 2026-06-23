@@ -128,7 +128,7 @@ export default defineConfig(({ mode }) => {
           },
         },
         workbox: {
-          // Allow larger bundles (libraries: Vega, Auth0, Chat components ~4.5MB)
+          // Allow larger bundles (libraries: Vega, Auth0, Markdown editor)
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           // Skip waiting to activate new service worker immediately
           skipWaiting: true,

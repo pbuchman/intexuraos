@@ -222,7 +222,6 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 | app-settings-service         | `initSentry` + `createAppLogger` + error handler |
 | bookmarks-agent              | `initSentry` + `createAppLogger` + error handler |
 | calendar-agent               | `initSentry` + `createAppLogger` + error handler |
-| chat-agent                   | `initSentry` + `createAppLogger` + error handler |
 | code-agent                   | `initSentry` + `createAppLogger` + error handler |
 | commands-agent               | `initSentry` + `createAppLogger` + error handler |
 | image-service                | `initSentry` + `createAppLogger` + error handler |
@@ -231,7 +230,6 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 | notes-agent                  | `initSentry` + `createAppLogger` + error handler |
 | notion-service               | `initSentry` + `createAppLogger` + error handler |
 | research-agent               | `initSentry` + `createAppLogger` + error handler |
-| todos-agent                  | `initSentry` + `createAppLogger` + error handler |
 | user-service                 | `initSentry` + `createAppLogger` + error handler |
 | web-agent                    | `initSentry` + `createAppLogger` + error handler |
 | whatsapp-service             | `initSentry` + `createAppLogger` + error handler |

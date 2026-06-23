@@ -17,7 +17,7 @@
   - `POST /webhook/usage-events` (llm-usage-service) — same batching contract as `/internal/usage-events`.
 - **Created:** none (all behavior changes ride existing endpoints).
 - **Removed:** none.
-- **Unchanged:** every caller-facing HTTP endpoint in apps consuming LLM clients (research-agent, chat-agent, code-agent, web-agent, etc.).
+- **Unchanged:** every caller-facing HTTP endpoint in apps consuming LLM clients (research-agent, retired-chat-service, code-agent, web-agent, etc.).
 
 ---
 
@@ -44,7 +44,7 @@
 ### Apps
 - `apps/research-agent/src/infra/llm/LlmAdapterFactory.ts` — delegate to `createLlmClient()`.
 - `apps/research-agent/src/infra/llm/{Gemini,Claude,Gpt,Perplexity,OpenRouter}Adapter.ts` — delete after migration.
-- `apps/chat-agent/src/prompts/*.ts` — migrate plain functions to `PromptBuilder<>`.
+- `apps/retired-chat-service/src/prompts/*.ts` — migrate plain functions to `PromptBuilder<>`.
 - `apps/code-agent/src/prompts/*.ts` — same.
 - `apps/web-agent/src/prompts/*.ts` — same.
 - `apps/llm-usage-service/src/routes/ingestRoutes.ts` — accept batched body.
@@ -254,7 +254,7 @@ Repeat Steps 1–8 for every file flagged by the baseline list. Group related fi
 ### Task 3: Convert plain-function prompts in service apps
 
 **Files:**
-- `apps/chat-agent/src/prompts/systemPrompt.ts` (and siblings)
+- `apps/retired-chat-service/src/prompts/systemPrompt.ts` (and siblings)
 - `apps/code-agent/src/prompts/{triage,cooloff,validationRepair}.ts`
 - `apps/web-agent/src/prompts/summaryRepair.ts`
 - Callers of the above within each app.
@@ -264,7 +264,7 @@ Repeat the Task 2 per-file recipe (Steps 1–8) for each app prompt. Use per-app
 Each commit is scoped to one app:
 
 ```bash
-git commit -m "refactor(chat-agent): convert chat prompts to versioned PromptBuilder (INT-1533)"
+git commit -m "refactor(retired-chat-service): convert chat prompts to versioned PromptBuilder (INT-1533)"
 ```
 
 Expected final state after Task 3: `node scripts/verify-prompt-versions.mjs` exits 0.

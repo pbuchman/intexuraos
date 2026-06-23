@@ -1063,11 +1063,11 @@ describe('handleApprovalReply', () => {
       expect(executeNoteAction).toHaveBeenCalledWith('action-1');
     });
 
-    it('executes todo action after approval', async () => {
-      const action = createFakeAction({ type: 'todo' });
+    it('executes note action after approval', async () => {
+      const action = createFakeAction({ type: 'note' });
       actionRepository = createFakeActionRepository({ getById: vi.fn().mockResolvedValue(action) });
-      const executeTodoAction = vi.fn().mockResolvedValue(ok(undefined));
-      const handleApprovalReply = createUseCase({ executeTodoAction });
+      const executeNoteAction = vi.fn().mockResolvedValue(ok(undefined));
+      const handleApprovalReply = createUseCase({ executeNoteAction });
 
       await handleApprovalReply({
         replyToWamid: 'wamid-1',
@@ -1077,7 +1077,7 @@ describe('handleApprovalReply', () => {
         buttonId: 'approve:action-1',
       });
 
-      expect(executeTodoAction).toHaveBeenCalledWith('action-1');
+      expect(executeNoteAction).toHaveBeenCalledWith('action-1');
     });
 
     it('executes link action after approval', async () => {

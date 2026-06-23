@@ -24,7 +24,6 @@ PUBSUB_ROUTES=(
   "intexuraos-approval-reply|intexuraos-actions|/internal/actions/approval-reply"
   "intexuraos-bookmark-enrich|intexuraos-bookmarks|/internal/bookmarks/pubsub/enrich"
   "intexuraos-bookmark-summarize|intexuraos-bookmarks|/internal/bookmarks/pubsub/summarize"
-  "intexuraos-todos-processing|intexuraos-todos|/internal/todos/pubsub/todos-processing"
   "intexuraos-calendar-preview|intexuraos-calendar|/internal/calendar/generate-preview"
   "intexuraos-transcription-completed|intexuraos-whatsapp-svc|/internal/whatsapp/pubsub/transcription-completed"
 )
@@ -33,7 +32,6 @@ SCHEDULER_ROUTES=(
   "mobile-notifications-digest-yesterday|/internal/notifications/digest/run-yesterday"
   "intexuraos-linear-sync-hourly|/internal/linear/sync-all"
   "intexuraos-linear-issues-prune-hourly|/internal/linear/prune-issues"
-  "intexuraos-cron-agent-tick|/internal/cron/tick"
   "intexuraos-retry-pending-commands|/internal/retry-pending"
   "intexuraos-retry-pending-actions|/internal/actions/retry-pending"
   "intexuraos-drain-task-queue|/internal/drain-queue"

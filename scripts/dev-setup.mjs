@@ -49,7 +49,6 @@ const SERVICES = [
   { name: 'commands-agent', port: 8117 },
   { name: 'actions-agent', port: 8118 },
   { name: 'notes-agent', port: 8121 },
-  { name: 'todos-agent', port: 8123 },
   { name: 'bookmarks-agent', port: 8124 },
   { name: 'calendar-agent', port: 8125 },
   { name: 'linear-agent', port: 8126 },

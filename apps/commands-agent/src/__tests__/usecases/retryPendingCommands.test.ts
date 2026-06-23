@@ -251,10 +251,10 @@ describe('retryPendingCommands usecase', () => {
     userServiceClient.setApiKeys('user-3', { google: 'key-3' });
 
     classifier.setResult({
-      type: 'todo',
+      type: 'note',
       confidence: 0.9,
       title: 'Task',
-      reasoning: 'Todo task',
+      reasoning: 'Note task',
       promptVersion: '1.0.0',
     });
 

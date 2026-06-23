@@ -27,7 +27,7 @@
 | ------------------------ | ------------------------------------------------------- | -------------------------------------------------- |
 | `validateInternalAuth()` | All services                                            | `X-Internal-Auth` header validation                |
 | `requireAuth()`          | All services                                            | Auth0 JWT bearer token                             |
-| `tryAuth()`              | chat-agent, user-service                                | Optional JWT (guest-capable)                       |
+| `tryAuth()`              | retired-chat-service, user-service                                | Optional JWT (guest-capable)                       |
 | PubSub OIDC              | Actions, bookmarks, calendar, commands, todos, whatsapp | Cloud Run validates OIDC from `noreply@google.com` |
 | OIDC Bearer              | Actions, commands, linear                               | `Authorization: Bearer` token from Cloud Scheduler |
 | HMAC-SHA256              | code-agent, whatsapp-service, mobile-notifications      | Signature header verification                      |
@@ -97,7 +97,7 @@
 | POST   | /internal/calendar/generate-preview    | PubSub OIDC or `validateInternalAuth()` | OK     |
 | GET    | /internal/calendar/preview/:actionId   | `validateInternalAuth()`                | OK     |
 
-### chat-agent
+### retired-chat-service
 
 | Method | Path  | Auth Type                   | Status                        |
 | ------ | ----- | --------------------------- | ----------------------------- |
@@ -194,7 +194,7 @@
 | GET    | /research/:researchId      | `requireAuth()`          | OK     |
 | POST   | /internal/research/process | `validateInternalAuth()` | OK     |
 
-### todos-agent
+### retired-checklist-service
 
 | Method | Path                                    | Auth Type                               | Status |
 | ------ | --------------------------------------- | --------------------------------------- | ------ |
@@ -204,7 +204,7 @@
 | PATCH  | /todos/:todoId                          | `requireAuth()`                         | OK     |
 | DELETE | /todos/:todoId                          | `requireAuth()`                         | OK     |
 | POST   | /internal/todos                         | `validateInternalAuth()`                | OK     |
-| POST   | /internal/todos/pubsub/todos-processing | PubSub OIDC or `validateInternalAuth()` | OK     |
+| POST   | /internal/todos/pubsub/retired-checklist-processing | PubSub OIDC or `validateInternalAuth()` | OK     |
 
 ### user-service
 
@@ -291,7 +291,7 @@ These routes have no authentication by design:
 | Service          | Method | Path               | Reason                                                              |
 | ---------------- | ------ | ------------------ | ------------------------------------------------------------------- |
 | bookmarks-agent  | GET    | /images/proxy      | Proxies already-public images; no user data involved                |
-| chat-agent       | POST   | /chat              | Guest access intentional; rate-limited via `x-guest-session` header |
+| retired-chat-service       | POST   | /chat              | Guest access intentional; rate-limited via `x-guest-session` header |
 | user-service     | GET    | /auth/login        | Redirects to Auth0; pre-authentication flow                         |
 | user-service     | GET    | /auth/logout       | Clears session; no protected data                                   |
 | user-service     | GET    | /auth/callback     | OAuth2 callback handler; pre-authentication                         |

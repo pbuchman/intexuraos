@@ -231,17 +231,17 @@ Behavior:
 
 ## Shared Package Change
 
-Do not import the embedding client from `apps/chat-agent`.
+Do not import the embedding client from `apps/retired-chat-service`.
 
 Instead:
 
 - extend `packages/infra-gpt` with a small reusable embedding helper
 - reuse the existing OpenAI dependency already present there
-- keep `apps/chat-agent` and `apps/code-agent` as separate consumers of the shared helper
+- keep `apps/retired-chat-service` and `apps/code-agent` as separate consumers of the shared helper
 
 This avoids app-to-app imports and keeps embedding logic in the package layer where it belongs.
 
-**Follow-up refactoring note:** `apps/chat-agent/src/infra/llm/embeddingClient.ts` contains a functionally equivalent OpenAI embedding client with retry logic and `Result` return types. After the `infra-gpt` embedding helper ships, `chat-agent` should be refactored to consume the shared helper instead of maintaining a parallel implementation. This is out of scope for v1 but tracked as a follow-up to avoid long-term duplication.
+**Follow-up refactoring note:** `apps/retired-chat-service/src/infra/llm/embeddingClient.ts` contains a functionally equivalent OpenAI embedding client with retry logic and `Result` return types. After the `infra-gpt` embedding helper ships, `retired-chat-service` should be refactored to consume the shared helper instead of maintaining a parallel implementation. This is out of scope for v1 but tracked as a follow-up to avoid long-term duplication.
 
 ## Code-Agent Changes
 

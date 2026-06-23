@@ -197,14 +197,6 @@ node scripts/reset-actions-status.mjs --status awaiting_approval
 
 Backfills `favourite: false` on research documents that are missing the field. Requires `FIRESTORE_EMULATOR_HOST` to be set.
 
-### embed-docs.ts
-
-Generates OpenAI embeddings for documentation files and uploads them to Firestore for semantic search.
-
-```bash
-OPENAI_API_KEY=xxx pnpm run embed-docs
-```
-
 ### test-llm-clients.ts
 
 Integration test script that verifies all LLM provider clients (`research`, `generate`, `generateImage`) work correctly with real API keys fetched from user-service.

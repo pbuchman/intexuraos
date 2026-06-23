@@ -46,7 +46,6 @@ const CATEGORIES = {
   'internal-clients': 'integration',
   'pr-triage-pubsub-client': 'integration',
   'service-catalog': 'integration',
-  'todos-pubsub-client': 'integration',
   'whatsapp-pubsub-client': 'integration',
 };
 
@@ -79,7 +78,6 @@ const DESCRIPTIONS = {
   'llm-utils': 'Redaction utilities, LLM parse error helpers',
   'pr-triage-pubsub-client': 'PR triage Pub/Sub message client',
   'service-catalog': 'Service registry metadata',
-  'todos-pubsub-client': 'Todos Pub/Sub message client',
   'whatsapp-pubsub-client': 'WhatsApp Pub/Sub message client',
 };
 

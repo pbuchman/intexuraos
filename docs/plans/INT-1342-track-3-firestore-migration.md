@@ -187,14 +187,14 @@ Verified by `rg "createClaudeClient|createGptClient|createGeminiClient|createPer
 | `apps/user-service`        | `src/infra/llm/LlmValidatorImpl.ts` — constructs clients inline per-validation                                                                                                                               | **YES**                                                                  |
 | `apps/linear-agent`        | `src/services.ts:79` — `createGeminiClient` in DI wiring                                                                                                                                                     | **YES**                                                                  |
 | `apps/hellscript-agent`    | `src/index.ts:38` — `createGeminiClient` at startup                                                                                                                                                          | **YES**                                                                  |
-| `apps/cron-agent`          | `src/index.ts` — creates a client                                                                                                                                                                            | **YES**                                                                  |
+| `apps/retired-scheduler-service`          | `src/index.ts` — creates a client                                                                                                                                                                            | **YES**                                                                  |
 | `apps/image-service`       | `src/infra/llm/GptPromptAdapter.ts`, `GeminiPromptAdapter.ts`, `src/infra/image/GoogleImageGenerator.ts`, `OpenAIImageGenerator.ts`                                                                          | **YES**                                                                  |
 | `apps/commands-agent`      | uses `llm-factory` wrapper; classifier tests mock `createUsageLogger`                                                                                                                                        | **YES** — `services.ts` constructs via `llm-factory`, trace the wrapping |
-| `apps/todos-agent`         | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES**                                                                  |
+| `apps/retired-checklist-service`         | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES**                                                                  |
 | `apps/data-insights-agent` | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES**                                                                  |
 | `apps/calendar-agent`      | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES** (verify)                                                         |
 | `apps/actions-agent`       | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES** (verify)                                                         |
-| `apps/chat-agent`          | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES** (verify)                                                         |
+| `apps/retired-chat-service`          | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES** (verify)                                                         |
 | `apps/web-agent`           | uses `llm-factory` wrapper                                                                                                                                                                                   | **YES** (verify)                                                         |
 | `apps/code-agent`          | only uses `EmbeddingClient` + `TOOL_CALLING_PRICING` from `infra-gemini`                                                                                                                                     | **NO** — no `createUsageLogger` call sites (verified)                    |
 
@@ -403,14 +403,14 @@ For each app in the "Apps that use provider clients" table above, the edit is:
 
    **hellscript-agent** (`apps/hellscript-agent/src/index.ts:38`): single `createGeminiClient` call. Construct `usageServiceClient` + `usageSink` inline in `index.ts` right before the `createGeminiClient`.
 
-   **cron-agent** (`apps/cron-agent/src/index.ts`): same pattern.
+   **retired-scheduler-service** (`apps/retired-scheduler-service/src/index.ts`): same pattern.
 
    **image-service** (`apps/image-service/src/infra/llm/GptPromptAdapter.ts:36`, `GeminiPromptAdapter.ts:36`, `src/infra/image/OpenAIImageGenerator.ts:52`, `GoogleImageGenerator.ts:53`):
    - Add `usageSink` to the adapter constructors.
    - `initializeServices(pricingContext)` in `apps/image-service/src/serviceFactory.ts:15` already takes `pricingContext` — extend to take `usageSink` too.
    - `apps/image-service/src/index.ts:22` already has `INTEXURAOS_APP_SETTINGS_SERVICE_URL` in REQUIRED_ENV — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` next to it.
 
-   **commands-agent, todos-agent, data-insights-agent, calendar-agent, actions-agent, chat-agent, web-agent**:
+   **commands-agent, retired-checklist-service, data-insights-agent, calendar-agent, actions-agent, retired-chat-service, web-agent**:
    - These use `@intexuraos/llm-factory` as a wrapper. **Audit `llm-factory` in Phase 3.0 before touching these apps.** If `llm-factory.createLlmClient()` is the single funnel, modify it to accept (and thread through) a `usageSink` parameter. Then each app just passes its own sink into the factory once.
    - If `llm-factory` does NOT exist or does NOT funnel all calls, treat each app like `linear-agent` above.
 
@@ -456,7 +456,7 @@ For each app in the "Apps that use provider clients" table above, the edit is:
 
 5.2. Add to CI as a manual `pnpm run verify:usage-parity --from=<yesterday> --to=<yesterday>` command (not gating — operator-run).
 
-5.3. Add a scheduled daily job (cron in `cron-agent` or manual operator run) that runs the script for "yesterday" and posts to a dev Slack channel on mismatch. This is the canary for the entire dual-write period.
+5.3. Add a scheduled daily job (cron in `retired-scheduler-service` or manual operator run) that runs the script for "yesterday" and posts to a dev Slack channel on mismatch. This is the canary for the entire dual-write period.
 
 5.4. Run it on day 1, day 3, day 7 of the dev dual-write period. Document the results in this plan's rollout notes. **Do not proceed to Phase 6 until 7 consecutive days show ≤0.1% mismatch.**
 
@@ -677,12 +677,12 @@ This is the highest-risk track of the epic. Rollout is deliberately slow.
 **Week 1 (dev dual-write starts):**
 - Day 1: flip `research-agent` in dev to `INTEXURAOS_USAGE_SINK_MODE=dual`. Watch logs for 2h.
 - Day 2: flip `user-service`, `image-service`, `linear-agent`.
-- Day 3: flip remaining apps (`hellscript-agent`, `cron-agent`, agents using `llm-factory`).
+- Day 3: flip remaining apps (`hellscript-agent`, `retired-scheduler-service`, agents using `llm-factory`).
 - Day 4: run parity script. Should be ≤0.1%.
 - Day 5–7: run parity daily. Alert the user if mismatch >0.1%.
 
 **Week 2 (prod dual-write):**
-- Day 1: flip one prod app (lowest-traffic first — `hellscript-agent` or `cron-agent`). Watch for 24h.
+- Day 1: flip one prod app (lowest-traffic first — `hellscript-agent` or `retired-scheduler-service`). Watch for 24h.
 - Day 2–3: flip remaining prod apps.
 - Day 4–7: parity script daily.
 

@@ -96,14 +96,14 @@ The PATCH `/actions/:actionId` handler in `publicRoutes.ts` (lines 132-253) has 
 3. If no PATCH section exists, add a new `describe('PATCH /actions/:actionId', () => { ... })` block
 4. The test setup uses `buildServer()` + `setServices(createFakeServices(...))`. Ensure `fakeActionRepository`, `fakeCommandsAgentClient`, and `fakeActionTransitionRepository` are available in `beforeEach`.
 5. Create a JWT token helper like the existing tests: `const createToken = (sub: string) => \`header.${Buffer.from(JSON.stringify({ sub })).toString('base64')}.sig\``
-6. Pre-save an action with `status: 'awaiting_approval'`, `type: 'todo'`, `userId: 'user-1'`
+6. Pre-save an action with `status: 'awaiting_approval'`, `type: 'note'`, `userId: 'user-1'`
 
 **Test cases to add:**
 
 **Test 1: `'updates status only'`**
 
 - PATCH with `{ status: 'processing' }`, no `type`
-- Assert 200, `response.data.action.status === 'processing'`, `response.data.action.type === 'todo'`
+- Assert 200, `response.data.action.status === 'processing'`, `response.data.action.type === 'note'`
 
 **Test 2: `'updates type only'`**
 
@@ -174,7 +174,7 @@ The PATCH `/actions/:actionId` handler in `publicRoutes.ts` (lines 132-253) has 
 
 ### Context
 
-The 7 `handle*Action` use cases (note, todo, link, research, calendar, linear, code) are wrapped by `registerActionHandler` which calls `actionRepository.updateStatusIf`. There are existing tests for the `error` outcome from `updateStatusIf` (via `setFailNext`), but the test for the actual repository `getById` failure within the inner handler (when the repo throws/fails during message building) is already tested indirectly. The **handleLinearAction** lacks auto-execute tests (since it has no `shouldAutoExecute` integration -- it always goes to approval). The **confidence boundary tests** for `shouldAutoExecute` threshold (0.9) are needed.
+The supported `handle*Action` use cases are wrapped by `registerActionHandler` which calls `actionRepository.updateStatusIf`. There are existing tests for the `error` outcome from `updateStatusIf` (via `setFailNext`), but the test for the actual repository `getById` failure within the inner handler (when the repo throws/fails during message building) is already tested indirectly. The **handleLinearAction** lacks auto-execute tests (since it has no `shouldAutoExecute` integration -- it always goes to approval). The **confidence boundary tests** for `shouldAutoExecute` threshold (0.9) are needed.
 
 ### Pre-conditions
 
@@ -249,26 +249,22 @@ The 7 `execute*Action` use cases all call `actionRepository.update()` at multipl
    - Assert result is `ok`, `status: 'completed'`, `resourceUrl` is undefined
    - Assert `fakeWhatsappPublisher.getSentMessages()` has length 0
 
-2. **executeTodoAction** (`apps/actions-agent/src/__tests__/executeTodoAction.test.ts`):
-   - Same pattern: return `{ status: 'completed', message: 'Todo created' }` (no `resourceUrl`)
-   - Assert no WhatsApp message sent
-
-3. **executeResearchAction** (`apps/actions-agent/src/__tests__/executeResearchAction.test.ts`):
+2. **executeResearchAction** (`apps/actions-agent/src/__tests__/executeResearchAction.test.ts`):
    - Same pattern: return `{ status: 'completed', message: 'Research created' }` (no `resourceUrl`)
    - Assert no WhatsApp message sent
 
-4. **executeLinearAction** (`apps/actions-agent/src/__tests__/executeLinearAction.test.ts`):
+3. **executeLinearAction** (`apps/actions-agent/src/__tests__/executeLinearAction.test.ts`):
    - Same pattern: return `{ status: 'completed', message: 'Linear issue created' }` (no `resourceUrl`)
    - Assert no WhatsApp message sent
 
-5. **executeCalendarAction** (`apps/actions-agent/src/__tests__/executeCalendarAction.test.ts`):
+4. **executeCalendarAction** (`apps/actions-agent/src/__tests__/executeCalendarAction.test.ts`):
    - Same pattern: return `{ status: 'completed', message: 'Event created' }` (no `resourceUrl`)
    - Assert no WhatsApp message sent
 
-6. **executeLinkAction** (`apps/actions-agent/src/__tests__/executeLinkAction.test.ts`):
+5. **executeLinkAction** (`apps/actions-agent/src/__tests__/executeLinkAction.test.ts`):
    - The link action always produces a `resourceUrl` (line 177: `const resourceUrl = \`/#/bookmarks/${bookmarkId}\``), so this test is N/A for link action. Instead test: when `bookmarksServiceClient.createBookmark`returns error with`existingBookmarkId`, the action is marked failed with the `existingBookmarkId` in payload.
 
-7. **executeCodeAction** (`apps/actions-agent/src/__tests__/executeCodeAction.test.ts`):
+6. **executeCodeAction** (`apps/actions-agent/src/__tests__/executeCodeAction.test.ts`):
    - The code action always has `resourceUrl` from `result.value` (line 180), so this test is N/A. Instead test: `WORKER_UNAVAILABLE` error code handling (if not already tested).
 
 **For repository update failure propagation:**
@@ -286,14 +282,13 @@ Add test to one representative execute\*Action (e.g., `executeNoteAction`):
 ### Files to Modify
 
 - `apps/actions-agent/src/__tests__/executeNoteAction.test.ts` — Add 2 tests
-- `apps/actions-agent/src/__tests__/executeTodoAction.test.ts` — Add 1 test
 - `apps/actions-agent/src/__tests__/executeResearchAction.test.ts` — Add 1 test
 - `apps/actions-agent/src/__tests__/executeLinearAction.test.ts` — Add 1 test
 - `apps/actions-agent/src/__tests__/executeCalendarAction.test.ts` — Add 1 test
 
 ### Test Requirements
 
-- [ ] Test: `'does not send WhatsApp notification when resourceUrl is undefined'` (in 4 test files: note, todo, research, linear)
+- [ ] Test: `'does not send WhatsApp notification when resourceUrl is undefined'` (in note, research, and linear executor tests)
 - [ ] Test: `'propagates error when repository update to processing fails'` (in executeNoteAction.test.ts)
 - [ ] Test: `'does not send WhatsApp notification when resourceUrl is undefined'` (in executeCalendarAction.test.ts)
 
@@ -309,7 +304,7 @@ Add test to one representative execute\*Action (e.g., `executeNoteAction`):
 
 ### Context
 
-The `internalRoutes.ts` POST `/internal/actions/:actionType` endpoint routes all 8 action types (note, todo, link, research, calendar, linear, code, and the catch-all for unknown). The existing `internalRoutes.test.ts` tests `todo` routing and `unsupported` type, but does not test routing for all 8 valid action types individually. It also lacks tests for missing `message` field and malformed JSON in decoded base64.
+The `internalRoutes.ts` POST `/internal/actions/:actionType` endpoint routes supported action types plus the catch-all for unknown. The existing `internalRoutes.test.ts` tests one supported type and `unsupported`, but does not test routing for all valid action types individually. It also lacks tests for missing `message` field and malformed JSON in decoded base64.
 
 ### Pre-conditions
 
@@ -354,11 +349,11 @@ The `internalRoutes.ts` POST `/internal/actions/:actionType` endpoint routes all
 
 **Test 7: `'returns 400 when handler returns error result'`**
 
-- This is already tested as `'returns 500 when handler fails'` at line 294. Verify it exists. If it only tests `todo`, add one that tests with a different type to confirm routing.
+- This is already tested as `'returns 500 when handler fails'` at line 294. Verify it exists. If it only tests one type, add one that tests with a different type to confirm routing.
 
 **Test 8: `'returns 400 when message field is missing from body'`**
 
-- Send POST to `/internal/actions/todo` with payload `{}` (no `message` field)
+- Send POST to `/internal/actions/note` with payload `{}` (no `message` field)
 - Assert 400 (Fastify schema validation: `required: ['message']`)
 
 **Test 9: `'returns 400 when decoded base64 contains malformed JSON'`**
@@ -410,7 +405,7 @@ Note: The `createFakeServices` in the test setup already registers handlers for 
 
 1. **Create `apps/actions-agent/src/domain/usecases/approval/executeActionByType.ts`**
    - Move the `executeActionByType` function (lines 426-578) to this new file
-   - Export signature: `export async function executeActionByType(action: Action, actionEventPublisher: ActionEventPublisher, logger: Logger, executeNoteAction?: ExecuteNoteActionUseCase, executeTodoAction?: ExecuteTodoActionUseCase, executeResearchAction?: ExecuteResearchActionUseCase, executeLinkAction?: ExecuteLinkActionUseCase, executeCalendarAction?: ExecuteCalendarActionUseCase, executeLinearAction?: ExecuteLinearActionUseCase, executeCodeAction?: ExecuteCodeActionUseCase): Promise<void>`
+   - Export signature: `export async function executeActionByType(action: Action, actionEventPublisher: ActionEventPublisher, logger: Logger, executeNoteAction?: ExecuteNoteActionUseCase, executeResearchAction?: ExecuteResearchActionUseCase, executeLinkAction?: ExecuteLinkActionUseCase, executeCalendarAction?: ExecuteCalendarActionUseCase, executeLinearAction?: ExecuteLinearActionUseCase, executeCodeAction?: ExecuteCodeActionUseCase): Promise<void>`
    - Add all necessary imports: `Result`, `Logger`, `getErrorMessage` from `@intexuraos/common-core`, `Action` from `../../models/action.js`, `ActionEventPublisher` from `../../ports/actionEventPublisher.js`, and all 7 `Execute*ActionUseCase` types
 
 2. **Create `apps/actions-agent/src/domain/usecases/approval/executeRejection.ts`**
@@ -544,7 +539,7 @@ All 7 `execute*Action` files share identical boilerplate: getById -> null check 
 
 6. **Do NOT migrate** `executeLinkAction` and `executeCodeAction` in this task -- they have too many deviations. Document them as "candidates for future migration" with a comment.
 
-7. Migrate the remaining 4 (todo, research, linear, calendar) in the same pattern.
+7. Migrate the remaining supported executors in the same pattern.
 
 ### Files to Create
 
@@ -553,7 +548,6 @@ All 7 `execute*Action` files share identical boilerplate: getById -> null check 
 ### Files to Modify
 
 - `apps/actions-agent/src/domain/usecases/executeNoteAction.ts` — Refactor to use template
-- `apps/actions-agent/src/domain/usecases/executeTodoAction.ts` — Refactor to use template
 - `apps/actions-agent/src/domain/usecases/executeResearchAction.ts` — Refactor to use template
 - `apps/actions-agent/src/domain/usecases/executeLinearAction.ts` — Refactor to use template
 - `apps/actions-agent/src/domain/usecases/executeCalendarAction.ts` — Refactor to use template
@@ -745,7 +739,7 @@ All 7 `handle*Action` use cases share a common pattern: log incoming event -> ch
    - Publish WhatsApp message (best-effort)
    - Return `ok({ actionId })`
 
-5. **Migrate simple handlers first**: note, todo, link, research (they follow the exact pattern)
+5. **Migrate simple handlers first**: note, link, research (they follow the exact pattern)
 
    ```typescript
    // handleNoteAction.ts becomes:

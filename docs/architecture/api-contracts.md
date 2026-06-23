@@ -225,11 +225,9 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 | `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | actions-agent                |
 | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | image-service                |
 | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | notes-agent                  |
-| `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | todos-agent                  |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | app-settings-service         |
 | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`              | bookmarks-agent              |
 | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`               | calendar-agent               |
-| `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                   | chat-agent                   |
 
 These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets). The full list of registered services is defined in `apps/api-docs-hub/src/config.ts`.
 

@@ -111,9 +111,9 @@ describe('FirestoreCommandRepository', () => {
     it('saves command with all optional fields', async () => {
       const command = createTestCommand({
         classification: {
-          type: 'todo',
+          type: 'note',
           confidence: 0.88,
-          reasoning: 'This is a task',
+          reasoning: 'This is a note',
           promptVersion: '1.0.0',
           classifiedAt: new Date().toISOString(),
         },
@@ -124,7 +124,7 @@ describe('FirestoreCommandRepository', () => {
       await repository.save(command);
 
       const result = await repository.getById(command.id);
-      expect(result?.classification?.type).toBe('todo');
+      expect(result?.classification?.type).toBe('note');
       expect(result?.actionId).toBe('action-789');
       expect(result?.failureReason).toBe('None');
     });

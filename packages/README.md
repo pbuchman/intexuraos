@@ -33,7 +33,6 @@ apps/*
   ├── @intexuraos/llm-utils                (Redaction utilities, LLM parse error helpers)
   ├── @intexuraos/pr-triage-pubsub-client  (PR triage Pub/Sub message client)
   ├── @intexuraos/service-catalog          (Service registry metadata)
-  ├── @intexuraos/todos-pubsub-client      (Todos Pub/Sub message client)
   └── @intexuraos/whatsapp-pubsub-client   (WhatsApp Pub/Sub message client)
 ```
 
@@ -85,7 +84,6 @@ apps/*
 | [`linear-domain`](../docs/packages/linear-domain/README.md)                     | Shared Linear domain contracts     | None (leaf)                                                                                                      |
 | [`pr-triage-pubsub-client`](../docs/packages/pr-triage-pubsub-client/README.md) | PR triage Pub/Sub message client   | `common-core`, `infra-pubsub`                                                                                    |
 | [`service-catalog`](../docs/packages/service-catalog/README.md)                 | Service registry metadata          | None (leaf)                                                                                                      |
-| [`todos-pubsub-client`](../docs/packages/todos-pubsub-client/README.md)         | Todos Pub/Sub message client       | `common-core`, `infra-pubsub`                                                                                    |
 | [`whatsapp-pubsub-client`](../docs/packages/whatsapp-pubsub-client/README.md)   | WhatsApp Pub/Sub message client    | `common-core`, `infra-pubsub`                                                                                    |
 
 ## Build Output
@@ -153,7 +151,6 @@ Enforced by `pnpm run verify:boundaries`:
 - `llm-utils` → imports from `common-core`, `llm-contract`
 - `pr-triage-pubsub-client` → imports from `common-core`, `infra-pubsub`
 - `service-catalog` → imports nothing
-- `todos-pubsub-client` → imports from `common-core`, `infra-pubsub`
 - `whatsapp-pubsub-client` → imports from `common-core`, `infra-pubsub`
 - `apps/*` → imports from any package, but NOT from other apps
 

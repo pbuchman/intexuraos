@@ -69,11 +69,6 @@ import {
 }
 
 import {
-  to = google_pubsub_subscription.hetzner_push["todos_processing"]
-  id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-todos-processing-prod-hetzner"
-}
-
-import {
   to = google_pubsub_subscription.hetzner_push["approval_reply"]
   id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-approval-reply-prod-hetzner"
 }

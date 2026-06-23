@@ -88,7 +88,6 @@ function formatZodErrors(error: ZodError): string {
 | -------------- | ------------------------------------ | ------------------------- | ------------------------------ |
 | research-agent | `ContextInferenceAdapter.ts`         | `inferResearchContext()`  | `ResearchContextSchema`        |
 | research-agent | `ContextInferenceAdapter.ts`         | `inferSynthesisContext()` | `SynthesisContextSchema`       |
-| todos-agent    | `todoItemExtractionService.ts`       | `extractItem()`           | `TodoExtractionResponseSchema` |
 | linear-agent   | `linearActionExtractionService.ts`   | `extractLinearIssue()`    | `LinearIssueDataSchema`        |
 | calendar-agent | `calendarActionExtractionService.ts` | `extractEvent()`          | `CalendarEventSchema`          |
 | commands-agent | `classifier.ts`                      | `classify()`              | `CommandClassificationSchema`  |

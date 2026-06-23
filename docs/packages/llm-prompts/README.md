@@ -120,12 +120,6 @@ Research context types: `ResearchContext` with `domain`, `mode`, `language`, `sa
 | `inputImprovementPrompt`            | `PromptBuilder` | Suggest improved research prompt            |
 | `buildInputValidationRepairPrompt`  | function        | Build repair prompt for invalid input       |
 
-### Todos (`src/todos/`)
-
-| Export                  | Type            | Purpose                                             |
-| ----------------------- | --------------- | --------------------------------------------------- |
-| `itemExtractionPrompt`  | `PromptBuilder` | Extract structured todo items from natural language |
-
 ### Image (`src/image/`)
 
 | Export                    | Type            | Purpose                                         |
@@ -176,7 +170,7 @@ This pattern is consistently applied across all domains.
 
 ## Used By
 
-**Apps (12):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`, `code-agent`, `user-service`
+**Apps (10):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `commands-agent`, `image-service`, `linear-agent`, `research-agent`, `web-agent`, `code-agent`, `user-service`
 
 **Workers (1):** `orchestrator`
 

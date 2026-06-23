@@ -8,7 +8,7 @@ the dead-code gate.
 
 | Library                   | Catalog version | Rationale                                                                                                                        | What was bumped                                                                                                                     |
 | ------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `openai`                  | `^6.15.0`       | Highest range already pinned in `apps/code-agent`, `packages/infra-gpt`, `workers/orchestrator`.                                 | `apps/chat-agent` v4 → v6, `packages/infra-openrouter` v5 → v6.                                                                     |
+| `openai`                  | `^6.15.0`       | Highest range already pinned in `apps/code-agent`, `packages/infra-gpt`, `workers/orchestrator`.                                 | `apps/retired-chat-service` v4 → v6, `packages/infra-openrouter` v5 → v6.                                                                     |
 | `fastify`                 | `^5.6.2`        | Highest pinned in repo (`workers/orchestrator`). All other apps were on `^5.1.0` or `^5.2.0` and resolve compatibly inside `^5`. | All apps/packages aligned to one resolved version (5.6.2).                                                                          |
 | `pino`                    | `^10.1.1`       | Highest pinned in repo (e.g. `apps/notion-service`, `apps/llm-usage-service`).                                                   | Workers (`log-cleanup`, `orchestrator`, `transcription`, `vm-lifecycle`) and the root devDependency bumped from `^9.x` → `^10.1.1`. |
 | `zod`                     | `^3.24.1`       | Already uniform in repo.                                                                                                         | None.                                                                                                                               |
@@ -16,10 +16,10 @@ the dead-code gate.
 
 ## Migration notes
 
-### `apps/chat-agent` openai v4 → v6
-Verified surface used by chat-agent (only file references are
-`apps/chat-agent/src/services.ts` and
-`apps/chat-agent/src/infra/llm/embeddingClient.ts`):
+### `apps/retired-chat-service` openai v4 → v6
+Verified surface used by retired-chat-service (only file references are
+`apps/retired-chat-service/src/services.ts` and
+`apps/retired-chat-service/src/infra/llm/embeddingClient.ts`):
 
 - `openai.embeddings.create({ model, input })`
 - `import type { CreateEmbeddingResponse } from 'openai/resources'`

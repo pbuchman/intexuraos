@@ -139,8 +139,8 @@ All endpoints require `X-Internal-Auth` header.
 ## Consumer Apps
 
 ```
-actions-agent, calendar-agent, chat-agent, code-agent, commands-agent,
-image-service, linear-agent, research-agent, todos-agent, web-agent
+actions-agent, calendar-agent, code-agent, commands-agent,
+image-service, linear-agent, research-agent, web-agent
 ```
 
 ---

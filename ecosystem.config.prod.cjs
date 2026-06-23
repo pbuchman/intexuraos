@@ -43,14 +43,11 @@ const SERVICE_PORTS = {
   'image-service': 8120,
   'notes-agent': 8121,
   'app-settings-service': 8122,
-  'todos-agent': 8123,
   'bookmarks-agent': 8124,
   'calendar-agent': 8125,
   'linear-agent': 8126,
   'web-agent': 8127,
   'code-agent': 8128,
-  'chat-agent': 8129,
-  'cron-agent': 8130,
   'hellscript-agent': 8131,
   'llm-usage-service': 8132,
   'api-docs-hub': 8133,
@@ -68,14 +65,11 @@ const SERVICE_URL_ENV = {
   'image-service': 'INTEXURAOS_IMAGE_SERVICE_URL',
   'notes-agent': 'INTEXURAOS_NOTES_AGENT_URL',
   'app-settings-service': 'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
-  'todos-agent': 'INTEXURAOS_TODOS_AGENT_URL',
   'bookmarks-agent': 'INTEXURAOS_BOOKMARKS_AGENT_URL',
   'calendar-agent': 'INTEXURAOS_CALENDAR_AGENT_URL',
   'linear-agent': 'INTEXURAOS_LINEAR_AGENT_URL',
   'web-agent': 'INTEXURAOS_WEB_AGENT_URL',
   'code-agent': 'INTEXURAOS_CODE_AGENT_URL',
-  'chat-agent': 'INTEXURAOS_CHAT_AGENT_URL',
-  'cron-agent': 'INTEXURAOS_CRON_AGENT_URL',
   'hellscript-agent': 'INTEXURAOS_HELLSCRIPT_AGENT_URL',
   'llm-usage-service': 'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'api-docs-hub': 'INTEXURAOS_API_DOCS_HUB_URL',
@@ -91,16 +85,13 @@ const PUBLIC_API_PATHS = {
   'commands-agent': '/api/commands',
   'actions-agent': '/api/actions',
   'notes-agent': '/api/notes',
-  'todos-agent': '/api/todos',
   'bookmarks-agent': '/api/bookmarks',
   'calendar-agent': '/api/calendar',
-  'chat-agent': '/api/chat',
   'linear-agent': '/api/linear',
   'code-agent': '/api/code',
   'image-service': '/api/images',
   'web-agent': '/api/web',
   'app-settings-service': '/api/settings',
-  'cron-agent': '/api/cron-agent',
   'hellscript-agent': '/api/hellscript-agent',
   'llm-usage-service': '/api/llm-usage',
 };
@@ -117,14 +108,11 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8120/openapi.json',
   INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8122/openapi.json',
   INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://127.0.0.1:8121/openapi.json',
-  INTEXURAOS_TODOS_AGENT_OPENAPI_URL: 'http://127.0.0.1:8123/openapi.json',
   INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://127.0.0.1:8124/openapi.json',
   INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://127.0.0.1:8125/openapi.json',
-  INTEXURAOS_CHAT_AGENT_OPENAPI_URL: 'http://127.0.0.1:8129/openapi.json',
   INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'http://127.0.0.1:8128/openapi.json',
   INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://127.0.0.1:8126/openapi.json',
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://127.0.0.1:8127/openapi.json',
-  INTEXURAOS_CRON_AGENT_OPENAPI_URL: 'http://127.0.0.1:8130/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://127.0.0.1:8131/openapi.json',
 };
 
@@ -137,18 +125,15 @@ const PROD_SERVICE_ORDER = [
   'notes-agent',
   'bookmarks-agent',
   'code-agent',
-  'cron-agent',
   'hellscript-agent',
   'llm-usage-service',
   'user-service',
   'commands-agent',
   'actions-agent',
   'research-agent',
-  'todos-agent',
   'image-service',
   'calendar-agent',
   'linear-agent',
-  'chat-agent',
   'web-agent',
   'api-docs-hub',
 ];
@@ -158,11 +143,9 @@ const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
   'commands-agent',
   'actions-agent',
   'research-agent',
-  'todos-agent',
   'image-service',
   'calendar-agent',
   'linear-agent',
-  'chat-agent',
   'web-agent',
 ]);
 
@@ -230,7 +213,6 @@ const SERVICE_SECRET_KEYS = {
     'INTEXURAOS_TOKEN_ENCRYPTION_KEY',
     'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   ],
-  'cron-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'hellscript-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'llm-usage-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_ORCHESTRATOR_SECRET'],
   'user-service': [
@@ -248,16 +230,9 @@ const SERVICE_SECRET_KEYS = {
   'commands-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'actions-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'research-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-  'todos-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'image-service': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'calendar-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'linear-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-  'chat-agent': [
-    'INTEXURAOS_GEMINI_APP_API_KEY',
-    'INTEXURAOS_GUEST_SESSION_SECRET',
-    'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-    'INTEXURAOS_OPENAI_APP_API_KEY',
-  ],
   'web-agent': [
     'INTEXURAOS_CLOUDFLARE_ACCOUNT_ID',
     'INTEXURAOS_CLOUDFLARE_API_TOKEN',
@@ -349,10 +324,6 @@ const SERVICE_ENV_MAPPINGS = {
       envValue('INTEXURAOS_IMAGE_BUCKET') ?? `intexuraos-images-${RETAINED_GCP_ENVIRONMENT}`,
     INTEXURAOS_IMAGE_PUBLIC_BASE_URL: envValue('INTEXURAOS_IMAGE_PUBLIC_BASE_URL') ?? PUBLIC_ORIGIN,
   },
-  'todos-agent': {
-    INTEXURAOS_TODOS_PROCESSING_TOPIC:
-      envValue('INTEXURAOS_TODOS_PROCESSING_TOPIC') ?? topic('todos-processing'),
-  },
   'bookmarks-agent': {
     INTEXURAOS_PUBSUB_BOOKMARK_ENRICH:
       envValue('INTEXURAOS_PUBSUB_BOOKMARK_ENRICH') ?? topic('bookmark-enrich'),
@@ -379,10 +350,6 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'linear-agent': {
     INTEXURAOS_SERVICE_URL: publicServiceUrl('linear-agent'),
-  },
-  'cron-agent': {
-    INTEXURAOS_SERVICE_URL:
-      envValue('INTEXURAOS_CRON_SERVICE_URL') ?? publicServiceUrl('cron-agent'),
   },
   'llm-usage-service': {
     INTEXURAOS_SERVICE_URL:

@@ -23,7 +23,7 @@
 | 11  | `code_worker_settings`           | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
 | 12  | `commands`                       | commands-agent               | `apps/commands-agent/src/infra/firestore/`       | OK     |
 | 16  | `dispatch_retries`               | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
-| 17  | `doc_embeddings`                 | chat-agent                   | `apps/chat-agent/src/infra/firestore/`           | OK     |
+| 17  | `retired-document-embeddings`                 | retired-chat-service                   | `apps/retired-chat-service/src/infra/firestore/`           | OK     |
 | 18  | `event_decisions`                | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
 | 19  | `generated_images`               | image-service                | `apps/image-service/src/infra/firestore/`        | OK     |
 | 20  | `github-event-log-entries`       | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
@@ -46,7 +46,7 @@
 | 37  | `research_export_settings`       | research-agent               | `apps/research-agent/src/infra/firestore/`       | OK     |
 | 38  | `researches`                     | research-agent               | `apps/research-agent/src/infra/research/`        | OK     |
 | 39  | `settings`                       | app-settings-service         | `apps/app-settings-service/src/infra/firestore/` | OK     |
-| 40  | `todos`                          | todos-agent                  | `apps/todos-agent/src/infra/firestore/`          | OK     |
+| 40  | `todos`                          | retired-checklist-service                  | `apps/retired-checklist-service/src/infra/firestore/`          | OK     |
 | 41  | `user_settings`                  | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
 | 42  | `user_spend`                     | code-agent                   | No repository found                              | WARN   |
 | 44  | `whatsapp_messages`              | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |

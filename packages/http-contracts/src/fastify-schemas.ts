@@ -26,7 +26,6 @@ import {
   notesCreateNoteRequestSchema,
   researchCreateDraftRequestSchema,
   serviceFeedbackZodSchema,
-  todosCreateTodoRequestSchema,
   webAgentFetchLinkPreviewsRequestSchema,
   webAgentLinkPreviewSchema,
   webAgentPageSummarySchema,
@@ -113,7 +112,6 @@ export const contractFastifySchemas = {
   NotesCreateNoteRequest: toFastifySchema('NotesCreateNoteRequest', notesCreateNoteRequestSchema),
   NotionTokenContext: toFastifySchema('NotionTokenContext', notionTokenContextSchema),
   NotionPagePreview: toFastifySchema('NotionPagePreview', notionPagePreviewSchema),
-  TodosCreateTodoRequest: toFastifySchema('TodosCreateTodoRequest', todosCreateTodoRequestSchema),
   ResearchCreateDraftRequest: toFastifySchema(
     'ResearchCreateDraftRequest',
     researchCreateDraftRequestSchema

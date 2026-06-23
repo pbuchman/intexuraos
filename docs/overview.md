@@ -1,6 +1,6 @@
 # IntexuraOS
 
-An AI-native personal operating system — 23 app services that turn your voice notes, messages, and ideas into research, code, calendar events, and organized work, all from WhatsApp and a single web dashboard.
+An AI-native personal operating system — 20 app services that turn your voice notes, messages, and ideas into research, code, calendar events, and organized work, all from WhatsApp and a single web dashboard.
 
 ## The Vision
 
@@ -34,8 +34,6 @@ You have two interfaces into IntexuraOS: WhatsApp and a web dashboard. Between t
 
 **[Ask Agent](services/code-agent/features.md)** starts an interactive Claude Code session directly from the web dashboard. Send a message, watch the agent respond in real time, and continue the conversation — back and forth — without leaving the UI. Useful for exploratory coding tasks, quick questions about your codebase, or any work where you want to stay in the loop step by step rather than approve a finished result.
 
-**[Chat Agent](services/chat-agent/features.md)** is your guide to the platform itself. Ask it how anything works, and it answers from up-to-date documentation with linked source citations. Then act on what you learned — describe a new command in natural language, confirm it, and the system creates it. No forms, no field navigation. Guest access works without an account, so anyone can explore before signing up.
-
 **[Fishing Assistant](services/fishing-assistant-service/features.md)** is a grounded chat for fishing knowledge. Ask questions against your saved fishing pages, WhatsApp digest summaries, and recent group-message context; the service retrieves supporting evidence, validates citations before storing answers, and keeps chat history so follow-up questions retain context. Knowledge-base evidence is prioritized when available, while digest and raw-message evidence fill in recent mobile context.
 
 ### Capture and Organize Your Thoughts
@@ -47,8 +45,6 @@ Every message you send enters through one front door and reaches the right speci
 **[Actions Agent](services/actions-agent/features.md)** is the dispatcher that turns every classified command into the right action. High-confidence classifications execute immediately — no approval step, no delay. Lower confidence pauses and asks. Project tracking actions always require approval, because an accidental issue in your tracker affects your team. Every correction you make in the dashboard — changing an action's type from note to to-do, for instance — is stored as training data that improves future accuracy.
 
 **[Calendar Agent](services/calendar-agent/features.md)** puts events on your Google Calendar from voice notes and text messages. Say "Dentist next Tuesday at 3pm" and a richly formatted preview appears with the title, date, time, duration, and the AI's reasoning. Approve it, and the event is created. Relative dates, all-day events, locations, and multilingual input — including Polish — all work without a settings page. Vague messages that lack enough detail are saved for review instead of discarded.
-
-**[Todos Agent](services/todos-agent/features.md)** structures your tasks automatically. Send a paragraph describing four next steps, and the agent breaks it into individual items with priorities and deadlines extracted from your natural language. Other agents create todos on your behalf — a research finding, a follow-up from a voice command — so your task list fills even when you are not actively capturing.
 
 **[Notes Agent](services/notes-agent/features.md)** gives your quick thoughts a home inside the platform. Create a note with tags from the dashboard, or let other agents store one on your behalf from a WhatsApp voice command. Tag-based organization, most-recent-first sorting, and zero friction.
 
@@ -66,7 +62,7 @@ You review a draft before anything runs — the refined prompt, selected models,
 
 ### See What Is Happening
 
-**[Your Dashboard](services/web/features.md)** is the observation deck. Code tasks stream their output in real time — color-coded lines showing every file read, every test run, every tool invocation — with a redesigned issue-centric grouped task view that surfaces design documents, worker model selection, and task lifecycle at a glance. All PR automation actions are visible in a unified log. Action items, approval gates, and research reviews surface in a single inbox. Your Linear board, calendar, todos, notes, bookmarks, and notification history are each one tap away. The floating chat assistant is available on every page.
+**[Your Dashboard](services/web/features.md)** is the observation deck. Code tasks stream their output in real time — color-coded lines showing every file read, every test run, every tool invocation — with a redesigned issue-centric grouped task view that surfaces design documents, worker model selection, and task lifecycle at a glance. All PR automation actions are visible in a unified log. Action items, approval gates, and research reviews surface in a single inbox. Your Linear board, calendar, notes, bookmarks, and notification history are each one tap away.
 
 **[LLM Usage Service](services/llm-usage-service/features.md)** shows you what every AI interaction costs. Usage can be grouped by model, call type, prompt type, source service, and provider, with research-run cost summaries that include per-event rows, totals, image counts, and missing-attribution diagnostics. Image generation metadata and OpenRouter model identifiers are preserved, so usage dashboards can explain both text and image spend without collapsing everything into one total.
 
@@ -81,8 +77,6 @@ You review a draft before anything runs — the refined prompt, selected models,
 **[User Service](services/user-service/features.md)** is the trust layer beneath the platform. Store API keys for AI providers in a single encrypted vault — protected with bank-grade encryption, decrypted only in memory, never readable while stored. Every key is tested against its provider's actual API before it is accepted. Error messages are translated from cryptic provider codes into plain language. Sign in with Google connects your calendar. Authentication works across the web dashboard, command line, and mobile apps — including a short-code sign-in for devices without a browser.
 
 ### Keep the System Running
-
-**[Cron Agent](services/cron-agent/features.md)** schedules and executes recurring tasks automatically. Define a task once and the cron agent runs it on your chosen schedule without manual intervention, freeing you from repetitive setup.
 
 **[VM Lifecycle](services/vm-lifecycle/features.md)** manages the dedicated machine that runs your coding agents. It starts every weekday morning, verifies the orchestrator and workers are ready to accept work — not just that the operating system booted — and shuts down every night. Before powering off, it checks for active coding tasks and waits up to ten minutes for them to finish. Your work is never interrupted mid-flight, and the machine stops billing the moment it is no longer needed.
 
@@ -100,7 +94,7 @@ When the work involves code, execution happens on your own infrastructure. The o
 
 ## Getting Started
 
-You need three things: a WhatsApp account, a Google account, and a web browser. Sign up through the web app, connect your WhatsApp number with a one-time verification code, and link your Google account for calendar access. Your first message — typed or spoken — enters the system immediately. The platform provides fallback AI model access so you can run research, generate bookmarks, and use the chat assistant before configuring your own API keys.
+You need three things: a WhatsApp account, a Google account, and a web browser. Sign up through the web app, connect your WhatsApp number with a one-time verification code, and link your Google account for calendar access. Your first message — typed or spoken — enters the system immediately. The platform provides fallback AI model access so you can run research and generate bookmarks before configuring your own API keys.
 
 For coding tasks, connect a worker machine — any Mac or Linux computer will do — and the platform handles the secure connection. For project tracking, connect your Linear account. For research exports, connect Notion. Each integration is optional and independent — use the parts you need, skip the rest.
 
@@ -114,8 +108,7 @@ IntexuraOS is designed for individual power users who want depth in one workflow
 - **Android for notification capture** — Mobile notification forwarding requires a compatible Android automation app. iOS is not supported.
 - **English and Polish natively** — Intent recognition is built for English and Polish. Other languages may work through general pattern matching but are not explicitly tested.
 - **Two worker machines** — You can configure a primary and a fallback coding worker, but not a larger pool.
-- **Designed for individual use** — Todos, notes, bookmarks, and notifications are personal and private. There are no shared workspaces or team collaboration features.
-- **No recurring events or tasks** — Calendar events and todos are single instances. Recurring patterns are calendar-specific complexity not yet built.
+- **Designed for individual use** — Notes, bookmarks, and notifications are personal and private. There are no shared workspaces or team collaboration features.
 - **API keys configured manually** — Connecting AI providers requires generating and pasting API keys yourself. The system validates every key before accepting it, but there is no one-click sign-in for most providers.
 - **Design review before code execution** — Code tasks pause between design and implementation for your approval. This is a deliberate quality gate, not an optimization to be removed.
 

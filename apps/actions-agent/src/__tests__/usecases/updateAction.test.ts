@@ -13,7 +13,7 @@ describe('UpdateActionUseCase', () => {
     id: 'action-1',
     userId: 'user-1',
     commandId: 'cmd-1',
-    type: 'todo',
+    type: 'note',
     confidence: 0.85,
     title: 'Test action',
     status: 'awaiting_approval',
@@ -70,7 +70,7 @@ describe('UpdateActionUseCase', () => {
     expect(result.ok).toBe(true);
     if (result.ok === true) {
       expect(result.value.action.status).toBe('processing');
-      expect(result.value.action.type).toBe('todo');
+      expect(result.value.action.type).toBe('note');
     }
     expect(changeActionTypeUseCase).not.toHaveBeenCalled();
   });
@@ -81,18 +81,18 @@ describe('UpdateActionUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      type: 'note',
+      type: 'research',
     });
 
     expect(result.ok).toBe(true);
     if (result.ok === true) {
-      expect(result.value.action.type).toBe('note');
+      expect(result.value.action.type).toBe('research');
       expect(result.value.action.status).toBe('awaiting_approval');
     }
     expect(changeActionTypeUseCase).toHaveBeenCalledWith({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'note',
+      newType: 'research',
     });
   });
 
@@ -103,13 +103,13 @@ describe('UpdateActionUseCase', () => {
       actionId: testAction.id,
       userId: testAction.userId,
       status: 'processing',
-      type: 'note',
+      type: 'research',
     });
 
     expect(result.ok).toBe(true);
     if (result.ok === true) {
       expect(result.value.action.status).toBe('processing');
-      expect(result.value.action.type).toBe('note');
+      expect(result.value.action.type).toBe('research');
     }
   });
 
@@ -123,7 +123,7 @@ describe('UpdateActionUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      type: 'note',
+      type: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -139,7 +139,7 @@ describe('UpdateActionUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      type: 'todo',
+      type: 'note',
     });
 
     expect(result.ok).toBe(true);
@@ -157,7 +157,7 @@ describe('UpdateActionUseCase', () => {
       actionId: testAction.id,
       userId: testAction.userId,
       status: 'processing',
-      type: 'note',
+      type: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -175,12 +175,12 @@ describe('UpdateActionUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      type: 'note',
+      type: 'research',
     });
 
     expect(result.ok).toBe(true);
     if (result.ok === true) {
-      expect(result.value.action.type).toBe('note');
+      expect(result.value.action.type).toBe('research');
       expect(result.value.action.status).toBe('awaiting_approval');
     }
   });

@@ -173,13 +173,10 @@ export interface AppConfig {
   commandsAgentServiceUrl: string;
   actionsAgentUrl: string;
   notesAgentUrl: string;
-  todosAgentUrl: string;
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
   linearAgentUrl: string;
   codeAgentUrl: string;
-  chatAgentUrl: string;
-  cronAgentUrl: string;
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
   llmUsageServiceUrl: string;
@@ -281,7 +278,6 @@ export interface UserSettings {
  * Command classification type from commands-agent
  */
 export type CommandType =
-  | 'todo'
   | 'research'
   | 'note'
   | 'link'
@@ -413,122 +409,9 @@ export interface UpdateNoteRequest {
 }
 
 /**
- * Todo priority levels
- */
-export type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
-
-/**
- * Todo status values
- */
-export type TodoStatus =
-  | 'draft'
-  | 'processing'
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled';
-
-/**
- * Todo item (nested within a todo)
- */
-export interface TodoItem {
-  id: string;
-  title: string;
-  status: TodoStatus;
-  priority: TodoPriority | null;
-  dueDate: string | null;
-  position: number;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Todo from todos-agent
- */
-export interface Todo {
-  id: string;
-  userId: string;
-  title: string;
-  description: string | null;
-  tags: string[];
-  priority: TodoPriority;
-  dueDate: string | null;
-  source: string;
-  sourceId: string;
-  status: TodoStatus;
-  archived: boolean;
-  items: TodoItem[];
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Request to create a todo
- */
-export interface CreateTodoRequest {
-  title: string;
-  description?: string | null;
-  tags: string[];
-  priority?: TodoPriority;
-  dueDate?: string | null;
-  source: string;
-  sourceId: string;
-  items?: {
-    title: string;
-    priority?: TodoPriority | null;
-    dueDate?: string | null;
-  }[];
-}
-
-/**
- * Request to update a todo
- */
-export interface UpdateTodoRequest {
-  title?: string;
-  description?: string | null;
-  tags?: string[];
-  priority?: TodoPriority;
-  dueDate?: string | null;
-}
-
-/**
- * Request to create a todo item
- */
-export interface CreateTodoItemRequest {
-  title: string;
-  priority?: TodoPriority | null;
-  dueDate?: string | null;
-}
-
-/**
- * Request to update a todo item
- */
-export interface UpdateTodoItemRequest {
-  title?: string;
-  status?: TodoStatus;
-  priority?: TodoPriority | null;
-  dueDate?: string | null;
-}
-
-/**
  * LLM provider type
  */
 export type { LlmProvider };
-
-/**
- * Chat types for Intex Chat feature.
- */
-export type {
-  ChatRole,
-  ChatMessage,
-  ChatSource,
-  SuggestedAction,
-  ChatResponse,
-  ChatSession,
-  ChatRequest,
-} from './chat.js';
 
 /**
  * Image size for pricing
@@ -1407,19 +1290,6 @@ export type {
   LlmUsageQueryRequest,
   LlmUsageQueryResponse,
 } from './llmUsage.js';
-
-// Cron Agent types
-export type {
-  CronSchedule,
-  CronScheduleStatus,
-  CronExecution,
-  CronExecutionStatus,
-  ToolCallLog,
-  ServiceInfo,
-  ListSchedulesResponse,
-  ListExecutionsResponse,
-  CreateScheduleRequest,
-} from './cronAgent.js';
 
 export type {
   FishingContentType,

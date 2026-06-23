@@ -102,7 +102,7 @@ describe('Internal Routes', () => {
     const validBody = {
       userId: 'user-1',
       commandId: 'cmd-1',
-      type: 'todo' as const,
+      type: 'note' as const,
       title: 'Test Action',
       confidence: 0.95,
     };
@@ -192,8 +192,8 @@ describe('Internal Routes', () => {
       actionId: 'action-1',
       userId: 'user-1',
       commandId: 'cmd-1',
-      actionType: 'todo',
-      title: 'Test Todo',
+      actionType: 'note',
+      title: 'Test Note',
       payload: { prompt: 'Test', confidence: 0.95 },
       timestamp: new Date().toISOString(),
       ...overrides,
@@ -208,13 +208,13 @@ describe('Internal Routes', () => {
         messageId: 'msg-1',
         publishTime: '2025-01-01T12:00:00.000Z',
       },
-      subscription: 'projects/test/subscriptions/actions-todo',
+      subscription: 'projects/test/subscriptions/actions-note',
     });
 
     it('returns 401 without auth (non-PubSub request)', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/actions/todo',
+        url: '/internal/actions/note',
         payload: createPubSubPayload(createActionEvent()),
       });
 
@@ -224,7 +224,7 @@ describe('Internal Routes', () => {
     it('accepts PubSub push requests with from header', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/actions/todo',
+        url: '/internal/actions/note',
         headers: {
           from: 'noreply@google.com',
         },
@@ -237,7 +237,7 @@ describe('Internal Routes', () => {
     it('returns 400 for invalid base64 data', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/actions/todo',
+        url: '/internal/actions/note',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -253,7 +253,7 @@ describe('Internal Routes', () => {
       const event = createActionEvent({ type: 'invalid.type' as ActionCreatedEvent['type'] });
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/actions/todo',
+        url: '/internal/actions/note',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -264,10 +264,10 @@ describe('Internal Routes', () => {
     });
 
     it('returns 400 for action type mismatch', async () => {
-      const event = createActionEvent({ actionType: 'todo' });
+      const event = createActionEvent({ actionType: 'note' });
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/actions/research', // URL says research, event says todo
+        url: '/internal/actions/research', // URL says research, event says note
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -296,13 +296,13 @@ describe('Internal Routes', () => {
       const services = getServices();
 
       // Mock the handler's execute method to return an error
-      vi.spyOn(services.todo, 'execute').mockResolvedValue(
+      vi.spyOn(services.note, 'execute').mockResolvedValue(
         err(new Error('Handler failed'))
       );
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/actions/todo',
+        url: '/internal/actions/note',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -312,13 +312,13 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(500);
 
       // Restore the mock
-      vi.spyOn(services.todo, 'execute').mockRestore();
+      vi.spyOn(services.note, 'execute').mockRestore();
     });
 
     it('processes action successfully with valid handler', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/actions/todo',
+        url: '/internal/actions/note',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -340,8 +340,8 @@ describe('Internal Routes', () => {
       actionId: 'action-1',
       userId: 'user-1',
       commandId: 'cmd-1',
-      actionType: 'todo',
-      title: 'Test Todo',
+      actionType: 'note',
+      title: 'Test Note',
       payload: { prompt: 'Test', confidence: 0.95 },
       timestamp: new Date().toISOString(),
       ...overrides,
@@ -430,7 +430,7 @@ describe('Internal Routes', () => {
     it('returns 500 when handler fails', async () => {
       // Get the current services and mock the handler
       const services = getServices();
-      vi.spyOn(services.todo, 'execute').mockResolvedValue(
+      vi.spyOn(services.note, 'execute').mockResolvedValue(
         err(new Error('Handler failed'))
       );
 
@@ -446,7 +446,7 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(500);
 
       // Restore the mock
-      vi.spyOn(services.todo, 'execute').mockRestore();
+      vi.spyOn(services.note, 'execute').mockRestore();
     });
 
     it('processes action successfully with valid handler', async () => {

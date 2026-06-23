@@ -12,7 +12,6 @@ local GLOBAL_ALLOWED_SERVICE_ACCOUNTS = {
   ["intexuraos-research-agent-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-calendar-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-bookmarks-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
-  ["intexuraos-todos-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
 }
 

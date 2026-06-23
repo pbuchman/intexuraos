@@ -94,7 +94,7 @@ interface UpdateActionResponse {
 ```json
 // Request
 // PATCH /abc-123
-{ "type": "todo" }
+{ "type": "note" }
 
 // Response
 {
@@ -102,7 +102,7 @@ interface UpdateActionResponse {
   "data": {
     "action": {
       "id": "abc-123",
-      "type": "todo",
+      "type": "note",
       "status": "awaiting_approval"
     }
   }
@@ -235,7 +235,6 @@ interface ResolveDuplicateResponse {
 
 ```typescript
 type ActionType =
-  | 'todo'
   | 'research'
   | 'note'
   | 'link'
@@ -349,7 +348,7 @@ interface CalendarPreview {
 | **Type Change Restriction** | Can only change type for 'pending', 'awaiting_approval', or 'failed' actions           |
 | **Batch Limit**             | Maximum 50 action IDs per batch request                                                |
 | **Ownership**               | Users can only access their own actions                                                |
-| **Supported Execute Types** | Execute supports: research, todo, note, link, calendar, linear (not code or reminder)  |
+| **Supported Execute Types** | Execute supports: research, note, link, calendar, linear (not code or reminder)        |
 | **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval                   |
 | **Auto-Execution**          | Actions with >= 90% confidence auto-execute (except linear and reminder)               |
 | **Notification Priority**   | All WhatsApp notifications are marked as important (bypass notification filtering)     |
@@ -389,7 +388,7 @@ if (result.errorCode === 'DUPLICATE_URL') {
 
 ```typescript
 // User corrects AI classification
-await updateAction(actionId, { type: 'todo' });
+await updateAction(actionId, { type: 'note' });
 await updateAction(actionId, { status: 'processing' });
 ```
 
@@ -512,7 +511,6 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 | -------------------- | ------------------------------------- | ----------------------------- |
 | commands-agent       | Fetch command text for type changes   | Type change fails             |
 | research-agent       | Execute research actions              | Action marked as failed       |
-| todos-agent          | Execute todo actions                  | Action marked as failed       |
 | notes-agent          | Execute note actions                  | Action marked as failed       |
 | bookmarks-agent      | Execute link actions                  | Action marked as failed       |
 | calendar-agent       | Execute calendar actions, previews    | Action marked as failed       |

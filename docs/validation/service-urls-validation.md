@@ -34,13 +34,13 @@ All service URLs follow the pattern `INTEXURAOS_<SERVICE>_URL`.
 | image-service                | `INTEXURAOS_IMAGE_SERVICE_URL` (:8120)                | `INTEXURAOS_IMAGE_SERVICE_URL`                | Direct fetch in research-agent                    | OK          |
 | notes-agent                  | `INTEXURAOS_NOTES_AGENT_URL` (:8121)                  | `INTEXURAOS_NOTES_AGENT_URL`                  | Direct fetch in actions-agent                     | OK          |
 | app-settings-service         | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` (:8122)         | `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Direct fetch in multiple services                 | OK          |
-| todos-agent                  | `INTEXURAOS_TODOS_AGENT_URL` (:8123)                  | `INTEXURAOS_TODOS_AGENT_URL`                  | Direct fetch in actions-agent                     | OK          |
+| retired-checklist-service                  | `INTEXURAOS_RETIRED_CHECKLIST_SERVICE_URL` (:8123)                  | `INTEXURAOS_RETIRED_CHECKLIST_SERVICE_URL`                  | Direct fetch in actions-agent                     | OK          |
 | bookmarks-agent              | `INTEXURAOS_BOOKMARKS_AGENT_URL` (:8124)              | `INTEXURAOS_BOOKMARKS_AGENT_URL`              | Direct fetch in actions-agent                     | OK          |
 | calendar-agent               | `INTEXURAOS_CALENDAR_AGENT_URL` (:8125)               | `INTEXURAOS_CALENDAR_AGENT_URL`               | Direct fetch in actions-agent                     | OK          |
 | linear-agent                 | `INTEXURAOS_LINEAR_AGENT_URL` (:8126)                 | `INTEXURAOS_LINEAR_AGENT_URL`                 | Direct fetch in actions-agent, code-agent         | OK          |
 | web-agent                    | `INTEXURAOS_WEB_AGENT_URL` (:8127)                    | `INTEXURAOS_WEB_AGENT_URL`                    | Direct fetch in whatsapp-service, bookmarks-agent | OK          |
 | code-agent                   | `INTEXURAOS_CODE_AGENT_URL` (:8128)                   | `INTEXURAOS_CODE_AGENT_URL`                   | Direct fetch in actions-agent                     | OK          |
-| chat-agent                   | `INTEXURAOS_CHAT_AGENT_URL` (:8129)                   | `INTEXURAOS_CHAT_AGENT_URL`                   | Direct fetch in web                               | OK          |
+| retired-chat-service                   | `INTEXURAOS_RETIRED_CHAT_SERVICE_URL` (:8129)                   | `INTEXURAOS_RETIRED_CHAT_SERVICE_URL`                   | Direct fetch in web                               | OK          |
 | api-docs-hub                 | **MISSING**                                           | `INTEXURAOS_API_DOCS_HUB_URL`                 | No code references found                          | DISCREPANCY |
 
 ---

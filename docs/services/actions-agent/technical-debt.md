@@ -99,7 +99,7 @@ Four instances of `as any` in test files for testing unsupported action types:
 
 ### Per-type `executeActionByType` branches (Low Severity)
 
-In `approval/executeActionByType.ts`, the `executeActionByType` function contains a `switch` with a near-identical block for each action type (note, todo, research, link, calendar, linear, code). Each branch differs only in log message and which `execute*Action` function is called.
+In `approval/executeActionByType.ts`, the `executeActionByType` function contains a `switch` with a near-identical block for each supported executable action type. Each branch differs only in log message and which `execute*Action` function is called.
 
 **Severity:** Low - The repetition is straightforward and exhaustive matching is intentional for TypeScript type narrowing.
 
@@ -204,7 +204,7 @@ No deprecated APIs or dependencies in use.
 
 ### Shared executeAction Template Extraction (INT-885)
 
-**Issue:** `executeResearchAction`, `executeTodoAction`, `executeNoteAction`, `executeCalendarAction`, and `executeLinearAction` contained duplicated workflow logic (get action, null check, idempotency, status validation, update to processing, call service, handle failure/success, send WhatsApp notification).
+**Issue:** Per-type action executors contained duplicated workflow logic (get action, null check, idempotency, status validation, update to processing, call service, handle failure/success, send WhatsApp notification).
 
 **Resolution:** Extracted common workflow into `executeActionTemplate.ts`. Five use cases migrated. `executeLinkAction` and `executeCodeAction` not migrated due to significant deviations.
 
@@ -246,7 +246,7 @@ No deprecated APIs or dependencies in use.
 
 **Issue:** Multiple production source files used v8 ignore coverage exemptions for error paths that could be tested with proper fakes and HTTP client mocking.
 
-**Resolution:** Added real test suites for `approvalMessageRepository`, `calendarServiceHttpClient`, `codeAgentHttpClient`, `notesServiceHttpClient`, `todosServiceHttpClient`, `internalRoutes`, and `publicRoutes`. Removed v8 ignore directives from 7 production files. Remaining directives in `handleApprovalReply.ts` are all `ts-type` category for `noUncheckedIndexedAccess` patterns.
+**Resolution:** Added real test suites for `approvalMessageRepository`, `calendarServiceHttpClient`, `codeAgentHttpClient`, `notesServiceHttpClient`, `internalRoutes`, and `publicRoutes`. Removed v8 ignore directives from 7 production files. Remaining directives in `handleApprovalReply.ts` are all `ts-type` category for `noUncheckedIndexedAccess` patterns.
 
 **Date Resolved:** 2026-03-13
 
@@ -316,7 +316,7 @@ No deprecated APIs or dependencies in use.
 
 ### Auto-Execute Generalized to All Action Types
 
-**Issue:** `shouldAutoExecute()` only auto-executed link actions, requiring manual approval for high-confidence todo/research/note/code actions even when classification was near-certain.
+**Issue:** `shouldAutoExecute()` only auto-executed link actions, requiring manual approval for high-confidence non-link actions even when classification was near-certain.
 
 **Resolution:** Removed the `actionType === 'link'` guard from `shouldAutoExecute()`. The function now returns `true` for any action type when `confidence >= 0.9`. Tests updated to reflect type-agnostic threshold behavior.
 

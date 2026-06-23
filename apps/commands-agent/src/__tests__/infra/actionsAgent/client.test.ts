@@ -31,7 +31,7 @@ describe('ActionsAgentClient', () => {
     const validParams = {
       userId: 'user-123',
       commandId: 'cmd-456',
-      type: 'todo' as const,
+      type: 'note' as const,
       title: 'Test action',
       confidence: 0.95,
     };
@@ -41,7 +41,7 @@ describe('ActionsAgentClient', () => {
         id: 'action-789',
         userId: 'user-123',
         commandId: 'cmd-456',
-        type: 'todo',
+        type: 'note',
         title: 'Test action',
         status: 'pending',
         createdAt: new Date().toISOString(),
@@ -58,7 +58,7 @@ describe('ActionsAgentClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.id).toBe('action-789');
-        expect(result.value.type).toBe('todo');
+        expect(result.value.type).toBe('note');
       }
     });
 
@@ -192,7 +192,7 @@ describe('ActionsAgentClient', () => {
     });
 
     it('handles different action types', async () => {
-      const types = ['todo', 'research', 'note', 'link', 'calendar', 'reminder'] as const;
+      const types = ['research', 'note', 'link', 'calendar', 'reminder'] as const;
 
       for (const type of types) {
         vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({

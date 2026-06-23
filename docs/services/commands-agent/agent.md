@@ -116,7 +116,7 @@ interface Command {
 }
 
 interface CommandClassification {
-  type: 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
+  type: 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
   confidence: number;     // 0–1
   reasoning: string;
   promptVersion: string;  // semver
@@ -303,7 +303,6 @@ interface ArchiveCommandBody {
 
 | Type       | When assigned                                                                             |
 | ---------- | ----------------------------------------------------------------------------------------- |
-| `todo`     | Explicit task creation instruction, or actionable request                                 |
 | `research` | Investigation intent ("investigate", "zbadaj", "how does X work")                         |
 | `note`     | Note-taking intent, or fallback when confidence < 0.50                                    |
 | `link`     | URL present and no explicit override intent; pwa-shared source gets +0.1 confidence boost |

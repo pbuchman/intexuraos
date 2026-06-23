@@ -27,7 +27,6 @@ locals {
     code_agent       = "intexuraos-code-${var.source_environment}"
     calendar_agent   = "intexuraos-calendar-${var.source_environment}"
     bookmarks_agent  = "intexuraos-bookmarks-${var.source_environment}"
-    todos_agent      = "intexuraos-todos-${var.source_environment}"
   }
 
   cloud_scheduler_service_account_id = "intexuraos-scheduler-${var.source_environment}"
@@ -51,7 +50,6 @@ locals {
     calendar_preview           = "intexuraos-calendar-preview-${var.source_environment}"
     bookmark_enrich            = "intexuraos-bookmark-enrich-${var.source_environment}"
     bookmark_summarize         = "intexuraos-bookmark-summarize-${var.source_environment}"
-    todos_processing           = "intexuraos-todos-processing-${var.source_environment}"
     approval_reply             = "intexuraos-approval-reply-${var.source_environment}"
     pr_triage                  = "intexuraos-pr-triage-${var.source_environment}"
     transcription_audio_dlq    = "intexuraos-transcription-audio-stored-dlq-${var.source_environment}"
@@ -69,7 +67,6 @@ locals {
     "/internal/code/detect-zombies"                     = "code-agent"
     "/internal/code/pubsub/pr-triage"                   = "code-agent"
     "/internal/commands"                                = "commands-agent"
-    "/internal/cron/tick"                               = "cron-agent"
     "/internal/drain-queue"                             = "code-agent"
     "/internal/execution-memory/process"                = "code-agent"
     "/internal/execution-memory/prune-stale"            = "code-agent"
@@ -83,7 +80,6 @@ locals {
     "/internal/merge-queue/tick"                        = "code-agent"
     "/internal/notifications/digest/run-yesterday"      = "mobile-notifications-service"
     "/internal/retry-pending"                           = "commands-agent"
-    "/internal/todos/pubsub/todos-processing"           = "todos-agent"
     "/internal/whatsapp/private/events"                 = "whatsapp-service"
     "/internal/whatsapp/pubsub/media-cleanup"           = "whatsapp-service"
     "/internal/whatsapp/pubsub/process-webhook"         = "whatsapp-service"

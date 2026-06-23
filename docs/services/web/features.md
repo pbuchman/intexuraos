@@ -70,9 +70,7 @@ The Worker Configuration page lets you register, test, and manage the code execu
 
 ### Everything Else in One Place
 
-Calendar events show your schedule. Todos and notes capture your running lists and scratch thoughts. Bookmarks save things you want to return to, with real-time sync so additions from other parts of the system appear immediately. Mobile notification history shows what the system pushed to your phone, so you can trace back anything you dismissed. Settings pages let you configure every connected service — WhatsApp, Notion, Google Calendar, Linear webhooks, mobile notifications, worker processes, API keys, LLM pricing, usage costs, and share history.
-
-A floating chat assistant is available on every page. It connects to an AI assistant that can answer questions and create commands on your behalf — the same commands that flow through the inbox for processing. If someone visits without an account, the chat still works in guest mode — useful for sharing a link with a colleague who wants to ask a quick question.
+Calendar events show your schedule. Notes capture your running scratch thoughts. Bookmarks save things you want to return to, with real-time sync so additions from other parts of the system appear immediately. Mobile notification history shows what the system pushed to your phone, so you can trace back anything you dismissed. Settings pages let you configure every connected service — WhatsApp, Notion, Google Calendar, Linear webhooks, mobile notifications, worker processes, API keys, LLM pricing, usage costs, and share history.
 
 **Example:** You are on the calendar page reviewing tomorrow's meetings. You remember you need to add a note about preparation for one of them. You tap into notes, write it, and switch to bookmarks to check a link you saved last week. No app-switching, no separate logins — it is all one surface.
 
@@ -84,7 +82,7 @@ The web app is a Progressive Web App. On Android and iOS, you install it to your
 
 ## Getting Started
 
-Install the web app from your browser — on mobile, use "Add to Home Screen." Sign in with your account, or start a guest chat session without one. The inbox shows what has accumulated since your last visit. Code tasks, research reports, calendar events, and Linear issues are each one tap away.
+Install the web app from your browser — on mobile, use "Add to Home Screen." Sign in with your account. The inbox shows what has accumulated since your last visit. Code tasks, research reports, calendar events, and Linear issues are each one tap away.
 
 ## Key Benefits
 
@@ -99,7 +97,6 @@ Install the web app from your browser — on mobile, use "Add to Home Screen." S
 
 - **Offline loads the shell, not live data** — the app opens without a connection, but everything meaningful requires network access
 - **Real-time updates need an active connection** — if your connection drops, updates pause until it reconnects
-- **Guest access is limited to the chat assistant** — inbox, code tasks, and other views require a full account
 - **Share target requires installation** — sending content from other apps only works when the PWA is installed to your home screen
 - **Some settings assume familiarity** — pages like webhook configuration and worker setup have no guided wizard yet
 - **Maximum two workers** — the worker configuration page supports up to two registered workers at a time
