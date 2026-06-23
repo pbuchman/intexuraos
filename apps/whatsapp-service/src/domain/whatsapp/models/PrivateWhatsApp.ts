@@ -5,6 +5,7 @@
 export type PrivateWhatsAppDeliveryMode = 'live' | 'backfill';
 export type PrivateWhatsAppChatType = 'direct' | 'group' | 'unknown';
 export type PrivateWhatsAppMessageDirection = 'incoming';
+export type PrivateWhatsAppSummaryStatus = 'not_started' | 'completed' | 'failed';
 export type PrivateWhatsAppMessageType =
   | 'text'
   | 'image'
@@ -37,11 +38,15 @@ export interface PrivateWhatsAppMessageInput {
   matrixSenderId: string;
   senderDisplayName?: string;
   senderPhoneNumber?: string;
+  senderPhoneNumberNormalized?: string;
+  senderKey?: string;
   direction: PrivateWhatsAppMessageDirection;
   type: PrivateWhatsAppMessageType;
   text?: string;
   media?: PrivateWhatsAppMediaInfo;
   eventTimestamp: string;
+  eventDayKey?: string;
+  eventTimeZone?: string;
   rawMatrixEvent: unknown;
 }
 
@@ -75,17 +80,62 @@ export interface PrivateWhatsAppMessage {
   matrixRoomId: string;
   matrixEventId: string;
   matrixSenderId: string;
+  senderKey?: string;
   senderDisplayName?: string;
   senderPhoneNumber?: string;
+  senderPhoneNumberNormalized?: string;
   direction: PrivateWhatsAppMessageDirection;
   messageType: PrivateWhatsAppMessageType;
   text?: string;
   media?: PrivateWhatsAppMediaInfo;
   eventTimestamp: string;
+  eventDayKey?: string;
+  eventTimeZone?: string;
+  chatDisplayName?: string;
+  chatType?: PrivateWhatsAppChatType;
   receivedAt: string;
   ingestedAt: string;
   deliveryMode: PrivateWhatsAppDeliveryMode;
   rawMatrixEvent: unknown;
+  schemaVersion?: number;
+}
+
+export interface PrivateWhatsAppSender {
+  id: string;
+  userId: string;
+  sourceAccountId: string;
+  senderKey: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  senderPhoneNumberNormalized?: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  messageCount: number;
+  chatIds: string[];
+  updatedAt: string;
+  schemaVersion: number;
+}
+
+export interface PrivateWhatsAppSenderDay {
+  id: string;
+  userId: string;
+  sourceAccountId: string;
+  senderKey: string;
+  eventDayKey: string;
+  eventTimeZone: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  messageCount: number;
+  chatIds: string[];
+  messageTypeCounts: Partial<Record<PrivateWhatsAppMessageType, number>>;
+  summaryStatus: PrivateWhatsAppSummaryStatus;
+  summaryText?: string;
+  summaryGeneratedAt?: string;
+  summarySourceMessageCount: number;
+  updatedAt: string;
+  schemaVersion: number;
 }
 
 export interface PrivateWhatsAppIngestOutcome {
@@ -108,4 +158,47 @@ export interface PrivateWhatsAppIngestResult {
   duplicates: number;
   rejected: number;
   messages: PrivateWhatsAppIngestEventResult[];
+}
+
+export interface PrivateWhatsAppMessageQueryInput {
+  sourceAccountId: string;
+  senderKey?: string;
+  from?: string;
+  to?: string;
+  eventDayKey?: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface PrivateWhatsAppMessageQueryResult {
+  messages: PrivateWhatsAppMessage[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppSenderDayQueryInput {
+  sourceAccountId: string;
+  senderKey?: string;
+  fromDay?: string;
+  toDay?: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface PrivateWhatsAppSenderDayQueryResult {
+  senderDays: PrivateWhatsAppSenderDay[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppAggregateRebuildInput {
+  sourceAccountId: string;
+  from?: string;
+  to?: string;
+  limit: number;
+}
+
+export interface PrivateWhatsAppAggregateRebuildResult {
+  scannedMessages: number;
+  upgradedMessages: number;
+  senderCount: number;
+  senderDayCount: number;
 }

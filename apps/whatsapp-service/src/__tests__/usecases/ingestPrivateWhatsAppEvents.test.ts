@@ -4,8 +4,14 @@ import {
   IngestPrivateWhatsAppEventsUseCase,
   type IngestPrivateWhatsAppEventInput,
   type IngestPrivateWhatsAppEventsInput,
+  type PrivateWhatsAppAggregateRebuildInput,
+  type PrivateWhatsAppAggregateRebuildResult,
   type PrivateWhatsAppIngestOutcome,
+  type PrivateWhatsAppMessageQueryInput,
+  type PrivateWhatsAppMessageQueryResult,
   type PrivateWhatsAppRepository,
+  type PrivateWhatsAppSenderDayQueryInput,
+  type PrivateWhatsAppSenderDayQueryResult,
   type StorePrivateWhatsAppMessageInput,
   type WhatsAppError,
 } from '../../domain/whatsapp/index.js';
@@ -85,6 +91,26 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     this.seenEventIds.set(input.message.matrixEventId, outcome);
     return Promise.resolve(ok(outcome));
   }
+
+  findMessages(
+    _input: PrivateWhatsAppMessageQueryInput
+  ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
+    return Promise.resolve(ok({ messages: [] }));
+  }
+
+  findSenderDays(
+    _input: PrivateWhatsAppSenderDayQueryInput
+  ): Promise<Result<PrivateWhatsAppSenderDayQueryResult, WhatsAppError>> {
+    return Promise.resolve(ok({ senderDays: [] }));
+  }
+
+  rebuildAggregates(
+    _input: PrivateWhatsAppAggregateRebuildInput
+  ): Promise<Result<PrivateWhatsAppAggregateRebuildResult, WhatsAppError>> {
+    return Promise.resolve(
+      ok({ scannedMessages: 0, upgradedMessages: 0, senderCount: 0, senderDayCount: 0 })
+    );
+  }
 }
 
 describe('IngestPrivateWhatsAppEventsUseCase', () => {
@@ -120,6 +146,74 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored[0]?.deliveryMode).toBe('live');
     expect(repository.stored[0]?.message.text).toBe('hello from private whatsapp');
     expect(repository.stored[0]?.message.direction).toBe('incoming');
+  });
+
+  it('derives sender identity and Europe/Warsaw day metadata before persistence', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            eventTimestamp: '2026-06-22T22:30:00.000Z',
+            sender: {
+              displayName: 'Alice',
+              phoneNumber: '+48 123 456 789',
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    const stored = repository.stored[0] as StorePrivateWhatsAppMessageInput | undefined;
+    expect(stored?.message.senderKey).toBe('phone:+48123456789');
+    expect(stored?.message.senderPhoneNumberNormalized).toBe('48123456789');
+    expect(stored?.message.eventDayKey).toBe('2026-06-23');
+    expect(stored?.message.eventTimeZone).toBe('Europe/Warsaw');
+  });
+
+  it('falls back to Matrix sender id when phone metadata is absent', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixSenderId: '@whatsapp_unknown:home-dev',
+            sender: {
+              displayName: 'Unknown Sender',
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    const stored = repository.stored[0] as StorePrivateWhatsAppMessageInput | undefined;
+    expect(stored?.message.senderKey).toBe('matrix:@whatsapp_unknown:home-dev');
+    expect(stored?.message.senderPhoneNumberNormalized).toBeUndefined();
+    expect(stored?.message.eventDayKey).toBe('2026-06-22');
+  });
+
+  it('falls back to Matrix sender id when phone metadata contains no digits', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixSenderId: '@alice:matrix.example',
+            sender: {
+              displayName: 'Alice',
+              phoneNumber: 'not a phone number',
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    const stored = repository.stored[0] as StorePrivateWhatsAppMessageInput | undefined;
+    expect(stored?.message.senderKey).toBe('matrix:@alice:matrix.example');
+    expect(stored?.message.senderPhoneNumberNormalized).toBeUndefined();
   });
 
   it('marks repeated Matrix event ids as duplicates', async () => {

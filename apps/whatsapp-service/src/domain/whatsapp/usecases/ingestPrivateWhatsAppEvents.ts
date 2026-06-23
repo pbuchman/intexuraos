@@ -81,6 +81,7 @@ const MESSAGE_TYPES = new Set<PrivateWhatsAppMessageType>([
 ]);
 
 const CHAT_TYPES = new Set<PrivateWhatsAppChatType>(['direct', 'group', 'unknown']);
+const PRIVATE_WHATSAPP_EVENT_TIME_ZONE = 'Europe/Warsaw';
 
 export class IngestPrivateWhatsAppEventsUseCase {
   constructor(private readonly deps: IngestPrivateWhatsAppEventsDeps) {}
@@ -336,6 +337,11 @@ function toStoreInput(
   input: IngestPrivateWhatsAppEventsInput,
   event: IngestPrivateWhatsAppEventInput
 ): StorePrivateWhatsAppMessageInput {
+  const normalizedPhoneNumber = normalizeSenderPhoneNumber(event.sender?.phoneNumber);
+  const senderKey =
+    normalizedPhoneNumber === undefined
+      ? `matrix:${event.matrixSenderId}`
+      : `phone:+${normalizedPhoneNumber}`;
   const storeInput: StorePrivateWhatsAppMessageInput = {
     sourceAccountId: input.sourceAccountId,
     userId: input.userId,
@@ -352,6 +358,9 @@ function toStoreInput(
       direction: 'incoming',
       type: normalizeMessageType(event.message.type),
       eventTimestamp: event.eventTimestamp,
+      eventDayKey: toWarsawDayKey(event.eventTimestamp),
+      eventTimeZone: PRIVATE_WHATSAPP_EVENT_TIME_ZONE,
+      senderKey,
       rawMatrixEvent: event.rawMatrixEvent,
     },
   };
@@ -368,6 +377,9 @@ function toStoreInput(
   if (event.sender?.phoneNumber !== undefined) {
     storeInput.message.senderPhoneNumber = event.sender.phoneNumber;
   }
+  if (normalizedPhoneNumber !== undefined) {
+    storeInput.message.senderPhoneNumberNormalized = normalizedPhoneNumber;
+  }
   if (event.message.text !== undefined) {
     storeInput.message.text = event.message.text;
   }
@@ -376,6 +388,34 @@ function toStoreInput(
   }
 
   return storeInput;
+}
+
+function normalizeSenderPhoneNumber(phoneNumber: string | undefined): string | undefined {
+  if (phoneNumber === undefined) {
+    return undefined;
+  }
+  const normalized = phoneNumber.replace(/\D/g, '');
+  return normalized.length === 0 ? undefined : normalized;
+}
+
+function toWarsawDayKey(timestamp: string): string {
+  const date = new Date(timestamp);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PRIVATE_WHATSAPP_EVENT_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  /* v8 ignore start -- upstream: Intl.DateTimeFormat requests year/month/day and always include those parts; fallback guard cannot be triggered by normal inputs @preserve */
+  if (year === undefined || month === undefined || day === undefined) {
+    return timestamp.slice(0, 10);
+  }
+  /* v8 ignore stop @preserve */
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeChatType(type: string): PrivateWhatsAppChatType {
