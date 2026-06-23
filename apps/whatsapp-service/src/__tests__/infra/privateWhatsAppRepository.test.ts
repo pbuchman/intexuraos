@@ -719,6 +719,87 @@ describe('privateWhatsAppRepository', () => {
     expect(zeroLimitResult.value.nextCursor).toBeUndefined();
   });
 
+  it('queries private WhatsApp senders newest-first with a stable cursor', async () => {
+    const olderResult = await repository.storeIncomingMessage(createStoreInput());
+    const newerResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-newer-sender',
+          matrixSenderId: '@bob:matrix.example',
+          senderDisplayName: 'Bob',
+          senderPhoneNumber: '+48987654321',
+          senderPhoneNumberNormalized: '48987654321',
+          senderKey: 'phone:+48987654321',
+          eventTimestamp: '2026-06-23T09:30:00.000Z',
+          eventDayKey: '2026-06-23',
+        },
+      })
+    );
+    const sameTimestampResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-same-timestamp',
+          matrixSenderId: '@cora:matrix.example',
+          senderDisplayName: 'Cora',
+          senderPhoneNumber: '+48777111222',
+          senderPhoneNumberNormalized: '48777111222',
+          senderKey: 'phone:+48777111222',
+          eventTimestamp: '2026-06-23T09:30:00.000Z',
+          eventDayKey: '2026-06-23',
+        },
+      })
+    );
+    expect(olderResult.ok).toBe(true);
+    expect(newerResult.ok).toBe(true);
+    expect(sameTimestampResult.ok).toBe(true);
+
+    const firstPageResult = await repository.findSenders({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 2,
+    });
+
+    expect(firstPageResult.ok).toBe(true);
+    if (!firstPageResult.ok) throw new Error(firstPageResult.error.message);
+    expect(firstPageResult.value.senders).toHaveLength(2);
+    expect(firstPageResult.value.senders.map((sender) => sender.lastEventAt)).toEqual([
+      '2026-06-23T09:30:00.000Z',
+      '2026-06-23T09:30:00.000Z',
+    ]);
+    expect(firstPageResult.value.nextCursor).toEqual(expect.any(String));
+
+    const cursor = firstPageResult.value.nextCursor;
+    if (cursor === undefined) throw new Error('Expected sender cursor');
+    const secondPageResult = await repository.findSenders({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 10,
+      cursor,
+    });
+
+    expect(secondPageResult.ok).toBe(true);
+    if (!secondPageResult.ok) throw new Error(secondPageResult.error.message);
+    expect(secondPageResult.value.senders.map((sender) => sender.senderKey)).toEqual([
+      'phone:+48123456789',
+    ]);
+    expect(secondPageResult.value.nextCursor).toBeUndefined();
+  });
+
+  it('does not generate a sender cursor for an empty sender page', async () => {
+    const storedResult = await repository.storeIncomingMessage(createStoreInput());
+    expect(storedResult.ok).toBe(true);
+
+    const result = await repository.findSenders({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 0,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.senders).toEqual([]);
+    expect(result.value.nextCursor).toBeUndefined();
+  });
+
   it('rebuilds sparse legacy messages with range filters and fallback metadata', async () => {
     const imageMessageId = deterministicId('pbuchman-private-whatsapp', '$legacy-image');
     await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(imageMessageId).set({

@@ -25,6 +25,8 @@ export interface SidebarState {
   setIsLlmUsageOpen: (next: boolean) => void;
   isFishingAssistantOpen: boolean;
   setIsFishingAssistantOpen: (next: boolean) => void;
+  isWhatsAppOpen: boolean;
+  setIsWhatsAppOpen: (next: boolean) => void;
   savedFilters: SavedNotificationFilter[];
   navRef: React.RefObject<HTMLElement | null>;
 }
@@ -54,6 +56,9 @@ export function useSidebarState(): SidebarState {
   );
   const [isFishingAssistantOpen, setIsFishingAssistantOpen] = useState(() =>
     window.location.hash.includes('/fishing-assistant')
+  );
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(() =>
+    window.location.hash.includes('/whatsapp') || window.location.hash.includes('/notes')
   );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
@@ -130,6 +135,12 @@ export function useSidebarState(): SidebarState {
   useEffect(() => {
     if (location.pathname.startsWith('/fishing-assistant')) {
       setIsFishingAssistantOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/whatsapp') || location.pathname === '/notes') {
+      setIsWhatsAppOpen(true);
     }
   }, [location.pathname]);
 
@@ -210,6 +221,8 @@ export function useSidebarState(): SidebarState {
     setIsLlmUsageOpen,
     isFishingAssistantOpen,
     setIsFishingAssistantOpen,
+    isWhatsAppOpen,
+    setIsWhatsAppOpen,
     savedFilters,
     navRef,
   };

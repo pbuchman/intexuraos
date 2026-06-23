@@ -6,6 +6,8 @@ import type {
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
+  PrivateWhatsAppSenderQueryInput,
+  PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
   StorePrivateWhatsAppMessageInput,
@@ -18,6 +20,9 @@ export interface PrivateWhatsAppRepository {
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>>;
+  findSenders(
+    input: PrivateWhatsAppSenderQueryInput
+  ): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>>;
   findSenderDays(
     input: PrivateWhatsAppSenderDayQueryInput
   ): Promise<Result<PrivateWhatsAppSenderDayQueryResult, WhatsAppError>>;

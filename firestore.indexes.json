@@ -1922,6 +1922,24 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_senders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastEventAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

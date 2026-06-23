@@ -11,6 +11,7 @@ import {
   Library,
   LayoutList,
   List,
+  MessagesSquare,
   MessageCircle,
   PenTool,
   Plus,
@@ -35,6 +36,11 @@ export const settingsItems: NavItem[] = [
   { to: '/settings/github', label: 'GitHub', icon: GitBranch },
   { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
+];
+
+export const whatsappItems: NavItem[] = [
+  { to: '/whatsapp/assistant', label: 'Assistant', icon: MessageCircle },
+  { to: '/whatsapp/private', label: 'Private', icon: MessagesSquare },
 ];
 
 export const researchAgentItems: NavItem[] = [

@@ -40,6 +40,8 @@ const testConfig: Config = {
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: INTERNAL_AUTH_TOKEN,
+  privateWhatsappSourceAccountId: 'test-private-whatsapp',
+  privateWhatsappOwnerUserId: 'user-test-private-owner',
   port: 8080,
   host: '0.0.0.0',
 };

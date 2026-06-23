@@ -555,6 +555,11 @@
       "id": "111",
       "name": "private-whatsapp-sender-day-indexes",
       "checksum": "sha256:dc59ce6a66641389040aa0e53922d79552d12f58034deb41cab19978d81079c0"
+    },
+    {
+      "id": "112",
+      "name": "private-whatsapp-sender-pagination-index",
+      "checksum": "sha256:4aa64b55567c95d76f79f5f92a291771006956e0e5ed3ae5f656ce6680ebdfd8"
     }
   ]
 }

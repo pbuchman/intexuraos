@@ -13,7 +13,7 @@ vi.mock('@intexuraos/common-http', async (importOriginal) => {
   };
 });
 
-import { beforeEach, describe, expect, it, setupTestContext } from './testUtils.js';
+import { beforeEach, createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 
 describe('Private WhatsApp Sync Routes', () => {
   const ctx = setupTestContext();
@@ -54,6 +54,35 @@ describe('Private WhatsApp Sync Routes', () => {
       ],
       ...overrides,
     };
+  }
+
+  function createSparseImagePayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return createPayload({
+      events: [
+        {
+          matrixRoomId: '!sparse-room:matrix.example',
+          matrixEventId: '$event-sparse-image',
+          matrixSenderId: '@sparse:matrix.example',
+          eventTimestamp: '2026-06-22T11:00:00.000Z',
+          chat: {
+            type: 'unknown',
+          },
+          message: {
+            direction: 'incoming',
+            type: 'image',
+            media: {
+              mxcUri: 'mxc://matrix.example/sparse-image',
+              mimeType: 'image/jpeg',
+            },
+          },
+          rawMatrixEvent: {
+            type: 'm.room.message',
+            event_id: '$event-sparse-image',
+          },
+        },
+      ],
+      ...overrides,
+    });
   }
 
   it('requires internal auth on the production internal path', async () => {
@@ -204,6 +233,494 @@ describe('Private WhatsApp Sync Routes', () => {
         },
       })
     );
+  });
+
+  it('requires bearer auth for public private WhatsApp sender reads', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/senders',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('requires bearer auth for public private WhatsApp message reads', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('requires bearer auth for public private WhatsApp sender-day reads', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/sender-days?senderKey=phone:%2B48123456789',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('rejects authenticated non-owner users for public private WhatsApp reads', async () => {
+    const token = await createToken({ sub: 'user-other' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/senders',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('returns sanitized public private WhatsApp sender profiles for the configured source account', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    commonHttpState.logIncomingRequest.mockClear();
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/senders?limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        senders: {
+          senderKey: string;
+          senderDisplayName?: string;
+          senderPhoneNumber?: string;
+          messageCount: number;
+        }[];
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.senders).toMatchObject([
+      {
+        senderKey: 'phone:+48123456789',
+        senderDisplayName: 'Alice',
+        senderPhoneNumber: '+48123456789',
+        messageCount: 1,
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain('sourceAccountId');
+    expect(JSON.stringify(body)).not.toContain('userId');
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: expect.objectContaining({
+          route: 'whatsapp_private_senders_query',
+          limit: 10,
+        }),
+      })
+    );
+    const logged = JSON.stringify(
+      commonHttpState.logIncomingRequest.mock.calls.map(([, options]) => options)
+    );
+    expect(logged).not.toContain('Alice');
+    expect(logged).not.toContain('+48123456789');
+    expect(logged).not.toContain('phone:+48123456789');
+  });
+
+  it('paginates public private WhatsApp sender profiles and rejects invalid public sender filters', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-public-sender-2',
+            matrixSenderId: '@bob:matrix.example',
+            sender: {
+              displayName: 'Bob',
+              phoneNumber: '+48987654321',
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const firstPage = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/senders?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(firstPage.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstPage.body) as {
+      data: { senders: { senderKey: string }[]; nextCursor?: string };
+    };
+    expect(firstBody.data.senders).toHaveLength(1);
+    expect(firstBody.data.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/senders?limit=1&cursor=${encodeURIComponent(firstBody.data.nextCursor ?? '')}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(secondPage.statusCode).toBe(200);
+    const secondBody = JSON.parse(secondPage.body) as {
+      data: { senders: { senderKey: string }[]; nextCursor?: string };
+    };
+    expect(secondBody.data.senders).toHaveLength(1);
+    expect(secondBody.data.senders[0]?.senderKey).not.toBe(firstBody.data.senders[0]?.senderKey);
+
+    const invalid = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/senders?limit=abc',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const rejectedSourceAccount = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/senders?sourceAccountId=wrong-source',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(rejectedSourceAccount.statusCode).toBe(400);
+  });
+
+  it('returns a standard error envelope when public private sender query fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private sender query failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/senders',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns sanitized public private WhatsApp messages without source internals', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    commonHttpState.logIncomingRequest.mockClear();
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=20',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { messages: { text?: string; rawMatrixEvent?: unknown }[] };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.messages).toMatchObject([
+      {
+        text: 'hello from private whatsapp',
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain('rawMatrixEvent');
+    expect(JSON.stringify(body)).not.toContain('sourceAccountId');
+    expect(JSON.stringify(body)).not.toContain('userId');
+    const logged = JSON.stringify(
+      commonHttpState.logIncomingRequest.mock.calls.map(([, options]) => options)
+    );
+    expect(logged).not.toContain('hello from private whatsapp');
+    expect(logged).not.toContain('+48123456789');
+    expect(logged).not.toContain('phone:+48123456789');
+  });
+
+  it('paginates public private WhatsApp messages and returns media metadata without text', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-public-message-2',
+            eventTimestamp: '2026-06-22T11:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'newer private whatsapp text',
+            },
+          },
+        ],
+      }),
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createSparseImagePayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const firstPage = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(firstPage.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstPage.body) as {
+      data: { messages: { text?: string }[]; nextCursor?: string };
+    };
+    expect(firstBody.data.messages).toHaveLength(1);
+    expect(firstBody.data.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await ctx.app.inject({
+      method: 'GET',
+      url:
+        '/private/messages?senderKey=phone:%2B48123456789&limit=1&cursor=' +
+        encodeURIComponent(firstBody.data.nextCursor ?? ''),
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(secondPage.statusCode).toBe(200);
+    const secondBody = JSON.parse(secondPage.body) as {
+      data: { messages: { text?: string }[]; nextCursor?: string };
+    };
+    expect(secondBody.data.messages).toHaveLength(1);
+
+    const mediaResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=matrix:%40sparse:matrix.example&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(mediaResponse.statusCode).toBe(200);
+    const mediaBody = JSON.parse(mediaResponse.body) as {
+      data: { messages: { media?: { mimeType?: string }; text?: string; senderDisplayName?: string }[] };
+    };
+    expect(mediaBody.data.messages).toMatchObject([
+      {
+        media: {
+          mimeType: 'image/jpeg',
+        },
+      },
+    ]);
+    expect(mediaBody.data.messages[0]).not.toHaveProperty('text');
+    expect(mediaBody.data.messages[0]).not.toHaveProperty('senderDisplayName');
+  });
+
+  it('rejects sourceAccountId on public private WhatsApp message queries', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&sourceAccountId=wrong-source',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('rejects invalid public private WhatsApp message filters after owner auth', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&limit=abc',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('returns a standard error envelope when public private message query fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated public private message query failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns public sender-day aggregates without raw message text', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/sender-days?senderKey=phone:%2B48123456789&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        senderDays: {
+          senderKey: string;
+          eventDayKey: string;
+          messageCount: number;
+          summaryStatus: string;
+        }[];
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.senderDays).toMatchObject([
+      {
+        senderKey: 'phone:+48123456789',
+        eventDayKey: '2026-06-22',
+        messageCount: 1,
+        summaryStatus: 'not_started',
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain('hello from private whatsapp');
+    expect(JSON.stringify(body)).not.toContain('sourceAccountId');
+    expect(JSON.stringify(body)).not.toContain('userId');
+  });
+
+  it('paginates public sender-day aggregates and rejects invalid public sender-day filters', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-next-day-public',
+            eventTimestamp: '2026-06-23T11:00:00.000Z',
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const firstPage = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/sender-days?senderKey=phone:%2B48123456789&fromDay=2026-06-22&toDay=2026-06-23&limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(firstPage.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstPage.body) as {
+      data: { senderDays: { eventDayKey: string }[]; nextCursor?: string };
+    };
+    expect(firstBody.data.senderDays).toHaveLength(1);
+    expect(firstBody.data.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await ctx.app.inject({
+      method: 'GET',
+      url:
+        '/private/sender-days?senderKey=phone:%2B48123456789&limit=1&cursor=' +
+        encodeURIComponent(firstBody.data.nextCursor ?? ''),
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(secondPage.statusCode).toBe(200);
+    const secondBody = JSON.parse(secondPage.body) as {
+      data: { senderDays: { eventDayKey: string }[]; nextCursor?: string };
+    };
+    expect(secondBody.data.senderDays).toHaveLength(1);
+    expect(secondBody.data.senderDays[0]?.eventDayKey).not.toBe(
+      firstBody.data.senderDays[0]?.eventDayKey
+    );
+
+    const invalid = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/sender-days?senderKey=phone:%2B48123456789&limit=abc',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const rejectedSourceAccount = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/sender-days?senderKey=phone:%2B48123456789&sourceAccountId=wrong-source',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(rejectedSourceAccount.statusCode).toBe(400);
+  });
+
+  it('returns a standard error envelope when public sender-day query fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated public private sender-day query failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/sender-days?senderKey=phone:%2B48123456789',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns a standard error envelope when private message persistence fails', async () => {

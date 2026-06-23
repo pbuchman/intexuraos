@@ -10,6 +10,8 @@ import {
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppMessageQueryResult,
   type PrivateWhatsAppRepository,
+  type PrivateWhatsAppSenderQueryInput,
+  type PrivateWhatsAppSenderQueryResult,
   type PrivateWhatsAppSenderDayQueryInput,
   type PrivateWhatsAppSenderDayQueryResult,
   type StorePrivateWhatsAppMessageInput,
@@ -96,6 +98,12 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     _input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
     return Promise.resolve(ok({ messages: [] }));
+  }
+
+  findSenders(
+    _input: PrivateWhatsAppSenderQueryInput
+  ): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>> {
+    return Promise.resolve(ok({ senders: [] }));
   }
 
   findSenderDays(

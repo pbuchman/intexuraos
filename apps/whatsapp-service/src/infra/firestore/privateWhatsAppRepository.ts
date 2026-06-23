@@ -11,6 +11,8 @@ import type {
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
   PrivateWhatsAppSender,
+  PrivateWhatsAppSenderQueryInput,
+  PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
@@ -70,6 +72,7 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
   return {
     storeIncomingMessage,
     findMessages,
+    findSenders,
     findSenderDays,
     rebuildAggregates,
   };
@@ -191,6 +194,41 @@ async function findMessages(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to query private WhatsApp messages: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function findSenders(
+  input: PrivateWhatsAppSenderQueryInput
+): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    let query: Query = db
+      .collection(PRIVATE_WHATSAPP_SENDERS_COLLECTION)
+      .where('sourceAccountId', '==', input.sourceAccountId)
+      .orderBy('lastEventAt', 'desc')
+      .orderBy(FieldPath.documentId(), 'desc');
+
+    const cursor = decodeCursor(input.cursor);
+    if (cursor !== undefined) {
+      query = query.startAfter(cursor.sortValue, cursor.id);
+    }
+
+    const snapshot = await query.limit(input.limit + 1).get();
+    const docs = snapshot.docs.slice(0, input.limit);
+    const senders = docs.map((doc) => doc.data() as PrivateWhatsAppSender);
+    const result: PrivateWhatsAppSenderQueryResult = { senders };
+    if (snapshot.docs.length > input.limit) {
+      const lastSender = senders[senders.length - 1];
+      if (lastSender !== undefined) {
+        result.nextCursor = encodeCursor(lastSender.lastEventAt, lastSender.id);
+      }
+    }
+    return ok(result);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to query private WhatsApp senders: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }

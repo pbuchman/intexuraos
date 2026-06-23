@@ -56,6 +56,8 @@ export type {
   PrivateWhatsAppMessageInput,
   PrivateWhatsAppMessageType,
   PrivateWhatsAppSender,
+  PrivateWhatsAppSenderQueryInput,
+  PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,

@@ -157,6 +157,99 @@ export interface WhatsAppMessagesResponse {
   nextCursor?: string;
 }
 
+export type PrivateWhatsAppMessageType =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'file'
+  | 'sticker'
+  | 'reaction'
+  | 'redaction'
+  | 'unknown';
+
+export type PrivateWhatsAppDeliveryMode = 'live' | 'backfill';
+
+export interface PrivateWhatsAppMedia {
+  mxcUri?: string;
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+}
+
+export interface PrivateWhatsAppSender {
+  id: string;
+  senderKey: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  senderPhoneNumberNormalized?: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  messageCount: number;
+  chatIds: string[];
+  updatedAt: string;
+  schemaVersion: number;
+}
+
+export interface PrivateWhatsAppMessage {
+  id: string;
+  chatId: string;
+  senderKey?: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  senderPhoneNumberNormalized?: string;
+  direction: 'incoming' | 'outgoing';
+  messageType: PrivateWhatsAppMessageType;
+  text?: string;
+  media?: PrivateWhatsAppMedia;
+  eventTimestamp: string;
+  eventDayKey?: string;
+  eventTimeZone?: string;
+  chatDisplayName?: string;
+  chatType?: string;
+  receivedAt: string;
+  ingestedAt: string;
+  deliveryMode: PrivateWhatsAppDeliveryMode;
+  schemaVersion?: number;
+}
+
+export interface PrivateWhatsAppSenderDay {
+  id: string;
+  senderKey: string;
+  eventDayKey: string;
+  eventTimeZone: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  messageCount: number;
+  messageTypeCounts: Record<string, number>;
+  summaryStatus: 'not_started' | 'running' | 'completed' | 'failed';
+  summaryText?: string;
+  summaryGeneratedAt?: string;
+  summarySourceMessageCount: number;
+  updatedAt: string;
+  schemaVersion: number;
+}
+
+export interface PrivateWhatsAppSendersResponse {
+  senders: PrivateWhatsAppSender[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppMessagesResponse {
+  messages: PrivateWhatsAppMessage[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppSenderDaysResponse {
+  senderDays: PrivateWhatsAppSenderDay[];
+  nextCursor?: string;
+}
+
 /**
  * Application config from environment
  */

@@ -118,6 +118,20 @@ const configSchema = z.object({
   internalAuthToken: z.string().min(1, 'INTEXURAOS_INTERNAL_AUTH_TOKEN is required'),
 
   /**
+   * Source account id for the single private WhatsApp account exposed to the web UI.
+   */
+  privateWhatsappSourceAccountId: z
+    .string()
+    .min(1, 'INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID is required'),
+
+  /**
+   * Auth0 user id allowed to read the private WhatsApp web UI.
+   */
+  privateWhatsappOwnerUserId: z
+    .string()
+    .min(1, 'INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID is required'),
+
+  /**
    * Server port.
    */
   port: z.coerce.number().int().positive().default(8080),
@@ -147,6 +161,8 @@ export function loadConfig(): Config {
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+    privateWhatsappSourceAccountId: process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'],
+    privateWhatsappOwnerUserId: process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'],
     commandsIngestTopic: process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'],
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
     webhookProcessTopic: process.env['INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC'],
@@ -177,6 +193,8 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+    'INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID',
+    'INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

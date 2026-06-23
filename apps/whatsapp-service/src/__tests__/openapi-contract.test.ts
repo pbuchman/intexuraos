@@ -38,6 +38,8 @@ describe('whatsapp-service OpenAPI contract', () => {
     gcpProjectId: 'test-project',
     webAgentUrl: 'https://web-agent.example.com',
     internalAuthToken: 'test-internal-auth-token',
+    privateWhatsappSourceAccountId: 'test-private-whatsapp',
+    privateWhatsappOwnerUserId: 'user-test-private-owner',
     port: 8080,
     host: '0.0.0.0',
   };

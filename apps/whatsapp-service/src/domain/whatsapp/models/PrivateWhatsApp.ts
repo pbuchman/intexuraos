@@ -175,6 +175,17 @@ export interface PrivateWhatsAppMessageQueryResult {
   nextCursor?: string;
 }
 
+export interface PrivateWhatsAppSenderQueryInput {
+  sourceAccountId: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface PrivateWhatsAppSenderQueryResult {
+  senders: PrivateWhatsAppSender[];
+  nextCursor?: string;
+}
+
 export interface PrivateWhatsAppSenderDayQueryInput {
   sourceAccountId: string;
   senderKey?: string;
