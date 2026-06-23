@@ -33,8 +33,16 @@ import type {
   PhoneVerification,
   PhoneVerificationRepository,
   PhoneVerificationStatus,
+  PrivateWhatsAppAggregateRebuildInput,
+  PrivateWhatsAppAggregateRebuildResult,
   PrivateWhatsAppIngestOutcome,
+  PrivateWhatsAppMessage,
+  PrivateWhatsAppMessageQueryInput,
+  PrivateWhatsAppMessageQueryResult,
   PrivateWhatsAppRepository,
+  PrivateWhatsAppSenderDay,
+  PrivateWhatsAppSenderDayQueryInput,
+  PrivateWhatsAppSenderDayQueryResult,
   SendMessageResult,
   StorePrivateWhatsAppMessageInput,
   TextMessageSendResult,
@@ -588,10 +596,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   storeIncomingMessage(
     input: StorePrivateWhatsAppMessageInput
   ): Promise<Result<PrivateWhatsAppIngestOutcome, WhatsAppError>> {
-    if (this.failNextError !== null) {
-      const error = this.failNextError;
-      this.failNextError = null;
-      return Promise.resolve(err(error));
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
     }
 
     const existing = this.stored.get(input.message.matrixEventId);
@@ -620,6 +627,76 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     );
   }
 
+  findMessages(
+    input: PrivateWhatsAppMessageQueryInput
+  ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const messages = Array.from(this.stored.values())
+      .filter((stored) => stored.sourceAccountId === input.sourceAccountId)
+      .map((stored) => this.toMessage(stored))
+      .filter((message) => input.senderKey === undefined || message.senderKey === input.senderKey)
+      .filter(
+        (message) => input.eventDayKey === undefined || message.eventDayKey === input.eventDayKey
+      )
+      .filter((message) => input.from === undefined || message.eventTimestamp >= input.from)
+      .filter((message) => input.to === undefined || message.eventTimestamp < input.to)
+      .sort((a, b) => {
+        const timestampComparison = b.eventTimestamp.localeCompare(a.eventTimestamp);
+        return timestampComparison === 0 ? b.id.localeCompare(a.id) : timestampComparison;
+      });
+    return Promise.resolve(ok({ messages: messages.slice(0, input.limit) }));
+  }
+
+  findSenderDays(
+    input: PrivateWhatsAppSenderDayQueryInput
+  ): Promise<Result<PrivateWhatsAppSenderDayQueryResult, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const senderDays = Array.from(this.buildSenderDays().values())
+      .filter((senderDay) => senderDay.sourceAccountId === input.sourceAccountId)
+      .filter(
+        (senderDay) => input.senderKey === undefined || senderDay.senderKey === input.senderKey
+      )
+      .filter((senderDay) => input.fromDay === undefined || senderDay.eventDayKey >= input.fromDay)
+      .filter((senderDay) => input.toDay === undefined || senderDay.eventDayKey <= input.toDay)
+      .sort((a, b) => {
+        const dayComparison = b.eventDayKey.localeCompare(a.eventDayKey);
+        return dayComparison === 0 ? a.senderKey.localeCompare(b.senderKey) : dayComparison;
+      });
+    return Promise.resolve(ok({ senderDays: senderDays.slice(0, input.limit) }));
+  }
+
+  rebuildAggregates(
+    input: PrivateWhatsAppAggregateRebuildInput
+  ): Promise<Result<PrivateWhatsAppAggregateRebuildResult, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const scannedMessages = Array.from(this.stored.values()).filter(
+      (stored) =>
+        stored.sourceAccountId === input.sourceAccountId &&
+        (input.from === undefined || stored.message.eventTimestamp >= input.from) &&
+        (input.to === undefined || stored.message.eventTimestamp < input.to)
+    ).length;
+    return Promise.resolve(
+      ok({
+        scannedMessages,
+        upgradedMessages: 0,
+        senderCount: this.buildSenderDays().size,
+        senderDayCount: this.buildSenderDays().size,
+      })
+    );
+  }
+
   getAll(): StorePrivateWhatsAppMessageInput[] {
     return Array.from(this.stored.values());
   }
@@ -627,6 +704,116 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   clear(): void {
     this.stored.clear();
     this.failNextError = null;
+  }
+
+  private consumeFailure(): WhatsAppError | null {
+    if (this.failNextError === null) {
+      return null;
+    }
+    const error = this.failNextError;
+    this.failNextError = null;
+    return error;
+  }
+
+  private toMessage(input: StorePrivateWhatsAppMessageInput): PrivateWhatsAppMessage {
+    const message: PrivateWhatsAppMessage = {
+      id: `message:${input.sourceAccountId}:${input.message.matrixEventId}`,
+      chatId: `chat:${input.sourceAccountId}:${input.chat.matrixRoomId}`,
+      userId: input.userId,
+      sourceAccountId: input.sourceAccountId,
+      matrixRoomId: input.message.matrixRoomId,
+      matrixEventId: input.message.matrixEventId,
+      matrixSenderId: input.message.matrixSenderId,
+      direction: input.message.direction,
+      messageType: input.message.type,
+      eventTimestamp: input.message.eventTimestamp,
+      chatType: input.chat.type,
+      receivedAt: input.receivedAt,
+      ingestedAt: input.receivedAt,
+      deliveryMode: input.deliveryMode,
+      rawMatrixEvent: input.message.rawMatrixEvent,
+      schemaVersion: 2,
+    };
+    if (input.message.senderKey !== undefined) {
+      message.senderKey = input.message.senderKey;
+    }
+    if (input.message.eventDayKey !== undefined) {
+      message.eventDayKey = input.message.eventDayKey;
+    }
+    if (input.message.eventTimeZone !== undefined) {
+      message.eventTimeZone = input.message.eventTimeZone;
+    }
+    if (input.message.senderDisplayName !== undefined) {
+      message.senderDisplayName = input.message.senderDisplayName;
+    }
+    if (input.message.senderPhoneNumber !== undefined) {
+      message.senderPhoneNumber = input.message.senderPhoneNumber;
+    }
+    if (input.message.senderPhoneNumberNormalized !== undefined) {
+      message.senderPhoneNumberNormalized = input.message.senderPhoneNumberNormalized;
+    }
+    if (input.chat.displayName !== undefined) {
+      message.chatDisplayName = input.chat.displayName;
+    }
+    if (input.message.text !== undefined) {
+      message.text = input.message.text;
+    }
+    if (input.message.media !== undefined) {
+      message.media = input.message.media;
+    }
+    return message;
+  }
+
+  private buildSenderDays(): Map<string, PrivateWhatsAppSenderDay> {
+    const senderDays = new Map<string, PrivateWhatsAppSenderDay>();
+    for (const stored of this.stored.values()) {
+      const message = this.toMessage(stored);
+      if (message.senderKey === undefined || message.eventDayKey === undefined) {
+        continue;
+      }
+      const key = `${message.sourceAccountId}\0${message.senderKey}\0${message.eventDayKey}`;
+      const existing = senderDays.get(key);
+      if (existing === undefined) {
+        const senderDay: PrivateWhatsAppSenderDay = {
+          id: `sender-day:${message.sourceAccountId}:${message.senderKey}:${message.eventDayKey}`,
+          userId: message.userId,
+          sourceAccountId: message.sourceAccountId,
+          senderKey: message.senderKey,
+          eventDayKey: message.eventDayKey,
+          eventTimeZone: message.eventTimeZone ?? 'Europe/Warsaw',
+          firstEventAt: message.eventTimestamp,
+          lastEventAt: message.eventTimestamp,
+          messageCount: 1,
+          chatIds: [message.chatId],
+          messageTypeCounts: { [message.messageType]: 1 },
+          summaryStatus: 'not_started',
+          summarySourceMessageCount: 0,
+          updatedAt: message.receivedAt,
+          schemaVersion: 2,
+        };
+        if (message.senderDisplayName !== undefined) {
+          senderDay.senderDisplayName = message.senderDisplayName;
+        }
+        if (message.senderPhoneNumber !== undefined) {
+          senderDay.senderPhoneNumber = message.senderPhoneNumber;
+        }
+        senderDays.set(key, senderDay);
+        continue;
+      }
+
+      existing.messageCount += 1;
+      existing.firstEventAt =
+        message.eventTimestamp < existing.firstEventAt ? message.eventTimestamp : existing.firstEventAt;
+      existing.lastEventAt =
+        message.eventTimestamp > existing.lastEventAt ? message.eventTimestamp : existing.lastEventAt;
+      if (!existing.chatIds.includes(message.chatId)) {
+        existing.chatIds.push(message.chatId);
+      }
+      existing.messageTypeCounts[message.messageType] =
+        (existing.messageTypeCounts[message.messageType] ?? 0) + 1;
+      existing.updatedAt = message.receivedAt;
+    }
+    return senderDays;
   }
 }
 
