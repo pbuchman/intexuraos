@@ -1,0 +1,8 @@
+.env
+data/
+secrets/
+logs/
+*.token
+*access-token*
+*service-account*.json
+google-source-service-account.json
