@@ -52,6 +52,7 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
   const selectedSenderKey = searchParams.get('sender') ?? undefined;
   const selectedDay = searchParams.get('day') ?? undefined;
   const selectedSenderKeyRef = useRef<string | undefined>(selectedSenderKey);
+  const selectedDataRequestIdRef = useRef(0);
 
   const [senders, setSenders] = useState<PrivateWhatsAppSender[]>([]);
   const [senderSearch, setSenderSearch] = useState('');
@@ -135,6 +136,7 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
   const loadSelectedSenderData = useCallback(
     async (mode: 'replace' | 'append' = 'replace', cursor?: string): Promise<void> => {
       if (selectedSenderKey === undefined) {
+        selectedDataRequestIdRef.current += 1;
         setMessages([]);
         setSenderDays([]);
         setMessageCursor(undefined);
@@ -143,6 +145,9 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
 
       const append = mode === 'append';
       if (append && cursor === undefined) return;
+
+      const requestId = selectedDataRequestIdRef.current + 1;
+      selectedDataRequestIdRef.current = requestId;
 
       if (append) {
         setLoadingMoreMessages(true);
@@ -169,6 +174,9 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
 
         if (append) {
           const messageResponse = await listPrivateWhatsAppMessages(token, messageOptions);
+          if (selectedDataRequestIdRef.current !== requestId) {
+            return;
+          }
           setMessages((prev) => [...prev, ...messageResponse.messages]);
           setMessageCursor(messageResponse.nextCursor);
           return;
@@ -182,17 +190,24 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
           listPrivateWhatsAppMessages(token, messageOptions),
           listPrivateWhatsAppSenderDays(token, senderDayOptions),
         ]);
+        if (selectedDataRequestIdRef.current !== requestId) {
+          return;
+        }
         setMessages(messageResponse.messages);
         setMessageCursor(messageResponse.nextCursor);
         setSenderDays(senderDayResponse.senderDays);
       } catch (err) {
-        setError(getErrorMessage(err, 'Failed to load private WhatsApp messages'));
+        if (selectedDataRequestIdRef.current === requestId) {
+          setError(getErrorMessage(err, 'Failed to load private WhatsApp messages'));
+        }
       } finally {
-        if (append) {
-          setLoadingMoreMessages(false);
-        } else {
-          setLoadingMessages(false);
-          setLoadingSenderDays(false);
+        if (selectedDataRequestIdRef.current === requestId) {
+          if (append) {
+            setLoadingMoreMessages(false);
+          } else {
+            setLoadingMessages(false);
+            setLoadingSenderDays(false);
+          }
         }
       }
     },

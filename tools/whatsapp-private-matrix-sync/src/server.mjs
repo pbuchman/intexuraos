@@ -64,6 +64,20 @@ export function buildHealthPayload(config, readiness) {
   return payload;
 }
 
+export function buildIngestPayload(config, events) {
+  const payload = {
+    sourceAccountId: config.sourceAccountId,
+    // This adapter only streams live events after the initial Matrix checkpoint.
+    // Backfill callers should use separate deterministic replay tooling.
+    deliveryMode: 'live',
+    events,
+  };
+  if (typeof config.userId === 'string' && config.userId !== '') {
+    payload.userId = config.userId;
+  }
+  return payload;
+}
+
 export function createProcessingPlan(syncResponse, config, options) {
   const nextBatch =
     typeof syncResponse?.next_batch === 'string' && syncResponse.next_batch.length > 0
@@ -689,14 +703,7 @@ async function postEvents(config, events) {
       'content-type': 'application/json',
       'user-agent': 'home-dev-whatsapp-sync/1.0',
     },
-    body: JSON.stringify({
-      sourceAccountId: config.sourceAccountId,
-      userId: config.userId,
-      // This adapter only streams live events after the initial Matrix checkpoint.
-      // Backfill callers should use separate deterministic replay tooling.
-      deliveryMode: 'live',
-      events,
-    }),
+    body: JSON.stringify(buildIngestPayload(config, events)),
   });
 
   if (!response.ok) {

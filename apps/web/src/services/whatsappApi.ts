@@ -1,6 +1,7 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
+  PrivateWhatsAppAccount,
   PrivateWhatsAppMessagesResponse,
   PrivateWhatsAppSenderDaysResponse,
   PrivateWhatsAppSendersResponse,
@@ -150,6 +151,10 @@ export interface ListPrivateWhatsAppSenderDaysOptions {
   cursor?: string;
 }
 
+export interface UpsertPrivateWhatsAppAccountRequest {
+  phoneNumber: string;
+}
+
 function appendOptionalNumber(params: URLSearchParams, key: string, value: number | undefined): void {
   if (value !== undefined) {
     params.set(key, String(value));
@@ -211,6 +216,42 @@ export async function listPrivateWhatsAppSenderDays(
     config.whatsappServiceUrl,
     `/private/sender-days?${params.toString()}`,
     accessToken
+  );
+}
+
+export async function getPrivateWhatsAppAccount(
+  accessToken: string
+): Promise<PrivateWhatsAppAccount | null> {
+  return await apiRequest<PrivateWhatsAppAccount | null>(
+    config.whatsappServiceUrl,
+    '/private/account',
+    accessToken
+  );
+}
+
+export async function upsertPrivateWhatsAppAccount(
+  accessToken: string,
+  request: UpsertPrivateWhatsAppAccountRequest
+): Promise<PrivateWhatsAppAccount> {
+  return await apiRequest<PrivateWhatsAppAccount>(
+    config.whatsappServiceUrl,
+    '/private/account',
+    accessToken,
+    {
+      method: 'PUT',
+      body: request,
+    }
+  );
+}
+
+export async function disablePrivateWhatsAppAccount(
+  accessToken: string
+): Promise<PrivateWhatsAppAccount> {
+  return await apiRequest<PrivateWhatsAppAccount>(
+    config.whatsappServiceUrl,
+    '/private/account',
+    accessToken,
+    { method: 'DELETE' }
   );
 }
 

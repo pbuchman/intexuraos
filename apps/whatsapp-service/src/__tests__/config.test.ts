@@ -10,8 +10,6 @@ describe('config validation', () => {
   let savedWaba: string | undefined;
   let savedPhone: string | undefined;
   let savedCommandsIngestTopic: string | undefined;
-  let savedPrivateSourceAccountId: string | undefined;
-  let savedPrivateOwnerUserId: string | undefined;
 
   beforeEach(() => {
     savedVerify = process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
@@ -20,8 +18,6 @@ describe('config validation', () => {
     savedWaba = process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     savedPhone = process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
     savedCommandsIngestTopic = process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'];
-    savedPrivateSourceAccountId = process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'];
-    savedPrivateOwnerUserId = process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'];
   });
 
   afterEach(() => {
@@ -56,16 +52,6 @@ describe('config validation', () => {
     } else {
       delete process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'];
     }
-    if (savedPrivateSourceAccountId !== undefined) {
-      process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'] = savedPrivateSourceAccountId;
-    } else {
-      delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'];
-    }
-    if (savedPrivateOwnerUserId !== undefined) {
-      process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'] = savedPrivateOwnerUserId;
-    } else {
-      delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'];
-    }
   });
 
   it('validates required env vars', async () => {
@@ -74,15 +60,13 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
-    delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'];
-    delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'];
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_APP_SECRET');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_WABA_ID');
-    expect(missing).toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
-    expect(missing).toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
+    expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
+    expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
   });
 
   it('returns empty array when all required vars present', async () => {
@@ -102,8 +86,6 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'] = 'source-private-whatsapp';
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'] = 'auth0|owner';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
@@ -124,8 +106,6 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'] = 'source-private-whatsapp';
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'] = 'auth0|owner';
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -143,8 +123,6 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'];
     delete process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'];
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
-    delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'];
-    delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'];
 
     expect(() => loadConfig()).toThrow();
   });
@@ -166,13 +144,9 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'] = 'source-private-whatsapp';
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'] = 'auth0|owner';
 
     const config = loadConfig();
     expect(config.allowedWabaIds).toEqual(['waba1', 'waba2']);
     expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
-    expect(config.privateWhatsappSourceAccountId).toBe('source-private-whatsapp');
-    expect(config.privateWhatsappOwnerUserId).toBe('auth0|owner');
   });
 });

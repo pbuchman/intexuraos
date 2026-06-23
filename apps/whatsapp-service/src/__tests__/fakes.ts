@@ -588,17 +588,141 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 /**
  * Fake private WhatsApp repository for sync route and use case tests.
  */
+interface FakePrivateWhatsAppAccount {
+  id: string;
+  userId: string;
+  sourceAccountId: string;
+  phoneNumberNormalized: string;
+  displayName: string;
+  status: 'active' | 'disabled';
+  createdAt: string;
+  updatedAt: string;
+  lastIngestAt?: string;
+  lastEventAt?: string;
+  messageCount?: number;
+  senderCount?: number;
+  schemaVersion: 1;
+}
+
+interface FakeUpsertPrivateWhatsAppAccountInput {
+  userId: string;
+  phoneNumberNormalized: string;
+  displayName?: string;
+  now: string;
+}
+
+interface FakeDisablePrivateWhatsAppAccountInput {
+  userId: string;
+  now: string;
+}
+
 export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   private readonly stored = new Map<string, StorePrivateWhatsAppMessageInput>();
+  private readonly accounts = new Map<string, FakePrivateWhatsAppAccount>();
   private failNextError: WhatsAppError | null = null;
+  private failNextStoreError: WhatsAppError | null = null;
+  private failNextDataQueryError: WhatsAppError | null = null;
 
   failNext(error: WhatsAppError): void {
     this.failNextError = error;
   }
 
+  failNextStore(error: WhatsAppError): void {
+    this.failNextStoreError = error;
+  }
+
+  failNextDataQuery(error: WhatsAppError): void {
+    this.failNextDataQueryError = error;
+  }
+
+  setAccount(account: FakePrivateWhatsAppAccount): void {
+    this.accounts.set(account.userId, account);
+  }
+
+  getAccountByUserId(
+    userId: string
+  ): Promise<Result<FakePrivateWhatsAppAccount | null, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    return Promise.resolve(ok(this.accounts.get(userId) ?? null));
+  }
+
+  getActiveAccountBySourceAccountId(
+    sourceAccountId: string
+  ): Promise<Result<FakePrivateWhatsAppAccount | null, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    const account = Array.from(this.accounts.values()).find(
+      (candidate) =>
+        candidate.sourceAccountId === sourceAccountId && candidate.status === 'active'
+    );
+    return Promise.resolve(ok(account ?? null));
+  }
+
+  upsertAccount(input: FakeUpsertPrivateWhatsAppAccountInput): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    const existing = this.accounts.get(input.userId);
+    const now = input.now;
+    const account: FakePrivateWhatsAppAccount = {
+      id: input.userId,
+      userId: input.userId,
+      sourceAccountId: existing?.sourceAccountId ?? `private-wa-test-${input.userId}`,
+      phoneNumberNormalized: input.phoneNumberNormalized,
+      displayName: input.displayName ?? `+${input.phoneNumberNormalized}`,
+      status: 'active',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      schemaVersion: 1,
+    };
+    if (existing?.lastIngestAt !== undefined) {
+      account.lastIngestAt = existing.lastIngestAt;
+    }
+    if (existing?.lastEventAt !== undefined) {
+      account.lastEventAt = existing.lastEventAt;
+    }
+    if (existing?.messageCount !== undefined) {
+      account.messageCount = existing.messageCount;
+    }
+    if (existing?.senderCount !== undefined) {
+      account.senderCount = existing.senderCount;
+    }
+    this.accounts.set(input.userId, account);
+    return Promise.resolve(ok(account));
+  }
+
+  disableAccount(input: FakeDisablePrivateWhatsAppAccountInput): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    const existing = this.accounts.get(input.userId);
+    if (existing === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Private WhatsApp account not found' }));
+    }
+    const account: FakePrivateWhatsAppAccount = {
+      ...existing,
+      status: 'disabled',
+      updatedAt: input.now,
+    };
+    this.accounts.set(input.userId, account);
+    return Promise.resolve(ok(account));
+  }
+
   storeIncomingMessage(
     input: StorePrivateWhatsAppMessageInput
   ): Promise<Result<PrivateWhatsAppIngestOutcome, WhatsAppError>> {
+    const storeFailure = this.consumeStoreFailure();
+    if (storeFailure !== null) {
+      return Promise.resolve(err(storeFailure));
+    }
+
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -633,6 +757,11 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -673,6 +802,11 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   findSenders(
     input: PrivateWhatsAppSenderQueryInput
   ): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -706,6 +840,11 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   findSenderDays(
     input: PrivateWhatsAppSenderDayQueryInput
   ): Promise<Result<PrivateWhatsAppSenderDayQueryResult, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -773,7 +912,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   clear(): void {
     this.stored.clear();
+    this.accounts.clear();
     this.failNextError = null;
+    this.failNextStoreError = null;
+    this.failNextDataQueryError = null;
   }
 
   private consumeFailure(): WhatsAppError | null {
@@ -782,6 +924,24 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     const error = this.failNextError;
     this.failNextError = null;
+    return error;
+  }
+
+  private consumeStoreFailure(): WhatsAppError | null {
+    if (this.failNextStoreError === null) {
+      return null;
+    }
+    const error = this.failNextStoreError;
+    this.failNextStoreError = null;
+    return error;
+  }
+
+  private consumeDataQueryFailure(): WhatsAppError | null {
+    if (this.failNextDataQueryError === null) {
+      return null;
+    }
+    const error = this.failNextDataQueryError;
+    this.failNextDataQueryError = null;
     return error;
   }
 

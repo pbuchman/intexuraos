@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
-import { Button, Card, Layout, WhatsAppPreferencesCard } from '@/components';
+import { Button, Card, Layout, PrivateWhatsAppMirrorCard, WhatsAppPreferencesCard } from '@/components';
 import { PhoneInput } from '@/components/ui';
 import { useAuth } from '@/context';
 import {
@@ -401,6 +401,8 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
             ) : null}
           </form>
         </Card>
+
+        <PrivateWhatsAppMirrorCard status={status} />
 
         <WhatsAppPreferencesCard />
 

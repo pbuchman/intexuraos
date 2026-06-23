@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildHealthPayload,
   buildImpersonatedIdTokenRequest,
+  buildIngestPayload,
   collectPrivateWhatsAppEvents,
   createConfig,
   createProcessingPlan,
@@ -560,6 +561,18 @@ test('createProcessingPlan skips historical events on first sync but posts later
   assert.equal(laterPlan.shouldPersistNextBatch, true);
   assert.equal(laterPlan.events.length, 1);
   assert.equal(laterPlan.events[0]?.matrixEventId, '$historical');
+});
+
+test('buildIngestPayload omits empty legacy user id', () => {
+  const payload = buildIngestPayload({ sourceAccountId: 'private-wa-from-settings', userId: '' }, [
+    { matrixEventId: '$event-1' },
+  ]);
+
+  assert.deepEqual(payload, {
+    sourceAccountId: 'private-wa-from-settings',
+    deliveryMode: 'live',
+    events: [{ matrixEventId: '$event-1' }],
+  });
 });
 
 test('buildHealthPayload reports credential readiness without exposing secrets', () => {

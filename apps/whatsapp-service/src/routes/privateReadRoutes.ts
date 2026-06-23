@@ -1,6 +1,7 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth, type AuthUser } from '@intexuraos/common-http';
 import type {
+  PrivateWhatsAppAccount,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppSender,
@@ -8,8 +9,8 @@ import type {
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderQueryInput,
 } from '../domain/whatsapp/index.js';
-import type { Config } from '../config.js';
 import { getServices } from '../services.js';
+import { validatePhoneNumber } from './shared.js';
 
 type ValidatedRequest = FastifyRequest & { validationError?: unknown };
 
@@ -33,6 +34,11 @@ interface PrivateSenderDaysQuerystring {
   cursor?: string;
 }
 
+interface PrivateAccountBody {
+  phoneNumber: string;
+}
+
+type PublicPrivateWhatsAppAccount = Omit<PrivateWhatsAppAccount, 'id' | 'userId'>;
 type PublicPrivateWhatsAppSender = Omit<PrivateWhatsAppSender, 'userId' | 'sourceAccountId'>;
 type PublicPrivateWhatsAppMessage = Omit<
   PrivateWhatsAppMessage,
@@ -66,7 +72,8 @@ function privateReadErrorResponses(): Record<number, Record<string, unknown>> {
   return {
     400: privateReadErrorResponse('Invalid request'),
     401: privateReadErrorResponse('Unauthorized - invalid or missing token'),
-    403: privateReadErrorResponse('Forbidden - authenticated user is not the configured owner'),
+    404: privateReadErrorResponse('Private WhatsApp mirror not configured'),
+    412: privateReadErrorResponse('Precondition failed'),
     500: privateReadErrorResponse('Internal error'),
   };
 }
@@ -117,19 +124,49 @@ function getPublicSenderDaysLogMetadata(
 
 async function requirePrivateWhatsAppOwner(
   request: FastifyRequest,
-  reply: FastifyReply,
-  config: Config
-): Promise<boolean> {
+  reply: FastifyReply
+): Promise<AuthUser | null> {
   const user = await requireAuth(request, reply);
   if (user === null) {
-    return false;
+    return null;
   }
-  if (user.userId !== config.privateWhatsappOwnerUserId) {
-    request.log.warn({ route: 'whatsapp_private_read', ownerMatch: false }, 'Private WhatsApp owner check failed');
-    await reply.fail('FORBIDDEN', 'Private WhatsApp access is restricted to the configured owner');
-    return false;
+  return user;
+}
+
+async function resolveActivePrivateAccount(
+  user: AuthUser,
+  reply: FastifyReply
+): Promise<PrivateWhatsAppAccount | null> {
+  const result = await getServices().privateWhatsAppRepository.getAccountByUserId(user.userId);
+  if (!result.ok) {
+    await reply.fail('INTERNAL_ERROR', result.error.message);
+    return null;
   }
-  return true;
+  if (result.value?.status !== 'active') {
+    await reply.fail('NOT_FOUND', 'Private WhatsApp mirror is not configured');
+    return null;
+  }
+  return result.value;
+}
+
+function isConnectedPhone(mappingPhones: string[], phoneNumberNormalized: string): boolean {
+  return mappingPhones.some((phone) => phone.replace(/\D/g, '') === phoneNumberNormalized);
+}
+
+function toPublicAccount(account: PrivateWhatsAppAccount): PublicPrivateWhatsAppAccount {
+  return omitUndefined({
+    sourceAccountId: account.sourceAccountId,
+    phoneNumberNormalized: account.phoneNumberNormalized,
+    displayName: account.displayName,
+    status: account.status,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
+    lastIngestAt: account.lastIngestAt,
+    lastEventAt: account.lastEventAt,
+    messageCount: account.messageCount,
+    senderCount: account.senderCount,
+    schemaVersion: account.schemaVersion,
+  }) as PublicPrivateWhatsAppAccount;
 }
 
 function toPublicSender(sender: PrivateWhatsAppSender): PublicPrivateWhatsAppSender {
@@ -193,8 +230,173 @@ function toPublicSenderDay(senderDay: PrivateWhatsAppSenderDay): PublicPrivateWh
   }) as PublicPrivateWhatsAppSenderDay;
 }
 
-export function createPrivateReadRoutes(config: Config): FastifyPluginCallback {
+export function createPrivateReadRoutes(): FastifyPluginCallback {
   return (fastify, _opts, done) => {
+    fastify.get(
+      '/private/account',
+      {
+        schema: {
+          operationId: 'getPrivateWhatsAppAccount',
+          summary: 'Get private WhatsApp mirror account',
+          tags: ['whatsapp'],
+          response: {
+            200: {
+              description: 'Private WhatsApp mirror account retrieved successfully',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: true },
+                data: { anyOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }] },
+              },
+              required: ['success', 'data'],
+            },
+            ...privateReadErrorResponses(),
+          },
+        },
+      },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to GET /whatsapp/private/account',
+          bodyPreviewLength: 0,
+          additionalFields: { route: 'whatsapp_private_account_get' },
+        });
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
+          return;
+        }
+
+        const result = await getServices().privateWhatsAppRepository.getAccountByUserId(user.userId);
+        if (!result.ok) {
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+        return await reply.ok(result.value === null ? null : toPublicAccount(result.value));
+      }
+    );
+
+    fastify.put<{ Body: PrivateAccountBody }>(
+      '/private/account',
+      {
+        attachValidation: true,
+        schema: {
+          operationId: 'upsertPrivateWhatsAppAccount',
+          summary: 'Enable private WhatsApp mirror account',
+          tags: ['whatsapp'],
+          body: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              phoneNumber: { type: 'string', minLength: 1 },
+            },
+            required: ['phoneNumber'],
+          },
+          response: {
+            200: {
+              description: 'Private WhatsApp mirror account saved successfully',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: true },
+                data: { type: 'object', additionalProperties: true },
+              },
+              required: ['success', 'data'],
+            },
+            ...privateReadErrorResponses(),
+          },
+        },
+      },
+      async (request: FastifyRequest<{ Body: PrivateAccountBody }>, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to PUT /whatsapp/private/account',
+          bodyPreviewLength: 0,
+          additionalFields: { route: 'whatsapp_private_account_put' },
+        });
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
+          return;
+        }
+        const validatedRequest = request as ValidatedRequest;
+        if (validatedRequest.validationError !== undefined) {
+          return await reply.fail('INVALID_REQUEST', 'Validation failed');
+        }
+
+        const phoneValidation = validatePhoneNumber(request.body.phoneNumber);
+        if (!phoneValidation.valid) {
+          return await reply.fail('INVALID_REQUEST', 'Invalid phone number format');
+        }
+
+        const services = getServices();
+        const mappingResult = await services.userMappingRepository.getMapping(user.userId);
+        if (!mappingResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', mappingResult.error.message);
+        }
+        if (
+          mappingResult.value === null ||
+          !mappingResult.value.connected ||
+          !isConnectedPhone(mappingResult.value.phoneNumbers, phoneValidation.normalized)
+        ) {
+          return await reply.fail(
+            'PRECONDITION_FAILED',
+            'Private WhatsApp mirror requires a connected assistant phone'
+          );
+        }
+
+        const result = await services.privateWhatsAppRepository.upsertAccount({
+          userId: user.userId,
+          phoneNumberNormalized: phoneValidation.normalized,
+          displayName: `+${phoneValidation.normalized}`,
+          now: new Date().toISOString(),
+        });
+        if (!result.ok) {
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+        return await reply.ok(toPublicAccount(result.value));
+      }
+    );
+
+    fastify.delete(
+      '/private/account',
+      {
+        schema: {
+          operationId: 'disablePrivateWhatsAppAccount',
+          summary: 'Disable private WhatsApp mirror account',
+          tags: ['whatsapp'],
+          response: {
+            200: {
+              description: 'Private WhatsApp mirror account disabled successfully',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: true },
+                data: { type: 'object', additionalProperties: true },
+              },
+              required: ['success', 'data'],
+            },
+            ...privateReadErrorResponses(),
+          },
+        },
+      },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to DELETE /whatsapp/private/account',
+          bodyPreviewLength: 0,
+          additionalFields: { route: 'whatsapp_private_account_delete' },
+        });
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
+          return;
+        }
+
+        const result = await getServices().privateWhatsAppRepository.disableAccount({
+          userId: user.userId,
+          now: new Date().toISOString(),
+        });
+        if (!result.ok) {
+          if (result.error.code === 'NOT_FOUND') {
+            return await reply.fail('NOT_FOUND', result.error.message);
+          }
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+        return await reply.ok(toPublicAccount(result.value));
+      }
+    );
+
     fastify.get<{ Querystring: PrivateSendersQuerystring }>(
       '/private/senders',
       {
@@ -238,7 +440,8 @@ export function createPrivateReadRoutes(config: Config): FastifyPluginCallback {
           bodyPreviewLength: 0,
           additionalFields: getPublicSenderLogMetadata(request.query),
         });
-        if (!(await requirePrivateWhatsAppOwner(request, reply, config))) {
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
           return;
         }
         if (hasSourceAccountQuery(request)) {
@@ -248,9 +451,13 @@ export function createPrivateReadRoutes(config: Config): FastifyPluginCallback {
         if (validatedRequest.validationError !== undefined) {
           return await reply.fail('INVALID_REQUEST', 'Validation failed');
         }
+        const account = await resolveActivePrivateAccount(user, reply);
+        if (account === null) {
+          return;
+        }
 
         const input: PrivateWhatsAppSenderQueryInput = {
-          sourceAccountId: config.privateWhatsappSourceAccountId,
+          sourceAccountId: account.sourceAccountId,
           limit: normalizeLimit(request.query.limit),
         };
         if (request.query.cursor !== undefined) {
@@ -321,7 +528,8 @@ export function createPrivateReadRoutes(config: Config): FastifyPluginCallback {
           bodyPreviewLength: 0,
           additionalFields: getPublicMessagesLogMetadata(request.query),
         });
-        if (!(await requirePrivateWhatsAppOwner(request, reply, config))) {
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
           return;
         }
         if (hasSourceAccountQuery(request)) {
@@ -331,9 +539,13 @@ export function createPrivateReadRoutes(config: Config): FastifyPluginCallback {
         if (validatedRequest.validationError !== undefined) {
           return await reply.fail('INVALID_REQUEST', 'Validation failed');
         }
+        const account = await resolveActivePrivateAccount(user, reply);
+        if (account === null) {
+          return;
+        }
 
         const input: PrivateWhatsAppMessageQueryInput = {
-          sourceAccountId: config.privateWhatsappSourceAccountId,
+          sourceAccountId: account.sourceAccountId,
           senderKey: request.query.senderKey,
           limit: normalizeLimit(request.query.limit),
         };
@@ -409,7 +621,8 @@ export function createPrivateReadRoutes(config: Config): FastifyPluginCallback {
           bodyPreviewLength: 0,
           additionalFields: getPublicSenderDaysLogMetadata(request.query),
         });
-        if (!(await requirePrivateWhatsAppOwner(request, reply, config))) {
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
           return;
         }
         if (hasSourceAccountQuery(request)) {
@@ -419,9 +632,13 @@ export function createPrivateReadRoutes(config: Config): FastifyPluginCallback {
         if (validatedRequest.validationError !== undefined) {
           return await reply.fail('INVALID_REQUEST', 'Validation failed');
         }
+        const account = await resolveActivePrivateAccount(user, reply);
+        if (account === null) {
+          return;
+        }
 
         const input: PrivateWhatsAppSenderDayQueryInput = {
-          sourceAccountId: config.privateWhatsappSourceAccountId,
+          sourceAccountId: account.sourceAccountId,
           senderKey: request.query.senderKey,
           limit: normalizeLimit(request.query.limit),
         };

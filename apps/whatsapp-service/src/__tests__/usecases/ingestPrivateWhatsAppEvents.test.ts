@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import {
   IngestPrivateWhatsAppEventsUseCase,
+  type DisablePrivateWhatsAppAccountInput,
   type IngestPrivateWhatsAppEventInput,
   type IngestPrivateWhatsAppEventsInput,
+  type PrivateWhatsAppAccount,
   type PrivateWhatsAppAggregateRebuildInput,
   type PrivateWhatsAppAggregateRebuildResult,
   type PrivateWhatsAppIngestOutcome,
@@ -15,6 +17,7 @@ import {
   type PrivateWhatsAppSenderDayQueryInput,
   type PrivateWhatsAppSenderDayQueryResult,
   type StorePrivateWhatsAppMessageInput,
+  type UpsertPrivateWhatsAppAccountInput,
   type WhatsAppError,
 } from '../../domain/whatsapp/index.js';
 import type { Logger } from '../../domain/whatsapp/utils/logger.js';
@@ -67,6 +70,34 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   readonly stored: StorePrivateWhatsAppMessageInput[] = [];
   private readonly seenEventIds = new Map<string, PrivateWhatsAppIngestOutcome>();
   failNextStore = false;
+
+  getAccountByUserId(
+    _userId: string
+  ): Promise<Result<PrivateWhatsAppAccount | null, WhatsAppError>> {
+    return Promise.resolve(ok(null));
+  }
+
+  getActiveAccountBySourceAccountId(
+    _sourceAccountId: string
+  ): Promise<Result<PrivateWhatsAppAccount | null, WhatsAppError>> {
+    return Promise.resolve(ok(null));
+  }
+
+  upsertAccount(
+    _input: UpsertPrivateWhatsAppAccountInput
+  ): Promise<Result<PrivateWhatsAppAccount, WhatsAppError>> {
+    return Promise.resolve(
+      err({ code: 'INTERNAL_ERROR', message: 'Account writes are not used by this fake' })
+    );
+  }
+
+  disableAccount(
+    _input: DisablePrivateWhatsAppAccountInput
+  ): Promise<Result<PrivateWhatsAppAccount, WhatsAppError>> {
+    return Promise.resolve(
+      err({ code: 'NOT_FOUND', message: 'Account writes are not used by this fake' })
+    );
+  }
 
   storeIncomingMessage(
     input: StorePrivateWhatsAppMessageInput

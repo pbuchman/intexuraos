@@ -18,8 +18,20 @@ import { beforeEach, createToken, describe, expect, it, setupTestContext } from 
 describe('Private WhatsApp Sync Routes', () => {
   const ctx = setupTestContext();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     commonHttpState.logIncomingRequest.mockClear();
+    await ctx.userMappingRepository.saveMapping('user-123', ['+48123456789']);
+    ctx.privateWhatsAppRepository.setAccount({
+      id: 'user-123',
+      userId: 'user-123',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      phoneNumberNormalized: '48123456789',
+      displayName: '+48123456789',
+      status: 'active',
+      createdAt: '2026-06-22T00:00:00.000Z',
+      updatedAt: '2026-06-22T00:00:00.000Z',
+      schemaVersion: 1,
+    });
   });
 
   function createPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -157,6 +169,51 @@ describe('Private WhatsApp Sync Routes', () => {
     });
   });
 
+  it('uses the canonical account owner when adapter payload includes a stale user id', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({ userId: 'adapter-supplied-user' }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(ctx.privateWhatsAppRepository.getAll()[0]?.userId).toBe('user-123');
+  });
+
+  it('rejects internal ingest for unknown private source accounts', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({ sourceAccountId: 'unknown-private-source' }),
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns a standard error envelope when private source account resolution fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private source account lookup failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
   it('logs private sync requests without raw body previews', async () => {
     const payload = createPayload();
     await ctx.app.inject({
@@ -226,13 +283,60 @@ describe('Private WhatsApp Sync Routes', () => {
         bodyPreviewLength: 0,
         additionalFields: {
           route: 'internal_whatsapp_private_events',
-          deliveryMode: 'unknown',
+          deliveryMode: '42',
           eventCount: 0,
-          hasSourceAccountId: false,
+          hasSourceAccountId: true,
           hasUserId: false,
         },
       })
     );
+  });
+
+  it('logs missing private sync delivery mode as unknown', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        events: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'internal_whatsapp_private_events',
+          deliveryMode: 'unknown',
+          eventCount: 0,
+          hasSourceAccountId: true,
+          hasUserId: false,
+        },
+      })
+    );
+  });
+
+  it('requires bearer auth for public private WhatsApp account reads and writes', async () => {
+    const getResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/account',
+    });
+    const putResponse = await ctx.app.inject({
+      method: 'PUT',
+      url: '/private/account',
+      payload: { phoneNumber: '+48123456789' },
+    });
+    const deleteResponse = await ctx.app.inject({
+      method: 'DELETE',
+      url: '/private/account',
+    });
+
+    expect(getResponse.statusCode).toBe(401);
+    expect(putResponse.statusCode).toBe(401);
+    expect(deleteResponse.statusCode).toBe(401);
   });
 
   it('requires bearer auth for public private WhatsApp sender reads', async () => {
@@ -271,7 +375,7 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('rejects authenticated non-owner users for public private WhatsApp reads', async () => {
+  it('returns not found for authenticated users without a private WhatsApp mirror', async () => {
     const token = await createToken({ sub: 'user-other' });
 
     const response = await ctx.app.inject({
@@ -280,10 +384,219 @@ describe('Private WhatsApp Sync Routes', () => {
       headers: { authorization: `Bearer ${token}` },
     });
 
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(404);
     const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
     expect(body.success).toBe(false);
-    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns the authenticated user private WhatsApp mirror account', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        userId?: string;
+        sourceAccountId: string;
+        phoneNumberNormalized: string;
+        status: string;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data).toMatchObject({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      phoneNumberNormalized: '48123456789',
+      status: 'active',
+    });
+    expect(body.data.userId).toBeUndefined();
+  });
+
+  it('returns null when the authenticated user has no private WhatsApp mirror account', async () => {
+    const token = await createToken({ sub: 'user-without-private-mirror' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { success: boolean; data: unknown };
+    expect(body.success).toBe(true);
+    expect(body.data).toBeNull();
+  });
+
+  it('returns a standard error envelope when loading the private WhatsApp account fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private account lookup failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('rejects invalid private WhatsApp mirror account payloads after auth', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const missingPhone = await ctx.app.inject({
+      method: 'PUT',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    const invalidPhone = await ctx.app.inject({
+      method: 'PUT',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phoneNumber: 'not-a-phone-number' },
+    });
+
+    expect(missingPhone.statusCode).toBe(400);
+    expect(invalidPhone.statusCode).toBe(400);
+  });
+
+  it('returns a standard error envelope when connected phone lookup fails', async () => {
+    ctx.userMappingRepository.setFailGetMapping(true);
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PUT',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phoneNumber: '+48123456789' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns a standard error envelope when saving the private WhatsApp account fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private account write failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PUT',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phoneNumber: '+48123456789' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('creates a private WhatsApp mirror account from a connected phone number', async () => {
+    await ctx.userMappingRepository.saveMapping('user-new', ['+48987654321']);
+    const token = await createToken({ sub: 'user-new' });
+
+    const response = await ctx.app.inject({
+      method: 'PUT',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phoneNumber: '+48987654321' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { sourceAccountId: string; phoneNumberNormalized: string; status: string };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data).toMatchObject({
+      phoneNumberNormalized: '48987654321',
+      status: 'active',
+    });
+    expect(body.data.sourceAccountId).toEqual(expect.any(String));
+    expect(body.data.sourceAccountId).not.toBe('');
+  });
+
+  it('rejects private WhatsApp mirror enablement for phones not connected to the user', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PUT',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { phoneNumber: '+48987654321' },
+    });
+
+    expect(response.statusCode).toBe(412);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('PRECONDITION_FAILED');
+  });
+
+  it('disables the authenticated user private WhatsApp mirror account', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'DELETE',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { success: boolean; data: { status: string } };
+    expect(body.success).toBe(true);
+    expect(body.data.status).toBe('disabled');
+  });
+
+  it('returns not found when disabling a missing private WhatsApp mirror account', async () => {
+    const token = await createToken({ sub: 'user-without-private-mirror' });
+
+    const response = await ctx.app.inject({
+      method: 'DELETE',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns a standard error envelope when disabling the private WhatsApp account fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private account disable failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'DELETE',
+      url: '/private/account',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns sanitized public private WhatsApp sender profiles for the configured source account', async () => {
@@ -411,7 +724,7 @@ describe('Private WhatsApp Sync Routes', () => {
   });
 
   it('returns a standard error envelope when public private sender query fails', async () => {
-    ctx.privateWhatsAppRepository.failNext({
+    ctx.privateWhatsAppRepository.failNextDataQuery({
       code: 'PERSISTENCE_ERROR',
       message: 'Simulated private sender query failure',
     });
@@ -577,8 +890,27 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.error.code).toBe('INVALID_REQUEST');
   });
 
-  it('returns a standard error envelope when public private message query fails', async () => {
+  it('returns a standard error envelope when public private message account lookup fails', async () => {
     ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated public private message account lookup failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns a standard error envelope when public private message query fails', async () => {
+    ctx.privateWhatsAppRepository.failNextDataQuery({
       code: 'PERSISTENCE_ERROR',
       message: 'Simulated public private message query failure',
     });
@@ -704,8 +1036,23 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(rejectedSourceAccount.statusCode).toBe(400);
   });
 
+  it('returns not found when public sender-day reads have no private WhatsApp mirror', async () => {
+    const token = await createToken({ sub: 'user-without-private-mirror' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/sender-days?senderKey=phone:%2B48123456789',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
   it('returns a standard error envelope when public sender-day query fails', async () => {
-    ctx.privateWhatsAppRepository.failNext({
+    ctx.privateWhatsAppRepository.failNextDataQuery({
       code: 'PERSISTENCE_ERROR',
       message: 'Simulated public private sender-day query failure',
     });
@@ -724,7 +1071,7 @@ describe('Private WhatsApp Sync Routes', () => {
   });
 
   it('returns a standard error envelope when private message persistence fails', async () => {
-    ctx.privateWhatsAppRepository.failNext({
+    ctx.privateWhatsAppRepository.failNextStore({
       code: 'PERSISTENCE_ERROR',
       message: 'Simulated private WhatsApp persistence failure',
     });

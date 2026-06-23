@@ -4,9 +4,12 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  disablePrivateWhatsAppAccount,
+  getPrivateWhatsAppAccount,
   listPrivateWhatsAppMessages,
   listPrivateWhatsAppSenderDays,
   listPrivateWhatsAppSenders,
+  upsertPrivateWhatsAppAccount,
 } from '../whatsappApi.js';
 
 vi.mock('../apiClient.js', () => ({
@@ -77,5 +80,50 @@ describe('whatsappApi private read helpers', () => {
       '/private/sender-days?senderKey=matrix%3A%40sender%3Ahome-dev&fromDay=2026-06-01&toDay=2026-06-30&limit=30'
     );
     expect(call?.[1]).not.toContain('sourceAccountId');
+  });
+
+  it('loads the private mirror account without sourceAccountId in the browser path', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue(null);
+
+    await getPrivateWhatsAppAccount(TOKEN);
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[0]).toBe('https://wa.test');
+    expect(call?.[1]).toBe('/private/account');
+    expect(call?.[1]).not.toContain('sourceAccountId');
+    expect(call?.[2]).toBe(TOKEN);
+  });
+
+  it('enables the private mirror account with a selected phone number', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      sourceAccountId: 'private-wa-test-user',
+      phoneNumberNormalized: '48123456789',
+      status: 'active',
+    });
+
+    const result = await upsertPrivateWhatsAppAccount(TOKEN, {
+      phoneNumber: '+48123456789',
+    });
+
+    expect(result.status).toBe('active');
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe('/private/account');
+    expect(call?.[3]).toEqual({
+      method: 'PUT',
+      body: { phoneNumber: '+48123456789' },
+    });
+  });
+
+  it('disables the private mirror account', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({ status: 'disabled' });
+
+    await disablePrivateWhatsAppAccount(TOKEN);
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe('/private/account');
+    expect(call?.[3]).toEqual({ method: 'DELETE' });
   });
 });

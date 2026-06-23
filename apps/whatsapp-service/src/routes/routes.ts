@@ -14,6 +14,9 @@
  * DELETE /whatsapp/messages/:message_id           → ./messageMediaRoutes.ts
  * GET    /whatsapp/preferences        → ./preferencesRoutes.ts
  * PUT    /whatsapp/preferences        → ./preferencesRoutes.ts
+ * GET    /whatsapp/private/account    → ./privateReadRoutes.ts
+ * PUT    /whatsapp/private/account    → ./privateReadRoutes.ts
+ * DELETE /whatsapp/private/account    → ./privateReadRoutes.ts
  * GET    /whatsapp/private/senders    → ./privateReadRoutes.ts
  * GET    /whatsapp/private/messages   → ./privateReadRoutes.ts
  * GET    /whatsapp/private/sender-days → ./privateReadRoutes.ts

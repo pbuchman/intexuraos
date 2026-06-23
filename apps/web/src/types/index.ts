@@ -235,6 +235,22 @@ export interface PrivateWhatsAppSenderDay {
   schemaVersion: number;
 }
 
+export type PrivateWhatsAppAccountStatus = 'active' | 'disabled';
+
+export interface PrivateWhatsAppAccount {
+  sourceAccountId: string;
+  phoneNumberNormalized: string;
+  displayName: string;
+  status: PrivateWhatsAppAccountStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastIngestAt?: string;
+  lastEventAt?: string;
+  messageCount?: number;
+  senderCount?: number;
+  schemaVersion: 1;
+}
+
 export interface PrivateWhatsAppSendersResponse {
   senders: PrivateWhatsAppSender[];
   nextCursor?: string;

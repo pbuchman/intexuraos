@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { Button, ErrorBanner, Layout } from '@/components';
 import { usePrivateWhatsAppLog } from '@/hooks/usePrivateWhatsAppLog';
-import { formatDate, formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
+import { formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
 import type {
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageType,
@@ -42,7 +42,27 @@ function getDayKey(message: PrivateWhatsAppMessage): string {
 }
 
 function formatDayLabel(dayKey: string): string {
-  return formatDate(`${dayKey}T00:00:00.000Z`);
+  const [yearValue, monthValue, dayValue] = dayKey.split('-');
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  const day = Number(dayValue);
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return dayKey;
+  }
+
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 function formatMessageTime(isoDate: string): string {

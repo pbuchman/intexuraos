@@ -1,6 +1,8 @@
 import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from '../models/error.js';
 import type {
+  DisablePrivateWhatsAppAccountInput,
+  PrivateWhatsAppAccount,
   PrivateWhatsAppAggregateRebuildInput,
   PrivateWhatsAppAggregateRebuildResult,
   PrivateWhatsAppIngestOutcome,
@@ -11,9 +13,22 @@ import type {
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
   StorePrivateWhatsAppMessageInput,
+  UpsertPrivateWhatsAppAccountInput,
 } from '../models/PrivateWhatsApp.js';
 
 export interface PrivateWhatsAppRepository {
+  getAccountByUserId(
+    userId: string
+  ): Promise<Result<PrivateWhatsAppAccount | null, WhatsAppError>>;
+  getActiveAccountBySourceAccountId(
+    sourceAccountId: string
+  ): Promise<Result<PrivateWhatsAppAccount | null, WhatsAppError>>;
+  upsertAccount(
+    input: UpsertPrivateWhatsAppAccountInput
+  ): Promise<Result<PrivateWhatsAppAccount, WhatsAppError>>;
+  disableAccount(
+    input: DisablePrivateWhatsAppAccountInput
+  ): Promise<Result<PrivateWhatsAppAccount, WhatsAppError>>;
   storeIncomingMessage(
     input: StorePrivateWhatsAppMessageInput
   ): Promise<Result<PrivateWhatsAppIngestOutcome, WhatsAppError>>;

@@ -108,8 +108,6 @@ export const testConfig: Config = {
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: 'test-internal-auth-token',
-  privateWhatsappSourceAccountId: 'pbuchman-private-whatsapp',
-  privateWhatsappOwnerUserId: 'user-123',
   port: 8080,
   host: '0.0.0.0',
 };
@@ -546,10 +544,6 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = testConfig.allowedWabaIds.join(',');
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'] =
-      testConfig.privateWhatsappSourceAccountId;
-    process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'] =
-      testConfig.privateWhatsappOwnerUserId;
 
     context.app = await buildServer(testConfig);
   });
@@ -564,8 +558,6 @@ export function setupTestContext(): TestContext {
     delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
-    delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID'];
-    delete process.env['INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID'];
   });
 
   return context;

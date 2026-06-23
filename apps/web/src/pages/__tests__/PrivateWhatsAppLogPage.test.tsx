@@ -25,6 +25,12 @@ vi.mock('@/components', async () => {
   };
 });
 
+vi.mock('@/utils/dateFormat', () => ({
+  formatDate: (value: string): string => `utc-helper:${value}`,
+  formatDateTimeCompact: (): string => 'Jun 22, 2026, 09:00 AM',
+  formatRelative: (): string => 'recent',
+}));
+
 import { PrivateWhatsAppLogPage } from '../PrivateWhatsAppLogPage.js';
 
 describe('PrivateWhatsAppLogPage', () => {
@@ -167,5 +173,16 @@ describe('PrivateWhatsAppLogPage', () => {
     await user.click(screen.getByRole('button', { name: /2026-06-22/ }));
 
     expect(selectDay).toHaveBeenCalledWith('2026-06-22');
+  });
+
+  it('formats event day headers from the logical day key without UTC timezone shifting', () => {
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Jun 22, 2026')).toBeInTheDocument();
+    expect(screen.queryByText(/utc-helper:/)).not.toBeInTheDocument();
   });
 });

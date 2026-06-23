@@ -29,7 +29,7 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(messageMediaRoutes);
     fastify.register(preferencesRoutes);
     fastify.register(verificationRoutes);
-    fastify.register(createPrivateReadRoutes(config));
+    fastify.register(createPrivateReadRoutes());
     fastify.register(createPubsubRoutes());
     fastify.register(internalRoutes);
     fastify.register(privateSyncRoutes);

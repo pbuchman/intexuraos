@@ -93,8 +93,39 @@ const dayA: PrivateWhatsAppSenderDay = {
   schemaVersion: 2,
 };
 
-function wrapper({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <MemoryRouter initialEntries={['/whatsapp/private']}>{children}</MemoryRouter>;
+const messageB: PrivateWhatsAppMessage = {
+  id: 'msg-b',
+  chatId: 'chat-b',
+  senderKey: senderB.senderKey,
+  direction: 'incoming',
+  messageType: 'text',
+  text: 'hello from sender B',
+  eventTimestamp: '2026-06-21T09:00:00.000Z',
+  eventDayKey: '2026-06-21',
+  eventTimeZone: 'Europe/Warsaw',
+  receivedAt: '2026-06-21T09:00:02.000Z',
+  ingestedAt: '2026-06-21T09:00:03.000Z',
+  deliveryMode: 'live',
+  schemaVersion: 2,
+};
+
+function createWrapper(initialEntry = '/whatsapp/private') {
+  return function wrapper({ children }: { children: React.ReactNode }): React.JSX.Element {
+    return <MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter>;
+  };
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 describe('usePrivateWhatsAppLog', () => {
@@ -115,7 +146,7 @@ describe('usePrivateWhatsAppLog', () => {
   });
 
   it('loads senders, auto-selects the first sender, and loads messages plus day aggregates', async () => {
-    const { result } = renderHook(() => usePrivateWhatsAppLog(), { wrapper });
+    const { result } = renderHook(() => usePrivateWhatsAppLog(), { wrapper: createWrapper() });
 
     await waitFor(() => {
       expect(result.current.selectedSender?.senderKey).toBe(senderA.senderKey);
@@ -136,7 +167,7 @@ describe('usePrivateWhatsAppLog', () => {
   });
 
   it('selecting a day reloads messages with eventDayKey', async () => {
-    const { result } = renderHook(() => usePrivateWhatsAppLog(), { wrapper });
+    const { result } = renderHook(() => usePrivateWhatsAppLog(), { wrapper: createWrapper() });
 
     await waitFor(() => {
       expect(result.current.selectedSender?.senderKey).toBe(senderA.senderKey);
@@ -154,5 +185,42 @@ describe('usePrivateWhatsAppLog', () => {
       });
     });
     expect(result.current.selectedDay).toBe('2026-06-22');
+  });
+
+  it('ignores stale message responses after the selected sender changes', async () => {
+    const senderARequest = createDeferred<{ messages: PrivateWhatsAppMessage[] }>();
+    mocks.listPrivateWhatsAppMessages.mockImplementation(
+      (_token: string, options: { senderKey: string }) => {
+        if (options.senderKey === senderA.senderKey) {
+          return senderARequest.promise;
+        }
+        return Promise.resolve({ messages: [messageB] });
+      }
+    );
+    mocks.listPrivateWhatsAppSenderDays.mockResolvedValue({ senderDays: [dayA] });
+
+    const { result } = renderHook(() => usePrivateWhatsAppLog(), {
+      wrapper: createWrapper('/whatsapp/private?sender=phone:%2B48123456789'),
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedSender?.senderKey).toBe(senderA.senderKey);
+    });
+
+    await act(async () => {
+      result.current.selectSender(senderB.senderKey);
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages).toEqual([messageB]);
+    });
+
+    await act(async () => {
+      senderARequest.resolve({ messages: [messageA] });
+      await senderARequest.promise;
+    });
+
+    expect(result.current.selectedSenderKey).toBe(senderB.senderKey);
+    expect(result.current.messages).toEqual([messageB]);
   });
 });
