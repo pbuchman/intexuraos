@@ -370,6 +370,13 @@ The verifier only accepts tokens whose signed `email` claim is one of the
 expected retained-GCP Pub/Sub push service accounts or the Cloud Scheduler
 service account.
 
+Private WhatsApp sync uses the same edge-auth path. The external bridge machine
+must call `POST https://intexuraos.cloud/internal/whatsapp/private/events` with
+a Google OIDC bearer token whose audience is `https://intexuraos.cloud` and
+whose email claim is
+`intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com`.
+The public `/api/whatsapp/internal/*` prefix is blocked and must not be used.
+
 ## Route Ownership Notes
 
 Public `/api/*` routes mirror `apps/web/service-manifest.json`.
