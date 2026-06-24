@@ -296,7 +296,7 @@ function getWhatsAppMatrixEventDirection(event, config) {
     senderPhone === config.ownWhatsAppPhoneNumber
   ) {
     direction = 'outgoing';
-  } else if (senderPhone === '') {
+  } else if (!isWhatsAppMatrixUserId(sender)) {
     return null;
   }
 
@@ -752,7 +752,7 @@ function isActiveWhatsAppMember(event) {
 }
 
 function isWhatsAppMatrixUserId(value) {
-  return typeof value === 'string' && /^@whatsapp_[0-9]+:/.test(value);
+  return typeof value === 'string' && /^@whatsapp_(?:[0-9]+|lid-[A-Za-z0-9_-]+):/.test(value);
 }
 
 function readMatrixTimestamp(event) {
