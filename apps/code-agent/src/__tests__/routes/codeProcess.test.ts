@@ -300,6 +300,31 @@ describe('POST /internal/code/process', () => {
     expect(json.data.resourceUrl).toMatch(/^\/#\/code-tasks\/[a-zA-Z0-9_-]+$/);
   });
 
+  it('creates execution tasks when process payload sets taskMode=execution', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/process',
+      headers: {
+        'X-Internal-Auth': 'test-internal-token',
+      },
+      payload: {
+        actionId: 'action-execution-mode',
+        approvalEventId: 'approval-execution-mode',
+        userId: 'user-123',
+        payload: {
+          prompt: 'Implement the requested change',
+          taskMode: 'execution',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = response.json() as { data: { codeTaskId: string } };
+    const taskResult = await codeTaskRepo.findById(json.data.codeTaskId);
+    expect(taskResult.ok).toBe(true);
+    expect(taskResult.ok ? taskResult.value?.agentType : undefined).toBe('execution');
+  });
+
   it('returns 409 for duplicate approvalEventId', async () => {
     // Mock dispatch to succeed for the first request
     vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({

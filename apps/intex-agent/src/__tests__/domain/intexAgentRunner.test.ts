@@ -37,9 +37,11 @@ describe('createIntexAgentRunner', () => {
       toolName: 'create_note',
     });
     expect(client.calls[0]?.systemPrompt).toBe(INTEX_AGENT_SYSTEM_PROMPT.text);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('1.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('2.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
+    expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
+    expect(client.calls[0]?.systemPrompt).toContain('execution');
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'create event tomorrow' },
       { role: 'assistant', content: 'What time?' },
@@ -48,6 +50,9 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual([
       'create_note',
       'create_calendar_event',
+      'create_research',
+      'create_link',
+      'create_code_task',
     ]);
     expect(client.calls[0]?.promptType).toBe('intex-agent-whatsapp-session');
   });
@@ -68,7 +73,8 @@ describe('createIntexAgentRunner', () => {
       ok(
         toolResult({
           outcome: 'unsupported',
-          reply: 'I do not support that yet. I can create notes and calendar events.',
+          reply:
+            'I do not support that yet. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
         })
       ),
     ]);
@@ -78,7 +84,8 @@ describe('createIntexAgentRunner', () => {
       runner.run({ session: session(), events: [], message: 'buy a ticket' })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: 'I do not support that yet. I can create notes and calendar events.',
+      reply:
+        'I do not support that yet. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
   });
 
@@ -97,7 +104,8 @@ describe('createIntexAgentRunner', () => {
       runner.run({ session: session(), events: [], message: 'something weird' })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: 'I could not safely understand that request. I can create notes and calendar events.',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
   });
 
@@ -141,7 +149,8 @@ describe('createIntexAgentRunner', () => {
       runner.run({ session: session(), events: [], message: 'something weird' })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: 'I could not safely understand that request. I can create notes and calendar events.',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
   });
 
@@ -153,7 +162,8 @@ describe('createIntexAgentRunner', () => {
       runner.run({ session: session(), events: [], message: 'remember this' })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: 'I could not safely understand that request. I can create notes and calendar events.',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
   });
 
@@ -167,9 +177,36 @@ describe('createIntexAgentRunner', () => {
       runner.run({ session: session(), events: [], message: 'do something else' })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: 'I could not safely understand that request. I can create notes and calendar events.',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
   });
+
+  it.each(['create_research', 'create_link', 'create_code_task'] as const)(
+    'keeps supported completed tool names: %s',
+    async (toolName) => {
+      const client = new FakeToolCallingClient([
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            summary: 'Handled request.',
+            toolName,
+          })
+        ),
+      ]);
+      const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+      await expect(
+        runner.run({ session: session(), events: [], message: 'handle this' })
+      ).resolves.toEqual({
+        outcome: 'completed',
+        reply: 'Done.',
+        summary: 'Handled request.',
+        toolName,
+      });
+    }
+  );
 
   it('drops unsupported completed tool names from normalized responses', async () => {
     const client = new FakeToolCallingClient([
@@ -201,7 +238,8 @@ describe('createIntexAgentRunner', () => {
       runner.run({ session: session(), events: [], message: 'remember this' })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: 'I could not complete that request right now. I can create notes and calendar events.',
+      reply:
+        'I could not complete that request right now. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
   });
 });
@@ -242,6 +280,9 @@ function fakeToolExecutor(): IntexAgentToolExecutor {
   return {
     createNote: async () => 'note-1',
     createCalendarEvent: async () => 'event-1',
+    createResearch: async () => 'research-1',
+    createLink: async () => 'bookmark-1',
+    createCodeTask: async () => 'code-task-1',
   };
 }
 

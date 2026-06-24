@@ -25,6 +25,14 @@ export interface SubmitTaskResponse {
   resourceUrl: string;
 }
 
+export interface CreateCodeTaskRequest {
+  userId: string;
+  prompt: string;
+  workerType?: string;
+  linearIssueId?: string;
+  taskMode?: 'planning' | 'execution';
+}
+
 export type SubmitTaskError =
   | { code: 'DUPLICATE'; message: string; status: 409; existingTaskId?: string }
   | { code: 'WORKER_UNAVAILABLE'; message: string; status: 503 }
@@ -98,6 +106,11 @@ export interface NotifyGroupSummaryRecomputeError {
 export interface CodeAgentServiceClient {
   submitTask(
     input: SubmitTaskRequest,
+    options?: CodeAgentRequestOptions
+  ): Promise<Result<SubmitTaskResponse, SubmitTaskError>>;
+
+  createCodeTask(
+    input: CreateCodeTaskRequest,
     options?: CodeAgentRequestOptions
   ): Promise<Result<SubmitTaskResponse, SubmitTaskError>>;
 

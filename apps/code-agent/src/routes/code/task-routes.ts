@@ -166,6 +166,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       payload: {
         prompt: string;
         workerType?: WorkerType;
+        taskMode?: 'planning' | 'execution';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -190,6 +191,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               properties: {
                 prompt: { type: 'string' },
                 workerType: workerTypeSchema,
+                taskMode: { type: 'string', enum: ['planning', 'execution'] },
                 linearIssueId: { type: 'string' },
                 repository: { type: 'string' },
                 baseBranch: { type: 'string' },
@@ -300,7 +302,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: WorkerType; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: WorkerType; taskMode?: 'planning' | 'execution'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/process',
       });
@@ -336,6 +338,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         userId: string;
         prompt: string;
         workerType: WorkerType;
+        taskMode?: 'planning' | 'execution';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -349,6 +352,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         traceId,
       };
 
+      if (body.payload.taskMode !== undefined) {
+        processRequest.taskMode = body.payload.taskMode;
+      }
       // Only include optional fields if they are defined
       if (body.payload.linearIssueId !== undefined) {
         processRequest.linearIssueId = body.payload.linearIssueId;
@@ -438,6 +444,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       userId: string;
       prompt: string;
       workerType?: WorkerType;
+      taskMode?: 'planning' | 'execution';
       linearIssueId?: string;
     };
   }>(
@@ -456,6 +463,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             userId: { type: 'string', minLength: 1 },
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: workerTypeSchema,
+            taskMode: { type: 'string', enum: ['planning', 'execution'] },
             linearIssueId: { type: 'string' },
           },
           required: ['userId', 'prompt'],
@@ -583,6 +591,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           userId: string;
           prompt: string;
           workerType?: WorkerType;
+          taskMode?: 'planning' | 'execution';
           linearIssueId?: string;
         };
       }>,
@@ -626,6 +635,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         userId: string;
         prompt: string;
         workerType: WorkerType;
+        taskMode?: 'planning' | 'execution';
         linearIssueId?: string;
         traceId?: string;
         source?: 'whatsapp' | 'web';
@@ -639,6 +649,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         source: 'web',
       };
 
+      if (body.taskMode !== undefined) {
+        processRequest.taskMode = body.taskMode;
+      }
       if (body.linearIssueId !== undefined) {
         processRequest.linearIssueId = body.linearIssueId;
       }

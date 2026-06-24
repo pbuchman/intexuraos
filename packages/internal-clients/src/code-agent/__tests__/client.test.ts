@@ -22,6 +22,102 @@ afterEach(() => {
 });
 
 describe('createCodeAgentServiceClient', () => {
+  it('creates code tasks through the direct internal submit endpoint', async () => {
+    const scope = nock(BASE_URL)
+      .post('/internal/code/submit', {
+        userId: 'user-1',
+        prompt: 'Implement feature',
+        workerType: 'codex',
+        linearIssueId: 'INT-123',
+        taskMode: 'execution',
+      })
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, {
+        success: true,
+        data: {
+          status: 'submitted',
+          codeTaskId: 'task-1',
+          resourceUrl: '/#/code-tasks/task-1',
+        },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createCodeTask({
+      userId: 'user-1',
+      prompt: 'Implement feature',
+      workerType: 'codex',
+      linearIssueId: 'INT-123',
+      taskMode: 'execution',
+    });
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        codeTaskId: 'task-1',
+        resourceUrl: '/#/code-tasks/task-1',
+      },
+    });
+  });
+
+  it('returns INVALID_REQUEST when direct code task creation gets a 4xx response', async () => {
+    nock(BASE_URL).post('/internal/code/submit').reply(400, 'Bad request');
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createCodeTask({
+      userId: 'user-1',
+      prompt: 'Implement feature',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'Bad request',
+        status: 400,
+      },
+    });
+  });
+
+  it('maps direct code task 424 responses to WORKER_UNAVAILABLE', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/submit')
+      .reply(424, {
+        success: false,
+        error: {
+          code: 'WORKER_NOT_CONFIGURED',
+          message: 'Please configure your workers in Settings before submitting code tasks',
+        },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createCodeTask({
+      userId: 'user-1',
+      prompt: 'Implement feature',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'WORKER_UNAVAILABLE',
+        message: 'Please configure your workers in Settings before submitting code tasks',
+        status: 503,
+      },
+    });
+  });
+
   it('returns code task data on submit success', async () => {
     const scope = nock(BASE_URL)
       .post('/internal/code/process', {
@@ -170,6 +266,41 @@ describe('createCodeAgentServiceClient', () => {
         message: 'Task already exists for this approval',
         status: 409,
         existingTaskId: 'existing-task-1',
+      },
+    });
+  });
+
+  it('maps submit task 424 responses to WORKER_UNAVAILABLE', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/process')
+      .reply(424, {
+        success: false,
+        error: {
+          code: 'WORKER_NOT_CONFIGURED',
+          message: 'Please configure your workers in Settings before submitting code tasks',
+        },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.submitTask({
+      actionId: 'action-1',
+      userId: 'user-1',
+      approvalEventId: 'approval-1',
+      payload: {
+        prompt: 'Fix bug',
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'WORKER_UNAVAILABLE',
+        message: 'Please configure your workers in Settings before submitting code tasks',
+        status: 503,
       },
     });
   });

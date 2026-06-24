@@ -349,6 +349,71 @@ describe('POST /internal/code/submit', () => {
     expect(body.data.codeTaskId).toMatch(/^task_/);
   });
 
+  it('defaults internal submissions to planning mode', async () => {
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: 'Plan the login fix',
+      },
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.payload) as {
+      data: { codeTaskId: string };
+    };
+    const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+    expect(taskResult.ok).toBe(true);
+    expect(taskResult.ok ? taskResult.value?.agentType : undefined).toBe('planning');
+  });
+
+  it('creates execution tasks when internal submissions set taskMode=execution', async () => {
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: 'Implement the login fix',
+        taskMode: 'execution',
+      },
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.payload) as {
+      data: { codeTaskId: string };
+    };
+    const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+    expect(taskResult.ok).toBe(true);
+    expect(taskResult.ok ? taskResult.value?.agentType : undefined).toBe('execution');
+  });
+
   it('passes optional workerType and linearIssueId', async () => {
     // Seed worker settings for the user using the repository (same pattern as codeProcess.test.ts)
     const { getServices } = await import('../../services.js');

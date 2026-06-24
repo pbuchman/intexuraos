@@ -9,6 +9,9 @@ export interface ServiceConfig {
   internalAuthToken: string;
   notesAgentUrl: string;
   calendarAgentUrl: string;
+  researchAgentUrl: string;
+  bookmarksAgentUrl: string;
+  codeAgentUrl: string;
   llmUsageServiceUrl: string;
   openRouterAppApiKey: string;
   whatsappSendTopic: string;
@@ -24,6 +27,9 @@ export function loadConfig(): ServiceConfig {
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     notesAgentUrl: process.env['INTEXURAOS_NOTES_AGENT_URL'] ?? '',
     calendarAgentUrl: process.env['INTEXURAOS_CALENDAR_AGENT_URL'] ?? '',
+    researchAgentUrl: process.env['INTEXURAOS_RESEARCH_AGENT_URL'] ?? '',
+    bookmarksAgentUrl: process.env['INTEXURAOS_BOOKMARKS_AGENT_URL'] ?? '',
+    codeAgentUrl: process.env['INTEXURAOS_CODE_AGENT_URL'] ?? '',
     llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '',
     openRouterAppApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
     whatsappSendTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '',

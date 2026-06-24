@@ -17,9 +17,34 @@ export interface CreateCalendarEventToolArgs {
   attendees?: string[];
 }
 
+export interface CreateResearchToolArgs {
+  title: string;
+  prompt: string;
+  originalMessage?: string;
+  sourceMessageIds?: string[];
+}
+
+export interface CreateLinkToolArgs {
+  url: string;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  sourceMessageIds?: string[];
+}
+
+export interface CreateCodeTaskToolArgs {
+  prompt: string;
+  workerType?: string;
+  linearIssueId?: string;
+  taskMode?: 'planning' | 'execution';
+}
+
 export interface IntexAgentToolExecutor {
   createNote(args: CreateNoteToolArgs): Promise<string>;
   createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string>;
+  createResearch(args: CreateResearchToolArgs): Promise<string>;
+  createLink(args: CreateLinkToolArgs): Promise<string>;
+  createCodeTask(args: CreateCodeTaskToolArgs): Promise<string>;
 }
 
 export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor): ToolDefinition[] {
@@ -98,6 +123,104 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
       run: async (args: Record<string, unknown>) =>
         await executor.createCalendarEvent(toCreateCalendarEventArgs(args)),
     },
+    {
+      name: 'create_research',
+      description:
+        'Use when the user asks to research, investigate, compare, look up, or gather information. Creates a research draft for the user to review.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['title', 'prompt'],
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Short research title.',
+          },
+          prompt: {
+            type: 'string',
+            description: 'Detailed research request to investigate.',
+          },
+          originalMessage: {
+            type: 'string',
+            description: 'Original user message when available.',
+          },
+          sourceMessageIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional WhatsApp message IDs that produced this research draft.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) =>
+        await executor.createResearch(toCreateResearchArgs(args)),
+    },
+    {
+      name: 'create_link',
+      description:
+        'Use when the user asks to save, bookmark, keep, or remember a link or URL.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['url'],
+        properties: {
+          url: {
+            type: 'string',
+            description: 'The URL to save as a bookmark.',
+          },
+          title: {
+            type: 'string',
+            description: 'Optional bookmark title.',
+          },
+          description: {
+            type: 'string',
+            description: 'Optional bookmark description.',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional bookmark tags.',
+          },
+          sourceMessageIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional WhatsApp message IDs that produced this bookmark.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) => await executor.createLink(toCreateLinkArgs(args)),
+    },
+    {
+      name: 'create_code_task',
+      description:
+        'Use when the user asks to create a code task. Code tasks default to planning mode. Use execution mode only when the user explicitly asks for execution mode, says create code task execution, or says the task is in execution stage.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['prompt'],
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Code task request.',
+          },
+          workerType: {
+            type: 'string',
+            description: 'Optional worker type to request.',
+          },
+          linearIssueId: {
+            type: 'string',
+            description: 'Optional Linear issue ID to associate with the task.',
+          },
+          taskMode: {
+            type: 'string',
+            enum: ['planning', 'execution'],
+            description:
+              'Use planning by default. Use execution only when explicitly requested by the user.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) =>
+        await executor.createCodeTask(toCreateCodeTaskArgs(args)),
+    },
   ];
 }
 
@@ -135,10 +258,68 @@ function toCreateCalendarEventArgs(args: Record<string, unknown>): CreateCalenda
   };
 }
 
+function toCreateResearchArgs(args: Record<string, unknown>): CreateResearchToolArgs {
+  const title = requiredString(args, 'title');
+  const prompt = requiredString(args, 'prompt');
+  const originalMessage = optionalString(args, 'originalMessage');
+  const sourceMessageIds = optionalStringArray(args, 'sourceMessageIds');
+
+  return {
+    title,
+    prompt,
+    ...(originalMessage !== undefined ? { originalMessage } : {}),
+    ...(sourceMessageIds !== undefined ? { sourceMessageIds } : {}),
+  };
+}
+
+function toCreateLinkArgs(args: Record<string, unknown>): CreateLinkToolArgs {
+  const url = requiredString(args, 'url');
+  const title = optionalString(args, 'title');
+  const description = optionalString(args, 'description');
+  const tags = optionalStringArray(args, 'tags');
+  const sourceMessageIds = optionalStringArray(args, 'sourceMessageIds');
+
+  return {
+    url,
+    ...(title !== undefined ? { title } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(tags !== undefined ? { tags } : {}),
+    ...(sourceMessageIds !== undefined ? { sourceMessageIds } : {}),
+  };
+}
+
+function toCreateCodeTaskArgs(args: Record<string, unknown>): CreateCodeTaskToolArgs {
+  const prompt = requiredString(args, 'prompt');
+  const workerType = optionalString(args, 'workerType');
+  const linearIssueId = optionalString(args, 'linearIssueId');
+  const taskMode = optionalTaskMode(args, 'taskMode');
+
+  return {
+    prompt,
+    ...(workerType !== undefined ? { workerType } : {}),
+    ...(linearIssueId !== undefined ? { linearIssueId } : {}),
+    ...(taskMode !== undefined ? { taskMode } : {}),
+  };
+}
+
 function requiredString(args: Record<string, unknown>, key: string): string {
   const value = args[key];
   if (typeof value !== 'string') {
     throw new Error(`Tool argument ${key} must be a string`);
+  }
+  return value;
+}
+
+function optionalTaskMode(
+  args: Record<string, unknown>,
+  key: string
+): 'planning' | 'execution' | undefined {
+  const value = args[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value !== 'planning' && value !== 'execution') {
+    throw new Error(`Tool argument ${key} must be one of: planning, execution`);
   }
   return value;
 }

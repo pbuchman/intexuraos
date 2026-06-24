@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import {
+  createBookmarksAgentServiceClient,
   createCalendarAgentServiceClient,
+  createCodeAgentServiceClient,
   createNotesAgentServiceClient,
+  createResearchAgentServiceClient,
 } from '@intexuraos/internal-clients';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
@@ -46,6 +49,24 @@ export function initServices(config: ServiceConfig): void {
     logger: createAppLogger({ name: 'intex-agent-calendar-client' }),
   });
 
+  const researchClient = createResearchAgentServiceClient({
+    baseUrl: config.researchAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'intex-agent-research-client' }),
+  });
+
+  const bookmarksClient = createBookmarksAgentServiceClient({
+    baseUrl: config.bookmarksAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'intex-agent-bookmarks-client' }),
+  });
+
+  const codeClient = createCodeAgentServiceClient({
+    baseUrl: config.codeAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'intex-agent-code-client' }),
+  });
+
   const usageSink = new HttpInternalAuthUsageSink({
     usageServiceUrl: config.llmUsageServiceUrl,
     internalAuthToken: config.internalAuthToken,
@@ -79,6 +100,9 @@ export function initServices(config: ServiceConfig): void {
         messageId: input.messageId ?? input.session.id,
         notesClient,
         calendarClient,
+        researchClient,
+        bookmarksClient,
+        codeClient,
       });
 
       return await createIntexAgentRunner({
