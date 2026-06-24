@@ -510,6 +510,59 @@ test('collectPrivateWhatsAppEvents infers group rooms from WhatsApp member state
   assert.equal(events[0]?.sender?.displayName, 'One (WA)');
 });
 
+test('collectPrivateWhatsAppEvents maps WhatsApp LID group sender events', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!lid-group:home-dev': {
+            state: {
+              events: [
+                { type: 'm.room.name', content: { name: 'LID Crew (WA)' } },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_lid-111111111111111:home-dev',
+                  content: { membership: 'join', displayname: 'LID One (WA)' },
+                },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_lid-222222222222222:home-dev',
+                  content: { membership: 'join', displayname: 'LID Two (WA)' },
+                },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_lid-333333333333333:home-dev',
+                  content: { membership: 'join', displayname: 'LID Three (WA)' },
+                },
+              ],
+            },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$lid-group-message',
+                  sender: '@whatsapp_lid-111111111111111:home-dev',
+                  content: { msgtype: 'm.text', body: 'lid sender message' },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.chat.type, 'group');
+  assert.equal(events[0]?.sender?.displayName, 'LID One (WA)');
+  assert.equal(events[0]?.sender?.phoneNumber, undefined);
+  assert.deepEqual(events[0]?.message, {
+    direction: 'incoming',
+    type: 'text',
+    text: 'lid sender message',
+  });
+});
+
 test('extractRoomContexts merges state from sync rooms with existing context', () => {
   const roomContexts = extractRoomContexts(
     {
