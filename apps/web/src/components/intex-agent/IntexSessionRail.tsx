@@ -1,7 +1,12 @@
 import { MessageSquare } from 'lucide-react';
-import { formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
 import type { IntexAgentSession } from '@/types';
-import { formatSessionValue, getSessionStatusClass } from './sessionPresentation.js';
+import {
+  formatSessionDateTimeCompact,
+  formatSessionRelative,
+  formatSessionValue,
+  getSessionStatusClass,
+  getSessionTitle,
+} from './sessionPresentation.js';
 
 interface IntexSessionRailProps {
   sessions: IntexAgentSession[];
@@ -49,7 +54,7 @@ export function IntexSessionRail({
         <div className="space-y-1">
           {sessions.map((session) => {
             const selected = session.id === selectedSessionId;
-            const label = session.summary ?? formatSessionValue(session.activeTool);
+            const label = getSessionTitle(session);
             return (
               <button
                 key={session.id}
@@ -69,7 +74,7 @@ export function IntexSessionRail({
                       {label}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                      {formatDateTimeCompact(session.startedAt)}
+                      {formatSessionDateTimeCompact(session.startedAt)}
                     </p>
                   </div>
                   <span
@@ -81,7 +86,7 @@ export function IntexSessionRail({
                   </span>
                 </div>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  Last user message {formatRelative(session.lastUserMessageAt)}
+                  Last user message {formatSessionRelative(session.lastUserMessageAt)}
                 </p>
               </button>
             );

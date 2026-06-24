@@ -1,10 +1,11 @@
 import { Bot, CheckCircle2, MessageCircle, PlayCircle, Wrench } from 'lucide-react';
-import { formatDateTime, formatDateTimeCompact } from '@/utils/dateFormat';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '@/types';
 import {
+  formatSessionDateTimeCompact,
   formatSessionValue,
-  getSessionEventClass,
   getSessionStatusClass,
+  getSessionEventClass,
+  getSessionTitle,
 } from './sessionPresentation.js';
 
 interface IntexSessionTimelineProps {
@@ -94,13 +95,15 @@ export function IntexSessionTimeline({
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-slate-400" />
               <h3 className="truncate text-lg font-semibold text-slate-950 dark:text-slate-50">
-                {session === undefined ? 'Select a session' : session.summary ?? session.id}
+                {session === undefined ? 'Select a session' : getSessionTitle(session)}
               </h3>
             </div>
             {session !== undefined ? (
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Started {formatDateTime(session.startedAt)}
-                {session.endedAt !== undefined ? ` · Ended ${formatDateTime(session.endedAt)}` : ''}
+                Started {formatSessionDateTimeCompact(session.startedAt)}
+                {session.endedAt !== undefined
+                  ? ` · Ended ${formatSessionDateTimeCompact(session.endedAt)}`
+                  : ''}
               </p>
             ) : null}
           </div>
@@ -167,7 +170,7 @@ export function IntexSessionTimeline({
                   dateTime={event.createdAt}
                   className="text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
-                  {formatDateTimeCompact(event.createdAt)}
+                  {formatSessionDateTimeCompact(event.createdAt)}
                 </time>
               </div>
               <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-slate-100">

@@ -1,6 +1,7 @@
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { getServices } from '../services.js';
+import type { IntexAgentSession, IntexAgentSessionEvent } from '../domain/sessions/types.js';
 
 interface SessionParams {
   sessionId: string;
@@ -33,8 +34,10 @@ export const sessionRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const sessions = await getServices().sessionRepository.listSessions(user.userId);
-      return await reply.ok(sessions);
+      const { sessionRepository } = getServices();
+      const sessions = await sessionRepository.listSessions(user.userId);
+      const enrichedSessions = await enrichSessionsWithSummary(sessions, user.userId);
+      return await reply.ok(enrichedSessions);
     }
   );
 
@@ -84,7 +87,8 @@ export const sessionRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const session = await getServices().sessionRepository.getSession(
+      const { sessionRepository } = getServices();
+      const session = await sessionRepository.getSession(
         request.params.sessionId,
         user.userId
       );
@@ -92,9 +96,54 @@ export const sessionRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('NOT_FOUND', 'Session not found');
       }
 
-      return await reply.ok(session);
+      return await reply.ok(await enrichSessionWithSummary(session, user.userId));
     }
   );
 
   done();
 };
+
+async function enrichSessionsWithSummary(
+  sessions: IntexAgentSession[],
+  userId: string
+): Promise<IntexAgentSession[]> {
+  return await Promise.all(sessions.map((session) => enrichSessionWithSummary(session, userId)));
+}
+
+async function enrichSessionWithSummary(
+  session: IntexAgentSession,
+  userId: string
+): Promise<IntexAgentSession> {
+  if (hasTitleMetadata(session)) {
+    return session;
+  }
+
+  const events = await getServices().sessionRepository.listEvents(session.id, userId);
+  const title = getFirstUserMessageTitle(events);
+  return title === undefined ? session : { ...session, summary: title };
+}
+
+function hasTitleMetadata(session: IntexAgentSession): boolean {
+  return (
+    (session.summary !== undefined && session.summary.trim() !== '') ||
+    session.activeTool !== undefined
+  );
+}
+
+function getFirstUserMessageTitle(events: IntexAgentSessionEvent[]): string | undefined {
+  const event = events.find((candidate) => candidate.type === 'user_message');
+  const text = event?.payload['text'];
+  if (typeof text !== 'string') {
+    return undefined;
+  }
+
+  const normalized = text.trim().replace(/\s+/g, ' ');
+  if (normalized === '') {
+    return undefined;
+  }
+
+  if (normalized.length <= 120) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 117)}...`;
+}

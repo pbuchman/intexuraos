@@ -186,6 +186,7 @@ describe('handleIncomingMessage', () => {
 
     expect(repo.sessions[0]?.status).toBe('unsupported');
     expect(repo.sessions[0]?.endReason).toBe('unsupported_request');
+    expect(repo.sessions[0]?.summary).toBe('book me a flight to Lisbon');
     expect(eventTypes(repo)).toEqual([
       'session_started',
       'user_message',
@@ -196,6 +197,57 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe(
       'New session started.\n\nI do not support that yet. I can create notes and calendar events.'
     );
+  });
+
+  it('truncates unsupported session summaries from long user messages', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'unsupported',
+        reply: 'I can only create notes and calendar events.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+    const longText = 'What are events in my calendar tomorrow and which ones conflict with preparation time';
+    const repeatedText = `${longText} ${longText}`;
+
+    await handleIncomingMessage(
+      message({ text: repeatedText }),
+      deps(repo, runner, replies)
+    );
+
+    expect(repo.sessions[0]?.summary).toBe(`${repeatedText.slice(0, 117)}...`);
+  });
+
+  it('normalizes WhatsApp epoch-second timestamps and records fresh event timestamps', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'unsupported',
+        reply: 'I can only create notes and calendar events.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+    const clock = new SequenceClock([
+      '2026-06-24T16:10:19.000Z',
+      '2026-06-24T16:10:19.001Z',
+      '2026-06-24T16:10:19.002Z',
+      '2026-06-24T16:10:20.000Z',
+      '2026-06-24T16:10:20.001Z',
+      '2026-06-24T16:10:20.002Z',
+      '2026-06-24T16:10:20.003Z',
+    ]);
+
+    await handleIncomingMessage(
+      message({
+        timestamp: '1782317416',
+        text: 'What are events in my calendar tomorrow?',
+      }),
+      deps(repo, runner, replies, clock)
+    );
+
+    expect(repo.sessions[0]?.lastUserMessageAt).toBe('2026-06-24T16:10:16.000Z');
+    expect(new Set(repo.events.map((event) => event.createdAt)).size).toBe(repo.events.length);
   });
 
   it('supersedes an open session and starts an idle one for an explicit new-session command', async () => {
@@ -289,19 +341,35 @@ describe('handleIncomingMessage', () => {
 function deps(
   sessionRepository: FakeSessionRepository,
   runner: FakeRunner,
-  replies: FakeReplyPublisher
+  replies: FakeReplyPublisher,
+  clock: { now: () => string } = { now: () => NOW }
 ): Parameters<typeof handleIncomingMessage>[1] {
   return {
     sessionRepository,
     runner,
     replyPublisher: replies,
-    clock: { now: () => NOW },
+    clock,
     ids: {
       sessionId: () => `session-${String(sessionRepository.createdSessions.length + 1)}`,
       eventId: () => `event-${String(sessionRepository.events.length + 1)}`,
     },
     sessionTimeoutMs: 30 * 60 * 1000,
   };
+}
+
+class SequenceClock {
+  private index = 0;
+
+  constructor(private readonly values: string[]) {}
+
+  now(): string {
+    const value = this.values[this.index];
+    if (value === undefined) {
+      throw new Error('No fake clock value configured');
+    }
+    this.index += 1;
+    return value;
+  }
 }
 
 function eventTypes(repo: FakeSessionRepository): IntexAgentSessionEventType[] {
