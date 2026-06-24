@@ -1,7 +1,7 @@
 /**
- * HTTP client for calling actions-agent internal API.
+ * HTTP client for calling intex-agent internal API.
  *
- * Notifies actions-agent when code tasks complete, fail, or are cancelled.
+ * Notifies intex-agent when code tasks complete, fail, or are cancelled.
  * Design reference: Lines 309-347
  */
 
@@ -11,9 +11,9 @@ import { fetchWithAuth, type ServiceClientConfig, type ServiceClientError } from
 
 export type ClientError = ServiceClientError;
 
-export interface ActionsAgentClient {
+export interface IntexAgentClient {
   /**
-   * Update action status in actions-agent.
+   * Update action status in intex-agent.
    *
    * @param actionId - The action ID to update
    * @param status - New resource status (dispatched, running, completed, failed, cancelled, interrupted)
@@ -30,9 +30,9 @@ export interface ActionsAgentClient {
 }
 
 /**
- * Factory function to create ActionsAgentClient.
+ * Factory function to create IntexAgentClient.
  */
-export function createActionsAgentClient(config: ServiceClientConfig): ActionsAgentClient {
+export function createIntexAgentClient(config: ServiceClientConfig): IntexAgentClient {
   return {
     async updateActionStatus(
       actionId: string,
@@ -62,7 +62,7 @@ export function createActionsAgentClient(config: ServiceClientConfig): ActionsAg
 
       const response = await fetchWithAuth(
         config,
-        `/internal/actions/${actionId}/status`,
+        `/internal/intex-agent/actions/${actionId}/status`,
         options
       );
 

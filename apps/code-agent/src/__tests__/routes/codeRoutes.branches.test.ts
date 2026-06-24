@@ -62,7 +62,7 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient } from '../../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
@@ -99,7 +99,7 @@ describe('codeRoutes branch coverage', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent')
+    nock('http://intex-agent')
       .persist()
       .patch(/\/internal\/actions\/.*\/status/)
       .reply(200, { success: true });
@@ -162,8 +162,8 @@ describe('codeRoutes branch coverage', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -192,12 +192,12 @@ describe('codeRoutes branch coverage', () => {
       whatsappNotifier,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({

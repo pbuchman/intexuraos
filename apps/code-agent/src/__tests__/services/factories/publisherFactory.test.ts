@@ -23,7 +23,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     whatsappSendTopic: '',
     prTriageTopic: '',
     linearAgentUrl: '',
-    actionsAgentUrl: '',
+    intexAgentUrl: '',
     webhookVerifySecret: '',
     orchestratorSecret: '',
     serviceUrl: '',

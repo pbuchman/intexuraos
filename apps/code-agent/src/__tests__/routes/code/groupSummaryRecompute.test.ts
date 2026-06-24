@@ -20,7 +20,7 @@ import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/fire
 import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
-import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient } from '../../../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
@@ -71,7 +71,7 @@ describe('POST /internal/code/group-summary/recompute', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    nock('http://actions-agent')
+    nock('http://intex-agent')
       .persist()
       .patch(/\/internal\/actions\/.*\/status/)
       .reply(200, { success: true });
@@ -130,8 +130,8 @@ describe('POST /internal/code/group-summary/recompute', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -153,11 +153,11 @@ describe('POST /internal/code/group-summary/recompute', () => {
       whatsappNotifier,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+      statusMirrorService: createStatusMirrorService({ intexAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),

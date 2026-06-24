@@ -1,7 +1,7 @@
 /**
  * Client factory for code-agent.
  *
- * Constructs external-service HTTP clients (linear-agent, actions-agent,
+ * Constructs external-service HTTP clients (linear-agent, intex-agent,
  * user-service, usage-service, GitHub) and exposes the `buildUsageSink`
  * helper used by downstream LLM factories.
  */
@@ -14,10 +14,10 @@ import {
   type UsageServiceClient,
   type UserServiceClient,
 } from '@intexuraos/internal-clients';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient } from '../../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createGitHubPRHttpClient } from '../../infra/http/gitHubPRHttpClient.js';
-import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { IntexAgentClient } from '../../infra/clients/intexAgentClient.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { E2EMocks } from './e2eMocks.js';
@@ -32,7 +32,7 @@ export interface ClientFactoryDeps {
 
 export interface ClientServices {
   linearAgentClient: LinearAgentClient;
-  actionsAgentClient: ActionsAgentClient;
+  intexAgentClient: IntexAgentClient;
   userServiceClient: UserServiceClient;
   usageServiceClient?: UsageServiceClient;
   gitHubPRClient: GitHubPRClient;
@@ -42,7 +42,7 @@ export interface ClientServices {
 /**
  * Create the HTTP/client services used by code-agent.
  *
- * When `isE2eMode` is true, Linear and actions-agent clients come from
+ * When `isE2eMode` is true, Linear and intex-agent clients come from
  * `e2eMocks` so no real network I/O happens. `usageServiceClient` is
  * `undefined` when `llmUsageServiceUrl` is empty (i.e., usage tracking off).
  */
@@ -57,10 +57,10 @@ export function createClientServices(deps: ClientFactoryDeps): ClientServices {
         timeoutMs: 60000,
       }, logger);
 
-  const actionsAgentClient = isE2eMode
-    ? e2eMocks.actionsAgentClient
-    : createActionsAgentClient({
-        baseUrl: config.actionsAgentUrl,
+  const intexAgentClient = isE2eMode
+    ? e2eMocks.intexAgentClient
+    : createIntexAgentClient({
+        baseUrl: config.intexAgentUrl,
         internalAuthToken: config.internalAuthToken,
         logger,
       });
@@ -93,7 +93,7 @@ export function createClientServices(deps: ClientFactoryDeps): ClientServices {
 
   return {
     linearAgentClient,
-    actionsAgentClient,
+    intexAgentClient,
     userServiceClient,
     ...(usageServiceClient !== undefined && { usageServiceClient }),
     gitHubPRClient,

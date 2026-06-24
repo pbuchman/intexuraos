@@ -60,7 +60,7 @@ export function initServices(config: ServiceConfig): void {
   const e2eMocks = createE2EMocks(logger);
   const repos = createRepositoryServices({ firestore, logger });
   const { whatsappPublisher, prTriagePublisher } = createPublisherServices({ config, isE2eMode, e2eMocks, logger });
-  const { linearAgentClient, actionsAgentClient, userServiceClient, usageServiceClient, gitHubPRClient, buildUsageSink } =
+  const { linearAgentClient, intexAgentClient, userServiceClient, usageServiceClient, gitHubPRClient, buildUsageSink } =
     createClientServices({ config, logger, isE2eMode, e2eMocks });
   const { resolveToolCallingClient, executionMemoryEmbeddingClient } = createLlmServices({ config, logger, userServiceClient, buildUsageSink });
 
@@ -78,7 +78,7 @@ export function initServices(config: ServiceConfig): void {
     logger,
   });
   const linearIssueService = createLinearIssueService({ linearAgentClient, logger });
-  const statusMirrorService = createStatusMirrorService({ actionsAgentClient, logger });
+  const statusMirrorService = createStatusMirrorService({ intexAgentClient, logger });
   const userLookupService = createUserLookupService({
     gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
     workerSettingsRepo: repos.workerSettingsRepo,
@@ -163,7 +163,7 @@ export function initServices(config: ServiceConfig): void {
   container = {
     firestore, logger, serviceUrl: config.serviceUrl, codeTaskCallbackBaseUrl: config.codeTaskCallbackBaseUrl,
     codeTaskRepo: repos.codeTaskRepo, logChunkRepo: repos.logChunkRepo, logLineRepo: repos.logLineRepo,
-    taskDispatcher, whatsappNotifier, codeTaskDispatchStatusService, actionsAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
+    taskDispatcher, whatsappNotifier, codeTaskDispatchStatusService, intexAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     archiveStaleGroups: createArchiveStaleGroupsUseCase({

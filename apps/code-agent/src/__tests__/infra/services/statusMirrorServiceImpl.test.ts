@@ -6,29 +6,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 import { ok, err } from '@intexuraos/common-core';
-import type { ActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
+import type { IntexAgentClient } from '../../../infra/clients/intexAgentClient.js';
 import type { TaskStatus } from '../../../domain/models/codeTask.js';
 
 describe('statusMirrorService', () => {
   const logger = createMockLogger();
-  let mockActionsAgentClient: ActionsAgentClient;
+  let mockIntexAgentClient: IntexAgentClient;
 
   beforeEach(() => {
-    mockActionsAgentClient = {
+    mockIntexAgentClient = {
       updateActionStatus: vi.fn(),
-    } as unknown as ActionsAgentClient;
+    } as unknown as IntexAgentClient;
     vi.clearAllMocks();
   });
 
   const getMockUpdateActionStatus = (): ReturnType<typeof vi.fn> =>
-    mockActionsAgentClient.updateActionStatus as ReturnType<typeof vi.fn>;
+    mockIntexAgentClient.updateActionStatus as ReturnType<typeof vi.fn>;
 
   describe('mirrorStatus', () => {
-    it('should call actionsAgentClient with correct status mapping', async () => {
+    it('should call intexAgentClient with correct status mapping', async () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -48,7 +48,7 @@ describe('statusMirrorService', () => {
 
     it('should skip mirroring when actionId is undefined', async () => {
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -68,7 +68,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -90,7 +90,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -117,7 +117,7 @@ describe('statusMirrorService', () => {
       );
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -142,7 +142,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -158,7 +158,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -174,7 +174,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -190,7 +190,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -206,7 +206,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -222,7 +222,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -249,7 +249,7 @@ describe('statusMirrorService', () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -265,7 +265,7 @@ describe('statusMirrorService', () => {
   describe('synthetic actionId guard', () => {
     it('should skip mirroring for webhook-assign pattern', async () => {
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -283,7 +283,7 @@ describe('statusMirrorService', () => {
 
     it('should skip mirroring for pr-comment pattern', async () => {
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -301,7 +301,7 @@ describe('statusMirrorService', () => {
 
     it('should skip mirroring for merge-conflict pattern', async () => {
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -319,7 +319,7 @@ describe('statusMirrorService', () => {
 
     it('should skip mirroring for fanout pattern', async () => {
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -335,11 +335,11 @@ describe('statusMirrorService', () => {
       );
     });
 
-    it('should call actionsAgentClient for real UUID actionId', async () => {
+    it('should call intexAgentClient for real UUID actionId', async () => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 
@@ -358,7 +358,7 @@ describe('statusMirrorService', () => {
 
     it('should still skip mirroring when actionId is undefined', async () => {
       const service = createStatusMirrorService({
-        actionsAgentClient: mockActionsAgentClient,
+        intexAgentClient: mockIntexAgentClient,
         logger,
       });
 

@@ -1,5 +1,5 @@
 /**
- * Use case: Process approved code action from actions-agent.
+ * Use case: Process approved code action from intex-agent.
  *
  * Creates a code task with deduplication and dispatches to worker.
  */

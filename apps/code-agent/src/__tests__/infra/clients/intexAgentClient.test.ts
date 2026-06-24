@@ -1,9 +1,9 @@
 /**
- * Tests for ActionsAgentClient
+ * Tests for the Intex agent status client.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createActionsAgentClient, type ActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient, type IntexAgentClient } from '../../../infra/clients/intexAgentClient.js';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
 import pino from 'pino';
 import type { Logger } from 'pino';
@@ -14,8 +14,8 @@ vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
 }));
 
-describe('ActionsAgentClient', () => {
-  let client: ActionsAgentClient;
+describe('IntexAgentClient', () => {
+  let client: IntexAgentClient;
   let logger: Logger;
   let mockFetchWithAuth: ReturnType<typeof vi.fn>;
 
@@ -26,14 +26,14 @@ describe('ActionsAgentClient', () => {
   });
 
   beforeEach(() => {
-    client = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    client = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
   });
 
-  it('sends correct status to actions-agent', async () => {
+  it('sends correct status to the intex-agent status endpoint', async () => {
     mockFetchWithAuth.mockResolvedValue(ok(undefined));
 
     const result = await client.updateActionStatus('action-123', 'completed', {
@@ -43,11 +43,11 @@ describe('ActionsAgentClient', () => {
     expect(result.ok).toBe(true);
     expect(mockFetchWithAuth).toHaveBeenCalledWith(
       expect.objectContaining({
-        baseUrl: 'http://actions-agent',
+        baseUrl: 'http://intex-agent',
         internalAuthToken: 'test-token',
         logger,
       }),
-      '/internal/actions/action-123/status',
+      '/internal/intex-agent/actions/action-123/status',
       expect.objectContaining({
         method: 'PATCH',
         headers: {
@@ -138,7 +138,7 @@ describe('ActionsAgentClient', () => {
     expect(result.ok).toBe(true);
     expect(mockFetchWithAuth).toHaveBeenCalledWith(
       expect.any(Object),
-      '/internal/actions/action-222/status',
+      '/internal/intex-agent/actions/action-222/status',
       expect.objectContaining({
         body: JSON.stringify({
           resource_status: 'failed',
@@ -158,7 +158,7 @@ describe('ActionsAgentClient', () => {
     expect(result.ok).toBe(true);
     expect(mockFetchWithAuth).toHaveBeenCalledWith(
       expect.any(Object),
-      '/internal/actions/action-333/status',
+      '/internal/intex-agent/actions/action-333/status',
       expect.objectContaining({
         body: JSON.stringify({
           resource_status: 'cancelled',
@@ -175,7 +175,7 @@ describe('ActionsAgentClient', () => {
     expect(result.ok).toBe(true);
     expect(mockFetchWithAuth).toHaveBeenCalledWith(
       expect.any(Object),
-      '/internal/actions/action-444/status',
+      '/internal/intex-agent/actions/action-444/status',
       expect.objectContaining({
         body: JSON.stringify({
           resource_status: 'completed',

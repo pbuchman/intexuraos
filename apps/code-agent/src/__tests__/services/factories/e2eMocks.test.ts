@@ -18,7 +18,7 @@ describe('createE2EMocks', () => {
     expect(mocks.whatsappPublisher).toBeDefined();
     expect(mocks.prTriagePublisher).toBeDefined();
     expect(mocks.linearAgentClient).toBeDefined();
-    expect(mocks.actionsAgentClient).toBeDefined();
+    expect(mocks.intexAgentClient).toBeDefined();
   });
 
   describe('whatsappPublisher', () => {
@@ -39,10 +39,10 @@ describe('createE2EMocks', () => {
     });
   });
 
-  describe('actionsAgentClient', () => {
+  describe('intexAgentClient', () => {
     it('updateActionStatus resolves to ok', async () => {
-      const { actionsAgentClient } = createE2EMocks(logger);
-      const result = await actionsAgentClient.updateActionStatus('a1', 'completed');
+      const mocks = createE2EMocks(logger);
+      const result = await mocks.intexAgentClient.updateActionStatus('a1', 'completed');
       expect(result.ok).toBe(true);
     });
   });

@@ -24,14 +24,14 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient } from '../../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
-import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { IntexAgentClient } from '../../infra/clients/intexAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { CodeTaskDispatchStatusService } from '../../domain/services/codeTaskDispatchStatusService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
@@ -115,8 +115,8 @@ describe('POST /code/submit', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -141,12 +141,12 @@ describe('POST /code/submit', () => {
       codeTaskDispatchStatusService,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -203,7 +203,7 @@ describe('POST /code/submit', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       logLineRepo: LogLineRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       codeTaskDispatchStatusService: CodeTaskDispatchStatusService;
       linearAgentClient: LinearAgentClient;

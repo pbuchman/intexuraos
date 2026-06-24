@@ -41,7 +41,7 @@ import { createFirestoreLogChunkRepository } from '../../infra/firestore/firesto
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient, type IntexAgentClient } from '../../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -210,7 +210,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
   let logLineRepo: LogLineRepository;
-  let actionsAgentClient: ActionsAgentClient;
+  let intexAgentClient: IntexAgentClient;
   let mockFetchWithAuth: ReturnType<typeof vi.fn>;
   let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
 
@@ -258,8 +258,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
     });
 
-    actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -316,12 +316,12 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -375,7 +375,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
@@ -6147,8 +6147,8 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
   });
 
-  describe('actions-agent callback', () => {
-    it('calls actions-agent when task has actionId', async () => {
+  describe('intex-agent callback', () => {
+    it('calls intex-agent when task has actionId', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -6193,13 +6193,13 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was called
+      // Verify intex-agent was called
       expect(mockFetchWithAuth).toHaveBeenCalledWith(
         expect.objectContaining({
-          baseUrl: 'http://actions-agent',
+          baseUrl: 'http://intex-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/550e8400-e29b-41d4-a716-446655440000/status`,
+        `/internal/intex-agent/actions/550e8400-e29b-41d4-a716-446655440000/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -6212,7 +6212,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
     });
 
-    it('does not call actions-agent for tasks without actionId', async () => {
+    it('does not call intex-agent for tasks without actionId', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -6256,7 +6256,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify WhatsApp notification was sent (but not actions-agent)
+      // Verify WhatsApp notification was sent (but not intex-agent)
       expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
       expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -6265,7 +6265,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
     });
 
-    it('calls actions-agent for completed task without prUrl', async () => {
+    it('calls intex-agent for completed task without prUrl', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -6309,13 +6309,13 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was called without prUrl
+      // Verify intex-agent was called without prUrl
       expect(mockFetchWithAuth).toHaveBeenCalledWith(
         expect.objectContaining({
-          baseUrl: 'http://actions-agent',
+          baseUrl: 'http://intex-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/660e8400-e29b-41d4-a716-446655440001/status`,
+        `/internal/intex-agent/actions/660e8400-e29b-41d4-a716-446655440001/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -6325,7 +6325,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
     });
 
-    it('calls actions-agent for failed task with actionId', async () => {
+    it('calls intex-agent for failed task with actionId', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -6368,13 +6368,13 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was called with 'failed' status
+      // Verify intex-agent was called with 'failed' status
       expect(mockFetchWithAuth).toHaveBeenCalledWith(
         expect.objectContaining({
-          baseUrl: 'http://actions-agent',
+          baseUrl: 'http://intex-agent',
           internalAuthToken: 'test-token',
         }),
-        `/internal/actions/770e8400-e29b-41d4-a716-446655440002/status`,
+        `/internal/intex-agent/actions/770e8400-e29b-41d4-a716-446655440002/status`,
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({
@@ -6446,7 +6446,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       updateSpy.mockRestore();
     });
 
-    it('calls actions-agent for completed task without prUrl', async () => {
+    it('calls intex-agent for completed task without prUrl', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -6485,10 +6485,10 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was called with 'interrupted' status (INT-1119: statusMirrorService maps correctly)
+      // Verify intex-agent was called with 'interrupted' status (INT-1119: statusMirrorService maps correctly)
       expect(mockFetchWithAuth).toHaveBeenCalledWith(
         expect.any(Object),
-        '/internal/actions/990e8400-e29b-41d4-a716-446655440004/status',
+        '/internal/intex-agent/actions/990e8400-e29b-41d4-a716-446655440004/status',
         expect.objectContaining({
           body: JSON.stringify({
             resource_status: 'interrupted',
@@ -6500,7 +6500,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
     });
 
-    it('handles actions-agent failure gracefully', async () => {
+    it('handles intex-agent failure gracefully', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -6531,7 +6531,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
 
-      // Mock actions-agent failure
+      // Mock intex-agent failure
       mockFetchWithAuth.mockResolvedValueOnce({
         ok: false,
         error: {
@@ -6551,7 +6551,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         payload,
       });
 
-      // Webhook still succeeds even though actions-agent callback failed
+      // Webhook still succeeds even though intex-agent callback failed
       expect(response.statusCode).toBe(200);
 
       // Task was still updated
@@ -6661,7 +6661,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       updateSpy.mockRestore();
     });
 
-    it('continues when actions-agent fails for failed status', async () => {
+    it('continues when intex-agent fails for failed status', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -6702,7 +6702,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         payload,
       });
 
-      // Webhook succeeds even if actions-agent fails
+      // Webhook succeeds even if intex-agent fails
       expect(response.statusCode).toBe(200);
 
       // Task was still updated
@@ -6712,7 +6712,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('failed');
     });
 
-    it('continues when actions-agent fails for interrupted status', async () => {
+    it('continues when intex-agent fails for interrupted status', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -7259,8 +7259,8 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     setFirestore(fakeFirestore as unknown as Firestore);
     logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -7308,12 +7308,12 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: mockMetricsClient as unknown as MetricsClient,
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -7367,7 +7367,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
       logLineRepo: LogLineRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
@@ -7634,8 +7634,8 @@ describe('POST /internal/logs', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -7652,7 +7652,7 @@ describe('POST /internal/logs', () => {
     });
 
     const statusMirrorService = createStatusMirrorService({
-      actionsAgentClient,
+      intexAgentClient,
       logger,
     });
 
@@ -7670,7 +7670,7 @@ describe('POST /internal/logs', () => {
       logLineRepo,
       taskDispatcher,
       workerSettingsRepo,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       statusMirrorService,
@@ -7727,7 +7727,7 @@ describe('POST /internal/logs', () => {
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
@@ -8544,7 +8544,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
-  let actionsAgentClient: ActionsAgentClient;
+  let intexAgentClient: IntexAgentClient;
   let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
@@ -8584,8 +8584,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
     });
 
-    actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -8610,12 +8610,12 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -8669,7 +8669,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
@@ -9430,8 +9430,8 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -9488,11 +9488,11 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       whatsappNotifier,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+      statusMirrorService: createStatusMirrorService({ intexAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
@@ -9533,7 +9533,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
@@ -10834,7 +10834,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.value.error?.message).toContain('missing result payload');
   });
 
-  it('handles cancelled status with actionId and actions-agent failure and duration', async () => {
+  it('handles cancelled status with actionId and intex-agent failure and duration', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
       repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't32', webhookSecret: 'test-webhook-secret', actionId: 'action-cancel',
@@ -10853,7 +10853,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.value.status).toBe('cancelled');
   });
 
-  it('handles cancelled status with actionId and actions-agent success', async () => {
+  it('handles cancelled status with actionId and intex-agent success', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
       repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't32b', webhookSecret: 'test-webhook-secret', actionId: 'action-cancel-ok',
@@ -11366,7 +11366,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
     logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
     const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
     const logLineRepo = createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
-    const actionsAgentClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
+    const intexAgentClient = createIntexAgentClient({ baseUrl: 'http://intex-agent', internalAuthToken: 'test-token', logger });
     const linearAgentClient = createLinearAgentHttpClient({ baseUrl: 'http://linear-agent:8086', internalAuthToken: 'test-token', timeoutMs: 10000 }, logger);
 
     setServices({
@@ -11376,10 +11376,10 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
-      actionsAgentClient, linearAgentClient,
+      intexAgentClient, linearAgentClient,
       linearIssueService: createLinearIssueService({ linearAgentClient, logger }),
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+      statusMirrorService: createStatusMirrorService({ intexAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
@@ -11398,7 +11398,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       prTriagePublisher: {} as never,
     } as {
       firestore: Firestore; logger: Logger; codeTaskRepo: CodeTaskRepository; logChunkRepo: LogChunkRepository; logLineRepo: LogLineRepository;
-      taskDispatcher: TaskDispatcherService; workerSettingsRepo: WorkerSettingsRepository; actionsAgentClient: ActionsAgentClient;
+      taskDispatcher: TaskDispatcherService; workerSettingsRepo: WorkerSettingsRepository; intexAgentClient: IntexAgentClient;
       linearAgentClient: LinearAgentClient; whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService; statusMirrorService: StatusMirrorService; metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
@@ -11530,8 +11530,8 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -11559,12 +11559,12 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -11618,7 +11618,7 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;

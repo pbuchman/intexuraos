@@ -24,7 +24,7 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
+    nock('http://intex-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';

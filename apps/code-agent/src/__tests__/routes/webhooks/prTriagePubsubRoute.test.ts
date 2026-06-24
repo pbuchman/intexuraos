@@ -55,7 +55,7 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
+    nock('http://intex-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -88,7 +88,7 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
       logLineRepo: {} as never,
       taskDispatcher: {} as never,
       whatsappNotifier: {} as never,
-      actionsAgentClient: {} as never,
+      intexAgentClient: {} as never,
       linearAgentClient: {} as never,
       linearIssueService: {} as never,
       statusMirrorService: {} as never,

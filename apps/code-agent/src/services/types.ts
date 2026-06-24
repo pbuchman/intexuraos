@@ -17,7 +17,7 @@ import type { LogLineRepository } from '../domain/repositories/logLineRepository
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { CodeTaskDispatchStatusService } from '../domain/services/codeTaskDispatchStatusService.js';
-import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
+import type { IntexAgentClient } from '../infra/clients/intexAgentClient.js';
 import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import type { UserLookupService } from '../domain/ports/userLookupService.js';
@@ -66,7 +66,7 @@ export interface ServiceContainer {
   logLineRepo: LogLineRepository;
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
-  actionsAgentClient: ActionsAgentClient;
+  intexAgentClient: IntexAgentClient;
   linearAgentClient: LinearAgentClient;
   linearIssueService: LinearIssueService;
   statusMirrorService: StatusMirrorService;
@@ -124,7 +124,7 @@ export interface ServiceConfig {
   whatsappSendTopic: string;
   prTriageTopic: string;
   linearAgentUrl: string;
-  actionsAgentUrl: string;
+  intexAgentUrl: string;
   webhookVerifySecret: string;
   orchestratorSecret: string;
   serviceUrl: string;

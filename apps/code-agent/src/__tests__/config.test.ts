@@ -51,7 +51,7 @@ describe('loadConfig', () => {
       expect(config.firestoreProjectId).toBe('');
       expect(config.whatsappServiceUrl).toBe('');
       expect(config.linearAgentUrl).toBe('');
-      expect(config.actionsAgentUrl).toBe('');
+      expect(config.intexAgentUrl).toBe('');
       expect(config.webhookVerifySecret).toBe('');
       expect(config.tokenEncryptionKey).toBe('');
       expect(config.serviceUrl).toBe('');
@@ -66,7 +66,7 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
       process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] = 'http://whatsapp';
       process.env['INTEXURAOS_LINEAR_AGENT_URL'] = 'http://linear';
-      process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'http://actions';
+      process.env['INTEXURAOS_INTEX_AGENT_URL'] = 'http://intex-agent';
       process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] = 'test-webhook';
       process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'test-encryption-key-32chars!';
       process.env['INTEXURAOS_SERVICE_URL'] = 'https://code-agent.test.local';
@@ -82,7 +82,7 @@ describe('loadConfig', () => {
       expect(config.firestoreProjectId).toBe('test-project');
       expect(config.whatsappServiceUrl).toBe('http://whatsapp');
       expect(config.linearAgentUrl).toBe('http://linear');
-      expect(config.actionsAgentUrl).toBe('http://actions');
+      expect(config.intexAgentUrl).toBe('http://intex-agent');
       expect(config.webhookVerifySecret).toBe('test-webhook');
       expect(config.tokenEncryptionKey).toBe('test-encryption-key-32chars!');
       expect(config.serviceUrl).toBe('https://code-agent.test.local');

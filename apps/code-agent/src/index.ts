@@ -28,7 +28,7 @@ const REQUIRED_ENV = [
  * - E2E_MODE, E2E_TEST_USER_ID: E2E testing mode flags
  * - INTEXURAOS_WHATSAPP_SERVICE_URL, INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: WhatsApp integration
  * - INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC: PR triage Pub/Sub topic
- * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_ACTIONS_AGENT_URL: Service integrations
+ * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_INTEX_AGENT_URL: Service integrations
  * - INTEXURAOS_SERVICE_URL: Public service URL
  * - INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: Worker callback URL base
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
@@ -41,7 +41,7 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
-  'INTEXURAOS_ACTIONS_AGENT_URL',
+  'INTEXURAOS_INTEX_AGENT_URL',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
     whatsappSendTopic: config.whatsappSendTopic,
     prTriageTopic: config.prTriageTopic,
     linearAgentUrl: config.linearAgentUrl,
-    actionsAgentUrl: config.actionsAgentUrl,
+    intexAgentUrl: config.intexAgentUrl,
     webhookVerifySecret: config.webhookVerifySecret,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,

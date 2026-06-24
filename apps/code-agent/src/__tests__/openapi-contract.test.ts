@@ -20,7 +20,7 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/firestore/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient } from '../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
@@ -32,7 +32,7 @@ import { ok } from '@intexuraos/common-core';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from '../domain/repositories/logLineRepository.js';
-import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
+import type { IntexAgentClient } from '../infra/clients/intexAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
@@ -62,8 +62,8 @@ describe('OpenAPI contract', () => {
     setFirestore(fakeFirestore);
     const logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -97,14 +97,14 @@ describe('OpenAPI contract', () => {
         firestore: fakeFirestore,
         logger,
       }),
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient: createLinearAgentHttpClient({
         baseUrl: 'http://linear-agent:8086',
         internalAuthToken: 'test-token',
         timeoutMs: 10000,
       }, logger),
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -166,7 +166,7 @@ describe('OpenAPI contract', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       logLineRepo: LogLineRepository;
-      actionsAgentClient: ActionsAgentClient;
+      intexAgentClient: IntexAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
       linearIssueService: LinearIssueService;

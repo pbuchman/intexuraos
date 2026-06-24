@@ -26,7 +26,7 @@ import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/fire
 import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
-import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient } from '../../../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import { createLinearIssueService } from '../../../domain/services/linearIssueService.js';
@@ -54,7 +54,7 @@ describe('GitHub event log routes', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    nock('http://actions-agent')
+    nock('http://intex-agent')
       .persist()
       .patch(/\/internal\/actions\/.*\/status/)
       .reply(200, { success: true });
@@ -116,8 +116,8 @@ describe('GitHub event log routes', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -147,11 +147,11 @@ describe('GitHub event log routes', () => {
       whatsappNotifier,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+      statusMirrorService: createStatusMirrorService({ intexAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
@@ -200,7 +200,7 @@ describe('GitHub event log routes', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: typeof logChunkRepo;
       logLineRepo: typeof logLineRepo;
-      actionsAgentClient: typeof actionsAgentClient;
+      intexAgentClient: typeof intexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: ReturnType<typeof createWhatsAppNotifier>;
       linearIssueService: ReturnType<typeof createLinearIssueService>;

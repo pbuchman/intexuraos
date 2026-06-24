@@ -232,7 +232,7 @@ describe('POST /webhooks/github', () => {
       logLineRepo: {} as never,
       taskDispatcher: {} as never,
       whatsappNotifier: {} as never,
-      actionsAgentClient: {} as never,
+      intexAgentClient: {} as never,
       linearAgentClient: {} as never,
       linearIssueService: {} as never,
       statusMirrorService: {} as never,

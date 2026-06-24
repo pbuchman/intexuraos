@@ -21,7 +21,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     whatsappSendTopic: 'whatsapp-send',
     prTriageTopic: 'pr-triage',
     linearAgentUrl: 'http://linear-agent',
-    actionsAgentUrl: 'http://actions-agent',
+    intexAgentUrl: 'http://intex-agent',
     webhookVerifySecret: 'webhook',
     orchestratorSecret: 'orch',
     serviceUrl: 'http://code-agent',
@@ -62,7 +62,7 @@ describe('initServices', () => {
     expect(c.taskDispatcher).toBeDefined();
     expect(c.whatsappNotifier).toBeDefined();
     expect(c.codeTaskDispatchStatusService).toBeDefined();
-    expect(c.actionsAgentClient).toBeDefined();
+    expect(c.intexAgentClient).toBeDefined();
     expect(c.linearAgentClient).toBeDefined();
     expect(c.linearIssueService).toBeDefined();
     expect(c.statusMirrorService).toBeDefined();
@@ -115,12 +115,12 @@ describe('initServices', () => {
     initServices(makeConfig());
     const c = getServices();
     expect(c.linearAgentClient).toBeDefined();
-    expect(c.actionsAgentClient).toBeDefined();
+    expect(c.intexAgentClient).toBeDefined();
   });
 
-  it('composes services so statusMirrorService forwards through actionsAgentClient', async () => {
+  it('composes services so statusMirrorService forwards through intexAgentClient', async () => {
     // Spot-check an actual wiring edge: if the composer created a second
-    // actionsAgentClient by mistake, this test would fail.
+    // intexAgentClient by mistake, this test would fail.
     process.env['E2E_MODE'] = 'true';
     initServices(makeConfig());
     const c = getServices();
@@ -129,7 +129,7 @@ describe('initServices', () => {
     // Replace the in-container client's method so we can observe calls from
     // statusMirrorService. If statusMirrorService was constructed with a
     // DIFFERENT client instance, the spy would never fire.
-    c.actionsAgentClient.updateActionStatus = async (
+    c.intexAgentClient.updateActionStatus = async (
       actionId,
       status,
     ): Promise<{ ok: true; value: undefined }> => {

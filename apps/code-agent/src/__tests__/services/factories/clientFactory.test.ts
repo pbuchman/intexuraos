@@ -2,7 +2,7 @@
  * Tests for clientFactory.
  *
  * Verifies:
- * - isE2eMode=true uses the e2e mock Linear + actions-agent clients
+ * - isE2eMode=true uses the e2e mock Linear + Intex agent clients
  * - isE2eMode=false builds real HTTP clients
  * - `usageServiceClient` is undefined when llmUsageServiceUrl is ''
  *   and defined when set
@@ -28,7 +28,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     whatsappSendTopic: '',
     prTriageTopic: '',
     linearAgentUrl: 'http://linear-agent',
-    actionsAgentUrl: 'http://actions-agent',
+    intexAgentUrl: 'http://intex-agent',
     webhookVerifySecret: '',
     orchestratorSecret: '',
     serviceUrl: '',
@@ -43,13 +43,13 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
 }
 
 describe('createClientServices', () => {
-  it('returns e2e mocks for linearAgentClient and actionsAgentClient when isE2eMode=true', () => {
+  it('returns e2e mocks for linearAgentClient and intexAgentClient when isE2eMode=true', () => {
     const e2eMocks = createE2EMocks(logger);
     const services = createClientServices({
       config: makeConfig(), logger, isE2eMode: true, e2eMocks,
     });
     expect(services.linearAgentClient).toBe(e2eMocks.linearAgentClient);
-    expect(services.actionsAgentClient).toBe(e2eMocks.actionsAgentClient);
+    expect(services.intexAgentClient).toBe(e2eMocks.intexAgentClient);
   });
 
   it('returns real HTTP clients when isE2eMode=false', () => {
@@ -58,9 +58,9 @@ describe('createClientServices', () => {
       config: makeConfig(), logger, isE2eMode: false, e2eMocks,
     });
     expect(services.linearAgentClient).not.toBe(e2eMocks.linearAgentClient);
-    expect(services.actionsAgentClient).not.toBe(e2eMocks.actionsAgentClient);
+    expect(services.intexAgentClient).not.toBe(e2eMocks.intexAgentClient);
     expect(typeof services.linearAgentClient.createIssue).toBe('function');
-    expect(typeof services.actionsAgentClient.updateActionStatus).toBe('function');
+    expect(typeof services.intexAgentClient.updateActionStatus).toBe('function');
   });
 
   it('omits usageServiceClient when llmUsageServiceUrl is empty', () => {

@@ -1,7 +1,7 @@
 /**
  * Use case: Cancel a task using nonce validation.
  *
- * Called by actions-agent when processing WhatsApp cancel button callback.
+ * Called by intex-agent when processing WhatsApp cancel button callback.
  * Validates nonce, ownership, and expiration before canceling.
  */
 

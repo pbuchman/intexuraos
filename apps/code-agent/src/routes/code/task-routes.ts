@@ -157,7 +157,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
   // ==== Internal routes (X-Internal-Auth / scheduler) ====
 
-  // POST /internal/code/process - Called by actions-agent
+  // POST /internal/code/process - Called by intex-agent
   fastify.post<{
     Body: {
       actionId: string;
@@ -176,8 +176,8 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     {
       schema: {
         operationId: 'processCodeAction',
-        summary: 'Process code action from actions-agent',
-        description: 'Internal endpoint for processing code actions. Called by actions-agent when a code action is approved.',
+        summary: 'Process code action from intex-agent',
+        description: 'Internal endpoint for processing code actions. Called by intex-agent when a code action is approved.',
         tags: ['internal'],
         body: {
           type: 'object',
@@ -1951,7 +1951,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
-        // Parse comma-separated status filter (matching actions-agent pattern)
+        // Parse comma-separated status filter (matching intex-agent pattern)
         const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled', 'archived'];
         let statusFilter: TaskStatus[] | undefined;
         if (request.query.status !== undefined) {

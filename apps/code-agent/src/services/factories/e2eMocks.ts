@@ -1,7 +1,7 @@
 /**
  * E2E mock factories for code-agent external-dependency clients and publishers.
  *
- * Used only when E2E_MODE=true to isolate code-agent from Linear, actions-agent,
+ * Used only when E2E_MODE=true to isolate code-agent from Linear, intex-agent,
  * and Pub/Sub topics that aren't available in e2e test environments.
  */
 
@@ -9,14 +9,14 @@ import { ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type { PRTriagePublisher } from '@intexuraos/pr-triage-pubsub-client';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
-import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { IntexAgentClient } from '../../infra/clients/intexAgentClient.js';
 import type { IssueContext, LinearAgentClient, LinearAgentError } from '../../domain/ports/linearAgentClient.js';
 
 export interface E2EMocks {
   whatsappPublisher: WhatsAppSendPublisher;
   prTriagePublisher: PRTriagePublisher;
   linearAgentClient: LinearAgentClient;
-  actionsAgentClient: ActionsAgentClient;
+  intexAgentClient: IntexAgentClient;
 }
 
 /**
@@ -154,11 +154,11 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
 }
 
 /**
- * Create a no-op actions agent client for E2E testing.
+ * Create a no-op Intex agent client for E2E testing.
  */
-function createE2eActionsAgentClient(logger: Logger): ActionsAgentClient {
+function createE2eIntexAgentClient(logger: Logger): IntexAgentClient {
   return {
-    updateActionStatus(actionId, status): ReturnType<ActionsAgentClient['updateActionStatus']> {
+    updateActionStatus(actionId, status): ReturnType<IntexAgentClient['updateActionStatus']> {
       logger.info({ actionId, status }, '[E2E] Mock action status update');
       return Promise.resolve(ok(undefined));
     },
@@ -173,6 +173,6 @@ export function createE2EMocks(logger: Logger): E2EMocks {
     whatsappPublisher: createE2eWhatsAppPublisher(),
     prTriagePublisher: createE2ePRTriagePublisher(),
     linearAgentClient: createE2eLinearAgentClient(logger),
-    actionsAgentClient: createE2eActionsAgentClient(logger),
+    intexAgentClient: createE2eIntexAgentClient(logger),
   };
 }

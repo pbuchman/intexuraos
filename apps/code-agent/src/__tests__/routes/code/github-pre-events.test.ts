@@ -28,7 +28,7 @@ import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/fire
 import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
-import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
+import { createIntexAgentClient } from '../../../infra/clients/intexAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import { createLinearIssueService } from '../../../domain/services/linearIssueService.js';
@@ -51,8 +51,8 @@ describe('GET /code/github-pr-events', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Mock actions-agent HTTP calls
-    nock('http://actions-agent')
+    // Mock intex-agent HTTP calls
+    nock('http://intex-agent')
       .persist()
       .patch(/\/internal\/actions\/.*\/status/)
       .reply(200, { success: true });
@@ -121,8 +121,8 @@ describe('GET /code/github-pr-events', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
+    const intexAgentClient = createIntexAgentClient({
+      baseUrl: 'http://intex-agent',
       internalAuthToken: 'test-token',
       logger,
     });
@@ -155,12 +155,12 @@ describe('GET /code/github-pr-events', () => {
       whatsappNotifier,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
+      intexAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
+        intexAgentClient,
         logger,
       }),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -215,7 +215,7 @@ describe('GET /code/github-pr-events', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: typeof logChunkRepo;
       logLineRepo: typeof logLineRepo;
-      actionsAgentClient: typeof actionsAgentClient;
+      intexAgentClient: typeof intexAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: ReturnType<typeof createWhatsAppNotifier>;
       linearIssueService: ReturnType<typeof createLinearIssueService>;
