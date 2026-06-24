@@ -51,6 +51,7 @@ const SERVICE_PORTS = {
   'hellscript-agent': 8131,
   'llm-usage-service': 8132,
   'api-docs-hub': 8133,
+  'intex-agent': 8134,
 };
 
 const SERVICE_URL_ENV = {
@@ -73,6 +74,7 @@ const SERVICE_URL_ENV = {
   'hellscript-agent': 'INTEXURAOS_HELLSCRIPT_AGENT_URL',
   'llm-usage-service': 'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'api-docs-hub': 'INTEXURAOS_API_DOCS_HUB_URL',
+  'intex-agent': 'INTEXURAOS_INTEX_AGENT_URL',
 };
 
 const PUBLIC_API_PATHS = {
@@ -94,6 +96,7 @@ const PUBLIC_API_PATHS = {
   'app-settings-service': '/api/settings',
   'hellscript-agent': '/api/hellscript-agent',
   'llm-usage-service': '/api/llm-usage',
+  'intex-agent': '/api/intex-agent',
 };
 
 const API_DOCS_HUB_OPENAPI_URLS = {
@@ -114,6 +117,7 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://127.0.0.1:8126/openapi.json',
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://127.0.0.1:8127/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://127.0.0.1:8131/openapi.json',
+  INTEXURAOS_INTEX_AGENT_OPENAPI_URL: 'http://127.0.0.1:8134/openapi.json',
 };
 
 const PROD_SERVICE_ORDER = [
@@ -127,6 +131,7 @@ const PROD_SERVICE_ORDER = [
   'code-agent',
   'hellscript-agent',
   'llm-usage-service',
+  'intex-agent',
   'user-service',
   'commands-agent',
   'actions-agent',
@@ -215,6 +220,7 @@ const SERVICE_SECRET_KEYS = {
   ],
   'hellscript-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'llm-usage-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_ORCHESTRATOR_SECRET'],
+  'intex-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
   'user-service': [
     'INTEXURAOS_AUTH0_CLIENT_ID',
     'INTEXURAOS_AUTH0_DOMAIN',
@@ -271,6 +277,8 @@ const SERVICE_ENV_MAPPINGS = {
       `${topic('whatsapp-media-cleanup')}-push`,
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
       envValue('INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC') ?? topic('commands-ingest'),
+    INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC:
+      envValue('INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC') ?? topic('intex-message-ingest'),
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC') ?? topic('whatsapp-webhook-process'),
     INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC:
@@ -354,6 +362,12 @@ const SERVICE_ENV_MAPPINGS = {
   'llm-usage-service': {
     INTEXURAOS_SERVICE_URL:
       envValue('INTEXURAOS_LLM_USAGE_PUBLIC_URL') ?? publicServiceUrl('llm-usage-service'),
+  },
+  'intex-agent': {
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
+    INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS:
+      envValue('INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS') ?? '1800000',
   },
   'api-docs-hub': {
     ...API_DOCS_HUB_OPENAPI_URLS,

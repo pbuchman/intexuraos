@@ -16,6 +16,7 @@ PUBSUB_ROUTES=(
   "intexuraos-whatsapp-webhook-process|intexuraos-whatsapp-svc|/internal/whatsapp/pubsub/process-webhook"
   "intexuraos-srt-transcription-completed|intexuraos-whatsapp-svc|/internal/whatsapp/pubsub/transcription-completed"
   "intexuraos-commands-ingest|intexuraos-commands-agents|/internal/commands"
+  "intexuraos-intex-message-ingest|intexuraos-intex-agent|/internal/intex-agent/messages"
   "intexuraos-actions-queue|intexuraos-actions|/internal/actions/process"
   "intexuraos-research-process|intexuraos-research-agent|/internal/llm/pubsub/process-research"
   "intexuraos-llm-analytics|intexuraos-research-agent|/internal/llm/pubsub/report-analytics"

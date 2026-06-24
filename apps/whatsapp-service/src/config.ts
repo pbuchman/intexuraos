@@ -77,6 +77,14 @@ const configSchema = z.object({
     .min(1, 'INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC is required'),
 
   /**
+   * Pub/Sub topic for intex-agent WhatsApp Assistant message ingest events.
+   * Required: Assistant conversations must reach intex-agent for realtime replies.
+   */
+  intexMessageIngestTopic: z
+    .string()
+    .min(1, 'INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC is required'),
+
+  /**
    * Pub/Sub topic for send message events.
    * Other services publish to this topic to request outbound WhatsApp messages.
    * Note: Subscription is configured in Terraform as push to /internal/whatsapp/pubsub/send-message
@@ -148,6 +156,7 @@ export function loadConfig(): Config {
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     commandsIngestTopic: process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'],
+    intexMessageIngestTopic: process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'],
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
     webhookProcessTopic: process.env['INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC'],
     audioStoredTopic: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'],
@@ -174,6 +183,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC',
     'INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC',
     'INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC',
+    'INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC',
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',

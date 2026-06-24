@@ -9,6 +9,7 @@ import type {
   AudioStoredEvent,
   CommandIngestEvent,
   ExtractLinkPreviewsEvent,
+  IntexMessageIngestEvent,
   MediaCleanupEvent,
   WebhookProcessEvent,
 } from '../events/index.js';
@@ -28,6 +29,12 @@ export interface EventPublisherPort {
    * Triggers command classification in commands-agent.
    */
   publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>>;
+
+  /**
+   * Publish a WhatsApp Assistant message ingest event.
+   * Triggers intex-agent realtime session handling.
+   */
+  publishIntexMessageIngest(event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a webhook process event.

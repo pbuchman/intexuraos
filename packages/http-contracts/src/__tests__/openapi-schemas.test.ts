@@ -156,6 +156,12 @@ describe('OpenAPI Schemas', () => {
       expect(
         (contractComponentSchemas.CalendarProcessActionRequest as { type?: string }).type
       ).toBe('object');
+      expect((contractComponentSchemas.CalendarCreateEventRequest as { type?: string }).type).toBe(
+        'object'
+      );
+      expect((contractComponentSchemas.CalendarCreatedEvent as { type?: string }).type).toBe(
+        'object'
+      );
       expect((contractComponentSchemas.CalendarPreview as { type?: string }).type).toBe('object');
       expect((contractComponentSchemas.LinearProcessActionRequest as { type?: string }).type).toBe(
         'object'
@@ -173,8 +179,23 @@ describe('OpenAPI Schemas', () => {
           };
         };
       };
+      const calendarCreateEventRequestSchema =
+        contractComponentSchemas.CalendarCreateEventRequest as {
+          additionalProperties?: boolean;
+          properties?: {
+            event?: {
+              required?: string[];
+            };
+          };
+        };
 
       expect(notesSchema.additionalProperties).toBe(false);
+      expect(calendarCreateEventRequestSchema.additionalProperties).toBe(false);
+      expect(calendarCreateEventRequestSchema.properties?.event?.required).toEqual([
+        'summary',
+        'start',
+        'end',
+      ]);
       expect(calendarPreviewSchema.properties?.status?.enum).toEqual([
         'pending',
         'ready',

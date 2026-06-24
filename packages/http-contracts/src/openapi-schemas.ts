@@ -9,6 +9,11 @@ import {
   bookmarksBookmarkSchema,
   bookmarksCreateBookmarkDataSchema,
   bookmarksCreateBookmarkRequestSchema,
+  calendarCreateEventDataSchema,
+  calendarCreateEventInputSchema,
+  calendarCreateEventRequestSchema,
+  calendarCreatedEventSchema,
+  calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewSchema,
@@ -206,6 +211,26 @@ export const contractComponentSchemas = {
   ResearchCreateDraftRequest: toOpenApiComponentSchema(
     'ResearchCreateDraftRequest',
     researchCreateDraftRequestSchema
+  ),
+  CalendarEventDateTime: toOpenApiComponentSchema(
+    'CalendarEventDateTime',
+    calendarEventDateTimeSchema
+  ),
+  CalendarCreateEventInput: toOpenApiComponentSchema(
+    'CalendarCreateEventInput',
+    calendarCreateEventInputSchema
+  ),
+  CalendarCreateEventRequest: toOpenApiComponentSchema(
+    'CalendarCreateEventRequest',
+    calendarCreateEventRequestSchema
+  ),
+  CalendarCreatedEvent: toOpenApiComponentSchema(
+    'CalendarCreatedEvent',
+    calendarCreatedEventSchema
+  ),
+  CalendarCreateEventData: toOpenApiComponentSchema(
+    'CalendarCreateEventData',
+    calendarCreateEventDataSchema
   ),
   CalendarProcessActionRequest: toOpenApiComponentSchema(
     'CalendarProcessActionRequest',

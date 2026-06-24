@@ -49,6 +49,7 @@ export function getConfig(): AppConfig {
     llmUsageServiceUrl: serviceUrls.INTEXURAOS_LLM_USAGE_SERVICE_URL,
     imageServiceUrl: serviceUrls.INTEXURAOS_IMAGE_SERVICE_URL,
     webAgentUrl: serviceUrls.INTEXURAOS_WEB_AGENT_URL,
+    intexAgentUrl: serviceUrls.INTEXURAOS_INTEX_AGENT_URL,
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),
     firebaseAuthDomain: getEnvVar('INTEXURAOS_FIREBASE_AUTH_DOMAIN'),

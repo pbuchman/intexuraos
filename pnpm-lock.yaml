@@ -745,6 +745,67 @@ importers:
         specifier: ^14.0.0
         version: 14.0.10
 
+  apps/intex-agent:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^10.0.1
+        version: 10.1.0
+      '@fastify/swagger':
+        specifier: ^9.4.2
+        version: 9.6.1
+      '@fastify/swagger-ui':
+        specifier: ^5.2.1
+        version: 5.2.4
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
+      '@intexuraos/common-http':
+        specifier: workspace:*
+        version: link:../../packages/common-http
+      '@intexuraos/http-contracts':
+        specifier: workspace:*
+        version: link:../../packages/http-contracts
+      '@intexuraos/http-server':
+        specifier: workspace:*
+        version: link:../../packages/http-server
+      '@intexuraos/infra-firestore':
+        specifier: workspace:*
+        version: link:../../packages/infra-firestore
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../../packages/infra-pubsub
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../../packages/llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
+      fastify:
+        specifier: 'catalog:'
+        version: 5.6.2
+      pino:
+        specifier: 'catalog:'
+        version: 10.1.1
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.0.16
+        version: 4.0.17(vitest@4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
+
   apps/linear-agent:
     dependencies:
       '@fastify/cors':

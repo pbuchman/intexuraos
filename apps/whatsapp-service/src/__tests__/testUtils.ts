@@ -103,6 +103,7 @@ export const testConfig: Config = {
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
   commandsIngestTopic: 'test-commands-ingest',
+  intexMessageIngestTopic: 'test-intex-message-ingest',
   audioStoredTopic: 'test-audio-stored',
   approvalReplyTopic: 'test-approval-reply',
   gcpProjectId: 'test-project',

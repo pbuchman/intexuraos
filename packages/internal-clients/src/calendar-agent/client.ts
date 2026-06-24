@@ -1,8 +1,12 @@
-import type { CalendarPreview as ContractCalendarPreview } from '@intexuraos/http-contracts';
+import type {
+  CalendarCreatedEvent as ContractCalendarCreatedEvent,
+  CalendarPreview as ContractCalendarPreview,
+} from '@intexuraos/http-contracts';
 import { err, ok, type Result, type ServiceFeedback } from '@intexuraos/common-core';
 import {
   createInternalHttpClient,
   type InternalHttpClient,
+  type InternalHttpClientError,
 } from '../shared/createInternalHttpClient.js';
 import { postServiceFeedback } from '../shared/serviceFeedback.js';
 import type {
@@ -10,10 +14,13 @@ import type {
   CalendarAgentServiceClient,
   CalendarAgentServiceConfig,
   CalendarPreview,
+  CreateCalendarEventRequest,
+  CreatedCalendarEvent,
   GeneratePreviewRequest,
   ProcessCalendarRequest,
 } from './types.js';
 
+const CREATE_EVENT_TIMEOUT_MS = 60_000;
 const PROCESS_ACTION_TIMEOUT_MS = 60_000;
 const GENERATE_PREVIEW_TIMEOUT_MS = 30_000;
 
@@ -64,6 +71,64 @@ function toCalendarPreview(preview: ContractCalendarPreview | null): CalendarPre
   };
 }
 
+function toCreatedCalendarEvent(event: ContractCalendarCreatedEvent): CreatedCalendarEvent {
+  return {
+    id: event.id,
+    summary: event.summary,
+    start: event.start,
+    end: event.end,
+    ...(event.description !== undefined ? { description: event.description } : {}),
+    ...(event.location !== undefined ? { location: event.location } : {}),
+    ...(event.status !== undefined ? { status: event.status } : {}),
+    ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
+    ...(event.created !== undefined ? { created: event.created } : {}),
+    ...(event.updated !== undefined ? { updated: event.updated } : {}),
+    ...(event.organizer !== undefined ? { organizer: event.organizer } : {}),
+    ...(event.attendees !== undefined ? { attendees: event.attendees } : {}),
+  };
+}
+
+function mapCalendarHttpError(error: InternalHttpClientError, errorPrefix: string): Error {
+  if (error.code === 'API_ERROR') {
+    const responseBody = error.body as CalendarErrorEnvelope;
+    const message =
+      (responseBody.success === true ? undefined : responseBody.error?.message) ??
+      `HTTP ${String(error.status)}: ${error.statusText}`;
+    return new Error(message);
+  }
+
+  if (error.code === 'ENVELOPE_ERROR' || error.code === 'MALFORMED_ENVELOPE') {
+    const responseBody = error.body as CalendarErrorEnvelope;
+    return new Error(
+      (responseBody.success === true ? undefined : responseBody.error?.message) ??
+        'Invalid response from calendar-agent'
+    );
+  }
+
+  return new Error(`${errorPrefix}: ${error.message}`);
+}
+
+async function createEvent(
+  config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
+  request: CreateCalendarEventRequest,
+  options: CalendarAgentRequestOptions | undefined
+): Promise<Result<CreatedCalendarEvent>> {
+  const result = await httpClient.request<{ event: ContractCalendarCreatedEvent }>({
+    path: '/internal/calendar/events',
+    method: 'POST',
+    body: request,
+    timeoutMs: resolveTimeoutMs(CREATE_EVENT_TIMEOUT_MS, config, options),
+    requestId: options?.requestId,
+  });
+
+  if (result.ok) {
+    return ok(toCreatedCalendarEvent(result.value.event));
+  }
+
+  return err(mapCalendarHttpError(result.error, 'Failed to create calendar event'));
+}
+
 async function readPreviewResponse(
   config: CalendarAgentServiceConfig,
   httpClient: InternalHttpClient,
@@ -86,25 +151,7 @@ async function readPreviewResponse(
     return ok(toCalendarPreview(result.value.preview));
   }
 
-  if (result.error.code === 'API_ERROR') {
-    const responseBody = result.error.body as CalendarErrorEnvelope;
-    const message =
-      (responseBody.success === true ? undefined : responseBody.error?.message) ??
-      `HTTP ${String(result.error.status)}: ${result.error.statusText}`;
-    return err(new Error(message));
-  }
-
-  if (result.error.code === 'ENVELOPE_ERROR' || result.error.code === 'MALFORMED_ENVELOPE') {
-    const responseBody = result.error.body as CalendarErrorEnvelope;
-    return err(
-      new Error(
-        (responseBody.success === true ? undefined : responseBody.error?.message) ??
-          'Invalid response from calendar-agent'
-      )
-    );
-  }
-
-  return err(new Error(`${errorPrefix}: ${result.error.message}`));
+  return err(mapCalendarHttpError(result.error, errorPrefix));
 }
 
 export function createCalendarAgentServiceClient(
@@ -118,6 +165,13 @@ export function createCalendarAgentServiceClient(
   });
 
   return {
+    async createEvent(
+      request: CreateCalendarEventRequest,
+      options?: CalendarAgentRequestOptions
+    ): Promise<Result<CreatedCalendarEvent>> {
+      return await createEvent(config, httpClient, request, options);
+    },
+
     async processAction(
       request: ProcessCalendarRequest,
       options?: CalendarAgentRequestOptions

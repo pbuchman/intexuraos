@@ -60,6 +60,16 @@ locals {
       retry_maximum_backoff = "600s"
       max_delivery_attempts = 5
     }
+    intex_message_ingest = {
+      subscription_name     = "intexuraos-intex-message-ingest-prod-hetzner"
+      topic_name            = local.pubsub_topics.intex_message_ingest
+      push_path             = "/internal/intex-agent/messages"
+      service_account_key   = "intex_agent"
+      ack_deadline_seconds  = 120
+      retry_minimum_backoff = "10s"
+      retry_maximum_backoff = "600s"
+      max_delivery_attempts = 5
+    }
     actions_queue = {
       subscription_name     = "intexuraos-actions-queue-prod-hetzner"
       topic_name            = local.pubsub_topics.actions_queue

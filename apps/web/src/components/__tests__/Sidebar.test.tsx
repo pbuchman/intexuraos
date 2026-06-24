@@ -136,7 +136,7 @@ describe('Sidebar', () => {
     );
   });
 
-  it('renders WhatsApp as an expanded section with Assistant and Private entries', () => {
+  it('renders WhatsApp as an expanded section with Assistant, Sessions, and Private entries', () => {
     render(
       <MemoryRouter initialEntries={['/whatsapp/private']}>
         <Sidebar />
@@ -147,6 +147,10 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /assistant/i })).toHaveAttribute(
       'href',
       '/whatsapp/assistant'
+    );
+    expect(screen.getByRole('link', { name: /sessions/i })).toHaveAttribute(
+      'href',
+      '/whatsapp/sessions'
     );
     expect(screen.getByRole('link', { name: /private/i })).toHaveAttribute(
       'href',

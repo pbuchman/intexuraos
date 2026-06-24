@@ -27,6 +27,7 @@ const EXPECTED_SERVICES = [
   ['code-agent', '8128'],
   ['hellscript-agent', '8131'],
   ['llm-usage-service', '8132'],
+  ['intex-agent', '8134'],
   ['user-service', '8110'],
   ['commands-agent', '8117'],
   ['actions-agent', '8118'],
@@ -297,6 +298,8 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('notion-service')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('notion-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
     expect(byName.get('code-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
     expect(byName.get('user-service')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBe(
       'github-oauth-secret'
@@ -339,6 +342,19 @@ describe('ecosystem.config.prod.cjs', () => {
     );
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'
+    );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC).toBe(
+      'intexuraos-intex-message-ingest-dev'
+    );
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
+      'intexuraos-whatsapp-send-dev'
+    );
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_NOTES_AGENT_URL).toBe('http://127.0.0.1:8121');
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_CALENDAR_AGENT_URL).toBe(
+      'http://127.0.0.1:8125'
+    );
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_LLM_USAGE_SERVICE_URL).toBe(
+      'http://127.0.0.1:8132'
     );
     expect(byName.get('commands-agent')?.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE).toBe(
       'intexuraos-actions-queue-dev'

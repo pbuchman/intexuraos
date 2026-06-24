@@ -36,6 +36,7 @@ export const OPEN_API_SOURCE_CATALOG = [
   { name: 'Linear Agent API', openApiUrlEnvVar: 'INTEXURAOS_LINEAR_AGENT_OPENAPI_URL' },
   { name: 'Web Agent API', openApiUrlEnvVar: 'INTEXURAOS_WEB_AGENT_OPENAPI_URL' },
   { name: 'Hellscript Agent API', openApiUrlEnvVar: 'INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL' },
+  { name: 'Intex Agent API', openApiUrlEnvVar: 'INTEXURAOS_INTEX_AGENT_OPENAPI_URL' },
 ] as const;
 
 const REQUIRED_ENV_VARS: EnvVar[] = OPEN_API_SOURCE_CATALOG.map(

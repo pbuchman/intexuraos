@@ -96,6 +96,9 @@ const HomePage = React.lazy(() =>
 const InboxPage = React.lazy(() =>
   import('@/pages/InboxPage').then((m) => ({ default: m.InboxPage })),
 );
+const IntexAgentSessionsPage = React.lazy(() =>
+  import('@/pages/IntexAgentSessionsPage').then((m) => ({ default: m.IntexAgentSessionsPage })),
+);
 const LlmUsagePage = React.lazy(() =>
   import('@/pages/LlmUsagePage').then((m) => ({ default: m.LlmUsagePage })),
 );
@@ -297,6 +300,7 @@ function AppRoutes(): React.JSX.Element {
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/share-target" element={<ShareTargetPage />} />
           <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
+          <Route path="/whatsapp/sessions" element={<IntexAgentSessionsPage />} />
           <Route path="/whatsapp/private" element={<PrivateWhatsAppLogPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />

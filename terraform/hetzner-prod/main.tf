@@ -22,6 +22,7 @@ locals {
   service_account_ids = {
     whatsapp_service = "intexuraos-whatsapp-svc-${var.source_environment}"
     commands_agent   = "intexuraos-commands-agents-${var.source_environment}"
+    intex_agent      = "intexuraos-intex-agent-${var.source_environment}"
     actions_agent    = "intexuraos-actions-${var.source_environment}"
     research_agent   = "intexuraos-research-agent-${var.source_environment}"
     code_agent       = "intexuraos-code-${var.source_environment}"
@@ -43,6 +44,7 @@ locals {
     transcription_completed    = "intexuraos-transcription-completed-${var.source_environment}"
     audio_stored               = "intexuraos-audio-stored-${var.source_environment}"
     commands_ingest            = "intexuraos-commands-ingest-${var.source_environment}"
+    intex_message_ingest       = "intexuraos-intex-message-ingest-${var.source_environment}"
     actions_queue              = "intexuraos-actions-queue-${var.source_environment}"
     research_process           = "intexuraos-research-process-${var.source_environment}"
     llm_analytics              = "intexuraos-llm-analytics-${var.source_environment}"
@@ -71,6 +73,7 @@ locals {
     "/internal/execution-memory/process"                = "code-agent"
     "/internal/execution-memory/prune-stale"            = "code-agent"
     "/internal/execution-memory/sweep-errored"          = "code-agent"
+    "/internal/intex-agent/messages"                    = "intex-agent"
     "/internal/linear/prune-issues"                     = "linear-agent"
     "/internal/linear/sync-all"                         = "linear-agent"
     "/internal/llm/pubsub/process-llm-call"             = "research-agent"

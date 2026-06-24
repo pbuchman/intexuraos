@@ -17,6 +17,7 @@ const TOPICS = [
   'whatsapp-webhook-process',
   'whatsapp-transcription',
   'commands-ingest',
+  'intex-message-ingest',
   'actions-queue',
   'approval-reply',
   'research-process',
@@ -36,6 +37,7 @@ const TOPIC_ENDPOINTS = {
   'whatsapp-transcription':
     'http://host.docker.internal:8113/internal/whatsapp/pubsub/transcribe-audio',
   'commands-ingest': 'http://host.docker.internal:8117/internal/commands',
+  'intex-message-ingest': 'http://host.docker.internal:8134/internal/intex-agent/messages',
   'actions-queue': 'http://host.docker.internal:8118/internal/actions/process',
   'approval-reply': 'http://host.docker.internal:8118/internal/actions/approval-reply',
   'research-process': 'http://host.docker.internal:8116/internal/llm/pubsub/process-research',

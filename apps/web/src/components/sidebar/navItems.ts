@@ -40,6 +40,7 @@ export const settingsItems: NavItem[] = [
 
 export const whatsappItems: NavItem[] = [
   { to: '/whatsapp/assistant', label: 'Assistant', icon: MessageCircle },
+  { to: '/whatsapp/sessions', label: 'Sessions', icon: Clock },
   { to: '/whatsapp/private', label: 'Private', icon: MessagesSquare },
 ];
 

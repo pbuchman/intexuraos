@@ -236,6 +236,47 @@ export interface CommandIngestEvent {
 }
 
 /**
+ * Event published when a WhatsApp Assistant message is ready for intex-agent.
+ * Triggers realtime session handling and tool execution.
+ */
+export interface IntexMessageIngestEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'intex.message.ingest';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * WhatsApp message ID.
+   */
+  messageId: string;
+
+  /**
+   * Message text content.
+   */
+  text: string;
+
+  /**
+   * Source type identifier.
+   */
+  sourceType: 'whatsapp_text' | 'whatsapp_voice';
+
+  /**
+   * Optional WhatsApp sender phone number for diagnostics.
+   */
+  whatsappSender?: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
  * Event published when a webhook needs async processing.
  * Decouples webhook response from processing to avoid CPU throttling.
  */
@@ -287,6 +328,7 @@ export type WhatsAppEvent =
   | MediaCleanupEvent
   | TranscriptionCompletedEvent
   | CommandIngestEvent
+  | IntexMessageIngestEvent
   | SendMessageEvent
   | WebhookProcessEvent
   | ExtractLinkPreviewsEvent

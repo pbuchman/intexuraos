@@ -52,7 +52,7 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     usecase = new HandleTranscriptionCompletedUseCase(deps);
   });
 
-  it('handles completed status: updates transcription, sends WhatsApp message with transcript, publishes command.ingest', async () => {
+  it('handles completed status: updates transcription, sends WhatsApp message with transcript, publishes intex.message.ingest', async () => {
     messageRepository.setMessage(createTestMessage());
 
     await usecase.execute(
@@ -77,15 +77,16 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     expect(sentMessages[0]?.message).toContain('🎙️ *Transcription:*');
     expect(sentMessages[0]?.message).toContain('Hello world');
 
-    const commandIngestEvents = eventPublisher.getCommandIngestEvents();
-    expect(commandIngestEvents).toHaveLength(1);
-    expect(commandIngestEvents[0]?.userId).toBe('user-1');
-    expect(commandIngestEvents[0]?.text).toBe('Hello world');
-    expect(commandIngestEvents[0]?.sourceType).toBe('whatsapp_voice');
-    expect(commandIngestEvents[0]?.externalId).toBe('wamid.test');
+    const ingestEvents = eventPublisher.getIntexMessageIngestEvents();
+    expect(ingestEvents).toHaveLength(1);
+    expect(ingestEvents[0]?.userId).toBe('user-1');
+    expect(ingestEvents[0]?.text).toBe('Hello world');
+    expect(ingestEvents[0]?.sourceType).toBe('whatsapp_voice');
+    expect(ingestEvents[0]?.messageId).toBe('wamid.test');
+    expect(ingestEvents[0]?.whatsappSender).toBe('+1234567890');
   });
 
-  it('handles failed status: updates transcription, sends failure message, does NOT publish command.ingest', async () => {
+  it('handles failed status: updates transcription, sends failure message, does NOT publish intex.message.ingest', async () => {
     messageRepository.setMessage(createTestMessage());
 
     await usecase.execute(
@@ -109,8 +110,8 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     expect(sentMessages[0]?.message).toContain('❌ *Transcription failed:*');
     expect(sentMessages[0]?.message).toContain('Audio quality too low');
 
-    const commandIngestEvents = eventPublisher.getCommandIngestEvents();
-    expect(commandIngestEvents).toHaveLength(0);
+    const ingestEvents = eventPublisher.getIntexMessageIngestEvents();
+    expect(ingestEvents).toHaveLength(0);
   });
 
   it('includes summary in WhatsApp message when provided (English)', async () => {
@@ -205,7 +206,7 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     );
 
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
-    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
   });
 
   it('returns early when findById returns an error result', async () => {
@@ -225,7 +226,7 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     );
 
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
-    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
   });
 
   it('returns early when phoneNumberId is missing from message metadata', async () => {
@@ -258,7 +259,7 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     );
 
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
-    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
   });
 
   it('uses empty string for transcript when transcript is undefined (completed)', async () => {
@@ -280,7 +281,7 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.message).toContain('🎙️ *Transcription:*');
 
-    const commandIngestEvents = eventPublisher.getCommandIngestEvents();
+    const commandIngestEvents = eventPublisher.getIntexMessageIngestEvents();
     expect(commandIngestEvents).toHaveLength(1);
     expect(commandIngestEvents[0]?.text).toBe('');
   });
@@ -325,9 +326,9 @@ describe('HandleTranscriptionCompletedUseCase', () => {
       logger
     );
 
-    // Should still send the WhatsApp message and publish command.ingest despite Firestore failure
+    // Should still send the WhatsApp message and publish intex.message.ingest despite Firestore failure
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(1);
-    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
   });
 
   it('continues and sends failure message when updateTranscription fails (failed status)', async () => {
@@ -353,7 +354,7 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     expect(sentMessages[0]?.message).toContain('❌ *Transcription failed:*');
   });
 
-  it('returns early and does not publish command.ingest when sendMessage fails (completed)', async () => {
+  it('returns early and does not publish intex.message.ingest when sendMessage fails (completed)', async () => {
     messageRepository.setMessage(createTestMessage());
     whatsappCloudApi.setFailSendMessage(true);
 
@@ -370,8 +371,8 @@ describe('HandleTranscriptionCompletedUseCase', () => {
       logger
     );
 
-    // Should NOT publish command.ingest since user was not notified
-    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+    // Should NOT publish intex.message.ingest since user was not notified
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
   });
 
   it('returns early when sendMessage fails (failed status)', async () => {
@@ -391,13 +392,13 @@ describe('HandleTranscriptionCompletedUseCase', () => {
       logger
     );
 
-    // Returns early — no command.ingest to check, just verify it didn't throw
-    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+    // Returns early — no intex.message.ingest to check, just verify it didn't throw
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
   });
 
-  it('handles publishCommandIngest failure gracefully', async () => {
+  it('handles publishIntexMessageIngest failure gracefully', async () => {
     messageRepository.setMessage(createTestMessage());
-    eventPublisher.setCommandIngestFailure('Simulated PubSub failure');
+    eventPublisher.setIntexMessageIngestFailure('Simulated PubSub failure');
 
     await usecase.execute(
       {
@@ -412,8 +413,8 @@ describe('HandleTranscriptionCompletedUseCase', () => {
       logger
     );
 
-    // WhatsApp message was sent successfully, but command.ingest failed
+    // WhatsApp message was sent successfully, but intex.message.ingest failed
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(1);
-    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
   });
 });

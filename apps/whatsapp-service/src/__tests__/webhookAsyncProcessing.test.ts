@@ -1828,8 +1828,8 @@ describe('Webhook async processing', () => {
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBe(0);
 
-      // But command.ingest should still be published
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // But intex.message.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -1873,8 +1873,8 @@ describe('Webhook async processing', () => {
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBe(0);
 
-      // But command.ingest should still be published
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // But intex.message.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -1914,8 +1914,8 @@ describe('Webhook async processing', () => {
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBe(0);
 
-      // But command.ingest should still be published
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // But intex.message.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -1997,19 +1997,19 @@ describe('Webhook async processing', () => {
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBe(0);
 
-      // command.ingest was NOT published because actionId was found (skips command.ingest)
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // intex.message.ingest was NOT published because actionId was found (skips intex.message.ingest)
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       expect(commandEvents.length).toBe(0);
     });
 
-    it('marks webhook failed and returns retryable status when command.ingest publish fails', async () => {
+    it('marks webhook failed and returns retryable status when intex.message.ingest publish fails', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
-      // Set publisher to fail for command ingest
-      ctx.eventPublisher.setCommandIngestFailure('PubSub failure');
+      // Set publisher to fail for intex message ingest
+      ctx.eventPublisher.setIntexMessageIngestFailure('PubSub failure');
 
-      // Use standard webhook payload (no reply context → goes through command.ingest path)
+      // Use standard webhook payload (no reply context → goes through intex.message.ingest path)
       const payload = createWebhookPayload();
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
@@ -2031,15 +2031,15 @@ describe('Webhook async processing', () => {
 
       expect(processingStatus).toBe(500);
 
-      // command.ingest failure is fatal for bookmark creation, so the webhook remains retryable
+      // intex.message.ingest failure is fatal for bookmark creation, so the webhook remains retryable
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('failed');
-      expect(events[0]?.failureDetails).toContain('Failed to publish command ingest');
+      expect(events[0]?.failureDetails).toContain('Failed to publish intex message ingest');
       expect(events[0]?.retryable).toBe(true);
 
-      // No command ingest events were published (publisher failed)
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // No intex message ingest events were published (publisher failed)
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       expect(commandEvents.length).toBe(0);
     });
 
@@ -2111,7 +2111,7 @@ describe('Webhook async processing', () => {
       });
     });
 
-    it('retries a pending webhook event by exact id and publishes command.ingest', async () => {
+    it('retries a pending webhook event by exact id and publishes intex.message.ingest', async () => {
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
       const payload = createWebhookPayload();
@@ -2156,7 +2156,7 @@ describe('Webhook async processing', () => {
       const events = ctx.webhookEventRepository.getAll();
       expect(events[0]?.status).toBe('completed');
       expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
-      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
     });
 
     it('drains old pending webhook events when the scheduler posts an empty body', async () => {
@@ -2201,7 +2201,7 @@ describe('Webhook async processing', () => {
       const events = ctx.webhookEventRepository.getAll();
       expect(events[0]?.status).toBe('completed');
       expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
-      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
     });
 
     it('reuses an existing WhatsApp message row when replaying a webhook', async () => {
@@ -2239,7 +2239,7 @@ describe('Webhook async processing', () => {
       await triggerWebhookProcessing();
 
       expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
-      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
     });
 
     it('drains old failed webhook events when the scheduler posts an empty body', async () => {
@@ -2253,7 +2253,7 @@ describe('Webhook async processing', () => {
         receivedAt: '2020-01-01T00:00:00.000Z',
         phoneNumberId: '123456789012345',
         status: 'failed',
-        failureDetails: 'Failed to publish command ingest: transient Pub/Sub error',
+        failureDetails: 'Failed to publish intex message ingest: transient Pub/Sub error',
         retryable: true,
       });
 
@@ -2286,7 +2286,7 @@ describe('Webhook async processing', () => {
       const events = ctx.webhookEventRepository.getAll();
       expect(events[0]?.status).toBe('completed');
       expect(ctx.messageRepository.getMessagesByUserSync(testUserId)).toHaveLength(1);
-      expect(ctx.eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
     });
 
     it('does not automatically retry old failed non-bookmark webhook events', async () => {
@@ -2782,8 +2782,8 @@ describe('Webhook async processing', () => {
     });
   });
 
-  describe('approval reply command.ingest skip', () => {
-    it('should skip command.ingest when approval reply has known actionId', async () => {
+  describe('approval reply intex.message.ingest skip', () => {
+    it('should skip intex.message.ingest when approval reply has known actionId', async () => {
       const senderPhone = '15551234567';
       const testUserId = 'test-user-approval';
 
@@ -2834,18 +2834,18 @@ describe('Webhook async processing', () => {
         replyText: 'Ok',
       });
 
-      // Verify: Command ingest event was NOT published for this message
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // Verify: Intex message ingest event was NOT published for this message
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       const latestCommandEvent = commandEvents[commandEvents.length - 1];
       // Either no events, or the latest event is not from this message
       if (latestCommandEvent !== undefined) {
-        expect(latestCommandEvent.externalId).not.toBe(
+        expect(latestCommandEvent.messageId).not.toBe(
           'wamid.reply.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA'
         );
       }
     });
 
-    it('should publish command.ingest when reply has no actionId', async () => {
+    it('should publish intex.message.ingest when reply has no actionId', async () => {
       const senderPhone = '15551234567';
       const testUserId = 'test-user-no-action';
 
@@ -2890,12 +2890,12 @@ describe('Webhook async processing', () => {
       const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalEvents.length).toBe(0);
 
-      // Verify: Command ingest event WAS published (because no actionId)
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // Verify: Intex message ingest event WAS published (because no actionId)
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       expect(commandEvents.length).toBeGreaterThanOrEqual(1);
       const latestCommandEvent = commandEvents[commandEvents.length - 1];
       expect(latestCommandEvent).toMatchObject({
-        type: 'command.ingest',
+        type: 'intex.message.ingest',
         text: 'Create a note to buy milk',
       });
     });
@@ -3493,15 +3493,15 @@ describe('Webhook async processing', () => {
     });
   });
 
-  describe('command ingest publish failure', () => {
-    it('logs error when publishCommandIngest fails', async () => {
+  describe('intex message ingest publish failure', () => {
+    it('logs error when publishIntexMessageIngest fails', async () => {
       const senderPhone = '15551234567';
       const testUserId = 'test-user-cmd-fail';
 
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
-      // Configure event publisher to fail command ingest
-      ctx.eventPublisher.setCommandIngestFailure('Simulated command ingest failure');
+      // Configure event publisher to fail intex message ingest
+      ctx.eventPublisher.setIntexMessageIngestFailure('Simulated intex message ingest failure');
 
       const payload = createWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -3521,15 +3521,15 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Event should fail so Pub/Sub can retry bookmark-producing command ingestion
+      // Event should fail so Pub/Sub can retry bookmark-producing intex message ingestion
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('failed');
-      expect(events[0]?.failureDetails).toContain('Failed to publish command ingest');
+      expect(events[0]?.failureDetails).toContain('Failed to publish intex message ingest');
       expect(events[0]?.retryable).toBe(true);
 
-      // No command ingest events should be published (publish failed)
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      // No intex message ingest events should be published (publish failed)
+      const commandEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
       expect(commandEvents.length).toBe(0);
     });
   });

@@ -132,27 +132,27 @@ export class HandleTranscriptionCompletedUseCase {
         'Sent transcription result to user'
       );
 
-      // Publish command.ingest event
-      const commandResult = await eventPublisher.publishCommandIngest({
-        type: 'command.ingest',
+      // Publish intex.message.ingest event
+      const ingestResult = await eventPublisher.publishIntexMessageIngest({
+        type: 'intex.message.ingest',
         userId: event.userId,
+        messageId: message.waMessageId,
         sourceType: 'whatsapp_voice',
-        externalId: message.waMessageId,
         text: event.transcript ?? '',
-        ...(event.summary !== undefined && { summary: event.summary }),
+        whatsappSender: message.fromNumber,
         timestamp: event.timestamp,
       });
-      if (!commandResult.ok) {
+      if (!ingestResult.ok) {
         logger.error(
-          { event: 'transcription_command_ingest_failed', messageId: event.messageId, error: commandResult.error },
-          'Failed to publish command.ingest event'
+          { event: 'transcription_intex_message_ingest_failed', messageId: event.messageId, error: ingestResult.error },
+          'Failed to publish intex.message.ingest event'
         );
         return;
       }
 
       logger.info(
         { event: 'transcription_completed_command_ingest_published', messageId: event.messageId, userId: event.userId },
-        'Published command.ingest event'
+        'Published intex.message.ingest event'
       );
     } else {
       // Update Firestore with failed transcription state

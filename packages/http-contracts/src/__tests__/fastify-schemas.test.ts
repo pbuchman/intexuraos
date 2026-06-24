@@ -84,6 +84,8 @@ describe('Fastify Schemas', () => {
       expect(addSchema).toHaveBeenCalledWith(fastifyErrorCodeSchema);
       expect(addSchema).toHaveBeenCalledWith(fastifyErrorBodySchema);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.ServiceFeedback);
+      expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarCreateEventRequest);
+      expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarCreatedEvent);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarPreview);
     });
   });
