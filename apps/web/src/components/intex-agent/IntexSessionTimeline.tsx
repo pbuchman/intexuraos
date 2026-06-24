@@ -123,7 +123,12 @@ export function IntexSessionTimeline({
             <span>Start: {formatSessionValue(session.startReason)}</span>
             <span>End: {formatSessionValue(session.endReason)}</span>
             <span>Tool: {formatSessionValue(session.activeTool)}</span>
-            <span>Assistant: {session.lastAssistantMessageAt ?? 'No reply yet'}</span>
+            <span>
+              Assistant:{' '}
+              {session.lastAssistantMessageAt !== undefined
+                ? formatSessionDateTimeCompact(session.lastAssistantMessageAt)
+                : 'No reply yet'}
+            </span>
           </div>
         ) : null}
       </div>

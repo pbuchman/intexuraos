@@ -309,7 +309,12 @@ export type IntexAgentSessionEndReason =
   | 'cancelled_by_user'
   | 'superseded_by_user';
 
-export type IntexAgentToolName = 'create_note' | 'create_calendar_event';
+export type IntexAgentToolName =
+  | 'create_note'
+  | 'create_calendar_event'
+  | 'create_research'
+  | 'create_link'
+  | 'create_code_task';
 
 export interface IntexAgentSession {
   id: string;

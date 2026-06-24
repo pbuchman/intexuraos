@@ -26,6 +26,10 @@ export type IntexAgentRunnerResult =
       reply: string;
     }
   | {
+      outcome: 'no_action';
+      reply: string;
+    }
+  | {
       outcome: 'unsupported';
       reply: string;
     };
@@ -86,7 +90,7 @@ export async function handleIncomingMessage(
   const effectiveMessage = decision.effectiveUserMessageText;
 
   if (effectiveMessage === null) {
-    const reply = prefixForDecision(decision) + newSessionReadyText();
+    const reply = newSessionReadyText();
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
@@ -113,7 +117,7 @@ export async function handleIncomingMessage(
     message: effectiveMessage,
     messageId: input.messageId,
   });
-  await applyRunnerResult(input, deps, session, runnerResult, prefixForDecision(decision));
+  await applyRunnerResult(input, deps, session, runnerResult);
 
   return { sessionId: session.id };
 }
@@ -169,11 +173,21 @@ async function applyRunnerResult(
   input: IntexIncomingMessage,
   deps: HandleIncomingMessageDeps,
   session: IntexAgentSession,
-  runnerResult: IntexAgentRunnerResult,
-  replyPrefix: string
+  runnerResult: IntexAgentRunnerResult
 ): Promise<void> {
+  if (runnerResult.outcome === 'no_action') {
+    const reply = stripDuplicateSessionPrefix(runnerResult.reply);
+    const assistantAt = await appendAssistantMessage(session, deps, reply);
+    await deps.sessionRepository.updateSession(session.id, {
+      status: 'waiting_for_user',
+      lastAssistantMessageAt: assistantAt,
+    });
+    await publishReply(input, deps, session.id, reply);
+    return;
+  }
+
   if (runnerResult.outcome === 'needs_clarification') {
-    const reply = replyPrefix + stripDuplicateSessionPrefix(runnerResult.reply);
+    const reply = stripDuplicateSessionPrefix(runnerResult.reply);
     await appendEvent(deps, session, 'clarification_requested', { message: reply });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
@@ -185,7 +199,7 @@ async function applyRunnerResult(
   }
 
   if (runnerResult.outcome === 'unsupported') {
-    const reply = replyPrefix + runnerResult.reply;
+    const reply = stripDuplicateSessionPrefix(runnerResult.reply);
     await appendEvent(deps, session, 'unsupported_request', { message: runnerResult.reply });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await closeSession(session, deps, 'unsupported', 'unsupported_request', {
@@ -196,9 +210,14 @@ async function applyRunnerResult(
     return;
   }
 
-  const reply = replyPrefix + runnerResult.reply;
+  if (runnerResult.toolName === undefined) {
+    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult());
+    return;
+  }
+
+  const reply = stripDuplicateSessionPrefix(runnerResult.reply);
   await appendEvent(deps, session, 'tool_call_completed', {
-    ...(runnerResult.toolName !== undefined ? { toolName: runnerResult.toolName } : {}),
+    toolName: runnerResult.toolName,
   });
   const assistantAt = await appendAssistantMessage(session, deps, reply);
   const endedAt = deps.clock.now();
@@ -207,7 +226,7 @@ async function applyRunnerResult(
     endedAt,
     lastAssistantMessageAt: assistantAt,
     endReason: 'tool_completed',
-    ...(runnerResult.toolName !== undefined ? { activeTool: runnerResult.toolName } : {}),
+    activeTool: runnerResult.toolName,
     ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
   });
   await appendEvent(deps, session, 'session_closed', {
@@ -278,28 +297,30 @@ async function publishReply(
   });
 }
 
-function prefixForDecision(decision: SessionTransitionDecision): string {
-  if (decision.action === 'continue') {
-    return '';
-  }
-
-  if (decision.closeCurrentSession?.status === 'superseded') {
-    return 'Previous session superseded. New session started.\n\n';
-  }
-
-  if (decision.closeCurrentSession?.status === 'expired') {
-    return 'Previous session expired. New session started.\n\n';
-  }
-
-  return 'New session started.\n\n';
-}
-
 function newSessionReadyText(): string {
-  return 'What would you like me to help with? I can create notes and calendar events.';
+  return 'What would you like me to help with? I can create notes, calendar events, research drafts, bookmarks, and code tasks.';
 }
 
 function stripDuplicateSessionPrefix(text: string): string {
-  return text.replace(/^New session started\.\s*/i, '').trimStart();
+  return text
+    .replace(/^(Previous session (?:superseded|expired)\. )?New session started\.\s*/i, '')
+    .trimStart();
+}
+
+async function applyUnsupportedRunnerResult(
+  input: IntexIncomingMessage,
+  deps: HandleIncomingMessageDeps,
+  session: IntexAgentSession,
+  runnerResult: Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }>
+): Promise<void> {
+  const reply = stripDuplicateSessionPrefix(runnerResult.reply);
+  await appendEvent(deps, session, 'unsupported_request', { message: runnerResult.reply });
+  const assistantAt = await appendAssistantMessage(session, deps, reply);
+  await closeSession(session, deps, 'unsupported', 'unsupported_request', {
+    lastAssistantMessageAt: assistantAt,
+    summary: summarizeUserMessage(input.text),
+  });
+  await publishReply(input, deps, session.id, reply);
 }
 
 function summarizeUserMessage(message: string): string {
@@ -308,4 +329,12 @@ function summarizeUserMessage(message: string): string {
     return normalized;
   }
   return `${normalized.slice(0, 117)}...`;
+}
+
+function malformedRunnerResult(): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
+  return {
+    outcome: 'unsupported',
+    reply:
+      'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
+  };
 }

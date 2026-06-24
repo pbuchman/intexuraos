@@ -59,9 +59,11 @@ export function createExecuteResearchActionUseCase(
         sourceActionId: prepared['sourceActionId'] as string,
       }),
     buildCompletionMessage: (_action: Action, response) =>
-      /* v8 ignore start -- ts-type: nullish coalescing fallback guard for undefined resourceUrl @preserve */
-      `📚 ${response.message} View it here: ${webAppUrl}${response.resourceUrl ?? ''}`,
-    /* v8 ignore stop @preserve */
+      `📚 ${response.message} View it here: ${resolveResourceUrl(webAppUrl, response.resourceUrl as string)}`,
     correlationPrefix: 'research-complete',
   });
+}
+
+function resolveResourceUrl(webAppUrl: string, resourceUrl: string): string {
+  return /^https?:\/\//i.test(resourceUrl) ? resourceUrl : `${webAppUrl}${resourceUrl}`;
 }
