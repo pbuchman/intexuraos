@@ -355,8 +355,12 @@ describe('privateWhatsAppRepository', () => {
       matrixRoomId: '!room:matrix.example',
       chatType: 'direct',
       displayName: 'Alice',
+      messageCount: 1,
+      participantCount: 1,
+      participantKeys: ['phone:+48123456789'],
       firstSeenAt: '2026-06-22T10:00:00.000Z',
       lastEventAt: '2026-06-22T10:00:00.000Z',
+      schemaVersion: 2,
     });
     expect(message).toMatchObject({
       id: expectedMessageId,
@@ -823,9 +827,26 @@ describe('privateWhatsAppRepository', () => {
         },
       })
     );
+    const otherChatResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!other-room:matrix.example',
+          type: 'group',
+          displayName: 'Other Room',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!other-room:matrix.example',
+          matrixEventId: '$event-other-chat',
+          text: 'different chat',
+          eventTimestamp: '2026-06-22T12:30:00.000Z',
+        },
+      })
+    );
     expect(firstResult.ok).toBe(true);
     expect(secondResult.ok).toBe(true);
     expect(otherSenderResult.ok).toBe(true);
+    expect(otherChatResult.ok).toBe(true);
 
     const malformedCursorResult = await repository.findMessages({
       sourceAccountId: 'pbuchman-private-whatsapp',
@@ -879,6 +900,110 @@ describe('privateWhatsAppRepository', () => {
     if (!zeroLimitResult.ok) throw new Error(zeroLimitResult.error.message);
     expect(zeroLimitResult.value.messages).toEqual([]);
     expect(zeroLimitResult.value.nextCursor).toBeUndefined();
+
+    const chatId = deterministicId('pbuchman-private-whatsapp', '!room:matrix.example');
+    const chatFilterResult = await repository.findMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId,
+      limit: 10,
+    });
+    expect(chatFilterResult.ok).toBe(true);
+    if (!chatFilterResult.ok) throw new Error(chatFilterResult.error.message);
+    expect(chatFilterResult.value.messages.map((message) => message.chatId)).toEqual([
+      chatId,
+      chatId,
+      chatId,
+    ]);
+  });
+
+  it('queries private WhatsApp chats newest-first and projects legacy chat documents safely', async () => {
+    const olderResult = await repository.storeIncomingMessage(createStoreInput());
+    const newerResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!group-room:matrix.example',
+          type: 'group',
+          displayName: 'Fishing Crew (WA)',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!group-room:matrix.example',
+          matrixEventId: '$event-group',
+          matrixSenderId: '@whatsapp_48536911713:home-dev',
+          senderDisplayName: 'Piotrek (WA)',
+          senderPhoneNumber: '+48536911713',
+          senderPhoneNumberNormalized: '48536911713',
+          senderKey: 'phone:+48536911713',
+          text: 'group message',
+          eventTimestamp: '2026-06-23T09:00:00.000Z',
+        },
+      })
+    );
+    expect(olderResult.ok).toBe(true);
+    expect(newerResult.ok).toBe(true);
+
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('legacy-chat').set({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      displayName: 'Legacy Room',
+      avatarMxcUri: 'mxc://matrix.example/avatar',
+      lastEventAt: '2026-06-21T09:00:00.000Z',
+      messageCount: 7,
+      participantKeys: ['phone:+48111111111', 123],
+    });
+
+    const firstPage = await repository.findChats({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 1,
+    });
+    expect(firstPage.ok).toBe(true);
+    if (!firstPage.ok) throw new Error(firstPage.error.message);
+    expect(firstPage.value.chats).toMatchObject([
+      {
+        chatType: 'group',
+        displayName: 'Fishing Crew (WA)',
+        messageCount: 1,
+        participantCount: 1,
+      },
+    ]);
+    expect(firstPage.value.nextCursor).toEqual(expect.any(String));
+
+    const cursor = firstPage.value.nextCursor;
+    if (cursor === undefined) throw new Error('Expected chat cursor');
+    const secondPage = await repository.findChats({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 10,
+      cursor,
+    });
+    expect(secondPage.ok).toBe(true);
+    if (!secondPage.ok) throw new Error(secondPage.error.message);
+    expect(secondPage.value.chats.map((chat) => chat.id)).toContain('legacy-chat');
+
+    const legacy = secondPage.value.chats.find((chat) => chat.id === 'legacy-chat');
+    expect(legacy).toMatchObject({
+      id: 'legacy-chat',
+      userId: '',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      matrixRoomId: '',
+      chatType: 'unknown',
+      displayName: 'Legacy Room',
+      avatarMxcUri: 'mxc://matrix.example/avatar',
+      messageCount: 7,
+      participantCount: 1,
+      participantKeys: ['phone:+48111111111'],
+      firstSeenAt: '',
+      lastEventAt: '2026-06-21T09:00:00.000Z',
+      updatedAt: '',
+      schemaVersion: 2,
+    });
+
+    const zeroLimit = await repository.findChats({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 0,
+    });
+    expect(zeroLimit.ok).toBe(true);
+    if (!zeroLimit.ok) throw new Error(zeroLimit.error.message);
+    expect(zeroLimit.value.chats).toEqual([]);
+    expect(zeroLimit.value.nextCursor).toBeUndefined();
   });
 
   it('queries sender-day aggregates with and without sender cursors', async () => {

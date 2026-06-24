@@ -6,17 +6,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  PrivateWhatsAppMessage,
-  PrivateWhatsAppSender,
-  PrivateWhatsAppSenderDay,
-} from '@/types';
+import type { PrivateWhatsAppChat, PrivateWhatsAppMessage } from '@/types';
 
 const mocks = vi.hoisted(() => ({
   getAccessToken: vi.fn(),
-  listPrivateWhatsAppSenders: vi.fn(),
-  listPrivateWhatsAppMessages: vi.fn(),
-  listPrivateWhatsAppSenderDays: vi.fn(),
+  listPrivateWhatsAppChats: vi.fn(),
+  listPrivateWhatsAppChatMessages: vi.fn(),
 }));
 
 vi.mock('@/context', () => ({
@@ -26,47 +21,47 @@ vi.mock('@/context', () => ({
 }));
 
 vi.mock('@/services/whatsappApi', () => ({
-  listPrivateWhatsAppSenders: mocks.listPrivateWhatsAppSenders,
-  listPrivateWhatsAppMessages: mocks.listPrivateWhatsAppMessages,
-  listPrivateWhatsAppSenderDays: mocks.listPrivateWhatsAppSenderDays,
+  listPrivateWhatsAppChats: mocks.listPrivateWhatsAppChats,
+  listPrivateWhatsAppChatMessages: mocks.listPrivateWhatsAppChatMessages,
 }));
 
 import { usePrivateWhatsAppLog } from '../usePrivateWhatsAppLog.js';
 
-const senderA: PrivateWhatsAppSender = {
-  id: 'sender-a',
-  senderKey: 'phone:+48123456789',
-  senderDisplayName: 'Alice',
-  senderPhoneNumber: '+48123456789',
-  senderPhoneNumberNormalized: '48123456789',
+const groupChat: PrivateWhatsAppChat = {
+  id: 'chat-group',
+  displayName: 'Fishing Crew (WA)',
+  chatType: 'group',
   firstEventAt: '2026-06-22T08:00:00.000Z',
   lastEventAt: '2026-06-22T09:00:00.000Z',
-  messageCount: 2,
-  chatIds: ['chat-a'],
+  messageCount: 3,
+  participantCount: 2,
   updatedAt: '2026-06-22T09:01:00.000Z',
   schemaVersion: 2,
 };
 
-const senderB: PrivateWhatsAppSender = {
-  id: 'sender-b',
-  senderKey: 'matrix:@sender:home-dev',
+const directChat: PrivateWhatsAppChat = {
+  id: 'chat-direct',
+  displayName: 'Alice (WA)',
+  chatType: 'direct',
   firstEventAt: '2026-06-21T08:00:00.000Z',
   lastEventAt: '2026-06-21T09:00:00.000Z',
   messageCount: 1,
-  chatIds: ['chat-b'],
+  participantCount: 1,
   updatedAt: '2026-06-21T09:01:00.000Z',
   schemaVersion: 2,
 };
 
-const messageA: PrivateWhatsAppMessage = {
-  id: 'msg-a',
-  chatId: 'chat-a',
-  senderKey: senderA.senderKey,
-  senderDisplayName: 'Alice',
+const groupIncomingMessage: PrivateWhatsAppMessage = {
+  id: 'msg-group-incoming',
+  chatId: groupChat.id,
+  chatDisplayName: groupChat.displayName,
+  chatType: groupChat.chatType,
+  senderKey: 'phone:+48123456789',
+  senderDisplayName: 'Monika (WA)',
   senderPhoneNumber: '+48123456789',
   direction: 'incoming',
   messageType: 'text',
-  text: 'hello from Alice',
+  text: 'hello from the group',
   eventTimestamp: '2026-06-22T09:00:00.000Z',
   eventDayKey: '2026-06-22',
   eventTimeZone: 'Europe/Warsaw',
@@ -76,30 +71,34 @@ const messageA: PrivateWhatsAppMessage = {
   schemaVersion: 2,
 };
 
-const dayA: PrivateWhatsAppSenderDay = {
-  id: 'day-a',
-  senderKey: senderA.senderKey,
+const groupOutgoingMessage: PrivateWhatsAppMessage = {
+  id: 'msg-group-outgoing',
+  chatId: groupChat.id,
+  chatDisplayName: groupChat.displayName,
+  chatType: groupChat.chatType,
+  senderKey: 'matrix:@pbuchman:home-dev',
+  senderDisplayName: 'You',
+  direction: 'outgoing',
+  messageType: 'text',
+  text: 'sent by me',
+  eventTimestamp: '2026-06-22T09:01:00.000Z',
   eventDayKey: '2026-06-22',
   eventTimeZone: 'Europe/Warsaw',
-  senderDisplayName: 'Alice',
-  senderPhoneNumber: '+48123456789',
-  firstEventAt: '2026-06-22T08:00:00.000Z',
-  lastEventAt: '2026-06-22T09:00:00.000Z',
-  messageCount: 2,
-  messageTypeCounts: { text: 2 },
-  summaryStatus: 'not_started',
-  summarySourceMessageCount: 0,
-  updatedAt: '2026-06-22T09:01:00.000Z',
+  receivedAt: '2026-06-22T09:01:02.000Z',
+  ingestedAt: '2026-06-22T09:01:03.000Z',
+  deliveryMode: 'live',
   schemaVersion: 2,
 };
 
-const messageB: PrivateWhatsAppMessage = {
-  id: 'msg-b',
-  chatId: 'chat-b',
-  senderKey: senderB.senderKey,
+const directMessage: PrivateWhatsAppMessage = {
+  id: 'msg-direct',
+  chatId: directChat.id,
+  chatDisplayName: directChat.displayName,
+  chatType: directChat.chatType,
+  senderKey: 'matrix:@sender:home-dev',
   direction: 'incoming',
   messageType: 'text',
-  text: 'hello from sender B',
+  text: 'hello from direct chat',
   eventTimestamp: '2026-06-21T09:00:00.000Z',
   eventDayKey: '2026-06-21',
   eventTimeZone: 'Europe/Warsaw',
@@ -132,37 +131,30 @@ describe('usePrivateWhatsAppLog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAccessToken.mockResolvedValue('tok');
-    mocks.listPrivateWhatsAppSenders.mockResolvedValue({
-      senders: [senderA, senderB],
-      nextCursor: 'senders-next',
+    mocks.listPrivateWhatsAppChats.mockResolvedValue({
+      chats: [groupChat, directChat],
+      nextCursor: 'chats-next',
     });
-    mocks.listPrivateWhatsAppMessages.mockResolvedValue({
-      messages: [messageA],
+    mocks.listPrivateWhatsAppChatMessages.mockResolvedValue({
+      messages: [groupIncomingMessage, groupOutgoingMessage],
       nextCursor: 'messages-next',
-    });
-    mocks.listPrivateWhatsAppSenderDays.mockResolvedValue({
-      senderDays: [dayA],
     });
   });
 
-  it('loads senders, auto-selects the first sender, and loads messages plus day aggregates', async () => {
+  it('loads chats, auto-selects the first chat, and loads the whole conversation', async () => {
     const { result } = renderHook(() => usePrivateWhatsAppLog(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.selectedSender?.senderKey).toBe(senderA.senderKey);
+      expect(result.current.selectedChat?.id).toBe(groupChat.id);
     });
 
-    expect(result.current.senders).toEqual([senderA, senderB]);
-    expect(result.current.messages).toEqual([messageA]);
-    expect(result.current.senderDays).toEqual([dayA]);
-    expect(mocks.listPrivateWhatsAppSenders).toHaveBeenCalledWith('tok', { limit: 50 });
-    expect(mocks.listPrivateWhatsAppMessages).toHaveBeenCalledWith('tok', {
-      senderKey: senderA.senderKey,
+    expect(result.current.chats).toEqual([groupChat, directChat]);
+    expect(result.current.messages).toEqual([groupIncomingMessage, groupOutgoingMessage]);
+    expect(result.current.availableDays).toEqual(['2026-06-22']);
+    expect(mocks.listPrivateWhatsAppChats).toHaveBeenCalledWith('tok', { limit: 50 });
+    expect(mocks.listPrivateWhatsAppChatMessages).toHaveBeenCalledWith('tok', {
+      chatId: groupChat.id,
       limit: 50,
-    });
-    expect(mocks.listPrivateWhatsAppSenderDays).toHaveBeenCalledWith('tok', {
-      senderKey: senderA.senderKey,
-      limit: 60,
     });
   });
 
@@ -170,7 +162,7 @@ describe('usePrivateWhatsAppLog', () => {
     const { result } = renderHook(() => usePrivateWhatsAppLog(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.selectedSender?.senderKey).toBe(senderA.senderKey);
+      expect(result.current.selectedChat?.id).toBe(groupChat.id);
     });
 
     await act(async () => {
@@ -178,8 +170,8 @@ describe('usePrivateWhatsAppLog', () => {
     });
 
     await waitFor(() => {
-      expect(mocks.listPrivateWhatsAppMessages).toHaveBeenLastCalledWith('tok', {
-        senderKey: senderA.senderKey,
+      expect(mocks.listPrivateWhatsAppChatMessages).toHaveBeenLastCalledWith('tok', {
+        chatId: groupChat.id,
         eventDayKey: '2026-06-22',
         limit: 50,
       });
@@ -187,40 +179,39 @@ describe('usePrivateWhatsAppLog', () => {
     expect(result.current.selectedDay).toBe('2026-06-22');
   });
 
-  it('ignores stale message responses after the selected sender changes', async () => {
-    const senderARequest = createDeferred<{ messages: PrivateWhatsAppMessage[] }>();
-    mocks.listPrivateWhatsAppMessages.mockImplementation(
-      (_token: string, options: { senderKey: string }) => {
-        if (options.senderKey === senderA.senderKey) {
-          return senderARequest.promise;
+  it('ignores stale message responses after the selected chat changes', async () => {
+    const groupRequest = createDeferred<{ messages: PrivateWhatsAppMessage[] }>();
+    mocks.listPrivateWhatsAppChatMessages.mockImplementation(
+      (_token: string, options: { chatId: string }) => {
+        if (options.chatId === groupChat.id) {
+          return groupRequest.promise;
         }
-        return Promise.resolve({ messages: [messageB] });
+        return Promise.resolve({ messages: [directMessage] });
       }
     );
-    mocks.listPrivateWhatsAppSenderDays.mockResolvedValue({ senderDays: [dayA] });
 
     const { result } = renderHook(() => usePrivateWhatsAppLog(), {
-      wrapper: createWrapper('/whatsapp/private?sender=phone:%2B48123456789'),
+      wrapper: createWrapper('/whatsapp/private?chat=chat-group'),
     });
 
     await waitFor(() => {
-      expect(result.current.selectedSender?.senderKey).toBe(senderA.senderKey);
+      expect(result.current.selectedChat?.id).toBe(groupChat.id);
     });
 
     await act(async () => {
-      result.current.selectSender(senderB.senderKey);
+      result.current.selectChat(directChat.id);
     });
 
     await waitFor(() => {
-      expect(result.current.messages).toEqual([messageB]);
+      expect(result.current.messages).toEqual([directMessage]);
     });
 
     await act(async () => {
-      senderARequest.resolve({ messages: [messageA] });
-      await senderARequest.promise;
+      groupRequest.resolve({ messages: [groupIncomingMessage] });
+      await groupRequest.promise;
     });
 
-    expect(result.current.selectedSenderKey).toBe(senderB.senderKey);
-    expect(result.current.messages).toEqual([messageB]);
+    expect(result.current.selectedChatId).toBe(directChat.id);
+    expect(result.current.messages).toEqual([directMessage]);
   });
 });

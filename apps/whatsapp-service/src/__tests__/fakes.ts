@@ -35,6 +35,9 @@ import type {
   PhoneVerificationStatus,
   PrivateWhatsAppAggregateRebuildInput,
   PrivateWhatsAppAggregateRebuildResult,
+  PrivateWhatsAppChat,
+  PrivateWhatsAppChatQueryInput,
+  PrivateWhatsAppChatQueryResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
@@ -770,6 +773,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     const messages = Array.from(this.stored.values())
       .filter((stored) => stored.sourceAccountId === input.sourceAccountId)
       .map((stored) => this.toMessage(stored))
+      .filter((message) => input.chatId === undefined || message.chatId === input.chatId)
       .filter((message) => input.senderKey === undefined || message.senderKey === input.senderKey)
       .filter(
         (message) => input.eventDayKey === undefined || message.eventDayKey === input.eventDayKey
@@ -794,6 +798,44 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       const lastMessage = page[page.length - 1];
       if (lastMessage !== undefined) {
         result.nextCursor = encodeFakePrivateWhatsAppCursor(lastMessage.eventTimestamp, lastMessage.id);
+      }
+    }
+    return Promise.resolve(ok(result));
+  }
+
+  findChats(
+    input: PrivateWhatsAppChatQueryInput
+  ): Promise<Result<PrivateWhatsAppChatQueryResult, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const chats = Array.from(this.buildChats().values())
+      .filter((chat) => chat.sourceAccountId === input.sourceAccountId)
+      .sort((a, b) => {
+        const timestampComparison = b.lastEventAt.localeCompare(a.lastEventAt);
+        return timestampComparison === 0 ? b.id.localeCompare(a.id) : timestampComparison;
+      });
+    const cursor = decodeFakePrivateWhatsAppCursor(input.cursor);
+    const startIndex =
+      cursor === undefined
+        ? 0
+        : chats.findIndex(
+            (chat) => chat.lastEventAt === cursor.sortValue && chat.id === cursor.id
+          ) + 1;
+    const safeStartIndex = startIndex < 0 ? 0 : startIndex;
+    const page = chats.slice(safeStartIndex, safeStartIndex + input.limit);
+    const result: PrivateWhatsAppChatQueryResult = { chats: page };
+    if (chats.length > safeStartIndex + input.limit) {
+      const lastChat = page[page.length - 1];
+      if (lastChat !== undefined) {
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastChat.lastEventAt, lastChat.id);
       }
     }
     return Promise.resolve(ok(result));
@@ -1101,6 +1143,57 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       }
     }
     return senders;
+  }
+
+  private buildChats(): Map<string, PrivateWhatsAppChat> {
+    const chats = new Map<string, PrivateWhatsAppChat>();
+    for (const stored of this.stored.values()) {
+      const message = this.toMessage(stored);
+      const existing = chats.get(message.chatId);
+      const participantKeys = existing?.participantKeys ?? [];
+      const nextParticipantKeys =
+        message.senderKey === undefined || participantKeys.includes(message.senderKey)
+          ? participantKeys
+          : [...participantKeys, message.senderKey];
+
+      if (existing === undefined) {
+        const chat: PrivateWhatsAppChat = {
+          id: message.chatId,
+          userId: message.userId,
+          sourceAccountId: message.sourceAccountId,
+          matrixRoomId: message.matrixRoomId,
+          chatType: message.chatType ?? 'unknown',
+          firstSeenAt: message.eventTimestamp,
+          lastEventAt: message.eventTimestamp,
+          messageCount: 1,
+          participantCount: nextParticipantKeys.length,
+          participantKeys: nextParticipantKeys,
+          updatedAt: message.receivedAt,
+          schemaVersion: 2,
+        };
+        if (message.chatDisplayName !== undefined) {
+          chat.displayName = message.chatDisplayName;
+        }
+        chats.set(message.chatId, chat);
+        continue;
+      }
+
+      existing.messageCount = (existing.messageCount ?? 0) + 1;
+      existing.participantKeys = nextParticipantKeys;
+      existing.participantCount = nextParticipantKeys.length;
+      existing.firstSeenAt =
+        message.eventTimestamp < existing.firstSeenAt ? message.eventTimestamp : existing.firstSeenAt;
+      existing.lastEventAt =
+        message.eventTimestamp > existing.lastEventAt ? message.eventTimestamp : existing.lastEventAt;
+      existing.updatedAt = message.receivedAt;
+      if (message.chatDisplayName !== undefined && message.eventTimestamp >= existing.lastEventAt) {
+        existing.displayName = message.chatDisplayName;
+      }
+      if (message.chatType !== undefined && message.chatType !== 'unknown') {
+        existing.chatType = message.chatType;
+      }
+    }
+    return chats;
   }
 }
 

@@ -2,6 +2,8 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { logIncomingRequest, requireAuth, type AuthUser } from '@intexuraos/common-http';
 import type {
   PrivateWhatsAppAccount,
+  PrivateWhatsAppChat,
+  PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppSender,
@@ -19,11 +21,26 @@ interface PrivateSendersQuerystring {
   cursor?: string;
 }
 
+interface PrivateChatsQuerystring {
+  limit?: number;
+  cursor?: string;
+}
+
 interface PrivateMessagesQuerystring {
   senderKey: string;
   eventDayKey?: string;
   limit?: number;
   cursor?: string;
+}
+
+interface PrivateChatMessagesQuerystring {
+  eventDayKey?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+interface PrivateChatMessagesParams {
+  chatId: string;
 }
 
 interface PrivateSenderDaysQuerystring {
@@ -39,6 +56,10 @@ interface PrivateAccountBody {
 }
 
 type PublicPrivateWhatsAppAccount = Omit<PrivateWhatsAppAccount, 'id' | 'userId'>;
+type PublicPrivateWhatsAppChat = Omit<
+  PrivateWhatsAppChat,
+  'userId' | 'sourceAccountId' | 'matrixRoomId' | 'participantKeys'
+>;
 type PublicPrivateWhatsAppSender = Omit<PrivateWhatsAppSender, 'userId' | 'sourceAccountId'>;
 type PublicPrivateWhatsAppMessage = Omit<
   PrivateWhatsAppMessage,
@@ -92,6 +113,27 @@ function hasSourceAccountQuery(request: FastifyRequest): boolean {
 function getPublicSenderLogMetadata(query: Partial<PrivateSendersQuerystring>): Record<string, unknown> {
   return {
     route: 'whatsapp_private_senders_query',
+    hasCursor: typeof query.cursor === 'string',
+    limit: normalizeLimit(query.limit),
+  };
+}
+
+function getPublicChatsLogMetadata(query: Partial<PrivateChatsQuerystring>): Record<string, unknown> {
+  return {
+    route: 'whatsapp_private_chats_query',
+    hasCursor: typeof query.cursor === 'string',
+    limit: normalizeLimit(query.limit),
+  };
+}
+
+function getPublicChatMessagesLogMetadata(
+  query: Partial<PrivateChatMessagesQuerystring>,
+  params: Partial<PrivateChatMessagesParams>
+): Record<string, unknown> {
+  return {
+    route: 'whatsapp_private_chat_messages_query',
+    hasChatId: typeof params.chatId === 'string',
+    hasEventDayKey: typeof query.eventDayKey === 'string',
     hasCursor: typeof query.cursor === 'string',
     limit: normalizeLimit(query.limit),
   };
@@ -183,6 +225,21 @@ function toPublicSender(sender: PrivateWhatsAppSender): PublicPrivateWhatsAppSen
     updatedAt: sender.updatedAt,
     schemaVersion: sender.schemaVersion,
   }) as PublicPrivateWhatsAppSender;
+}
+
+function toPublicChat(chat: PrivateWhatsAppChat): PublicPrivateWhatsAppChat {
+  return omitUndefined({
+    id: chat.id,
+    chatType: chat.chatType,
+    displayName: chat.displayName,
+    avatarMxcUri: chat.avatarMxcUri,
+    messageCount: chat.messageCount,
+    participantCount: chat.participantCount,
+    firstSeenAt: chat.firstSeenAt,
+    lastEventAt: chat.lastEventAt,
+    updatedAt: chat.updatedAt,
+    schemaVersion: chat.schemaVersion,
+  }) as PublicPrivateWhatsAppChat;
 }
 
 function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsAppMessage {
@@ -394,6 +451,201 @@ export function createPrivateReadRoutes(): FastifyPluginCallback {
           return await reply.fail('INTERNAL_ERROR', result.error.message);
         }
         return await reply.ok(toPublicAccount(result.value));
+      }
+    );
+
+    fastify.get<{ Querystring: PrivateChatsQuerystring }>(
+      '/private/chats',
+      {
+        attachValidation: true,
+        schema: {
+          operationId: 'listPrivateWhatsAppChats',
+          summary: 'List private WhatsApp chats',
+          tags: ['whatsapp'],
+          querystring: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+              cursor: { type: 'string', minLength: 1 },
+            },
+          },
+          response: {
+            200: {
+              description: 'Private WhatsApp chats retrieved successfully',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: true },
+                data: {
+                  type: 'object',
+                  properties: {
+                    chats: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                    nextCursor: { type: 'string' },
+                  },
+                  required: ['chats'],
+                },
+              },
+              required: ['success', 'data'],
+            },
+            ...privateReadErrorResponses(),
+          },
+        },
+      },
+      async (request: FastifyRequest<{ Querystring: PrivateChatsQuerystring }>, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to GET /whatsapp/private/chats',
+          bodyPreviewLength: 0,
+          additionalFields: getPublicChatsLogMetadata(request.query),
+        });
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
+          return;
+        }
+        if (hasSourceAccountQuery(request)) {
+          return await reply.fail('INVALID_REQUEST', 'sourceAccountId is server-side only');
+        }
+        const validatedRequest = request as ValidatedRequest;
+        if (validatedRequest.validationError !== undefined) {
+          return await reply.fail('INVALID_REQUEST', 'Validation failed');
+        }
+        const account = await resolveActivePrivateAccount(user, reply);
+        if (account === null) {
+          return;
+        }
+
+        const input: PrivateWhatsAppChatQueryInput = {
+          sourceAccountId: account.sourceAccountId,
+          limit: normalizeLimit(request.query.limit),
+        };
+        if (request.query.cursor !== undefined) {
+          input.cursor = request.query.cursor;
+        }
+
+        const result = await getServices().privateWhatsAppRepository.findChats(input);
+        if (!result.ok) {
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+        request.log.info(
+          { route: 'whatsapp_private_chats_query', resultCount: result.value.chats.length },
+          'Private WhatsApp chats retrieved'
+        );
+        const response: { chats: PublicPrivateWhatsAppChat[]; nextCursor?: string } = {
+          chats: result.value.chats.map(toPublicChat),
+        };
+        if (result.value.nextCursor !== undefined) {
+          response.nextCursor = result.value.nextCursor;
+        }
+        return await reply.ok(response);
+      }
+    );
+
+    fastify.get<{
+      Params: PrivateChatMessagesParams;
+      Querystring: PrivateChatMessagesQuerystring;
+    }>(
+      '/private/chats/:chatId/messages',
+      {
+        attachValidation: true,
+        schema: {
+          operationId: 'listPrivateWhatsAppChatMessages',
+          summary: 'List private WhatsApp messages by chat',
+          tags: ['whatsapp'],
+          params: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              chatId: { type: 'string', minLength: 1 },
+            },
+            required: ['chatId'],
+          },
+          querystring: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              eventDayKey: { type: 'string', minLength: 10 },
+              limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+              cursor: { type: 'string', minLength: 1 },
+            },
+          },
+          response: {
+            200: {
+              description: 'Private WhatsApp chat messages retrieved successfully',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: true },
+                data: {
+                  type: 'object',
+                  properties: {
+                    messages: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                    nextCursor: { type: 'string' },
+                  },
+                  required: ['messages'],
+                },
+              },
+              required: ['success', 'data'],
+            },
+            ...privateReadErrorResponses(),
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{
+          Params: PrivateChatMessagesParams;
+          Querystring: PrivateChatMessagesQuerystring;
+        }>,
+        reply: FastifyReply
+      ) => {
+        logIncomingRequest(request, {
+          message: 'Received request to GET /whatsapp/private/chats/:chatId/messages',
+          bodyPreviewLength: 0,
+          additionalFields: getPublicChatMessagesLogMetadata(request.query, request.params),
+        });
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
+          return;
+        }
+        if (hasSourceAccountQuery(request)) {
+          return await reply.fail('INVALID_REQUEST', 'sourceAccountId is server-side only');
+        }
+        const validatedRequest = request as ValidatedRequest;
+        if (validatedRequest.validationError !== undefined) {
+          return await reply.fail('INVALID_REQUEST', 'Validation failed');
+        }
+        const account = await resolveActivePrivateAccount(user, reply);
+        if (account === null) {
+          return;
+        }
+
+        const input: PrivateWhatsAppMessageQueryInput = {
+          sourceAccountId: account.sourceAccountId,
+          chatId: request.params.chatId,
+          limit: normalizeLimit(request.query.limit),
+        };
+        if (request.query.eventDayKey !== undefined) {
+          input.eventDayKey = request.query.eventDayKey;
+        }
+        if (request.query.cursor !== undefined) {
+          input.cursor = request.query.cursor;
+        }
+
+        const result = await getServices().privateWhatsAppRepository.findMessages(input);
+        if (!result.ok) {
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+        request.log.info(
+          {
+            route: 'whatsapp_private_chat_messages_query',
+            resultCount: result.value.messages.length,
+          },
+          'Private WhatsApp chat messages retrieved'
+        );
+        const response: { messages: PublicPrivateWhatsAppMessage[]; nextCursor?: string } = {
+          messages: result.value.messages.map(toPublicMessage),
+        };
+        if (result.value.nextCursor !== undefined) {
+          response.nextCursor = result.value.nextCursor;
+        }
+        return await reply.ok(response);
       }
     );
 

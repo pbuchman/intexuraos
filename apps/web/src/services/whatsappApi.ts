@@ -2,6 +2,7 @@ import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
   PrivateWhatsAppAccount,
+  PrivateWhatsAppChatsResponse,
   PrivateWhatsAppMessagesResponse,
   PrivateWhatsAppSenderDaysResponse,
   PrivateWhatsAppSendersResponse,
@@ -136,8 +137,20 @@ export interface ListPrivateWhatsAppSendersOptions {
   cursor?: string;
 }
 
+export interface ListPrivateWhatsAppChatsOptions {
+  limit?: number;
+  cursor?: string;
+}
+
 export interface ListPrivateWhatsAppMessagesOptions {
   senderKey: string;
+  eventDayKey?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListPrivateWhatsAppChatMessagesOptions {
+  chatId: string;
   eventDayKey?: string;
   limit?: number;
   cursor?: string;
@@ -184,6 +197,23 @@ export async function listPrivateWhatsAppSenders(
   );
 }
 
+export async function listPrivateWhatsAppChats(
+  accessToken: string,
+  options: ListPrivateWhatsAppChatsOptions = {}
+): Promise<PrivateWhatsAppChatsResponse> {
+  const params = new URLSearchParams();
+  appendOptionalNumber(params, 'limit', options.limit);
+  appendOptionalString(params, 'cursor', options.cursor);
+  const queryString = params.toString();
+  const path = queryString !== '' ? `/private/chats?${queryString}` : '/private/chats';
+
+  return await apiRequest<PrivateWhatsAppChatsResponse>(
+    config.whatsappServiceUrl,
+    path,
+    accessToken
+  );
+}
+
 export async function listPrivateWhatsAppMessages(
   accessToken: string,
   options: ListPrivateWhatsAppMessagesOptions
@@ -197,6 +227,28 @@ export async function listPrivateWhatsAppMessages(
   return await apiRequest<PrivateWhatsAppMessagesResponse>(
     config.whatsappServiceUrl,
     `/private/messages?${params.toString()}`,
+    accessToken
+  );
+}
+
+export async function listPrivateWhatsAppChatMessages(
+  accessToken: string,
+  options: ListPrivateWhatsAppChatMessagesOptions
+): Promise<PrivateWhatsAppMessagesResponse> {
+  const params = new URLSearchParams();
+  appendOptionalString(params, 'eventDayKey', options.eventDayKey);
+  appendOptionalNumber(params, 'limit', options.limit);
+  appendOptionalString(params, 'cursor', options.cursor);
+  const queryString = params.toString();
+  const encodedChatId = encodeURIComponent(options.chatId);
+  const path =
+    queryString !== ''
+      ? `/private/chats/${encodedChatId}/messages?${queryString}`
+      : `/private/chats/${encodedChatId}/messages`;
+
+  return await apiRequest<PrivateWhatsAppMessagesResponse>(
+    config.whatsappServiceUrl,
+    path,
     accessToken
   );
 }

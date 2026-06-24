@@ -5,6 +5,7 @@ import type {
   PrivateWhatsAppDeliveryMode,
   PrivateWhatsAppIngestEventResult,
   PrivateWhatsAppIngestResult,
+  PrivateWhatsAppMessageDirection,
   PrivateWhatsAppMessageType,
   StorePrivateWhatsAppMessageInput,
 } from '../models/PrivateWhatsApp.js';
@@ -81,6 +82,7 @@ const MESSAGE_TYPES = new Set<PrivateWhatsAppMessageType>([
 ]);
 
 const CHAT_TYPES = new Set<PrivateWhatsAppChatType>(['direct', 'group', 'unknown']);
+const MESSAGE_DIRECTIONS = new Set<PrivateWhatsAppMessageDirection>(['incoming', 'outgoing']);
 const PRIVATE_WHATSAPP_EVENT_TIME_ZONE = 'Europe/Warsaw';
 
 export class IngestPrivateWhatsAppEventsUseCase {
@@ -244,7 +246,10 @@ function parseMessage(
   }
 
   const direction = readRequiredString(rawMessage, 'direction');
-  if (direction !== 'incoming') {
+  if (
+    direction === null ||
+    !MESSAGE_DIRECTIONS.has(direction as PrivateWhatsAppMessageDirection)
+  ) {
     return rejectEvent(matrixEventId, 'unsupported_direction');
   }
 
@@ -355,7 +360,7 @@ function toStoreInput(
       matrixRoomId: event.matrixRoomId,
       matrixEventId: event.matrixEventId,
       matrixSenderId: event.matrixSenderId,
-      direction: 'incoming',
+      direction: event.message.direction as PrivateWhatsAppMessageDirection,
       type: normalizeMessageType(event.message.type),
       eventTimestamp: event.eventTimestamp,
       eventDayKey: toWarsawDayKey(event.eventTimestamp),

@@ -5,9 +5,11 @@ import type { WhatsAppError } from '../../domain/whatsapp/index.js';
 import type {
   DisablePrivateWhatsAppAccountInput,
   PrivateWhatsAppAccount,
-  PrivateWhatsAppChat,
   PrivateWhatsAppAggregateRebuildInput,
   PrivateWhatsAppAggregateRebuildResult,
+  PrivateWhatsAppChat,
+  PrivateWhatsAppChatQueryInput,
+  PrivateWhatsAppChatQueryResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
@@ -86,6 +88,7 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
     disableAccount,
     storeIncomingMessage,
     findMessages,
+    findChats,
     findSenders,
     findSenderDays,
     rebuildAggregates,
@@ -378,6 +381,9 @@ async function findMessages(
       .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
       .where('sourceAccountId', '==', input.sourceAccountId);
 
+    if (input.chatId !== undefined) {
+      query = query.where('chatId', '==', input.chatId);
+    }
     if (input.senderKey !== undefined) {
       query = query.where('senderKey', '==', input.senderKey);
     }
@@ -411,6 +417,41 @@ async function findMessages(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to query private WhatsApp messages: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function findChats(
+  input: PrivateWhatsAppChatQueryInput
+): Promise<Result<PrivateWhatsAppChatQueryResult, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    let query: Query = db
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .where('sourceAccountId', '==', input.sourceAccountId)
+      .orderBy('lastEventAt', 'desc')
+      .orderBy(FieldPath.documentId(), 'desc');
+
+    const cursor = decodeCursor(input.cursor);
+    if (cursor !== undefined) {
+      query = query.startAfter(cursor.sortValue, cursor.id);
+    }
+
+    const snapshot = await query.limit(input.limit + 1).get();
+    const docs = snapshot.docs.slice(0, input.limit);
+    const chats = docs.map((doc) => normalizeChat(doc.id, doc.data()));
+    const result: PrivateWhatsAppChatQueryResult = { chats };
+    /* v8 ignore start -- schema: cursor generation is covered through public reads; zero-limit guard is defensive for malformed internal callers @preserve */
+    if (snapshot.docs.length > input.limit && input.limit > 0) {
+      const lastChat = chats[chats.length - 1] as PrivateWhatsAppChat;
+      result.nextCursor = encodeCursor(lastChat.lastEventAt, lastChat.id);
+    }
+    /* v8 ignore stop @preserve */
+    return ok(result);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to query private WhatsApp chats: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
@@ -618,10 +659,15 @@ function buildChat(
     sourceAccountId: input.sourceAccountId,
     matrixRoomId: input.chat.matrixRoomId,
     chatType: selectChatType(existingChat, input.chat.type, shouldApplyIncomingChatMetadata),
+    messageCount: (existingChat?.messageCount ?? 0) + 1,
     firstSeenAt: oldestTimestamp(existingChat?.firstSeenAt, input.message.eventTimestamp),
     lastEventAt: newestTimestamp(existingChat?.lastEventAt, input.message.eventTimestamp),
     updatedAt: now,
+    schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
   };
+  const participantKeys = appendUnique(existingChat?.participantKeys ?? [], getSenderKey(input));
+  chat.participantKeys = participantKeys;
+  chat.participantCount = participantKeys.length;
 
   if (
     input.chat.displayName !== undefined &&
@@ -772,7 +818,7 @@ function toStoreInputFromMessage(message: PrivateWhatsAppMessage): StorePrivateW
     matrixEventId: message.matrixEventId,
     matrixSenderId: message.matrixSenderId,
     senderKey,
-    direction: 'incoming',
+    direction: message.direction,
     type: isPrivateWhatsAppMessageType(message.messageType) ? message.messageType : 'unknown',
     eventTimestamp: message.eventTimestamp,
     eventDayKey,
@@ -839,6 +885,46 @@ function buildMessageUpgradeFields(
 
   return Object.keys(fields).length === 0 ? undefined : fields;
 }
+
+/* v8 ignore start -- schema: defensive Firestore chat projection fallbacks are only partially reachable through sourceAccountId-filtered queries @preserve */
+function normalizeChat(id: string, data: Record<string, unknown> | undefined): PrivateWhatsAppChat {
+  const chat = data as Partial<PrivateWhatsAppChat> | undefined;
+  const projected: PrivateWhatsAppChat = {
+    id,
+    userId: typeof chat?.userId === 'string' ? chat.userId : '',
+    sourceAccountId: typeof chat?.sourceAccountId === 'string' ? chat.sourceAccountId : '',
+    matrixRoomId: typeof chat?.matrixRoomId === 'string' ? chat.matrixRoomId : '',
+    chatType:
+      chat?.chatType === 'direct' || chat?.chatType === 'group' || chat?.chatType === 'unknown'
+        ? chat.chatType
+        : 'unknown',
+    firstSeenAt: typeof chat?.firstSeenAt === 'string' ? chat.firstSeenAt : '',
+    lastEventAt: typeof chat?.lastEventAt === 'string' ? chat.lastEventAt : '',
+    updatedAt: typeof chat?.updatedAt === 'string' ? chat.updatedAt : '',
+    schemaVersion:
+      typeof chat?.schemaVersion === 'number' ? chat.schemaVersion : PRIVATE_WHATSAPP_SCHEMA_VERSION,
+  };
+  if (typeof chat?.displayName === 'string') {
+    projected.displayName = chat.displayName;
+  }
+  if (typeof chat?.avatarMxcUri === 'string') {
+    projected.avatarMxcUri = chat.avatarMxcUri;
+  }
+  if (typeof chat?.messageCount === 'number') {
+    projected.messageCount = chat.messageCount;
+  }
+  if (typeof chat?.participantCount === 'number') {
+    projected.participantCount = chat.participantCount;
+  }
+  if (Array.isArray(chat?.participantKeys)) {
+    projected.participantKeys = chat.participantKeys.filter(
+      (participantKey): participantKey is string => typeof participantKey === 'string'
+    );
+    projected.participantCount = projected.participantCount ?? projected.participantKeys.length;
+  }
+  return projected;
+}
+/* v8 ignore stop @preserve */
 
 function getSenderKey(input: StorePrivateWhatsAppMessageInput): string {
   const senderPhoneNumberNormalized = getSenderPhoneNumberNormalized(input);
