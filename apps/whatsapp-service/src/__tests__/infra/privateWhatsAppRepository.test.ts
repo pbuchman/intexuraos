@@ -743,6 +743,61 @@ describe('privateWhatsAppRepository', () => {
     expect(chat?.['lastEventAt']).toBe('2026-06-22T10:06:00.000Z');
   });
 
+  it('keeps group chat type when a newer event is misclassified as direct', async () => {
+    const groupResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!group-room:matrix.example',
+          type: 'group',
+          displayName: 'Fishing Crew (WA)',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!group-room:matrix.example',
+          matrixEventId: '$event-group',
+          matrixSenderId: '@whatsapp_lid-111111111111111:home-dev',
+          senderDisplayName: 'LID One (WA)',
+          senderKey: 'matrix:@whatsapp_lid-111111111111111:home-dev',
+          text: 'group message',
+          eventTimestamp: '2026-06-22T10:00:00.000Z',
+        },
+      })
+    );
+    expect(groupResult.ok).toBe(true);
+
+    const directResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!group-room:matrix.example',
+          type: 'direct',
+          displayName: 'Fishing Crew (WA)',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!group-room:matrix.example',
+          matrixEventId: '$event-misclassified-reaction',
+          matrixSenderId: '@whatsapp_lid-222222222222222:home-dev',
+          senderDisplayName: 'LID Two (WA)',
+          senderKey: 'matrix:@whatsapp_lid-222222222222222:home-dev',
+          direction: 'incoming',
+          type: 'reaction',
+          text: 'ok',
+          eventTimestamp: '2026-06-22T10:06:00.000Z',
+          rawMatrixEvent: {
+            type: 'm.reaction',
+            event_id: '$event-misclassified-reaction',
+          },
+        },
+      })
+    );
+
+    expect(directResult.ok).toBe(true);
+    const chatId = deterministicId('pbuchman-private-whatsapp', '!group-room:matrix.example');
+    const chat = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION)?.get(chatId);
+    expect(chat?.['chatType']).toBe('group');
+    expect(chat?.['lastEventAt']).toBe('2026-06-22T10:06:00.000Z');
+  });
+
   it('repairs invalid existing chat timestamps when a valid later event arrives', async () => {
     const invalidResult = await repository.storeIncomingMessage(
       createStoreInput({

@@ -563,6 +563,57 @@ test('collectPrivateWhatsAppEvents maps WhatsApp LID group sender events', () =>
   });
 });
 
+test('collectPrivateWhatsAppEvents keeps stale cached LID member counts from downgrading groups', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!stale-lid-group:home-dev': {
+            timeline: {
+              events: [
+                {
+                  type: 'm.reaction',
+                  event_id: '$stale-lid-group-reaction',
+                  sender: '@whatsapp_lid-111111111111111:home-dev',
+                  origin_server_ts: 1782205200123,
+                  content: {
+                    'm.relates_to': {
+                      rel_type: 'm.annotation',
+                      event_id: '$message-being-reacted-to',
+                      key: 'ok',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+    config,
+    {
+      '!stale-lid-group:home-dev': {
+        chatType: 'unknown',
+        whatsappMemberCount: 1,
+        memberDisplayNames: {
+          '@whatsapp_lid-111111111111111:home-dev': 'LID One (WA)',
+          '@whatsapp_lid-222222222222222:home-dev': 'LID Two (WA)',
+          '@whatsapp_lid-333333333333333:home-dev': 'LID Three (WA)',
+        },
+      },
+    }
+  );
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.chat.type, 'group');
+  assert.equal(events[0]?.sender?.displayName, 'LID One (WA)');
+  assert.deepEqual(events[0]?.message, {
+    direction: 'incoming',
+    type: 'reaction',
+    text: 'ok',
+  });
+});
+
 test('extractRoomContexts merges state from sync rooms with existing context', () => {
   const roomContexts = extractRoomContexts(
     {
