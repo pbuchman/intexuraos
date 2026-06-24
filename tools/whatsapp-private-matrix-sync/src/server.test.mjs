@@ -458,6 +458,58 @@ test('collectPrivateWhatsAppEvents maps group rooms as one conversation with par
   );
 });
 
+test('collectPrivateWhatsAppEvents infers group rooms from WhatsApp member state when topic is missing', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!group-without-topic:home-dev': {
+            state: {
+              events: [
+                { type: 'm.room.name', content: { name: 'Weekend Crew (WA)' } },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_48111111111:home-dev',
+                  content: { membership: 'join', displayname: 'One (WA)' },
+                },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_48222222222:home-dev',
+                  content: { membership: 'join', displayname: 'Two (WA)' },
+                },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_48333333333:home-dev',
+                  content: { membership: 'join', displayname: 'Three (WA)' },
+                },
+                {
+                  type: 'm.room.member',
+                  state_key: '@pbuchman:home-dev',
+                  content: { membership: 'join', displayname: 'Piotr' },
+                },
+              ],
+            },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$group-without-topic-message',
+                  sender: '@whatsapp_48111111111:home-dev',
+                  content: { msgtype: 'm.text', body: 'topic metadata is absent' },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.chat.type, 'group');
+  assert.equal(events[0]?.sender?.displayName, 'One (WA)');
+});
+
 test('extractRoomContexts merges state from sync rooms with existing context', () => {
   const roomContexts = extractRoomContexts(
     {
@@ -501,6 +553,7 @@ test('extractRoomContexts merges state from sync rooms with existing context', (
         '@whatsapp_48517277952:home-dev': 'Monika (WA)',
         '@whatsapp_48536911713:home-dev': 'Piotrek (WA)',
       },
+      whatsappMemberCount: 1,
     },
   });
 });
