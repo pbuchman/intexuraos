@@ -703,6 +703,9 @@ function selectChatType(
   if (nextChatType === 'unknown' && existingChat.chatType !== 'unknown') {
     return existingChat.chatType;
   }
+  if (existingChat.chatType === 'group' && nextChatType === 'direct') {
+    return existingChat.chatType;
+  }
   return nextChatType;
 }
 

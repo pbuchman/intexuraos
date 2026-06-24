@@ -723,10 +723,12 @@ function inferChatType(roomContext) {
   if (roomContext.chatType !== undefined && roomContext.chatType !== 'unknown') {
     return roomContext.chatType;
   }
-  const whatsappMemberCount =
-    typeof roomContext.whatsappMemberCount === 'number'
-      ? roomContext.whatsappMemberCount
-      : countWhatsAppMembers(roomContext.memberDisplayNames);
+  const cachedWhatsAppMemberCount =
+    typeof roomContext.whatsappMemberCount === 'number' ? roomContext.whatsappMemberCount : 0;
+  const whatsappMemberCount = Math.max(
+    cachedWhatsAppMemberCount,
+    countWhatsAppMembers(roomContext.memberDisplayNames)
+  );
   if (whatsappMemberCount > 2) {
     return 'group';
   }
