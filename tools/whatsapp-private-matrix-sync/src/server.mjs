@@ -239,7 +239,7 @@ export function matrixEventToPrivateWhatsAppEvent(roomId, event, roomContext, co
   const senderDisplayName =
     direction === 'outgoing' ? 'You' : roomContext.memberDisplayNames?.[sender];
   const chat = {
-    type: roomContext.chatType ?? 'unknown',
+    type: inferChatType(roomContext),
   };
 
   if (roomContext.displayName !== undefined) {
@@ -483,6 +483,7 @@ function extractRoomContext(room) {
   const context = {
     memberDisplayNames: {},
   };
+  const whatsappMemberIds = new Set();
 
   const stateEvents = [
     ...(Array.isArray(room.state?.events) ? room.state.events : []),
@@ -514,11 +515,18 @@ function extractRoomContext(room) {
     }
 
     if (event.type === 'm.room.member' && isRecord(event.content)) {
+      if (isActiveWhatsAppMember(event)) {
+        whatsappMemberIds.add(event.state_key);
+      }
       const displayName = readString(event.content, 'displayname');
       if (displayName !== undefined) {
         context.memberDisplayNames[event.state_key] = displayName;
       }
     }
+  }
+
+  if (whatsappMemberIds.size > 0) {
+    context.whatsappMemberCount = whatsappMemberIds.size;
   }
 
   return context;
@@ -549,9 +557,14 @@ function roomContextFromStateEvent(type, content, stateKey) {
   }
   if (type === 'm.room.member' && stateKey !== undefined) {
     const displayName = readString(content, 'displayname');
-    return displayName === undefined
-      ? { memberDisplayNames: {} }
-      : { memberDisplayNames: { [stateKey]: displayName } };
+    const context =
+      displayName === undefined
+        ? { memberDisplayNames: {} }
+        : { memberDisplayNames: { [stateKey]: displayName } };
+    if (isWhatsAppMatrixUserId(stateKey) && readString(content, 'membership') !== 'leave') {
+      context.whatsappMemberCount = 1;
+    }
+    return context;
   }
 
   return { memberDisplayNames: {} };
@@ -594,7 +607,7 @@ function isWhatsAppInviteRoom(room, config) {
 }
 
 function mergeRoomContext(existing, next) {
-  return {
+  const merged = {
     ...(existing ?? {}),
     ...next,
     memberDisplayNames: {
@@ -602,6 +615,12 @@ function mergeRoomContext(existing, next) {
       ...(next.memberDisplayNames ?? {}),
     },
   };
+  const existingCount = (existing ?? {}).whatsappMemberCount;
+  const nextCount = next.whatsappMemberCount;
+  if (typeof existingCount === 'number' || typeof nextCount === 'number') {
+    merged.whatsappMemberCount = Math.max(existingCount ?? 0, nextCount ?? 0);
+  }
+  return merged;
 }
 
 function matrixEventToMessage(event, direction) {
@@ -698,6 +717,42 @@ function chatTypeFromTopic(topic) {
     return 'group';
   }
   return 'unknown';
+}
+
+function inferChatType(roomContext) {
+  if (roomContext.chatType !== undefined && roomContext.chatType !== 'unknown') {
+    return roomContext.chatType;
+  }
+  const whatsappMemberCount =
+    typeof roomContext.whatsappMemberCount === 'number'
+      ? roomContext.whatsappMemberCount
+      : countWhatsAppMembers(roomContext.memberDisplayNames);
+  if (whatsappMemberCount > 2) {
+    return 'group';
+  }
+  if (whatsappMemberCount > 0) {
+    return 'direct';
+  }
+  return roomContext.chatType ?? 'unknown';
+}
+
+function countWhatsAppMembers(memberDisplayNames) {
+  if (!isRecord(memberDisplayNames)) {
+    return 0;
+  }
+  return Object.keys(memberDisplayNames).filter(isWhatsAppMatrixUserId).length;
+}
+
+function isActiveWhatsAppMember(event) {
+  if (!isRecord(event) || !isRecord(event.content) || typeof event.state_key !== 'string') {
+    return false;
+  }
+  const membership = readString(event.content, 'membership');
+  return isWhatsAppMatrixUserId(event.state_key) && membership !== 'leave' && membership !== 'ban';
+}
+
+function isWhatsAppMatrixUserId(value) {
+  return typeof value === 'string' && /^@whatsapp_[0-9]+:/.test(value);
 }
 
 function readMatrixTimestamp(event) {
