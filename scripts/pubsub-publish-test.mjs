@@ -9,6 +9,7 @@
  *   - webhook-process
  *   - transcription
  *   - commands-ingest
+ *   - intex-message-ingest
  *   - actions-queue
  *   - approval-reply
  *   - research-process
@@ -105,6 +106,18 @@ const EVENTS = {
       sourceType: 'whatsapp_text',
       externalId: 'msg-' + Date.now(),
       text: 'Research latest AI developments',
+      timestamp: new Date().toISOString(),
+    },
+  },
+  'intex-message-ingest': {
+    topic: 'intex-message-ingest',
+    data: {
+      type: 'intex.message.ingest',
+      userId: 'test-user-789',
+      sourceType: 'whatsapp_text',
+      messageId: 'wamid.test-' + Date.now(),
+      text: 'Create a calendar event for tomorrow at 10 for planning',
+      whatsappSender: '+15551234567',
       timestamp: new Date().toISOString(),
     },
   },

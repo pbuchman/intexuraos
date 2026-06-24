@@ -55,6 +55,7 @@ describe('GcpPubSubPublisher', () => {
       audioStoredTopic: 'audio-stored-topic',
       approvalReplyTopic: 'approval-reply-topic',
       commandsIngestTopic: 'commands-ingest-topic',
+      intexMessageIngestTopic: 'intex-message-ingest-topic',
       logger: pino({ name: 'test', level: 'silent' }),
     });
   });
@@ -71,6 +72,8 @@ describe('GcpPubSubPublisher', () => {
             projectId: 'test-project',
             mediaCleanupTopic: 'media-cleanup-topic',
             approvalReplyTopic: 'approval-reply-topic',
+            commandsIngestTopic: 'commands-ingest-topic',
+            intexMessageIngestTopic: 'intex-message-ingest-topic',
             logger: pino({ name: 'test', level: 'silent' }),
             // Cast: testing the runtime guard for callers that bypass the type system
           } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
@@ -84,6 +87,8 @@ describe('GcpPubSubPublisher', () => {
             projectId: 'test-project',
             mediaCleanupTopic: 'media-cleanup-topic',
             audioStoredTopic: 'audio-stored-topic',
+            commandsIngestTopic: 'commands-ingest-topic',
+            intexMessageIngestTopic: 'intex-message-ingest-topic',
             logger: pino({ name: 'test', level: 'silent' }),
             // Cast: testing the runtime guard for callers that bypass the type system
           } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
@@ -98,10 +103,26 @@ describe('GcpPubSubPublisher', () => {
             mediaCleanupTopic: 'media-cleanup-topic',
             audioStoredTopic: 'audio-stored-topic',
             approvalReplyTopic: 'approval-reply-topic',
+            intexMessageIngestTopic: 'intex-message-ingest-topic',
             logger: pino({ name: 'test', level: 'silent' }),
             // Cast: testing the runtime guard for callers that bypass the type system
           } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
       ).toThrow('commandsIngestTopic is required');
+    });
+
+    it('throws when intexMessageIngestTopic is missing', () => {
+      expect(
+        () =>
+          new GcpPubSubPublisher({
+            projectId: 'test-project',
+            mediaCleanupTopic: 'media-cleanup-topic',
+            audioStoredTopic: 'audio-stored-topic',
+            approvalReplyTopic: 'approval-reply-topic',
+            commandsIngestTopic: 'commands-ingest-topic',
+            logger: pino({ name: 'test', level: 'silent' }),
+            // Cast: testing the runtime guard for callers that bypass the type system
+          } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
+      ).toThrow('intexMessageIngestTopic is required');
     });
   });
 
@@ -172,6 +193,7 @@ describe('GcpPubSubPublisher', () => {
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
 
@@ -199,6 +221,7 @@ describe('GcpPubSubPublisher', () => {
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
       mockPublishToTopic.mockResolvedValue({
@@ -220,6 +243,28 @@ describe('GcpPubSubPublisher', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('Topic unavailable');
       }
+    });
+  });
+
+  describe('publishIntexMessageIngest', () => {
+    it('publishes to the required intex message ingest topic', async () => {
+      const event = {
+        type: 'intex.message.ingest' as const,
+        userId: 'user-123',
+        messageId: 'wamid.abc',
+        text: 'Remember the garage code',
+        sourceType: 'whatsapp_text' as const,
+        whatsappSender: '+15551234567',
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await publisher.publishIntexMessageIngest(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishToTopic).toHaveBeenCalledWith('intex-message-ingest-topic', event, {
+        messageId: 'wamid.abc',
+      });
+      expect(mockPublishToOptionalTopic).not.toHaveBeenCalled();
     });
   });
 
@@ -248,6 +293,7 @@ describe('GcpPubSubPublisher', () => {
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -275,6 +321,7 @@ describe('GcpPubSubPublisher', () => {
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -386,6 +433,7 @@ describe('GcpPubSubPublisher', () => {
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -412,6 +460,7 @@ describe('GcpPubSubPublisher', () => {
         audioStoredTopic: 'audio-stored-topic',
         approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });

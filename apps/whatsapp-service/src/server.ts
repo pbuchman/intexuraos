@@ -112,6 +112,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     audioStoredTopic: config.audioStoredTopic,
     approvalReplyTopic: config.approvalReplyTopic,
     commandsIngestTopic: config.commandsIngestTopic,
+    intexMessageIngestTopic: config.intexMessageIngestTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,

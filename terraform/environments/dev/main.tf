@@ -261,6 +261,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    intex_agent = {
+      name      = "intexuraos-intex-agent"
+      app_path  = "apps/intex-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -836,6 +843,31 @@ module "pubsub_commands_ingest" {
   push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/commands"
   push_service_account_email = module.iam.service_accounts["commands_agent"]
   push_audience              = local.retired_cloud_run_push_audience
+
+  publisher_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
+# Topic for intex-agent WhatsApp Assistant message ingest (whatsapp -> intex-agent)
+module "pubsub_intex_message_ingest" {
+  source = "../../modules/pubsub-push"
+
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-intex-message-ingest-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
+
+  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/intex-agent/messages"
+  push_service_account_email = module.iam.service_accounts["intex_agent"]
+  push_audience              = local.retired_cloud_run_push_audience
+  ack_deadline_seconds       = 120
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -1662,6 +1694,11 @@ output "pubsub_media_cleanup_topic" {
 output "pubsub_commands_ingest_topic" {
   description = "Pub/Sub topic for commands ingest events"
   value       = module.pubsub_commands_ingest.topic_name
+}
+
+output "pubsub_intex_message_ingest_topic" {
+  description = "Pub/Sub topic for intex-agent WhatsApp Assistant message ingest events"
+  value       = module.pubsub_intex_message_ingest.topic_name
 }
 
 output "pubsub_actions_queue_topic" {

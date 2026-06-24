@@ -11,6 +11,7 @@ const KNOWN_TOPICS = [
   'llm-call',
   'whatsapp-media-cleanup',
   'commands-ingest',
+  'intex-message-ingest',
   'whatsapp-webhook-process',
   'whatsapp-transcription',
   'approval-reply',

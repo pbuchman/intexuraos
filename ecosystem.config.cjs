@@ -41,6 +41,7 @@ const COMMON_SERVICE_ENV = {
 // All service URLs - mirrors Terraform local.common_service_env_vars
 const COMMON_SERVICE_URLS = {
   ...COMMON_SERVICE_URLS_GENERATED,
+  INTEXURAOS_INTEX_AGENT_URL: 'http://localhost:8134',
   INTEXURAOS_API_DOCS_HUB_URL: 'http://localhost:8133',
 };
 
@@ -64,6 +65,7 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://localhost:8126/openapi.json',
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://localhost:8127/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://localhost:8131/openapi.json',
+  INTEXURAOS_INTEX_AGENT_OPENAPI_URL: 'http://localhost:8134/openapi.json',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -93,6 +95,8 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'whatsapp-media-cleanup',
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
       process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
+    INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC ?? 'intex-message-ingest',
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN: process.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN,
     INTEXURAOS_WHATSAPP_APP_SECRET: process.env.INTEXURAOS_WHATSAPP_APP_SECRET,
     INTEXURAOS_WHATSAPP_WABA_ID: process.env.INTEXURAOS_WHATSAPP_WABA_ID,
@@ -183,6 +187,13 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
+  'intex-agent': {
+    INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+    INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS:
+      process.env.INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS ?? '1800000',
+  },
   'api-docs-hub': {
     ...API_DOCS_HUB_OPENAPI_URLS,
   },
@@ -259,6 +270,7 @@ module.exports = {
     createServiceConfig('code-agent', 8128),
     createServiceConfig('hellscript-agent', 8131),
     createServiceConfig('llm-usage-service', 8132),
+    createServiceConfig('intex-agent', 8134),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)

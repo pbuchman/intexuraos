@@ -19,4 +19,5 @@ export const WEB_SERVICE_URLS = [
   { envVar: 'INTEXURAOS_APP_SETTINGS_SERVICE_URL', apiPath: '/api/settings', proxyTarget: 'http://localhost:8122' },
   { envVar: 'INTEXURAOS_HELLSCRIPT_AGENT_URL', apiPath: '/api/hellscript-agent', proxyTarget: 'http://localhost:8131' },
   { envVar: 'INTEXURAOS_LLM_USAGE_SERVICE_URL', apiPath: '/api/llm-usage', proxyTarget: 'http://localhost:8132' },
+  { envVar: 'INTEXURAOS_INTEX_AGENT_URL', apiPath: '/api/intex-agent', proxyTarget: 'http://localhost:8134' },
 ] as const;

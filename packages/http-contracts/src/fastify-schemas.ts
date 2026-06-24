@@ -10,6 +10,11 @@ import {
   bookmarksBookmarkSchema,
   bookmarksCreateBookmarkDataSchema,
   bookmarksCreateBookmarkRequestSchema,
+  calendarCreateEventDataSchema,
+  calendarCreateEventInputSchema,
+  calendarCreateEventRequestSchema,
+  calendarCreatedEventSchema,
+  calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewSchema,
@@ -115,6 +120,20 @@ export const contractFastifySchemas = {
   ResearchCreateDraftRequest: toFastifySchema(
     'ResearchCreateDraftRequest',
     researchCreateDraftRequestSchema
+  ),
+  CalendarEventDateTime: toFastifySchema('CalendarEventDateTime', calendarEventDateTimeSchema),
+  CalendarCreateEventInput: toFastifySchema(
+    'CalendarCreateEventInput',
+    calendarCreateEventInputSchema
+  ),
+  CalendarCreateEventRequest: toFastifySchema(
+    'CalendarCreateEventRequest',
+    calendarCreateEventRequestSchema
+  ),
+  CalendarCreatedEvent: toFastifySchema('CalendarCreatedEvent', calendarCreatedEventSchema),
+  CalendarCreateEventData: toFastifySchema(
+    'CalendarCreateEventData',
+    calendarCreateEventDataSchema
   ),
   CalendarProcessActionRequest: toFastifySchema(
     'CalendarProcessActionRequest',

@@ -11,6 +11,7 @@ import type {
   CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
+  IntexMessageIngestEvent,
   WhatsAppError,
   MediaCleanupEvent,
   WebhookProcessEvent,
@@ -32,6 +33,10 @@ export interface GcpPubSubPublisherConfig {
    * Required: commands-agent turns WhatsApp text commands into bookmark records.
    */
   commandsIngestTopic: string;
+  /**
+   * Required: intex-agent handles realtime WhatsApp Assistant conversations.
+   */
+  intexMessageIngestTopic: string;
   /** Optional: webhook async-processing fanout; safe to leave unset in dev. */
   webhookProcessTopic?: string;
   logger: Logger;
@@ -45,6 +50,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   private readonly audioStoredTopic: string;
   private readonly approvalReplyTopic: string;
   private readonly commandsIngestTopic: string;
+  private readonly intexMessageIngestTopic: string;
   private readonly webhookProcessTopic: string | null;
 
   constructor(config: GcpPubSubPublisherConfig) {
@@ -66,10 +72,15 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     if (config.commandsIngestTopic === undefined || config.commandsIngestTopic === '') {
       throw new Error('commandsIngestTopic is required');
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
+    if (config.intexMessageIngestTopic === undefined || config.intexMessageIngestTopic === '') {
+      throw new Error('intexMessageIngestTopic is required');
+    }
     this.mediaCleanupTopic = config.mediaCleanupTopic;
     this.audioStoredTopic = config.audioStoredTopic;
     this.approvalReplyTopic = config.approvalReplyTopic;
     this.commandsIngestTopic = config.commandsIngestTopic;
+    this.intexMessageIngestTopic = config.intexMessageIngestTopic;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;
   }
 
@@ -89,6 +100,18 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { externalId: event.externalId },
       'command ingest'
+    );
+    return this.mapToWhatsAppError(result);
+  }
+
+  async publishIntexMessageIngest(
+    event: IntexMessageIngestEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    const result = await this.publishToTopic(
+      this.intexMessageIngestTopic,
+      event,
+      { messageId: event.messageId },
+      'intex message ingest'
     );
     return this.mapToWhatsAppError(result);
   }

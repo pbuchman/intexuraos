@@ -18,6 +18,7 @@
     { "name": "web-agent",                    "envSuffix": "WEB_AGENT",                    "apiPath": "/api/web",               "proxyTarget": "http://localhost:8127",                    "serviceUrl": "http://localhost:8127" },
     { "name": "app-settings-service",         "envSuffix": "APP_SETTINGS_SERVICE",         "apiPath": "/api/settings",          "proxyTarget": "http://localhost:8122",                    "serviceUrl": "http://localhost:8122" },
     { "name": "hellscript-agent",             "envSuffix": "HELLSCRIPT_AGENT",             "apiPath": "/api/hellscript-agent",  "proxyTarget": "http://localhost:8131",                    "serviceUrl": "http://localhost:8131" },
-    { "name": "llm-usage-service",            "envSuffix": "LLM_USAGE_SERVICE",            "apiPath": "/api/llm-usage",         "proxyTarget": "http://localhost:8132",                    "serviceUrl": "http://localhost:8132" }
+    { "name": "llm-usage-service",            "envSuffix": "LLM_USAGE_SERVICE",            "apiPath": "/api/llm-usage",         "proxyTarget": "http://localhost:8132",                    "serviceUrl": "http://localhost:8132" },
+    { "name": "intex-agent",                  "envSuffix": "INTEX_AGENT",                  "apiPath": "/api/intex-agent",       "proxyTarget": "http://localhost:8134",                    "serviceUrl": "http://localhost:8134" }
   ]
 }

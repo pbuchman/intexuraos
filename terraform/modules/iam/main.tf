@@ -120,6 +120,13 @@ resource "google_service_account" "linear_agent" {
   description  = "Service account for linear-agent Cloud Run deployment"
 }
 
+# Service account for intex-agent
+resource "google_service_account" "intex_agent" {
+  account_id   = "intexuraos-intex-agent-${var.environment}"
+  display_name = "IntexuraOS Intex Agent (${var.environment})"
+  description  = "Service account for intex-agent Cloud Run deployment"
+}
+
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
   for_each = var.secret_ids
@@ -255,6 +262,15 @@ resource "google_secret_manager_secret_iam_member" "linear_agent_secrets" {
   member    = "serviceAccount:${google_service_account.linear_agent.email}"
 }
 
+# Intex Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "intex_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.intex_agent.email}"
+}
+
 # Code Agent: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "code_agent_secrets" {
   for_each = var.secret_ids
@@ -377,6 +393,13 @@ resource "google_project_iam_member" "linear_agent_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.linear_agent.email}"
+}
+
+# Intex Agent: Firestore access
+resource "google_project_iam_member" "intex_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.intex_agent.email}"
 }
 
 # Calendar Agent: Firestore access
@@ -510,6 +533,13 @@ resource "google_project_iam_member" "linear_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.linear_agent.email}"
+}
+
+# Intex Agent: Cloud Logging
+resource "google_project_iam_member" "intex_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.intex_agent.email}"
 }
 
 # Code Agent: Cloud Logging

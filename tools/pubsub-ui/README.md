@@ -35,6 +35,7 @@ node scripts/pubsub-publish-test.mjs send-message
 node scripts/pubsub-publish-test.mjs webhook-process
 node scripts/pubsub-publish-test.mjs transcription
 node scripts/pubsub-publish-test.mjs commands-ingest
+node scripts/pubsub-publish-test.mjs intex-message-ingest
 node scripts/pubsub-publish-test.mjs actions-queue
 node scripts/pubsub-publish-test.mjs research-process
 node scripts/pubsub-publish-test.mjs llm-analytics
@@ -53,6 +54,7 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 | `whatsapp-webhook-process` | Light Purple | WhatsApp webhook processing |
 | `whatsapp-transcription`   | Light Green  | Audio transcription         |
 | `commands-ingest`          | Orange       | Command routing             |
+| `intex-message-ingest`     | Blue         | Intex Agent message routing |
 | `actions-queue`            | Cyan         | Action processing           |
 | `research-process`         | Blue         | Research task processing    |
 | `llm-analytics`            | Indigo       | LLM usage analytics         |
@@ -104,6 +106,7 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 - `whatsapp-webhook-process` → `POST /internal/whatsapp/pubsub/process-webhook` (:8113)
 - `whatsapp-transcription` → `POST /internal/whatsapp/pubsub/transcribe-audio` (:8113)
 - `commands-ingest` → `POST /internal/commands` (:8117)
+- `intex-message-ingest` → `POST /internal/intex-agent/messages` (:8134)
 - `actions-queue` → `POST /internal/actions/process` (:8118)
 - `research-process` → `POST /internal/llm/pubsub/process-research` (:8116)
 - `llm-analytics` → `POST /internal/llm/pubsub/report-analytics` (:8116)
@@ -145,6 +148,7 @@ const TOPICS = [
   'whatsapp-webhook-process',
   'whatsapp-transcription',
   'commands-ingest',
+  'intex-message-ingest',
   'actions-queue',
   'research-process',
   'llm-analytics',

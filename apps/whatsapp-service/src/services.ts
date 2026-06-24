@@ -43,6 +43,7 @@ export interface ServiceConfig {
   audioStoredTopic: string;
   approvalReplyTopic: string;
   commandsIngestTopic: string;
+  intexMessageIngestTopic: string;
   webhookProcessTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
@@ -57,6 +58,7 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
     audioStoredTopic: config.audioStoredTopic,
     approvalReplyTopic: config.approvalReplyTopic,
     commandsIngestTopic: config.commandsIngestTopic,
+    intexMessageIngestTopic: config.intexMessageIngestTopic,
     logger: createAppLogger({ name: 'whatsapp-pubsub-publisher' }),
   };
   if (config.webhookProcessTopic !== undefined) {

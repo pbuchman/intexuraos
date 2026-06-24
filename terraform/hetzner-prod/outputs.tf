@@ -180,6 +180,7 @@ output "cutover_cloud_run_subscriptions_to_pause_or_remove" {
     "intexuraos-srt-transcription-completed-${var.source_environment}-push",
     "intexuraos-transcription-completed-${var.source_environment}-push",
     "intexuraos-commands-ingest-${var.source_environment}-push",
+    "intexuraos-intex-message-ingest-${var.source_environment}-push",
     "intexuraos-actions-queue-${var.source_environment}-push",
     "intexuraos-research-process-${var.source_environment}-push",
     "intexuraos-llm-analytics-${var.source_environment}-push",

@@ -22,6 +22,249 @@ afterEach(() => {
 });
 
 describe('createCalendarAgentServiceClient', () => {
+  it('creates calendar events through the internal endpoint', async () => {
+    const scope = nock(BASE_URL)
+      .post('/internal/calendar/events', {
+        userId: 'user-1',
+        calendarId: 'primary',
+        event: {
+          summary: 'Dentist appointment',
+          start: {
+            dateTime: '2026-06-25T09:00:00.000Z',
+            timeZone: 'Europe/Warsaw',
+          },
+          end: {
+            dateTime: '2026-06-25T10:00:00.000Z',
+            timeZone: 'Europe/Warsaw',
+          },
+          location: 'Dental clinic',
+        },
+      })
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(201, {
+        success: true,
+        data: {
+          event: {
+            id: 'calendar-event-123',
+            summary: 'Dentist appointment',
+            start: {
+              dateTime: '2026-06-25T09:00:00.000Z',
+              timeZone: 'Europe/Warsaw',
+            },
+            end: {
+              dateTime: '2026-06-25T10:00:00.000Z',
+              timeZone: 'Europe/Warsaw',
+            },
+            location: 'Dental clinic',
+            htmlLink: 'https://calendar.google.com/event?eid=calendar-event-123',
+          },
+        },
+      });
+
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createEvent({
+      userId: 'user-1',
+      calendarId: 'primary',
+      event: {
+        summary: 'Dentist appointment',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        location: 'Dental clinic',
+      },
+    });
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: 'calendar-event-123',
+        summary: 'Dentist appointment',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        location: 'Dental clinic',
+        htmlLink: 'https://calendar.google.com/event?eid=calendar-event-123',
+      },
+    });
+  });
+
+  it('maps all optional fields from created calendar events', async () => {
+    const scope = nock(BASE_URL)
+      .post('/internal/calendar/events')
+      .reply(201, {
+        success: true,
+        data: {
+          event: {
+            id: 'calendar-event-full',
+            summary: 'Strategy review',
+            description: 'Quarterly planning',
+            location: 'Conference room',
+            start: {
+              dateTime: '2026-06-25T09:00:00.000Z',
+            },
+            end: {
+              dateTime: '2026-06-25T10:00:00.000Z',
+            },
+            status: 'confirmed',
+            htmlLink: 'https://calendar.google.com/event?eid=calendar-event-full',
+            created: '2026-06-24T10:00:00.000Z',
+            updated: '2026-06-24T10:01:00.000Z',
+            organizer: {
+              email: 'owner@example.com',
+            },
+            attendees: [{ email: 'assistant@example.com' }],
+          },
+        },
+      });
+
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createEvent({
+      userId: 'user-1',
+      event: {
+        summary: 'Strategy review',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+        },
+      },
+    });
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: 'calendar-event-full',
+        summary: 'Strategy review',
+        description: 'Quarterly planning',
+        location: 'Conference room',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+        },
+        status: 'confirmed',
+        htmlLink: 'https://calendar.google.com/event?eid=calendar-event-full',
+        created: '2026-06-24T10:00:00.000Z',
+        updated: '2026-06-24T10:01:00.000Z',
+        organizer: {
+          email: 'owner@example.com',
+        },
+        attendees: [{ email: 'assistant@example.com' }],
+      },
+    });
+  });
+
+  it('maps minimal created calendar events without optional fields', async () => {
+    nock(BASE_URL)
+      .post('/internal/calendar/events')
+      .reply(201, {
+        success: true,
+        data: {
+          event: {
+            id: 'calendar-event-minimal',
+            summary: 'Strategy review',
+            start: {
+              dateTime: '2026-06-25T09:00:00.000Z',
+            },
+            end: {
+              dateTime: '2026-06-25T10:00:00.000Z',
+            },
+          },
+        },
+      });
+
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createEvent({
+      userId: 'user-1',
+      event: {
+        summary: 'Strategy review',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: 'calendar-event-minimal',
+        summary: 'Strategy review',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+        },
+      },
+    });
+  });
+
+  it('returns calendar create error messages from non-2xx envelopes', async () => {
+    nock(BASE_URL)
+      .post('/internal/calendar/events')
+      .reply(401, {
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'OAuth token expired',
+        },
+      });
+
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createEvent({
+      userId: 'user-1',
+      event: {
+        summary: 'Dentist appointment',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('OAuth token expired');
+    }
+  });
+
   it('returns service feedback on process success', async () => {
     const scope = nock(BASE_URL)
       .post('/internal/calendar/process-action', {

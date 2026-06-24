@@ -17,6 +17,7 @@ output "service_accounts" {
     calendar_agent               = google_service_account.calendar_agent.email
     web_agent                    = google_service_account.web_agent.email
     linear_agent                 = google_service_account.linear_agent.email
+    intex_agent                  = google_service_account.intex_agent.email
     code_agent                   = google_service_account.code_agent.email
     hellscript_agent             = google_service_account.hellscript_agent.email
     llm_usage_service            = google_service_account.llm_usage_service.email
@@ -101,6 +102,11 @@ output "web_agent_sa" {
 output "linear_agent_sa" {
   description = "Linear Agent service account email"
   value       = google_service_account.linear_agent.email
+}
+
+output "intex_agent_sa" {
+  description = "Intex Agent service account email"
+  value       = google_service_account.intex_agent.email
 }
 
 output "code_agent_sa" {

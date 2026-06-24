@@ -6,6 +6,7 @@ export type {
   AudioStoredEvent,
   CommandIngestEvent,
   ExtractLinkPreviewsEvent,
+  IntexMessageIngestEvent,
   MediaCleanupEvent,
   SendMessageEvent,
   TranscriptionCompletedEvent,

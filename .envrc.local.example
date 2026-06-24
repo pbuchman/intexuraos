@@ -48,6 +48,7 @@ export INTEXURAOS_BOOKMARKS_AGENT_URL=http://localhost:8124
 export INTEXURAOS_CALENDAR_AGENT_URL=http://localhost:8125
 export INTEXURAOS_LINEAR_AGENT_URL=http://localhost:8126
 export INTEXURAOS_HELLSCRIPT_AGENT_URL=http://localhost:8131
+export INTEXURAOS_INTEX_AGENT_URL=http://localhost:8134
 
 # =============================================================================
 # GCS BUCKETS
@@ -72,6 +73,10 @@ export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=whatsapp-media-cleanup-push
 # research-agent publishes, whatsapp-service subscribes
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC=whatsapp-send-message
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION=whatsapp-send-message-push
+
+# Required for WhatsApp Assistant inbound routing.
+export INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC=commands-ingest
+export INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC=intex-message-ingest
 
 # =============================================================================
 # SERVICE-TO-SERVICE AUTHENTICATION

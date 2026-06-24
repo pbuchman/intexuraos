@@ -201,6 +201,9 @@
       .event.commands-ingest {
         border-left-color: #f59e0b;
       }
+      .event.intex-message-ingest {
+        border-left-color: #2563eb;
+      }
       .event.actions-queue {
         border-left-color: #06b6d4;
       }
@@ -268,6 +271,10 @@
       }
       .commands-ingest .event-badge {
         background: #f59e0b;
+        color: white;
+      }
+      .intex-message-ingest .event-badge {
+        background: #2563eb;
         color: white;
       }
       .actions-queue .event-badge {
@@ -511,6 +518,7 @@
               <option value="whatsapp-webhook-process">whatsapp-webhook-process</option>
               <option value="whatsapp-transcription">whatsapp-transcription</option>
               <option value="commands-ingest">commands-ingest</option>
+              <option value="intex-message-ingest">intex-message-ingest</option>
               <option value="actions-queue">actions-queue</option>
               <option value="approval-reply">approval-reply</option>
               <option value="research-process">research-process</option>
@@ -581,6 +589,15 @@
           sourceType: 'whatsapp_text',
           externalId: 'msg-{timestamp}',
           text: 'Research latest AI developments',
+          timestamp: '{timestamp}',
+        },
+        'intex-message-ingest': {
+          type: 'intex.message.ingest',
+          userId: '{userId}',
+          sourceType: 'whatsapp_text',
+          messageId: 'wamid.ui-{timestamp}',
+          text: 'Create a calendar event for tomorrow at 10 for planning',
+          whatsappSender: '+15551234567',
           timestamp: '{timestamp}',
         },
         'actions-queue': {

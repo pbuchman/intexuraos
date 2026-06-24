@@ -16,6 +16,7 @@ import type {
   CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
+  IntexMessageIngestEvent,
   IgnoredReason,
   WhatsAppError,
   LinkPreview,
@@ -1343,6 +1344,7 @@ export class FakeMediaStorage implements MediaStoragePort {
 export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
   private commandIngestEvents: CommandIngestEvent[] = [];
+  private intexMessageIngestEvents: IntexMessageIngestEvent[] = [];
   private webhookProcessEvents: WebhookProcessEvent[] = [];
   private audioStoredEvents: AudioStoredEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
@@ -1350,6 +1352,7 @@ export class FakeEventPublisher implements EventPublisherPort {
   private approvalReplyFailureMessage: string | null = null;
   private extractLinkPreviewsFailureMessage: string | null = null;
   private commandIngestFailureMessage: string | null = null;
+  private intexMessageIngestFailureMessage: string | null = null;
   private audioStoredFailureMessage: string | null = null;
   private webhookProcessFailureMessage: string | null = null;
 
@@ -1370,6 +1373,20 @@ export class FakeEventPublisher implements EventPublisherPort {
 
   setCommandIngestFailure(message: string): void {
     this.commandIngestFailureMessage = message;
+  }
+
+  publishIntexMessageIngest(event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.intexMessageIngestFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.intexMessageIngestFailureMessage })
+      );
+    }
+    this.intexMessageIngestEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  setIntexMessageIngestFailure(message: string): void {
+    this.intexMessageIngestFailureMessage = message;
   }
 
   publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
@@ -1438,6 +1455,10 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.commandIngestEvents];
   }
 
+  getIntexMessageIngestEvents(): IntexMessageIngestEvent[] {
+    return [...this.intexMessageIngestEvents];
+  }
+
   getWebhookProcessEvents(): WebhookProcessEvent[] {
     return [...this.webhookProcessEvents];
   }
@@ -1457,6 +1478,7 @@ export class FakeEventPublisher implements EventPublisherPort {
   clear(): void {
     this.mediaCleanupEvents = [];
     this.commandIngestEvents = [];
+    this.intexMessageIngestEvents = [];
     this.webhookProcessEvents = [];
     this.audioStoredEvents = [];
     this.extractLinkPreviewsEvents = [];
@@ -1464,6 +1486,7 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.approvalReplyFailureMessage = null;
     this.extractLinkPreviewsFailureMessage = null;
     this.commandIngestFailureMessage = null;
+    this.intexMessageIngestFailureMessage = null;
     this.audioStoredFailureMessage = null;
     this.webhookProcessFailureMessage = null;
   }

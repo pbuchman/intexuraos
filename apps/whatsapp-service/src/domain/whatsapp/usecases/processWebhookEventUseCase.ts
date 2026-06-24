@@ -814,33 +814,34 @@ export class ProcessWebhookEventUseCase {
       }
     }
 
-    // Only publish command.ingest if this is NOT a confirmed approval reply
-    // If actionId is defined, we've already handled this via approval reply event
+    // Only publish intex.message.ingest if this is NOT a confirmed approval reply.
+    // If actionId is defined, we've already handled this via approval reply event.
     if (actionId !== undefined) {
       logger.info(
         { eventId: savedEvent.id, actionId, userId },
-        'Skipping command.ingest for approval reply with known actionId'
+        'Skipping intex.message.ingest for approval reply with known actionId'
       );
     } else {
       logger.info(
         { eventId: savedEvent.id, userId, messageId: savedMessage.id },
-        'Publishing command.ingest event'
+        'Publishing intex.message.ingest event'
       );
 
-      const commandPublishResult = await eventPublisher.publishCommandIngest({
-        type: 'command.ingest',
+      const ingestPublishResult = await eventPublisher.publishIntexMessageIngest({
+        type: 'intex.message.ingest',
         userId,
+        messageId: waMessageId,
         sourceType: 'whatsapp_text',
-        externalId: waMessageId,
         text: messageText,
+        whatsappSender: fromNumber,
         timestamp,
       });
 
-      if (!commandPublishResult.ok) {
-        const failureDetails = `Failed to publish command ingest: ${commandPublishResult.error.message}`;
+      if (!ingestPublishResult.ok) {
+        const failureDetails = `Failed to publish intex message ingest: ${ingestPublishResult.error.message}`;
         logger.error(
-          { eventId: savedEvent.id, error: commandPublishResult.error },
-          'Failed to publish command ingest event'
+          { eventId: savedEvent.id, error: ingestPublishResult.error },
+          'Failed to publish intex.message.ingest event'
         );
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
           failureDetails,
