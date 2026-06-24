@@ -1,4 +1,22 @@
-import type { IntexAgentSessionEventType, IntexAgentSessionStatus } from '@/types';
+import type {
+  IntexAgentSession,
+  IntexAgentSessionEvent,
+  IntexAgentSessionEventType,
+  IntexAgentSessionStatus,
+} from '@/types';
+import { formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
+
+const EVENT_TYPE_ORDER: Record<IntexAgentSessionEventType, number> = {
+  session_started: 0,
+  user_message: 10,
+  tool_call_started: 20,
+  tool_call_completed: 30,
+  tool_call_failed: 30,
+  unsupported_request: 40,
+  clarification_requested: 40,
+  assistant_message: 50,
+  session_closed: 90,
+};
 
 export function formatSessionValue(value: string | undefined): string {
   if (value === undefined || value.trim() === '') {
@@ -9,6 +27,56 @@ export function formatSessionValue(value: string | undefined): string {
     .filter((part) => part !== '')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+export function parseSessionTimestamp(value: string): Date | undefined {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return undefined;
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    const epoch = Number(trimmed);
+    if (Number.isSafeInteger(epoch)) {
+      const millis = trimmed.length <= 10 ? epoch * 1000 : epoch;
+      const date = new Date(millis);
+      if (!Number.isNaN(date.getTime())) {
+        return date;
+      }
+    }
+  }
+
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+export function formatSessionDateTimeCompact(value: string): string {
+  const date = parseSessionTimestamp(value);
+  return date === undefined ? 'Unknown' : formatDateTimeCompact(date.toISOString());
+}
+
+export function formatSessionRelative(value: string): string {
+  const date = parseSessionTimestamp(value);
+  return date === undefined ? 'Unknown' : formatRelative(date.toISOString());
+}
+
+export function getSessionTitle(session: IntexAgentSession): string {
+  if (session.summary !== undefined && session.summary.trim() !== '') {
+    return session.summary;
+  }
+  if (session.activeTool !== undefined) {
+    return formatSessionValue(session.activeTool);
+  }
+  if (session.endReason !== undefined) {
+    return formatSessionValue(session.endReason);
+  }
+  return formatSessionValue(session.status);
+}
+
+export function sortSessionEventsForTimeline(
+  events: IntexAgentSessionEvent[]
+): IntexAgentSessionEvent[] {
+  return [...events].sort(compareSessionEvents);
 }
 
 export function getSessionStatusClass(status: IntexAgentSessionStatus): string {
@@ -46,4 +114,20 @@ export function getSessionEventClass(type: IntexAgentSessionEventType): string {
     case 'session_closed':
       return 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900';
   }
+}
+
+function compareSessionEvents(a: IntexAgentSessionEvent, b: IntexAgentSessionEvent): number {
+  const aTime = parseSessionTimestamp(a.createdAt)?.getTime() ?? 0;
+  const bTime = parseSessionTimestamp(b.createdAt)?.getTime() ?? 0;
+  const timeDiff = aTime - bTime;
+  if (timeDiff !== 0) {
+    return timeDiff;
+  }
+
+  const typeDiff = EVENT_TYPE_ORDER[a.type] - EVENT_TYPE_ORDER[b.type];
+  if (typeDiff !== 0) {
+    return typeDiff;
+  }
+
+  return a.id.localeCompare(b.id);
 }

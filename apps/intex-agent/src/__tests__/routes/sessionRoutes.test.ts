@@ -154,6 +154,135 @@ describe('intex-agent routes', () => {
     expect(sessionRepository.listSessionsCalls).toEqual(['user-1']);
   });
 
+  it('derives a missing session summary from the first user message', async () => {
+    const { activeTool: _activeTool, summary: _summary, ...sessionWithoutTitle } = session;
+    sessionRepository.sessions = [
+      {
+        ...sessionWithoutTitle,
+        id: 'session-without-summary',
+        status: 'unsupported',
+        endReason: 'unsupported_request',
+      },
+    ];
+    sessionRepository.events = [
+      {
+        ...event,
+        id: 'user-event',
+        sessionId: 'session-without-summary',
+        type: 'user_message',
+        payload: { text: 'What are events in my calendar tomorrow?' },
+      },
+    ];
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/sessions',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({
+      success: true,
+      data: [
+        {
+          id: 'session-without-summary',
+          summary: 'What are events in my calendar tomorrow?',
+        },
+      ],
+    });
+    expect(sessionRepository.listEventsCalls).toEqual([
+      { sessionId: 'session-without-summary', userId: 'user-1' },
+    ]);
+  });
+
+  it('truncates derived session summaries from long user messages', async () => {
+    const { activeTool: _activeTool, summary: _summary, ...sessionWithoutTitle } = session;
+    const longText = 'Review every calendar event tomorrow and explain which ones need preparation';
+    const repeatedText = `${longText} ${longText} ${longText}`;
+    sessionRepository.sessions = [
+      {
+        ...sessionWithoutTitle,
+        id: 'session-long-summary',
+        status: 'unsupported',
+        endReason: 'unsupported_request',
+      },
+    ];
+    sessionRepository.events = [
+      {
+        ...event,
+        id: 'user-event-long',
+        sessionId: 'session-long-summary',
+        type: 'user_message',
+        payload: { text: repeatedText },
+      },
+    ];
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/sessions',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({
+      success: true,
+      data: [
+        {
+          id: 'session-long-summary',
+          summary: `${repeatedText.slice(0, 117)}...`,
+        },
+      ],
+    });
+  });
+
+  it('leaves titleless sessions unchanged when user message text is unusable', async () => {
+    const { activeTool: _activeTool, summary: _summary, ...sessionWithoutTitle } = session;
+    sessionRepository.sessions = [
+      {
+        ...sessionWithoutTitle,
+        id: 'session-non-string-title',
+        status: 'unsupported',
+        endReason: 'unsupported_request',
+      },
+      {
+        ...sessionWithoutTitle,
+        id: 'session-blank-title',
+        status: 'unsupported',
+        endReason: 'unsupported_request',
+      },
+    ];
+    sessionRepository.events = [
+      {
+        ...event,
+        id: 'user-event-non-string',
+        sessionId: 'session-non-string-title',
+        type: 'user_message',
+        payload: { text: 42 },
+      },
+      {
+        ...event,
+        id: 'user-event-blank',
+        sessionId: 'session-blank-title',
+        type: 'user_message',
+        payload: { text: '  \n  ' },
+      },
+    ];
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/sessions',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: Record<string, unknown>[] };
+    expect(body.data).toHaveLength(2);
+    expect(body.data[0]).toMatchObject({ id: 'session-non-string-title' });
+    expect(body.data[0]).not.toHaveProperty('summary');
+    expect(body.data[1]).toMatchObject({ id: 'session-blank-title' });
+    expect(body.data[1]).not.toHaveProperty('summary');
+  });
+
   it('does not list sessions when authentication fails', async () => {
     vi.mocked(requireAuth).mockResolvedValueOnce(null);
 

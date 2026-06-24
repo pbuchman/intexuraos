@@ -4,7 +4,10 @@ import { useSearchParams } from 'react-router-dom';
 import { Button, ErrorBanner, Layout } from '@/components';
 import { IntexSessionRail } from '@/components/intex-agent/IntexSessionRail.js';
 import { IntexSessionTimeline } from '@/components/intex-agent/IntexSessionTimeline.js';
-import { formatSessionValue } from '@/components/intex-agent/sessionPresentation.js';
+import {
+  formatSessionValue,
+  sortSessionEventsForTimeline,
+} from '@/components/intex-agent/sessionPresentation.js';
 import { useAuth } from '@/context';
 import { ApiError, listIntexAgentSessionEvents, listIntexAgentSessions } from '@/services';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '@/types';
@@ -105,6 +108,7 @@ export function IntexAgentSessionsPage(): React.JSX.Element {
     () => sessions.filter((session) => sessionMatchesSearch(session, search)),
     [sessions, search]
   );
+  const timelineEvents = useMemo(() => sortSessionEventsForTimeline(events), [events]);
   const selectedSession = sessions.find((session) => session.id === selectedSessionId);
 
   const selectSession = (sessionId: string): void => {
@@ -183,7 +187,7 @@ export function IntexAgentSessionsPage(): React.JSX.Element {
 
           <IntexSessionTimeline
             session={selectedSession}
-            events={events}
+            events={timelineEvents}
             loading={loadingEvents}
           />
         </div>

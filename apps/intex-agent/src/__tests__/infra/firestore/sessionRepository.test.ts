@@ -97,6 +97,42 @@ describe('FirestoreSessionRepository', () => {
       { id: 'event-2' },
     ]);
   });
+
+  it('uses session event order as a tie-breaker when events share the same timestamp', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const repo = new FirestoreSessionRepository({ firestore });
+    const createdAt = '2026-06-24T10:00:00.000Z';
+
+    await repo.createSession(session({ id: 'session-1' }));
+    await repo.appendEvent(event({ id: 'assistant', type: 'assistant_message', createdAt }));
+    await repo.appendEvent(event({ id: 'unsupported', type: 'unsupported_request', createdAt }));
+    await repo.appendEvent(event({ id: 'user', type: 'user_message', createdAt }));
+    await repo.appendEvent(event({ id: 'closed', type: 'session_closed', createdAt }));
+    await repo.appendEvent(event({ id: 'started', type: 'session_started', createdAt }));
+
+    await expect(repo.listEvents('session-1', 'user-1')).resolves.toMatchObject([
+      { id: 'started' },
+      { id: 'user' },
+      { id: 'unsupported' },
+      { id: 'assistant' },
+      { id: 'closed' },
+    ]);
+  });
+
+  it('uses event id as the final tie-breaker for matching event type and timestamp', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const repo = new FirestoreSessionRepository({ firestore });
+    const createdAt = '2026-06-24T10:00:00.000Z';
+
+    await repo.createSession(session({ id: 'session-1' }));
+    await repo.appendEvent(event({ id: 'user-z', type: 'user_message', createdAt }));
+    await repo.appendEvent(event({ id: 'user-a', type: 'user_message', createdAt }));
+
+    await expect(repo.listEvents('session-1', 'user-1')).resolves.toMatchObject([
+      { id: 'user-a' },
+      { id: 'user-z' },
+    ]);
+  });
 });
 
 function session(overrides: Partial<IntexAgentSession> = {}): IntexAgentSession {

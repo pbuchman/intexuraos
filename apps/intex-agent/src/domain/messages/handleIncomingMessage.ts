@@ -12,6 +12,7 @@ import type {
   IntexAgentSessionStatus,
   IntexAgentToolName,
 } from '../sessions/types.js';
+import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
 
 export type IntexAgentRunnerResult =
   | {
@@ -70,6 +71,7 @@ export async function handleIncomingMessage(
   deps: HandleIncomingMessageDeps
 ): Promise<IncomingMessageHandlerResult> {
   const now = deps.clock.now();
+  const normalizedUserTimestamp = normalizeSessionTimestamp(input.timestamp);
   const currentSession = await deps.sessionRepository.findOpenSession(input.userId);
   const decision = decideSessionTransition({
     currentSession,
@@ -80,28 +82,28 @@ export async function handleIncomingMessage(
 
   await closePreviousSessionIfNeeded(decision, deps);
 
-  const session = await resolveSession(decision, input, deps, now);
+  const session = await resolveSession(decision, input, deps, normalizedUserTimestamp);
   const effectiveMessage = decision.effectiveUserMessageText;
 
   if (effectiveMessage === null) {
     const reply = prefixForDecision(decision) + newSessionReadyText();
-    await appendAssistantMessage(session, deps, now, reply);
+    const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
-      lastAssistantMessageAt: now,
+      lastAssistantMessageAt: assistantAt,
     });
     await publishReply(input, deps, session.id, reply);
     return { sessionId: session.id };
   }
 
-  await appendEvent(deps, session, now, 'user_message', {
+  await appendEvent(deps, session, 'user_message', {
     messageId: input.messageId,
     text: effectiveMessage,
     sourceType: input.sourceType,
   });
   await deps.sessionRepository.updateSession(session.id, {
     status: 'active',
-    lastUserMessageAt: input.timestamp,
+    lastUserMessageAt: normalizedUserTimestamp,
   });
 
   const events = await deps.sessionRepository.listEvents(session.id, input.userId);
@@ -111,7 +113,7 @@ export async function handleIncomingMessage(
     message: effectiveMessage,
     messageId: input.messageId,
   });
-  await applyRunnerResult(input, deps, session, runnerResult, now, prefixForDecision(decision));
+  await applyRunnerResult(input, deps, session, runnerResult, prefixForDecision(decision));
 
   return { sessionId: session.id };
 }
@@ -130,35 +132,36 @@ async function closePreviousSessionIfNeeded(
     endedAt: close.endedAt,
     endReason: close.endReason,
   });
-  await appendEvent(deps, session, close.endedAt, 'session_closed', {
+  await appendEvent(deps, session, 'session_closed', {
     status: close.status,
     reason: close.endReason,
-  });
+  }, close.endedAt);
 }
 
 async function resolveSession(
   decision: SessionTransitionDecision,
   input: IntexIncomingMessage,
   deps: HandleIncomingMessageDeps,
-  now: string
+  normalizedUserTimestamp: string
 ): Promise<IntexAgentSession> {
   if (decision.action === 'continue') {
     return decision.session;
   }
 
+  const startedAt = deps.clock.now();
   const session: IntexAgentSession = await deps.sessionRepository.createSession({
     id: deps.ids.sessionId(),
     userId: input.userId,
     channel: 'whatsapp',
     status: 'active',
-    startedAt: now,
-    lastUserMessageAt: input.timestamp,
+    startedAt,
+    lastUserMessageAt: normalizedUserTimestamp,
     startReason: decision.startReason,
   });
-  await appendEvent(deps, session, now, 'session_started', {
+  await appendEvent(deps, session, 'session_started', {
     reason: decision.startReason,
     explicit: decision.isExplicitNewSession,
-  });
+  }, startedAt);
   return session;
 }
 
@@ -167,16 +170,15 @@ async function applyRunnerResult(
   deps: HandleIncomingMessageDeps,
   session: IntexAgentSession,
   runnerResult: IntexAgentRunnerResult,
-  now: string,
   replyPrefix: string
 ): Promise<void> {
   if (runnerResult.outcome === 'needs_clarification') {
     const reply = replyPrefix + stripDuplicateSessionPrefix(runnerResult.reply);
-    await appendEvent(deps, session, now, 'clarification_requested', { message: reply });
-    await appendAssistantMessage(session, deps, now, reply);
+    await appendEvent(deps, session, 'clarification_requested', { message: reply });
+    const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
-      lastAssistantMessageAt: now,
+      lastAssistantMessageAt: assistantAt,
     });
     await publishReply(input, deps, session.id, reply);
     return;
@@ -184,76 +186,82 @@ async function applyRunnerResult(
 
   if (runnerResult.outcome === 'unsupported') {
     const reply = replyPrefix + runnerResult.reply;
-    await appendEvent(deps, session, now, 'unsupported_request', { message: runnerResult.reply });
-    await appendAssistantMessage(session, deps, now, reply);
-    await closeSession(session, deps, now, 'unsupported', 'unsupported_request');
+    await appendEvent(deps, session, 'unsupported_request', { message: runnerResult.reply });
+    const assistantAt = await appendAssistantMessage(session, deps, reply);
+    await closeSession(session, deps, 'unsupported', 'unsupported_request', {
+      lastAssistantMessageAt: assistantAt,
+      summary: summarizeUserMessage(input.text),
+    });
     await publishReply(input, deps, session.id, reply);
     return;
   }
 
   const reply = replyPrefix + runnerResult.reply;
-  await appendEvent(deps, session, now, 'tool_call_completed', {
+  await appendEvent(deps, session, 'tool_call_completed', {
     ...(runnerResult.toolName !== undefined ? { toolName: runnerResult.toolName } : {}),
   });
-  await appendAssistantMessage(session, deps, now, reply);
+  const assistantAt = await appendAssistantMessage(session, deps, reply);
+  const endedAt = deps.clock.now();
   await deps.sessionRepository.updateSession(session.id, {
     status: 'completed',
-    endedAt: now,
-    lastAssistantMessageAt: now,
+    endedAt,
+    lastAssistantMessageAt: assistantAt,
     endReason: 'tool_completed',
     ...(runnerResult.toolName !== undefined ? { activeTool: runnerResult.toolName } : {}),
     ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
   });
-  await appendEvent(deps, session, now, 'session_closed', {
+  await appendEvent(deps, session, 'session_closed', {
     status: 'completed',
     reason: 'tool_completed',
-  });
+  }, endedAt);
   await publishReply(input, deps, session.id, reply);
 }
 
 async function closeSession(
   session: IntexAgentSession,
   deps: HandleIncomingMessageDeps,
-  now: string,
   status: IntexAgentSessionStatus,
-  endReason: IntexAgentSessionEndReason
+  endReason: IntexAgentSessionEndReason,
+  metadata: { lastAssistantMessageAt: string; summary: string }
 ): Promise<void> {
+  const endedAt = deps.clock.now();
   await deps.sessionRepository.updateSession(session.id, {
     status,
-    endedAt: now,
-    lastAssistantMessageAt: now,
+    endedAt,
+    lastAssistantMessageAt: metadata.lastAssistantMessageAt,
     endReason,
+    summary: metadata.summary,
   });
-  await appendEvent(deps, session, now, 'session_closed', {
+  await appendEvent(deps, session, 'session_closed', {
     status,
     reason: endReason,
-  });
+  }, endedAt);
 }
 
 async function appendAssistantMessage(
   session: IntexAgentSession,
   deps: HandleIncomingMessageDeps,
-  now: string,
   text: string
-): Promise<void> {
-  await appendEvent(deps, session, now, 'assistant_message', { text });
+): Promise<string> {
+  return await appendEvent(deps, session, 'assistant_message', { text });
 }
 
 async function appendEvent(
   deps: HandleIncomingMessageDeps,
   session: IntexAgentSession,
-  now: string,
   type: IntexAgentSessionEventType,
-  payload: Record<string, unknown>
-): Promise<void> {
+  payload: Record<string, unknown>,
+  createdAt = deps.clock.now()
+): Promise<string> {
   await deps.sessionRepository.appendEvent({
     id: deps.ids.eventId(),
     sessionId: session.id,
     userId: session.userId,
     type,
     payload,
-    createdAt: now,
+    createdAt,
   });
+  return createdAt;
 }
 
 async function publishReply(
@@ -292,4 +300,12 @@ function newSessionReadyText(): string {
 
 function stripDuplicateSessionPrefix(text: string): string {
   return text.replace(/^New session started\.\s*/i, '').trimStart();
+}
+
+function summarizeUserMessage(message: string): string {
+  const normalized = message.trim().replace(/\s+/g, ' ');
+  if (normalized.length <= 120) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 117)}...`;
 }

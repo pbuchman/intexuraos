@@ -5,6 +5,7 @@ import type {
   IntexAgentSessionStartReason,
   IntexAgentSessionStatus,
 } from './types.js';
+import { getSessionTimestampMs } from './sessionTimestamps.js';
 
 export interface SessionTransitionInput {
   currentSession: IntexAgentSession | null;
@@ -108,8 +109,8 @@ function isTerminal(session: IntexAgentSession): boolean {
 }
 
 function isExpired(session: IntexAgentSession, now: string, timeoutMs: number): boolean {
-  const lastUserMessageAt = new Date(session.lastUserMessageAt).getTime();
-  const nowMs = new Date(now).getTime();
+  const lastUserMessageAt = getSessionTimestampMs(session.lastUserMessageAt);
+  const nowMs = getSessionTimestampMs(now);
   return nowMs - lastUserMessageAt > timeoutMs;
 }
 
