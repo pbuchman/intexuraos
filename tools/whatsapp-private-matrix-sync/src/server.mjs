@@ -561,8 +561,9 @@ function roomContextFromStateEvent(type, content, stateKey) {
       displayName === undefined
         ? { memberDisplayNames: {} }
         : { memberDisplayNames: { [stateKey]: displayName } };
-    if (isWhatsAppMatrixUserId(stateKey) && readString(content, 'membership') !== 'leave') {
-      context.whatsappMemberCount = 1;
+    const membership = readString(content, 'membership');
+    if (isWhatsAppMatrixUserId(stateKey)) {
+      context.whatsappMemberCount = membership !== 'leave' && membership !== 'ban' ? 1 : 0;
     }
     return context;
   }
@@ -727,7 +728,7 @@ function inferChatType(roomContext) {
     typeof roomContext.whatsappMemberCount === 'number'
       ? roomContext.whatsappMemberCount
       : countWhatsAppMembers(roomContext.memberDisplayNames);
-  if (whatsappMemberCount > 2) {
+  if (whatsappMemberCount >= 2) {
     return 'group';
   }
   if (whatsappMemberCount > 0) {

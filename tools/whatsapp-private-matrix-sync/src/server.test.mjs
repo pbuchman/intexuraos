@@ -458,7 +458,7 @@ test('collectPrivateWhatsAppEvents maps group rooms as one conversation with par
   );
 });
 
-test('collectPrivateWhatsAppEvents infers group rooms from WhatsApp member state when topic is missing', () => {
+test('collectPrivateWhatsAppEvents infers group rooms from exactly two WhatsApp members when topic is missing', () => {
   const events = collectPrivateWhatsAppEvents(
     {
       rooms: {
@@ -480,7 +480,7 @@ test('collectPrivateWhatsAppEvents infers group rooms from WhatsApp member state
                 {
                   type: 'm.room.member',
                   state_key: '@whatsapp_48333333333:home-dev',
-                  content: { membership: 'join', displayname: 'Three (WA)' },
+                  content: { membership: 'ban', displayname: 'Three (WA)' },
                 },
                 {
                   type: 'm.room.member',
@@ -508,6 +508,42 @@ test('collectPrivateWhatsAppEvents infers group rooms from WhatsApp member state
   assert.equal(events.length, 1);
   assert.equal(events[0]?.chat.type, 'group');
   assert.equal(events[0]?.sender?.displayName, 'One (WA)');
+});
+
+test('ensureRoomContextsForIncomingEvents excludes banned WhatsApp members from fetched member state', async () => {
+  const syncResponse = {
+    rooms: {
+      join: {
+        '!banned-member-room:home-dev': {
+          state: { events: [] },
+          timeline: {
+            events: [
+              matrixMessage({
+                event_id: '$banned-member-room-message',
+                sender: '@whatsapp_48517277952:home-dev',
+                content: { msgtype: 'm.text', body: 'banned state should not imply direct chat' },
+              }),
+            ],
+          },
+        },
+      },
+    },
+  };
+  const roomContexts = await ensureRoomContextsForIncomingEvents(
+    syncResponse,
+    {},
+    config,
+    async (_roomId, stateType) => {
+      if (stateType === 'm.room.member') {
+        return { membership: 'ban', displayname: 'Banned (WA)' };
+      }
+      return {};
+    }
+  );
+  const events = collectPrivateWhatsAppEvents(syncResponse, config, roomContexts);
+
+  assert.equal(events[0]?.chat.type, 'unknown');
+  assert.equal(events[0]?.sender?.displayName, 'Banned (WA)');
 });
 
 test('extractRoomContexts merges state from sync rooms with existing context', () => {
