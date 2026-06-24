@@ -195,13 +195,6 @@ export function createCodeAgentServiceClient(
         requestId: options?.requestId,
       });
 
-      if (
-        !result.ok &&
-        (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')
-      ) {
-        return err(toSubmitTaskError(result.error));
-      }
-
       if (result.ok) {
         return toSubmitTaskSuccess(result.value);
       }

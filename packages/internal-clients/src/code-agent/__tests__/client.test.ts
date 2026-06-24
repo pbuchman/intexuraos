@@ -87,6 +87,37 @@ describe('createCodeAgentServiceClient', () => {
     });
   });
 
+  it('maps direct code task 424 responses to WORKER_UNAVAILABLE', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/submit')
+      .reply(424, {
+        success: false,
+        error: {
+          code: 'WORKER_NOT_CONFIGURED',
+          message: 'Please configure your workers in Settings before submitting code tasks',
+        },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createCodeTask({
+      userId: 'user-1',
+      prompt: 'Implement feature',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'WORKER_UNAVAILABLE',
+        message: 'Please configure your workers in Settings before submitting code tasks',
+        status: 503,
+      },
+    });
+  });
+
   it('returns code task data on submit success', async () => {
     const scope = nock(BASE_URL)
       .post('/internal/code/process', {
@@ -235,6 +266,41 @@ describe('createCodeAgentServiceClient', () => {
         message: 'Task already exists for this approval',
         status: 409,
         existingTaskId: 'existing-task-1',
+      },
+    });
+  });
+
+  it('maps submit task 424 responses to WORKER_UNAVAILABLE', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/process')
+      .reply(424, {
+        success: false,
+        error: {
+          code: 'WORKER_NOT_CONFIGURED',
+          message: 'Please configure your workers in Settings before submitting code tasks',
+        },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.submitTask({
+      actionId: 'action-1',
+      userId: 'user-1',
+      approvalEventId: 'approval-1',
+      payload: {
+        prompt: 'Fix bug',
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'WORKER_UNAVAILABLE',
+        message: 'Please configure your workers in Settings before submitting code tasks',
+        status: 503,
       },
     });
   });

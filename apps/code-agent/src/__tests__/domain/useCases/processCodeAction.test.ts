@@ -559,12 +559,12 @@ describe('processCodeAction', () => {
     );
   });
 
-  it('uses explicit taskMode=planning even when linear issue has code-task label', async () => {
+  it('skips fan-out for explicit taskMode=planning even when issue has code-task children', async () => {
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
       linearIssueId: 'INT-123',
       linearIssueTitle: 'Test Issue',
       linearIssueLabels: ['code-task'],
-      hasChildren: false,
+      hasChildren: true,
       linearFallback: false,
     });
 
@@ -604,11 +604,20 @@ describe('processCodeAction', () => {
     );
 
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.codeTaskId).toBe('new-task-planning');
+    }
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         agentType: 'planning',
       })
     );
+    expect(linearAgentClient.validateIssue).not.toHaveBeenCalled();
+    expect(linearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+    expect(taskEnqueueService.enqueue).toHaveBeenCalledWith({
+      taskId: 'new-task-planning',
+      userId: 'user-789',
+    });
   });
 
   it('stores sanitized prompt when prompt contains secret patterns', async () => {
