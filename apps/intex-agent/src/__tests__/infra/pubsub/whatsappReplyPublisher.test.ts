@@ -22,6 +22,7 @@ describe('createWhatsAppReplyPublisher', () => {
         message: 'New session started.',
         replyToMessageId: 'wamid-1',
         correlationId: 'session-1',
+        important: true,
       },
     ]);
   });

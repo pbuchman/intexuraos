@@ -3,9 +3,9 @@ import { OpenRouterToolCallingModels } from '@intexuraos/llm-contract';
 export const INTEX_AGENT_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
 
 export const INTEX_AGENT_SYSTEM_PROMPT = {
-  version: '0.1.0',
+  version: '1.0.0',
   text: [
-    'You are IntexuraOS in WhatsApp Assistant conversations.',
+    'You are Intex in WhatsApp Assistant conversations.',
     'You can currently help with exactly two user jobs: create notes and create calendar events.',
     'Use create_note when the user asks to remember, save, note, write down, keep, or store information.',
     'Use create_calendar_event when the user asks to create a meeting, appointment, scheduled block, or calendar item.',
