@@ -33,106 +33,112 @@ vi.mock('@/utils/dateFormat', () => ({
 
 import { PrivateWhatsAppLogPage } from '../PrivateWhatsAppLogPage.js';
 
-describe('PrivateWhatsAppLogPage', () => {
-  beforeEach(() => {
-    mockUsePrivateWhatsAppLog.mockReturnValue({
-      senders: [
-        {
-          id: 'sender-a',
-          senderKey: 'phone:+48123456789',
-          senderDisplayName: 'Alice',
-          senderPhoneNumber: '+48123456789',
-          firstEventAt: '2026-06-22T08:00:00.000Z',
-          lastEventAt: '2026-06-22T09:00:00.000Z',
-          messageCount: 2,
-          chatIds: ['chat-a'],
-          updatedAt: '2026-06-22T09:01:00.000Z',
-          schemaVersion: 2,
-        },
-      ],
-      filteredSenders: [
-        {
-          id: 'sender-a',
-          senderKey: 'phone:+48123456789',
-          senderDisplayName: 'Alice',
-          senderPhoneNumber: '+48123456789',
-          firstEventAt: '2026-06-22T08:00:00.000Z',
-          lastEventAt: '2026-06-22T09:00:00.000Z',
-          messageCount: 2,
-          chatIds: ['chat-a'],
-          updatedAt: '2026-06-22T09:01:00.000Z',
-          schemaVersion: 2,
-        },
-      ],
-      selectedSender: {
-        id: 'sender-a',
-        senderKey: 'phone:+48123456789',
-        senderDisplayName: 'Alice',
-        senderPhoneNumber: '+48123456789',
+function createHookResult(
+  overrides: Partial<UsePrivateWhatsAppLogResult> = {}
+): UsePrivateWhatsAppLogResult {
+  return {
+    chats: [
+      {
+        id: 'chat-group',
+        displayName: 'Fishing Crew (WA)',
+        chatType: 'group',
         firstEventAt: '2026-06-22T08:00:00.000Z',
         lastEventAt: '2026-06-22T09:00:00.000Z',
-        messageCount: 2,
-        chatIds: ['chat-a'],
+        messageCount: 3,
+        participantCount: 2,
         updatedAt: '2026-06-22T09:01:00.000Z',
         schemaVersion: 2,
       },
-      selectedSenderKey: 'phone:+48123456789',
-      selectedDay: undefined,
-      senderSearch: '',
-      messages: [
-        {
-          id: 'msg-a',
-          chatId: 'chat-a',
-          senderKey: 'phone:+48123456789',
-          senderDisplayName: 'Alice',
-          senderPhoneNumber: '+48123456789',
-          direction: 'incoming',
-          messageType: 'text',
-          text: 'hello from Alice',
-          eventTimestamp: '2026-06-22T09:00:00.000Z',
-          eventDayKey: '2026-06-22',
-          eventTimeZone: 'Europe/Warsaw',
-          receivedAt: '2026-06-22T09:00:02.000Z',
-          ingestedAt: '2026-06-22T09:00:03.000Z',
-          deliveryMode: 'live',
-          schemaVersion: 2,
-        },
-      ],
-      senderDays: [
-        {
-          id: 'day-a',
-          senderKey: 'phone:+48123456789',
-          eventDayKey: '2026-06-22',
-          eventTimeZone: 'Europe/Warsaw',
-          senderDisplayName: 'Alice',
-          senderPhoneNumber: '+48123456789',
-          firstEventAt: '2026-06-22T08:00:00.000Z',
-          lastEventAt: '2026-06-22T09:00:00.000Z',
-          messageCount: 2,
-          messageTypeCounts: { text: 2 },
-          summaryStatus: 'not_started',
-          summarySourceMessageCount: 0,
-          updatedAt: '2026-06-22T09:01:00.000Z',
-          schemaVersion: 2,
-        },
-      ],
-      senderCursor: undefined,
-      messageCursor: undefined,
-      loadingSenders: false,
-      loadingMessages: false,
-      loadingSenderDays: false,
-      loadingMoreSenders: false,
-      loadingMoreMessages: false,
-      refreshing: false,
-      error: null,
-      setSenderSearch: vi.fn(),
-      selectSender: vi.fn(),
-      selectDay: vi.fn(),
-      clearDay: vi.fn(),
-      refresh: vi.fn(),
-      loadMoreSenders: vi.fn(),
-      loadMoreMessages: vi.fn(),
-    });
+    ],
+    filteredChats: [
+      {
+        id: 'chat-group',
+        displayName: 'Fishing Crew (WA)',
+        chatType: 'group',
+        firstEventAt: '2026-06-22T08:00:00.000Z',
+        lastEventAt: '2026-06-22T09:00:00.000Z',
+        messageCount: 3,
+        participantCount: 2,
+        updatedAt: '2026-06-22T09:01:00.000Z',
+        schemaVersion: 2,
+      },
+    ],
+    selectedChat: {
+      id: 'chat-group',
+      displayName: 'Fishing Crew (WA)',
+      chatType: 'group',
+      firstEventAt: '2026-06-22T08:00:00.000Z',
+      lastEventAt: '2026-06-22T09:00:00.000Z',
+      messageCount: 3,
+      participantCount: 2,
+      updatedAt: '2026-06-22T09:01:00.000Z',
+      schemaVersion: 2,
+    },
+    selectedChatId: 'chat-group',
+    selectedDay: undefined,
+    chatSearch: '',
+    messages: [
+      {
+        id: 'msg-incoming',
+        chatId: 'chat-group',
+        chatDisplayName: 'Fishing Crew (WA)',
+        chatType: 'group',
+        senderKey: 'phone:+48123456789',
+        senderDisplayName: 'Monika (WA)',
+        senderPhoneNumber: '+48123456789',
+        direction: 'incoming',
+        messageType: 'text',
+        text: 'hello from the group',
+        eventTimestamp: '2026-06-22T09:00:00.000Z',
+        eventDayKey: '2026-06-22',
+        eventTimeZone: 'Europe/Warsaw',
+        receivedAt: '2026-06-22T09:00:02.000Z',
+        ingestedAt: '2026-06-22T09:00:03.000Z',
+        deliveryMode: 'live',
+        schemaVersion: 2,
+      },
+      {
+        id: 'msg-outgoing',
+        chatId: 'chat-group',
+        chatDisplayName: 'Fishing Crew (WA)',
+        chatType: 'group',
+        senderKey: 'matrix:@pbuchman:home-dev',
+        senderDisplayName: 'You',
+        direction: 'outgoing',
+        messageType: 'text',
+        text: 'sent by me',
+        eventTimestamp: '2026-06-22T09:01:00.000Z',
+        eventDayKey: '2026-06-22',
+        eventTimeZone: 'Europe/Warsaw',
+        receivedAt: '2026-06-22T09:01:02.000Z',
+        ingestedAt: '2026-06-22T09:01:03.000Z',
+        deliveryMode: 'live',
+        schemaVersion: 2,
+      },
+    ],
+    availableDays: ['2026-06-22'],
+    chatCursor: undefined,
+    messageCursor: undefined,
+    loadingChats: false,
+    loadingMessages: false,
+    loadingMoreChats: false,
+    loadingMoreMessages: false,
+    refreshing: false,
+    error: null,
+    setChatSearch: vi.fn(),
+    selectChat: vi.fn(),
+    selectDay: vi.fn(),
+    clearDay: vi.fn(),
+    refresh: vi.fn(),
+    loadMoreChats: vi.fn(),
+    loadMoreMessages: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe('PrivateWhatsAppLogPage', () => {
+  beforeEach(() => {
+    mockUsePrivateWhatsAppLog.mockReturnValue(createHookResult());
   });
 
   afterEach(() => {
@@ -140,7 +146,7 @@ describe('PrivateWhatsAppLogPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders a read-only sender-first message log', () => {
+  it('renders a read-only conversation-first log with group participants and outgoing messages', () => {
     render(
       <MemoryRouter>
         <PrivateWhatsAppLogPage />
@@ -148,15 +154,18 @@ describe('PrivateWhatsAppLogPage', () => {
     );
 
     expect(screen.getByRole('heading', { name: /private whatsapp/i })).toBeInTheDocument();
-    expect(screen.getAllByText('Alice')).not.toHaveLength(0);
-    expect(screen.getByText('hello from Alice')).toBeInTheDocument();
+    expect(screen.getAllByText('Fishing Crew (WA)')).not.toHaveLength(0);
+    expect(screen.getByText('Monika (WA)')).toBeInTheDocument();
+    expect(screen.getByText('You')).toBeInTheDocument();
+    expect(screen.getByText('hello from the group')).toBeInTheDocument();
+    expect(screen.getByText('sent by me')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /2026-06-22/ })).toBeInTheDocument();
     expect(screen.queryByText(/^Reply$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Delete$/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/send a message/i)).not.toBeInTheDocument();
   });
 
-  it('uses the full work surface with a mobile-bounded sender rail', () => {
+  it('uses the full work surface with a mobile-bounded chat rail', () => {
     render(
       <MemoryRouter>
         <PrivateWhatsAppLogPage />
@@ -165,7 +174,7 @@ describe('PrivateWhatsAppLogPage', () => {
 
     expect(screen.getByTestId('private-whatsapp-log-shell')).toHaveClass('w-full', 'min-w-0');
     expect(screen.getByTestId('private-whatsapp-log-shell')).not.toHaveClass('max-w-7xl');
-    expect(screen.getByTestId('private-whatsapp-sender-rail')).toHaveClass(
+    expect(screen.getByTestId('private-whatsapp-chat-rail')).toHaveClass(
       'max-h-[45vh]',
       'xl:max-h-none'
     );
@@ -175,10 +184,7 @@ describe('PrivateWhatsAppLogPage', () => {
   it('uses day chips to filter messages by exact eventDayKey', async () => {
     const user = userEvent.setup();
     const selectDay = vi.fn();
-    mockUsePrivateWhatsAppLog.mockReturnValueOnce({
-      ...mockUsePrivateWhatsAppLog(),
-      selectDay,
-    });
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(createHookResult({ selectDay }));
 
     render(
       <MemoryRouter>

@@ -3,83 +3,73 @@ import { useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import {
-  listPrivateWhatsAppMessages,
-  listPrivateWhatsAppSenderDays,
-  listPrivateWhatsAppSenders,
-  type ListPrivateWhatsAppMessagesOptions,
-  type ListPrivateWhatsAppSenderDaysOptions,
+  listPrivateWhatsAppChatMessages,
+  listPrivateWhatsAppChats,
+  type ListPrivateWhatsAppChatMessagesOptions,
 } from '@/services/whatsappApi';
-import type {
-  PrivateWhatsAppMessage,
-  PrivateWhatsAppSender,
-  PrivateWhatsAppSenderDay,
-} from '@/types';
+import type { PrivateWhatsAppChat, PrivateWhatsAppMessage } from '@/types';
 
-const SENDER_PAGE_SIZE = 50;
+const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 50;
-const SENDER_DAY_PAGE_SIZE = 60;
 
 export interface UsePrivateWhatsAppLogResult {
-  senders: PrivateWhatsAppSender[];
-  filteredSenders: PrivateWhatsAppSender[];
-  selectedSender: PrivateWhatsAppSender | undefined;
-  selectedSenderKey: string | undefined;
+  chats: PrivateWhatsAppChat[];
+  filteredChats: PrivateWhatsAppChat[];
+  selectedChat: PrivateWhatsAppChat | undefined;
+  selectedChatId: string | undefined;
   selectedDay: string | undefined;
-  senderSearch: string;
+  chatSearch: string;
   messages: PrivateWhatsAppMessage[];
-  senderDays: PrivateWhatsAppSenderDay[];
-  senderCursor: string | undefined;
+  availableDays: string[];
+  chatCursor: string | undefined;
   messageCursor: string | undefined;
-  loadingSenders: boolean;
+  loadingChats: boolean;
   loadingMessages: boolean;
-  loadingSenderDays: boolean;
-  loadingMoreSenders: boolean;
+  loadingMoreChats: boolean;
   loadingMoreMessages: boolean;
   refreshing: boolean;
   error: string | null;
-  setSenderSearch: (value: string) => void;
-  selectSender: (senderKey: string) => void;
+  setChatSearch: (value: string) => void;
+  selectChat: (chatId: string) => void;
   selectDay: (dayKey: string) => void;
   clearDay: () => void;
   refresh: () => Promise<void>;
-  loadMoreSenders: () => Promise<void>;
+  loadMoreChats: () => Promise<void>;
   loadMoreMessages: () => Promise<void>;
 }
 
 export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
   const { getAccessToken } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedSenderKey = searchParams.get('sender') ?? undefined;
+  const selectedChatId = searchParams.get('chat') ?? undefined;
   const selectedDay = searchParams.get('day') ?? undefined;
-  const selectedSenderKeyRef = useRef<string | undefined>(selectedSenderKey);
+  const selectedChatIdRef = useRef<string | undefined>(selectedChatId);
   const selectedDataRequestIdRef = useRef(0);
 
-  const [senders, setSenders] = useState<PrivateWhatsAppSender[]>([]);
-  const [senderSearch, setSenderSearch] = useState('');
+  const [chats, setChats] = useState<PrivateWhatsAppChat[]>([]);
+  const [chatSearch, setChatSearch] = useState('');
   const [messages, setMessages] = useState<PrivateWhatsAppMessage[]>([]);
-  const [senderDays, setSenderDays] = useState<PrivateWhatsAppSenderDay[]>([]);
-  const [senderCursor, setSenderCursor] = useState<string | undefined>(undefined);
+  const [chatCursor, setChatCursor] = useState<string | undefined>(undefined);
   const [messageCursor, setMessageCursor] = useState<string | undefined>(undefined);
-  const [loadingSenders, setLoadingSenders] = useState(true);
+  const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [loadingSenderDays, setLoadingSenderDays] = useState(false);
-  const [loadingMoreSenders, setLoadingMoreSenders] = useState(false);
+  const [loadingMoreChats, setLoadingMoreChats] = useState(false);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    selectedSenderKeyRef.current = selectedSenderKey;
-  }, [selectedSenderKey]);
+    selectedChatIdRef.current = selectedChatId;
+  }, [selectedChatId]);
 
   const setSelectionParams = useCallback(
-    (senderKey: string | undefined, dayKey?: string): void => {
+    (chatId: string | undefined, dayKey?: string): void => {
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
-        if (senderKey === undefined || senderKey === '') {
-          next.delete('sender');
+        if (chatId === undefined || chatId === '') {
+          next.delete('chat');
         } else {
-          next.set('sender', senderKey);
+          next.set('chat', chatId);
         }
         if (dayKey === undefined || dayKey === '') {
           next.delete('day');
@@ -92,53 +82,48 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
     [setSearchParams]
   );
 
-  const loadSenders = useCallback(
+  const loadChats = useCallback(
     async (mode: 'replace' | 'append' = 'replace', cursor?: string): Promise<void> => {
       const append = mode === 'append';
       if (append && cursor === undefined) return;
 
       if (append) {
-        setLoadingMoreSenders(true);
+        setLoadingMoreChats(true);
       } else {
-        setLoadingSenders(true);
+        setLoadingChats(true);
       }
       setError(null);
 
       try {
         const token = await getAccessToken();
-        const response = await listPrivateWhatsAppSenders(token, {
-          limit: SENDER_PAGE_SIZE,
+        const response = await listPrivateWhatsAppChats(token, {
+          limit: CHAT_PAGE_SIZE,
           ...(append && cursor !== undefined ? { cursor } : {}),
         });
-        setSenders((prev) => (append ? [...prev, ...response.senders] : response.senders));
-        setSenderCursor(response.nextCursor);
+        setChats((prev) => (append ? [...prev, ...response.chats] : response.chats));
+        setChatCursor(response.nextCursor);
 
-        if (
-          !append &&
-          selectedSenderKeyRef.current === undefined &&
-          response.senders[0] !== undefined
-        ) {
-          setSelectionParams(response.senders[0].senderKey);
+        if (!append && selectedChatIdRef.current === undefined && response.chats[0] !== undefined) {
+          setSelectionParams(response.chats[0].id);
         }
       } catch (err) {
-        setError(getErrorMessage(err, 'Failed to load private WhatsApp senders'));
+        setError(getErrorMessage(err, 'Failed to load private WhatsApp chats'));
       } finally {
         if (append) {
-          setLoadingMoreSenders(false);
+          setLoadingMoreChats(false);
         } else {
-          setLoadingSenders(false);
+          setLoadingChats(false);
         }
       }
     },
     [getAccessToken, setSelectionParams]
   );
 
-  const loadSelectedSenderData = useCallback(
+  const loadSelectedChatData = useCallback(
     async (mode: 'replace' | 'append' = 'replace', cursor?: string): Promise<void> => {
-      if (selectedSenderKey === undefined) {
+      if (selectedChatId === undefined) {
         selectedDataRequestIdRef.current += 1;
         setMessages([]);
-        setSenderDays([]);
         setMessageCursor(undefined);
         return;
       }
@@ -153,16 +138,14 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
         setLoadingMoreMessages(true);
       } else {
         setLoadingMessages(true);
-        setLoadingSenderDays(true);
         setMessages([]);
-        setSenderDays([]);
       }
       setError(null);
 
       try {
         const token = await getAccessToken();
-        const messageOptions: ListPrivateWhatsAppMessagesOptions = {
-          senderKey: selectedSenderKey,
+        const messageOptions: ListPrivateWhatsAppChatMessagesOptions = {
+          chatId: selectedChatId,
           limit: MESSAGE_PAGE_SIZE,
         };
         if (selectedDay !== undefined) {
@@ -172,30 +155,14 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
           messageOptions.cursor = cursor;
         }
 
-        if (append) {
-          const messageResponse = await listPrivateWhatsAppMessages(token, messageOptions);
-          if (selectedDataRequestIdRef.current !== requestId) {
-            return;
-          }
-          setMessages((prev) => [...prev, ...messageResponse.messages]);
-          setMessageCursor(messageResponse.nextCursor);
-          return;
-        }
-
-        const senderDayOptions: ListPrivateWhatsAppSenderDaysOptions = {
-          senderKey: selectedSenderKey,
-          limit: SENDER_DAY_PAGE_SIZE,
-        };
-        const [messageResponse, senderDayResponse] = await Promise.all([
-          listPrivateWhatsAppMessages(token, messageOptions),
-          listPrivateWhatsAppSenderDays(token, senderDayOptions),
-        ]);
+        const messageResponse = await listPrivateWhatsAppChatMessages(token, messageOptions);
         if (selectedDataRequestIdRef.current !== requestId) {
           return;
         }
-        setMessages(messageResponse.messages);
+        setMessages((prev) =>
+          append ? [...prev, ...messageResponse.messages] : messageResponse.messages
+        );
         setMessageCursor(messageResponse.nextCursor);
-        setSenderDays(senderDayResponse.senderDays);
       } catch (err) {
         if (selectedDataRequestIdRef.current === requestId) {
           setError(getErrorMessage(err, 'Failed to load private WhatsApp messages'));
@@ -206,106 +173,107 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
             setLoadingMoreMessages(false);
           } else {
             setLoadingMessages(false);
-            setLoadingSenderDays(false);
           }
         }
       }
     },
-    [getAccessToken, selectedDay, selectedSenderKey]
+    [getAccessToken, selectedChatId, selectedDay]
   );
 
   useEffect(() => {
-    void loadSenders();
-  }, [loadSenders]);
+    void loadChats();
+  }, [loadChats]);
 
   useEffect(() => {
-    void loadSelectedSenderData();
-  }, [loadSelectedSenderData]);
+    void loadSelectedChatData();
+  }, [loadSelectedChatData]);
 
   const refresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
     try {
-      await Promise.all([loadSenders(), loadSelectedSenderData()]);
+      await Promise.all([loadChats(), loadSelectedChatData()]);
     } finally {
       setRefreshing(false);
     }
-  }, [loadSelectedSenderData, loadSenders]);
+  }, [loadChats, loadSelectedChatData]);
 
-  const loadMoreSenders = useCallback(async (): Promise<void> => {
-    await loadSenders('append', senderCursor);
-  }, [loadSenders, senderCursor]);
+  const loadMoreChats = useCallback(async (): Promise<void> => {
+    await loadChats('append', chatCursor);
+  }, [chatCursor, loadChats]);
 
   const loadMoreMessages = useCallback(async (): Promise<void> => {
-    await loadSelectedSenderData('append', messageCursor);
-  }, [loadSelectedSenderData, messageCursor]);
+    await loadSelectedChatData('append', messageCursor);
+  }, [loadSelectedChatData, messageCursor]);
 
-  const selectSender = useCallback(
-    (senderKey: string): void => {
-      setSelectionParams(senderKey);
+  const selectChat = useCallback(
+    (chatId: string): void => {
+      setSelectionParams(chatId);
     },
     [setSelectionParams]
   );
 
   const selectDay = useCallback(
     (dayKey: string): void => {
-      const senderKey = selectedSenderKeyRef.current;
-      if (senderKey !== undefined) {
-        setSelectionParams(senderKey, dayKey);
+      const chatId = selectedChatIdRef.current;
+      if (chatId !== undefined) {
+        setSelectionParams(chatId, dayKey);
       }
     },
     [setSelectionParams]
   );
 
   const clearDay = useCallback((): void => {
-    const senderKey = selectedSenderKeyRef.current;
-    if (senderKey !== undefined) {
-      setSelectionParams(senderKey);
+    const chatId = selectedChatIdRef.current;
+    if (chatId !== undefined) {
+      setSelectionParams(chatId);
     }
   }, [setSelectionParams]);
 
-  const selectedSender = useMemo(
-    () => senders.find((sender) => sender.senderKey === selectedSenderKey),
-    [selectedSenderKey, senders]
+  const selectedChat = useMemo(
+    () => chats.find((chat) => chat.id === selectedChatId),
+    [chats, selectedChatId]
   );
 
-  const filteredSenders = useMemo(() => {
-    const query = senderSearch.trim().toLowerCase();
-    if (query === '') return senders;
-    return senders.filter((sender) => {
-      const values = [
-        sender.senderDisplayName,
-        sender.senderPhoneNumber,
-        sender.senderPhoneNumberNormalized,
-        sender.senderKey,
-      ];
+  const filteredChats = useMemo(() => {
+    const query = chatSearch.trim().toLowerCase();
+    if (query === '') return chats;
+    return chats.filter((chat) => {
+      const values = [chat.displayName, chat.chatType, chat.id];
       return values.some((value) => value?.toLowerCase().includes(query) === true);
     });
-  }, [senderSearch, senders]);
+  }, [chatSearch, chats]);
+
+  const availableDays = useMemo(() => {
+    const days = new Set<string>();
+    for (const message of messages) {
+      days.add(message.eventDayKey ?? message.eventTimestamp.slice(0, 10));
+    }
+    return [...days].sort((a, b) => b.localeCompare(a));
+  }, [messages]);
 
   return {
-    senders,
-    filteredSenders,
-    selectedSender,
-    selectedSenderKey,
+    chats,
+    filteredChats,
+    selectedChat,
+    selectedChatId,
     selectedDay,
-    senderSearch,
+    chatSearch,
     messages,
-    senderDays,
-    senderCursor,
+    availableDays,
+    chatCursor,
     messageCursor,
-    loadingSenders,
+    loadingChats,
     loadingMessages,
-    loadingSenderDays,
-    loadingMoreSenders,
+    loadingMoreChats,
     loadingMoreMessages,
     refreshing,
     error,
-    setSenderSearch,
-    selectSender,
+    setChatSearch,
+    selectChat,
     selectDay,
     clearDay,
     refresh,
-    loadMoreSenders,
+    loadMoreChats,
     loadMoreMessages,
   };
 }

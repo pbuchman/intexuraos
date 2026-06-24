@@ -363,6 +363,20 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
+  it('requires bearer auth for public private WhatsApp chat reads', async () => {
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats',
+    });
+    const messagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats/chat-a/messages',
+    });
+
+    expect(chatsResponse.statusCode).toBe(401);
+    expect(messagesResponse.statusCode).toBe(401);
+  });
+
   it('requires bearer auth for public private WhatsApp sender-day reads', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
@@ -388,6 +402,24 @@ describe('Private WhatsApp Sync Routes', () => {
     const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns not found for private WhatsApp chat reads without a mirror', async () => {
+    const token = await createToken({ sub: 'user-other' });
+
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const messagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats/chat-a/messages',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(chatsResponse.statusCode).toBe(404);
+    expect(messagesResponse.statusCode).toBe(404);
   });
 
   it('returns the authenticated user private WhatsApp mirror account', async () => {
@@ -721,6 +753,299 @@ describe('Private WhatsApp Sync Routes', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(rejectedSourceAccount.statusCode).toBe(400);
+  });
+
+  it('returns private WhatsApp chats and reads a whole group conversation by chat id', async () => {
+    const groupEvents = [
+      {
+        ...(createPayload()['events'] as Record<string, unknown>[])[0],
+        matrixRoomId: '!group-room:matrix.example',
+        matrixEventId: '$group-piotrek',
+        matrixSenderId: '@whatsapp_48536911713:home-dev',
+        eventTimestamp: '2026-06-22T10:00:00.000Z',
+        chat: {
+          type: 'group',
+          displayName: 'Fishing Crew (WA)',
+        },
+        sender: {
+          displayName: 'Piotrek (WA)',
+          phoneNumber: '+48536911713',
+        },
+        message: {
+          direction: 'incoming',
+          type: 'text',
+          text: 'Kto jedzie?',
+        },
+      },
+      {
+        ...(createPayload()['events'] as Record<string, unknown>[])[0],
+        matrixRoomId: '!group-room:matrix.example',
+        matrixEventId: '$group-monika',
+        matrixSenderId: '@whatsapp_48517277952:home-dev',
+        eventTimestamp: '2026-06-22T10:02:00.000Z',
+        chat: {
+          type: 'group',
+          displayName: 'Fishing Crew (WA)',
+        },
+        sender: {
+          displayName: 'Monika (WA)',
+          phoneNumber: '+48517277952',
+        },
+        message: {
+          direction: 'incoming',
+          type: 'text',
+          text: 'Ja moge.',
+        },
+      },
+    ];
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({ events: groupEvents }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(chatsResponse.statusCode).toBe(200);
+    const chatsBody = JSON.parse(chatsResponse.body) as {
+      success: boolean;
+      data: {
+        chats: {
+          id: string;
+          chatType: string;
+          displayName?: string;
+          messageCount: number;
+          participantCount: number;
+        }[];
+      };
+    };
+    expect(chatsBody.success).toBe(true);
+    expect(chatsBody.data.chats).toMatchObject([
+      {
+        chatType: 'group',
+        displayName: 'Fishing Crew (WA)',
+        messageCount: 2,
+        participantCount: 2,
+      },
+    ]);
+    const chatId = chatsBody.data.chats[0]?.id;
+    expect(chatId).toEqual(expect.any(String));
+
+    const messagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId ?? '')}/messages?limit=10`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(messagesResponse.statusCode).toBe(200);
+    const messagesBody = JSON.parse(messagesResponse.body) as {
+      success: boolean;
+      data: {
+        messages: {
+          text?: string;
+          senderDisplayName?: string;
+          senderPhoneNumber?: string;
+          direction: string;
+          chatDisplayName?: string;
+          chatType?: string;
+        }[];
+      };
+    };
+    expect(messagesBody.success).toBe(true);
+    expect(messagesBody.data.messages).toMatchObject([
+      {
+        text: 'Ja moge.',
+        senderDisplayName: 'Monika (WA)',
+        senderPhoneNumber: '+48517277952',
+        direction: 'incoming',
+        chatDisplayName: 'Fishing Crew (WA)',
+        chatType: 'group',
+      },
+      {
+        text: 'Kto jedzie?',
+        senderDisplayName: 'Piotrek (WA)',
+        senderPhoneNumber: '+48536911713',
+        direction: 'incoming',
+        chatDisplayName: 'Fishing Crew (WA)',
+        chatType: 'group',
+      },
+    ]);
+    expect(JSON.stringify(messagesBody)).not.toContain('sourceAccountId');
+    expect(JSON.stringify(messagesBody)).not.toContain('rawMatrixEvent');
+  });
+
+  it('paginates private WhatsApp chats and rejects server-side public chat filters', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixRoomId: '!second-room:matrix.example',
+            matrixEventId: '$event-second-chat',
+            eventTimestamp: '2026-06-22T12:00:00.000Z',
+            chat: {
+              type: 'direct',
+              displayName: 'Second Chat',
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const firstPage = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(firstPage.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstPage.body) as {
+      data: { chats: { id: string }[]; nextCursor?: string };
+    };
+    expect(firstBody.data.chats).toHaveLength(1);
+    expect(firstBody.data.nextCursor).toEqual(expect.any(String));
+
+    const cursor = firstBody.data.nextCursor;
+    const secondPage = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats?limit=10&cursor=${encodeURIComponent(cursor ?? '')}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const sourceFilter = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?sourceAccountId=wrong-source',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const invalidLimit = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=0',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(secondPage.statusCode).toBe(200);
+    expect(sourceFilter.statusCode).toBe(400);
+    expect(invalidLimit.statusCode).toBe(400);
+  });
+
+  it('returns standard errors when private WhatsApp chat data queries fail', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    ctx.privateWhatsAppRepository.failNextDataQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private chat query failure',
+    });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    ctx.privateWhatsAppRepository.failNextDataQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private chat message query failure',
+    });
+    const messagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats/chat-a/messages',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(chatsResponse.statusCode).toBe(500);
+    expect(messagesResponse.statusCode).toBe(500);
+  });
+
+  it('filters private WhatsApp chat messages by day and rejects server-side public message filters', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-day-one',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-day-two',
+            eventTimestamp: '2026-06-23T10:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'next day',
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as {
+      data: { chats: { id: string }[] };
+    };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+
+    const dayResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?eventDayKey=2026-06-23&limit=1`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const firstMessagePage = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=1`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const firstMessagePageBody = JSON.parse(firstMessagePage.body) as {
+      data: { nextCursor?: string };
+    };
+    const secondMessagePage = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=10&cursor=${encodeURIComponent(
+        firstMessagePageBody.data.nextCursor ?? ''
+      )}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const sourceFilter = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?sourceAccountId=wrong-source`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const invalidLimit = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=0`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(dayResponse.statusCode).toBe(200);
+    expect(firstMessagePage.statusCode).toBe(200);
+    expect(firstMessagePageBody.data.nextCursor).toEqual(expect.any(String));
+    expect(secondMessagePage.statusCode).toBe(200);
+    const dayBody = JSON.parse(dayResponse.body) as {
+      data: { messages: { text?: string }[]; nextCursor?: string };
+    };
+    expect(dayBody.data.messages).toMatchObject([{ text: 'next day' }]);
+    expect(dayBody.data.nextCursor).toBeUndefined();
+    expect(sourceFilter.statusCode).toBe(400);
+    expect(invalidLimit.statusCode).toBe(400);
   });
 
   it('returns a standard error envelope when public private sender query fails', async () => {

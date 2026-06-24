@@ -44,6 +44,8 @@ export type {
   PrivateWhatsAppAccountStatus,
   PrivateWhatsAppChat,
   PrivateWhatsAppChatInput,
+  PrivateWhatsAppChatQueryInput,
+  PrivateWhatsAppChatQueryResult,
   PrivateWhatsAppChatType,
   PrivateWhatsAppDeliveryMode,
   PrivateWhatsAppAggregateRebuildInput,

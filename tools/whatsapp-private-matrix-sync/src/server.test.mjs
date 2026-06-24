@@ -293,6 +293,171 @@ test('isIncomingWhatsAppMatrixEvent accepts incoming reactions and stickers', ()
   );
 });
 
+test('collectPrivateWhatsAppEvents maps messages authored by the Matrix user as outgoing', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!direct:home-dev': {
+            state: {
+              events: [
+                { type: 'm.room.name', content: { name: 'Tomek (WA)' } },
+                { type: 'm.room.topic', content: { topic: 'WhatsApp private chat' } },
+              ],
+            },
+            timeline: {
+              events: [
+                {
+                  type: 'm.room.message',
+                  event_id: '$outgoing-from-matrix-user',
+                  sender: '@pbuchman:home-dev',
+                  origin_server_ts: 1782205300000,
+                  content: { msgtype: 'm.text', body: 'sent from Element' },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0]?.message, {
+    direction: 'outgoing',
+    type: 'text',
+    text: 'sent from Element',
+  });
+  assert.equal(events[0]?.sender?.displayName, 'You');
+});
+
+test('collectPrivateWhatsAppEvents maps own WhatsApp number echoes as outgoing', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!direct:home-dev': {
+            state: {
+              events: [
+                { type: 'm.room.name', content: { name: 'Tomek (WA)' } },
+                { type: 'm.room.topic', content: { topic: 'WhatsApp private chat' } },
+              ],
+            },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$outgoing-from-own-phone',
+                  sender: '@whatsapp_48111222333:home-dev',
+                  content: { msgtype: 'm.text', body: 'sent from mobile' },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0]?.message, {
+    direction: 'outgoing',
+    type: 'text',
+    text: 'sent from mobile',
+  });
+  assert.equal(events[0]?.sender?.phoneNumber, '+48111222333');
+});
+
+test('collectPrivateWhatsAppEvents maps group rooms as one conversation with participant senders', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!group:home-dev': {
+            state: {
+              events: [
+                { type: 'm.room.name', content: { name: 'Fishing Crew (WA)' } },
+                { type: 'm.room.topic', content: { topic: 'WhatsApp group' } },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_48536911713:home-dev',
+                  content: { displayname: 'Piotrek (WA)' },
+                },
+                {
+                  type: 'm.room.member',
+                  state_key: '@whatsapp_48517277952:home-dev',
+                  content: { displayname: 'Monika (WA)' },
+                },
+                {
+                  type: 'm.room.member',
+                  state_key: '@pbuchman:home-dev',
+                  content: { displayname: 'Piotr' },
+                },
+              ],
+            },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$group-piotrek',
+                  sender: '@whatsapp_48536911713:home-dev',
+                  content: { msgtype: 'm.text', body: 'Kto jedzie?' },
+                }),
+                matrixMessage({
+                  event_id: '$group-monika',
+                  sender: '@whatsapp_48517277952:home-dev',
+                  content: { msgtype: 'm.text', body: 'Ja moge.' },
+                }),
+                {
+                  type: 'm.room.message',
+                  event_id: '$group-me',
+                  sender: '@pbuchman:home-dev',
+                  origin_server_ts: 1782205305000,
+                  content: { msgtype: 'm.text', body: 'Tez bede.' },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.deepEqual(
+    events.map((event) => ({
+      roomId: event.matrixRoomId,
+      chat: event.chat,
+      sender: event.sender,
+      direction: event.message.direction,
+      text: event.message.text,
+    })),
+    [
+      {
+        roomId: '!group:home-dev',
+        chat: { type: 'group', displayName: 'Fishing Crew (WA)' },
+        sender: { displayName: 'Piotrek (WA)', phoneNumber: '+48536911713' },
+        direction: 'incoming',
+        text: 'Kto jedzie?',
+      },
+      {
+        roomId: '!group:home-dev',
+        chat: { type: 'group', displayName: 'Fishing Crew (WA)' },
+        sender: { displayName: 'Monika (WA)', phoneNumber: '+48517277952' },
+        direction: 'incoming',
+        text: 'Ja moge.',
+      },
+      {
+        roomId: '!group:home-dev',
+        chat: { type: 'group', displayName: 'Fishing Crew (WA)' },
+        sender: { displayName: 'You' },
+        direction: 'outgoing',
+        text: 'Tez bede.',
+      },
+    ]
+  );
+});
+
 test('extractRoomContexts merges state from sync rooms with existing context', () => {
   const roomContexts = extractRoomContexts(
     {
@@ -395,28 +560,14 @@ test('ensureRoomContextsForIncomingEvents fetches Matrix state for new WhatsApp 
   assert.equal(events[0]?.sender?.displayName, 'Monika (WA)');
 });
 
-test('collectPrivateWhatsAppEvents ignores local user, bridge bot, own-number ghost, and non-message events', () => {
+test('collectPrivateWhatsAppEvents ignores bridge bot and non-message events', () => {
   const ignoredEvents = [
-    {
-      type: 'm.room.message',
-      event_id: '$from-user',
-      sender: '@pbuchman:home-dev',
-      origin_server_ts: 1782205200000,
-      content: { msgtype: 'm.text', body: 'outgoing from Element' },
-    },
     {
       type: 'm.room.message',
       event_id: '$from-bot',
       sender: '@whatsappbot:home-dev',
       origin_server_ts: 1782205200000,
       content: { msgtype: 'm.notice', body: 'bridge status' },
-    },
-    {
-      type: 'm.room.message',
-      event_id: '$from-own-phone',
-      sender: '@whatsapp_48111222333:home-dev',
-      origin_server_ts: 1782205200000,
-      content: { msgtype: 'm.text', body: 'sent from my mobile' },
     },
     {
       type: 'm.room.redaction',

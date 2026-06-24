@@ -194,6 +194,19 @@ export interface PrivateWhatsAppSender {
   schemaVersion: number;
 }
 
+export interface PrivateWhatsAppChat {
+  id: string;
+  chatType: 'direct' | 'group' | 'unknown';
+  displayName?: string;
+  avatarMxcUri?: string;
+  messageCount: number;
+  participantCount: number;
+  firstSeenAt: string;
+  lastEventAt: string;
+  updatedAt: string;
+  schemaVersion?: number;
+}
+
 export interface PrivateWhatsAppMessage {
   id: string;
   chatId: string;
@@ -253,6 +266,11 @@ export interface PrivateWhatsAppAccount {
 
 export interface PrivateWhatsAppSendersResponse {
   senders: PrivateWhatsAppSender[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppChatsResponse {
+  chats: PrivateWhatsAppChat[];
   nextCursor?: string;
 }
 

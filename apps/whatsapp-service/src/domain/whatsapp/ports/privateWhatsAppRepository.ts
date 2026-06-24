@@ -5,6 +5,8 @@ import type {
   PrivateWhatsAppAccount,
   PrivateWhatsAppAggregateRebuildInput,
   PrivateWhatsAppAggregateRebuildResult,
+  PrivateWhatsAppChatQueryInput,
+  PrivateWhatsAppChatQueryResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
@@ -35,6 +37,9 @@ export interface PrivateWhatsAppRepository {
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>>;
+  findChats(
+    input: PrivateWhatsAppChatQueryInput
+  ): Promise<Result<PrivateWhatsAppChatQueryResult, WhatsAppError>>;
   findSenders(
     input: PrivateWhatsAppSenderQueryInput
   ): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>>;

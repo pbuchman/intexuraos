@@ -214,7 +214,12 @@ export async function ensureRoomContextsForIncomingEvents(
 }
 
 export function matrixEventToPrivateWhatsAppEvent(roomId, event, roomContext, config) {
-  if (!isRecord(event) || !isIncomingWhatsAppMatrixEvent(event, config)) {
+  if (!isRecord(event)) {
+    return null;
+  }
+
+  const direction = getWhatsAppMatrixEventDirection(event, config);
+  if (direction === null) {
     return null;
   }
 
@@ -225,13 +230,14 @@ export function matrixEventToPrivateWhatsAppEvent(roomId, event, roomContext, co
     return null;
   }
 
-  const message = matrixEventToMessage(event);
+  const message = matrixEventToMessage(event, direction);
   if (message === null) {
     return null;
   }
 
   const senderPhoneNumber = phoneNumberFromWhatsAppMxid(sender);
-  const senderDisplayName = roomContext.memberDisplayNames?.[sender];
+  const senderDisplayName =
+    direction === 'outgoing' ? 'You' : roomContext.memberDisplayNames?.[sender];
   const chat = {
     type: roomContext.chatType ?? 'unknown',
   };
@@ -268,34 +274,43 @@ export function matrixEventToPrivateWhatsAppEvent(roomId, event, roomContext, co
 }
 
 export function isIncomingWhatsAppMatrixEvent(event, config) {
+  return getWhatsAppMatrixEventDirection(event, config) === 'incoming';
+}
+
+function getWhatsAppMatrixEventDirection(event, config) {
   const sender = readString(event, 'sender');
   if (sender === undefined) {
-    return false;
+    return null;
   }
   const bridgeBotUsers = config.bridgeBotUsers ?? defaultBridgeBotUsers;
-  if (sender === config.matrixUserId || bridgeBotUsers.has(sender)) {
-    return false;
+  if (bridgeBotUsers.has(sender)) {
+    return null;
   }
 
   const senderPhone = normalizePhoneNumber(phoneNumberFromWhatsAppMxid(sender) ?? '');
-  if (senderPhone === '') {
-    return false;
-  }
-  if (config.ownWhatsAppPhoneNumber !== '' && senderPhone === config.ownWhatsAppPhoneNumber) {
-    return false;
+  let direction = 'incoming';
+  if (sender === config.matrixUserId) {
+    direction = 'outgoing';
+  } else if (
+    config.ownWhatsAppPhoneNumber !== '' &&
+    senderPhone === config.ownWhatsAppPhoneNumber
+  ) {
+    direction = 'outgoing';
+  } else if (senderPhone === '') {
+    return null;
   }
 
   const type = readString(event, 'type');
   if (type === 'm.reaction' || type === 'm.sticker') {
-    return true;
+    return direction;
   }
   if (type !== 'm.room.message') {
-    return false;
+    return null;
   }
 
   const content = isRecord(event.content) ? event.content : {};
   const msgtype = readString(content, 'msgtype');
-  return msgtype !== 'm.notice';
+  return msgtype === 'm.notice' ? null : direction;
 }
 
 export function buildImpersonatedIdTokenRequest(config, sourceAccessToken) {
@@ -589,19 +604,19 @@ function mergeRoomContext(existing, next) {
   };
 }
 
-function matrixEventToMessage(event) {
+function matrixEventToMessage(event, direction) {
   const type = readString(event, 'type');
   const content = isRecord(event.content) ? event.content : {};
 
   if (type === 'm.reaction') {
     const relation = isRecord(content['m.relates_to']) ? content['m.relates_to'] : {};
     const reactionText = readString(relation, 'key');
-    return withOptionalText({ direction: 'incoming', type: 'reaction' }, reactionText);
+    return withOptionalText({ direction, type: 'reaction' }, reactionText);
   }
 
   if (type === 'm.sticker') {
     return withMediaFromContent(
-      withOptionalText({ direction: 'incoming', type: 'sticker' }, readString(content, 'body')),
+      withOptionalText({ direction, type: 'sticker' }, readString(content, 'body')),
       content
     );
   }
@@ -616,10 +631,7 @@ function matrixEventToMessage(event) {
     return null;
   }
 
-  const message = withOptionalText(
-    { direction: 'incoming', type: messageType },
-    readString(content, 'body')
-  );
+  const message = withOptionalText({ direction, type: messageType }, readString(content, 'body'));
 
   if (messageType === 'text') {
     return message;

@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   disablePrivateWhatsAppAccount,
   getPrivateWhatsAppAccount,
+  listPrivateWhatsAppChatMessages,
+  listPrivateWhatsAppChats,
   listPrivateWhatsAppMessages,
   listPrivateWhatsAppSenderDays,
   listPrivateWhatsAppSenders,
@@ -46,6 +48,23 @@ describe('whatsappApi private read helpers', () => {
     expect(call?.[2]).toBe(TOKEN);
   });
 
+  it('lists private chats without sourceAccountId in the browser path', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({ chats: [], nextCursor: 'next-chats' });
+
+    const result = await listPrivateWhatsAppChats(TOKEN, {
+      limit: 25,
+      cursor: 'chat-cursor',
+    });
+
+    expect(result.nextCursor).toBe('next-chats');
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[0]).toBe('https://wa.test');
+    expect(call?.[1]).toBe('/private/chats?limit=25&cursor=chat-cursor');
+    expect(call?.[1]).not.toContain('sourceAccountId');
+    expect(call?.[2]).toBe(TOKEN);
+  });
+
   it('lists private messages by sender and optional day without sourceAccountId', async () => {
     const { apiRequest } = await import('../apiClient.js');
     vi.mocked(apiRequest).mockResolvedValue({ messages: [] });
@@ -60,6 +79,24 @@ describe('whatsappApi private read helpers', () => {
     const call = vi.mocked(apiRequest).mock.calls[0];
     expect(call?.[1]).toBe(
       '/private/messages?senderKey=phone%3A%2B48123456789&eventDayKey=2026-06-22&limit=50&cursor=messages-cursor'
+    );
+    expect(call?.[1]).not.toContain('sourceAccountId');
+  });
+
+  it('lists private messages by chat and optional day without sourceAccountId', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({ messages: [] });
+
+    await listPrivateWhatsAppChatMessages(TOKEN, {
+      chatId: 'chat-a',
+      eventDayKey: '2026-06-22',
+      limit: 50,
+      cursor: 'messages-cursor',
+    });
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe(
+      '/private/chats/chat-a/messages?eventDayKey=2026-06-22&limit=50&cursor=messages-cursor'
     );
     expect(call?.[1]).not.toContain('sourceAccountId');
   });

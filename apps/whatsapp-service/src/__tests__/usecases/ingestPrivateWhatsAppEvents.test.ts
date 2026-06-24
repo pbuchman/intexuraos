@@ -8,6 +8,8 @@ import {
   type PrivateWhatsAppAccount,
   type PrivateWhatsAppAggregateRebuildInput,
   type PrivateWhatsAppAggregateRebuildResult,
+  type PrivateWhatsAppChatQueryInput,
+  type PrivateWhatsAppChatQueryResult,
   type PrivateWhatsAppIngestOutcome,
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppMessageQueryResult,
@@ -131,6 +133,12 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     return Promise.resolve(ok({ messages: [] }));
   }
 
+  findChats(
+    _input: PrivateWhatsAppChatQueryInput
+  ): Promise<Result<PrivateWhatsAppChatQueryResult, WhatsAppError>> {
+    return Promise.resolve(ok({ chats: [] }));
+  }
+
   findSenders(
     _input: PrivateWhatsAppSenderQueryInput
   ): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>> {
@@ -185,6 +193,40 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored[0]?.deliveryMode).toBe('live');
     expect(repository.stored[0]?.message.text).toBe('hello from private whatsapp');
     expect(repository.stored[0]?.message.direction).toBe('incoming');
+  });
+
+  it('stores outgoing Matrix events from the private account owner', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$outgoing-event-1',
+            matrixSenderId: '@pbuchman:home-dev',
+            sender: {
+              displayName: 'You',
+            },
+            message: {
+              direction: 'outgoing',
+              type: 'text',
+              text: 'sent by me',
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toMatchObject({
+      accepted: 1,
+      duplicates: 0,
+      rejected: 0,
+    });
+    expect(repository.stored).toHaveLength(1);
+    expect(repository.stored[0]?.message.direction).toBe('outgoing');
+    expect(repository.stored[0]?.message.senderDisplayName).toBe('You');
+    expect(repository.stored[0]?.message.senderKey).toBe('matrix:@pbuchman:home-dev');
   });
 
   it('derives sender identity and Europe/Warsaw day metadata before persistence', async () => {
@@ -272,14 +314,14 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored).toHaveLength(1);
   });
 
-  it('rejects non-incoming events without writing them', async () => {
+  it('rejects unsupported directions without writing them', async () => {
     const result = await useCase.execute(
       createInput({
         events: [
           createEvent({
             matrixEventId: '$event-outgoing',
             message: {
-              direction: 'outgoing',
+              direction: 'sideways',
               type: 'text',
               text: 'sent from me',
             },

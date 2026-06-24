@@ -4,7 +4,7 @@
 
 export type PrivateWhatsAppDeliveryMode = 'live' | 'backfill';
 export type PrivateWhatsAppChatType = 'direct' | 'group' | 'unknown';
-export type PrivateWhatsAppMessageDirection = 'incoming';
+export type PrivateWhatsAppMessageDirection = 'incoming' | 'outgoing';
 export type PrivateWhatsAppSummaryStatus = 'not_started' | 'completed' | 'failed';
 export type PrivateWhatsAppAccountStatus = 'active' | 'disabled';
 export type PrivateWhatsAppMessageType =
@@ -96,9 +96,13 @@ export interface PrivateWhatsAppChat {
   chatType: PrivateWhatsAppChatType;
   displayName?: string;
   avatarMxcUri?: string;
+  messageCount?: number;
+  participantCount?: number;
+  participantKeys?: string[];
   firstSeenAt: string;
   lastEventAt: string;
   updatedAt: string;
+  schemaVersion?: number;
 }
 
 export interface PrivateWhatsAppMessage {
@@ -191,6 +195,7 @@ export interface PrivateWhatsAppIngestResult {
 
 export interface PrivateWhatsAppMessageQueryInput {
   sourceAccountId: string;
+  chatId?: string;
   senderKey?: string;
   from?: string;
   to?: string;
@@ -201,6 +206,17 @@ export interface PrivateWhatsAppMessageQueryInput {
 
 export interface PrivateWhatsAppMessageQueryResult {
   messages: PrivateWhatsAppMessage[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppChatQueryInput {
+  sourceAccountId: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface PrivateWhatsAppChatQueryResult {
+  chats: PrivateWhatsAppChat[];
   nextCursor?: string;
 }
 
