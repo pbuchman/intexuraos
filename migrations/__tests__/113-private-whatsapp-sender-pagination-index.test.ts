@@ -1,27 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { indexes, metadata, up } from '../113_private-whatsapp-day-message-pagination-index.mjs'; // @allow-missing-js -- .mjs import
+import { indexes, metadata, up } from '../113_private-whatsapp-sender-pagination-index.mjs'; // @allow-missing-js -- .mjs import
 
-describe('migration 113 - private whatsapp day message pagination index', () => {
+describe('migration 113 - private whatsapp sender pagination index', () => {
   it('exports the expected metadata', () => {
     expect(metadata).toMatchObject({
       id: '113',
-      name: 'private-whatsapp-day-message-pagination-index',
-      description: 'Stable pagination index for private WhatsApp day-filtered message reads',
+      name: 'private-whatsapp-sender-pagination-index',
+      description: 'Stable pagination index for private WhatsApp sender lists',
       createdAt: '2026-06-23',
     });
   });
 
-  it('defines the day-filtered message pagination index', () => {
+  it('defines the stable sender pagination index', () => {
     expect(indexes).toEqual([
       {
-        collectionGroup: 'whatsapp_private_messages',
+        collectionGroup: 'whatsapp_private_senders',
         queryScope: 'COLLECTION',
         fields: [
           { fieldPath: 'sourceAccountId', order: 'ASCENDING' },
-          { fieldPath: 'senderKey', order: 'ASCENDING' },
-          { fieldPath: 'eventDayKey', order: 'ASCENDING' },
-          { fieldPath: 'eventTimestamp', order: 'DESCENDING' },
+          { fieldPath: 'lastEventAt', order: 'DESCENDING' },
           { fieldPath: '__name__', order: 'DESCENDING' },
         ],
       },

@@ -1,12 +1,12 @@
 /**
- * Migration 113: Private WhatsApp day-filtered message pagination index.
+ * Migration 114: Private WhatsApp day-filtered message pagination index.
  *
  * Required by:
  * - whatsapp-service public private message reads filtered by sender and day
  */
 
 export const metadata = {
-  id: '113',
+  id: '114',
   name: 'private-whatsapp-day-message-pagination-index',
   description: 'Stable pagination index for private WhatsApp day-filtered message reads',
   createdAt: '2026-06-23',

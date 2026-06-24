@@ -1,12 +1,12 @@
 /**
- * Migration 112: Private WhatsApp sender pagination index.
+ * Migration 113: Private WhatsApp sender pagination index.
  *
  * Required by:
  * - whatsapp-service public private sender list queries
  */
 
 export const metadata = {
-  id: '112',
+  id: '113',
   name: 'private-whatsapp-sender-pagination-index',
   description: 'Stable pagination index for private WhatsApp sender lists',
   createdAt: '2026-06-23',
