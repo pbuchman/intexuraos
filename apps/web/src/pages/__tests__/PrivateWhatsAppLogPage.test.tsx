@@ -156,6 +156,22 @@ describe('PrivateWhatsAppLogPage', () => {
     expect(screen.queryByPlaceholderText(/send a message/i)).not.toBeInTheDocument();
   });
 
+  it('uses the full work surface with a mobile-bounded sender rail', () => {
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('private-whatsapp-log-shell')).toHaveClass('w-full', 'min-w-0');
+    expect(screen.getByTestId('private-whatsapp-log-shell')).not.toHaveClass('max-w-7xl');
+    expect(screen.getByTestId('private-whatsapp-sender-rail')).toHaveClass(
+      'max-h-[45vh]',
+      'xl:max-h-none'
+    );
+    expect(screen.getByTestId('private-whatsapp-message-timeline')).toHaveClass('min-w-0');
+  });
+
   it('uses day chips to filter messages by exact eventDayKey', async () => {
     const user = userEvent.setup();
     const selectDay = vi.fn();

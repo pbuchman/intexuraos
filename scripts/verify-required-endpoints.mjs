@@ -11,7 +11,7 @@
  * 4. Report missing endpoints with remediation steps
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
@@ -53,10 +53,10 @@ function checkServerFile(appName) {
     let content = '';
     let exists = false;
 
-    if (statSync(serverPath).isFile()) {
+    if (existsSync(serverPath) && statSync(serverPath).isFile()) {
       content = readFileSync(serverPath, 'utf8');
       exists = true;
-    } else if (statSync(distPath).isFile()) {
+    } else if (existsSync(distPath) && statSync(distPath).isFile()) {
       content = readFileSync(distPath, 'utf8');
       exists = true;
     }
