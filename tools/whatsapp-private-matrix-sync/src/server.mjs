@@ -136,6 +136,22 @@ export function extractRoomContexts(syncResponse, existingRoomContexts = {}) {
   return roomContexts;
 }
 
+export function collectWhatsAppInviteRoomIds(syncResponse, config) {
+  const invitedRooms = syncResponse?.rooms?.invite;
+  if (!isRecord(invitedRooms)) {
+    return [];
+  }
+
+  const roomIds = [];
+  for (const [roomId, room] of Object.entries(invitedRooms)) {
+    if (isWhatsAppInviteRoom(room, config)) {
+      roomIds.push(roomId);
+    }
+  }
+
+  return roomIds;
+}
+
 export async function ensureRoomContextsForIncomingEvents(
   syncResponse,
   existingRoomContexts,
@@ -326,6 +342,7 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   const readSyncStateFn = deps.readSyncState ?? readSyncState;
   const fetchMatrixSyncFn = deps.fetchMatrixSync ?? fetchMatrixSync;
   const fetchMatrixRoomStateFn = deps.fetchMatrixRoomState ?? fetchMatrixRoomState;
+  const joinMatrixRoomFn = deps.joinMatrixRoom ?? joinMatrixRoom;
   const postEventsInBatchesFn = deps.postEventsInBatches ?? postEventsInBatches;
   const writeSyncStateFn = deps.writeSyncState ?? writeSyncState;
   const nowISOString = deps.nowISOString ?? (() => new Date().toISOString());
@@ -345,12 +362,24 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   const hasStoredBatch = typeof state.nextBatch === 'string' && state.nextBatch.length > 0;
   runtime.state = hasStoredBatch ? 'running' : 'initializing';
 
-  const syncResponse = await fetchMatrixSyncFn(
+  let syncResponse = await fetchMatrixSyncFn(
     config,
     matrixAccessToken,
     state.nextBatch,
     hasStoredBatch ? config.pollTimeoutMs : config.initialSyncTimeoutMs
   );
+  let syncResponseCount = 1;
+
+  const inviteRoomIds = collectWhatsAppInviteRoomIds(syncResponse, config);
+  if (inviteRoomIds.length > 0) {
+    for (const roomId of inviteRoomIds) {
+      await joinMatrixRoomFn(config, matrixAccessToken, roomId);
+    }
+    runtime.counters.joinedRooms = (runtime.counters.joinedRooms ?? 0) + inviteRoomIds.length;
+
+    syncResponse = await fetchMatrixSyncFn(config, matrixAccessToken, state.nextBatch, 0);
+    syncResponseCount += 1;
+  }
 
   let roomContexts = extractRoomContexts(syncResponse, state.roomContexts ?? {});
   if (hasStoredBatch) {
@@ -366,7 +395,7 @@ export async function runSyncIteration(config, runtime, deps = {}) {
     hasStoredBatch,
     roomContexts,
   });
-  runtime.counters.syncResponses = (runtime.counters.syncResponses ?? 0) + 1;
+  runtime.counters.syncResponses = (runtime.counters.syncResponses ?? 0) + syncResponseCount;
 
   if (plan.events.length > 0) {
     await postEventsInBatchesFn(config, plan.events);
@@ -527,6 +556,28 @@ function incomingWhatsAppSendersFromRoom(room, config) {
   return senders;
 }
 
+function isWhatsAppInviteRoom(room, config) {
+  if (!isRecord(room)) {
+    return false;
+  }
+
+  const inviteStateEvents = Array.isArray(room.invite_state?.events)
+    ? room.invite_state.events
+    : [];
+  const bridgeBotUsers = config.bridgeBotUsers ?? defaultBridgeBotUsers;
+  return inviteStateEvents.some((event) => {
+    if (!isRecord(event)) {
+      return false;
+    }
+    const sender = readString(event, 'sender');
+    if (sender !== undefined && bridgeBotUsers.has(sender)) {
+      return true;
+    }
+
+    return readString(event, 'type') === 'm.bridge';
+  });
+}
+
 function mergeRoomContext(existing, next) {
   return {
     ...(existing ?? {}),
@@ -684,6 +735,27 @@ async function fetchMatrixRoomState(config, accessToken, roomId, stateType, stat
   if (!response.ok) {
     throw new Error(`matrix_room_state_failed_${response.status}`);
   }
+  return await response.json();
+}
+
+async function joinMatrixRoom(config, accessToken, roomId) {
+  const url = new URL(
+    `/_matrix/client/v3/join/${encodeURIComponent(roomId)}`,
+    config.homeserverUrl
+  );
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: '{}',
+  });
+
+  if (!response.ok) {
+    throw new Error(`matrix_join_failed_${response.status}`);
+  }
+
   return await response.json();
 }
 

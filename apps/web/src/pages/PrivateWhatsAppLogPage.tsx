@@ -132,7 +132,7 @@ export function PrivateWhatsAppLogPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mx-auto flex max-w-7xl flex-col gap-4">
+      <div data-testid="private-whatsapp-log-shell" className="flex w-full min-w-0 flex-col gap-4">
         <header className="flex flex-col gap-3 border-b border-slate-200 pb-4 dark:border-slate-800 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-slate-950 dark:text-slate-50">
@@ -158,8 +158,11 @@ export function PrivateWhatsAppLogPage(): React.JSX.Element {
 
         <ErrorBanner message={log.error} />
 
-        <div className="grid min-h-[calc(100vh-12rem)] grid-cols-1 gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="grid min-h-[calc(100vh-12rem)] grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]">
+          <aside
+            data-testid="private-whatsapp-sender-rail"
+            className="flex max-h-[45vh] min-h-0 flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 sm:max-h-[28rem] xl:max-h-none"
+          >
             <div className="border-b border-slate-200 p-3 dark:border-slate-800">
               <label className="sr-only" htmlFor="private-whatsapp-sender-search">
                 Search senders
@@ -257,7 +260,10 @@ export function PrivateWhatsAppLogPage(): React.JSX.Element {
             ) : null}
           </aside>
 
-          <section className="min-w-0 rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <section
+            data-testid="private-whatsapp-message-timeline"
+            className="min-w-0 rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+          >
             <div className="sticky top-16 z-10 border-b border-slate-200 bg-white/95 p-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">

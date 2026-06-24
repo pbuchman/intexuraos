@@ -5,6 +5,7 @@ import {
   buildHealthPayload,
   buildImpersonatedIdTokenRequest,
   buildIngestPayload,
+  collectWhatsAppInviteRoomIds,
   collectPrivateWhatsAppEvents,
   createConfig,
   createProcessingPlan,
@@ -469,6 +470,136 @@ test('createConfig supports missing env defaults and configurable bridge bot use
     isIncomingWhatsAppMatrixEvent(matrixMessage({ sender: '@bridgebot:matrix.example' }), custom),
     false
   );
+});
+
+test('collectWhatsAppInviteRoomIds returns only WhatsApp bridge invites', () => {
+  assert.deepEqual(
+    collectWhatsAppInviteRoomIds(
+      {
+        rooms: {
+          invite: {
+            '!whatsapp:home-dev': {
+              invite_state: {
+                events: [
+                  {
+                    type: 'm.room.member',
+                    sender: '@whatsappbot:home-dev',
+                    state_key: '@pbuchman:home-dev',
+                    content: { membership: 'invite' },
+                  },
+                ],
+              },
+            },
+            '!bridge-event:home-dev': {
+              invite_state: {
+                events: [{ type: 'm.bridge', sender: '@someone:home-dev', content: {} }],
+              },
+            },
+            '!ordinary:home-dev': {
+              invite_state: {
+                events: [
+                  {
+                    type: 'm.room.member',
+                    sender: '@friend:home-dev',
+                    state_key: '@pbuchman:home-dev',
+                    content: { membership: 'invite' },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+      config
+    ),
+    ['!whatsapp:home-dev', '!bridge-event:home-dev']
+  );
+});
+
+test('runSyncIteration joins WhatsApp invite rooms before processing joined timelines', async () => {
+  const runtime = { state: 'starting', counters: {} };
+  const joinedRoomIds = [];
+  const postedBatches = [];
+  const writtenStates = [];
+  const syncResponses = [
+    {
+      next_batch: 's-invite',
+      rooms: {
+        invite: {
+          '!business:home-dev': {
+            invite_state: {
+              events: [
+                {
+                  type: 'm.room.member',
+                  sender: '@whatsappbot:home-dev',
+                  state_key: '@pbuchman:home-dev',
+                  content: { membership: 'invite' },
+                },
+              ],
+            },
+          },
+          '!ordinary:home-dev': {
+            invite_state: {
+              events: [{ type: 'm.room.member', sender: '@friend:home-dev' }],
+            },
+          },
+        },
+      },
+    },
+    {
+      next_batch: 's-joined',
+      rooms: {
+        join: {
+          '!business:home-dev': {
+            state: {
+              events: [
+                { type: 'm.room.name', content: { name: 'Test Number (WA)' } },
+                { type: 'm.room.topic', content: { topic: 'WhatsApp private chat' } },
+              ],
+            },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$business-message',
+                  sender: '@whatsapp_15551381846:home-dev',
+                  content: { msgtype: 'm.text', body: 'prod marker' },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+  ];
+
+  await runSyncIteration(config, runtime, {
+    readAccessToken: () => 'matrix-token',
+    hasNonEmptyFile: () => true,
+    readSyncState: async () => ({ nextBatch: 's0' }),
+    fetchMatrixSync: async () => syncResponses.shift(),
+    fetchMatrixRoomState: async () => ({}),
+    joinMatrixRoom: async (_config, _accessToken, roomId) => {
+      joinedRoomIds.push(roomId);
+      return { room_id: roomId };
+    },
+    postEventsInBatches: async (_config, events) => {
+      postedBatches.push(events);
+    },
+    writeSyncState: async (_stateFile, state) => {
+      writtenStates.push(state);
+    },
+    nowISOString: () => '2026-06-24T07:20:00.000Z',
+  });
+
+  assert.deepEqual(joinedRoomIds, ['!business:home-dev']);
+  assert.equal(postedBatches.length, 1);
+  assert.equal(postedBatches[0]?.length, 1);
+  assert.equal(postedBatches[0]?.[0]?.matrixEventId, '$business-message');
+  assert.equal(postedBatches[0]?.[0]?.chat.displayName, 'Test Number (WA)');
+  assert.equal(writtenStates[0]?.nextBatch, 's-joined');
+  assert.equal(runtime.counters.joinedRooms, 1);
+  assert.equal(runtime.counters.syncResponses, 2);
+  assert.equal(runtime.counters.postedEvents, 1);
 });
 
 test('runSyncIteration surfaces Matrix sync, ingest API, and corrupted state errors', async () => {
