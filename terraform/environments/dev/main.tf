@@ -998,6 +998,7 @@ module "pubsub_whatsapp_send" {
     research_agent  = module.iam.service_accounts["research_agent"]
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
     code_agent      = module.iam.service_accounts["code_agent"]
+    intex_agent     = module.iam.service_accounts["intex_agent"]
   }
 
   depends_on = [

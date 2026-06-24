@@ -37,7 +37,9 @@ describe('createIntexAgentRunner', () => {
       toolName: 'create_note',
     });
     expect(client.calls[0]?.systemPrompt).toBe(INTEX_AGENT_SYSTEM_PROMPT.text);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('0.1.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('1.0.0');
+    expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
+    expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'create event tomorrow' },
       { role: 'assistant', content: 'What time?' },
