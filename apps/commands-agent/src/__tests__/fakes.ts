@@ -123,10 +123,10 @@ export class FakeActionsAgentClient implements ActionsAgentClient {
 
 export class FakeClassifier implements Classifier {
   private result: ClassificationResult = {
-    type: 'todo',
+    type: 'note',
     confidence: 0.9,
     title: 'Test Task',
-    reasoning: 'Contains task-related keywords indicating a todo item',
+    reasoning: 'Contains note-worthy text',
     promptVersion: '1.0.0',
   };
   private failNext = false;

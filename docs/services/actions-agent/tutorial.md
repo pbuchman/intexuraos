@@ -200,7 +200,7 @@ If the AI classified incorrectly, change the type:
 curl -X PATCH https://actions-agent.intexuraos.com/ACTION_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"type": "todo"}'
+  -d '{"type": "note"}'
 ```
 
 This logs the transition for ML training and re-routes the action.
@@ -446,7 +446,7 @@ Error codes returned when cancellation fails:
 ### Medium
 
 1. Create a batch request to fetch 10 specific action IDs
-2. Change an action type from `link` to `todo` and verify the transition was logged
+2. Change an action type from `link` to `note` and verify the transition was logged
 3. Send a command via WhatsApp and approve it by tapping the button
 
 ### Hard

@@ -386,18 +386,18 @@
 
 ---
 
-## 2026-04-22 — cron-agent v3.6.0
+## 2026-04-22 — retired-scheduler-service v3.6.0
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/cron-agent/features.md`
-- `docs/services/cron-agent/technical.md`
-- `docs/services/cron-agent/tutorial.md`
-- `docs/services/cron-agent/technical-debt.md`
-- `docs/services/cron-agent/agent.md`
+- `docs/services/retired-scheduler-service/features.md`
+- `docs/services/retired-scheduler-service/technical.md`
+- `docs/services/retired-scheduler-service/tutorial.md`
+- `docs/services/retired-scheduler-service/technical-debt.md`
+- `docs/services/retired-scheduler-service/agent.md`
 
 **Inferred Insights:**
 
@@ -491,18 +491,18 @@
 
 ---
 
-## 2026-04-22 — todos-agent v3.6.0
+## 2026-04-22 — retired-checklist-service v3.6.0
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/features.md` (no changes — no user-facing feature work)
-- `docs/services/todos-agent/technical.md`
-- `docs/services/todos-agent/tutorial.md` (no changes — no tutorial-impacting work)
-- `docs/services/todos-agent/technical-debt.md`
-- `docs/services/todos-agent/agent.md`
+- `docs/services/retired-checklist-service/features.md` (no changes — no user-facing feature work)
+- `docs/services/retired-checklist-service/technical.md`
+- `docs/services/retired-checklist-service/tutorial.md` (no changes — no tutorial-impacting work)
+- `docs/services/retired-checklist-service/technical-debt.md`
+- `docs/services/retired-checklist-service/agent.md`
 
 **Inferred Insights:**
 
@@ -967,18 +967,18 @@
 
 ---
 
-## 2026-04-07 — todos-agent v3.5.0
+## 2026-04-07 — retired-checklist-service v3.5.0
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/features.md`
-- `docs/services/todos-agent/technical.md`
-- `docs/services/todos-agent/tutorial.md`
-- `docs/services/todos-agent/technical-debt.md`
-- `docs/services/todos-agent/agent.md`
+- `docs/services/retired-checklist-service/features.md`
+- `docs/services/retired-checklist-service/technical.md`
+- `docs/services/retired-checklist-service/tutorial.md`
+- `docs/services/retired-checklist-service/technical-debt.md`
+- `docs/services/retired-checklist-service/agent.md`
 
 **Inferred Insights:**
 
@@ -1136,18 +1136,18 @@
 
 ---
 
-## 2026-04-07 — cron-agent v3.5.0
+## 2026-04-07 — retired-scheduler-service v3.5.0
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/cron-agent/features.md`
-- `docs/services/cron-agent/technical.md`
-- `docs/services/cron-agent/tutorial.md`
-- `docs/services/cron-agent/technical-debt.md`
-- `docs/services/cron-agent/agent.md`
+- `docs/services/retired-scheduler-service/features.md`
+- `docs/services/retired-scheduler-service/technical.md`
+- `docs/services/retired-scheduler-service/tutorial.md`
+- `docs/services/retired-scheduler-service/technical-debt.md`
+- `docs/services/retired-scheduler-service/agent.md`
 
 **Inferred Insights:**
 
@@ -1713,18 +1713,18 @@
 
 ---
 
-## 2026-03-22 — chat-agent
+## 2026-03-22 — retired-chat-service
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/chat-agent/features.md`
-- `docs/services/chat-agent/technical.md`
-- `docs/services/chat-agent/tutorial.md`
-- `docs/services/chat-agent/technical-debt.md`
-- `docs/services/chat-agent/agent.md`
+- `docs/services/retired-chat-service/features.md`
+- `docs/services/retired-chat-service/technical.md`
+- `docs/services/retired-chat-service/tutorial.md`
+- `docs/services/retired-chat-service/technical-debt.md`
+- `docs/services/retired-chat-service/agent.md`
 
 **Inferred Insights:**
 
@@ -1752,18 +1752,18 @@
 
 ---
 
-## 2026-03-22 — todos-agent
+## 2026-03-22 — retired-checklist-service
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/features.md`
-- `docs/services/todos-agent/technical.md`
-- `docs/services/todos-agent/tutorial.md`
-- `docs/services/todos-agent/technical-debt.md`
-- `docs/services/todos-agent/agent.md`
+- `docs/services/retired-checklist-service/features.md`
+- `docs/services/retired-checklist-service/technical.md`
+- `docs/services/retired-checklist-service/tutorial.md`
+- `docs/services/retired-checklist-service/technical-debt.md`
+- `docs/services/retired-checklist-service/agent.md`
 
 **Inferred Insights:**
 
@@ -1783,20 +1783,20 @@
 
 ---
 
-## 2026-03-22 — cron-agent
+## 2026-03-22 — retired-scheduler-service
 
 **Action:** Created
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/cron-agent/features.md`
-- `docs/services/cron-agent/technical.md`
-- `docs/services/cron-agent/tutorial.md`
-- `docs/services/cron-agent/technical-debt.md`
-- `docs/services/cron-agent/agent.md`
+- `docs/services/retired-scheduler-service/features.md`
+- `docs/services/retired-scheduler-service/technical.md`
+- `docs/services/retired-scheduler-service/tutorial.md`
+- `docs/services/retired-scheduler-service/technical-debt.md`
+- `docs/services/retired-scheduler-service/agent.md`
 - `docs/services/index.md` (added Task Automation AI capability section)
-- `docs/site-index.json` (added cron-agent entries)
+- `docs/site-index.json` (added retired-scheduler-service entries)
 
 **Inferred Insights:**
 
@@ -2249,18 +2249,18 @@
 
 ---
 
-## 2026-03-15 — todos-agent (v3.3.0 force refresh)
+## 2026-03-15 — retired-checklist-service (v3.3.0 force refresh)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/features.md` — Preserved narrative; no content changes required
-- `docs/services/todos-agent/technical.md` — Updated Recent Changes (v3.3.0 + v8 ignore fixes), replaced "Gemini / GLM" with "Gemini 2.5 Flash" in Architecture and Dependencies (ZAI/GLM-4.7 removed in 93aeac4a), updated AI extraction model description
-- `docs/services/todos-agent/tutorial.md` — Full refresh: progressive 4-part structure, AI extraction polling pattern, updated Cloud Run URL, TypeScript exercise solution
-- `docs/services/todos-agent/technical-debt.md` — Added v3.3.0 ZAI/GLM removal as resolved issue, updated analysis run date, removed ZAI references from Deprecations section
-- `docs/services/todos-agent/agent.md` — Full refresh: structured capabilities with TypeScript schemas, extraction failure handling pattern, lifecycle action table
+- `docs/services/retired-checklist-service/features.md` — Preserved narrative; no content changes required
+- `docs/services/retired-checklist-service/technical.md` — Updated Recent Changes (v3.3.0 + v8 ignore fixes), replaced "Gemini / GLM" with "Gemini 2.5 Flash" in Architecture and Dependencies (ZAI/GLM-4.7 removed in 93aeac4a), updated AI extraction model description
+- `docs/services/retired-checklist-service/tutorial.md` — Full refresh: progressive 4-part structure, AI extraction polling pattern, updated Cloud Run URL, TypeScript exercise solution
+- `docs/services/retired-checklist-service/technical-debt.md` — Added v3.3.0 ZAI/GLM removal as resolved issue, updated analysis run date, removed ZAI references from Deprecations section
+- `docs/services/retired-checklist-service/agent.md` — Full refresh: structured capabilities with TypeScript schemas, extraction failure handling pattern, lifecycle action table
 
 **Inferred Insights:**
 
@@ -2750,18 +2750,18 @@
 
 ---
 
-## 2026-03-07 — todos-agent (targeted refresh)
+## 2026-03-07 — retired-checklist-service (targeted refresh)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/features.md` — Typographic refresh (ASCII double-dashes to em-dashes throughout)
-- `docs/services/todos-agent/technical.md` — Added v3.2.0 release commit to Recent Changes, typographic refresh
-- `docs/services/todos-agent/tutorial.md` — Typographic refresh (em-dashes, en-dash in time range)
-- `docs/services/todos-agent/technical-debt.md` — Added v3.2.0 release to Recent Improvements and Resolved Issues, typographic refresh
-- `docs/services/todos-agent/agent.md` — Typographic refresh (em-dashes in constraints table)
+- `docs/services/retired-checklist-service/features.md` — Typographic refresh (ASCII double-dashes to em-dashes throughout)
+- `docs/services/retired-checklist-service/technical.md` — Added v3.2.0 release commit to Recent Changes, typographic refresh
+- `docs/services/retired-checklist-service/tutorial.md` — Typographic refresh (em-dashes, en-dash in time range)
+- `docs/services/retired-checklist-service/technical-debt.md` — Added v3.2.0 release to Recent Improvements and Resolved Issues, typographic refresh
+- `docs/services/retired-checklist-service/agent.md` — Typographic refresh (em-dashes in constraints table)
 - `docs/documentation-runs.md` — This entry
 
 **Inferred Insights:**
@@ -2785,7 +2785,7 @@
 
 - Release v3.2.0 commit added to Recent Changes table
 - Typographic consistency: All ASCII double-dashes (`--`) replaced with em-dashes (`—`) across all five files
-- No functional code changes to todos-agent since previous documentation run
+- No functional code changes to retired-checklist-service since previous documentation run
 
 ---
 
@@ -3335,18 +3335,18 @@
 
 ---
 
-## 2026-03-07 -- todos-agent (targeted refresh)
+## 2026-03-07 -- retired-checklist-service (targeted refresh)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/features.md` -- Added "Automatic Status Tracking" capability section; added "Smart status" key benefit; minor prose polish
-- `docs/services/todos-agent/technical.md` -- Added commit `99febe66` (GitHub OAuth mocks) to Recent Changes; added second data flow diagram for public CRUD; expanded Gotchas with tag filtering OR logic, adding items to completed todos, and processing vs public status differences; added "No description" fallback to AI extraction section
-- `docs/services/todos-agent/tutorial.md` -- Added "Access denied" row to troubleshooting; improved exercise descriptions with verification steps; added link to agent.md in Next Steps
-- `docs/services/todos-agent/technical-debt.md` -- Added resolved issue for GitHub OAuth mock update (99febe66); updated Last Updated date
-- `docs/services/todos-agent/agent.md` -- Added "Reopening" and "Tag Filtering" constraints; added "No description" fallback to AI extraction; updated Last Updated date
+- `docs/services/retired-checklist-service/features.md` -- Added "Automatic Status Tracking" capability section; added "Smart status" key benefit; minor prose polish
+- `docs/services/retired-checklist-service/technical.md` -- Added commit `99febe66` (GitHub OAuth mocks) to Recent Changes; added second data flow diagram for public CRUD; expanded Gotchas with tag filtering OR logic, adding items to completed todos, and processing vs public status differences; added "No description" fallback to AI extraction section
+- `docs/services/retired-checklist-service/tutorial.md` -- Added "Access denied" row to troubleshooting; improved exercise descriptions with verification steps; added link to agent.md in Next Steps
+- `docs/services/retired-checklist-service/technical-debt.md` -- Added resolved issue for GitHub OAuth mock update (99febe66); updated Last Updated date
+- `docs/services/retired-checklist-service/agent.md` -- Added "Reopening" and "Tag Filtering" constraints; added "No description" fallback to AI extraction; updated Last Updated date
 - `docs/documentation-runs.md` -- This entry
 
 **Inferred Insights:**
@@ -3470,18 +3470,18 @@
 
 ---
 
-## 2026-03-07 -- chat-agent (minor refresh)
+## 2026-03-07 -- retired-chat-service (minor refresh)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/chat-agent/features.md` -- No changes needed; content accurate
-- `docs/services/chat-agent/technical.md` -- Added `99febe66` to Recent Changes table (cross-service mock update)
-- `docs/services/chat-agent/tutorial.md` -- No changes needed; content accurate
-- `docs/services/chat-agent/technical-debt.md` -- Updated Last Updated date; added resolved issue for FakeUserServiceClient conformance
-- `docs/services/chat-agent/agent.md` -- No changes needed; content accurate
+- `docs/services/retired-chat-service/features.md` -- No changes needed; content accurate
+- `docs/services/retired-chat-service/technical.md` -- Added `99febe66` to Recent Changes table (cross-service mock update)
+- `docs/services/retired-chat-service/tutorial.md` -- No changes needed; content accurate
+- `docs/services/retired-chat-service/technical-debt.md` -- Updated Last Updated date; added resolved issue for FakeUserServiceClient conformance
+- `docs/services/retired-chat-service/agent.md` -- No changes needed; content accurate
 
 **Inferred Insights:**
 
@@ -3915,22 +3915,22 @@
 
 ---
 
-## 2026-02-22 -- chat-agent (targeted refresh)
+## 2026-02-22 -- retired-chat-service (targeted refresh)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/chat-agent/features.md` -- Updated guest access section to list all three supported models (Gemini 2.5 Flash, GLM-4.7, GLM-4.7-Flash) for authenticated users
-- `docs/services/chat-agent/technical.md` -- Added v3.1.0 and v3.0.0 releases to recent changes table, added "Supported Chat Models" subsection under Configuration, fixed domain model table formatting (pipe-escaped union types)
-- `docs/services/chat-agent/tutorial.md` -- Minor formatting consistency fixes in troubleshooting table
-- `docs/services/chat-agent/technical-debt.md` -- Updated last-updated date to 2026-02-22, updated total count in summary table
-- `docs/services/chat-agent/agent.md` -- No substantive changes; confirmed accuracy of all schemas, examples, and constraints
+- `docs/services/retired-chat-service/features.md` -- Updated guest access section to list all three supported models (Gemini 2.5 Flash, GLM-4.7, GLM-4.7-Flash) for authenticated users
+- `docs/services/retired-chat-service/technical.md` -- Added v3.1.0 and v3.0.0 releases to recent changes table, added "Supported Chat Models" subsection under Configuration, fixed domain model table formatting (pipe-escaped union types)
+- `docs/services/retired-chat-service/tutorial.md` -- Minor formatting consistency fixes in troubleshooting table
+- `docs/services/retired-chat-service/technical-debt.md` -- Updated last-updated date to 2026-02-22, updated total count in summary table
+- `docs/services/retired-chat-service/agent.md` -- No substantive changes; confirmed accuracy of all schemas, examples, and constraints
 
 **Inferred Insights:**
 
-- Why: Users need contextual help inside IntexuraOS without switching to external documentation; the chat agent provides instant answers with source citations through natural conversation
+- Why: Users need contextual help inside IntexuraOS without switching to external documentation; the retired chat service provides instant answers with source citations through natural conversation
 - Killer feature: RAG-powered documentation Q&A that combines Firestore vector search with LLM generation, producing answers with traceable source citations and the ability to create commands through conversational confirmation flow
 - Future plans: Conversation persistence in Firestore, multi-action support (edit/delete), automated documentation indexing pipeline, streaming responses via SSE
 - Limitations: Create-only commands, no user data access, manual doc indexing required, in-memory rate limiter (per-instance), 100 msg/hr guest limit
@@ -4050,18 +4050,18 @@
 
 ---
 
-## 2026-02-22 -- todos-agent (targeted refresh)
+## 2026-02-22 -- retired-checklist-service (targeted refresh)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/features.md` -- Updated LLM model references (Gemini 2.5 Flash / GLM-4.7), added automatic status tracking capability, added description limit to limitations
-- `docs/services/todos-agent/technical.md` -- Added v3.1.0 and v3.0.0 releases to recent changes, added app-settings-service dependency, added system endpoints table, added automatic status transitions section, added Pub/Sub auth gotcha, added max items cap and markdown stripping gotchas, updated model chain documentation
-- `docs/services/todos-agent/tutorial.md` -- Changed URLs from production to localhost:8123 for local dev, added archived filter step, corrected AI extraction to use internal endpoint, improved exercise solutions with cancel-then-archive flow
-- `docs/services/todos-agent/technical-debt.md` -- Updated to 2026-02-22, added v3.1.0 and v3.0.0 release entries, identified parseDate duplication as low-priority code duplicate, updated dependency versions
-- `docs/services/todos-agent/agent.md` -- Added auto-status constraint, added max items constraint, added default priority constraint, added internal API usage pattern, updated model chain, updated last updated date
+- `docs/services/retired-checklist-service/features.md` -- Updated LLM model references (Gemini 2.5 Flash / GLM-4.7), added automatic status tracking capability, added description limit to limitations
+- `docs/services/retired-checklist-service/technical.md` -- Added v3.1.0 and v3.0.0 releases to recent changes, added app-settings-service dependency, added system endpoints table, added automatic status transitions section, added Pub/Sub auth gotcha, added max items cap and markdown stripping gotchas, updated model chain documentation
+- `docs/services/retired-checklist-service/tutorial.md` -- Changed URLs from production to localhost:8123 for local dev, added archived filter step, corrected AI extraction to use internal endpoint, improved exercise solutions with cancel-then-archive flow
+- `docs/services/retired-checklist-service/technical-debt.md` -- Updated to 2026-02-22, added v3.1.0 and v3.0.0 release entries, identified parseDate duplication as low-priority code duplicate, updated dependency versions
+- `docs/services/retired-checklist-service/agent.md` -- Added auto-status constraint, added max items constraint, added default priority constraint, added internal API usage pattern, updated model chain, updated last updated date
 
 **Inferred Insights:**
 
@@ -4340,14 +4340,14 @@
 
 ---
 
-## 2026-02-19 — todos-agent (targeted refresh)
+## 2026-02-19 — retired-checklist-service (targeted refresh)
 
 **Action:** Updated
 **Agent:** service-scribe (autonomous)
 
 **Files:**
 
-- `docs/services/todos-agent/technical.md` — Fixed broken Domain Model table rendering; added missing `INTEXURAOS_APP_SETTINGS_SERVICE_URL` env var to Configuration table
+- `docs/services/retired-checklist-service/technical.md` — Fixed broken Domain Model table rendering; added missing `INTEXURAOS_APP_SETTINGS_SERVICE_URL` env var to Configuration table
 
 **Inferred Insights:**
 
@@ -4382,7 +4382,7 @@
 - Total: 186 documentation files refreshed
 
 **Services Updated:**
-actions-agent, api-docs-hub, app-settings-service, bookmarks-agent, calendar-agent, chat-agent, code-agent, commands-agent, data-insights-agent, image-service, linear-agent, mobile-notifications-service, notes-agent, notion-service, research-agent, todos-agent, user-service, web, web-agent, whatsapp-service
+actions-agent, api-docs-hub, app-settings-service, bookmarks-agent, calendar-agent, retired-chat-service, code-agent, commands-agent, data-insights-agent, image-service, linear-agent, mobile-notifications-service, notes-agent, notion-service, research-agent, retired-checklist-service, user-service, web, web-agent, whatsapp-service
 
 **Workers Updated:**
 code-worker, log-cleanup, orchestrator, vm-lifecycle
@@ -4515,7 +4515,7 @@ common-core, common-http, http-contracts, http-server, infra-claude, infra-fires
 
 ---
 
-## 2026-01-25 - todos-agent v2.1.0 Documentation Update
+## 2026-01-25 - retired-checklist-service v2.1.0 Documentation Update
 
 **Action:** Updated (HIGH CARE)
 **Agent:** service-scribe (autonomous)
@@ -4523,11 +4523,11 @@ common-core, common-http, http-contracts, http-server, infra-claude, infra-fires
 
 **Files Updated:**
 
-- `docs/services/todos-agent/features.md` - Rewritten with active voice, concrete examples, clear value propositions
-- `docs/services/todos-agent/technical.md` - Added architecture diagrams, data flow sequence, recent changes table (INT-269, INT-218)
-- `docs/services/todos-agent/tutorial.md` - Complete rewrite with progressive exercises, AI extraction scenario
-- `docs/services/todos-agent/technical-debt.md` - Updated with INT-269/INT-218 resolved issues, recent improvements
-- `docs/services/todos-agent/agent.md` - Updated with constraint clarifications, AI extraction section
+- `docs/services/retired-checklist-service/features.md` - Rewritten with active voice, concrete examples, clear value propositions
+- `docs/services/retired-checklist-service/technical.md` - Added architecture diagrams, data flow sequence, recent changes table (INT-269, INT-218)
+- `docs/services/retired-checklist-service/tutorial.md` - Complete rewrite with progressive exercises, AI extraction scenario
+- `docs/services/retired-checklist-service/technical-debt.md` - Updated with INT-269/INT-218 resolved issues, recent improvements
+- `docs/services/retired-checklist-service/agent.md` - Updated with constraint clarifications, AI extraction section
 
 **Key Changes Documented:**
 
@@ -4581,7 +4581,7 @@ Log of all `/document-service` runs.
 
 **New Services:**
 
-- chat-agent - AI-powered conversational interface for natural language interactions
+- retired-chat-service - AI-powered conversational interface for natural language interactions
 - code-agent - AI-assisted coding with context-aware suggestions and completions
 
 **Removed Services:**
@@ -4616,7 +4616,7 @@ Log of all `/document-service` runs.
 
 <!-- Entries are prepended below this line -->
 
-## 2026-01-25 - todos-agent v2.1.0 Documentation Update
+## 2026-01-25 - retired-checklist-service v2.1.0 Documentation Update
 
 **Action:** Updated (HIGH CARE)
 **Agent:** service-scribe (autonomous)
@@ -4624,11 +4624,11 @@ Log of all `/document-service` runs.
 
 **Files Updated:**
 
-- `docs/services/todos-agent/features.md` - Rewritten with active voice, concrete examples, clear value propositions
-- `docs/services/todos-agent/technical.md` - Added architecture diagrams, data flow sequence, recent changes table (INT-269, INT-218)
-- `docs/services/todos-agent/tutorial.md` - Complete rewrite with progressive exercises, AI extraction scenario
-- `docs/services/todos-agent/technical-debt.md` - Updated with INT-269/INT-218 resolved issues, recent improvements
-- `docs/services/todos-agent/agent.md` - Updated with constraint clarifications, AI extraction section
+- `docs/services/retired-checklist-service/features.md` - Rewritten with active voice, concrete examples, clear value propositions
+- `docs/services/retired-checklist-service/technical.md` - Added architecture diagrams, data flow sequence, recent changes table (INT-269, INT-218)
+- `docs/services/retired-checklist-service/tutorial.md` - Complete rewrite with progressive exercises, AI extraction scenario
+- `docs/services/retired-checklist-service/technical-debt.md` - Updated with INT-269/INT-218 resolved issues, recent improvements
+- `docs/services/retired-checklist-service/agent.md` - Updated with constraint clarifications, AI extraction section
 
 **Key Changes Documented:**
 
@@ -5254,7 +5254,7 @@ Log of all `/document-service` runs.
 
 **Files Updated:**
 
-- `docs/services/index.md` — Added tutorial links for bookmarks-agent, notes-agent, todos-agent
+- `docs/services/index.md` — Added tutorial links for bookmarks-agent, notes-agent, retired-checklist-service
 - Updated documentation count to "17 / 17 (100%) — All with tutorials"
 
 **Context:**
@@ -5265,7 +5265,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 
 - bookmarks-agent: Added `[tutorial](bookmarks-agent/tutorial.md)` link
 - notes-agent: Added `[tutorial](notes-agent/tutorial.md)` link
-- todos-agent: Added `[tutorial](todos-agent/tutorial.md)` link
+- retired-checklist-service: Added `[tutorial](retired-checklist-service/tutorial.md)` link
 
 ---
 
@@ -5320,12 +5320,12 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 - `docs/services/notes-agent/tutorial.md`
 - `docs/services/notes-agent/technical-debt.md`
 
-**todos-agent** (4 files)
+**retired-checklist-service** (4 files)
 
-- `docs/services/todos-agent/features.md`
-- `docs/services/todos-agent/technical.md`
-- `docs/services/todos-agent/tutorial.md`
-- `docs/services/todos-agent/technical-debt.md`
+- `docs/services/retired-checklist-service/features.md`
+- `docs/services/retired-checklist-service/technical.md`
+- `docs/services/retired-checklist-service/tutorial.md`
+- `docs/services/retired-checklist-service/technical-debt.md`
 
 **whatsapp-service** (4 files)
 
@@ -5406,7 +5406,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 | image-service                | AI image generation for research covers          | GPT Image 1 and Gemini Flash Image support           | More image models                      |
 | bookmarks-agent              | Save links with metadata extraction              | OpenGraph metadata via web-agent                     | Full-text search                       |
 | notes-agent                  | Quick note capture                               | Simple CRUD with tag support                         | Rich text, versioning                  |
-| todos-agent                  | Task management with AI extraction               | AI-powered item extraction from natural language     | Recurring tasks, sub-task dependencies |
+| retired-checklist-service                  | Task management with AI extraction               | AI-powered item extraction from natural language     | Recurring tasks, sub-task dependencies |
 | whatsapp-service             | WhatsApp Business integration                    | Media download to GCS with async transcription       | More message types                     |
 | commands-agent               | Classify user intent into action types           | Model preference detection from natural language     | More action types                      |
 | web-agent                    | OpenGraph metadata extraction                    | Streaming with 2MB limit enforcement                 | Twitter card expansion                 |
@@ -5429,7 +5429,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 | image-service                | 0     | 1           | 0         | 0           |
 | bookmarks-agent              | 0     | 1           | 0         | 0           |
 | notes-agent                  | 0     | 1           | 0         | 0           |
-| todos-agent                  | 0     | 0           | 0         | 0           |
+| retired-checklist-service                  | 0     | 0           | 0         | 0           |
 | whatsapp-service             | 0     | 2           | 0         | 0           |
 | commands-agent               | 0     | 0           | 0         | 0           |
 | web-agent                    | 0     | 0           | 0         | 0           |
@@ -5455,12 +5455,12 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 
 1. bookmarks-agent — Recent Changes, technical-debt timestamp
 2. calendar-agent — Removed ZAI env var, GLM-4.7 models from External APIs, updated fallback references
-3. chat-agent — Switched guest model from GLM-4.7-Flash to Gemini 2.5 Flash, removed ZAI env var (now uses GEMINI as required)
+3. retired-chat-service — Switched guest model from GLM-4.7-Flash to Gemini 2.5 Flash, removed ZAI env var (now uses GEMINI as required)
 4. commands-agent — Removed GLM-4.7 from classifier models, updated gotchas and tutorials
 5. data-insights-agent — Removed GLM-4.7 from LLM Models table and env vars
 6. notion-service — Recent Changes, technical-debt timestamp
 7. research-agent — Removed ZAI provider from LLM Providers table, env vars, fallback chain, file structure
-8. todos-agent — Removed ZAI from model chain and env vars
+8. retired-checklist-service — Removed ZAI from model chain and env vars
 9. user-service — Removed zai from LlmKeys, validation models, provider naming
 10. web-agent — Removed ZAI from overview, architecture diagram, fallback chain, env vars
 11. app-settings-service — Updated provider count from 5 to 4, removed zai from pricing response schemas
@@ -5469,7 +5469,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 
 **Aggregation Updates:**
 
-- `docs/services/index.md` — Removed infra-glm package (deleted), updated chat-agent AI column, fixed model count
+- `docs/services/index.md` — Removed infra-glm package (deleted), updated retired-chat-service AI column, fixed model count
 
 **Inferred Insights:**
 

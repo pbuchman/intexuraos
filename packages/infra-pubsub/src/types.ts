@@ -4,7 +4,6 @@
  * This module exposes ONLY generic Pub/Sub primitives. Domain-specific event
  * shapes live in their dedicated leaf client packages
  * (e.g. `@intexuraos/whatsapp-pubsub-client`,
- * `@intexuraos/todos-pubsub-client`,
  * `@intexuraos/calendar-pubsub-client`,
  * `@intexuraos/pr-triage-pubsub-client`).
  */

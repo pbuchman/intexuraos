@@ -118,7 +118,7 @@ interface LlmGenerateClient {
 
 **Packages (1):** `internal-clients`
 
-**Apps (9):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`
+**Apps (7):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `commands-agent`, `linear-agent`, `research-agent`, `web-agent`
 
 **Workers (1):** `orchestrator`
 

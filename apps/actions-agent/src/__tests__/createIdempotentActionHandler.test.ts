@@ -11,7 +11,7 @@ const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreated
   actionId: 'action-123',
   userId: 'user-456',
   commandId: 'cmd-789',
-  actionType: 'todo',
+  actionType: 'note',
   title: 'Test action',
   payload: {
     prompt: 'Test prompt',

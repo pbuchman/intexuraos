@@ -6,7 +6,6 @@ export type CommandStatus =
   | 'failed'
   | 'archived';
 export type CommandType =
-  | 'todo'
   | 'research'
   | 'note'
   | 'link'

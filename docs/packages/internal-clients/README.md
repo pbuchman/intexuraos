@@ -197,13 +197,11 @@ interface ServiceClientError {
 | ------------------- | ------------------------------------- |
 | actions-agent       | LLM client + OAuth tokens             |
 | calendar-agent      | LLM client + OAuth tokens             |
-| chat-agent          | LLM client creation                   |
 | code-agent          | fetchWithAuth for cross-service calls |
 | commands-agent      | LLM client for command processing     |
 | image-service       | LLM client for image generation       |
 | linear-agent        | LLM client for issue management       |
 | research-agent      | LLM client for research tasks         |
-| todos-agent         | LLM client for todo extraction        |
 | web-agent           | LLM client for web browsing           |
 
 ---

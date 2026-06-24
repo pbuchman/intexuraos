@@ -279,8 +279,8 @@ describe('approvalMessageRepository', () => {
         actionId: 'action-1',
         userId: 'user-1',
         sentAt: '2026-01-02T00:00:00.000Z',
-        actionType: 'todo',
-        actionTitle: 'Test Todo',
+        actionType: 'note',
+        actionTitle: 'Test Note',
       });
 
       setupFakeFirestore({ snapshotEmpty: false, docs: [fakeDoc] });
@@ -296,8 +296,8 @@ describe('approvalMessageRepository', () => {
           actionId: 'action-1',
           userId: 'user-1',
           sentAt: '2026-01-02T00:00:00.000Z',
-          actionType: 'todo',
-          actionTitle: 'Test Todo',
+          actionType: 'note',
+          actionTitle: 'Test Note',
         });
       }
     });

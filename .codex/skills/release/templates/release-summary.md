@@ -63,12 +63,6 @@ Use this template to display the final summary after Phase 6 completes.
 | 2   | Update hero statistics          | Implemented |
 | 3   | Add approval flow visualization | Skipped     |
 
-## RAG Embeddings
-
-- **Status:** [Refreshed | Skipped | Failed]
-- **Chunks uploaded:** [N]
-- **Collection:** `doc_embeddings` (production Firestore)
-
 ## Post-Release Validation
 
 | Check                      | Result |

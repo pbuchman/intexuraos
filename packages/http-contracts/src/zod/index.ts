@@ -31,11 +31,6 @@ export {
   type NotesCreateNoteRequest,
 } from './notes-agent.js';
 export {
-  todosCreateTodoRequestSchema,
-  todosCreateTodoResponseSchema,
-  type TodosCreateTodoRequest,
-} from './todos-agent.js';
-export {
   researchCreateDraftRequestSchema,
   researchCreateDraftResponseSchema,
   type ResearchCreateDraftRequest,

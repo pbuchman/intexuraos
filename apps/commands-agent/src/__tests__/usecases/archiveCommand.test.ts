@@ -35,7 +35,7 @@ describe('archiveCommand usecase', () => {
         timestamp: '2025-01-01T00:00:00.000Z',
         status: 'classified' as const,
         classification: {
-          type: 'todo',
+          type: 'note',
           confidence: 0.9,
           reasoning: 'Test',
           promptVersion: '1.0.0',
@@ -144,7 +144,7 @@ describe('archiveCommand usecase', () => {
         timestamp: '2025-01-01T00:00:00.000Z',
         status: 'classified' as const,
         classification: {
-          type: 'todo',
+          type: 'note',
           confidence: 0.9,
           reasoning: 'Test',
           promptVersion: '1.0.0',

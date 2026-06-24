@@ -50,7 +50,7 @@ Available components to document:
 Apps WITH existing docs:
   + user-service          (last: 2026-02-08)
   + whatsapp-service      (last: 2026-02-08)
-  + chat-agent            (last: 2026-02-08)
+  + notes-agent           (last: 2026-02-08)
   ...
 
 Apps WITHOUT docs:

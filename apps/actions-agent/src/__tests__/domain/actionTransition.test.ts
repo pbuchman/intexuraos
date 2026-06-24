@@ -18,7 +18,7 @@ describe('createActionTransition', () => {
       commandId: 'cmd-1',
       commandText: 'Test command',
       originalType: 'note',
-      newType: 'todo',
+      newType: 'note',
       originalConfidence: 0.85,
     });
 
@@ -28,7 +28,7 @@ describe('createActionTransition', () => {
       commandId: 'cmd-1',
       commandText: 'Test command',
       originalType: 'note',
-      newType: 'todo',
+      newType: 'note',
       originalConfidence: 0.85,
     });
   });
@@ -40,7 +40,7 @@ describe('createActionTransition', () => {
       commandId: 'cmd-1',
       commandText: 'Test',
       originalType: 'note',
-      newType: 'todo',
+      newType: 'note',
       originalConfidence: 0.8,
     });
 
@@ -50,7 +50,7 @@ describe('createActionTransition', () => {
       commandId: 'cmd-1',
       commandText: 'Test',
       originalType: 'note',
-      newType: 'todo',
+      newType: 'note',
       originalConfidence: 0.8,
     });
 

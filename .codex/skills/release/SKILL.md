@@ -11,7 +11,7 @@ Use this skill to prepare an IntexuraOS release.
 
 ```text
 $release                    # Full release workflow
-$release --skip-docs        # Skip service documentation and RAG embeddings
+$release --skip-docs        # Skip service documentation
 $release --phase 3          # Resume from a specific phase
 $release --collect          # Only collect and triage release data
 ```
@@ -31,7 +31,7 @@ $release --collect          # Only collect and triage release data
 | Argument      | Workflow                            | What Happens                                                                               |
 | ------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ |
 | none          | `workflows/full-release.md`         | Full release workflow                                                                      |
-| `--skip-docs` | `workflows/full-release.md`         | Full release workflow, skipping service documentation and RAG embeddings                   |
+| `--skip-docs` | `workflows/full-release.md`         | Full release workflow, skipping service documentation                                      |
 | `--phase N`   | `workflows/full-release.md`         | Resume from Phase N                                                                        |
 | `--collect`   | `workflows/collect-release-data.md` | Separate pipeline: collect release data, triage it, write `.prerelease-data.md`, then stop |
 

@@ -10,7 +10,7 @@ App-settings-service is a Fastify-based microservice running on Cloud Run (port 
 graph TB
     subgraph "External"
         Services[Downstream Services<br/>user-service, commands-agent, etc.]
-        CronAgent[cron-agent<br/>OpenAPI catalog]
+        ApiDocs[api-docs-hub<br/>OpenAPI catalog]
     end
 
     subgraph "App Settings Service"
@@ -25,7 +25,7 @@ graph TB
     end
 
     Services -->|poll /health| Health
-    CronAgent -->|GET /openapi.json| OpenAPI
+    ApiDocs -->|GET /openapi.json| OpenAPI
     Server --> Health
     Server --> OpenAPI
     Health --> Firestore
@@ -37,7 +37,7 @@ graph TB
 
     class Server,Health,OpenAPI service
     class Firestore storage
-    class Services,CronAgent external
+    class Services,ApiDocs external
 ```
 
 ## Recent Changes
@@ -93,11 +93,10 @@ These services poll `/health` before starting (configured in `ecosystem.config.c
 | commands-agent | Startup dependency (waitForService)            |
 | actions-agent  | Startup dependency (waitForService)            |
 | research-agent | Startup dependency (waitForService)            |
-| todos-agent    | Startup dependency (waitForService)            |
 
 ### Service Catalog
 
-The cron-agent's `config.ts` registers app-settings-service in its service catalog with `allowedOperations: []` (no callable operations).
+Api-docs-hub registers app-settings-service in its OpenAPI source catalog.
 
 ## Configuration
 
@@ -125,7 +124,7 @@ The cron-agent's `config.ts` registers app-settings-service in its service catal
 
 ## Gotchas
 
-- **Five services still depend on this service's health endpoint.** Removing or decommissioning the service requires updating `ecosystem.config.cjs` `waitForService` entries for user-service, commands-agent, actions-agent, research-agent, and todos-agent.
+- **Four services still depend on this service's health endpoint.** Removing or decommissioning the service requires updating `ecosystem.config.cjs` `waitForService` entries for user-service, commands-agent, actions-agent, and research-agent.
 - **Empty service container.** `ServiceContainer` is typed as `Record<string, never>` — it holds no adapters. The DI wiring (`getServices`, `setServices`, `resetServices`) exists but is unused.
 - **No test files.** All test files were removed with the pricing migration. The service currently has no test coverage.
 - **Firestore collection still registered.** The `settings` collection is registered in `firestore-collections.json` with `app-settings-service` as owner, but nothing in the service code reads or writes it.

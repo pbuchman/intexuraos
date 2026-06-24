@@ -7,7 +7,6 @@ import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { XiaomiBatteryGuide } from '@/components/XiaomiBatteryGuide';
 import { DevBar } from '@/components/DevBar';
-import { Chat } from '@/components/Chat';
 import { ProtectedLayout } from '@/components/routing/ProtectedLayout';
 import { FullPageSpinner } from '@/components/routing/FullPageSpinner';
 import { config } from '@/config';
@@ -41,22 +40,6 @@ const CodeTaskNewPage = React.lazy(() =>
 );
 const CodeTasksPage = React.lazy(() =>
   import('@/pages/CodeTasksPage').then((m) => ({ default: m.CodeTasksPage })),
-);
-const CronExecutionsPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronExecutionsPage').then((m) => ({ default: m.CronExecutionsPage })),
-);
-const CronScheduleNewPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronScheduleNewPage').then((m) => ({
-    default: m.CronScheduleNewPage,
-  })),
-);
-const CronSchedulesPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronSchedulesPage').then((m) => ({ default: m.CronSchedulesPage })),
-);
-const CronScheduleViewPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronScheduleViewPage').then((m) => ({
-    default: m.CronScheduleViewPage,
-  })),
 );
 const DispatchQueuePage = React.lazy(() =>
   import('@/pages/DispatchQueuePage').then((m) => ({ default: m.DispatchQueuePage })),
@@ -183,9 +166,6 @@ const ShareHistoryPage = React.lazy(() =>
 const ShareTargetPage = React.lazy(() =>
   import('@/pages/ShareTargetPage').then((m) => ({ default: m.ShareTargetPage })),
 );
-const TodosListPage = React.lazy(() =>
-  import('@/pages/TodosListPage').then((m) => ({ default: m.TodosListPage })),
-);
 const WhatsAppConnectionPage = React.lazy(() =>
   import('@/pages/WhatsAppConnectionPage').then((m) => ({ default: m.WhatsAppConnectionPage })),
 );
@@ -241,11 +221,6 @@ function HomeRoute(): React.JSX.Element {
 function NoteDetailRedirect(): React.JSX.Element {
   const { id } = useParams();
   return <Navigate to={`/my-notes?id=${id ?? ''}`} replace />;
-}
-
-function TodoDetailRedirect(): React.JSX.Element {
-  const { id } = useParams();
-  return <Navigate to={`/my-todos?id=${id ?? ''}`} replace />;
 }
 
 function BookmarkDetailRedirect(): React.JSX.Element {
@@ -311,11 +286,6 @@ function AppRoutes(): React.JSX.Element {
           <Route path="/llm-usage" element={<LlmUsagePage />} />
           <Route path="/llm-usage/pricing" element={<LlmUsagePricingPage />} />
           <Route path="/llm-usage/:eventId" element={<LlmUsageViewPageKeyed />} />
-          {/* Cron Agent routes */}
-          <Route path="/cron-agent" element={<CronSchedulesPage />} />
-          <Route path="/cron-agent/new" element={<CronScheduleNewPage />} />
-          <Route path="/cron-agent/executions" element={<CronExecutionsPage />} />
-          <Route path="/cron-agent/:id" element={<CronScheduleViewPage />} />
           {/* Research Agent routes */}
           <Route path="/research/new" element={<ResearchAgentPage />} />
           <Route path="/research/:id" element={<ResearchDetailPage />} />
@@ -326,8 +296,6 @@ function AppRoutes(): React.JSX.Element {
           <Route path="/notes" element={<WhatsAppNotesPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />
-          <Route path="/my-todos" element={<TodosListPage />} />
-          <Route path="/todos/:id" element={<TodoDetailRedirect />} />
           <Route path="/my-bookmarks" element={<BookmarksListPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/linear/prune-candidates" element={<LinearPruneCandidatesPage />} />
@@ -403,7 +371,6 @@ export function App(): React.JSX.Element {
                   <AndroidInstallBanner />
                   <XiaomiBatteryGuide />
                   <DevBar />
-                  <Chat />
                 </SyncQueueProvider>
               </AuthProvider>
             </HashRouter>

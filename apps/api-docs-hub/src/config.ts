@@ -30,14 +30,11 @@ export const OPEN_API_SOURCE_CATALOG = [
   { name: 'Image Service API', openApiUrlEnvVar: 'INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL' },
   { name: 'Application Settings API', openApiUrlEnvVar: 'INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL' },
   { name: 'Notes Agent API', openApiUrlEnvVar: 'INTEXURAOS_NOTES_AGENT_OPENAPI_URL' },
-  { name: 'Todos Agent API', openApiUrlEnvVar: 'INTEXURAOS_TODOS_AGENT_OPENAPI_URL' },
   { name: 'Bookmarks Agent API', openApiUrlEnvVar: 'INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL' },
   { name: 'Calendar Agent API', openApiUrlEnvVar: 'INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL' },
-  { name: 'Chat Agent API', openApiUrlEnvVar: 'INTEXURAOS_CHAT_AGENT_OPENAPI_URL' },
   { name: 'Code Agent API', openApiUrlEnvVar: 'INTEXURAOS_CODE_AGENT_OPENAPI_URL' },
   { name: 'Linear Agent API', openApiUrlEnvVar: 'INTEXURAOS_LINEAR_AGENT_OPENAPI_URL' },
   { name: 'Web Agent API', openApiUrlEnvVar: 'INTEXURAOS_WEB_AGENT_OPENAPI_URL' },
-  { name: 'Cron Agent API', openApiUrlEnvVar: 'INTEXURAOS_CRON_AGENT_OPENAPI_URL' },
   { name: 'Hellscript Agent API', openApiUrlEnvVar: 'INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL' },
 ] as const;
 

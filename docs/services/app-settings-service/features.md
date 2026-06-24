@@ -16,15 +16,15 @@ In v3.6.0, LLM pricing and usage cost analytics were migrated to the dedicated `
 
 Multiple services poll the app-settings-service health endpoint before starting. This dependency chain ensures that shared infrastructure (Firestore, secrets) is verified before downstream services begin accepting traffic.
 
-**Example:** When the dev environment starts, user-service, commands-agent, actions-agent, research-agent, and todos-agent all wait for app-settings-service to report healthy before booting.
+**Example:** When the dev environment starts, user-service, commands-agent, actions-agent, and research-agent all wait for app-settings-service to report healthy before booting.
 
 ### OpenAPI Service Catalog Participant
 
-The service exposes its OpenAPI specification at `/openapi.json` and Swagger UI at `/docs`, making it discoverable by the cron-agent's service catalog and the api-docs-hub aggregator.
+The service exposes its OpenAPI specification at `/openapi.json` and Swagger UI at `/docs`, making it discoverable by the api-docs-hub aggregator.
 
 ## Key Benefits
 
-- **Startup dependency anchor** for five downstream services that poll its health endpoint
+- **Startup dependency anchor** for four downstream services that poll its health endpoint
 - **OpenAPI-compliant** with auto-generated Swagger documentation
 - **Infrastructure-ready** with Sentry error tracking, CORS, and standardized health checks
 

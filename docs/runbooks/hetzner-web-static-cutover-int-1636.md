@@ -31,16 +31,13 @@ Generated post-cutover values must be:
 | `INTEXURAOS_COMMANDS_AGENT_URL`              | `/api/commands`           | `https://intexuraos.cloud/api/commands`                    |
 | `INTEXURAOS_ACTIONS_AGENT_URL`               | `/api/actions`            | `https://intexuraos.cloud/api/actions`                     |
 | `INTEXURAOS_NOTES_AGENT_URL`                 | `/api/notes`              | `https://intexuraos.cloud/api/notes`                       |
-| `INTEXURAOS_TODOS_AGENT_URL`                 | `/api/todos`              | `https://intexuraos.cloud/api/todos`                       |
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`             | `/api/bookmarks`          | `https://intexuraos.cloud/api/bookmarks`                   |
 | `INTEXURAOS_CALENDAR_AGENT_URL`              | `/api/calendar`           | `https://intexuraos.cloud/api/calendar`                    |
-| `INTEXURAOS_CHAT_AGENT_URL`                  | `/api/chat`               | `https://intexuraos.cloud/api/chat`                        |
 | `INTEXURAOS_LINEAR_AGENT_URL`                | `/api/linear`             | `https://intexuraos.cloud/api/linear`                      |
 | `INTEXURAOS_CODE_AGENT_URL`                  | `/api/code`               | `https://intexuraos.cloud/api/code`                        |
 | `INTEXURAOS_IMAGE_SERVICE_URL`               | `/api/images`             | `https://intexuraos.cloud/api/images`                      |
 | `INTEXURAOS_WEB_AGENT_URL`                   | `/api/web`                | `https://intexuraos.cloud/api/web`                         |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL`        | `/api/settings`           | `https://intexuraos.cloud/api/settings`                    |
-| `INTEXURAOS_CRON_AGENT_URL`                  | `/api/cron-agent`         | `https://intexuraos.cloud/api/cron-agent`                  |
 | `INTEXURAOS_HELLSCRIPT_AGENT_URL`            | `/api/hellscript-agent`   | `https://intexuraos.cloud/api/hellscript-agent`            |
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL`           | `/api/llm-usage`          | `https://intexuraos.cloud/api/llm-usage`                   |
 
@@ -197,7 +194,6 @@ for path in \
   /api/research \
   /api/actions \
   /api/notifications \
-  /api/cron-agent/services \
   /api/llm-usage/pricing; do
   status="$(curl -sS -o /dev/null -w '%{http_code}' "https://intexuraos.cloud${path}")"
   printf '%s %s\n' "$status" "$path"

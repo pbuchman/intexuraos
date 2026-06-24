@@ -110,10 +110,6 @@
       "owner": "app-settings-service",
       "description": "Application settings (usage statistics)"
     },
-    "todos": {
-      "owner": "todos-agent",
-      "description": "User-scoped todos with items, priority, and due dates"
-    },
     "bookmarks": {
       "owner": "bookmarks-agent",
       "description": "User-scoped bookmarks with OG metadata, AI summaries, and tags"
@@ -167,10 +163,6 @@
     "code_worker_settings": {
       "owner": "code-agent",
       "description": "Per-user worker configuration with encrypted credentials (CF Access, dispatch signing) for Mac and VM workers"
-    },
-    "doc_embeddings": {
-      "owner": "chat-agent",
-      "description": "Documentation chunks with vector embeddings for RAG similarity search (1536-dim OpenAI embeddings)"
     },
     "github-pr-events": {
       "owner": "code-agent",
@@ -237,14 +229,6 @@
       "owner": "code-agent",
       "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)",
       "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
-    },
-    "cron_schedules": {
-      "owner": "cron-agent",
-      "description": "User-defined recurring schedules with cron expressions and action definitions"
-    },
-    "cron_executions": {
-      "owner": "cron-agent",
-      "description": "Execution log entries for cron schedule runs"
     },
     "hellscript_buffers": {
       "owner": "hellscript-agent",

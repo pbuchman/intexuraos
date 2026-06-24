@@ -5,7 +5,6 @@ import type { ApprovalMessageRepository } from '../ports/approvalMessageReposito
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { ActionEventPublisher } from '../ports/actionEventPublisher.js';
 import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
-import type { ExecuteTodoActionUseCase } from './executeTodoAction.js';
 import type { ExecuteResearchActionUseCase } from './executeResearchAction.js';
 import type { ExecuteLinkActionUseCase } from './executeLinkAction.js';
 import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
@@ -28,7 +27,6 @@ export interface HandleApprovalReplyDeps {
   actionEventPublisher: ActionEventPublisher;
   logger: Logger;
   executeNoteAction?: ExecuteNoteActionUseCase;
-  executeTodoAction?: ExecuteTodoActionUseCase;
   executeResearchAction?: ExecuteResearchActionUseCase;
   executeLinkAction?: ExecuteLinkActionUseCase;
   executeCalendarAction?: ExecuteCalendarActionUseCase;
@@ -60,7 +58,6 @@ export function createHandleApprovalReplyUseCase(
     actionEventPublisher,
     logger,
     executeNoteAction,
-    executeTodoAction,
     executeResearchAction,
     executeLinkAction,
     executeCalendarAction,
@@ -213,7 +210,6 @@ export function createHandleApprovalReplyUseCase(
         actionEventPublisher,
         logger,
         executeNoteAction,
-        executeTodoAction,
         executeResearchAction,
         executeLinkAction,
         executeCalendarAction,

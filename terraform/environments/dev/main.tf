@@ -205,13 +205,6 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    todos_agent = {
-      name      = "intexuraos-todos-agent"
-      app_path  = "apps/todos-agent"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
     bookmarks_agent = {
       name      = "intexuraos-bookmarks-agent"
       app_path  = "apps/bookmarks-agent"
@@ -250,20 +243,6 @@ locals {
     linear_agent = {
       name      = "intexuraos-linear-agent"
       app_path  = "apps/linear-agent"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
-    chat_agent = {
-      name      = "intexuraos-chat-agent"
-      app_path  = "apps/chat-agent"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
-    cron_agent = {
-      name      = "intexuraos-cron-agent"
-      app_path  = "apps/cron-agent"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -321,7 +300,6 @@ locals {
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID",
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
     "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
-    "INTEXURAOS_GUEST_SESSION_SECRET",
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
     "INTEXURAOS_OPENAI_APP_API_KEY",
     "INTEXURAOS_OPENROUTER_APP_API_KEY",
@@ -534,8 +512,7 @@ module "secret_manager" {
     "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID" = "Cloudflare account ID for Browser Rendering API"
     "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"
     # LLM API keys
-    "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
-    "INTEXURAOS_GUEST_SESSION_SECRET"   = "HS256 secret used to sign chat-agent guest session JWTs (at least 32 bytes of entropy)"
+    "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for services using OpenAI APIs"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
     "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro 2.5 API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
@@ -1073,31 +1050,6 @@ module "pubsub_bookmark_summarize" {
 
   publisher_service_accounts = {
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
-}
-
-# Pub/Sub for todos processing (AI breakdown of todos into items)
-module "pubsub_todos_processing" {
-  source = "../../modules/pubsub-push"
-
-  project_id               = var.project_id
-  project_number           = local.project_number
-  topic_name               = "intexuraos-todos-processing-${var.environment}"
-  labels                   = local.common_labels
-  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
-
-  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/todos/pubsub/todos-processing"
-  push_service_account_email = module.iam.service_accounts["todos_agent"]
-  push_audience              = local.retired_cloud_run_push_audience
-  ack_deadline_seconds       = 60
-
-  publisher_service_accounts = {
-    todos_agent = module.iam.service_accounts["todos_agent"]
   }
 
   depends_on = [

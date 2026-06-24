@@ -9,7 +9,6 @@ import { z } from 'zod';
  * Valid command types that can be classified.
  */
 export const COMMAND_TYPES = [
-  'todo',
   'research',
   'note',
   'link',

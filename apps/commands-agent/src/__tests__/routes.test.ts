@@ -389,7 +389,7 @@ describe('Commands Agent Routes', () => {
       app = await buildServer();
 
       fakeClassifier.setResult({
-        type: 'todo',
+        type: 'note',
         confidence: 0.95,
         title: 'Buy groceries',
         reasoning: 'Contains grocery shopping task',
@@ -422,7 +422,7 @@ describe('Commands Agent Routes', () => {
         .getCreatedActions()
         .filter((a) => a.userId === 'user-456');
       expect(actions).toHaveLength(1);
-      expect(actions[0]?.type).toBe('todo');
+      expect(actions[0]?.type).toBe('note');
       expect(actions[0]?.title).toBe('Buy groceries');
       expect(actions[0]?.confidence).toBe(0.95);
     });
@@ -596,7 +596,7 @@ describe('Commands Agent Routes', () => {
 
       fakeUserServiceClient.setApiKeys('user-with-key', { google: 'valid-gemini-key' });
       fakeClassifier.setResult({
-        type: 'todo',
+        type: 'note',
         confidence: 0.9,
         title: 'Test Task',
         reasoning: 'Contains task indicator',
@@ -1028,7 +1028,7 @@ describe('Commands Agent Routes', () => {
 
       fakeUserServiceClient.setApiKeys('user-retry-1', { google: 'new-gemini-key' });
       fakeClassifier.setResult({
-        type: 'todo',
+        type: 'note',
         confidence: 0.9,
         title: 'Buy groceries',
         reasoning: 'Shopping task',
@@ -1059,7 +1059,7 @@ describe('Commands Agent Routes', () => {
 
       const command = await fakeCommandRepo.getById('whatsapp_text:retry-1');
       expect(command?.status).toBe('classified');
-      expect(command?.classification?.type).toBe('todo');
+      expect(command?.classification?.type).toBe('note');
 
       const actions = fakeActionsAgentClient
         .getCreatedActions()
@@ -1175,7 +1175,7 @@ describe('Commands Agent Routes', () => {
 
       fakeUserServiceClient.setApiKeys('user-multi-1', { google: 'key-1' });
       fakeClassifier.setResult({
-        type: 'todo',
+        type: 'note',
         confidence: 0.9,
         title: 'Task',
         reasoning: 'General task',
@@ -1419,7 +1419,7 @@ describe('Commands Agent Routes', () => {
         timestamp: '2025-01-01T12:00:00.000Z',
         status: 'classified',
         classification: {
-          type: 'todo',
+          type: 'note',
           confidence: 0.9,
           reasoning: 'Task detected',
           promptVersion: '1.0.0',
@@ -1537,7 +1537,7 @@ describe('Commands Agent Routes', () => {
         timestamp: '2025-01-01T12:00:00.000Z',
         status: 'classified',
         classification: {
-          type: 'todo',
+          type: 'note',
           confidence: 0.9,
           reasoning: 'Task detected',
           promptVersion: '1.0.0',
@@ -1608,7 +1608,7 @@ describe('Commands Agent Routes', () => {
         timestamp: '2025-01-01T12:00:00.000Z',
         status: 'classified',
         classification: {
-          type: 'todo',
+          type: 'note',
           confidence: 0.9,
           reasoning: 'Task detected',
           promptVersion: '1.0.0',

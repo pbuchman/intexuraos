@@ -36,7 +36,7 @@ The file header comment says "All 14 models from migrations 012+".
 | Model ID                 | Used By                                                   | Purpose                           |
 | ------------------------ | --------------------------------------------------------- | --------------------------------- |
 | `gpt-4.1`                | `apps/image-service/src/infra/llm/GptPromptAdapter.ts:16` | Default prompt-enhancement model  |
-| `text-embedding-3-small` | `apps/chat-agent/src/infra/llm/embeddingClient.ts:56`     | OpenAI embeddings for RAG search  |
+| `text-embedding-3-small` | `apps/retired-chat-service/src/infra/llm/embeddingClient.ts:56`     | OpenAI embeddings for RAG search  |
 
 Both models are used with provider-specific clients (`infra-gpt`, OpenAI SDK directly) and bypass `llm-contract` entirely.
 
@@ -190,8 +190,8 @@ Code has 9 models in the `ResearchModel` type. With the fast model used for titl
 
 ### `text-embedding-3-small` — Vector Embeddings
 
-- **File:** `apps/chat-agent/src/infra/llm/embeddingClient.ts` line 56
-- **Purpose:** OpenAI Ada-style embeddings for RAG semantic search in chat-agent
+- **File:** `apps/retired-chat-service/src/infra/llm/embeddingClient.ts` line 56
+- **Purpose:** OpenAI Ada-style embeddings for RAG semantic search in retired-chat-service
 - **Not in:** `LlmModels`, `LLMModel` type
 - **Uses:** OpenAI SDK directly (`openai.embeddings.create`)
 - **Note:** Embedding models are architecturally different from generation models — no token pricing, different API surface. Their omission from the generation model contract is intentional but undocumented.
@@ -220,7 +220,7 @@ The `ai-architecture.md` has not been updated to reflect these removals and cont
 
 | Issue from v3 Report                                              | Status          |
 | ----------------------------------------------------------------- | --------------- |
-| chat-agent and code-agent missing from overview docs              | ✅ Resolved      |
+| retired-chat-service and code-agent missing from overview docs              | ✅ Resolved      |
 | `o4-mini` in test fixtures (should be `o4-mini-deep-research`)    | Not re-verified |
 | `gemini-2.0-flash-exp` in test fixtures (deprecated)              | Not re-verified |
 

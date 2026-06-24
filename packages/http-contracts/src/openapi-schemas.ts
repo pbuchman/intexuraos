@@ -25,7 +25,6 @@ import {
   notesCreateNoteRequestSchema,
   researchCreateDraftRequestSchema,
   serviceFeedbackZodSchema,
-  todosCreateTodoRequestSchema,
   webAgentFetchLinkPreviewsRequestSchema,
   webAgentLinkPreviewSchema,
   webAgentPageSummarySchema,
@@ -204,10 +203,6 @@ export const contractComponentSchemas = {
   ),
   NotionTokenContext: toOpenApiComponentSchema('NotionTokenContext', notionTokenContextSchema),
   NotionPagePreview: toOpenApiComponentSchema('NotionPagePreview', notionPagePreviewSchema),
-  TodosCreateTodoRequest: toOpenApiComponentSchema(
-    'TodosCreateTodoRequest',
-    todosCreateTodoRequestSchema
-  ),
   ResearchCreateDraftRequest: toOpenApiComponentSchema(
     'ResearchCreateDraftRequest',
     researchCreateDraftRequestSchema

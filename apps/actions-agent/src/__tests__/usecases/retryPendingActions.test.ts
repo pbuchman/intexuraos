@@ -42,9 +42,6 @@ describe('retryPendingActions', () => {
       research: {
         execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
       },
-      todo: {
-        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
-      },
       note: {
         execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
       },

@@ -59,11 +59,9 @@ Click the dropdown at the top of the Swagger UI page. You will see entries such 
 - User Service API
 - Research Agent API
 - Commands Agent API
-- Chat Agent API
 - Code Agent API
-- Cron Agent API
 - Hellscript Agent API
-- ... and 13 more
+- ... and 12 more
 
 ### Step 2.2: Select a Service
 

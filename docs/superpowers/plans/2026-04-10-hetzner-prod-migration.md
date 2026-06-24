@@ -1008,14 +1008,14 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
   INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
   INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',
-  INTEXURAOS_TODOS_AGENT_URL: 'http://localhost:8123',
+  INTEXURAOS_RETIRED_CHECKLIST_SERVICE_URL: 'http://localhost:8123',
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
-  INTEXURAOS_CHAT_AGENT_URL: 'http://localhost:8129',
+  INTEXURAOS_RETIRED_CHAT_SERVICE_URL: 'http://localhost:8129',
   INTEXURAOS_CODE_AGENT_URL: 'https://intexuraos.cloud/api/code',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
-  INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
+  INTEXURAOS_RETIRED_SCHEDULER_SERVICE_URL: 'http://localhost:8130',
   INTEXURAOS_HELLSCRIPT_AGENT_URL: 'http://localhost:8131',
   INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
 };
@@ -1079,8 +1079,8 @@ const SERVICE_ENV_MAPPINGS = {
   'commands-agent': {
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: 'intexuraos-actions-queue-prod',
   },
-  'todos-agent': {
-    INTEXURAOS_TODOS_PROCESSING_TOPIC: 'intexuraos-todos-processing-prod',
+  'retired-checklist-service': {
+    INTEXURAOS_TODOS_PROCESSING_TOPIC: 'intexuraos-retired-checklist-processing-prod',
   },
   'user-service': {
     INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY,
@@ -1094,7 +1094,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_CLOUDFLARE_ACCOUNT_ID: process.env.INTEXURAOS_CLOUDFLARE_ACCOUNT_ID,
     INTEXURAOS_CLOUDFLARE_API_TOKEN: process.env.INTEXURAOS_CLOUDFLARE_API_TOKEN,
   },
-  'chat-agent': {
+  'retired-chat-service': {
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
   },
   'llm-usage-service': {
@@ -1155,7 +1155,7 @@ module.exports = {
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),
-    createServiceConfig('cron-agent', 8130),
+    createServiceConfig('retired-scheduler-service', 8130),
     createServiceConfig('hellscript-agent', 8131),
     createServiceConfig('llm-usage-service', 8132),
 
@@ -1164,14 +1164,14 @@ module.exports = {
     createServiceConfig('commands-agent', 8117, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('actions-agent', 8118, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('todos-agent', 8123, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('retired-checklist-service', 8123, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('data-insights-agent', 8119, {
       waitForService: 'http://localhost:8122/health',
     }),
     createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('chat-agent', 8129, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('retired-chat-service', 8129, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('web-agent', 8127, { waitForService: 'http://localhost:8122/health' }),
     // NB: web SPA is NOT in this config — served by nginx as static files (see Phase 6).
   ],
@@ -1700,7 +1700,7 @@ locals {
     calendar_preview             = "intexuraos-calendar-preview-dev"
     bookmark_enrich              = "intexuraos-bookmark-enrich-dev"
     bookmark_summarize           = "intexuraos-bookmark-summarize-dev"
-    todos_processing             = "intexuraos-todos-processing-dev"
+    todos_processing             = "intexuraos-retired-checklist-processing-dev"
     approval_reply               = "intexuraos-approval-reply-dev"
     audio_stored                 = "intexuraos-audio-stored-dev"
   }
@@ -2059,7 +2059,7 @@ resource "google_pubsub_subscription" "prod_bookmark_summarize" {
 }
 
 resource "google_pubsub_subscription" "prod_todos_processing" {
-  name    = "intexuraos-todos-processing-prod-hetzner"
+  name    = "intexuraos-retired-checklist-processing-prod-hetzner"
   project = var.project_id
   topic   = "projects/${var.project_id}/topics/${local.topics.todos_processing}"
   labels  = local.common_labels
@@ -2068,7 +2068,7 @@ resource "google_pubsub_subscription" "prod_todos_processing" {
   message_retention_duration = "604800s"
 
   push_config {
-    push_endpoint = "${local.prod_audience}/internal/todos/pubsub/todos-processing"
+    push_endpoint = "${local.prod_audience}/internal/todos/pubsub/retired-checklist-processing"
     oidc_token {
       service_account_email = data.google_service_account.todos_agent.email
       audience              = local.prod_audience
@@ -2176,13 +2176,13 @@ INTEXURAOS_DATA_INSIGHTS_AGENT_URL=https://intexuraos.cloud/api/data-insights \
 INTEXURAOS_IMAGE_SERVICE_URL=https://intexuraos.cloud/api/image \
 INTEXURAOS_NOTES_AGENT_URL=https://intexuraos.cloud/api/notes \
 INTEXURAOS_APP_SETTINGS_SERVICE_URL=https://intexuraos.cloud/api/app-settings \
-INTEXURAOS_TODOS_AGENT_URL=https://intexuraos.cloud/api/todos \
+INTEXURAOS_RETIRED_CHECKLIST_SERVICE_URL=https://intexuraos.cloud/api/todos \
 INTEXURAOS_BOOKMARKS_AGENT_URL=https://intexuraos.cloud/api/bookmarks \
 INTEXURAOS_CALENDAR_AGENT_URL=https://intexuraos.cloud/api/calendar \
 INTEXURAOS_LINEAR_AGENT_URL=https://intexuraos.cloud/api/linear \
 INTEXURAOS_WEB_AGENT_URL=https://intexuraos.cloud/api/web \
 INTEXURAOS_CODE_AGENT_URL=https://intexuraos.cloud/api/code \
-INTEXURAOS_CHAT_AGENT_URL=https://intexuraos.cloud/api/chat \
+INTEXURAOS_RETIRED_CHAT_SERVICE_URL=https://intexuraos.cloud/api/chat \
 pnpm build
 cd ../..
 ```

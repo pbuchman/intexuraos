@@ -16,7 +16,7 @@ You are an operator who spent the weekend collecting thoughts — some typed, so
 
 1. Saturday afternoon, you tap "Share" on an article about competitor pricing from `https://research-tracker.io/pricing-analysis`. The system sees the share action, recognizes you did not ask it to investigate anything, and saves the link as a bookmark with a summary.
 2. Saturday evening, you hold down the microphone and say: "Zbadaj jakie sa najnowsze trendy w logistyce ostatniej mili." You spoke in Polish, but the system does not translate and re-interpret — it understands the intent natively. "Zbadaj" means investigate. A research task is created.
-3. Sunday morning, you type: "Create a todo to research competitor onboarding flows." The word "research" is right there in the sentence, but so is "create a todo." The system reads the explicit instruction first. A to-do item appears, not a research task.
+3. Sunday morning, you type: "Create a note about competitor onboarding flows." The system reads the explicit instruction first. A note appears, not a research task.
 4. Sunday night, you record a voice note rambling about a bug in the checkout flow. The transcription feeds through the same classification path as typed text. The system detects an engineering task and routes it to code.
 
 By Monday, four different inputs — a shared link, a Polish voice command, an ambiguous typed message, and a rambling voice note — have each landed in the right place. You never opened a single organizing tool.
@@ -27,9 +27,9 @@ By Monday, four different inputs — a shared link, a Polish voice command, an a
 
 Most systems match keywords. If your message contains "research," it becomes a research task. If it contains "calendar," it goes to your calendar. This falls apart the moment real language enters the picture, because real language is full of words that mean different things depending on where they sit in a sentence.
 
-The commands agent reads your messages through a five-step decision process that mirrors how a capable assistant would think. First, it checks whether you gave an explicit instruction — "create a todo," "add to calendar," "save this link." Explicit instructions always win, even when other words in the sentence point elsewhere. Only when no clear instruction exists does the system look at secondary signals: intent phrases, engineering task patterns, URL presence, and finally broader category patterns. The result lands in one of eight categories — to-do, research, note, link, calendar, project tracking, reminder, or code — each connected to a specialized agent that knows how to act on it.
+The commands agent reads your messages through a five-step decision process that mirrors how a capable assistant would think. First, it checks whether you gave an explicit instruction — "create a note," "add to calendar," "save this link." Explicit instructions always win, even when other words in the sentence point elsewhere. Only when no clear instruction exists does the system look at secondary signals: intent phrases, engineering task patterns, URL presence, and finally broader category patterns. The result lands in one of seven categories — research, note, link, calendar, project tracking, reminder, or code — each connected to a specialized agent that knows how to act on it.
 
-**Example:** You type "create a todo to research competitors." A keyword matcher sees "research" and queues up an investigation. The commands agent sees "create a todo" — an explicit instruction — and adds the item to your task list. The word "research" describes what the task is about, not what you want the system to do.
+**Example:** You type "create a note about research competitors." A keyword matcher sees "research" and queues up an investigation. The commands agent sees "create a note" — an explicit instruction — and stores the thought as a note. The word "research" describes what the note is about, not what you want the system to do.
 
 ### Speaks Your Language
 
@@ -68,9 +68,9 @@ Send a message through WhatsApp, record a voice note, or use the share menu on y
 ## Key Benefits
 
 - **One front door** — every message enters through the same gateway, whether it comes from WhatsApp, a voice note, or the web app's share menu
-- **Intent over keywords** — explicit instructions override misleading words, so "create a todo to research competitors" becomes a to-do, not a research task
+- **Intent over keywords** — explicit instructions override misleading words, so "create a note about research competitors" becomes a note, not a research task
 - **Bilingual by design** — English and Polish intent phrases are understood natively, not translated, preserving the clarity of your original words
-- **Eight categories, zero menus** — to-do, research, note, link, calendar, project tracking, reminder, and code tasks are all classified automatically
+- **Seven categories, zero menus** — research, note, link, calendar, project tracking, reminder, and code tasks are all classified automatically
 - **Automatic retry** — messages that cannot be classified immediately enter a pending state and retry without any action from you
 - **Auditable decisions** — every classification is stored with confidence scores, reasoning, and logic version, so you can inspect why any message was routed the way it was
 

@@ -177,7 +177,7 @@ export interface ActionExecutionResult {
   actionId: string;
   /** Execution status */
   status: 'completed' | 'failed';
-  /** URL to the created/affected resource (e.g., research, todo, note) */
+  /** URL to the created/affected resource (e.g., research, note, bookmark) */
   resourceUrl?: string;
   /** Human-readable message (success or error) */
   message?: string;

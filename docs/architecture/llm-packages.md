@@ -13,7 +13,6 @@ graph TB
     subgraph "Application Layer"
         RA[research-agent]
         CA[calendar-agent]
-        TA[todos-agent]
         LA[linear-agent]
     end
 
@@ -40,7 +39,6 @@ graph TB
 
     RA --> LP
     CA --> LP
-    TA --> LP
     LA --> LP
 
     LP --> LC

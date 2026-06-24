@@ -72,6 +72,13 @@ export function aggregateIndexes(migrations) {
 export function aggregateRules(migrations) {
   const functions = {};
   const collections = {};
+  const removedRulePaths = new Set();
+
+  for (const migration of migrations) {
+    for (const path of migration.removedRulePaths ?? []) {
+      removedRulePaths.add(path);
+    }
+  }
 
   for (const migration of migrations) {
     const rules = migration.rules ?? {};
@@ -81,6 +88,10 @@ export function aggregateRules(migrations) {
     if (rules.collections) {
       Object.assign(collections, rules.collections);
     }
+  }
+
+  for (const path of removedRulePaths) {
+    delete collections[path];
   }
 
   return { functions, collections };
@@ -165,6 +176,7 @@ export async function loadFirestoreMigrations({ repoRoot }) {
       indexes: module.indexes ?? [],
       fieldOverrides: module.fieldOverrides ?? [],
       removedCollectionGroups: module.removedCollectionGroups ?? [],
+      removedRulePaths: module.removedRulePaths ?? [],
       rules: module.rules ?? {},
     });
   }

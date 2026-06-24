@@ -6,6 +6,14 @@ import {
 } from '../internalServiceCatalog.js';
 
 describe('buildInternalApiOpenApiSources', () => {
+  it('does not include removed agent services', () => {
+    const catalogKeys = INTERNAL_API_SERVICE_CATALOG.map((entry) => entry.key);
+
+    for (const retiredKey of ['todos', 'chat', 'cron'].map((name) => `${name}-agent`)) {
+      expect(catalogKeys).not.toContain(retiredKey);
+    }
+  });
+
   it('trims configured URLs and skips blank values', () => {
     const [includedEntry, skippedEntry] = INTERNAL_API_SERVICE_CATALOG;
     if (includedEntry === undefined || skippedEntry === undefined) {

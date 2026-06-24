@@ -27,4 +27,3 @@ export { WhatsAppPreferencesCard } from './WhatsAppPreferencesCard.js';
 export { LinearIssueCombobox } from './LinearIssueCombobox.js';
 export { LinearIssueSelectorModal } from './LinearIssueSelectorModal.js';
 export * from './ui/index.js';
-export * from './Chat/index.js';

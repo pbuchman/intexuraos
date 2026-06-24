@@ -250,7 +250,6 @@ graph TB
 
     subgraph "AI Agents"
         RA[Research Agent]
-        TA[Todos Agent]
         CA[Calendar Agent]
         LA[Linear Agent]
         IS[Image Service]
@@ -279,7 +278,6 @@ graph TB
     GLM1 --> AA
 
     AA --> RA
-    AA --> TA
     AA --> CA
     AA --> LA
     AA --> IS
@@ -311,7 +309,7 @@ graph TB
 
 1. Receive transcribed text or typed input
 2. Use structured output (JSON mode) for classification
-3. Detect action type: research, todo, note, link, calendar, linear
+3. Detect action type: research, note, link, calendar, linear
 4. Detect model preferences from explicit mentions ("use Claude", "ask GPT")
 
 ### Research Agent
@@ -328,19 +326,6 @@ graph TB
 4. **Synthesis**: Aggregate findings with confidence scores
 5. **Title Generation**: Create descriptive title
 6. **Cover Image**: Generate visual representation
-
-### Todos Agent
-
-**Purpose**: Extract task items from natural language
-
-**AI Models**: Gemini 2.5 Flash
-
-**Extraction Capabilities**:
-
-- Task title from description
-- Due dates from relative expressions ("by Friday", "next week")
-- Priority from context ("urgent", "when you have time")
-- Sub-items from compound tasks
 
 ### Calendar Agent
 

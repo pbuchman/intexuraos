@@ -62,7 +62,7 @@ If message starts with a category keyword (with or without colon), that category
 
 ```
 "linear: buy groceries" -> linear
-"todo: meeting tomorrow" -> todo
+"note: meeting tomorrow" -> note
 "do lineara: fix bug" -> linear (Polish)
 ```
 
@@ -80,7 +80,6 @@ When ambiguous, prefer `code`. Engineering tasks default to code execution. Code
 **English phrases (confidence 0.90+):**
 
 - link: "save bookmark", "save link", "bookmark this"
-- todo: "create todo", "add todo", "add task"
 - research: "perform research", "do research", "investigate"
 - note: "create note", "save note", "write note"
 - reminder: "set reminder", "remind me"
@@ -91,7 +90,6 @@ When ambiguous, prefer `code`. Engineering tasks default to code execution. Code
 **Polish phrases:**
 
 - link: "zapisz link", "dodaj zakladke"
-- todo: "stworz zadanie", "dodaj zadanie"
 - research: "zbadaj", "sprawdz", "przeprowadz research"
 - note: "stworz notatke", "zapisz notatke"
 - reminder: "przypomnij mi"
@@ -124,7 +122,6 @@ Traditional signal matching when no URL and no explicit intent:
 | research | how does, what is, why, find out, learn about, ?    |
 | note     | notes, idea, remember that, jot down                |
 | code     | fix bug, refactor, implement, deploy, debug         |
-| todo     | (default for actionable requests)                   |
 
 ## Data Flow
 
@@ -218,7 +215,7 @@ sequenceDiagram
 
 | Field           | Type          | Description                                                                  |
 | --------------- | ------------- | ---------------------------------------------------------------------------- |
-| `type`          | `CommandType` | `todo`, `research`, `note`, `link`, `calendar`, `linear`, `reminder`, `code` |
+| `type`          | `CommandType` | `research`, `note`, `link`, `calendar`, `linear`, `reminder`, `code` |
 | `confidence`    | `number`      | 0–1 confidence score                                                         |
 | `reasoning`     | `string`      | LLM explanation for classification                                           |
 | `promptVersion` | `string`      | Semver version of the prompt that produced this result                       |

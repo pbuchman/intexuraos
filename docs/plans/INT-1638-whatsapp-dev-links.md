@@ -22,7 +22,7 @@ Relevant findings:
 
 - `ecosystem.config.cjs` currently injects `INTEXURAOS_WEB_APP_URL` through `COMMON_SERVICE_ENV` with a fallback of `http://localhost:3000`.
 - `ecosystem.config.cjs` also defines a service-specific `SERVICE_ENV_MAPPINGS['actions-agent'].INTEXURAOS_WEB_APP_URL` fallback of `http://localhost:3000`. Because `createServiceConfig()` spreads service-specific env after `COMMON_SERVICE_ENV`, this override takes precedence and must be removed or changed with the common fallback.
-- `apps/actions-agent/src/index.ts` requires `INTEXURAOS_WEB_APP_URL` and passes it into the action use cases; `handleActionTemplate.ts`, `executeCodeAction.ts`, `executeCalendarAction.ts`, `executeResearchAction.ts`, `executeTodoAction.ts`, `executeNoteAction.ts`, and `executeLinkAction.ts` use that value for WhatsApp approval or completion links.
+- `apps/actions-agent/src/index.ts` requires `INTEXURAOS_WEB_APP_URL` and passes it into the action use cases; `handleActionTemplate.ts` and the supported per-type executors use that value for WhatsApp approval or completion links.
 - `apps/mobile-notifications-service/src/services.ts` uses `INTEXURAOS_WEB_APP_URL` for digest CTA links.
 - `apps/research-agent/src/routes/helpers/completionHandlers.ts` and research synthesis flows use `INTEXURAOS_WEB_APP_URL` for generated web links.
 - `apps/code-agent/src/infra/services/whatsappNotifierImpl.ts` currently hardcodes `https://intexuraos.cloud` for code task WhatsApp CTA links.

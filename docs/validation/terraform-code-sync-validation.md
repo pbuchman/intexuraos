@@ -37,14 +37,14 @@ All Cloud Run services use the shared `cloud-run-service` module. Default values
 | actions-agent                | `actions_agent`                | `apps/actions-agent`                | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | image-service                | `image_service`                | `apps/image-service`                | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | notes-agent                  | `notes_agent`                  | `apps/notes-agent`                  | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
-| todos-agent                  | `todos_agent`                  | `apps/todos-agent`                  | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
+| retired-checklist-service                  | `todos_agent`                  | `apps/retired-checklist-service`                  | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | bookmarks-agent              | `bookmarks_agent`              | `apps/bookmarks-agent`              | 0   | 1   | 512Mi  | 1   | 300s     | PARTIAL (note 3) | OK            |
 | code-agent                   | `code_agent`                   | `apps/code-agent`                   | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | app-settings-service         | `app_settings_service`         | `apps/app-settings-service`         | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | calendar-agent               | `calendar_agent`               | `apps/calendar-agent`               | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | web-agent                    | `web_agent`                    | `apps/web-agent`                    | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | linear-agent                 | `linear_agent`                 | `apps/linear-agent`                 | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
-| chat-agent                   | `chat_agent`                   | `apps/chat-agent`                   | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
+| retired-chat-service                   | `chat_agent`                   | `apps/retired-chat-service`                   | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 
 **Note:** All services use `min_scale = 0, max_scale = 1`. CPU throttling is enabled on all services (`cpu_idle = true`).
 
@@ -240,7 +240,7 @@ env_vars = merge(local.common_service_env_vars, {
 | intexuraos-approval-reply-dev           | whatsapp-service                                           | actions-agent        |
 | intexuraos-bookmark-enrich-dev          | bookmarks-agent                                            | bookmarks-agent      |
 | intexuraos-bookmark-summarize-dev       | bookmarks-agent                                            | bookmarks-agent      |
-| intexuraos-todos-processing-dev         | todos-agent                                                | todos-agent          |
+| intexuraos-retired-checklist-processing-dev         | retired-checklist-service                                                | retired-checklist-service          |
 | intexuraos-calendar-preview-dev         | actions-agent                                              | calendar-agent       |
 | intexuraos-log-cleanup-dev              | cloud-scheduler                                            | function_log_cleanup |
 

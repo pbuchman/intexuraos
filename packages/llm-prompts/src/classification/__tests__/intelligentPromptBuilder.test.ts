@@ -46,7 +46,7 @@ describe('intelligentClassifierPrompt', () => {
 
     it('includes examples section when examples are provided', () => {
       const examples: ClassificationExample[] = [
-        { text: 'buy milk', type: 'todo', confidence: 0.9 },
+        { text: 'buy milk', type: 'note', confidence: 0.9 },
         { text: 'what is OAuth', type: 'research', confidence: 0.85 },
       ];
 
@@ -54,14 +54,14 @@ describe('intelligentClassifierPrompt', () => {
 
       expect(prompt).toContain('REAL EXAMPLES FROM HISTORY');
       expect(prompt).toContain('buy milk');
-      expect(prompt).toContain('→ todo');
+      expect(prompt).toContain('→ note');
       expect(prompt).toContain('what is OAuth');
       expect(prompt).toContain('→ research');
     });
 
     it('includes corrections section when corrections are provided', () => {
       const corrections: ClassificationCorrection[] = [
-        { text: 'meeting tomorrow', originalType: 'todo', correctedType: 'calendar' },
+        { text: 'meeting tomorrow', originalType: 'research', correctedType: 'calendar' },
         { text: 'remind me about X', originalType: 'note', correctedType: 'reminder' },
       ];
 
@@ -72,17 +72,17 @@ describe('intelligentClassifierPrompt', () => {
 
       expect(prompt).toContain('CRITICAL: LEARNED CORRECTIONS');
       expect(prompt).toContain('meeting tomorrow');
-      expect(prompt).toContain('→ calendar (NOT todo)');
+      expect(prompt).toContain('→ calendar (NOT research)');
       expect(prompt).toContain('remind me about X');
       expect(prompt).toContain('→ reminder (NOT note)');
     });
 
     it('balances examples per category using maxExamplesPerCategory', () => {
       const examples: ClassificationExample[] = [
-        { text: 'todo 1', type: 'todo', confidence: 0.9 },
-        { text: 'todo 2', type: 'todo', confidence: 0.8 },
-        { text: 'todo 3', type: 'todo', confidence: 0.7 },
-        { text: 'todo 4', type: 'todo', confidence: 0.6 },
+        { text: 'note 1', type: 'note', confidence: 0.9 },
+        { text: 'note 2', type: 'note', confidence: 0.8 },
+        { text: 'note 3', type: 'note', confidence: 0.7 },
+        { text: 'note 4', type: 'note', confidence: 0.6 },
         { text: 'research 1', type: 'research', confidence: 0.95 },
         { text: 'research 2', type: 'research', confidence: 0.85 },
       ];
@@ -92,17 +92,17 @@ describe('intelligentClassifierPrompt', () => {
         { examples, maxExamplesPerCategory: 2 }
       );
 
-      expect(prompt).toContain('todo 1');
-      expect(prompt).toContain('todo 2');
-      expect(prompt).not.toContain('todo 3');
-      expect(prompt).not.toContain('todo 4');
+      expect(prompt).toContain('note 1');
+      expect(prompt).toContain('note 2');
+      expect(prompt).not.toContain('note 3');
+      expect(prompt).not.toContain('note 4');
       expect(prompt).toContain('research 1');
       expect(prompt).toContain('research 2');
     });
 
     it('limits corrections using maxCorrections', () => {
       const corrections: ClassificationCorrection[] = [
-        { text: 'correction 1', originalType: 'todo', correctedType: 'calendar' },
+        { text: 'correction 1', originalType: 'research', correctedType: 'calendar' },
         { text: 'correction 2', originalType: 'note', correctedType: 'research' },
         { text: 'correction 3', originalType: 'link', correctedType: 'note' },
       ];
@@ -139,9 +139,9 @@ describe('intelligentClassifierPrompt', () => {
 
     it('sorts examples by confidence (descending) before selection', () => {
       const examples: ClassificationExample[] = [
-        { text: 'low confidence', type: 'todo', confidence: 0.5 },
-        { text: 'high confidence', type: 'todo', confidence: 0.95 },
-        { text: 'medium confidence', type: 'todo', confidence: 0.7 },
+        { text: 'low confidence', type: 'note', confidence: 0.5 },
+        { text: 'high confidence', type: 'note', confidence: 0.95 },
+        { text: 'medium confidence', type: 'note', confidence: 0.7 },
       ];
 
       const prompt = intelligentClassifierPrompt.build(
@@ -156,9 +156,9 @@ describe('intelligentClassifierPrompt', () => {
 
     it('uses default confidence of 0.5 for examples without confidence', () => {
       const examples: ClassificationExample[] = [
-        { text: 'no confidence', type: 'todo' },
-        { text: 'high confidence', type: 'todo', confidence: 0.9 },
-        { text: 'low confidence', type: 'todo', confidence: 0.3 },
+        { text: 'no confidence', type: 'note' },
+        { text: 'high confidence', type: 'note', confidence: 0.9 },
+        { text: 'low confidence', type: 'note', confidence: 0.3 },
       ];
 
       const prompt = intelligentClassifierPrompt.build(
@@ -173,8 +173,8 @@ describe('intelligentClassifierPrompt', () => {
 
     it('handles sorting when both examples have undefined confidence', () => {
       const examples: ClassificationExample[] = [
-        { text: 'first no confidence', type: 'todo' },
-        { text: 'second no confidence', type: 'todo' },
+        { text: 'first no confidence', type: 'note' },
+        { text: 'second no confidence', type: 'note' },
       ];
 
       const prompt = intelligentClassifierPrompt.build(
@@ -188,53 +188,38 @@ describe('intelligentClassifierPrompt', () => {
 
     it('handles all category types', () => {
       const examples: ClassificationExample[] = [
-        { text: 'todo item', type: 'todo' },
         { text: 'research topic', type: 'research' },
         { text: 'note text', type: 'note' },
         { text: 'http://link.com', type: 'link' },
         { text: 'meeting at 3', type: 'calendar' },
         { text: 'remind me', type: 'reminder' },
         { text: 'bug fix', type: 'linear' },
+        { text: 'fix auth bug', type: 'code' },
       ];
 
       const prompt = intelligentClassifierPrompt.build({ message: 'test' }, { examples });
 
-      expect(prompt).toContain('→ todo');
       expect(prompt).toContain('→ research');
       expect(prompt).toContain('→ note');
       expect(prompt).toContain('→ link');
       expect(prompt).toContain('→ calendar');
       expect(prompt).toContain('→ reminder');
       expect(prompt).toContain('→ linear');
+      expect(prompt).toContain('→ code');
     });
 
     it('uses default maxExamplesPerCategory of 5', () => {
       const examples: ClassificationExample[] = Array.from({ length: 10 }, (_, i) => ({
-        text: `todo ${String(i + 1)}`,
-        type: 'todo' as const,
+        text: `note ${String(i + 1)}`,
+        type: 'note' as const,
         confidence: 1 - i * 0.05,
       }));
 
       const prompt = intelligentClassifierPrompt.build({ message: 'test' }, { examples });
 
-      expect(prompt).toContain('todo 1');
-      expect(prompt).toContain('todo 5');
-      expect(prompt).not.toContain('todo 6');
-    });
-
-    it('lists todo before calendar in Step 5 priority', () => {
-      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
-
-      const step5Start = prompt.indexOf('STEP 5: Category Detection');
-      expect(step5Start).toBeGreaterThan(-1);
-
-      const afterStep5 = prompt.slice(step5Start);
-      const todoPos = afterStep5.indexOf('**todo**');
-      const calendarPos = afterStep5.indexOf('**calendar**');
-
-      expect(todoPos).toBeGreaterThan(-1);
-      expect(calendarPos).toBeGreaterThan(-1);
-      expect(todoPos).toBeLessThan(calendarPos);
+      expect(prompt).toContain('note 1');
+      expect(prompt).toContain('note 5');
+      expect(prompt).not.toContain('note 6');
     });
 
     it('includes "create code task" in code explicit phrases', () => {
@@ -297,17 +282,10 @@ describe('intelligentClassifierPrompt', () => {
       );
     });
 
-    it('includes calendar vs todo tiebreaker guidance', () => {
-      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
-
-      expect(prompt).toContain('CALENDAR vs TODO TIEBREAKER');
-      expect(prompt).toContain('occupies a time slot');
-    });
-
     it('uses default maxCorrections of 20', () => {
       const corrections: ClassificationCorrection[] = Array.from({ length: 25 }, (_, i) => ({
         text: `correction ${String(i + 1)}`,
-        originalType: 'todo' as const,
+        originalType: 'research' as const,
         correctedType: 'note' as const,
       }));
 
@@ -333,16 +311,16 @@ describe('intelligentClassifierPrompt', () => {
 describe('toClassificationExample', () => {
   it('converts valid source to ClassificationExample', () => {
     const source: CommandExampleSource = {
-      text: 'buy groceries',
-      classificationType: 'todo',
+      text: 'research AI',
+      classificationType: 'research',
       classificationConfidence: 0.9,
     };
 
     const result = toClassificationExample(source);
 
     expect(result).toEqual({
-      text: 'buy groceries',
-      type: 'todo',
+      text: 'research AI',
+      type: 'research',
       confidence: 0.9,
     });
   });
@@ -373,17 +351,19 @@ describe('toClassificationExample', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null for removed todo classification type', () => {
+    const source: CommandExampleSource = {
+      text: 'buy groceries',
+      classificationType: 'todo',
+    };
+
+    const result = toClassificationExample(source);
+
+    expect(result).toBeNull();
+  });
+
   it('accepts all valid category types', () => {
-    const validTypes = [
-      'todo',
-      'research',
-      'note',
-      'link',
-      'calendar',
-      'reminder',
-      'linear',
-      'code',
-    ];
+    const validTypes = ['research', 'note', 'link', 'calendar', 'reminder', 'linear', 'code'];
 
     for (const type of validTypes) {
       const source: CommandExampleSource = {
@@ -401,7 +381,7 @@ describe('toClassificationCorrection', () => {
   it('converts valid source to ClassificationCorrection', () => {
     const source: TransitionSource = {
       commandText: 'meeting tomorrow',
-      originalType: 'todo',
+      originalType: 'research',
       newType: 'calendar',
       originalConfidence: 0.8,
     };
@@ -410,7 +390,7 @@ describe('toClassificationCorrection', () => {
 
     expect(result).toEqual({
       text: 'meeting tomorrow',
-      originalType: 'todo',
+      originalType: 'research',
       correctedType: 'calendar',
       originalConfidence: 0.8,
     });
@@ -437,7 +417,19 @@ describe('toClassificationCorrection', () => {
     const source: TransitionSource = {
       commandText: 'test',
       originalType: 'invalid',
-      newType: 'todo',
+      newType: 'research',
+    };
+
+    const result = toClassificationCorrection(source);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when originalType is removed todo type', () => {
+    const source: TransitionSource = {
+      commandText: 'test',
+      originalType: 'todo',
+      newType: 'research',
     };
 
     const result = toClassificationCorrection(source);
@@ -448,8 +440,20 @@ describe('toClassificationCorrection', () => {
   it('returns null when newType is invalid', () => {
     const source: TransitionSource = {
       commandText: 'test',
-      originalType: 'todo',
+      originalType: 'research',
       newType: 'invalid',
+    };
+
+    const result = toClassificationCorrection(source);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when newType is removed todo type', () => {
+    const source: TransitionSource = {
+      commandText: 'test',
+      originalType: 'research',
+      newType: 'todo',
     };
 
     const result = toClassificationCorrection(source);
@@ -470,16 +474,7 @@ describe('toClassificationCorrection', () => {
   });
 
   it('accepts all valid category type combinations', () => {
-    const validTypes = [
-      'todo',
-      'research',
-      'note',
-      'link',
-      'calendar',
-      'reminder',
-      'linear',
-      'code',
-    ];
+    const validTypes = ['research', 'note', 'link', 'calendar', 'reminder', 'linear', 'code'];
 
     const source: TransitionSource = {
       commandText: 'test',
@@ -489,7 +484,7 @@ describe('toClassificationCorrection', () => {
 
     const result = toClassificationCorrection(source);
     expect(result).not.toBeNull();
-    expect(result?.originalType).toBe('todo');
-    expect(result?.correctedType).toBe('research');
+    expect(result?.originalType).toBe('research');
+    expect(result?.correctedType).toBe('note');
   });
 });

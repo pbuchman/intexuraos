@@ -10,6 +10,7 @@ const loadSecretsPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
 const reloadPm2Path = resolve(repoRoot, 'scripts/hetzner/reload-pm2.sh');
 const cutoverEdgePath = resolve(repoRoot, 'scripts/hetzner/cutover-gcp-edge.sh');
+const pubsubPublishTestPath = resolve(repoRoot, 'scripts/pubsub-publish-test.mjs');
 const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-cert.sh');
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
 const githubActionsDeployPath = resolve(repoRoot, 'scripts/hetzner/github-actions-deploy.sh');
@@ -18,6 +19,8 @@ const migrationPlanPath = resolve(repoRoot, 'docs/operations/hetzner-prod-migrat
 const selfReviewPath = resolve(repoRoot, 'docs/operations/hetzner-prod-self-review.md');
 const deployWorkflowPath = resolve(repoRoot, '.github/workflows/deploy.yml');
 const terraformDevMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
+const terraformIamMainPath = resolve(repoRoot, 'terraform/modules/iam/main.tf');
+const terraformIamOutputsPath = resolve(repoRoot, 'terraform/modules/iam/outputs.tf');
 const terraformDevTfvarsExamplePath = resolve(
   repoRoot,
   'terraform/environments/dev/terraform.tfvars.example'
@@ -64,6 +67,14 @@ const terraformMonitoringCodeTaskAlertsPath = resolve(
 const terraformMonitoringOutputsPath = resolve(repoRoot, 'terraform/modules/monitoring/outputs.tf');
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 const pnpmWorkspacePath = resolve(repoRoot, 'pnpm-workspace.yaml');
+const pubsubUiServerPath = resolve(repoRoot, 'tools/pubsub-ui/server.mjs');
+const pubsubUiIndexPath = resolve(repoRoot, 'tools/pubsub-ui/index.html');
+const pubsubUiReadmePath = resolve(repoRoot, 'tools/pubsub-ui/README.md');
+
+const REMOVED_AGENT_SERVICES = new Set(['todos', 'chat', 'cron'].map((name) => `${name}-agent`));
+const retiredRoute = (resource: string) => `/api/${resource}`;
+const retiredDashed = (...parts: string[]) => parts.join('-');
+const retiredUnderscored = (...parts: string[]) => parts.join('_');
 
 interface ManifestService {
   name: string;
@@ -91,7 +102,9 @@ describe('Hetzner nginx runtime config', () => {
       config.indexOf('location /internal/whatsapp/')
     );
 
-    for (const service of manifest.services) {
+    for (const service of manifest.services.filter(
+      (entry) => !REMOVED_AGENT_SERVICES.has(entry.name)
+    )) {
       const upstream = upstreamName(service.name);
       if (service.name === 'code-agent') {
         expect(config, service.apiPath).toContain(`location ^~ ${service.apiPath}/`);
@@ -118,6 +131,12 @@ describe('Hetzner nginx runtime config', () => {
     expect(config).not.toContain('/api/image/');
     expect(config).not.toContain('/api/app-settings/');
     expect(config).not.toContain('/api/cron/');
+    expect(config).not.toContain(retiredRoute(retiredDashed('cron', 'agent')));
+    expect(config).not.toContain('/api/todos');
+    expect(config).not.toContain('/api/chat');
+    expect(config).not.toContain(retiredUnderscored('todos', 'agent'));
+    expect(config).not.toContain(retiredUnderscored('chat', 'agent'));
+    expect(config).not.toContain(retiredUnderscored('cron', 'agent'));
     expect(config).not.toContain('/api/hellscript/');
     expect(config).not.toContain('data_insights_agent');
   });
@@ -173,8 +192,6 @@ describe('Hetzner nginx runtime config', () => {
       ['/internal/calendar/', 'calendar_agent'],
       ['/internal/bookmarks/', 'bookmarks_agent'],
       ['/internal/bookmarks', 'bookmarks_agent'],
-      ['/internal/todos/', 'todos_agent'],
-      ['/internal/todos', 'todos_agent'],
       ['/internal/code/', 'code_agent'],
       ['/internal/code-tasks/', 'code_agent'],
       ['/internal/webhooks/', 'code_agent'],
@@ -188,7 +205,6 @@ describe('Hetzner nginx runtime config', () => {
       ['/internal/linear/issue-context/', 'code_agent'],
       ['/internal/linear/sync-all', 'linear_agent'],
       ['/internal/linear/prune-issues', 'linear_agent'],
-      ['/internal/cron/', 'cron_agent'],
       ['/internal/notifications/', 'mobile_notifications_service'],
       ['/internal/retry-pending', 'commands_agent'],
       ['/internal/drain-queue', 'code_agent'],
@@ -230,6 +246,9 @@ describe('Hetzner nginx runtime config', () => {
     );
     expect(verifier).not.toContain(
       'intexuraos-cron-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+    expect(verifier).not.toContain(
+      'intexuraos-todos-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
     expect(verifier).not.toContain(
       'intexuraos-mobile-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
@@ -558,6 +577,39 @@ describe('Code-task automation monitoring', () => {
   });
 });
 
+describe('Retired service Terraform IAM', () => {
+  it('removes IAM resources and outputs for obsolete agents', () => {
+    const iamMain = readRequired(terraformIamMainPath);
+    const iamOutputs = readRequired(terraformIamOutputsPath);
+    const devMain = readRequired(terraformDevMainPath);
+
+    for (const removed of ['todos', 'chat', 'cron'].map((name) =>
+      retiredUnderscored(name, 'agent')
+    )) {
+      expect(iamMain).not.toContain(`"${removed}"`);
+      expect(iamMain).not.toContain(`google_service_account.${removed}`);
+      expect(iamMain).not.toContain(`"${removed}_`);
+      expect(iamOutputs).not.toContain(removed);
+      expect(devMain).not.toContain(`${removed} = {`);
+      expect(devMain).not.toContain(`module.iam.service_accounts["${removed}"]`);
+    }
+  });
+});
+
+describe('Pub/Sub dev tooling', () => {
+  it('does not expose removed checklist-processing topic helpers', () => {
+    const retiredTopicAlias = retiredDashed('todos', 'processing');
+    for (const filePath of [
+      pubsubUiServerPath,
+      pubsubUiIndexPath,
+      pubsubUiReadmePath,
+      pubsubPublishTestPath,
+    ]) {
+      expect(readRequired(filePath), filePath).not.toContain(retiredTopicAlias);
+    }
+  });
+});
+
 describe('Hetzner async edge cutover', () => {
   it('stages retained GCP Pub/Sub and Scheduler consumers in the Hetzner Terraform root', () => {
     const script = readRequired(cutoverEdgePath);
@@ -584,17 +636,33 @@ describe('Hetzner async edge cutover', () => {
     expect(script).toContain('/internal/linear/sync-all');
     expect(script).toContain('/internal/drain-queue');
     expect(script).toContain('/internal/execution-memory/process');
+    const retiredTopicAlias = retiredDashed('todos', 'processing');
+    const retiredTopicName = retiredDashed('intexuraos', 'todos', 'processing');
+    const retiredCronJob = retiredDashed('intexuraos', 'cron', 'agent', 'tick');
+    const retiredTodosPushPath = `/internal/todos/pubsub/${retiredTopicAlias}`;
+    expect(script).not.toContain(retiredTopicName);
+    expect(script).not.toContain(retiredTodosPushPath);
+    expect(script).not.toContain(retiredCronJob);
+    expect(script).not.toContain('/internal/cron/tick');
     expect(devTerraform).not.toContain('variable "hetzner_edge_origin"');
     expect(devTerraform).not.toContain('local.hetzner_edge_origin');
     expect(devTerraform).not.toContain('local.async_edge_audience');
     expect(prTriageTerraform).not.toContain('local.hetzner_edge_origin');
     expect(hetznerMain).toContain('activate_hetzner_async_consumers');
     expect(hetznerMain).toContain('"/internal/whatsapp/private/events"');
+    expect(hetznerMain).not.toContain(retiredUnderscored('todos', 'agent'));
+    expect(hetznerMain).not.toContain(retiredUnderscored('todos', 'processing'));
+    expect(hetznerMain).not.toContain(`"${retiredTodosPushPath}"`);
+    expect(hetznerMain).not.toContain('"/internal/cron/tick"');
     expect(hetznerPubsub).toContain('google_pubsub_subscription" "hetzner_push"');
+    expect(hetznerPubsub).not.toContain(retiredUnderscored('todos', 'processing'));
+    expect(hetznerPubsub).not.toContain(retiredTodosPushPath);
     expect(hetznerPubsub).toContain(
       'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
     );
     expect(hetznerScheduler).toContain('paused      = !var.activate_hetzner_async_consumers');
+    expect(hetznerScheduler).not.toContain(retiredUnderscored('cron', 'agent', 'tick'));
+    expect(hetznerScheduler).not.toContain('/internal/cron/tick');
     const zombieSweepJob =
       hetznerScheduler
         .split('code_tasks_zombie_sweep = {')[1]
@@ -605,6 +673,8 @@ describe('Hetzner async edge cutover', () => {
     expect(hetznerOutputs).toContain(
       'filter        = subscription.filter == "" ? null : subscription.filter'
     );
+    expect(hetznerOutputs).not.toContain(retiredTopicName);
+    expect(hetznerOutputs).not.toContain(retiredCronJob);
     expect(prodAutoTfvars.activate_hetzner_async_consumers).toBe(true);
     expect(runbook).toContain('terraform -chdir=terraform/hetzner-prod apply');
     expect(runbook).toContain('activate_hetzner_async_consumers=false');
@@ -641,7 +711,6 @@ describe('Hetzner async edge cutover', () => {
       'pubsub_approval_reply',
       'pubsub_bookmark_enrich',
       'pubsub_bookmark_summarize',
-      'pubsub_todos_processing',
       'pubsub_calendar_preview',
       'pubsub_transcription_completed',
     ]) {
@@ -656,6 +725,13 @@ describe('Hetzner async edge cutover', () => {
       'enable_push_subscription = var.enable_legacy_cloud_run_async_consumers'
     );
     expect(prTriageTerraform).toContain('local.retired_cloud_run_push_endpoint');
+    expect(devTerraform).not.toContain('module "pubsub_todos_processing"');
+    expect(devTerraform).not.toContain(
+      `/internal/todos/pubsub/${retiredDashed('todos', 'processing')}`
+    );
+    expect(devTerraform).not.toContain(
+      `module.iam.service_accounts["${retiredUnderscored('todos', 'agent')}"]`
+    );
     expect(devTerraform).toContain('resource "google_pubsub_subscription" "audio_stored_push"');
     expect(devTerraform).not.toContain(
       'resource "google_pubsub_subscription" "audio_stored_push" {\n  count'
@@ -665,7 +741,6 @@ describe('Hetzner async edge cutover', () => {
       'mobile_notifications_digest_yesterday',
       'linear_sync_hourly',
       'linear_issues_prune_hourly',
-      'cron_agent_tick',
       'retry_pending_commands',
       'retry_pending_actions',
       'drain_task_queue',
@@ -904,7 +979,6 @@ describe('Hetzner secret loader', () => {
       'intexuraos-commands-ingest-prod-hetzner',
       'intexuraos-approval-reply-prod-hetzner',
       'intexuraos-calendar-preview-prod-hetzner',
-      'intexuraos-todos-processing-prod-hetzner',
       'intexuraos-research-process-prod-hetzner',
       'intexuraos-llm-call-prod-hetzner',
       'intexuraos-srt-transcription-completed-prod-hetzner',
@@ -913,6 +987,10 @@ describe('Hetzner secret loader', () => {
     }
 
     expect(hetznerImports).not.toContain('126413082');
+    expect(hetznerImports).not.toContain('todos_processing');
+    expect(hetznerImports).not.toContain(
+      retiredDashed('intexuraos', 'todos', 'processing', 'prod', 'hetzner')
+    );
   });
 });
 

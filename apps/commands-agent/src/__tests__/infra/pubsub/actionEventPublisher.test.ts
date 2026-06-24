@@ -86,13 +86,13 @@ describe('ActionEventPublisher', () => {
       });
     });
 
-    it('publishes todo action event to unified queue', async () => {
+    it('publishes note action event to unified queue', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
         userId: 'user-456',
         commandId: 'cmd-789',
-        actionType: 'todo',
+        actionType: 'note',
         title: 'Buy groceries',
         payload: {
           prompt: 'Buy groceries tomorrow',
@@ -106,7 +106,7 @@ describe('ActionEventPublisher', () => {
       expect(result.ok).toBe(true);
       expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
-        actionType: 'todo',
+        actionType: 'note',
       });
     });
 

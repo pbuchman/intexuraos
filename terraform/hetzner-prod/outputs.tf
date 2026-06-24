@@ -187,7 +187,6 @@ output "cutover_cloud_run_subscriptions_to_pause_or_remove" {
     "intexuraos-calendar-preview-${var.source_environment}-push",
     "intexuraos-bookmark-enrich-${var.source_environment}-push",
     "intexuraos-bookmark-summarize-${var.source_environment}-push",
-    "intexuraos-todos-processing-${var.source_environment}-push",
     "intexuraos-approval-reply-${var.source_environment}-push",
     "intexuraos-pr-triage-${var.source_environment}-push",
   ]
@@ -199,7 +198,6 @@ output "cutover_cloud_run_scheduler_jobs_to_pause_or_remove" {
     "mobile-notifications-digest-yesterday-${var.source_environment}",
     "intexuraos-linear-sync-hourly-${var.source_environment}",
     "intexuraos-linear-issues-prune-hourly-${var.source_environment}",
-    "intexuraos-cron-agent-tick-${var.source_environment}",
     "intexuraos-retry-pending-commands-${var.source_environment}",
     "intexuraos-retry-pending-actions-${var.source_environment}",
     "intexuraos-drain-task-queue-${var.source_environment}",

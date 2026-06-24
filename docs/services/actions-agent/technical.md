@@ -18,7 +18,6 @@ graph TB
 
         subgraph "Action Handlers"
             PubSub --> RH[Research Handler]
-            PubSub --> TH[Todo Handler]
             PubSub --> NH[Note Handler]
             PubSub --> LH[Link Handler]
             PubSub --> CH[Calendar Handler]
@@ -27,7 +26,6 @@ graph TB
         end
 
         RH --> RA[Research Agent]
-        TH --> TA[Todos Agent]
         NH --> NA[Notes Agent]
         LH --> BA[Bookmarks Agent]
         CH --> CAL[Calendar Agent]
@@ -176,7 +174,6 @@ sequenceDiagram
 
 | Value      | Handler                     | Auto-Execute |
 | ---------- | --------------------------- | ------------ |
-| `todo`     | HandleTodoActionUseCase     | Yes (>= 90%) |
 | `research` | HandleResearchActionUseCase | Yes (>= 90%) |
 | `note`     | HandleNoteActionUseCase     | Yes (>= 90%) |
 | `link`     | HandleLinkActionUseCase     | Yes (>= 90%) |
@@ -440,7 +437,6 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 | ------------------- | ----------------------------------------------------------------------------- |
 | `commands-agent`    | Fetch command text for type transitions, create new commands                  |
 | `research-agent`    | Execute research actions                                                      |
-| `todos-agent`       | Execute todo actions                                                          |
 | `notes-agent`       | Execute note actions                                                          |
 | `bookmarks-agent`   | Execute link actions, force-refresh duplicate bookmarks                       |
 | `calendar-agent`    | Execute calendar actions, generate previews, fetch previews                   |
@@ -471,7 +467,6 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 | `INTEXURAOS_RESEARCH_AGENT_URL`          | Yes      | Research-agent base URL                                   |
 | `INTEXURAOS_USER_SERVICE_URL`            | Yes      | User-service base URL                                     |
 | `INTEXURAOS_COMMANDS_AGENT_URL`          | Yes      | Commands-agent base URL                                   |
-| `INTEXURAOS_TODOS_AGENT_URL`             | Yes      | Todos-agent base URL                                      |
 | `INTEXURAOS_NOTES_AGENT_URL`             | Yes      | Notes-agent base URL                                      |
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`         | Yes      | Bookmarks-agent base URL                                  |
 | `INTEXURAOS_CALENDAR_AGENT_URL`          | Yes      | Calendar-agent base URL                                   |

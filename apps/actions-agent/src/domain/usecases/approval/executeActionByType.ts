@@ -12,7 +12,6 @@ export async function executeActionByType(
   actionEventPublisher: ActionEventPublisher,
   logger: Logger,
   executeNoteAction?: HandleApprovalReplyDeps['executeNoteAction'],
-  executeTodoAction?: HandleApprovalReplyDeps['executeTodoAction'],
   executeResearchAction?: HandleApprovalReplyDeps['executeResearchAction'],
   executeLinkAction?: HandleApprovalReplyDeps['executeLinkAction'],
   executeCalendarAction?: HandleApprovalReplyDeps['executeCalendarAction'],
@@ -32,21 +31,6 @@ export async function executeActionByType(
             );
           } else {
             logger.info({ actionId: action.id }, 'Note action executed successfully after approval');
-          }
-          return;
-        }
-        break;
-      case 'todo':
-        if (executeTodoAction !== undefined) {
-          logger.info({ actionId: action.id }, 'Executing todo action directly after approval');
-          const result = await executeTodoAction(action.id);
-          if (!result.ok) {
-            logger.error(
-              { actionId: action.id, error: getErrorMessage(result.error) },
-              'Failed to execute todo action after approval'
-            );
-          } else {
-            logger.info({ actionId: action.id }, 'Todo action executed successfully after approval');
           }
           return;
         }

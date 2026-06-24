@@ -28,7 +28,7 @@ describe('createActionsAgentServiceClient', () => {
       id: 'action-1',
       userId: 'user-1',
       commandId: 'command-1',
-      type: 'todo',
+      type: 'note',
       confidence: 0.9,
       title: 'Follow up',
       status: 'pending',
@@ -40,7 +40,7 @@ describe('createActionsAgentServiceClient', () => {
       .post('/internal/actions', {
         userId: 'user-1',
         commandId: 'command-1',
-        type: 'todo',
+        type: 'note',
         title: 'Follow up',
         confidence: 0.9,
       })
@@ -55,7 +55,7 @@ describe('createActionsAgentServiceClient', () => {
     const result = await client.createAction<typeof action>({
       userId: 'user-1',
       commandId: 'command-1',
-      type: 'todo',
+      type: 'note',
       title: 'Follow up',
       confidence: 0.9,
     });
@@ -246,7 +246,7 @@ describe('createActionsAgentServiceClient', () => {
     const result = await client.createAction({
       userId: 'user-1',
       commandId: 'command-1',
-      type: 'todo',
+      type: 'note',
       title: 'Follow up',
       confidence: 0.9,
     });

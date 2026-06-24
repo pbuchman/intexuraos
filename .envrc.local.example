@@ -44,11 +44,9 @@ export INTEXURAOS_ACTIONS_AGENT_URL=http://localhost:8118
 export INTEXURAOS_IMAGE_SERVICE_URL=http://localhost:8120
 export INTEXURAOS_NOTES_AGENT_URL=http://localhost:8121
 export INTEXURAOS_APP_SETTINGS_SERVICE_URL=http://localhost:8122
-export INTEXURAOS_TODOS_AGENT_URL=http://localhost:8123
 export INTEXURAOS_BOOKMARKS_AGENT_URL=http://localhost:8124
 export INTEXURAOS_CALENDAR_AGENT_URL=http://localhost:8125
 export INTEXURAOS_LINEAR_AGENT_URL=http://localhost:8126
-export INTEXURAOS_CRON_AGENT_URL=http://localhost:8130
 export INTEXURAOS_HELLSCRIPT_AGENT_URL=http://localhost:8131
 
 # =============================================================================
@@ -74,9 +72,6 @@ export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=whatsapp-media-cleanup-push
 # research-agent publishes, whatsapp-service subscribes
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC=whatsapp-send-message
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION=whatsapp-send-message-push
-
-# Required for todos processing (todos-agent publishes and subscribes)
-export INTEXURAOS_TODOS_PROCESSING_TOPIC=todos-processing
 
 # =============================================================================
 # SERVICE-TO-SERVICE AUTHENTICATION
@@ -193,7 +188,6 @@ export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
 export INTEXURAOS_REPOSITORY_PATH=$HOME/claude-orchestrator/intexuraos
 export INTEXURAOS_CODE_AGENT_URL=http://localhost:8128
 export INTEXURAOS_USAGE_WEBHOOK_URL=http://localhost:8128/internal/webhooks/usage-events
-export INTEXURAOS_CHAT_AGENT_URL=http://localhost:8129
 # Worker image reference for Claude containers (tag or digest)
 # Recommended in production: immutable digest (@sha256:...)
 # export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:<digest>

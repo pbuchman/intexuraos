@@ -6,7 +6,6 @@ import {
   FileText,
   HelpCircle,
   Link,
-  ListTodo,
   Loader2,
   MessageSquare,
   Mic,
@@ -21,8 +20,6 @@ import { formatDate } from '@/utils/dateFormat';
 function getTypeIcon(type: CommandType): React.JSX.Element {
   const iconClass = 'h-4 w-4';
   switch (type) {
-    case 'todo':
-      return <ListTodo className={iconClass} />;
     case 'research':
       return <FileText className={iconClass} />;
     case 'note':

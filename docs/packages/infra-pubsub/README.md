@@ -30,7 +30,6 @@ Generic Pub/Sub infrastructure: a thin wrapper around `@google-cloud/pubsub` tha
         │ extends
         │
 @intexuraos/whatsapp-pubsub-client     → consumed by whatsapp-service
-@intexuraos/todos-pubsub-client        → consumed by todos-agent
 @intexuraos/calendar-pubsub-client     → consumed by calendar-agent
 @intexuraos/pr-triage-pubsub-client    → consumed by code-agent
 ```
@@ -111,7 +110,6 @@ Use these to publish typed events to the corresponding consumer service. None of
 | Package                                 | Factory                          | Event type                   | Consumer           |
 | --------------------------------------- | -------------------------------- | ---------------------------- | ------------------ |
 | `@intexuraos/whatsapp-pubsub-client`    | `createWhatsAppSendPublisher`    | `whatsapp.message.send`      | `whatsapp-service` |
-| `@intexuraos/todos-pubsub-client`       | `createTodosProcessingPublisher` | `todos.processing.created`   | `todos-agent`      |
 | `@intexuraos/calendar-pubsub-client`    | `createCalendarPreviewPublisher` | `calendar.preview.generate`  | `calendar-agent`   |
 | `@intexuraos/pr-triage-pubsub-client`   | `createPRTriagePublisher`        | `code.pr.triage.requested`   | `code-agent`       |
 

@@ -72,7 +72,7 @@ describe('FirestoreActionRepository', () => {
 
     it('saves action with all fields', async () => {
       const action = createTestAction({
-        type: 'todo',
+        type: 'note',
         status: 'completed',
         confidence: 0.85,
         payload: { task: 'Complete this', priority: 'high' },
@@ -81,7 +81,7 @@ describe('FirestoreActionRepository', () => {
       await repository.save(action);
 
       const result = await repository.getById(action.id);
-      expect(result?.type).toBe('todo');
+      expect(result?.type).toBe('note');
       expect(result?.status).toBe('completed');
       expect(result?.confidence).toBe(0.85);
       expect(result?.payload).toEqual({ task: 'Complete this', priority: 'high' });

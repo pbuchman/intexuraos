@@ -222,9 +222,6 @@
       .event.bookmark-summarize {
         border-left-color: #ec4899;
       }
-      .event.todos-processing-local {
-        border-left-color: #ec4899;
-      }
       .event.calendar-preview {
         border-left-color: #14b8a6;
       }
@@ -298,10 +295,6 @@
         color: white;
       }
       .bookmark-summarize .event-badge {
-        background: #ec4899;
-        color: white;
-      }
-      .todos-processing-local .event-badge {
         background: #ec4899;
         color: white;
       }
@@ -525,7 +518,6 @@
               <option value="llm-call">llm-call</option>
               <option value="bookmark-enrich">bookmark-enrich</option>
               <option value="bookmark-summarize">bookmark-summarize</option>
-              <option value="todos-processing-local">todos-processing-local</option>
               <option value="calendar-preview">calendar-preview</option>
             </select>
           </div>
@@ -646,13 +638,6 @@
           type: 'bookmarks.summarize',
           bookmarkId: 'bookmark-{timestamp}',
           userId: '{userId}',
-        },
-        'todos-processing-local': {
-          type: 'todos.processing.created',
-          todoId: 'todo-{timestamp}',
-          userId: '{userId}',
-          correlationId: 'ui-{timestamp}',
-          timestamp: '{timestamp}',
         },
         'calendar-preview': {
           type: 'calendar.preview.generate',

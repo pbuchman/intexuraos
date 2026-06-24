@@ -13,7 +13,6 @@ import {
   FileText,
   HelpCircle,
   Link,
-  ListTodo,
   MoreVertical,
   Search,
   X,
@@ -44,8 +43,6 @@ interface ActionItemProps {
 function getTypeIcon(type: CommandType): React.JSX.Element {
   const iconClass = 'h-4 w-4';
   switch (type) {
-    case 'todo':
-      return <ListTodo className={iconClass} />;
     case 'research':
       return <Search className={iconClass} />;
     case 'note':

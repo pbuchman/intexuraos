@@ -13,7 +13,6 @@
     "emulators:start": "docker compose -f docker/docker-compose.local.yaml up -d",
     "emulators:stop": "docker compose -f docker/docker-compose.local.yaml down",
     "emulators:logs": "docker compose -f docker/docker-compose.local.yaml logs -f",
-    "embed-docs": "tsx scripts/embed-docs.ts",
     "services:start": "pnpm exec pm2 start ecosystem.config.cjs",
     "services:stop": "pnpm exec pm2 stop all",
     "services:delete": "pnpm exec pm2 delete all",

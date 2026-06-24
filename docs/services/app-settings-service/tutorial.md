@@ -80,14 +80,13 @@ Open `http://localhost:8122/docs` in your browser to see the interactive API doc
 
 ## Part 3: Startup Dependencies (1 minute)
 
-Five services wait for app-settings-service to be healthy before starting:
+Four services wait for app-settings-service to be healthy before starting:
 
 ```
 user-service       --> polls http://localhost:8122/health
 commands-agent     --> polls http://localhost:8122/health
 actions-agent      --> polls http://localhost:8122/health
 research-agent     --> polls http://localhost:8122/health
-todos-agent        --> polls http://localhost:8122/health
 ```
 
 If app-settings-service is down, these services will not start (30-second timeout).

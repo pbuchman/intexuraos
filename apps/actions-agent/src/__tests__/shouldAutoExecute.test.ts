@@ -25,7 +25,7 @@ describe('shouldAutoExecute', () => {
     });
 
     it('returns true when confidence is exactly 90%', () => {
-      const event = createEvent({ actionType: 'todo', payload: { prompt: 'test', confidence: 0.9 } });
+      const event = createEvent({ actionType: 'note', payload: { prompt: 'test', confidence: 0.9 } });
       expect(shouldAutoExecute(event)).toBe(true);
     });
 
@@ -53,7 +53,6 @@ describe('shouldAutoExecute', () => {
   describe('all action types auto-execute at high confidence', () => {
     it.each([
       'link',
-      'todo',
       'research',
       'note',
       'calendar',
@@ -67,7 +66,6 @@ describe('shouldAutoExecute', () => {
 
     it.each([
       'link',
-      'todo',
       'research',
       'note',
       'calendar',

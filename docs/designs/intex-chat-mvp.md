@@ -3,7 +3,7 @@
 > In-app AI assistant for IntexuraOS documentation and command creation.
 
 **Created:** 2026-01-31
-**Status:** COMPLETED — Implementation lives in `apps/chat-agent/`
+**Status:** COMPLETED — Implementation lives in `apps/retired-chat-service/`
 
 ---
 
@@ -52,7 +52,7 @@ An in-app AI chat assistant named **"Intex"** that:
 │                           │                         │        │       │
 │                           ▼                         ▼        │       │
 │                    ┌─────────────┐          ┌─────────────┐  │       │
-│                    │ chat-agent  │          │commands-agent│ │       │
+│                    │ retired-chat-service  │          │commands-agent│ │       │
 │                    │   (RAG)     │          │  (direct)    │ │       │
 │                    └──────┬──────┘          └─────────────┘  │       │
 └───────────────────────────┼──────────────────────────────────┘       │
@@ -61,7 +61,7 @@ An in-app AI chat assistant named **"Intex"** that:
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Firestore                                    │
 │  ┌─────────────────────┐    ┌─────────────────────────────────────┐ │
-│  │  doc_embeddings     │    │  (existing collections)              │ │
+│  │  retired-document-embeddings     │    │  (existing collections)              │ │
 │  │  - content          │    │  - commands, actions, todos, etc.   │ │
 │  │  - embedding vector │    └─────────────────────────────────────┘ │
 │  │  - filePath         │                                            │
@@ -77,15 +77,15 @@ An in-app AI chat assistant named **"Intex"** that:
 | ---------------------------- | ------------------------------------------------------ |
 | **Chat FAB**                 | Floating button to open/close chat                     |
 | **Chat Panel**               | UI for conversation, message input, controls           |
-| **Chat Service (frontend)**  | API calls to chat-agent, session storage               |
-| **chat-agent (backend)**     | RAG pipeline: embed query → search → generate response |
+| **Chat Service (frontend)**  | API calls to retired-chat-service, session storage               |
+| **retired-chat-service (backend)**     | RAG pipeline: embed query → search → generate response |
 | **commands-agent**           | Command creation (called directly by frontend)         |
-| **Firestore doc_embeddings** | Vector storage for documentation chunks                |
+| **Firestore retired-document-embeddings** | Vector storage for documentation chunks                |
 
-### New Service: chat-agent
+### New Service: retired-chat-service
 
 ```
-apps/chat-agent/
+apps/retired-chat-service/
 ├── src/
 │   ├── domain/
 │   │   ├── models/
@@ -139,14 +139,14 @@ apps/chat-agent/
 Content within section...  → included in chunk above
 ```
 
-**Storage:** Firestore collection `doc_embeddings`
+**Storage:** Firestore collection `retired-document-embeddings`
 
 ```typescript
 interface DocChunk {
   id: string; // auto-generated
   content: string; // chunk text
   embedding: number[]; // 1536-dim vector
-  filePath: string; // "docs/services/todos-agent/API.md"
+  filePath: string; // "docs/services/retired-checklist-service/API.md"
   section: string; // "POST /commands"
   docType: 'markdown' | 'openapi';
   createdAt: Timestamp;
@@ -164,7 +164,7 @@ interface DocChunk {
 3. Fetch `/openapi.json` from each deployed service
 4. Chunk OpenAPI by endpoint
 5. Generate embeddings via OpenAI API
-6. Upsert to Firestore `doc_embeddings` collection
+6. Upsert to Firestore `retired-document-embeddings` collection
 
 ---
 
@@ -215,7 +215,7 @@ User: "How do I create a todo?"
 │  - Command creation rules                        │
 ├─────────────────────────────────────────────────┤
 │  Retrieved Documentation (RAG context)           │
-│  [Chunk 1: docs/services/todos-agent/API.md]    │
+│  [Chunk 1: docs/services/retired-checklist-service/API.md]    │
 │  [Chunk 2: docs/services/commands-agent/...]    │
 │  ...                                            │
 ├─────────────────────────────────────────────────┤
@@ -265,7 +265,7 @@ Intex: "✓ Created as todo (92% confident): 'buy groceries'
 | Decision                               | Rationale                                    |
 | -------------------------------------- | -------------------------------------------- |
 | Text confirmation only                 | Simpler MVP, conversational feel             |
-| Frontend calls commands-agent directly | chat-agent doesn't proxy, cleaner separation |
+| Frontend calls commands-agent directly | retired-chat-service doesn't proxy, cleaner separation |
 | Show confidence                        | Transparency about classification            |
 | Link to Inbox                          | User can verify result                       |
 
@@ -363,7 +363,7 @@ Intex recognizes affirmative responses:
 │ [I] Intex                           │
 ├─────────────────────────────────────┤
 │ To create a todo, use the           │
-│ todos-agent API:                    │
+│ retired-checklist-service API:                    │
 │                                     │
 │ ```bash                             │
 │ POST /todos                         │
@@ -394,7 +394,7 @@ Intex recognizes affirmative responses:
 
 ## Backend API
 
-### chat-agent Endpoints
+### retired-chat-service Endpoints
 
 #### POST /chat
 
@@ -418,8 +418,8 @@ Send a message and get a response.
 {
   "success": true,
   "data": {
-    "response": "To create a todo, use the todos-agent API...",
-    "sources": [{ "filePath": "docs/services/todos-agent/API.md", "section": "POST /todos" }],
+    "response": "To create a todo, use the retired-checklist-service API...",
+    "sources": [{ "filePath": "docs/services/retired-checklist-service/API.md", "section": "POST /todos" }],
     "suggestedAction": null
   }
 }
@@ -569,13 +569,13 @@ Errors appear as inline chat messages from Intex:
 
 | Resource         | Type                 | Purpose                  |
 | ---------------- | -------------------- | ------------------------ |
-| `chat-agent`     | Cloud Run service    | Backend API              |
-| `doc_embeddings` | Firestore collection | Vector storage           |
-| `embed-docs`     | GitHub Action        | Manual embedding trigger |
+| `retired-chat-service`         | Cloud Run service    | Backend API              |
+| `retired-document-embeddings` | Firestore collection | Vector storage           |
+| Retired documentation indexer  | GitHub Action        | Manual embedding trigger |
 
 ### Environment Variables
 
-**chat-agent:**
+**retired-chat-service:**
 
 | Variable                        | Description                      |
 | ------------------------------- | -------------------------------- |
@@ -587,7 +587,7 @@ Errors appear as inline chat messages from Intex:
 ### Firestore Collection
 
 ```
-doc_embeddings/
+retired-document-embeddings/
 ├── {chunkId}/
 │   ├── content: string
 │   ├── embedding: vector<1536>
@@ -601,7 +601,7 @@ doc_embeddings/
 
 ---
 
-## GitHub Action: Embed Documentation
+## Retired Documentation Embedding Workflow
 
 ### Workflow
 
@@ -626,7 +626,7 @@ jobs:
         run: pnpm install
 
       - name: Generate embeddings
-        run: pnpm run embed-docs
+        run: pnpm run retired-doc-indexer
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
@@ -637,14 +637,14 @@ jobs:
 
 ### Embedding Script
 
-Located at `scripts/embed-docs.ts`:
+The implementation was retired with the chat surface:
 
 1. Read all `docs/**/*.md` files
 2. Chunk by markdown headers
 3. Fetch OpenAPI specs from deployed services
 4. Chunk by endpoint
 5. Generate embeddings
-6. Write to `doc_embeddings` collection
+6. Write to `retired-document-embeddings` collection
 
 ---
 
@@ -652,14 +652,14 @@ Located at `scripts/embed-docs.ts`:
 
 ### Phase 1: Foundation
 
-- [ ] Create `chat-agent` service scaffold
-- [ ] Set up Firestore `doc_embeddings` collection
+- [ ] Create `retired-chat-service` service scaffold
+- [ ] Set up Firestore `retired-document-embeddings` collection
 - [ ] Implement embedding generation script
 - [ ] Create GitHub Action for manual embedding
 
 ### Phase 2: RAG Pipeline
 
-- [ ] Implement vector search in chat-agent
+- [ ] Implement vector search in retired-chat-service
 - [ ] Build prompt construction logic
 - [ ] Integrate with user's generation model
 - [ ] Add fallback for no-docs-found

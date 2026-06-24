@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import {
   Bot,
   Brain,
-  CheckCircle2,
   Clock,
   Code2,
   Layers,
@@ -16,7 +15,6 @@ export function VoiceSection(): React.JSX.Element {
     { input: 'Fix the Safari login redirect', output: 'Code change created, tests passing, project tracker updated', icon: Code2, tag: 'CODE' },
     { input: 'Research quantum computing breakthroughs', output: '5-model synthesis with citations and disagreement analysis', icon: Brain, tag: 'RESEARCH' },
     { input: 'Schedule sync with engineering Tuesday 2pm', output: 'Preview shown, approved via emoji, event created', icon: Layers, tag: 'CALENDAR' },
-    { input: 'Remind me to review Q4 report by Friday', output: 'Task extracted with priority and deadline', icon: CheckCircle2, tag: 'TODO' },
     { input: 'Save this link about TypeScript 5.0', output: 'AI summary generated, metadata extracted, bookmarked', icon: MessageSquare, tag: 'LINK' },
     { input: 'Track the auth refactor as a project issue', output: 'Issue filed with AI-generated title and description', icon: Bot, tag: 'PROJECT' },
     { input: 'Interesting thought about microservice boundaries', output: 'Note created with tags, searchable later', icon: MessageSquare, tag: 'NOTE' },
@@ -37,7 +35,7 @@ export function VoiceSection(): React.JSX.Element {
             </span>
           </h2>
           <p className="mb-6 text-lg leading-relaxed text-neutral-600">
-            Eight action types. One interface. Send a WhatsApp voice note or text message.
+            Seven action types. One interface. Send a WhatsApp voice note or text message.
             The system figures out what you meant — even when the wording is imprecise — and
             routes it to the right specialist. Polish and English supported.
           </p>
@@ -83,9 +81,9 @@ export function VoiceSection(): React.JSX.Element {
               <MessageSquare className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-cyan-700">Chat Agent</p>
+              <p className="text-sm font-semibold text-cyan-700">Fishing Assistant</p>
               <p className="mt-1 text-sm text-neutral-600">
-                Your guide to the platform. Ask how anything works — the agent answers from up-to-date documentation with source citations. Guest access works without an account.
+                Plan sessions, inspect digests, and keep chat history grounded in the fishing knowledge base with source citations.
               </p>
             </div>
           </div>

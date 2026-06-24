@@ -33,7 +33,6 @@ Catalog for IntexuraOS services, workers, and packages.
 | Component            | Key Changes                                                                                                                                                                                                                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **hellscript-agent** | Categorized writing config — platform-specific style instructions and writing samples (threads, linkedin, general)                                                                                                                                                                          |
-| **cron-agent**       | Security & config — per-service operation allowlists, schedule-owner userId injection into tool calls, `description` replaced with `schedule` input and `scheduleSummary` storage, improved tool registry logging                                                                           |
 | **code-agent**       | Execution Memory Graph (alpha data collection + RAG pipeline), Remediation Agent (autonomous review fix loop), Ask Agent (interactive Claude Code sessions), code tasks pagination with issue grouping, auto-archive merged tasks, CI failure auto-handling, per-agent-type worker settings |
 | **orchestrator**     | Codex runtime support (OpenAI Codex as execution backend with auth and log processing), execution memory graph (data collection pipeline, alpha), remediation agent (autonomous auto-improvement with cross-LLM checks and event-sourcing)                                                  |
 | **research-agent**   | OpenRouter integration — route research tasks through OpenRouter models with pricing support                                                                                                                                                                                                |
@@ -47,7 +46,6 @@ Catalog for IntexuraOS services, workers, and packages.
 | Component             | Key Changes                                                                                                                                 |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | **hellscript-agent**  | New: AI-powered writing assistant with intent interpretation, thought accumulation, and versioned draft generation                          |
-| **cron-agent**        | New: Schedule and execute recurring tasks automatically                                                                                     |
 | **code-agent**        | Merge Queue for ordered auto-merging of PRs, merge conflict cron reconciliation, orchestrator Linear proxy, expandable event log payloads   |
 | **orchestrator**      | Orchestrator Linear Proxy — removed direct Linear dependency via code-agent proxy                                                           |
 | **Platform**          | Unified Task Enqueue Service (queue-first dispatch), Plan-Based Review Dispatch, Auto-Enforcement of findings                               |
@@ -82,7 +80,6 @@ Catalog for IntexuraOS services, workers, and packages.
 
 | Component         | Key Changes                                                                         |
 | ----------------- | ----------------------------------------------------------------------------------- |
-| **chat-agent**    | New: In-app AI assistant with RAG, guest access, command creation                   |
 | **code-agent**    | New: Autonomous code execution with worker dispatch and dedup                       |
 | **orchestrator**  | New: Local worker orchestration for code-worker sessions via Docker                 |
 | **code-worker**   | New: Docker container image for isolated Claude/Codex execution                     |
@@ -108,7 +105,7 @@ Catalog for IntexuraOS services, workers, and packages.
 
 ## AI Capabilities Overview
 
-IntexuraOS integrates **5 core LLM providers** with **15 LLM contract models** across **23 app services**:
+IntexuraOS integrates **5 core LLM providers** with **15 LLM contract models** across **20 app services**:
 
 ```mermaid
 graph TB
@@ -125,7 +122,6 @@ graph TB
         C[commands-agent]
         I[image-service]
         B[bookmarks-agent]
-        CH[chat-agent]
         F[fishing-assistant-service]
     end
 
@@ -138,7 +134,6 @@ graph TB
     I --> O
     I --> G
     B --> G
-    CH --> G
     F --> OR
 ```
 
@@ -170,13 +165,11 @@ graph TB
 | ---------------------------------------------- | ------------------ | ------------------------------------- |
 | [bookmarks-agent](bookmarks-agent/features.md) | Via web-agent      | Link summarization                    |
 | [web-agent](web-agent/features.md)             | Gemini 2.5 Flash   | Content extraction, summarization     |
-| [todos-agent](todos-agent/features.md)         | Via commands-agent | Task extraction from natural language |
 
 ### Conversational AI
 
 | Service                              | AI Models                        | Capability                                        |
 | ------------------------------------ | -------------------------------- | ------------------------------------------------- |
-| [chat-agent](chat-agent/features.md) | Gemini 2.5 Flash                 | Documentation Q&A, command creation, guest access |
 | [fishing-assistant-service](fishing-assistant-service/features.md) | OpenRouter Gemini 3 Flash Preview | Grounded fishing chat over knowledge, digests, and raw-message evidence |
 
 ### Autonomous Code Execution
@@ -184,12 +177,6 @@ graph TB
 | Service                              | AI Models                                        | Capability                                                                                    |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | [code-agent](code-agent/features.md) | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | GitHub Agent with tool calling, unified PR log, task queueing, PR creation via worker presets |
-
-### Task Automation
-
-| Service                                    | AI Models        | Capability                                                              |
-| ------------------------------------------ | ---------------- | ----------------------------------------------------------------------- |
-| [cron-agent](cron-agent/features.md)       | Gemini 2.5 Flash | NL-to-cron parsing, LLM-driven tool-calling execution on schedules      |
 
 ### Writing Assistance
 
@@ -219,11 +206,9 @@ Services that directly invoke AI models for their core functionality.
 | [image-service](image-service/features.md)             | AI image generation                | GPT Image 1, Gemini Flash Image                  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
 | [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries  | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
 | [web-agent](web-agent/features.md)                     | Web scraping with AI               | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
-| [chat-agent](chat-agent/features.md)                   | In-app AI assistant with RAG       | Gemini 2.5 Flash                                 | [features](chat-agent/features.md) / [technical](chat-agent/technical.md) / [tutorial](chat-agent/tutorial.md) / [debt](chat-agent/technical-debt.md) / [agent](chat-agent/agent.md)                                              |
 | [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3 Flash Preview + OpenAI embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
 | [code-agent](code-agent/features.md)                   | Autonomous code execution          | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
 | [hellscript-agent](hellscript-agent/features.md)       | Voice-to-draft writing assistant   | Gemini 2.5 Flash                                 | [features](hellscript-agent/features.md) / [technical](hellscript-agent/technical.md) / [tutorial](hellscript-agent/tutorial.md) / [debt](hellscript-agent/technical-debt.md) / [agent](hellscript-agent/agent.md)                |
-| [cron-agent](cron-agent/features.md)                   | Recurring task scheduling          | Gemini 2.5 Flash                                 | [features](cron-agent/features.md) / [technical](cron-agent/technical.md) / [tutorial](cron-agent/tutorial.md) / [debt](cron-agent/technical-debt.md) / [agent](cron-agent/agent.md)                                              |
 
 ### Content Management Agents
 
@@ -231,7 +216,6 @@ Services that manage user content with AI-enhanced features.
 
 | Service                                      | Purpose                     | AI             | Docs                                                                                                                                                                                                     |
 | -------------------------------------------- | --------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [todos-agent](todos-agent/features.md)       | Task management             | NLP extraction | [features](todos-agent/features.md) / [technical](todos-agent/technical.md) / [tutorial](todos-agent/tutorial.md) / [debt](todos-agent/technical-debt.md) / [agent](todos-agent/agent.md)                |
 | [notes-agent](notes-agent/features.md)       | Note-taking                 | -              | [features](notes-agent/features.md) / [technical](notes-agent/technical.md) / [tutorial](notes-agent/tutorial.md) / [debt](notes-agent/technical-debt.md) / [agent](notes-agent/agent.md)                |
 | [calendar-agent](calendar-agent/features.md) | Google Calendar integration | Date parsing   | [features](calendar-agent/features.md) / [technical](calendar-agent/technical.md) / [tutorial](calendar-agent/tutorial.md) / [debt](calendar-agent/technical-debt.md) / [agent](calendar-agent/agent.md) |
 | [linear-agent](linear-agent/features.md)     | Linear issue management     | Gemini, GLM    | [features](linear-agent/features.md) / [technical](linear-agent/technical.md) / [tutorial](linear-agent/tutorial.md) / [debt](linear-agent/technical-debt.md) / [agent](linear-agent/agent.md)           |
@@ -308,7 +292,7 @@ Shared libraries used across apps and workers.
 | Package                                                  | Purpose                                                                      |
 | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | [infra-firestore](../packages/infra-firestore/README.md) | Firestore singleton client and in-memory test fake                           |
-| [infra-pubsub](../packages/infra-pubsub/README.md)       | Pub/Sub publishers for WhatsApp, todos, calendar                             |
+| [infra-pubsub](../packages/infra-pubsub/README.md)       | Pub/Sub publishers for WhatsApp, calendar, and code-task events              |
 | [infra-sentry](../packages/infra-sentry/README.md)       | Sentry error tracking, Pino log stream, logger factory                       |
 | [infra-whatsapp](../packages/infra-whatsapp/README.md)   | WhatsApp Cloud API client (send, media, read receipts)                       |
 | [infra-notion](../packages/infra-notion/README.md)       | Notion API client, token validation, page retrieval                          |
@@ -343,7 +327,6 @@ Shared libraries used across apps and workers.
 | [linear-domain](../packages/linear-domain/README.md)       | Linear label normalization and detection utilities          |
 | [pr-triage-pubsub-client](../packages/pr-triage-pubsub-client/README.md) | Publisher-side client for PR triage requests               |
 | [service-catalog](../packages/service-catalog/README.md)   | Canonical internal service registry and URL bindings        |
-| [todos-pubsub-client](../packages/todos-pubsub-client/README.md) | Publisher-side client for todos-processing requests         |
 | [whatsapp-pubsub-client](../packages/whatsapp-pubsub-client/README.md) | Publisher-side client for WhatsApp send requests            |
 
 ---
@@ -405,7 +388,6 @@ graph TD
     subgraph "Entry Points"
         WA[whatsapp-service]
         WEB[Web Dashboard]
-        CHAT[chat-agent]
         GH_PR[GitHub PR Webhooks]
     end
 
@@ -417,7 +399,6 @@ graph TD
     subgraph "Execution"
         RES[research-agent]
         FISH[fishing-assistant-service]
-        TODO[todos-agent]
         NOTE[notes-agent]
         BOOK[bookmarks-agent]
         CAL[calendar-agent]
@@ -441,11 +422,9 @@ graph TD
     WA --> CMD
     WEB --> CMD
     WEB --> FISH
-    CHAT --> CMD
     CMD --> ACT
 
     ACT --> RES
-    ACT --> TODO
     ACT --> NOTE
     ACT --> BOOK
     ACT --> CAL
@@ -465,7 +444,6 @@ graph TD
     FISH --> LLM_USAGE
 
     RES --> NOTIF
-    TODO --> NOTIF
     CODE --> NOTIF
 ```
 
@@ -475,15 +453,15 @@ graph TD
 
 | Metric                 | Count    |
 | ---------------------- | -------- |
-| Total Apps             | 23       |
+| Total Apps             | 20       |
 | Total Workers          | 6        |
-| Total Packages         | 29       |
-| Apps with features.md  | 23       |
-| Apps with technical.md | 23       |
-| Apps with tutorial.md  | 23       |
-| Apps with tech-debt.md | 23       |
-| Apps with agent.md     | 23       |
-| Packages with README   | 29       |
+| Total Packages         | 28       |
+| Apps with features.md  | 20       |
+| Apps with technical.md | 20       |
+| Apps with tutorial.md  | 20       |
+| Apps with tech-debt.md | 20       |
+| Apps with agent.md     | 20       |
+| Packages with README   | 28       |
 | Workers with docs      | 4        |
 | **Coverage**           | **App/package docs complete; 4 of 6 workers documented** |
 
@@ -496,10 +474,8 @@ graph TD
 **I want to...**
 
 - **Do multi-model research**: [research-agent](research-agent/features.md)
-- **Ask questions about the platform**: [chat-agent](chat-agent/features.md)
 - **Ask grounded fishing questions**: [fishing-assistant-service](fishing-assistant-service/features.md)
 - **Automate coding tasks**: [code-agent](code-agent/features.md)
-- **Manage tasks via voice**: [todos-agent](todos-agent/features.md) + [whatsapp-service](whatsapp-service/features.md)
 - **Save and summarize links**: [bookmarks-agent](bookmarks-agent/features.md)
 - **Generate images**: [image-service](image-service/features.md)
 - **Schedule events**: [calendar-agent](calendar-agent/features.md)
@@ -531,4 +507,4 @@ graph TD
 
 **Last updated:** 2026-06-12
 
-**Components tracked:** 23 apps + 6 workers + 29 packages = 58 total (log-cleanup and predev-lifecycle have no service doc directories yet)
+**Components tracked:** 20 apps + 6 workers + 28 packages = 54 total (log-cleanup and predev-lifecycle have no service doc directories yet)

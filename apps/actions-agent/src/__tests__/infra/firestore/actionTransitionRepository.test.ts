@@ -15,7 +15,7 @@ function createTestTransition(overrides: Partial<ActionTransition> = {}): Action
     actionId: 'action-456',
     commandId: 'command-789',
     commandText: 'Research AI trends',
-    originalType: 'todo',
+    originalType: 'note',
     newType: 'research',
     originalConfidence: 0.75,
     createdAt: '2025-01-06T12:00:00.000Z',
@@ -55,7 +55,7 @@ describe('FirestoreActionTransitionRepository', () => {
         actionId: 'action-xyz',
         commandId: 'cmd-123',
         commandText: 'Add meeting to calendar',
-        originalType: 'todo',
+        originalType: 'note',
         newType: 'calendar',
         originalConfidence: 0.65,
         createdAt: '2025-01-06T14:30:00.000Z',
@@ -71,17 +71,17 @@ describe('FirestoreActionTransitionRepository', () => {
         actionId: 'action-xyz',
         commandId: 'cmd-123',
         commandText: 'Add meeting to calendar',
-        originalType: 'todo',
+        originalType: 'note',
         newType: 'calendar',
         originalConfidence: 0.65,
         createdAt: '2025-01-06T14:30:00.000Z',
       });
     });
 
-    it('saves transition with research to todo correction', async () => {
+    it('saves transition with research to note correction', async () => {
       const transition = createTestTransition({
         originalType: 'research',
-        newType: 'todo',
+        newType: 'note',
         commandText: 'Buy groceries',
         originalConfidence: 0.55,
       });
@@ -91,12 +91,12 @@ describe('FirestoreActionTransitionRepository', () => {
       const transitions = await repository.listByUserId(transition.userId);
       expect(transitions).toHaveLength(1);
       expect(transitions[0]?.originalType).toBe('research');
-      expect(transitions[0]?.newType).toBe('todo');
+      expect(transitions[0]?.newType).toBe('note');
     });
 
     it('saves transition with note action type', async () => {
       const transition = createTestTransition({
-        originalType: 'todo',
+        originalType: 'note',
         newType: 'note',
         commandText: 'Meeting notes from yesterday',
       });
@@ -124,7 +124,7 @@ describe('FirestoreActionTransitionRepository', () => {
 
     it('saves transition with reminder action type', async () => {
       const transition = createTestTransition({
-        originalType: 'todo',
+        originalType: 'note',
         newType: 'reminder',
         commandText: 'Remind me to call mom tomorrow',
       });

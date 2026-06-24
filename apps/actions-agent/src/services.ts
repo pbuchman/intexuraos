@@ -4,7 +4,6 @@ import type { NotificationSender } from './domain/ports/notificationSender.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
 import type { ActionTransitionRepository } from './domain/ports/actionTransitionRepository.js';
 import type { CommandsAgentClient } from './domain/ports/commandsAgentClient.js';
-import type { TodosServiceClient } from './domain/ports/todosServiceClient.js';
 import type { NotesServiceClient } from './domain/ports/notesServiceClient.js';
 import type { BookmarksServiceClient } from './domain/ports/bookmarksServiceClient.js';
 import type { CalendarServiceClient } from './domain/ports/calendarServiceClient.js';
@@ -15,10 +14,6 @@ import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
 } from './domain/usecases/handleResearchAction.js';
-import {
-  createHandleTodoActionUseCase,
-  type HandleTodoActionUseCase,
-} from './domain/usecases/handleTodoAction.js';
 import {
   createHandleNoteActionUseCase,
   type HandleNoteActionUseCase,
@@ -39,10 +34,6 @@ import {
   createExecuteResearchActionUseCase,
   type ExecuteResearchActionUseCase,
 } from './domain/usecases/executeResearchAction.js';
-import {
-  createExecuteTodoActionUseCase,
-  type ExecuteTodoActionUseCase,
-} from './domain/usecases/executeTodoAction.js';
 import {
   createExecuteNoteActionUseCase,
   type ExecuteNoteActionUseCase,
@@ -92,7 +83,6 @@ import { createFirestoreApprovalMessageRepository } from './infra/firestore/appr
 import { registerActionHandler } from './domain/usecases/createIdempotentActionHandler.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
 import { createCommandsAgentHttpClient } from './infra/http/commandsAgentHttpClient.js';
-import { createTodosServiceHttpClient } from './infra/http/todosServiceHttpClient.js';
 import { createNotesServiceHttpClient } from './infra/http/notesServiceHttpClient.js';
 import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceHttpClient.js';
 import { createCalendarServiceHttpClient } from './infra/http/calendarServiceHttpClient.js';
@@ -110,7 +100,6 @@ export interface Services {
   actionRepository: ActionRepository;
   actionTransitionRepository: ActionTransitionRepository;
   commandsAgentClient: CommandsAgentClient;
-  todosServiceClient: TodosServiceClient;
   notesServiceClient: NotesServiceClient;
   bookmarksServiceClient: BookmarksServiceClient;
   calendarServiceClient: CalendarServiceClient;
@@ -121,14 +110,12 @@ export interface Services {
   approvalMessageRepository: ApprovalMessageRepository;
   userServiceClient: UserServiceClient;
   handleResearchActionUseCase: HandleResearchActionUseCase;
-  handleTodoActionUseCase: HandleTodoActionUseCase;
   handleNoteActionUseCase: HandleNoteActionUseCase;
   handleLinkActionUseCase: HandleLinkActionUseCase;
   handleCalendarActionUseCase: HandleCalendarActionUseCase;
   handleLinearActionUseCase: HandleLinearActionUseCase;
   handleCodeActionUseCase: HandleCodeActionUseCase;
   executeResearchActionUseCase: ExecuteResearchActionUseCase;
-  executeTodoActionUseCase: ExecuteTodoActionUseCase;
   executeNoteActionUseCase: ExecuteNoteActionUseCase;
   executeLinkActionUseCase: ExecuteLinkActionUseCase;
   executeCalendarActionUseCase: ExecuteCalendarActionUseCase;
@@ -140,7 +127,6 @@ export interface Services {
   handleApprovalReplyUseCase: HandleApprovalReplyUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
-  todo: HandleTodoActionUseCase;
   note: HandleNoteActionUseCase;
   link: HandleLinkActionUseCase;
   calendar: HandleCalendarActionUseCase;
@@ -152,7 +138,6 @@ export interface ServiceConfig {
   ResearchAgentUrl: string;
   userServiceUrl: string;
   commandsAgentUrl: string;
-  todosAgentUrl: string;
   notesAgentUrl: string;
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
@@ -218,12 +203,6 @@ export function initServices(config: ServiceConfig): void {
     logger: createAppLogger({ name: 'whatsapp-publisher' }),
   });
 
-  const todosServiceClient = createTodosServiceHttpClient({
-    baseUrl: config.todosAgentUrl,
-    internalAuthToken: config.internalAuthToken,
-    logger: createAppLogger({ name: 'todosServiceClient' }),
-  });
-
   const notesServiceClient = createNotesServiceHttpClient({
     baseUrl: config.notesAgentUrl,
     internalAuthToken: config.internalAuthToken,
@@ -260,14 +239,6 @@ export function initServices(config: ServiceConfig): void {
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: createAppLogger({ name: 'executeResearchAction' }),
-  });
-
-  const executeTodoActionUseCase = createExecuteTodoActionUseCase({
-    actionRepository,
-    todosServiceClient,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: createAppLogger({ name: 'executeTodoAction' }),
   });
 
   const executeNoteActionUseCase = createExecuteNoteActionUseCase({
@@ -318,17 +289,6 @@ export function initServices(config: ServiceConfig): void {
       webAppUrl: config.webAppUrl,
       logger: createAppLogger({ name: 'handleResearchAction' }),
       executeResearchAction: executeResearchActionUseCase,
-    }
-  );
-
-  const handleTodoActionUseCase = registerActionHandler(
-    createHandleTodoActionUseCase,
-    {
-      actionRepository,
-      whatsappPublisher,
-      webAppUrl: config.webAppUrl,
-      logger: createAppLogger({ name: 'handleTodoAction' }),
-      executeTodoAction: executeTodoActionUseCase,
     }
   );
 
@@ -386,7 +346,6 @@ export function initServices(config: ServiceConfig): void {
     actionEventPublisher,
     actionHandlerRegistry: {
       research: handleResearchActionUseCase,
-      todo: handleTodoActionUseCase,
       note: handleNoteActionUseCase,
       link: handleLinkActionUseCase,
       calendar: handleCalendarActionUseCase,
@@ -416,7 +375,6 @@ export function initServices(config: ServiceConfig): void {
     actionEventPublisher,
     logger: createAppLogger({ name: 'handleApprovalReply' }),
     executeNoteAction: executeNoteActionUseCase,
-    executeTodoAction: executeTodoActionUseCase,
     executeResearchAction: executeResearchActionUseCase,
     executeLinkAction: executeLinkActionUseCase,
     executeCalendarAction: executeCalendarActionUseCase,
@@ -432,7 +390,6 @@ export function initServices(config: ServiceConfig): void {
     actionRepository,
     actionTransitionRepository,
     commandsAgentClient,
-    todosServiceClient,
     notesServiceClient,
     bookmarksServiceClient,
     calendarServiceClient,
@@ -443,14 +400,12 @@ export function initServices(config: ServiceConfig): void {
     approvalMessageRepository,
     userServiceClient,
     handleResearchActionUseCase,
-    handleTodoActionUseCase,
     handleNoteActionUseCase,
     handleLinkActionUseCase,
     handleCalendarActionUseCase,
     handleLinearActionUseCase,
     handleCodeActionUseCase,
     executeResearchActionUseCase,
-    executeTodoActionUseCase,
     executeNoteActionUseCase,
     executeLinkActionUseCase,
     executeCalendarActionUseCase,
@@ -462,7 +417,6 @@ export function initServices(config: ServiceConfig): void {
     handleApprovalReplyUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,
-    todo: handleTodoActionUseCase,
     note: handleNoteActionUseCase,
     link: handleLinkActionUseCase,
     calendar: handleCalendarActionUseCase,

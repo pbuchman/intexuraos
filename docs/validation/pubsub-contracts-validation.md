@@ -49,7 +49,7 @@ All topics using the `pubsub-push` Terraform module include: HTTP push subscript
 | 9   | `pubsub_media_cleanup`               | `intexuraos-whatsapp-media-cleanup-{env}`      | `/internal/whatsapp/pubsub/media-cleanup`           | 60s          | YES  | whatsapp_service          |
 | 10  | `pubsub_research_process`            | `intexuraos-research-process-{env}`            | `/internal/llm/pubsub/process-research`             | 600s ²       | YES  | research_agent            |
 | 11  | `pubsub_srt_transcription_completed` | `intexuraos-srt-transcription-completed-{env}` | `/internal/whatsapp/pubsub/transcription-completed` | 120s         | YES  | whatsapp_service          |
-| 12  | `pubsub_todos_processing`            | `intexuraos-todos-processing-{env}`            | `/internal/todos/pubsub/todos-processing`           | 60s          | YES  | todos_agent               |
+| 12  | `pubsub_todos_processing`            | `intexuraos-retired-checklist-processing-{env}`            | `/internal/todos/pubsub/retired-checklist-processing`           | 60s          | YES  | todos_agent               |
 | 13  | `pubsub_transcription_completed`     | `intexuraos-transcription-completed-{env}`     | `/internal/whatsapp/pubsub/transcription-completed` | 60s          | YES  | whatsapp_service          |
 | 14  | `pubsub_whatsapp_send`               | `intexuraos-whatsapp-send-{env}`               | `/internal/whatsapp/pubsub/send-message`            | 60s          | YES  | whatsapp_service          |
 | 15  | `pubsub_whatsapp_webhook_process`    | `intexuraos-whatsapp-webhook-process-{env}`    | `/internal/whatsapp/pubsub/process-webhook`         | 120s         | YES  | whatsapp_service          |
@@ -92,7 +92,7 @@ The GCP Pub/Sub service account (`service-{project_number}@gcp-sa-pubsub.iam.gse
 | `intexuraos-whatsapp-media-cleanup-{env}`      | `intexuraos-whatsapp-media-cleanup-{env}-dlq`       | 5 (default)  | 7 days        |
 | `intexuraos-research-process-{env}`            | `intexuraos-research-process-{env}-dlq`             | 5 (default)  | 7 days        |
 | `intexuraos-srt-transcription-completed-{env}` | `intexuraos-srt-transcription-completed-{env}-dlq`  | 5 (default)  | 7 days        |
-| `intexuraos-todos-processing-{env}`            | `intexuraos-todos-processing-{env}-dlq`             | 5 (default)  | 7 days        |
+| `intexuraos-retired-checklist-processing-{env}`            | `intexuraos-retired-checklist-processing-{env}-dlq`             | 5 (default)  | 7 days        |
 | `intexuraos-transcription-completed-{env}`     | `intexuraos-transcription-completed-{env}-dlq`      | 5 (default)  | 7 days        |
 | `intexuraos-whatsapp-send-{env}`               | `intexuraos-whatsapp-send-{env}-dlq`                | 5 (default)  | 7 days        |
 | `intexuraos-whatsapp-webhook-process-{env}`    | `intexuraos-whatsapp-webhook-process-{env}-dlq`     | 5 (default)  | 7 days        |
@@ -149,7 +149,7 @@ Validated by reading publisher implementations against subscriber route handlers
 | `intexuraos-whatsapp-media-cleanup-{env}`      | `MediaCleanupEvent`                                  | `apps/whatsapp-service/src/infra/pubsub/publisher.ts`                       | YES                                |
 | `intexuraos-research-process-{env}`            | `research.process`                                   | `apps/research-agent/src/infra/pubsub/researchEventPublisher.ts`            | YES                                |
 | `intexuraos-srt-transcription-completed-{env}` | `srt.transcription.completed`                        | srt-service (external — schema inferred from subscriber)                    | YES — explicit type check          |
-| `intexuraos-todos-processing-{env}`            | `todos.processing.created`                           | `packages/infra-pubsub/src/todosProcessingPublisher.ts`                     | YES                                |
+| `intexuraos-retired-checklist-processing-{env}`            | `todos.processing.created`                           | `packages/infra-pubsub/src/todosProcessingPublisher.ts`                     | YES                                |
 | `intexuraos-transcription-completed-{env}`     | `srt.transcription.completed`                        | `workers/transcription/src/publishers/transcription-completed-publisher.ts` | YES — same type check              |
 | `intexuraos-whatsapp-send-{env}`               | `whatsapp.message.send`                              | `packages/infra-pubsub/src/whatsappSendPublisher.ts`                        | YES                                |
 | `intexuraos-whatsapp-webhook-process-{env}`    | `WebhookProcessEvent` / `ExtractLinkPreviewsEvent`   | `apps/whatsapp-service/src/infra/pubsub/publisher.ts`                       | Partial — see D-4                  |
@@ -165,7 +165,7 @@ The `packages/infra-pubsub` package centralizes shared event schemas used by mul
 | Type exported                  | Used by publishers                                                                                 |
 | ------------------------------ | -------------------------------------------------------------------------------------------------- |
 | `SendMessageEvent`             | actions-agent, research-agent, bookmarks-agent, code-agent (all via `createWhatsAppSendPublisher`) |
-| `TodoProcessingEvent`          | todos-agent (`createTodosProcessingPublisher`)                                                     |
+| `TodoProcessingEvent`          | retired-checklist-service (`createTodosProcessingPublisher`)                                                     |
 | `CalendarPreviewGenerateEvent` | actions-agent (`createCalendarPreviewPublisher`)                                                   |
 
 ---
@@ -186,7 +186,7 @@ The `packages/infra-pubsub` package centralizes shared event schemas used by mul
 | `intexuraos-log-cleanup-{env}`                 | Cloud Scheduler                                            | Cloud Function          | Scheduled trigger for log retention enforcement           |
 | `intexuraos-research-process-{env}`            | research-agent                                             | research-agent          | Self-loop: async research task execution                  |
 | `intexuraos-srt-transcription-completed-{env}` | srt-service (external)                                     | whatsapp-service        | Cross-service: srt-service transcription results          |
-| `intexuraos-todos-processing-{env}`            | todos-agent                                                | todos-agent             | Self-loop: AI todo item extraction                        |
+| `intexuraos-retired-checklist-processing-{env}`            | retired-checklist-service                                                | retired-checklist-service             | Self-loop: AI todo item extraction                        |
 | `intexuraos-transcription-completed-{env}`     | transcription Cloud Function (`workers/transcription`)     | whatsapp-service        | Cloud Function → service: Speechmatics transcription done |
 | `intexuraos-whatsapp-media-cleanup-{env}`      | whatsapp-service                                           | whatsapp-service        | Self-loop: deferred media expiry cleanup                  |
 | `intexuraos-whatsapp-send-{env}`               | actions-agent, research-agent, bookmarks-agent, code-agent | whatsapp-service        | Multi-publisher notification bus                          |
@@ -233,7 +233,7 @@ All IAM grants use `roles/pubsub.publisher`. Verified against Terraform `publish
 | research-agent       | `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`                | YES                 | YES (hardcoded string)                                    | YES                    | OK ✓    |
 | research-agent       | `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`           | **NO** ⚠            | YES (hardcoded string)                                    | **NO** ⚠               | D-2 ⚠   |
 | research-agent       | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`           | YES                 | YES (hardcoded string)                                    | YES                    | OK ✓    |
-| todos-agent          | `INTEXURAOS_TODOS_PROCESSING_TOPIC`               | YES                 | YES (hardcoded string)                                    | YES (non-standard key) | D-5 ⚠   |
+| retired-checklist-service          | `INTEXURAOS_TODOS_PROCESSING_TOPIC`               | YES                 | YES (hardcoded string)                                    | YES (non-standard key) | D-5 ⚠   |
 | transcription worker | `INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC` | YES (startup throw) | YES (`module.pubsub_transcription_completed.topic_name`)  | N/A (Cloud Function)   | OK ✓    |
 | whatsapp-service     | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`           | YES                 | YES (hardcoded string)                                    | YES                    | OK ✓    |
 | whatsapp-service     | `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`         | YES                 | YES (`module.pubsub_commands_ingest.topic_name`)          | YES                    | OK ✓    |
@@ -258,7 +258,7 @@ All topic env vars set in Terraform `env_vars` are compared against local fallba
 | `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC`  | `intexuraos-calendar-preview-dev`                         | `calendar-preview`           | ALIAS ⚠ |
 | `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`         | `intexuraos-bookmark-enrich-dev`                          | `bookmark-enrich`            | ALIAS ⚠ |
 | `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`      | `intexuraos-bookmark-summarize-dev`                       | `bookmark-summarize`         | ALIAS ⚠ |
-| `INTEXURAOS_TODOS_PROCESSING_TOPIC`         | `intexuraos-todos-processing-dev`                         | `todos-processing`           | ALIAS ⚠ |
+| `INTEXURAOS_TODOS_PROCESSING_TOPIC`         | `intexuraos-retired-checklist-processing-dev`                         | `retired-checklist-processing`           | ALIAS ⚠ |
 | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`     | `intexuraos-whatsapp-media-cleanup-dev`                   | `whatsapp-media-cleanup`     | ALIAS ⚠ |
 | `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`   | `intexuraos-commands-ingest-dev` (module output)          | `commands-ingest`            | ALIAS ⚠ |
 | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`   | `intexuraos-whatsapp-webhook-process-dev` (module output) | `whatsapp-webhook-process`   | ALIAS ⚠ |
@@ -352,15 +352,15 @@ This means `intexuraos-whatsapp-webhook-process-{env}` multiplexes two distinct 
 
 ---
 
-### D-5 · LOW · todos-agent Env Var Missing `PUBSUB_` Prefix
+### D-5 · LOW · retired-checklist-service Env Var Missing `PUBSUB_` Prefix
 
-**Location:** `apps/todos-agent/src/index.ts`, `ecosystem.config.cjs`, `terraform/environments/dev/main.tf` line 1246
+**Location:** `apps/retired-checklist-service/src/index.ts`, `ecosystem.config.cjs`, `terraform/environments/dev/main.tf` line 1246
 
-**Description:** todos-agent uses `INTEXURAOS_TODOS_PROCESSING_TOPIC` rather than `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC`, deviating from the `INTEXURAOS_PUBSUB_*` naming convention used by all other publishers. Terraform, source code, and ecosystem.config.cjs are internally consistent with the non-standard name.
+**Description:** retired-checklist-service uses `INTEXURAOS_TODOS_PROCESSING_TOPIC` rather than `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC`, deviating from the `INTEXURAOS_PUBSUB_*` naming convention used by all other publishers. Terraform, source code, and ecosystem.config.cjs are internally consistent with the non-standard name.
 
 **Impact:** No runtime issue. Minor inconsistency for tooling that scans for `PUBSUB_`-prefixed env vars.
 
-**Action item:** Low priority — rename env var in lockstep across `apps/todos-agent/src/index.ts`, `apps/todos-agent/src/services.ts`, `terraform/environments/dev/main.tf`, and `ecosystem.config.cjs`.
+**Action item:** Low priority — rename env var in lockstep across `apps/retired-checklist-service/src/index.ts`, `apps/retired-checklist-service/src/services.ts`, `terraform/environments/dev/main.tf`, and `ecosystem.config.cjs`.
 
 ---
 
@@ -416,7 +416,7 @@ The whatsapp-service operates as a Pub/Sub **subscriber** via HTTP push (GCP pus
 | D-2 | MEDIUM        | research-agent          | Add `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` to REQUIRED_ENV + ecosystem.config.cjs (resolved by D-1)                                                         |
 | D-3 | MEDIUM        | docs                    | Regenerate `technical.md` for actions-agent, bookmarks-agent, commands-agent, research-agent, whatsapp-service with correct topic names                      |
 | D-4 | MEDIUM        | docs / whatsapp-service | Update technical.md: `publishExtractLinkPreviews` reuses `webhook-process` topic, not a separate topic                                                       |
-| D-5 | LOW           | todos-agent             | Rename `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` across 4 files                                                       |
+| D-5 | LOW           | retired-checklist-service             | Rename `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` across 4 files                                                       |
 | D-6 | LOW           | bookmarks-agent         | Add `_TOPIC` suffix to `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` across 4 files                                         |
 | D-7 | INFORMATIONAL | N/A                     | ecosystem.config.cjs fallback names are development shorthand — no action required                                                                           |
 | D-8 | LOW           | whatsapp-service        | Remove ghost `INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION` from `ecosystem.config.cjs`                                                                      |

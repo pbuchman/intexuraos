@@ -28,9 +28,6 @@ export function createFakeServices(overrides: Partial<Services> = {}): Services 
     commandsAgentClient: {
       reclassify: vi.fn(),
     },
-    todosServiceClient: {
-      processAction: vi.fn(),
-    },
     notesServiceClient: {
       processAction: vi.fn(),
     },
@@ -67,14 +64,12 @@ export function createFakeServices(overrides: Partial<Services> = {}): Services 
       resolveModel: vi.fn(),
     },
     handleResearchActionUseCase: { execute: vi.fn() },
-    handleTodoActionUseCase: { execute: vi.fn() },
     handleNoteActionUseCase: { execute: vi.fn() },
     handleLinkActionUseCase: { execute: vi.fn() },
     handleCalendarActionUseCase: { execute: vi.fn() },
     handleLinearActionUseCase: { execute: vi.fn() },
     handleCodeActionUseCase: { execute: vi.fn() },
     executeResearchActionUseCase: vi.fn(),
-    executeTodoActionUseCase: vi.fn(),
     executeNoteActionUseCase: vi.fn(),
     executeLinkActionUseCase: vi.fn(),
     executeCalendarActionUseCase: vi.fn(),
@@ -85,7 +80,6 @@ export function createFakeServices(overrides: Partial<Services> = {}): Services 
     updateActionUseCase: vi.fn(),
     handleApprovalReplyUseCase: vi.fn(),
     research: { execute: vi.fn() },
-    todo: { execute: vi.fn() },
     note: { execute: vi.fn() },
     link: { execute: vi.fn() },
     calendar: { execute: vi.fn() },

@@ -130,16 +130,6 @@ locals {
       retry_maximum_backoff = "600s"
       max_delivery_attempts = 50
     }
-    todos_processing = {
-      subscription_name     = "intexuraos-todos-processing-prod-hetzner"
-      topic_name            = local.pubsub_topics.todos_processing
-      push_path             = "/internal/todos/pubsub/todos-processing"
-      service_account_key   = "todos_agent"
-      ack_deadline_seconds  = 60
-      retry_minimum_backoff = "10s"
-      retry_maximum_backoff = "600s"
-      max_delivery_attempts = 5
-    }
     approval_reply = {
       subscription_name     = "intexuraos-approval-reply-prod-hetzner"
       topic_name            = local.pubsub_topics.approval_reply

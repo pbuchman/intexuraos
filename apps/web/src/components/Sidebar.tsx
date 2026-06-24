@@ -3,7 +3,6 @@ import {
   Bookmark,
   BookOpenText,
   Calendar,
-  CheckSquare,
   Code2,
   Inbox,
   LayoutList,
@@ -14,7 +13,6 @@ import {
   Sparkles,
   StickyNote,
   Swords,
-  Timer,
   TrendingUp,
 } from 'lucide-react';
 import { CollapseToggle } from './sidebar/CollapseToggle.js';
@@ -25,7 +23,6 @@ import { TopLevelNavLink } from './sidebar/TopLevelNavLink.js';
 import {
   codeTasksItems,
   fishingAssistantItems,
-  cronAgentItems,
   hellscriptItems,
   linearItems,
   llmUsageItems,
@@ -121,18 +118,6 @@ export function Sidebar(): React.JSX.Element {
           />
 
           <CollapsibleNavSection
-            label="Cron Agent"
-            icon={Timer}
-            items={cronAgentItems}
-            rootPath="/cron-agent"
-            isOpen={s.isCronAgentOpen}
-            onToggle={s.setIsCronAgentOpen}
-            isCollapsed={s.isCollapsed}
-            isActive={location.pathname.startsWith('/cron-agent')}
-            navigateFallback="/cron-agent"
-          />
-
-          <CollapsibleNavSection
             label="Research Studio"
             icon={Sparkles}
             items={researchAgentItems}
@@ -168,7 +153,6 @@ export function Sidebar(): React.JSX.Element {
           />
 
           <TopLevelNavLink to="/my-notes" label="Notes" icon={StickyNote} isCollapsed={s.isCollapsed} />
-          <TopLevelNavLink to="/my-todos" label="Checklists" icon={CheckSquare} isCollapsed={s.isCollapsed} />
 
           <CollapsibleNavSection
             label="Settings"

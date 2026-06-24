@@ -11,7 +11,6 @@ import {
   notesCreateNoteRequestSchema,
   researchCreateDraftRequestSchema,
   serviceFeedbackZodSchema,
-  todosCreateTodoRequestSchema,
   webAgentFetchLinkPreviewsRequestSchema,
   webAgentPageSummarySchema,
   webAgentSummarizePageRequestSchema,
@@ -48,15 +47,10 @@ describe('Zod contracts', () => {
 
   it('accepts nullable optional fields where the current clients do', () => {
     expect(
-      todosCreateTodoRequestSchema.parse({
-        userId: 'user-1',
-        title: 'Todo',
-        description: null,
-        tags: ['ops'],
-        dueDate: null,
-        source: 'command',
-        sourceId: 'source-1',
-      }).description
+      notionTokenContextSchema.parse({
+        connected: false,
+        token: null,
+      }).token
     ).toBeNull();
   });
 

@@ -3,7 +3,6 @@ import { createRetryPendingActionsUseCase } from '../domain/usecases/retryPendin
 import type { Action } from '../domain/models/action.js';
 import { FakeActionRepository, FakeActionEventPublisher } from './fakes.js';
 import type { HandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
-import type { HandleTodoActionUseCase } from '../domain/usecases/handleTodoAction.js';
 import type { HandleNoteActionUseCase } from '../domain/usecases/handleNoteAction.js';
 import type { HandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
 import type { HandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
@@ -22,7 +21,6 @@ describe('retryPendingActions usecase', () => {
   let fakeActionEventPublisher: FakeActionEventPublisher;
   let fakeHandlers: {
     research: HandleResearchActionUseCase;
-    todo: HandleTodoActionUseCase;
     note: HandleNoteActionUseCase;
     link: HandleLinkActionUseCase;
     calendar: HandleCalendarActionUseCase;
@@ -34,7 +32,7 @@ describe('retryPendingActions usecase', () => {
     id: 'action-123',
     userId: 'user-456',
     commandId: 'cmd-789',
-    type: 'todo',
+    type: 'note',
     title: 'Test Action',
     status: 'pending',
     confidence: 0.9,
@@ -49,7 +47,6 @@ describe('retryPendingActions usecase', () => {
     fakeActionEventPublisher = new FakeActionEventPublisher();
     fakeHandlers = {
       research: createFakeHandler() as unknown as HandleResearchActionUseCase,
-      todo: createFakeHandler() as unknown as HandleTodoActionUseCase,
       note: createFakeHandler() as unknown as HandleNoteActionUseCase,
       link: createFakeHandler() as unknown as HandleLinkActionUseCase,
       calendar: createFakeHandler() as unknown as HandleCalendarActionUseCase,

@@ -3340,6 +3340,6 @@ The `/simplify` skill review surfaced several issues that were fixed before open
 
 Items considered but deferred (cross-codebase refactors, out of Phase 1 scope):
 
-* `FakeLlmClient` should live in `packages/llm-factory/src/__tests__/` and replace the duplicate fakes in `apps/research-agent`, `apps/calendar-agent`, `apps/chat-agent`. Defer to a dedicated tech-debt PR.
+* `FakeLlmClient` should live in `packages/llm-factory/src/__tests__/` and replace the duplicate fakes in `apps/research-agent`, `apps/calendar-agent`, `apps/retired-chat-service`. Defer to a dedicated tech-debt PR.
 * `makeNoopLogger()` test helper in `packages/common-core` to replace ~10 inline `noopLogger` definitions. Defer.
 * Generic LLM-repair-loop higher-order function shared between `aggregateDigest` and `calendarActionExtractionService`. Wait for a third call site before extracting.

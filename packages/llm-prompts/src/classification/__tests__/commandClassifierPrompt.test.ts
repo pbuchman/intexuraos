@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { commandClassifierPrompt } from '../commandClassifierPrompt.js';
+import { CommandClassificationSchema, COMMAND_TYPES } from '../contextSchemas.js';
 
 describe('commandClassifierPrompt', () => {
   describe('build', () => {
@@ -28,11 +29,27 @@ describe('commandClassifierPrompt', () => {
       expect(prompt).toContain('OVERRIDE category signals from URL content');
     });
 
-    it('includes explicit command phrases for all categories', () => {
+    it('does not advertise the removed todo category', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(COMMAND_TYPES).not.toContain('todo');
+      expect(
+        CommandClassificationSchema.safeParse({
+          type: 'todo',
+          confidence: 0.9,
+          title: 'Buy groceries',
+          reasoning: 'Old todo category',
+        }).success
+      ).toBe(false);
+      expect(prompt).not.toContain('**todo**');
+      expect(prompt).not.toContain('"create todo"');
+      expect(prompt).not.toContain('→ todo');
+    });
+
+    it('includes explicit command phrases for remaining categories', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
       expect(prompt).toContain('"save bookmark"');
-      expect(prompt).toContain('"create todo"');
       expect(prompt).toContain('"perform research"');
       expect(prompt).toContain('"create note"');
       expect(prompt).toContain('"set reminder"');
@@ -46,10 +63,7 @@ describe('commandClassifierPrompt', () => {
         'save bookmark https://research-world.com" → link (explicit "save bookmark" overrides "research" in URL)'
       );
       expect(prompt).toContain(
-        'create todo to research competitors" → todo (explicit "create todo" overrides "research" keyword)'
-      );
-      expect(prompt).toContain(
-        'perform research on todo apps" → research (explicit "perform research" overrides "todo" keyword)'
+        'perform research on task apps" → research (explicit "perform research" overrides incidental task wording)'
       );
     });
 
@@ -75,7 +89,6 @@ describe('commandClassifierPrompt', () => {
 
       expect(prompt).toContain('zapisz link');
       expect(prompt).toContain('dodaj zakładkę');
-      expect(prompt).toContain('stwórz zadanie');
       expect(prompt).toContain('zbadaj');
       expect(prompt).toContain('stwórz notatkę');
       expect(prompt).toContain('przypomnij mi');
@@ -96,7 +109,6 @@ describe('commandClassifierPrompt', () => {
       expect(prompt).toContain('**reminder**');
       expect(prompt).toContain('**research**');
       expect(prompt).toContain('**note**');
-      expect(prompt).toContain('**todo**');
     });
 
     it('maintains confidence semantics', () => {
@@ -178,34 +190,6 @@ describe('commandClassifierPrompt', () => {
       expect(prompt).toContain('occupies a time slot');
     });
 
-    it('includes calendar vs todo tiebreaker guidance', () => {
-      const prompt = commandClassifierPrompt.build({ message: 'test' });
-
-      expect(prompt).toContain('action verb');
-      expect(prompt).toMatch(/todo.*unless.*named event|todo.*unless.*event to attend/i);
-    });
-
-    it('lists todo before calendar in Step 5 priority', () => {
-      const prompt = commandClassifierPrompt.build({ message: 'test' });
-
-      const step5Start = prompt.indexOf('STEP 5: Category Detection');
-      expect(step5Start).toBeGreaterThan(-1);
-
-      const afterStep5 = prompt.slice(step5Start);
-      const todoPos = afterStep5.indexOf('**todo**');
-      const calendarPos = afterStep5.indexOf('**calendar**');
-
-      expect(todoPos).toBeGreaterThan(-1);
-      expect(calendarPos).toBeGreaterThan(-1);
-      expect(todoPos).toBeLessThan(calendarPos);
-    });
-
-    it('includes example: todo with deadline stays todo', () => {
-      const prompt = commandClassifierPrompt.build({ message: 'test' });
-
-      expect(prompt).toMatch(/Send contract.*→ todo|contract.*by Friday.*→ todo/i);
-    });
-
     it('includes example: named event is calendar', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
@@ -271,14 +255,6 @@ describe('commandClassifierPrompt', () => {
         '"create calendar event for team standup" → calendar (explicit "create calendar event")'
       );
     });
-
-    it('includes example: action + date = todo', () => {
-      const prompt = commandClassifierPrompt.build({ message: 'test' });
-
-      expect(prompt).toMatch(
-        /[Ss]ign up.*deadline.*→ todo|[Ss]ign up.*exam.*→ todo|[Pp]repare.*→ todo/i
-      );
-    });
   });
 
   describe('metadata', () => {
@@ -290,8 +266,8 @@ describe('commandClassifierPrompt', () => {
       expect(commandClassifierPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
-    it('has version 2.1.0', () => {
-      expect(commandClassifierPrompt.version).toBe('2.1.0');
+    it('has version 3.0.0', () => {
+      expect(commandClassifierPrompt.version).toBe('3.0.0');
     });
   });
 });

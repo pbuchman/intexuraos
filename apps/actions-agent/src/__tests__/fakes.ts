@@ -22,10 +22,6 @@ import type {
   CommandWithText,
 } from '../domain/ports/commandsAgentClient.js';
 import type {
-  TodosServiceClient,
-  CreateTodoRequest,
-} from '../domain/ports/todosServiceClient.js';
-import type {
   NotesServiceClient,
   CreateNoteRequest,
 } from '../domain/ports/notesServiceClient.js';
@@ -488,39 +484,6 @@ export class FakeCommandsAgentClient implements CommandsAgentClient {
   }
 }
 
-export class FakeTodosServiceClient implements TodosServiceClient {
-  private createdTodos: CreateTodoRequest[] = [];
-  private nextResponse: ServiceFeedback = {
-    status: 'completed',
-    message: 'Todo created successfully',
-    resourceUrl: '/#/todos/todo-123',
-  };
-  private failNext = false;
-  private failError: Error | null = null;
-
-  getCreatedTodos(): CreateTodoRequest[] {
-    return this.createdTodos;
-  }
-
-  setNextResponse(response: ServiceFeedback): void {
-    this.nextResponse = response;
-  }
-
-  setFailNext(fail: boolean, error?: Error): void {
-    this.failNext = fail;
-    this.failError = error ?? null;
-  }
-
-  async createTodo(request: CreateTodoRequest): Promise<Result<ServiceFeedback>> {
-    if (this.failNext) {
-      this.failNext = false;
-      return err(this.failError ?? new Error('Simulated failure'));
-    }
-    this.createdTodos.push(request);
-    return ok(this.nextResponse);
-  }
-}
-
 export class FakeNotesServiceClient implements NotesServiceClient {
   private createdNotes: CreateNoteRequest[] = [];
   private nextResponse: ServiceFeedback = {
@@ -948,28 +911,6 @@ export function createFakeExecuteResearchActionUseCase(config?: {
   };
 }
 
-export type FakeExecuteTodoActionUseCase = (
-  actionId: string
-) => Promise<Result<ExecuteActionResult, Error>>;
-
-export function createFakeExecuteTodoActionUseCase(config?: {
-  failWithError?: Error;
-  returnResult?: ExecuteActionResult;
-}): FakeExecuteTodoActionUseCase {
-  return async (_actionId: string): Promise<Result<ExecuteActionResult, Error>> => {
-    if (config?.failWithError !== undefined) {
-      return err(config.failWithError);
-    }
-    return ok(
-      config?.returnResult ?? {
-        status: 'completed',
-        message: 'Todo created successfully',
-        resourceUrl: '/#/todos/todo-123',
-      }
-    );
-  };
-}
-
 export type FakeExecuteNoteActionUseCase = (
   actionId: string
 ) => Promise<Result<ExecuteActionResult, Error>>;
@@ -1296,10 +1237,6 @@ export function createFakeHandleApprovalReplyUseCase(config?: {
 }
 
 import {
-  createHandleTodoActionUseCase,
-  type HandleTodoActionUseCase,
-} from '../domain/usecases/handleTodoAction.js';
-import {
   createHandleNoteActionUseCase,
   type HandleNoteActionUseCase,
 } from '../domain/usecases/handleNoteAction.js';
@@ -1327,7 +1264,6 @@ export function createFakeServices(deps: {
   actionRepository?: FakeActionRepository;
   actionTransitionRepository?: FakeActionTransitionRepository;
   commandsAgentClient?: FakeCommandsAgentClient;
-  todosServiceClient?: FakeTodosServiceClient;
   notesServiceClient?: FakeNotesServiceClient;
   bookmarksServiceClient?: FakeBookmarksServiceClient;
   calendarServiceClient?: FakeCalendarServiceClient;
@@ -1336,7 +1272,6 @@ export function createFakeServices(deps: {
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
-  executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
   executeLinkActionUseCase?: FakeExecuteLinkActionUseCase;
   executeCalendarActionUseCase?: FakeExecuteCalendarActionUseCase;
@@ -1354,7 +1289,6 @@ export function createFakeServices(deps: {
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
   const commandsAgentClient = deps.commandsAgentClient ?? new FakeCommandsAgentClient();
-  const todosServiceClient = deps.todosServiceClient ?? new FakeTodosServiceClient();
   const notesServiceClient = deps.notesServiceClient ?? new FakeNotesServiceClient();
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
   const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
@@ -1368,16 +1302,6 @@ export function createFakeServices(deps: {
 
   const handleResearchActionUseCase: HandleResearchActionUseCase = registerActionHandler(
     createHandleResearchActionUseCase,
-    {
-      actionRepository,
-      whatsappPublisher,
-      webAppUrl: 'http://test.app',
-      logger: silentLogger,
-    }
-  );
-
-  const handleTodoActionUseCase: HandleTodoActionUseCase = registerActionHandler(
-    createHandleTodoActionUseCase,
     {
       actionRepository,
       whatsappPublisher,
@@ -1453,7 +1377,6 @@ export function createFakeServices(deps: {
     actionRepository,
     actionTransitionRepository,
     commandsAgentClient,
-    todosServiceClient,
     notesServiceClient,
     bookmarksServiceClient,
     calendarServiceClient,
@@ -1462,7 +1385,6 @@ export function createFakeServices(deps: {
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     handleResearchActionUseCase,
-    handleTodoActionUseCase,
     handleNoteActionUseCase,
     handleLinkActionUseCase,
     handleCalendarActionUseCase,
@@ -1470,7 +1392,6 @@ export function createFakeServices(deps: {
     handleCodeActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
-    executeTodoActionUseCase: deps.executeTodoActionUseCase ?? createFakeExecuteTodoActionUseCase(),
     executeNoteActionUseCase: deps.executeNoteActionUseCase ?? createFakeExecuteNoteActionUseCase(),
     executeLinkActionUseCase: deps.executeLinkActionUseCase ?? createFakeExecuteLinkActionUseCase(),
     executeCalendarActionUseCase:
@@ -1493,7 +1414,6 @@ export function createFakeServices(deps: {
     handleApprovalReplyUseCase:
       deps.handleApprovalReplyUseCase ?? createFakeHandleApprovalReplyUseCase(),
     research: handleResearchActionUseCase,
-    todo: handleTodoActionUseCase,
     note: handleNoteActionUseCase,
     link: handleLinkActionUseCase,
     calendar: handleCalendarActionUseCase,

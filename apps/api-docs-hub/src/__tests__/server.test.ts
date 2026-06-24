@@ -8,8 +8,8 @@ const config: Config = {
   host: '127.0.0.1',
   openApiSources: [
     {
-      name: 'cron-agent',
-      url: 'https://example.com/cron-agent/openapi.json',
+      name: 'actions-agent',
+      url: 'https://example.com/actions-agent/openapi.json',
     },
   ],
 };

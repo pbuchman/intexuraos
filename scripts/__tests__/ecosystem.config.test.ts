@@ -12,6 +12,49 @@ interface WhatsAppPubSubEnv {
   INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC: string;
 }
 
+interface DevAppSummary {
+  name: string;
+  env: Record<string, string | undefined>;
+}
+
+interface DevConfigSummary {
+  apps: DevAppSummary[];
+}
+
+const REMOVED_AGENT_NAMES = ['todos', 'chat', 'cron'].map((name) => `${name}-agent`);
+const REMOVED_AGENT_ENV_KEYS = ['TODOS', 'CHAT', 'CRON'].flatMap((name) => [
+  `INTEXURAOS_${name}_AGENT_URL`,
+  `INTEXURAOS_${name}_AGENT_OPENAPI_URL`,
+]);
+const REMOVED_TOPIC_ENV_KEY = ['INTEXURAOS', 'TODOS', 'PROCESSING', 'TOPIC'].join('_');
+
+function loadDevConfig(): DevConfigSummary {
+  const stdout = execFileSync(
+    process.execPath,
+    [
+      '-e',
+      `
+        const config = require('./ecosystem.config.cjs');
+        process.stdout.write(JSON.stringify({
+          apps: config.apps.map((app) => ({
+            name: app.name,
+            env: app.env,
+          })),
+        }));
+      `,
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        HOME: process.env.HOME ?? '/tmp',
+        PATH: process.env.PATH ?? '',
+      },
+    }
+  );
+
+  return JSON.parse(stdout.toString()) as DevConfigSummary;
+}
+
 function loadWhatsAppPubSubEnv(): WhatsAppPubSubEnv {
   const stdout = execFileSync(
     process.execPath,
@@ -109,6 +152,23 @@ function loadInheritedNodeOptions(): Record<string, string | undefined> {
 }
 
 describe('ecosystem.config.cjs', () => {
+  it('omits removed agents and their shared runtime URLs from dev PM2 config', () => {
+    const config = loadDevConfig();
+    const names = config.apps.map((app) => app.name);
+
+    for (const removed of REMOVED_AGENT_NAMES) {
+      expect(names).not.toContain(removed);
+    }
+
+    for (const app of config.apps) {
+      for (const envKey of REMOVED_AGENT_ENV_KEYS) {
+        expect(app.env[envKey], `${app.name} ${envKey}`).toBeUndefined();
+      }
+      expect(app.env[REMOVED_TOPIC_ENV_KEY], app.name).toBeUndefined();
+      expect(app.env.INTEXURAOS_GUEST_SESSION_SECRET, app.name).toBeUndefined();
+    }
+  });
+
   it('uses home-dev Pub/Sub emulator aliases for whatsapp-service fallbacks', () => {
     expect(loadWhatsAppPubSubEnv()).toEqual({
       INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: 'whatsapp-send-message',

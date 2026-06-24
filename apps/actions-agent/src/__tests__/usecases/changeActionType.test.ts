@@ -44,7 +44,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: 'non-existent',
       userId: 'user-1',
-      newType: 'todo',
+      newType: 'note',
     });
 
     expect(result.ok).toBe(false);
@@ -59,7 +59,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: 'other-user',
-      newType: 'todo',
+      newType: 'note',
     });
 
     expect(result.ok).toBe(false);
@@ -74,7 +74,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -89,7 +89,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -105,13 +105,13 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(true);
 
     const updatedAction = await actionRepository.getById(testAction.id);
-    expect(updatedAction?.type).toBe('todo');
+    expect(updatedAction?.type).toBe('research');
   });
 
   it('logs transition for failed action type change', async () => {
@@ -159,7 +159,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -187,7 +187,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -202,7 +202,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -218,13 +218,13 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(true);
 
     const updatedAction = await actionRepository.getById(testAction.id);
-    expect(updatedAction?.type).toBe('todo');
+    expect(updatedAction?.type).toBe('research');
   });
 
   it('allows type change for awaiting_approval action', async () => {
@@ -263,7 +263,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(false);
@@ -279,7 +279,7 @@ describe('ChangeActionTypeUseCase', () => {
     const result = await useCase({
       actionId: testAction.id,
       userId: testAction.userId,
-      newType: 'todo',
+      newType: 'research',
     });
 
     expect(result.ok).toBe(true);
@@ -292,7 +292,7 @@ describe('ChangeActionTypeUseCase', () => {
       commandId: testAction.commandId,
       commandText: 'Original command text',
       originalType: 'note',
-      newType: 'todo',
+      newType: 'research',
       originalConfidence: 0.85,
     });
   });

@@ -40,8 +40,8 @@
 - `scripts/verify-v8-ignore.mjs` — add duplicate-explanation detector (Phase B-2) and stricter `ts-type`/`source-map` blocker keyword list (prune weak keywords `conditional`, `ternary`, `spread` that describe code rather than the testing blocker).
 - `.claude/reference/coverage-exemptions.md` — document the `filesystem`/`node-mock` decision (new subcategory OR adoption of `FakeFileSystem`; see Task 6 decision block).
 - `vitest.config.ts` — switch root to consume `vitest.shared.ts` via `mergeConfig`.
-- `apps/chat-agent/vitest.config.ts`
-- `apps/cron-agent/vitest.config.ts`
+- `apps/retired-chat-service/vitest.config.ts`
+- `apps/retired-scheduler-service/vitest.config.ts`
 - `apps/hellscript-agent/vitest.config.ts`
 - `apps/web/vitest.config.ts` (shared-base-compatible subset; web has UI-test exception per CLAUDE.md)
 - `packages/infra-otel/vitest.config.ts`
@@ -995,9 +995,9 @@ git commit -m "lint: require afterEach(resetServices) when setServices used (INT
 ## Task 9: Standardize workspace vitest configs
 
 **Files:**
-- Modify: `apps/chat-agent/vitest.config.ts`, `apps/cron-agent/vitest.config.ts`, `apps/hellscript-agent/vitest.config.ts`, `apps/web/vitest.config.ts`, `packages/infra-otel/vitest.config.ts`, `packages/internal-clients/vitest.config.ts`, `migrations/vitest.config.ts`, `e2e/vitest.config.ts`.
+- Modify: `apps/retired-chat-service/vitest.config.ts`, `apps/retired-scheduler-service/vitest.config.ts`, `apps/hellscript-agent/vitest.config.ts`, `apps/web/vitest.config.ts`, `packages/infra-otel/vitest.config.ts`, `packages/internal-clients/vitest.config.ts`, `migrations/vitest.config.ts`, `e2e/vitest.config.ts`.
 
-- [ ] **Step 1: Rewrite `apps/chat-agent/vitest.config.ts`**
+- [ ] **Step 1: Rewrite `apps/retired-chat-service/vitest.config.ts`**
 
 ```ts
 import { mergeConfig, defineConfig } from 'vitest/config';
@@ -1025,7 +1025,7 @@ Key points:
 - The `coverage.thresholds` object is inherited from shared (95/95/95/95). Delete the local `thresholds:` block.
 - Keep workspace-local `alias` entries for `@intexuraos/*` mappings.
 
-- [ ] **Step 2: Repeat for `apps/cron-agent`, `apps/hellscript-agent`**
+- [ ] **Step 2: Repeat for `apps/retired-scheduler-service`, `apps/hellscript-agent`**
 
 Same pattern.
 

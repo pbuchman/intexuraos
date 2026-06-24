@@ -51,7 +51,7 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 | auth-service                 | 8 R   | 9     | 9     | 8.5   | 8     | 9     | 8.58 | 5/6  | Targeted edits  |
 | bookmarks-agent              | 9     | 9.1   | 9.1   | 9     | 8.5   | 7 R   | 8.62 | 5/6  | Targeted edits  |
 | calendar-agent               | 7 R   | 9     | 9     | 9     | 7 R   | 8     | 8.17 | 4/6  | Targeted edits  |
-| chat-agent                   | 9     | 9.1   | 8.5   | 7.5 R | 8     | 6 R   | 8.02 | 4/6  | Targeted edits  |
+| retired-chat-service                   | 9     | 9.1   | 8.5   | 7.5 R | 8     | 6 R   | 8.02 | 4/6  | Targeted edits  |
 | code-worker                  | 8 R   | 9     | 9.5   | 9     | 9     | 8.5   | 8.83 | 5/6  | Targeted edits  |
 | code-agent                   | 7 R   | 9     | 9     | 9     | 8 R   | 9     | 8.50 | 4/6  | Targeted edits  |
 | commands-agent               | 9     | 7 R   | 8     | 7 R   | 7 R   | 7 R   | 7.50 | 2/6  | Targeted edits  |
@@ -64,7 +64,7 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 | orchestrator                 | 7 R   | 9     | 9     | 9     | 9     | 9     | 8.67 | 5/6  | Targeted edits  |
 | research-agent               | 7 R   | 9     | 9.5   | 9     | 8     | 9     | 8.58 | 5/6  | Targeted edits  |
 | sentry-service               | 9     | 9     | 9     | 9     | 8     | 8.5   | 8.75 | 6/6  | Done            |
-| todos-agent                  | 8 R   | 9     | 9     | 8     | 8     | 8     | 8.33 | 5/6  | Targeted edits  |
+| retired-checklist-service                  | 8 R   | 9     | 9     | 8     | 8     | 8     | 8.33 | 5/6  | Targeted edits  |
 | user-service                 | 8 R   | 9     | 9     | 9     | 8     | 9     | 8.67 | 5/6  | Targeted edits  |
 | web-agent                    | 8 R   | 9     | 9     | 9     | 8.5   | 7 R   | 8.42 | 4/6  | Targeted edits  |
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), a two-phase agent-based code task management system with a v2 task view, dynamic pipeline display, GitHub event decision log, per-user default review worker type, and a developer toolbar (DevBar) for local and dev machine environments.
+Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, a two-phase agent-based code task management system with a v2 task view, dynamic pipeline display, GitHub event decision log, per-user default review worker type, and a developer toolbar (DevBar) for local and dev machine environments.
 
 ## Architecture
 
@@ -19,7 +19,6 @@ graph TB
         CMD[commands-agent]
         ACT[actions-agent]
         RES[research-agent]
-        TODO[todos-agent]
         NOTE[notes-agent]
         BKMK[bookmarks-agent]
         CAL[calendar-agent]
@@ -29,7 +28,6 @@ graph TB
         NOTION[notion-service]
         WA[whatsapp-service]
         CODE[code-agent]
-        CHAT[chat-agent]
     end
 
     subgraph "Data & Auth"
@@ -42,7 +40,6 @@ graph TB
     PWA --> CMD
     PWA --> ACT
     PWA --> RES
-    PWA --> TODO
     PWA --> NOTE
     PWA --> BKMK
     PWA --> CAL
@@ -53,7 +50,6 @@ graph TB
     PWA --> NOTION
     PWA --> WA
     PWA --> CODE
-    PWA --> CHAT
     PWA --> Firestore
     SW --> PWA
 ```
@@ -132,7 +128,6 @@ apps/web/src/
 │   ├── usePubSubEvents.ts # Pub/Sub event streaming via SSE
 │   ├── useResearch.ts      # Research report management
 │   ├── useTaskView.ts      # Code task detail view state and actions
-│   ├── useTodos.ts         # Todo CRUD
 │   ├── useUsageCosts.ts    # LLM usage cost data
 │   ├── useVisualizations.ts  # Saved visualization management
 │   ├── useWorkerSettings.ts # Worker config management
@@ -153,7 +148,6 @@ apps/web/src/
 │   └── ...
 ├── services/           # API client functions
 │   ├── apiClient.ts       # Base API request handler
-│   ├── chatService.ts     # Chat agent API + session persistence
 │   ├── codeAgentApi.ts    # Code agent API (tasks, workers, PR events)
 │   ├── errorConfig.ts     # Declarative error display configuration
 │   ├── linearApi.ts       # Linear API (connection, issues, webhook config, sync)
@@ -191,8 +185,6 @@ apps/web/src/
 | `/code-tasks/:id/view`                  | CodeTaskViewPageV2                | Yes                             | Code task detail v2 (current)        |
 | `/code-tasks/:id`                       | CodeTaskViewPage                  | Yes                             | Code task detail v1 (legacy)         |
 | `/code-tasks/pr-events`                 | PREventsPage                      | Yes                             | GitHub event decision log            |
-| `/my-todos`                             | TodosListPage                     | Yes                             | Todo items                           |
-| `/todos/:id`                            | TodoDetailRedirect                | Yes                             | Redirect to `/my-todos?id=`          |
 | `/my-notes`                             | NotesListPage                     | Yes                             | Notes list                           |
 | `/notes/:id`                            | NoteDetailRedirect                | Yes                             | Redirect to `/my-notes?id=`          |
 | `/my-bookmarks`                         | BookmarksListPage                 | Yes                             | Bookmarks list                       |
@@ -351,7 +343,7 @@ Features: follow mode (auto-scroll), manual scroll override, copy-all-logs butto
 
 - **React Context** — global state: auth, sync queue, PWA, theme
 - **Component State** (`useState`) — local UI state per component
-- **localStorage** — user preferences: active tab, filters, sidebar collapse, theme, chat sessions, chat panel size, DevBar state, default worker type (via settings API), PWA install dismissal per version
+- **localStorage** — user preferences: active tab, filters, sidebar collapse, theme, DevBar state, default worker type (via settings API), PWA install dismissal per version
 - **sessionStorage** — one-time flags: deep link fetch tracking
 - **Firestore** — real-time data: actions, commands, code task logs, Linear issues, GitHub event log
 
@@ -372,12 +364,10 @@ Environment variables (prefixed `INTEXURAOS_`, read via `import.meta.env`):
 | `INTEXURAOS_COMMANDS_AGENT_URL`               | commands-agent endpoint               | Yes      |
 | `INTEXURAOS_ACTIONS_AGENT_URL`                | actions-agent endpoint                | Yes      |
 | `INTEXURAOS_NOTES_AGENT_URL`                  | notes-agent endpoint                  | Yes      |
-| `INTEXURAOS_TODOS_AGENT_URL`                  | todos-agent endpoint                  | Yes      |
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`              | bookmarks-agent endpoint              | Yes      |
 | `INTEXURAOS_CALENDAR_AGENT_URL`               | calendar-agent endpoint               | Yes      |
 | `INTEXURAOS_LINEAR_AGENT_URL`                 | linear-agent endpoint                 | Yes      |
 | `INTEXURAOS_CODE_AGENT_URL`                   | code-agent endpoint                   | Yes      |
-| `INTEXURAOS_CHAT_AGENT_URL`                   | chat-agent endpoint                   | Yes      |
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL`            | llm-usage-service endpoint            | Yes      |
 | `INTEXURAOS_FIREBASE_PROJECT_ID`              | Firebase project ID                   | Yes      |
 | `INTEXURAOS_FIREBASE_API_KEY`                 | Firebase API key                      | Yes      |

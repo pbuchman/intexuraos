@@ -18,7 +18,7 @@
   - `packages/infra-pubsub/src/{whatsappSendPublisher,todosProcessingPublisher,calendarPreviewPublisher,prTriagePublisher}.ts` — per-integration publishers inside a generic package.
   - `packages/http-server/src/health.ts:6` imports `getFirestore` from `@intexuraos/infra-firestore` and defines `checkNotionSdk`.
   - `packages/common-http/src/http/logger.ts` and `index.ts` import `redactToken`/`redactObject`/`SENSITIVE_FIELDS` from `@intexuraos/llm-utils`; definitions live in `packages/llm-utils/src/redaction.ts` (64 LoC).
-  - `package.json` divergence: `packages/infra-openrouter` pins `openai ^5.3.0`; `packages/infra-gpt`, `apps/code-agent`, `workers/orchestrator` pin `^6.15.0`; `apps/chat-agent` pins `^4.0.0`.
+  - `package.json` divergence: `packages/infra-openrouter` pins `openai ^5.3.0`; `packages/infra-gpt`, `apps/code-agent`, `workers/orchestrator` pin `^6.15.0`; `apps/retired-chat-service` pins `^4.0.0`.
   - `packages/llm-pricing/package.json` declares `@intexuraos/infra-firestore` dependency but no source file imports it.
   - Dead re-exports in `packages/common-core/src/index.ts`: `serviceFeedback` family, `ensureAllDefined`, `getFirstOrNull`, `toDateOrNull`, `toISOStringOrNull` — grep shows zero external consumers.
   - README audit: 10 of 21 packages ship a `README.md`; 11 do not (`common-core`, `common-http`, `http-contracts`, `http-server`, `infra-firestore`, `infra-notion`, `infra-openrouter`, `infra-otel`, `infra-pubsub`, `infra-whatsapp`, `internal-clients`).
@@ -88,7 +88,7 @@ Relocated typed publishers (owning services):
 
 ```
 apps/whatsapp-service/src/infra/pubsub/whatsappSendPublisher.ts   # ← moved from infra-pubsub
-apps/todos-agent/src/infra/pubsub/todosProcessingPublisher.ts     # ← moved from infra-pubsub
+apps/retired-checklist-service/src/infra/pubsub/todosProcessingPublisher.ts     # ← moved from infra-pubsub
 apps/calendar-agent/src/infra/pubsub/calendarPreviewPublisher.ts  # ← moved from infra-pubsub
 apps/code-agent/src/infra/pubsub/prTriagePublisher.ts             # ← moved from infra-pubsub
 apps/notion-service/src/infra/health/notionSdkHealthCheck.ts       # ← absorbs checkNotionSdk
@@ -122,8 +122,8 @@ Merge order for integration (does not affect parallel execution): SUB-D → SUB-
 
 | Subtask   | Package owner                          | Touched apps/workers                                                                                      | Contract for other subtasks                                                                                                                                                                                                                                                 |
 | --------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SUB-A     | common-core + 3 new domain packages    | code-agent, linear-agent, actions-agent, cron-agent, orchestrator, web, api-docs-hub                      | New barrels: `@intexuraos/linear-domain`, `@intexuraos/code-task-domain`, `@intexuraos/service-catalog`. Six symbol families removed from `@intexuraos/common-core`.                                                                                                        |
-| SUB-B     | infra-pubsub                           | whatsapp-service, todos-agent, calendar-agent, code-agent, research-agent, bookmarks-agent, actions-agent | `@intexuraos/infra-pubsub` exports exactly `BasePubSubPublisher`, `BasePubSubPublisherConfig`, `PublishContext`, `PublishError`, `PublishFailureReason` (+ those names only).                                                                                               |
+| SUB-A     | common-core + 3 new domain packages    | code-agent, linear-agent, actions-agent, retired-scheduler-service, orchestrator, web, api-docs-hub                      | New barrels: `@intexuraos/linear-domain`, `@intexuraos/code-task-domain`, `@intexuraos/service-catalog`. Six symbol families removed from `@intexuraos/common-core`.                                                                                                        |
+| SUB-B     | infra-pubsub                           | whatsapp-service, retired-checklist-service, calendar-agent, code-agent, research-agent, bookmarks-agent, actions-agent | `@intexuraos/infra-pubsub` exports exactly `BasePubSubPublisher`, `BasePubSubPublisherConfig`, `PublishContext`, `PublishError`, `PublishFailureReason` (+ those names only).                                                                                               |
 | SUB-C     | http-server + common-http + llm-utils  | notion-service, all common-http consumers                                                                 | `@intexuraos/common-core/redaction` exports `redactToken`, `redactObject`, `SENSITIVE_FIELDS`. `http-server` no longer exports `checkNotionSdk` nor depends on `@intexuraos/infra-firestore`. `common-http` drops `@intexuraos/llm-utils` dep.                              |
 | SUB-D     | root workspace + all package manifests | none (manifests only)                                                                                     | `pnpm-workspace.yaml` `catalog:` keys: `openai@^6`, `fastify@^5.2.0`, `pino@^9`, `zod@^3.24`. `infra-*`/`common-http`/`http-server` declare these as `peerDependencies`. `llm-pricing` no longer depends on `infra-firestore`. `pnpm run verify:dead-code` in `ci:tracked`. |
 | SUB-E     | docs + build config                    | none (docs + tsconfig + CLAUDE.md only)                                                                   | 21/21 packages have `README.md`. `packages/README.md` + `docs/architecture/package-contracts.md` match filesystem. Source-exports model documented & enforced by `scripts/verify-package-exports.mjs` (exception: `infra-otel` retains `dist/`). CLAUDE.md rule updated.    |
@@ -397,14 +397,14 @@ EOF
 - Modify: `packages/infra-pubsub/src/types.ts` (keep only `PublishError` / `PublishFailureReason`; delete integration-specific event types).
 - Delete: `packages/infra-pubsub/src/{whatsappSendPublisher,todosProcessingPublisher,calendarPreviewPublisher,prTriagePublisher}.ts` and their test files.
 - Create: `apps/whatsapp-service/src/infra/pubsub/whatsappSendPublisher.ts` (+ tests).
-- Create: `apps/todos-agent/src/infra/pubsub/todosProcessingPublisher.ts` (+ tests).
+- Create: `apps/retired-checklist-service/src/infra/pubsub/todosProcessingPublisher.ts` (+ tests).
 - Create: `apps/calendar-agent/src/infra/pubsub/calendarPreviewPublisher.ts` (+ tests) — create `infra/pubsub` dir if absent.
 - Create: `apps/code-agent/src/infra/pubsub/prTriagePublisher.ts` (+ tests).
 - Modify: every importer listed below.
 
 **Importer map (verified):**
 - `createWhatsAppSendPublisher` → `apps/{code-agent,bookmarks-agent,research-agent,actions-agent}/src/services.ts|index.ts|config.ts` (publisher), `apps/whatsapp-service/src/...` (consumer — receives Pub/Sub push).
-- `createTodosProcessingPublisher` → `apps/todos-agent/src/services.ts`.
+- `createTodosProcessingPublisher` → `apps/retired-checklist-service/src/services.ts`.
 - `createCalendarPreviewPublisher` → resolve via grep during execution (current consumers).
 - `createPRTriagePublisher` → `apps/code-agent/src/services/factories/publisherFactory.ts`.
 
@@ -437,7 +437,7 @@ packages/whatsapp-pubsub-client/
 
 This keeps infra-pubsub pure (BasePubSubPublisher only) while letting unrelated services publish without depending on `whatsapp-service`. Apply the same pattern to the other three publishers:
 
-- `packages/todos-pubsub-client`
+- `packages/retired-checklist-pubsub-client`
 - `packages/calendar-pubsub-client`
 - `packages/pr-triage-pubsub-client`
 
@@ -454,7 +454,7 @@ import { createWhatsAppSendPublisher } from '../whatsappSendPublisher.js';
 
 Run: `pnpm --filter @intexuraos/whatsapp-pubsub-client test` → PASS.
 
-- [ ] **Step 3: Repeat Step 2 for `todos-pubsub-client`, `calendar-pubsub-client`, `pr-triage-pubsub-client`**
+- [ ] **Step 3: Repeat Step 2 for `retired-checklist-pubsub-client`, `calendar-pubsub-client`, `pr-triage-pubsub-client`**
 
 Each is created from verbatim copies of the corresponding current `packages/infra-pubsub/src/<publisher>.ts` + test. Confirm `pnpm --filter <new-pkg> test` passes after each.
 
@@ -658,7 +658,7 @@ pnpm run ci:tracked 2>&1 | tee /tmp/ci-sub-c-full.txt
 - Modify: `pnpm-workspace.yaml` (add `catalog:` block).
 - Modify: every `packages/*/package.json` that declares `openai`, `fastify`, `pino`, `zod`, or `@google-cloud/firestore` at a hard version.
 - Modify: `packages/llm-pricing/package.json` (remove `@intexuraos/infra-firestore` dep).
-- Modify: `apps/chat-agent/package.json` (bump `openai` to catalog).
+- Modify: `apps/retired-chat-service/package.json` (bump `openai` to catalog).
 - Create: `scripts/verify-dead-code.mjs` (knip runner + allowlist).
 - Create: `scripts/verify-package-exports.mjs` (source-exports policy gate).
 - Modify: `package.json` root (`ci:tracked` script includes new gates).
@@ -704,11 +704,11 @@ Do this for every occurrence of the catalogued deps in:
 - `packages/infra-openrouter/package.json` (openai 5→catalog)
 - `packages/infra-gpt/package.json` (openai 6→catalog)
 - `apps/code-agent/package.json` (openai 6→catalog)
-- `apps/chat-agent/package.json` (openai 4→catalog; bump may be breaking — validate behavior & bump tests)
+- `apps/retired-chat-service/package.json` (openai 4→catalog; bump may be breaking — validate behavior & bump tests)
 - `workers/orchestrator/package.json` (openai 6→catalog)
 - Every `fastify`/`pino`/`zod` consumer in `packages/*`.
 
-For `apps/chat-agent`, read its OpenAI usage first; if v6 API changed, add migration steps here (none expected for simple `chat.completions.create`).
+For `apps/retired-chat-service`, read its OpenAI usage first; if v6 API changed, add migration steps here (none expected for simple `chat.completions.create`).
 
 Run: `pnpm install` → PASS. Run `pnpm -w tsc --noEmit` → PASS.
 
@@ -940,7 +940,7 @@ Any dist-based export outside `infra-otel` must be converted (or the exception l
 
 - [ ] Unit: Each new leaf package has 95% branch coverage via migrated tests.
 - [ ] Unit: `packages/common-core/src/__tests__/redaction.test.ts` passes.
-- [ ] Integration: `pnpm --filter apps/whatsapp-service test`, `pnpm --filter apps/todos-agent test`, `pnpm --filter apps/calendar-agent test`, `pnpm --filter apps/code-agent test`, `pnpm --filter apps/notion-service test` all PASS.
+- [ ] Integration: `pnpm --filter apps/whatsapp-service test`, `pnpm --filter apps/retired-checklist-service test`, `pnpm --filter apps/calendar-agent test`, `pnpm --filter apps/code-agent test`, `pnpm --filter apps/notion-service test` all PASS.
 - [ ] Repo: `pnpm -w tsc --noEmit` PASS (no missed consumer).
 - [ ] Repo: `pnpm run ci:tracked` PASS.
 - [ ] Repo: `pnpm exec knip --no-progress` PASS on each merged branch.
@@ -949,7 +949,7 @@ Any dist-based export outside `infra-otel` must be converted (or the exception l
 ## Risks & Mitigations
 
 - **Circular-dep risk when packages import each other post-extraction.** Mitigation: each new leaf domain package depends ONLY on `@intexuraos/common-core`; verified by adding an ESLint `import/no-cycle` rule run in CI.
-- **pnpm catalog `openai` bump breaks `chat-agent`** (currently pinned to v4). Mitigation: SUB-D Step 2 includes an explicit adapter-behavior test run; if breakage, document it in `docs/plans/INT-1537-sub-d-catalog-choices.md` and either bump with a code fix or keep `chat-agent` off-catalog with a TODO.
+- **pnpm catalog `openai` bump breaks `retired-chat-service`** (currently pinned to v4). Mitigation: SUB-D Step 2 includes an explicit adapter-behavior test run; if breakage, document it in `docs/plans/INT-1537-sub-d-catalog-choices.md` and either bump with a code fix or keep `retired-chat-service` off-catalog with a TODO.
 - **knip surfaces more dead code than expected.** Mitigation: allowlist with rationale in `knip.json`; escalate large findings to a follow-up ticket rather than ballooning this refactor.
 - **Consumer import-path rewrites miss a file** (per memory mem_4b8fb197). Mitigation: each sub-plan mandates a global grep + compile check BEFORE deleting the old export, AND a final `pnpm -w tsc --noEmit` pass AFTER deletion.
 

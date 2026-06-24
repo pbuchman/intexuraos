@@ -60,7 +60,7 @@ All error codes are defined in `packages/common-core/src/errors.ts` as the `Erro
 | whatsapp-service             | 63                   | 23                 |
 | user-service                 | 50                   | 22                 |
 | linear-agent                 | 47                   | 29                 |
-| todos-agent                  | 37                   | 17                 |
+| retired-checklist-service                  | 37                   | 17                 |
 | bookmarks-agent              | 32                   | 17                 |
 | actions-agent                | 31                   | 15                 |
 | calendar-agent               | 22                   | 11                 |
@@ -70,7 +70,7 @@ All error codes are defined in `packages/common-core/src/errors.ts` as the `Erro
 | image-service                | 11                   | 3                  |
 | notion-service               | 10                   | 8                  |
 | commands-agent               | 10                   | 6                  |
-| chat-agent                   | 4                    | 1                  |
+| retired-chat-service                   | 4                    | 1                  |
 | web-agent                    | 2                    | 5                  |
 | api-docs-hub                 | 0                    | 0                  |
 | web (frontend)               | 0                    | 0                  |
@@ -162,7 +162,7 @@ This propagates the downstream service's raw error message to the API caller. Fo
 
 ---
 
-### LOW — `INTERNAL_ERROR` With `result.error.message` (todos-agent, notes-agent, research-agent)
+### LOW — `INTERNAL_ERROR` With `result.error.message` (retired-checklist-service, notes-agent, research-agent)
 
 These services pass domain layer error messages directly as the HTTP error message:
 
@@ -199,7 +199,7 @@ These could potentially expose internal service messages to callers. However, th
 | app-settings-service         | 3        | 13         | 0         | —         | PASS                                               |
 | bookmarks-agent              | 17       | 32         | 6         | 6         | PASS                                               |
 | calendar-agent               | 11       | 22         | 0         | —         | PASS (see consistency issue)                       |
-| chat-agent                   | 1        | 4          | 0         | —         | PASS                                               |
+| retired-chat-service                   | 1        | 4          | 0         | —         | PASS                                               |
 | code-agent                   | 35       | 98         | 7         | 7+4       | PASS (see INVALID_STATUS issue)                    |
 | commands-agent               | 6        | 10         | 0         | —         | PASS                                               |
 | image-service                | 3        | 11         | 0         | —         | PASS                                               |
@@ -208,7 +208,7 @@ These could potentially expose internal service messages to callers. However, th
 | notes-agent                  | 7        | 12         | 0         | —         | PASS                                               |
 | notion-service               | 8        | 10         | 0         | —         | PASS                                               |
 | research-agent               | 37       | 86         | 0         | —         | PASS                                               |
-| todos-agent                  | 17       | 37         | 0         | —         | PASS                                               |
+| retired-checklist-service                  | 17       | 37         | 0         | —         | PASS                                               |
 | user-service                 | 22       | 50         | 11        | 11        | PASS                                               |
 | web-agent                    | 5        | 2          | 0         | —         | PASS                                               |
 | whatsapp-service             | 23       | 63         | 2         | 2         | PASS                                               |

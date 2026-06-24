@@ -28,7 +28,7 @@ The publisher configs and `BasePubSubPublisher` accept `Logger` from `pino` rath
 
 #### 4. Duplicated config interfaces
 
-`WhatsAppSendPublisherConfig`, `TodosProcessingPublisherConfig`, and `CalendarPreviewPublisherConfig` are identical (`{ projectId, topicName, logger }`). Each is defined separately in `types.ts`.
+`WhatsAppSendPublisherConfig` and `CalendarPreviewPublisherConfig` are identical (`{ projectId, topicName, logger }`). Each is defined separately in `types.ts`.
 
 **Impact:** Low. The types are stable and the duplication is minimal.
 **Suggested fix:** Consider a generic `PublisherConfig` type: `BasePubSubPublisherConfig & { topicName: string }`.

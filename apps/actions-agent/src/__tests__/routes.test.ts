@@ -277,8 +277,8 @@ describe('Research Agent Routes', () => {
         actionId: 'action-123',
         userId: 'user-456',
         commandId: 'cmd-789',
-        actionType: 'todo',
-        title: 'Test Todo',
+        actionType: 'note',
+        title: 'Test Note',
         payload: { prompt: 'test', confidence: 0.9 },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -997,7 +997,7 @@ describe('Research Agent Routes', () => {
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
-        payload: { type: 'todo' },
+        payload: { type: 'research' },
       });
 
       expect(response.statusCode).toBe(200);
@@ -1006,7 +1006,7 @@ describe('Research Agent Routes', () => {
         data: { action: { id: string; type: string } };
       };
       expect(body.success).toBe(true);
-      expect(body.data.action.type).toBe('todo');
+      expect(body.data.action.type).toBe('research');
     });
 
     it('changes type for awaiting_approval action', async () => {
@@ -1063,7 +1063,7 @@ describe('Research Agent Routes', () => {
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
-        payload: { type: 'todo' },
+        payload: { type: 'research' },
       });
 
       expect(response.statusCode).toBe(400);
@@ -1090,7 +1090,7 @@ describe('Research Agent Routes', () => {
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
-        payload: { type: 'todo', status: 'rejected' },
+        payload: { type: 'research', status: 'rejected' },
       });
 
       expect(response.statusCode).toBe(200);
@@ -1099,7 +1099,7 @@ describe('Research Agent Routes', () => {
         data: { action: { id: string; type: string; status: string } };
       };
       expect(body.success).toBe(true);
-      expect(body.data.action.type).toBe('todo');
+      expect(body.data.action.type).toBe('research');
       expect(body.data.action.status).toBe('rejected');
     });
 
@@ -1124,7 +1124,7 @@ describe('Research Agent Routes', () => {
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
-        payload: { type: 'todo' },
+        payload: { type: 'research' },
       });
 
       const transitions = fakeActionTransitionRepository.getTransitions();
@@ -1135,7 +1135,7 @@ describe('Research Agent Routes', () => {
         commandId: 'cmd-1',
         commandText: 'Original command text',
         originalType: 'note',
-        newType: 'todo',
+        newType: 'research',
       });
     });
   });
@@ -1299,7 +1299,7 @@ describe('Research Agent Routes', () => {
         id: 'action-3',
         userId: 'user-123',
         commandId: 'cmd-3',
-        type: 'todo',
+        type: 'note',
         confidence: 0.9,
         title: 'Another My Action',
         status: 'completed',

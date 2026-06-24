@@ -24,7 +24,6 @@ const TOPICS = [
   'llm-call',
   'bookmark-enrich',
   'bookmark-summarize',
-  'todos-processing',
   'calendar-preview',
 ];
 
@@ -44,7 +43,6 @@ const TOPIC_ENDPOINTS = {
   'llm-call': 'http://host.docker.internal:8116/internal/llm/pubsub/process-llm-call',
   'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
-  'todos-processing': 'http://host.docker.internal:8123/internal/todos/pubsub/todos-processing',
   'calendar-preview': 'http://host.docker.internal:8125/internal/calendar/generate-preview',
 };
 

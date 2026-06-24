@@ -74,9 +74,9 @@ describe('ActionsAgentClient', () => {
         id: 'action-456',
         userId: 'user-123',
         commandId: 'command-456',
-        type: 'todo' as const,
+        type: 'note' as const,
         confidence: 0.9,
-        title: 'Simple Todo',
+        title: 'Simple Note',
         status: 'pending' as const,
         payload: {},
         createdAt: '2024-01-01T00:00:00.000Z',
@@ -94,14 +94,14 @@ describe('ActionsAgentClient', () => {
       const result = await client.createAction({
         userId: 'user-123',
         commandId: 'command-456',
-        type: 'todo',
-        title: 'Simple Todo',
+        type: 'note',
+        title: 'Simple Note',
         confidence: 0.9,
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.type).toBe('todo');
+        expect(result.value.type).toBe('note');
       }
     });
 

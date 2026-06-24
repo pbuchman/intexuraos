@@ -18,7 +18,7 @@ at Object.runMicrotasks (node:internal/process/task_queues:130:5)
 at processTicksAndRejections (node:internal/process/task_queues:95:21)
 
 ✅ Relevant frame (your code):
-at TodoService.findById (apps/todos-agent/src/domain/todos/service.ts:45:12)
+at UserService.findById (apps/user-service/src/domain/users/service.ts:45:12)
 ```
 
 ### Tracing Data Flow

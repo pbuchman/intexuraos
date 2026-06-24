@@ -41,7 +41,6 @@ node scripts/pubsub-publish-test.mjs llm-analytics
 node scripts/pubsub-publish-test.mjs llm-call
 node scripts/pubsub-publish-test.mjs bookmark-enrich
 node scripts/pubsub-publish-test.mjs bookmark-summarize
-node scripts/pubsub-publish-test.mjs todos-processing
 node scripts/pubsub-publish-test.mjs calendar-preview
 ```
 
@@ -60,7 +59,6 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 | `llm-call`                 | Purple       | LLM API calls               |
 | `bookmark-enrich`          | Orange       | Bookmark metadata enriching |
 | `bookmark-summarize`       | Teal         | Bookmark AI summarization   |
-| `todos-processing`         | Pink         | Todo processing events      |
 | `calendar-preview`         | Teal         | Calendar preview generation |
 
 ## Architecture
@@ -112,7 +110,6 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 - `llm-call` → `POST /internal/llm/pubsub/process-llm-call` (:8116)
 - `bookmark-enrich` → `POST /internal/bookmarks/pubsub/enrich` (:8124)
 - `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
-- `todos-processing` → `POST /internal/todos/pubsub/todos-processing` (:8123)
 - `calendar-preview` → `POST /internal/calendar/generate-preview` (:8125)
 
 ## Environment Variables
@@ -154,7 +151,6 @@ const TOPICS = [
   'llm-call',
   'bookmark-enrich',
   'bookmark-summarize',
-  'todos-processing',
   'calendar-preview',
   'your-new-topic', // Add here
 ];
