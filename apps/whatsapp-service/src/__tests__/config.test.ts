@@ -65,6 +65,8 @@ describe('config validation', () => {
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_APP_SECRET');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_WABA_ID');
+    expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
+    expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
   });
 
   it('returns empty array when all required vars present', async () => {

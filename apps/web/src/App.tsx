@@ -151,6 +151,9 @@ const NotesListPage = React.lazy(() =>
 const NotionConnectionPage = React.lazy(() =>
   import('@/pages/NotionConnectionPage').then((m) => ({ default: m.NotionConnectionPage })),
 );
+const PrivateWhatsAppLogPage = React.lazy(() =>
+  import('@/pages/PrivateWhatsAppLogPage').then((m) => ({ default: m.PrivateWhatsAppLogPage })),
+);
 const GitHubEventLogPage = React.lazy(() =>
   import('@/pages/GitHubEventLogPage').then((m) => ({ default: m.GitHubEventLogPage })),
 );
@@ -293,7 +296,8 @@ function AppRoutes(): React.JSX.Element {
           {/* Feature routes */}
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/share-target" element={<ShareTargetPage />} />
-          <Route path="/notes" element={<WhatsAppNotesPage />} />
+          <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
+          <Route path="/whatsapp/private" element={<PrivateWhatsAppLogPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />
           <Route path="/my-bookmarks" element={<BookmarksListPage />} />
@@ -331,8 +335,9 @@ function AppRoutes(): React.JSX.Element {
         </Route>
         {/* Redirects for old URLs (backward compatibility) */}
         <Route path="/notion" element={<Navigate to="/settings/notion" replace />} />
-        <Route path="/whatsapp" element={<Navigate to="/settings/whatsapp" replace />} />
-        <Route path="/whatsapp-notes" element={<Navigate to="/notes" replace />} />
+        <Route path="/whatsapp" element={<Navigate to="/whatsapp/assistant" replace />} />
+        <Route path="/notes" element={<Navigate to="/whatsapp/assistant" replace />} />
+        <Route path="/whatsapp-notes" element={<Navigate to="/whatsapp/assistant" replace />} />
         <Route path="/mobile-notifications" element={<Navigate to="/settings/mobile" replace />} />
         <Route
           path="/mobile-notifications/list"

@@ -28,9 +28,10 @@ Authentication uses Google OIDC ID tokens:
 Required ingest payload fields:
 
 - `sourceAccountId`
-- `userId`
 - `deliveryMode`
 - `events`
+
+`sourceAccountId` is copied from `Settings > WhatsApp > Private WhatsApp Mirror`. The adapter may still include `userId` for compatibility, but the IntexuraOS API ignores it and resolves the canonical owner from `sourceAccountId`.
 
 Supported delivery modes:
 
@@ -57,7 +58,6 @@ The adapter requires:
 - `INTEXURAOS_OIDC_AUDIENCE`
 - `INTEXURAOS_OIDC_IMPERSONATE_SERVICE_ACCOUNT`
 - `INTEXURAOS_SOURCE_ACCOUNT_ID`
-- `INTEXURAOS_USER_ID`
 - `SOURCE_WHATSAPP_PHONE_NUMBER`
 - `MATRIX_BRIDGE_BOT_USERS` (comma-separated Matrix user IDs to ignore)
 - `WHATSAPP_SYNC_STATE_FILE`

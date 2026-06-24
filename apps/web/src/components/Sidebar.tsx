@@ -28,6 +28,7 @@ import {
   llmUsageItems,
   researchAgentItems,
   settingsItems,
+  whatsappItems,
 } from './sidebar/navItems.js';
 import { useSidebarState } from './sidebar/useSidebarState.js';
 
@@ -143,7 +144,17 @@ export function Sidebar(): React.JSX.Element {
 
           <TopLevelNavLink to="/calendar" label="Calendar" icon={Calendar} isCollapsed={s.isCollapsed} />
           <TopLevelNavLink to="/my-bookmarks" label="Bookmarks" icon={Bookmark} isCollapsed={s.isCollapsed} />
-          <TopLevelNavLink to="/notes" label="WhatsApp" icon={MessageSquare} isCollapsed={s.isCollapsed} />
+          <CollapsibleNavSection
+            label="WhatsApp"
+            icon={MessageSquare}
+            items={whatsappItems}
+            rootPath="/whatsapp"
+            isOpen={s.isWhatsAppOpen}
+            onToggle={s.setIsWhatsAppOpen}
+            isCollapsed={s.isCollapsed}
+            isActive={location.pathname.startsWith('/whatsapp') || location.pathname === '/notes'}
+            navigateFallback="/whatsapp/assistant"
+          />
 
           <NotificationsSection
             isOpen={s.isNotificationsOpen}

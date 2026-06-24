@@ -14,4 +14,12 @@ describe('App.tsx lazy-loaded routes', () => {
   it('wraps routes in <Suspense fallback={<FullPageSpinner', () => {
     expect(source).toMatch(/<Suspense[^>]*fallback={<FullPageSpinner/);
   });
+
+  it('keeps WhatsApp assistant and private log routes under the WhatsApp section', () => {
+    expect(source).toContain('path="/whatsapp/assistant"');
+    expect(source).toContain('path="/whatsapp/private"');
+    expect(source).toMatch(/path="\/whatsapp"\s+element={<Navigate to="\/whatsapp\/assistant" replace \/>}/);
+    expect(source).toMatch(/path="\/notes"\s+element={<Navigate to="\/whatsapp\/assistant" replace \/>}/);
+    expect(source).toMatch(/path="\/whatsapp-notes"\s+element={<Navigate to="\/whatsapp\/assistant" replace \/>}/);
+  });
 });

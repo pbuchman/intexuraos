@@ -37,6 +37,10 @@ interface PrivateAggregateRebuildBody {
   limit?: number;
 }
 
+interface PrivateIngestBody extends Omit<IngestPrivateWhatsAppEventsInput, 'userId'> {
+  userId?: string;
+}
+
 function getPrivateSyncLogMetadata(body: unknown): Record<string, unknown> {
   if (body === null || typeof body !== 'object') {
     return {
@@ -132,7 +136,7 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
               items: {},
             },
           },
-          required: ['sourceAccountId', 'userId', 'deliveryMode', 'events'],
+          required: ['sourceAccountId', 'deliveryMode', 'events'],
         },
         response: {
           200: {
@@ -187,6 +191,15 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
             },
             required: ['success', 'error'],
           },
+          404: {
+            description: 'Private WhatsApp account not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
           500: {
             description: 'Persistence failure',
             type: 'object',
@@ -221,11 +234,27 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       }
 
       const services = getServices();
+      const body = request.body as PrivateIngestBody;
+      const accountResult =
+        await services.privateWhatsAppRepository.getActiveAccountBySourceAccountId(
+          body.sourceAccountId
+        );
+      if (!accountResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', accountResult.error.message);
+      }
+      if (accountResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'Private WhatsApp source account is not active');
+      }
       const useCase = new IngestPrivateWhatsAppEventsUseCase({
         privateWhatsAppRepository: services.privateWhatsAppRepository,
       });
       const result = await useCase.execute(
-        request.body as IngestPrivateWhatsAppEventsInput,
+        {
+          sourceAccountId: body.sourceAccountId,
+          userId: accountResult.value.userId,
+          deliveryMode: body.deliveryMode,
+          events: body.events,
+        },
         request.log
       );
 

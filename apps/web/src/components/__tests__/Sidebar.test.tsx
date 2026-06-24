@@ -135,4 +135,23 @@ describe('Sidebar', () => {
       '/fishing-assistant/chat'
     );
   });
+
+  it('renders WhatsApp as an expanded section with Assistant and Private entries', () => {
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/private']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('button', { name: /^whatsapp$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /assistant/i })).toHaveAttribute(
+      'href',
+      '/whatsapp/assistant'
+    );
+    expect(screen.getByRole('link', { name: /private/i })).toHaveAttribute(
+      'href',
+      '/whatsapp/private'
+    );
+    expect(screen.queryByRole('link', { name: /^whatsapp$/i })).not.toBeInTheDocument();
+  });
 });

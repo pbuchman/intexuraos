@@ -39,6 +39,9 @@ import type {
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
+  PrivateWhatsAppSender,
+  PrivateWhatsAppSenderQueryInput,
+  PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppRepository,
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
@@ -585,17 +588,141 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 /**
  * Fake private WhatsApp repository for sync route and use case tests.
  */
+interface FakePrivateWhatsAppAccount {
+  id: string;
+  userId: string;
+  sourceAccountId: string;
+  phoneNumberNormalized: string;
+  displayName: string;
+  status: 'active' | 'disabled';
+  createdAt: string;
+  updatedAt: string;
+  lastIngestAt?: string;
+  lastEventAt?: string;
+  messageCount?: number;
+  senderCount?: number;
+  schemaVersion: 1;
+}
+
+interface FakeUpsertPrivateWhatsAppAccountInput {
+  userId: string;
+  phoneNumberNormalized: string;
+  displayName?: string;
+  now: string;
+}
+
+interface FakeDisablePrivateWhatsAppAccountInput {
+  userId: string;
+  now: string;
+}
+
 export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   private readonly stored = new Map<string, StorePrivateWhatsAppMessageInput>();
+  private readonly accounts = new Map<string, FakePrivateWhatsAppAccount>();
   private failNextError: WhatsAppError | null = null;
+  private failNextStoreError: WhatsAppError | null = null;
+  private failNextDataQueryError: WhatsAppError | null = null;
 
   failNext(error: WhatsAppError): void {
     this.failNextError = error;
   }
 
+  failNextStore(error: WhatsAppError): void {
+    this.failNextStoreError = error;
+  }
+
+  failNextDataQuery(error: WhatsAppError): void {
+    this.failNextDataQueryError = error;
+  }
+
+  setAccount(account: FakePrivateWhatsAppAccount): void {
+    this.accounts.set(account.userId, account);
+  }
+
+  getAccountByUserId(
+    userId: string
+  ): Promise<Result<FakePrivateWhatsAppAccount | null, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    return Promise.resolve(ok(this.accounts.get(userId) ?? null));
+  }
+
+  getActiveAccountBySourceAccountId(
+    sourceAccountId: string
+  ): Promise<Result<FakePrivateWhatsAppAccount | null, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    const account = Array.from(this.accounts.values()).find(
+      (candidate) =>
+        candidate.sourceAccountId === sourceAccountId && candidate.status === 'active'
+    );
+    return Promise.resolve(ok(account ?? null));
+  }
+
+  upsertAccount(input: FakeUpsertPrivateWhatsAppAccountInput): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    const existing = this.accounts.get(input.userId);
+    const now = input.now;
+    const account: FakePrivateWhatsAppAccount = {
+      id: input.userId,
+      userId: input.userId,
+      sourceAccountId: existing?.sourceAccountId ?? `private-wa-test-${input.userId}`,
+      phoneNumberNormalized: input.phoneNumberNormalized,
+      displayName: input.displayName ?? `+${input.phoneNumberNormalized}`,
+      status: 'active',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      schemaVersion: 1,
+    };
+    if (existing?.lastIngestAt !== undefined) {
+      account.lastIngestAt = existing.lastIngestAt;
+    }
+    if (existing?.lastEventAt !== undefined) {
+      account.lastEventAt = existing.lastEventAt;
+    }
+    if (existing?.messageCount !== undefined) {
+      account.messageCount = existing.messageCount;
+    }
+    if (existing?.senderCount !== undefined) {
+      account.senderCount = existing.senderCount;
+    }
+    this.accounts.set(input.userId, account);
+    return Promise.resolve(ok(account));
+  }
+
+  disableAccount(input: FakeDisablePrivateWhatsAppAccountInput): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    const existing = this.accounts.get(input.userId);
+    if (existing === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Private WhatsApp account not found' }));
+    }
+    const account: FakePrivateWhatsAppAccount = {
+      ...existing,
+      status: 'disabled',
+      updatedAt: input.now,
+    };
+    this.accounts.set(input.userId, account);
+    return Promise.resolve(ok(account));
+  }
+
   storeIncomingMessage(
     input: StorePrivateWhatsAppMessageInput
   ): Promise<Result<PrivateWhatsAppIngestOutcome, WhatsAppError>> {
+    const storeFailure = this.consumeStoreFailure();
+    if (storeFailure !== null) {
+      return Promise.resolve(err(storeFailure));
+    }
+
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -630,6 +757,11 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -648,12 +780,71 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         const timestampComparison = b.eventTimestamp.localeCompare(a.eventTimestamp);
         return timestampComparison === 0 ? b.id.localeCompare(a.id) : timestampComparison;
       });
-    return Promise.resolve(ok({ messages: messages.slice(0, input.limit) }));
+    const cursor = decodeFakePrivateWhatsAppCursor(input.cursor);
+    const startIndex =
+      cursor === undefined
+        ? 0
+        : messages.findIndex(
+            (message) => message.eventTimestamp === cursor.sortValue && message.id === cursor.id
+          ) + 1;
+    const safeStartIndex = startIndex < 0 ? 0 : startIndex;
+    const page = messages.slice(safeStartIndex, safeStartIndex + input.limit);
+    const result: PrivateWhatsAppMessageQueryResult = { messages: page };
+    if (messages.length > safeStartIndex + input.limit) {
+      const lastMessage = page[page.length - 1];
+      if (lastMessage !== undefined) {
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastMessage.eventTimestamp, lastMessage.id);
+      }
+    }
+    return Promise.resolve(ok(result));
+  }
+
+  findSenders(
+    input: PrivateWhatsAppSenderQueryInput
+  ): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const senders = Array.from(this.buildSenders().values())
+      .filter((sender) => sender.sourceAccountId === input.sourceAccountId)
+      .sort((a, b) => {
+        const timestampComparison = b.lastEventAt.localeCompare(a.lastEventAt);
+        return timestampComparison === 0 ? b.id.localeCompare(a.id) : timestampComparison;
+      });
+    const cursor = decodeFakePrivateWhatsAppCursor(input.cursor);
+    const startIndex =
+      cursor === undefined
+        ? 0
+        : senders.findIndex(
+            (sender) => sender.lastEventAt === cursor.sortValue && sender.id === cursor.id
+          ) + 1;
+    const safeStartIndex = startIndex < 0 ? 0 : startIndex;
+    const page = senders.slice(safeStartIndex, safeStartIndex + input.limit);
+    const result: PrivateWhatsAppSenderQueryResult = { senders: page };
+    if (senders.length > safeStartIndex + input.limit) {
+      const lastSender = page[page.length - 1];
+      if (lastSender !== undefined) {
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastSender.lastEventAt, lastSender.id);
+      }
+    }
+    return Promise.resolve(ok(result));
   }
 
   findSenderDays(
     input: PrivateWhatsAppSenderDayQueryInput
   ): Promise<Result<PrivateWhatsAppSenderDayQueryResult, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -670,7 +861,25 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         const dayComparison = b.eventDayKey.localeCompare(a.eventDayKey);
         return dayComparison === 0 ? a.senderKey.localeCompare(b.senderKey) : dayComparison;
       });
-    return Promise.resolve(ok({ senderDays: senderDays.slice(0, input.limit) }));
+    const cursor = decodeFakePrivateWhatsAppCursor(input.cursor);
+    const startIndex =
+      cursor === undefined
+        ? 0
+        : senderDays.findIndex(
+            (senderDay) =>
+              senderDay.eventDayKey === cursor.sortValue &&
+              (input.senderKey !== undefined || senderDay.senderKey === cursor.id)
+          ) + 1;
+    const safeStartIndex = startIndex < 0 ? 0 : startIndex;
+    const page = senderDays.slice(safeStartIndex, safeStartIndex + input.limit);
+    const result: PrivateWhatsAppSenderDayQueryResult = { senderDays: page };
+    if (senderDays.length > safeStartIndex + input.limit) {
+      const lastSenderDay = page[page.length - 1];
+      if (lastSenderDay !== undefined) {
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastSenderDay.eventDayKey, lastSenderDay.senderKey);
+      }
+    }
+    return Promise.resolve(ok(result));
   }
 
   rebuildAggregates(
@@ -703,7 +912,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   clear(): void {
     this.stored.clear();
+    this.accounts.clear();
     this.failNextError = null;
+    this.failNextStoreError = null;
+    this.failNextDataQueryError = null;
   }
 
   private consumeFailure(): WhatsAppError | null {
@@ -712,6 +924,24 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     const error = this.failNextError;
     this.failNextError = null;
+    return error;
+  }
+
+  private consumeStoreFailure(): WhatsAppError | null {
+    if (this.failNextStoreError === null) {
+      return null;
+    }
+    const error = this.failNextStoreError;
+    this.failNextStoreError = null;
+    return error;
+  }
+
+  private consumeDataQueryFailure(): WhatsAppError | null {
+    if (this.failNextDataQueryError === null) {
+      return null;
+    }
+    const error = this.failNextDataQueryError;
+    this.failNextDataQueryError = null;
     return error;
   }
 
@@ -814,6 +1044,92 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       existing.updatedAt = message.receivedAt;
     }
     return senderDays;
+  }
+
+  private buildSenders(): Map<string, PrivateWhatsAppSender> {
+    const senders = new Map<string, PrivateWhatsAppSender>();
+    for (const stored of this.stored.values()) {
+      const message = this.toMessage(stored);
+      if (message.senderKey === undefined) {
+        continue;
+      }
+      const key = `${message.sourceAccountId}\0${message.senderKey}`;
+      const existing = senders.get(key);
+      if (existing === undefined) {
+        const sender: PrivateWhatsAppSender = {
+          id: `sender:${message.sourceAccountId}:${message.senderKey}`,
+          userId: message.userId,
+          sourceAccountId: message.sourceAccountId,
+          senderKey: message.senderKey,
+          firstEventAt: message.eventTimestamp,
+          lastEventAt: message.eventTimestamp,
+          messageCount: 1,
+          chatIds: [message.chatId],
+          updatedAt: message.receivedAt,
+          schemaVersion: 2,
+        };
+        if (message.senderDisplayName !== undefined) {
+          sender.senderDisplayName = message.senderDisplayName;
+        }
+        if (message.senderPhoneNumber !== undefined) {
+          sender.senderPhoneNumber = message.senderPhoneNumber;
+        }
+        if (message.senderPhoneNumberNormalized !== undefined) {
+          sender.senderPhoneNumberNormalized = message.senderPhoneNumberNormalized;
+        }
+        senders.set(key, sender);
+        continue;
+      }
+
+      existing.messageCount += 1;
+      existing.firstEventAt =
+        message.eventTimestamp < existing.firstEventAt ? message.eventTimestamp : existing.firstEventAt;
+      existing.lastEventAt =
+        message.eventTimestamp > existing.lastEventAt ? message.eventTimestamp : existing.lastEventAt;
+      if (!existing.chatIds.includes(message.chatId)) {
+        existing.chatIds.push(message.chatId);
+      }
+      existing.updatedAt = message.receivedAt;
+      if (message.senderDisplayName !== undefined && message.eventTimestamp >= existing.lastEventAt) {
+        existing.senderDisplayName = message.senderDisplayName;
+      }
+      if (message.senderPhoneNumber !== undefined) {
+        existing.senderPhoneNumber = message.senderPhoneNumber;
+      }
+      if (message.senderPhoneNumberNormalized !== undefined) {
+        existing.senderPhoneNumberNormalized = message.senderPhoneNumberNormalized;
+      }
+    }
+    return senders;
+  }
+}
+
+interface FakePrivateWhatsAppCursor {
+  sortValue: string;
+  id: string;
+}
+
+function encodeFakePrivateWhatsAppCursor(sortValue: string, id: string): string {
+  return Buffer.from(JSON.stringify({ sortValue, id })).toString('base64url');
+}
+
+function decodeFakePrivateWhatsAppCursor(
+  cursor: string | undefined
+): FakePrivateWhatsAppCursor | undefined {
+  if (cursor === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      sortValue?: unknown;
+      id?: unknown;
+    };
+    if (typeof parsed.sortValue !== 'string' || typeof parsed.id !== 'string') {
+      return undefined;
+    }
+    return { sortValue: parsed.sortValue, id: parsed.id };
+  } catch {
+    return undefined;
   }
 }
 

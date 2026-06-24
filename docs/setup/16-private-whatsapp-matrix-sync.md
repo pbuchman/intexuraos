@@ -4,13 +4,25 @@ This is the canonical IntexuraOS reference for connecting an external Matrix/mau
 
 ## Endpoint Changes
 
-Created: none in this documentation/tooling PR.
+Created:
 
-Modified: none.
+- `GET /whatsapp/private/account`
+- `PUT /whatsapp/private/account`
+- `DELETE /whatsapp/private/account`
 
-Removed: none.
+Modified:
 
-Unchanged: the private WhatsApp internal endpoints are consumed as documented below.
+- `POST /internal/whatsapp/private/events` now resolves ownership from `sourceAccountId` through `whatsapp_private_accounts`; adapter-provided `userId` is ignored.
+- Public private read endpoints resolve the authenticated user's private account instead of using app-wide owner/source secrets.
+
+Removed:
+
+- App-wide `INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID`
+- App-wide `INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID`
+
+Unchanged:
+
+- Internal agent read endpoints for messages, sender-days, and aggregate rebuild.
 
 ## Deployment Shape
 
@@ -46,9 +58,10 @@ intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com
 The request body must include:
 
 - `sourceAccountId`
-- `userId`
 - `deliveryMode`
 - `events`
+
+`sourceAccountId` is generated per user in `Settings > WhatsApp > Private WhatsApp Mirror`. The adapter may still send a legacy `userId` field, but IntexuraOS ignores it and resolves ownership from `whatsapp_private_accounts`.
 
 Supported `deliveryMode` values:
 
@@ -79,13 +92,22 @@ Never commit:
 
 The adapter should receive Matrix and Google credentials as mounted secret files. The Home Dev deployment documents the current file paths, but the IntexuraOS API contract does not require those exact host paths.
 
+## User Configuration
+
+1. Open `Settings > WhatsApp`.
+2. Connect and verify the assistant WhatsApp phone number.
+3. Enable `Private WhatsApp Mirror`.
+4. Copy the displayed `sourceAccountId` into the Home Dev adapter configuration as `INTEXURAOS_SOURCE_ACCOUNT_ID`.
+5. Keep Matrix tokens, WhatsApp bridge state, `.env`, and Google credential JSON out of Git.
+
 ## Message Flow
 
 1. mautrix-whatsapp receives incoming private WhatsApp messages and mirrors them into Matrix rooms.
 2. The sync adapter polls Matrix `/sync`.
 3. On a first run, it stores the Matrix `next_batch` token and skips historical messages.
 4. On later runs, it maps incoming Matrix message events into private WhatsApp ingest events.
-5. It posts batches to IntexuraOS with OIDC internal auth.
-6. IntexuraOS stores immutable message docs and updates sender/sender-day read models.
+5. It posts batches to IntexuraOS with OIDC internal auth and the per-user `sourceAccountId`.
+6. IntexuraOS resolves `sourceAccountId` to the canonical user id.
+7. IntexuraOS stores immutable message docs and updates sender/sender-day read models.
 
 Backfills should use the same endpoint with `deliveryMode: "backfill"` and deterministic Matrix event ids so duplicate ingest does not double-count aggregates.

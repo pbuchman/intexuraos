@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import {
   createPrivateWhatsAppRepository,
+  PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION,
   PRIVATE_WHATSAPP_CHATS_COLLECTION,
   PRIVATE_WHATSAPP_MESSAGES_COLLECTION,
   PRIVATE_WHATSAPP_SENDERS_COLLECTION,
@@ -62,6 +63,251 @@ describe('privateWhatsAppRepository', () => {
 
   afterEach(() => {
     resetFirestore();
+  });
+
+  it('creates and resolves a per-user private WhatsApp account', async () => {
+    const result = await repository.upsertAccount({
+      userId: 'user-123',
+      phoneNumberNormalized: '48123456789',
+      displayName: '+48123456789',
+      now: '2026-06-22T10:00:00.000Z',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toMatchObject({
+      id: 'user-123',
+      userId: 'user-123',
+      phoneNumberNormalized: '48123456789',
+      displayName: '+48123456789',
+      status: 'active',
+      createdAt: '2026-06-22T10:00:00.000Z',
+      updatedAt: '2026-06-22T10:00:00.000Z',
+      schemaVersion: 1,
+    });
+    expect(result.value.sourceAccountId).toMatch(/^private-wa-[a-f0-9]{24}$/);
+
+    const byUser = await repository.getAccountByUserId('user-123');
+    expect(byUser.ok).toBe(true);
+    if (!byUser.ok) throw new Error(byUser.error.message);
+    expect(byUser.value?.sourceAccountId).toBe(result.value.sourceAccountId);
+
+    const bySource = await repository.getActiveAccountBySourceAccountId(
+      result.value.sourceAccountId
+    );
+    expect(bySource.ok).toBe(true);
+    if (!bySource.ok) throw new Error(bySource.error.message);
+    expect(bySource.value?.userId).toBe('user-123');
+  });
+
+  it('returns null when a private WhatsApp account does not exist', async () => {
+    const result = await repository.getAccountByUserId('missing-user');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toBeNull();
+  });
+
+  it('projects sparse and legacy private WhatsApp account documents safely', async () => {
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('legacy-user').set({});
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('disabled-user').set({
+      userId: 'disabled-user',
+      sourceAccountId: 'legacy-private-source',
+      phoneNumberNormalized: '48987654321',
+      displayName: '+48987654321',
+      status: 'disabled',
+      createdAt: '2026-06-21T10:00:00.000Z',
+      updatedAt: '2026-06-22T10:00:00.000Z',
+      lastIngestAt: '2026-06-22T10:01:00.000Z',
+      lastEventAt: '2026-06-22T10:00:30.000Z',
+      messageCount: 7,
+      senderCount: 3,
+    });
+
+    const sparse = await repository.getAccountByUserId('legacy-user');
+    const disabled = await repository.getAccountByUserId('disabled-user');
+
+    expect(sparse.ok).toBe(true);
+    expect(disabled.ok).toBe(true);
+    if (!sparse.ok) throw new Error(sparse.error.message);
+    if (!disabled.ok) throw new Error(disabled.error.message);
+    expect(sparse.value).toMatchObject({
+      id: 'legacy-user',
+      userId: 'legacy-user',
+      phoneNumberNormalized: '',
+      displayName: '',
+      status: 'active',
+      createdAt: '',
+      updatedAt: '',
+      schemaVersion: 1,
+    });
+    expect(sparse.value?.sourceAccountId).toMatch(/^private-wa-[a-f0-9]{24}$/);
+    expect(disabled.value).toMatchObject({
+      id: 'disabled-user',
+      userId: 'disabled-user',
+      sourceAccountId: 'legacy-private-source',
+      phoneNumberNormalized: '48987654321',
+      displayName: '+48987654321',
+      status: 'disabled',
+      createdAt: '2026-06-21T10:00:00.000Z',
+      updatedAt: '2026-06-22T10:00:00.000Z',
+      lastIngestAt: '2026-06-22T10:01:00.000Z',
+      lastEventAt: '2026-06-22T10:00:30.000Z',
+      messageCount: 7,
+      senderCount: 3,
+      schemaVersion: 1,
+    });
+  });
+
+  it('rejects duplicate active private WhatsApp source account ids', async () => {
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('user-a').set({
+      userId: 'user-a',
+      sourceAccountId: 'shared-private-source',
+      phoneNumberNormalized: '48111111111',
+      displayName: '+48111111111',
+      status: 'active',
+      createdAt: '2026-06-22T10:00:00.000Z',
+      updatedAt: '2026-06-22T10:00:00.000Z',
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('user-b').set({
+      userId: 'user-b',
+      sourceAccountId: 'shared-private-source',
+      phoneNumberNormalized: '48222222222',
+      displayName: '+48222222222',
+      status: 'active',
+      createdAt: '2026-06-22T10:00:00.000Z',
+      updatedAt: '2026-06-22T10:00:00.000Z',
+    });
+
+    const result = await repository.getActiveAccountBySourceAccountId('shared-private-source');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected duplicate source error');
+    expect(result.error.code).toBe('PERSISTENCE_ERROR');
+  });
+
+  it('preserves source account id when updating an existing private WhatsApp account', async () => {
+    const first = await repository.upsertAccount({
+      userId: 'user-123',
+      phoneNumberNormalized: '48123456789',
+      now: '2026-06-22T10:00:00.000Z',
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error.message);
+
+    const second = await repository.upsertAccount({
+      userId: 'user-123',
+      phoneNumberNormalized: '48987654321',
+      displayName: '+48987654321',
+      now: '2026-06-23T10:00:00.000Z',
+    });
+
+    expect(second.ok).toBe(true);
+    if (!second.ok) throw new Error(second.error.message);
+    expect(second.value.sourceAccountId).toBe(first.value.sourceAccountId);
+    expect(second.value).toMatchObject({
+      phoneNumberNormalized: '48987654321',
+      displayName: '+48987654321',
+      createdAt: '2026-06-22T10:00:00.000Z',
+      updatedAt: '2026-06-23T10:00:00.000Z',
+      status: 'active',
+    });
+  });
+
+  it('disables private WhatsApp accounts and excludes them from source resolution', async () => {
+    const created = await repository.upsertAccount({
+      userId: 'user-123',
+      phoneNumberNormalized: '48123456789',
+      now: '2026-06-22T10:00:00.000Z',
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error(created.error.message);
+
+    const disabled = await repository.disableAccount({
+      userId: 'user-123',
+      now: '2026-06-23T10:00:00.000Z',
+    });
+
+    expect(disabled.ok).toBe(true);
+    if (!disabled.ok) throw new Error(disabled.error.message);
+    expect(disabled.value.status).toBe('disabled');
+    expect(disabled.value.updatedAt).toBe('2026-06-23T10:00:00.000Z');
+
+    const bySource = await repository.getActiveAccountBySourceAccountId(
+      created.value.sourceAccountId
+    );
+    expect(bySource.ok).toBe(true);
+    if (!bySource.ok) throw new Error(bySource.error.message);
+    expect(bySource.value).toBeNull();
+  });
+
+  it('returns not found when disabling a missing private WhatsApp account', async () => {
+    const result = await repository.disableAccount({
+      userId: 'missing-user',
+      now: '2026-06-23T10:00:00.000Z',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected not found');
+    expect(result.error.code).toBe('NOT_FOUND');
+  });
+
+  it('updates private WhatsApp account ingest stats only for first-write messages', async () => {
+    const accountResult = await repository.upsertAccount({
+      userId: 'user-123',
+      phoneNumberNormalized: '48123456789',
+      now: '2026-06-22T10:00:00.000Z',
+    });
+    expect(accountResult.ok).toBe(true);
+    if (!accountResult.ok) throw new Error(accountResult.error.message);
+    const input = createStoreInput({
+      sourceAccountId: accountResult.value.sourceAccountId,
+    });
+
+    const first = await repository.storeIncomingMessage(input);
+    const duplicate = await repository.storeIncomingMessage(input);
+    const secondSameSender = await repository.storeIncomingMessage(
+      createStoreInput({
+        sourceAccountId: accountResult.value.sourceAccountId,
+        message: {
+          ...input.message,
+          matrixEventId: '$event-2',
+          text: 'second same sender',
+          eventTimestamp: '2026-06-22T11:00:00.000Z',
+        },
+      })
+    );
+
+    expect(first.ok).toBe(true);
+    expect(duplicate.ok).toBe(true);
+    expect(secondSameSender.ok).toBe(true);
+    const account = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION)
+      ?.get('user-123');
+    expect(account).toMatchObject({
+      sourceAccountId: accountResult.value.sourceAccountId,
+      lastEventAt: '2026-06-22T11:00:00.000Z',
+      messageCount: 2,
+      senderCount: 1,
+      schemaVersion: 1,
+    });
+
+    const updated = await repository.upsertAccount({
+      userId: 'user-123',
+      phoneNumberNormalized: '48987654321',
+      displayName: '+48987654321',
+      now: '2026-06-23T10:00:00.000Z',
+    });
+
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) throw new Error(updated.error.message);
+    expect(updated.value).toMatchObject({
+      sourceAccountId: accountResult.value.sourceAccountId,
+      lastEventAt: '2026-06-22T11:00:00.000Z',
+      messageCount: 2,
+      senderCount: 1,
+    });
   });
 
   it('stores a chat and message with deterministic ids', async () => {
@@ -717,6 +963,87 @@ describe('privateWhatsAppRepository', () => {
     if (!zeroLimitResult.ok) throw new Error(zeroLimitResult.error.message);
     expect(zeroLimitResult.value.senderDays).toEqual([]);
     expect(zeroLimitResult.value.nextCursor).toBeUndefined();
+  });
+
+  it('queries private WhatsApp senders newest-first with a stable cursor', async () => {
+    const olderResult = await repository.storeIncomingMessage(createStoreInput());
+    const newerResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-newer-sender',
+          matrixSenderId: '@bob:matrix.example',
+          senderDisplayName: 'Bob',
+          senderPhoneNumber: '+48987654321',
+          senderPhoneNumberNormalized: '48987654321',
+          senderKey: 'phone:+48987654321',
+          eventTimestamp: '2026-06-23T09:30:00.000Z',
+          eventDayKey: '2026-06-23',
+        },
+      })
+    );
+    const sameTimestampResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-same-timestamp',
+          matrixSenderId: '@cora:matrix.example',
+          senderDisplayName: 'Cora',
+          senderPhoneNumber: '+48777111222',
+          senderPhoneNumberNormalized: '48777111222',
+          senderKey: 'phone:+48777111222',
+          eventTimestamp: '2026-06-23T09:30:00.000Z',
+          eventDayKey: '2026-06-23',
+        },
+      })
+    );
+    expect(olderResult.ok).toBe(true);
+    expect(newerResult.ok).toBe(true);
+    expect(sameTimestampResult.ok).toBe(true);
+
+    const firstPageResult = await repository.findSenders({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 2,
+    });
+
+    expect(firstPageResult.ok).toBe(true);
+    if (!firstPageResult.ok) throw new Error(firstPageResult.error.message);
+    expect(firstPageResult.value.senders).toHaveLength(2);
+    expect(firstPageResult.value.senders.map((sender) => sender.lastEventAt)).toEqual([
+      '2026-06-23T09:30:00.000Z',
+      '2026-06-23T09:30:00.000Z',
+    ]);
+    expect(firstPageResult.value.nextCursor).toEqual(expect.any(String));
+
+    const cursor = firstPageResult.value.nextCursor;
+    if (cursor === undefined) throw new Error('Expected sender cursor');
+    const secondPageResult = await repository.findSenders({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 10,
+      cursor,
+    });
+
+    expect(secondPageResult.ok).toBe(true);
+    if (!secondPageResult.ok) throw new Error(secondPageResult.error.message);
+    expect(secondPageResult.value.senders.map((sender) => sender.senderKey)).toEqual([
+      'phone:+48123456789',
+    ]);
+    expect(secondPageResult.value.nextCursor).toBeUndefined();
+  });
+
+  it('does not generate a sender cursor for an empty sender page', async () => {
+    const storedResult = await repository.storeIncomingMessage(createStoreInput());
+    expect(storedResult.ok).toBe(true);
+
+    const result = await repository.findSenders({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 0,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.senders).toEqual([]);
+    expect(result.value.nextCursor).toBeUndefined();
   });
 
   it('rebuilds sparse legacy messages with range filters and fallback metadata', async () => {

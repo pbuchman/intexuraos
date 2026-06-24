@@ -24,8 +24,10 @@ import { IntexuraOSError } from '@intexuraos/common-core';
  */
 type DocumentStore = Map<string, Map<string, DocumentData>>;
 
-function isDocumentIdField(field: unknown): field is FieldPath {
-  return field instanceof FieldPath && field.isEqual(FieldPath.documentId());
+function isDocumentIdField(field: unknown): field is FieldPath | '__name__' {
+  return (
+    field === '__name__' || (field instanceof FieldPath && field.isEqual(FieldPath.documentId()))
+  );
 }
 
 /**
@@ -311,7 +313,7 @@ class FakeQuery {
   private filters: { field: string; op: string; value: unknown }[] = [];
   private ordering: { field: string | FieldPath; direction: 'asc' | 'desc' }[] = [];
   private limitCount: number | null = null;
-  private startAfterValue: unknown = null;
+  private startAfterValues: unknown[] | null = null;
   private countRequested = false;
 
   constructor(
@@ -338,9 +340,9 @@ class FakeQuery {
     return query;
   }
 
-  startAfter(value: unknown): FakeQuery {
+  startAfter(...values: unknown[]): FakeQuery {
     const query = this.clone();
-    query.startAfterValue = value;
+    query.startAfterValues = values;
     return query;
   }
 
@@ -454,21 +456,20 @@ class FakeQuery {
     }
 
     // Apply startAfter
-    if (this.startAfterValue !== null && this.ordering.length > 0) {
-      const orderField = this.ordering[0]?.field;
-      if (orderField !== undefined) {
-        const startValue = this.resolveStartAfterValue(orderField);
-        if (startValue === undefined) {
-          return this.countRequested
-            ? Promise.resolve(new FakeQuerySnapshotWithCount(docs))
-            : Promise.resolve(new FakeQuerySnapshot(docs));
-        }
-        const startIndex = docs.findIndex((doc) => {
-          return this.getOrderedValue(doc, orderField) === startValue;
+    if (this.startAfterValues !== null && this.ordering.length > 0) {
+      const startValues = this.resolveStartAfterValues();
+      if (startValues === undefined) {
+        return this.countRequested
+          ? Promise.resolve(new FakeQuerySnapshotWithCount(docs))
+          : Promise.resolve(new FakeQuerySnapshot(docs));
+      }
+      const startIndex = docs.findIndex((doc) => {
+        return this.ordering.every((order, index) => {
+          return this.getOrderedValue(doc, order.field) === startValues[index];
         });
-        if (startIndex >= 0) {
-          docs = docs.slice(startIndex + 1);
-        }
+      });
+      if (startIndex >= 0) {
+        docs = docs.slice(startIndex + 1);
       }
     }
 
@@ -489,7 +490,7 @@ class FakeQuery {
     query.filters = [...this.filters];
     query.ordering = [...this.ordering];
     query.limitCount = this.limitCount;
-    query.startAfterValue = this.startAfterValue;
+    query.startAfterValues = this.startAfterValues === null ? null : [...this.startAfterValues];
     query.countRequested = this.countRequested;
     return query;
   }
@@ -503,10 +504,11 @@ class FakeQuery {
     return data?.[field];
   }
 
-  private resolveStartAfterValue(field: string | FieldPath): unknown {
-    const startAfterValue = this.startAfterValue;
+  private resolveStartAfterValues(): unknown[] | undefined {
+    const startAfterValue = this.startAfterValues?.[0];
     if (
       startAfterValue !== null &&
+      startAfterValue !== undefined &&
       typeof startAfterValue === 'object' &&
       'data' in startAfterValue &&
       typeof startAfterValue.data === 'function'
@@ -515,14 +517,18 @@ class FakeQuery {
         id?: unknown;
         data: () => Record<string, unknown> | undefined;
       };
-      if (isDocumentIdField(field)) {
-        return snapshotLike.id;
-      }
+      const data = snapshotLike.data();
+      if (data === undefined) return undefined;
 
-      return snapshotLike.data()?.[field];
+      return this.ordering.map((order) => {
+        if (isDocumentIdField(order.field)) {
+          return snapshotLike.id;
+        }
+        return data[order.field];
+      });
     }
 
-    return this.startAfterValue;
+    return this.startAfterValues ?? undefined;
   }
 }
 

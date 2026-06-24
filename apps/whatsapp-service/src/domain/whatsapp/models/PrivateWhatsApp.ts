@@ -6,6 +6,7 @@ export type PrivateWhatsAppDeliveryMode = 'live' | 'backfill';
 export type PrivateWhatsAppChatType = 'direct' | 'group' | 'unknown';
 export type PrivateWhatsAppMessageDirection = 'incoming';
 export type PrivateWhatsAppSummaryStatus = 'not_started' | 'completed' | 'failed';
+export type PrivateWhatsAppAccountStatus = 'active' | 'disabled';
 export type PrivateWhatsAppMessageType =
   | 'text'
   | 'image'
@@ -57,6 +58,34 @@ export interface StorePrivateWhatsAppMessageInput {
   receivedAt: string;
   chat: PrivateWhatsAppChatInput;
   message: PrivateWhatsAppMessageInput;
+}
+
+export interface PrivateWhatsAppAccount {
+  id: string;
+  userId: string;
+  sourceAccountId: string;
+  phoneNumberNormalized: string;
+  displayName: string;
+  status: PrivateWhatsAppAccountStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastIngestAt?: string;
+  lastEventAt?: string;
+  messageCount?: number;
+  senderCount?: number;
+  schemaVersion: 1;
+}
+
+export interface UpsertPrivateWhatsAppAccountInput {
+  userId: string;
+  phoneNumberNormalized: string;
+  displayName?: string;
+  now: string;
+}
+
+export interface DisablePrivateWhatsAppAccountInput {
+  userId: string;
+  now: string;
 }
 
 export interface PrivateWhatsAppChat {
@@ -172,6 +201,17 @@ export interface PrivateWhatsAppMessageQueryInput {
 
 export interface PrivateWhatsAppMessageQueryResult {
   messages: PrivateWhatsAppMessage[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppSenderQueryInput {
+  sourceAccountId: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface PrivateWhatsAppSenderQueryResult {
+  senders: PrivateWhatsAppSender[];
   nextCursor?: string;
 }
 

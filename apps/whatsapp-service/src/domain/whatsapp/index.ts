@@ -39,6 +39,9 @@ export type {
 } from './models/PhoneVerification.js';
 
 export type {
+  DisablePrivateWhatsAppAccountInput,
+  PrivateWhatsAppAccount,
+  PrivateWhatsAppAccountStatus,
   PrivateWhatsAppChat,
   PrivateWhatsAppChatInput,
   PrivateWhatsAppChatType,
@@ -56,11 +59,14 @@ export type {
   PrivateWhatsAppMessageInput,
   PrivateWhatsAppMessageType,
   PrivateWhatsAppSender,
+  PrivateWhatsAppSenderQueryInput,
+  PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
   PrivateWhatsAppSummaryStatus,
   StorePrivateWhatsAppMessageInput,
+  UpsertPrivateWhatsAppAccountInput,
 } from './models/PrivateWhatsApp.js';
 
 // Ports

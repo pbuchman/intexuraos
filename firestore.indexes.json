@@ -1922,6 +1922,50 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_senders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastEventAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "senderKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventDayKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventTimestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

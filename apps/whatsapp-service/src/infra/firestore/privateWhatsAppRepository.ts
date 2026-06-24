@@ -3,6 +3,8 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { FieldPath, getFirestore, type Query } from '@intexuraos/infra-firestore';
 import type { WhatsAppError } from '../../domain/whatsapp/index.js';
 import type {
+  DisablePrivateWhatsAppAccountInput,
+  PrivateWhatsAppAccount,
   PrivateWhatsAppChat,
   PrivateWhatsAppAggregateRebuildInput,
   PrivateWhatsAppAggregateRebuildResult,
@@ -11,17 +13,22 @@ import type {
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
   PrivateWhatsAppSender,
+  PrivateWhatsAppSenderQueryInput,
+  PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
   StorePrivateWhatsAppMessageInput,
+  UpsertPrivateWhatsAppAccountInput,
 } from '../../domain/whatsapp/index.js';
 import type { PrivateWhatsAppRepository } from '../../domain/whatsapp/index.js';
 
+export const PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION = 'whatsapp_private_accounts';
 export const PRIVATE_WHATSAPP_CHATS_COLLECTION = 'whatsapp_private_chats';
 export const PRIVATE_WHATSAPP_MESSAGES_COLLECTION = 'whatsapp_private_messages';
 export const PRIVATE_WHATSAPP_SENDERS_COLLECTION = 'whatsapp_private_senders';
 export const PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION = 'whatsapp_private_sender_days';
+const PRIVATE_WHATSAPP_ACCOUNT_SCHEMA_VERSION = 1;
 const PRIVATE_WHATSAPP_SCHEMA_VERSION = 2;
 const PRIVATE_WHATSAPP_EVENT_TIME_ZONE = 'Europe/Warsaw';
 const PRIVATE_WHATSAPP_MESSAGE_TYPES = new Set<PrivateWhatsAppMessage['messageType']>([
@@ -66,12 +73,212 @@ function createPrivateWhatsAppId(sourceAccountId: string, matrixId: string): str
   return createHash('sha256').update(`${sourceAccountId}\0${matrixId}`).digest('hex');
 }
 
+function createPrivateWhatsAppSourceAccountId(userId: string): string {
+  const hash = createHash('sha256').update(`private-whatsapp\0${userId}`).digest('hex');
+  return `private-wa-${hash.slice(0, 24)}`;
+}
+
 export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
   return {
+    getAccountByUserId,
+    getActiveAccountBySourceAccountId,
+    upsertAccount,
+    disableAccount,
     storeIncomingMessage,
     findMessages,
+    findSenders,
     findSenderDays,
     rebuildAggregates,
+  };
+}
+
+async function getAccountByUserId(
+  userId: string
+): Promise<Result<PrivateWhatsAppAccount | null, WhatsAppError>> {
+  try {
+    const doc = await getFirestore().collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(userId).get();
+    if (!doc.exists) {
+      return ok(null);
+    }
+    return ok(toPrivateWhatsAppAccount(doc.id, doc.data()));
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to load private WhatsApp account: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function getActiveAccountBySourceAccountId(
+  sourceAccountId: string
+): Promise<Result<PrivateWhatsAppAccount | null, WhatsAppError>> {
+  try {
+    const snapshot = await getFirestore()
+      .collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION)
+      .where('sourceAccountId', '==', sourceAccountId)
+      .where('status', '==', 'active')
+      .limit(2)
+      .get();
+    if (snapshot.docs.length === 0) {
+      return ok(null);
+    }
+    if (snapshot.docs.length > 1) {
+      return err({
+        code: 'PERSISTENCE_ERROR',
+        message: 'Multiple active private WhatsApp accounts share the same source account id',
+      });
+    }
+    const doc = snapshot.docs[0] as (typeof snapshot.docs)[number];
+    return ok(toPrivateWhatsAppAccount(doc.id, doc.data()));
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to resolve private WhatsApp account: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function upsertAccount(
+  input: UpsertPrivateWhatsAppAccountInput
+): Promise<Result<PrivateWhatsAppAccount, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    const accountRef = db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(input.userId);
+    const account = await db.runTransaction(async (transaction) => {
+      const existingDoc = await transaction.get(accountRef);
+      const existingAccount = existingDoc.exists
+        ? toPrivateWhatsAppAccount(existingDoc.id, existingDoc.data())
+        : undefined;
+      const nextAccount = buildPrivateWhatsAppAccount(input, existingAccount);
+      transaction.set(accountRef, nextAccount);
+      return nextAccount;
+    });
+    return ok(account);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to save private WhatsApp account: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function disableAccount(
+  input: DisablePrivateWhatsAppAccountInput
+): Promise<Result<PrivateWhatsAppAccount, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    const accountRef = db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(input.userId);
+    const outcome = await db.runTransaction(
+      async (
+        transaction
+      ): Promise<{ status: 'not_found' } | { status: 'ok'; account: PrivateWhatsAppAccount }> => {
+        const existingDoc = await transaction.get(accountRef);
+        if (!existingDoc.exists) {
+          return { status: 'not_found' };
+        }
+        const existingAccount = toPrivateWhatsAppAccount(existingDoc.id, existingDoc.data());
+        const account: PrivateWhatsAppAccount = {
+          ...existingAccount,
+          status: 'disabled',
+          updatedAt: input.now,
+          schemaVersion: PRIVATE_WHATSAPP_ACCOUNT_SCHEMA_VERSION,
+        };
+        transaction.set(accountRef, account);
+        return { status: 'ok', account };
+      }
+    );
+    if (outcome.status === 'not_found') {
+      return err({ code: 'NOT_FOUND', message: 'Private WhatsApp account not found' });
+    }
+    return ok(outcome.account);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to disable private WhatsApp account: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+function toPrivateWhatsAppAccount(
+  id: string,
+  data: Record<string, unknown> | undefined
+): PrivateWhatsAppAccount {
+  const account = data as Partial<PrivateWhatsAppAccount> | undefined;
+  const projected: PrivateWhatsAppAccount = {
+    id,
+    userId: typeof account?.userId === 'string' ? account.userId : id,
+    sourceAccountId:
+      typeof account?.sourceAccountId === 'string'
+        ? account.sourceAccountId
+        : createPrivateWhatsAppSourceAccountId(id),
+    phoneNumberNormalized:
+      typeof account?.phoneNumberNormalized === 'string' ? account.phoneNumberNormalized : '',
+    displayName: typeof account?.displayName === 'string' ? account.displayName : '',
+    status: account?.status === 'disabled' ? 'disabled' : 'active',
+    createdAt: typeof account?.createdAt === 'string' ? account.createdAt : '',
+    updatedAt: typeof account?.updatedAt === 'string' ? account.updatedAt : '',
+    schemaVersion: PRIVATE_WHATSAPP_ACCOUNT_SCHEMA_VERSION,
+  };
+  if (typeof account?.lastIngestAt === 'string') {
+    projected.lastIngestAt = account.lastIngestAt;
+  }
+  if (typeof account?.lastEventAt === 'string') {
+    projected.lastEventAt = account.lastEventAt;
+  }
+  if (typeof account?.messageCount === 'number') {
+    projected.messageCount = account.messageCount;
+  }
+  if (typeof account?.senderCount === 'number') {
+    projected.senderCount = account.senderCount;
+  }
+  return projected;
+}
+
+function buildPrivateWhatsAppAccount(
+  input: UpsertPrivateWhatsAppAccountInput,
+  existingAccount: PrivateWhatsAppAccount | undefined
+): PrivateWhatsAppAccount {
+  const account: PrivateWhatsAppAccount = {
+    id: input.userId,
+    userId: input.userId,
+    sourceAccountId:
+      existingAccount?.sourceAccountId ?? createPrivateWhatsAppSourceAccountId(input.userId),
+    phoneNumberNormalized: input.phoneNumberNormalized,
+    displayName: input.displayName ?? existingAccount?.displayName ?? `+${input.phoneNumberNormalized}`,
+    status: 'active',
+    createdAt: existingAccount?.createdAt ?? input.now,
+    updatedAt: input.now,
+    schemaVersion: PRIVATE_WHATSAPP_ACCOUNT_SCHEMA_VERSION,
+  };
+  if (existingAccount?.lastIngestAt !== undefined) {
+    account.lastIngestAt = existingAccount.lastIngestAt;
+  }
+  if (existingAccount?.lastEventAt !== undefined) {
+    account.lastEventAt = existingAccount.lastEventAt;
+  }
+  if (existingAccount?.messageCount !== undefined) {
+    account.messageCount = existingAccount.messageCount;
+  }
+  if (existingAccount?.senderCount !== undefined) {
+    account.senderCount = existingAccount.senderCount;
+  }
+  return account;
+}
+
+function buildAccountIngestFields(
+  input: StorePrivateWhatsAppMessageInput,
+  existingAccount: PrivateWhatsAppAccount,
+  senderAlreadyExists: boolean
+): PrivateWhatsAppAccount {
+  const now = new Date().toISOString();
+  return {
+    ...existingAccount,
+    lastIngestAt: now,
+    lastEventAt: newestTimestamp(existingAccount.lastEventAt, input.message.eventTimestamp),
+    messageCount: (existingAccount.messageCount ?? 0) + 1,
+    senderCount: (existingAccount.senderCount ?? 0) + (senderAlreadyExists ? 0 : 1),
+    updatedAt: now,
+    schemaVersion: PRIVATE_WHATSAPP_ACCOUNT_SCHEMA_VERSION,
   };
 }
 
@@ -97,6 +304,7 @@ async function storeIncomingMessage(
     const messageRef = db.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId);
     const senderRef = db.collection(PRIVATE_WHATSAPP_SENDERS_COLLECTION).doc(senderId);
     const senderDayRef = db.collection(PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION).doc(senderDayId);
+    const accountRef = db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(input.userId);
 
     const outcome = await db.runTransaction(async (transaction) => {
       const existingMessage = await transaction.get(messageRef);
@@ -112,6 +320,7 @@ async function storeIncomingMessage(
       const existingChat = await transaction.get(chatRef);
       const existingSender = await transaction.get(senderRef);
       const existingSenderDay = await transaction.get(senderDayRef);
+      const existingAccount = await transaction.get(accountRef);
       const chat = buildChat(input, chatId, existingChat.data() as PrivateWhatsAppChat | undefined);
       const message = buildMessage(input, chatId, messageId);
       const sender = buildSender(
@@ -131,6 +340,17 @@ async function storeIncomingMessage(
       transaction.set(messageRef, message);
       transaction.set(senderRef, sender);
       transaction.set(senderDayRef, senderDay);
+      if (existingAccount.exists) {
+        transaction.set(
+          accountRef,
+          buildAccountIngestFields(
+            input,
+            existingAccount.data() as PrivateWhatsAppAccount,
+            existingSender.exists
+          ),
+          { merge: true }
+        );
+      }
 
       return {
         outcome: 'created' as const,
@@ -191,6 +411,41 @@ async function findMessages(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to query private WhatsApp messages: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function findSenders(
+  input: PrivateWhatsAppSenderQueryInput
+): Promise<Result<PrivateWhatsAppSenderQueryResult, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    let query: Query = db
+      .collection(PRIVATE_WHATSAPP_SENDERS_COLLECTION)
+      .where('sourceAccountId', '==', input.sourceAccountId)
+      .orderBy('lastEventAt', 'desc')
+      .orderBy(FieldPath.documentId(), 'desc');
+
+    const cursor = decodeCursor(input.cursor);
+    if (cursor !== undefined) {
+      query = query.startAfter(cursor.sortValue, cursor.id);
+    }
+
+    const snapshot = await query.limit(input.limit + 1).get();
+    const docs = snapshot.docs.slice(0, input.limit);
+    const senders = docs.map((doc) => doc.data() as PrivateWhatsAppSender);
+    const result: PrivateWhatsAppSenderQueryResult = { senders };
+    if (snapshot.docs.length > input.limit) {
+      const lastSender = senders[senders.length - 1];
+      if (lastSender !== undefined) {
+        result.nextCursor = encodeCursor(lastSender.lastEventAt, lastSender.id);
+      }
+    }
+    return ok(result);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to query private WhatsApp senders: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }

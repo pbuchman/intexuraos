@@ -38,6 +38,10 @@
       "owner": "whatsapp-service",
       "description": "Phone number verification codes with TTL-based expiry for WhatsApp connection"
     },
+    "whatsapp_private_accounts": {
+      "owner": "whatsapp-service",
+      "description": "Per-user private WhatsApp mirror accounts mapping external Matrix source account IDs to canonical IntexuraOS users."
+    },
     "whatsapp_private_chats": {
       "owner": "whatsapp-service",
       "description": "Private WhatsApp chat metadata synchronized from Matrix/mautrix bridge events. Separate from WhatsApp Business API collections."
