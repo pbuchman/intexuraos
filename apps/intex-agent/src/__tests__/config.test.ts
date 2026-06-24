@@ -13,6 +13,9 @@ describe('loadConfig', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret';
     process.env['INTEXURAOS_NOTES_AGENT_URL'] = 'http://notes-agent.test';
     process.env['INTEXURAOS_CALENDAR_AGENT_URL'] = 'http://calendar-agent.test';
+    process.env['INTEXURAOS_RESEARCH_AGENT_URL'] = 'http://research-agent.test';
+    process.env['INTEXURAOS_BOOKMARKS_AGENT_URL'] = 'http://bookmarks-agent.test';
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'http://code-agent.test';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
     process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'openrouter-key';
     process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] = 'whatsapp-send';
@@ -25,6 +28,9 @@ describe('loadConfig', () => {
       internalAuthToken: 'secret',
       notesAgentUrl: 'http://notes-agent.test',
       calendarAgentUrl: 'http://calendar-agent.test',
+      researchAgentUrl: 'http://research-agent.test',
+      bookmarksAgentUrl: 'http://bookmarks-agent.test',
+      codeAgentUrl: 'http://code-agent.test',
       llmUsageServiceUrl: 'http://llm-usage.test',
       openRouterAppApiKey: 'openrouter-key',
       whatsappSendTopic: 'whatsapp-send',
@@ -41,6 +47,9 @@ describe('loadConfig', () => {
       internalAuthToken: '',
       notesAgentUrl: '',
       calendarAgentUrl: '',
+      researchAgentUrl: '',
+      bookmarksAgentUrl: '',
+      codeAgentUrl: '',
       llmUsageServiceUrl: '',
       openRouterAppApiKey: '',
       whatsappSendTopic: '',
@@ -57,6 +66,9 @@ function clearConfigEnv(): void {
   delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   delete process.env['INTEXURAOS_NOTES_AGENT_URL'];
   delete process.env['INTEXURAOS_CALENDAR_AGENT_URL'];
+  delete process.env['INTEXURAOS_RESEARCH_AGENT_URL'];
+  delete process.env['INTEXURAOS_BOOKMARKS_AGENT_URL'];
+  delete process.env['INTEXURAOS_CODE_AGENT_URL'];
   delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
   delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
   delete process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'];

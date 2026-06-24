@@ -8,7 +8,13 @@ describe('createIntexAgentToolDefinitions', () => {
   it('defines exactly the supported tools', () => {
     const tools = createIntexAgentToolDefinitions(createExecutor());
 
-    expect(tools.map((tool) => tool.name)).toEqual(['create_note', 'create_calendar_event']);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      'create_note',
+      'create_calendar_event',
+      'create_research',
+      'create_link',
+      'create_code_task',
+    ]);
   });
 
   it('describes when to create a note', () => {
@@ -39,7 +45,44 @@ describe('createIntexAgentToolDefinitions', () => {
 
     expect(toolNames).not.toContain('book_uber');
     expect(toolNames).not.toContain('create_reminder');
-    expect(toolNames).not.toContain('research');
+    expect(toolNames).not.toContain('send_email');
+  });
+
+  it('describes research creation', () => {
+    const researchTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_research'
+    );
+
+    expect(researchTool?.description).toContain('research');
+    expect(researchTool?.description).toContain('draft');
+    expect(researchTool?.parameters['required']).toEqual(['title', 'prompt']);
+  });
+
+  it('describes link creation', () => {
+    const linkTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_link'
+    );
+
+    expect(linkTool?.description).toContain('link');
+    expect(linkTool?.description).toContain('bookmark');
+    expect(linkTool?.parameters['required']).toEqual(['url']);
+  });
+
+  it('describes code task creation and task mode semantics', () => {
+    const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_code_task'
+    );
+
+    expect(codeTaskTool?.description).toContain('code');
+    expect(codeTaskTool?.description).toContain('planning');
+    expect(codeTaskTool?.description).toContain('execution');
+    expect(codeTaskTool?.parameters['required']).toEqual(['prompt']);
+    expect(codeTaskTool?.parameters['properties']).toMatchObject({
+      taskMode: {
+        type: 'string',
+        enum: ['planning', 'execution'],
+      },
+    });
   });
 
   it('delegates note execution to the injected executor', async () => {
@@ -160,8 +203,135 @@ describe('createIntexAgentToolDefinitions', () => {
     ]);
   });
 
+  it('delegates research execution to the injected executor', async () => {
+    const executor = createExecutor();
+    const researchTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'create_research'
+    );
+
+    await expect(
+      researchTool?.run({
+        title: 'GPU pricing',
+        prompt: 'Research current GPU cloud pricing.',
+        originalMessage: 'Please research current GPU cloud pricing.',
+        sourceMessageIds: ['wamid-research'],
+      })
+    ).resolves.toBe('research-created');
+    expect(executor.researchArgs).toEqual([
+      {
+        title: 'GPU pricing',
+        prompt: 'Research current GPU cloud pricing.',
+        originalMessage: 'Please research current GPU cloud pricing.',
+        sourceMessageIds: ['wamid-research'],
+      },
+    ]);
+  });
+
+  it('delegates minimal research arguments without optional metadata', async () => {
+    const executor = createExecutor();
+    const researchTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'create_research'
+    );
+
+    await expect(
+      researchTool?.run({
+        title: 'GPU pricing',
+        prompt: 'Research current GPU cloud pricing.',
+      })
+    ).resolves.toBe('research-created');
+    expect(executor.researchArgs).toEqual([
+      {
+        title: 'GPU pricing',
+        prompt: 'Research current GPU cloud pricing.',
+      },
+    ]);
+  });
+
+  it('delegates link execution to the injected executor', async () => {
+    const executor = createExecutor();
+    const linkTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'create_link'
+    );
+
+    await expect(
+      linkTool?.run({
+        url: 'https://example.com/post',
+        title: 'Example post',
+        description: 'A useful post',
+        tags: ['reading'],
+        sourceMessageIds: ['wamid-link'],
+      })
+    ).resolves.toBe('link-created');
+    expect(executor.linkArgs).toEqual([
+      {
+        url: 'https://example.com/post',
+        title: 'Example post',
+        description: 'A useful post',
+        tags: ['reading'],
+        sourceMessageIds: ['wamid-link'],
+      },
+    ]);
+  });
+
+  it('delegates minimal link arguments without optional metadata', async () => {
+    const executor = createExecutor();
+    const linkTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'create_link'
+    );
+
+    await expect(
+      linkTool?.run({
+        url: 'https://example.com/post',
+      })
+    ).resolves.toBe('link-created');
+    expect(executor.linkArgs).toEqual([
+      {
+        url: 'https://example.com/post',
+      },
+    ]);
+  });
+
+  it('delegates code task execution to the injected executor with explicit execution mode', async () => {
+    const executor = createExecutor();
+    const codeTaskTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'create_code_task'
+    );
+
+    await expect(
+      codeTaskTool?.run({
+        prompt: 'Implement the new import flow.',
+        workerType: 'fullstack',
+        linearIssueId: 'LIN-123',
+        taskMode: 'execution',
+      })
+    ).resolves.toBe('code-task-created');
+    expect(executor.codeTaskArgs).toEqual([
+      {
+        prompt: 'Implement the new import flow.',
+        workerType: 'fullstack',
+        linearIssueId: 'LIN-123',
+        taskMode: 'execution',
+      },
+    ]);
+  });
+
+  it('omits code task mode by default so the executor can create planning tasks', async () => {
+    const executor = createExecutor();
+    const codeTaskTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'create_code_task'
+    );
+
+    await expect(codeTaskTool?.run({ prompt: 'Plan the new import flow.' })).resolves.toBe(
+      'code-task-created'
+    );
+    expect(executor.codeTaskArgs).toEqual([{ prompt: 'Plan the new import flow.' }]);
+  });
+
   it('rejects invalid required and optional tool arguments', async () => {
     const [noteTool, calendarTool] = createIntexAgentToolDefinitions(createExecutor());
+    const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_code_task'
+    );
 
     await expect(noteTool?.run({ content: 123 })).rejects.toThrow(
       'Tool argument content must be a string'
@@ -177,16 +347,25 @@ describe('createIntexAgentToolDefinitions', () => {
         timeZone: 123,
       })
     ).rejects.toThrow('Tool argument timeZone must be a string');
+    await expect(
+      codeTaskTool?.run({ prompt: 'Implement this', taskMode: 'fast' })
+    ).rejects.toThrow('Tool argument taskMode must be one of: planning, execution');
   });
 });
 
 function createExecutor(): IntexAgentToolExecutor & {
   noteArgs: unknown[];
   calendarArgs: unknown[];
+  researchArgs: unknown[];
+  linkArgs: unknown[];
+  codeTaskArgs: unknown[];
 } {
   return {
     noteArgs: [],
     calendarArgs: [],
+    researchArgs: [],
+    linkArgs: [],
+    codeTaskArgs: [],
     createNote(args): Promise<string> {
       this.noteArgs.push(args);
       return Promise.resolve('note-created');
@@ -194,6 +373,18 @@ function createExecutor(): IntexAgentToolExecutor & {
     createCalendarEvent(args): Promise<string> {
       this.calendarArgs.push(args);
       return Promise.resolve('calendar-created');
+    },
+    createResearch(args): Promise<string> {
+      this.researchArgs.push(args);
+      return Promise.resolve('research-created');
+    },
+    createLink(args): Promise<string> {
+      this.linkArgs.push(args);
+      return Promise.resolve('link-created');
+    },
+    createCodeTask(args): Promise<string> {
+      this.codeTaskArgs.push(args);
+      return Promise.resolve('code-task-created');
     },
   };
 }

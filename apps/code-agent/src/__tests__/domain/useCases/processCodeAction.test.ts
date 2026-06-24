@@ -559,6 +559,58 @@ describe('processCodeAction', () => {
     );
   });
 
+  it('uses explicit taskMode=planning even when linear issue has code-task label', async () => {
+    vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+      linearIssueId: 'INT-123',
+      linearIssueTitle: 'Test Issue',
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      linearFallback: false,
+    });
+
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-planning',
+        userId: 'user-789',
+        prompt: 'Plan the bug fix',
+        sanitizedPrompt: 'Plan the bug fix',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'queued',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        agentType: 'planning',
+      })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Plan the bug fix',
+        workerType: 'auto',
+        taskMode: 'planning',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentType: 'planning',
+      })
+    );
+  });
+
   it('stores sanitized prompt when prompt contains secret patterns', async () => {
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({

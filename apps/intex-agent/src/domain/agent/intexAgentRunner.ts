@@ -3,9 +3,12 @@ import type {
   IntexAgentRunner,
   IntexAgentRunnerResult,
 } from '../messages/handleIncomingMessage.js';
-import type { IntexAgentSessionEvent } from '../sessions/types.js';
+import type { IntexAgentSessionEvent, IntexAgentToolName } from '../sessions/types.js';
 import { createIntexAgentToolDefinitions, type IntexAgentToolExecutor } from './toolDefinitions.js';
 import { INTEX_AGENT_SYSTEM_PROMPT } from './systemPrompt.js';
+
+const SUPPORTED_CAPABILITIES =
+  'notes, calendar events, research drafts, bookmarks, and code tasks';
 
 export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
@@ -26,7 +29,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (!result.ok) {
         return {
           outcome: 'unsupported',
-          reply: 'I could not complete that request right now. I can create notes and calendar events.',
+          reply: `I could not complete that request right now. I can create ${SUPPORTED_CAPABILITIES}.`,
         };
       }
 
@@ -90,7 +93,7 @@ function parseRunnerContent(content: string): IntexAgentRunnerResult {
       outcome,
       reply,
       ...(typeof summary === 'string' ? { summary } : {}),
-      ...(toolName === 'create_note' || toolName === 'create_calendar_event' ? { toolName } : {}),
+      ...(isSupportedToolName(toolName) ? { toolName } : {}),
     };
   }
 
@@ -112,6 +115,16 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
 function malformedResult(): IntexAgentRunnerResult {
   return {
     outcome: 'unsupported',
-    reply: 'I could not safely understand that request. I can create notes and calendar events.',
+    reply: `I could not safely understand that request. I can create ${SUPPORTED_CAPABILITIES}.`,
   };
+}
+
+function isSupportedToolName(toolName: unknown): toolName is IntexAgentToolName {
+  return (
+    toolName === 'create_note' ||
+    toolName === 'create_calendar_event' ||
+    toolName === 'create_research' ||
+    toolName === 'create_link' ||
+    toolName === 'create_code_task'
+  );
 }

@@ -35,6 +35,7 @@ export interface ProcessCodeActionRequest {
   userId: string;
   prompt: string;
   workerType: WorkerType;
+  taskMode?: 'planning' | 'execution';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -184,9 +185,16 @@ export async function processCodeAction(
     'Linear issue processed'
   );
 
+  const effectiveAgentType: 'planning' | 'execution' =
+    request.taskMode ?? (hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning');
+
   // Step 3b: Fan-out check (INT-962) — if parent issue has children with code-task labels,
   // create separate child tasks instead of dispatching the parent.
-  if (finalLinearIssueId !== undefined && shouldFanOut(hasChildren, linearIssueLabels)) {
+  if (
+    effectiveAgentType === 'execution' &&
+    finalLinearIssueId !== undefined &&
+    shouldFanOut(hasChildren, linearIssueLabels)
+  ) {
     logger.info({ linearIssueId: finalLinearIssueId }, 'Fan-out triggered: parent issue has code-task children');
 
     // Pre-generate parent task to use as a template for child tasks
@@ -213,7 +221,7 @@ export async function processCodeAction(
       approvalEventId,
       webhookSecret: parentWebhookSecret,
       linearIssueId: finalLinearIssueId,
-      agentType: 'execution',
+      agentType: effectiveAgentType,
       initialStatus: 'dispatched',
     });
 
@@ -368,7 +376,7 @@ export async function processCodeAction(
     actionId,
     approvalEventId,
     webhookSecret,
-    agentType: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning',
+    agentType: effectiveAgentType,
   };
 
   // Only include linear issue fields if we have them
