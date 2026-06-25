@@ -97,8 +97,8 @@ locals {
       schedule             = "*/5 * * * *"
       time_zone            = "UTC"
       path                 = "/internal/code/detect-zombies"
-      body                 = null
-      headers              = {}
+      body                 = base64encode("{}")
+      headers              = { "Content-Type" = "application/json" }
       retry_count          = 1
       max_retry_duration   = "60s"
       min_backoff_duration = "5s"

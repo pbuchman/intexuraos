@@ -52,6 +52,7 @@ const IGNORE_EXACT_PATHS = new Set([
   'docs/architect-review-report.md',
   'docs/documentation-runs.md',
   'docs/features-rewrite-history.md',
+  'terraform/hetzner-prod/retired-async-cleanup.tf',
   'scripts/verify-removed-agents.mjs',
   'scripts/__tests__/verify-removed-agents.test.ts',
 ]);

@@ -9,6 +9,8 @@ environment = "prod"
 domain      = "intexuraos.cloud"
 
 activate_hetzner_async_consumers = true
+# Set true only for the one-time guarded cleanup documented in the runbook.
+enable_retired_async_consumer_cleanup = false
 
 hetzner_location    = "nbg1"
 hetzner_server_type = "cx33"

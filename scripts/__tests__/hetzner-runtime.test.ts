@@ -50,6 +50,10 @@ const terraformHetznerCloudInitPath = resolve(
 );
 const terraformHetznerPubsubPath = resolve(repoRoot, 'terraform/hetzner-prod/pubsub.tf');
 const terraformHetznerSchedulerPath = resolve(repoRoot, 'terraform/hetzner-prod/scheduler.tf');
+const terraformHetznerRetiredAsyncCleanupPath = resolve(
+  repoRoot,
+  'terraform/hetzner-prod/retired-async-cleanup.tf'
+);
 const terraformHetznerVariablesPath = resolve(repoRoot, 'terraform/hetzner-prod/variables.tf');
 const terraformHetznerOutputsPath = resolve(repoRoot, 'terraform/hetzner-prod/outputs.tf');
 const terraformHetznerTfvarsExamplePath = resolve(
@@ -625,10 +629,44 @@ describe('Hetzner async edge cutover', () => {
     const hetznerMain = readRequired(terraformHetznerMainPath);
     const hetznerPubsub = readRequired(terraformHetznerPubsubPath);
     const hetznerScheduler = readRequired(terraformHetznerSchedulerPath);
+    const hetznerRetiredAsyncCleanup = readRequired(terraformHetznerRetiredAsyncCleanupPath);
+    const hetznerVariables = readRequired(terraformHetznerVariablesPath);
     const hetznerOutputs = readRequired(terraformHetznerOutputsPath);
     const prodAutoTfvars = JSON.parse(readRequired(terraformHetznerProdAutoTfvarsPath)) as {
       activate_hetzner_async_consumers?: boolean;
     };
+    const retiredSchedulerJobs: Array<[string, string[]]> = [
+      [
+        retiredDashed('intexuraos', 'retry', 'pending', 'actions', 'prod', 'hetzner'),
+        ['internal', 'actions', 'retry-pending'],
+      ],
+      [
+        retiredDashed('intexuraos', 'cron', 'agent', 'tick', 'prod', 'hetzner'),
+        ['internal', 'cron', 'tick'],
+      ],
+      [
+        retiredDashed('intexuraos', 'retry', 'pending', 'commands', 'prod', 'hetzner'),
+        ['internal', 'retry-pending'],
+      ],
+    ];
+    const retiredPubsubSubscriptions: Array<[string, string[]]> = [
+      [
+        retiredDashed('intexuraos', 'todos', 'processing', 'prod', 'hetzner'),
+        ['internal', 'todos', 'pubsub', retiredDashed('todos', 'processing')],
+      ],
+      [
+        retiredDashed('intexuraos', 'commands', 'ingest', 'prod', 'hetzner'),
+        ['internal', 'commands'],
+      ],
+      [
+        retiredDashed('intexuraos', 'actions', 'queue', 'prod', 'hetzner'),
+        ['internal', 'actions', 'process'],
+      ],
+      [
+        retiredDashed('intexuraos', 'approval', 'reply', 'prod', 'hetzner'),
+        ['internal', 'actions', retiredDashed('approval', 'reply')],
+      ],
+    ];
 
     expect(script).toContain('PUBSUB_ROUTES=(');
     expect(script).toContain('SCHEDULER_ROUTES=(');
@@ -674,8 +712,32 @@ describe('Hetzner async edge cutover', () => {
         .split('code_tasks_zombie_sweep = {')[1]
         ?.split('\n    archive_stale_groups = {')[0] ?? '';
     expect(zombieSweepJob).toContain('path                 = "/internal/code/detect-zombies"');
-    expect(zombieSweepJob).toContain('body                 = null');
-    expect(zombieSweepJob).not.toContain('base64encode("{}")');
+    expect(zombieSweepJob).toContain('body                 = base64encode("{}")');
+    expect(zombieSweepJob).toContain(
+      'headers              = { "Content-Type" = "application/json" }'
+    );
+    expect(hetznerVariables).toContain('variable "enable_retired_async_consumer_cleanup"');
+    expect(hetznerVariables).toContain('default     = false');
+    expect(hetznerRetiredAsyncCleanup).toContain(
+      'resource "terraform_data" "retired_async_consumer_cleanup"'
+    );
+    expect(hetznerRetiredAsyncCleanup).toContain(
+      'count = var.enable_retired_async_consumer_cleanup ? 1 : 0'
+    );
+    expect(hetznerRetiredAsyncCleanup).toContain('Refusing to delete scheduler job');
+    expect(hetznerRetiredAsyncCleanup).toContain('Refusing to delete Pub/Sub subscription');
+    for (const [jobName, pathParts] of retiredSchedulerJobs) {
+      const path = `/${pathParts.join('/')}`;
+      expect(hetznerRetiredAsyncCleanup, jobName).toContain(jobName);
+      expect(hetznerRetiredAsyncCleanup, path).toContain(path);
+      expect(hetznerScheduler, jobName).not.toContain(jobName);
+    }
+    for (const [subscriptionName, pathParts] of retiredPubsubSubscriptions) {
+      const path = `/${pathParts.join('/')}`;
+      expect(hetznerRetiredAsyncCleanup, subscriptionName).toContain(subscriptionName);
+      expect(hetznerRetiredAsyncCleanup, path).toContain(path);
+      expect(hetznerPubsub, subscriptionName).not.toContain(subscriptionName);
+    }
     expect(hetznerOutputs).toContain(
       'filter        = subscription.filter == "" ? null : subscription.filter'
     );
