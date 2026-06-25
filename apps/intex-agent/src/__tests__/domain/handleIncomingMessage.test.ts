@@ -76,7 +76,7 @@ describe('handleIncomingMessage', () => {
       {
         outcome: 'no_action',
         reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
-      } as unknown as IntexAgentRunnerResult,
+      },
     ]);
     const replies = new FakeReplyPublisher();
 

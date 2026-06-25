@@ -106,8 +106,7 @@ function parseRunnerContent(
 
   if (outcome === 'completed') {
     const summary = parsed['summary'];
-    const toolName = parsed['toolName'];
-    const completedToolName = getCompletedToolName(toolName, executedToolNames);
+    const completedToolName = getCompletedToolName(executedToolNames);
     if (completedToolName === undefined) {
       return malformedResult();
     }
@@ -151,10 +150,7 @@ function createTrackingToolExecutor(
   };
 }
 
-function getCompletedToolName(
-  parsedToolName: unknown,
-  executedToolNames: IntexAgentToolName[]
-): IntexAgentToolName | undefined {
+function getCompletedToolName(executedToolNames: IntexAgentToolName[]): IntexAgentToolName | undefined {
   const uniqueExecutedToolNames = [...new Set(executedToolNames)];
   if (uniqueExecutedToolNames.length === 1) {
     const [executedToolName] = uniqueExecutedToolNames as [IntexAgentToolName];
@@ -165,7 +161,7 @@ function getCompletedToolName(
     return undefined;
   }
 
-  return isSupportedToolName(parsedToolName) ? parsedToolName : undefined;
+  return undefined;
 }
 
 function parseJsonObject(content: string): Record<string, unknown> | null {
@@ -185,14 +181,4 @@ function malformedResult(): IntexAgentRunnerResult {
     outcome: 'unsupported',
     reply: `I could not safely understand that request. I can create ${SUPPORTED_CAPABILITIES}.`,
   };
-}
-
-function isSupportedToolName(toolName: unknown): toolName is IntexAgentToolName {
-  return (
-    toolName === 'create_note' ||
-    toolName === 'create_calendar_event' ||
-    toolName === 'create_research' ||
-    toolName === 'create_link' ||
-    toolName === 'create_code_task'
-  );
 }

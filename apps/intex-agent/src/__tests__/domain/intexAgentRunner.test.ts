@@ -12,7 +12,10 @@ import type { IntexAgentSession, IntexAgentSessionEvent } from '../../domain/ses
 
 describe('createIntexAgentRunner', () => {
   it('uses the versioned prompt, transcript messages, and supported tools', async () => {
-    const client = new FakeToolCallingClient([
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'The door code is 1234.', title: 'Door code' },
+    }, [
       ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' })),
     ]);
 
@@ -132,7 +135,10 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('ignores malformed historical events when building the transcript', async () => {
-    const client = new FakeToolCallingClient([
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'Parking spot is B12.' },
+    }, [
       ok(
         toolResult({
           outcome: 'completed',
@@ -215,7 +221,10 @@ describe('createIntexAgentRunner', () => {
   it.each(['create_research', 'create_link', 'create_code_task'] as const)(
     'keeps supported completed tool names: %s',
     async (toolName) => {
-      const client = new FakeToolCallingClient([
+      const client = new ToolExecutingFakeToolCallingClient({
+        toolName,
+        args: toolArgsFor(toolName),
+      }, [
         ok(
           toolResult({
             outcome: 'completed',
@@ -284,6 +293,28 @@ describe('createIntexAgentRunner', () => {
 
     await expect(
       runner.run({ session: session(), events: [], message: 'Cześć! Co u Ciebie?' })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
+    });
+  });
+
+  it('rejects completed responses when the model claims a supported toolName but no tool ran', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          summary: 'Handled request.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({ session: session(), events: [], message: 'remember this' })
     ).resolves.toEqual({
       outcome: 'unsupported',
       reply:
@@ -397,6 +428,16 @@ function fakeToolExecutor(): IntexAgentToolExecutor {
     createLink: async () => 'bookmark-1',
     createCodeTask: async () => 'code-task-1',
   };
+}
+
+function toolArgsFor(toolName: 'create_research' | 'create_link' | 'create_code_task'): Record<string, unknown> {
+  if (toolName === 'create_research') {
+    return { title: 'Research topic', prompt: 'Research this topic.' };
+  }
+  if (toolName === 'create_link') {
+    return { url: 'https://example.com', title: 'Example' };
+  }
+  return { prompt: 'Investigate this code issue.' };
 }
 
 class FakeToolCallingClient implements ToolCallingClient {
