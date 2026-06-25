@@ -79,6 +79,17 @@ export class FirestoreSessionRepository implements SessionRepository {
   }
 
   async findOpenSession(userId: string): Promise<IntexAgentSession | null> {
+    return await this.findNewestSessionByStatuses(userId, OPEN_STATUSES);
+  }
+
+  async findContinuableSession(userId: string): Promise<IntexAgentSession | null> {
+    return await this.findNewestSessionByStatuses(userId, OPEN_STATUSES);
+  }
+
+  private async findNewestSessionByStatuses(
+    userId: string,
+    statuses: Set<string>
+  ): Promise<IntexAgentSession | null> {
     const snapshot = await this.firestore
       .collection(INTEX_AGENT_SESSIONS_COLLECTION)
       .where('userId', '==', userId)
@@ -86,7 +97,7 @@ export class FirestoreSessionRepository implements SessionRepository {
 
     const sessions = snapshot.docs
       .map((doc) => toSession(doc.id, doc.data() as SessionDocument))
-      .filter((session) => OPEN_STATUSES.has(session.status))
+      .filter((session) => statuses.has(session.status))
       .sort((a, b) => getSessionTimestampMs(b.lastUserMessageAt) - getSessionTimestampMs(a.lastUserMessageAt));
 
     return sessions[0] ?? null;

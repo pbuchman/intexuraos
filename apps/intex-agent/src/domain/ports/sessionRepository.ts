@@ -20,6 +20,7 @@ export interface SessionRepository {
   getSession(sessionId: string, userId: string): Promise<IntexAgentSession | null>;
   listEvents(sessionId: string, userId: string): Promise<IntexAgentSessionEvent[]>;
   findOpenSession(userId: string): Promise<IntexAgentSession | null>;
+  findContinuableSession(userId: string): Promise<IntexAgentSession | null>;
   createSession(draft: SessionRepositorySessionDraft): Promise<IntexAgentSession>;
   updateSession(
     sessionId: string,

@@ -40,7 +40,7 @@ describe('createIntexAgentRunner', () => {
       toolName: 'create_note',
     });
     expect(client.calls[0]?.systemPrompt).toBe(INTEX_AGENT_SYSTEM_PROMPT.text);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('2.1.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('3.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
@@ -55,13 +55,8 @@ describe('createIntexAgentRunner', () => {
       { role: 'assistant', content: 'What time?' },
       { role: 'user', content: 'remember the door code' },
     ]);
-    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual([
-      'create_note',
-      'create_calendar_event',
-      'create_research',
-      'create_link',
-      'create_code_task',
-    ]);
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
+    expect(client.calls[0]?.toolChoice).toBe('auto');
     expect(client.calls[0]?.promptType).toBe('intex-agent-whatsapp-session');
   });
 
@@ -98,22 +93,59 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('normalizes no-action responses for greetings without closing the session', async () => {
-    const client = new FakeToolCallingClient([
-      ok(
-        toolResult({
-          outcome: 'no_action',
-          reply: 'Cześć! W czym mogę pomóc?',
-        })
-      ),
-    ]);
+    const client = new FakeToolCallingClient([]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
       runner.run({ session: session(), events: [], message: 'Cześć! Co u Ciebie?' })
     ).resolves.toEqual({
       outcome: 'no_action',
-      reply: 'Cześć! W czym mogę pomóc?',
+      reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
     });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('does not expose tools for informational questions that lack explicit creation intent', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply: 'HTTP requests include a method, URL, headers, and optional body.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'A jak wygląda taki schemat request o HTTP, który wykonujesz?',
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'HTTP requests include a method, URL, headers, and optional body.',
+    });
+    expect(client.calls[0]?.tools).toEqual([]);
+    expect(client.calls[0]?.toolChoice).toBe('auto');
+  });
+
+  it('blocks read-only calendar questions instead of creating research', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Chciałbym zobaczyć, jakie mam wydarzenia w kalendarzu na jutro',
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'Nie mogę jeszcze przeglądać Twojego kalendarza ani sprawdzać zaplanowanych wydarzeń. Mogę utworzyć nowe wydarzenie, jeśli poprosisz o to wprost.',
+    });
+    expect(client.calls).toEqual([]);
   });
 
   it('returns unsupported when the model result is malformed instead of executing a hidden action', async () => {
@@ -169,6 +201,54 @@ describe('createIntexAgentRunner', () => {
     });
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'remember the parking spot' },
+    ]);
+  });
+
+  it('includes assistant messages and completed tool summaries in continuity history', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'Office pin is 2468.' },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Saved.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        message: 'remember the office pin',
+        events: [
+          event('assistant_message', { text: 'Saved the previous item.' }),
+          event('tool_call_completed', {
+            toolName: 'create_research',
+            result: { resourceUrl: 'https://intexuraos.cloud/#/research/research-1' },
+          }),
+          event('tool_call_completed', { toolName: 'create_note' }),
+          event('assistant_message', { text: false }),
+          event('tool_call_completed', { toolName: false, result: {} }),
+          event('unsupported_request', { message: 'Unsupported.' }),
+        ],
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Saved.',
+      toolName: 'create_note',
+    });
+    expect(client.calls[0]?.messages).toEqual([
+      { role: 'assistant', content: 'Saved the previous item.' },
+      {
+        role: 'assistant',
+        content:
+          'Tool create_research completed: {"resourceUrl":"https://intexuraos.cloud/#/research/research-1"}',
+      },
+      { role: 'assistant', content: 'Tool create_note completed: {}' },
+      { role: 'user', content: 'remember the office pin' },
     ]);
   });
 
@@ -239,7 +319,7 @@ describe('createIntexAgentRunner', () => {
       const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
       await expect(
-        runner.run({ session: session(), events: [], message: 'handle this' })
+        runner.run({ session: session(), events: [], message: explicitMessageFor(toolName) })
       ).resolves.toEqual({
         outcome: 'completed',
         reply: 'Done.',
@@ -249,7 +329,7 @@ describe('createIntexAgentRunner', () => {
     }
   );
 
-  it('uses the executed tool name when the final model JSON omits toolName', async () => {
+  it('uses the executed tool result and deterministic link reply when the final model JSON omits toolName', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: 'create_research',
       args: {
@@ -260,24 +340,157 @@ describe('createIntexAgentRunner', () => {
       ok(
         toolResult({
           outcome: 'completed',
-          reply: 'Created a research draft.',
+          reply: 'Created a research draft without the link.',
           summary: 'Calendar events tomorrow',
         })
       ),
     ]);
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        createResearch: async () =>
+          JSON.stringify({
+            status: 'completed',
+            message: 'Research created',
+            resourceUrl: 'https://intexuraos.cloud/#/research/research-1',
+          }),
+      }),
+    });
 
     await expect(
       runner.run({
         session: session(),
         events: [],
-        message: 'Chciałbym zobaczyć, jakie mam wydarzenia w kalendarzu na jutro',
+        message: 'Create research draft: calendar events tomorrow',
       })
     ).resolves.toEqual({
       outcome: 'completed',
-      reply: 'Created a research draft.',
+      reply:
+        'Utworzyłem szkic researchu: https://intexuraos.cloud/#/research/research-1',
       summary: 'Calendar events tomorrow',
       toolName: 'create_research',
+      toolResult: {
+        status: 'completed',
+        message: 'Research created',
+        resourceUrl: 'https://intexuraos.cloud/#/research/research-1',
+      },
+    });
+  });
+
+  it.each([
+    {
+      toolName: 'create_code_task' as const,
+      message: 'Create code task to investigate webhook retries',
+      args: { prompt: 'Investigate webhook retries.' },
+      executorOverride: {
+        createCodeTask: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: 'https://intexuraos.cloud/#/code-tasks/task-1',
+          }),
+      },
+      expectedReply:
+        'Utworzyłem zadanie programistyczne: https://intexuraos.cloud/#/code-tasks/task-1',
+    },
+    {
+      toolName: 'create_calendar_event' as const,
+      message: 'Add calendar event for dentist tomorrow 9-10',
+      args: {
+        summary: 'Dentist',
+        start: '2026-06-25T09:00:00+02:00',
+        end: '2026-06-25T10:00:00+02:00',
+      },
+      executorOverride: {
+        createCalendarEvent: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            htmlLink: 'https://calendar.google.com/event?eid=event-1',
+          }),
+      },
+      expectedReply:
+        'Utworzyłem wydarzenie w kalendarzu: https://calendar.google.com/event?eid=event-1',
+    },
+    {
+      toolName: 'create_link' as const,
+      message: 'Save link https://example.com/post',
+      args: { url: 'https://example.com/post', title: 'Example' },
+      executorOverride: {
+        createLink: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+          }),
+      },
+      expectedReply: 'Zapisałem link: https://intexuraos.cloud/#/bookmarks/bookmark-1',
+    },
+    {
+      toolName: 'create_note' as const,
+      message: 'Create a note: office printer pin is 1357',
+      args: { content: 'Office printer pin is 1357.' },
+      executorOverride: {
+        createNote: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: '',
+            message: 'Zapisałem notatkę.',
+          }),
+      },
+      expectedReply: 'Zapisałem notatkę.',
+    },
+    {
+      toolName: 'create_note' as const,
+      message: 'Create a note: office room is London',
+      args: { content: 'Office room is London.' },
+      executorOverride: {
+        createNote: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: 'https://intexuraos.cloud/#/notes/note-1',
+          }),
+      },
+      expectedReply:
+        'The model reply should not be the source of truth. https://intexuraos.cloud/#/notes/note-1',
+    },
+    {
+      toolName: 'create_note' as const,
+      message: 'Create a note: laptop locker is 4',
+      args: { content: 'Laptop locker is 4.' },
+      executorOverride: {
+        createNote: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+          }),
+      },
+      expectedReply: 'The model reply should not be the source of truth.',
+    },
+  ])('builds deterministic confirmations from %s tool results', async (testCase) => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: testCase.toolName,
+      args: testCase.args,
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'The model reply should not be the source of truth.',
+          toolName: testCase.toolName,
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor(testCase.executorOverride),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: testCase.message,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'completed',
+      reply: testCase.expectedReply,
+      toolName: testCase.toolName,
     });
   });
 
@@ -294,7 +507,7 @@ describe('createIntexAgentRunner', () => {
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
-      runner.run({ session: session(), events: [], message: 'Cześć! Co u Ciebie?' })
+      runner.run({ session: session(), events: [], message: 'Create a note: remember this' })
     ).resolves.toEqual({
       outcome: 'unsupported',
       reply:
@@ -325,33 +538,21 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('rejects completed responses when multiple tools ran in one turn', async () => {
-    const client = new ToolExecutingFakeToolCallingClient([
-      {
-        toolName: 'create_note',
-        args: { title: 'Trip idea', content: 'Visit Lisbon' },
-      },
-      {
-        toolName: 'create_link',
-        args: { url: 'https://example.com', title: 'Example' },
-      },
-    ], [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          summary: 'Handled multiple requests.',
-        })
-      ),
-    ]);
+    const client = new FakeToolCallingClient([]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
-      runner.run({ session: session(), events: [], message: 'remember Lisbon and save example.com' })
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a note: visit Lisbon and save link https://example.com',
+      })
     ).resolves.toEqual({
       outcome: 'unsupported',
       reply:
         'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
+    expect(client.calls).toEqual([]);
   });
 
   it('rejects unsupported completed tool names from normalized responses', async () => {
@@ -422,13 +623,14 @@ function event(type: IntexAgentSessionEvent['type'], payload: Record<string, unk
   };
 }
 
-function fakeToolExecutor(): IntexAgentToolExecutor {
+function fakeToolExecutor(overrides: Partial<IntexAgentToolExecutor> = {}): IntexAgentToolExecutor {
   return {
     createNote: async () => 'note-1',
     createCalendarEvent: async () => 'event-1',
     createResearch: async () => 'research-1',
     createLink: async () => 'bookmark-1',
     createCodeTask: async () => 'code-task-1',
+    ...overrides,
   };
 }
 
@@ -440,6 +642,16 @@ function toolArgsFor(toolName: 'create_research' | 'create_link' | 'create_code_
     return { url: 'https://example.com', title: 'Example' };
   }
   return { prompt: 'Investigate this code issue.' };
+}
+
+function explicitMessageFor(toolName: 'create_research' | 'create_link' | 'create_code_task'): string {
+  if (toolName === 'create_research') {
+    return 'Create research draft about this topic.';
+  }
+  if (toolName === 'create_link') {
+    return 'Save link https://example.com/post';
+  }
+  return 'Create code task to investigate this issue.';
 }
 
 class FakeToolCallingClient implements ToolCallingClient {

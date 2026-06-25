@@ -45,6 +45,8 @@ export interface ToolDefinition {
   run: (args: Record<string, unknown>) => Promise<string>;
 }
 
+export type ToolChoice = 'auto' | 'required';
+
 /**
  * Abstract tool calling client interface.
  *
@@ -63,6 +65,8 @@ export interface ToolCallingClient {
     systemPrompt: string;
     messages: ToolCallingMessage[];
     tools: ToolDefinition[];
+    /** Whether the first model turn must call a tool or may answer directly. Defaults to 'required'. */
+    toolChoice?: ToolChoice;
     /** Semantic identifier for usage tracking. */
     promptType?: string;
     /** Maximum iterations of the tool calling loop (default: 5) */

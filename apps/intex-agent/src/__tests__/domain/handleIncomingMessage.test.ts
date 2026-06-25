@@ -32,7 +32,7 @@ function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMe
 }
 
 describe('handleIncomingMessage', () => {
-  it('creates a new session, executes a note request, replies, and closes the session', async () => {
+  it('creates a new session, executes a note request, replies, and keeps the session open', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
       {
@@ -40,6 +40,7 @@ describe('handleIncomingMessage', () => {
         reply: 'Saved that note.',
         summary: 'Saved door code note.',
         toolName: 'create_note',
+        toolResult: { status: 'completed', id: 'note-1' },
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -49,17 +50,21 @@ describe('handleIncomingMessage', () => {
     expect(result).toEqual({ sessionId: 'session-1' });
     expect(repo.sessions[0]).toMatchObject({
       id: 'session-1',
-      status: 'completed',
-      endReason: 'tool_completed',
+      status: 'waiting_for_user',
       summary: 'Saved door code note.',
     });
+    expect(repo.sessions[0]?.endedAt).toBeUndefined();
+    expect(repo.sessions[0]?.endReason).toBeUndefined();
     expect(eventTypes(repo)).toEqual([
       'session_started',
       'user_message',
       'tool_call_completed',
       'assistant_message',
-      'session_closed',
     ]);
+    expect(eventPayloads(repo, 'tool_call_completed')[0]).toEqual({
+      toolName: 'create_note',
+      result: { status: 'completed', id: 'note-1' },
+    });
     expect(replies.messages).toEqual([
       {
         userId: 'user-1',
@@ -124,7 +129,7 @@ describe('handleIncomingMessage', () => {
       deps(repo, runner, replies)
     );
 
-    expect(repo.sessions[0]?.status).toBe('completed');
+    expect(repo.sessions[0]?.status).toBe('waiting_for_user');
     expect(repo.sessions[0]?.activeTool).toBe('create_calendar_event');
     expect(repo.sessions[0]?.summary).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')[0]).toMatchObject({
@@ -192,7 +197,7 @@ describe('handleIncomingMessage', () => {
     );
 
     expect(result).toEqual({ sessionId: 'session-existing' });
-    expect(repo.sessions[0]?.status).toBe('completed');
+    expect(repo.sessions[0]?.status).toBe('waiting_for_user');
     expect(repo.createdSessions).toHaveLength(0);
     expect(runner.calls[0]?.session.id).toBe('session-existing');
     expect(replies.messages).toEqual([
@@ -205,7 +210,7 @@ describe('handleIncomingMessage', () => {
     ]);
   });
 
-  it('replies unsupported and closes the session for unsupported requests', async () => {
+  it('replies unsupported and keeps the session available for follow-up context', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
       {
@@ -220,15 +225,15 @@ describe('handleIncomingMessage', () => {
       deps(repo, runner, replies)
     );
 
-    expect(repo.sessions[0]?.status).toBe('unsupported');
-    expect(repo.sessions[0]?.endReason).toBe('unsupported_request');
+    expect(repo.sessions[0]?.status).toBe('waiting_for_user');
+    expect(repo.sessions[0]?.endedAt).toBeUndefined();
+    expect(repo.sessions[0]?.endReason).toBeUndefined();
     expect(repo.sessions[0]?.summary).toBe('book me a flight to Lisbon');
     expect(eventTypes(repo)).toEqual([
       'session_started',
       'user_message',
       'unsupported_request',
       'assistant_message',
-      'session_closed',
     ]);
     expect(replies.messages[0]?.message).toBe(
       'I do not support that yet. I can create notes and calendar events.'
@@ -329,6 +334,140 @@ describe('handleIncomingMessage', () => {
     );
   });
 
+  it('continues the same session after a completed tool turn', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Saved that note.',
+        summary: 'Saved garage code.',
+        toolName: 'create_note',
+      },
+      {
+        outcome: 'no_action',
+        reply: 'The previous note was about the garage code.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-1', text: 'Create a note: garage code is 7241' }),
+      deps(repo, runner, replies)
+    );
+    const result = await handleIncomingMessage(
+      message({ messageId: 'wamid-2', text: 'What was that about?' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(result).toEqual({ sessionId: 'session-1' });
+    expect(repo.createdSessions).toHaveLength(1);
+    expect(repo.sessions[0]).toMatchObject({
+      id: 'session-1',
+      status: 'waiting_for_user',
+      activeTool: 'create_note',
+    });
+    expect(runner.calls[1]?.session.id).toBe('session-1');
+    expect(runner.calls[1]?.events.map((event) => event.type)).toContain('assistant_message');
+  });
+
+  it('resends the previous resource link instead of creating a note for link follow-up complaints', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      lastAssistantMessageAt: '2026-06-24T09:51:00.000Z',
+      startReason: 'no_active_session',
+      activeTool: 'create_research',
+    });
+    repo.seedEvent('session-existing', 'tool_call_completed', {
+      toolName: 'create_research',
+      result: {
+        status: 'completed',
+        resourceUrl: 'https://intexuraos.cloud/#/research/research-1',
+      },
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    const result = await handleIncomingMessage(
+      message({ messageId: 'wamid-2', text: 'Nie dostałam żadnego linku' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(result).toEqual({ sessionId: 'session-existing' });
+    expect(runner.calls).toEqual([]);
+    expect(repo.createdSessions).toHaveLength(0);
+    expect(replies.messages[0]?.message).toContain(
+      'https://intexuraos.cloud/#/research/research-1'
+    );
+    expect(eventPayloads(repo, 'tool_call_completed')).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      text: 'Brak linku',
+      result: { htmlLink: 'https://calendar.google.com/event?eid=event-1' },
+      expectedUrl: 'https://calendar.google.com/event?eid=event-1',
+    },
+    {
+      text: 'no link arrived',
+      result: { url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1' },
+      expectedUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+    },
+    {
+      text: 'I did not get the link',
+      result: null,
+      expectedUrl: null,
+    },
+    {
+      text: "I didn't get the link",
+      result: [],
+      expectedUrl: null,
+    },
+    {
+      text: 'I did not get any link',
+      result: { status: 'completed' },
+      expectedUrl: null,
+    },
+  ])('handles missing-link follow-up variant: $text', async ({ text, result, expectedUrl }) => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      lastAssistantMessageAt: '2026-06-24T09:51:00.000Z',
+      startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'tool_call_completed', {
+      toolName: 'create_link',
+      result,
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-missing-link', text }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(repo.createdSessions).toHaveLength(0);
+    if (expectedUrl === null) {
+      expect(replies.messages[0]?.message).toBe(
+        'Nie widzę zapisanego linku z poprzedniej akcji. Poproś mnie jeszcze raz wprost, a utworzę zasób od nowa.'
+      );
+    } else {
+      expect(replies.messages[0]?.message).toBe(`Link z poprzedniej akcji: ${expectedUrl}`);
+    }
+  });
+
   it('expires a stale session and rejects completed runner results without a tool name', async () => {
     const repo = new FakeSessionRepository();
     repo.seedSession({
@@ -361,12 +500,11 @@ describe('handleIncomingMessage', () => {
       },
       {
         id: 'session-1',
-        status: 'unsupported',
-        endReason: 'unsupported_request',
+        status: 'waiting_for_user',
       },
     ]);
-    expect(repo.sessions[1]?.status).toBe('unsupported');
-    expect(repo.sessions[1]?.endReason).toBe('unsupported_request');
+    expect(repo.sessions[1]?.status).toBe('waiting_for_user');
+    expect(repo.sessions[1]?.endReason).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
     expect(replies.messages[0]?.message).toBe(
       'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.'
@@ -463,6 +601,10 @@ class FakeSessionRepository implements SessionRepository {
           ['active', 'waiting_for_user', 'executing_tool'].includes(session.status)
       ) ?? null
     );
+  }
+
+  findContinuableSession(userId: string): Promise<IntexAgentSession | null> {
+    return this.findOpenSession(userId);
   }
 
   createSession(draft: SessionRepositorySessionDraft): Promise<IntexAgentSession> {

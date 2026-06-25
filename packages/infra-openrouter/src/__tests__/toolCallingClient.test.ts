@@ -254,6 +254,40 @@ describe('createOpenRouterToolCallingClient', () => {
     );
   });
 
+  it('uses auto tool choice when requested', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBody = body as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: { role: 'assistant', content: '{"outcome":"no_action","reply":"Hi"}' },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.0001 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Return JSON.',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note.',
+          parameters: { type: 'object', properties: { content: { type: 'string' } } },
+          run: vi.fn(),
+        },
+      ],
+      toolChoice: 'auto',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(capturedBody?.['tool_choice']).toBe('auto');
+  });
+
   it('sends tool error responses for unknown tools and thrown callbacks', async () => {
     const capturedBodies: Record<string, unknown>[] = [];
     nock(API_BASE_URL)

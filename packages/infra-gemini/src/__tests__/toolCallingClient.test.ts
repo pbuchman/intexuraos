@@ -161,6 +161,33 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.value.usage.outputTokens).toBe(25);
   });
 
+  it('uses AUTO function calling mode when auto tool choice is requested', async () => {
+    mockGenerateContent.mockResolvedValueOnce(textResponse('{"outcome":"no_action","reply":"Hi"}'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Return JSON.',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note',
+          parameters: {
+            type: 'object',
+            properties: { content: { type: 'string' } },
+          },
+          run: vi.fn(),
+        },
+      ],
+      toolChoice: 'auto',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      mockGenerateContent.mock.calls[0]?.[0].config.toolConfig.functionCallingConfig.mode
+    ).toBe('AUTO');
+  });
+
   it('sends functionResponse with role "user" as expected by @google/genai SDK', async () => {
     const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
 
