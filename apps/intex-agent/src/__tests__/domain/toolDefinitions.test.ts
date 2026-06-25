@@ -65,6 +65,8 @@ describe('createIntexAgentToolDefinitions', () => {
 
     expect(linkTool?.description).toContain('link');
     expect(linkTool?.description).toContain('bookmark');
+    expect(linkTool?.description).toContain('bare URL');
+    expect(linkTool?.description).toContain('URL share');
     expect(linkTool?.parameters['required']).toEqual(['url']);
   });
 

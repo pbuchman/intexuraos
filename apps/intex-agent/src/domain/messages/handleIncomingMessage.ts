@@ -6,20 +6,19 @@ import {
 } from '../sessions/sessionController.js';
 import type {
   IntexAgentSession,
-  IntexAgentSessionEndReason,
   IntexAgentSessionEvent,
   IntexAgentSessionEventType,
-  IntexAgentSessionStatus,
   IntexAgentToolName,
 } from '../sessions/types.js';
 import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
 
 export type IntexAgentRunnerResult =
-  | {
+    | {
       outcome: 'completed';
       reply: string;
       summary?: string;
       toolName?: IntexAgentToolName;
+      toolResult?: Record<string, unknown>;
     }
   | {
       outcome: 'needs_clarification';
@@ -76,7 +75,7 @@ export async function handleIncomingMessage(
 ): Promise<IncomingMessageHandlerResult> {
   const now = deps.clock.now();
   const normalizedUserTimestamp = normalizeSessionTimestamp(input.timestamp);
-  const currentSession = await deps.sessionRepository.findOpenSession(input.userId);
+  const currentSession = await deps.sessionRepository.findContinuableSession(input.userId);
   const decision = decideSessionTransition({
     currentSession,
     now,
@@ -111,6 +110,17 @@ export async function handleIncomingMessage(
   });
 
   const events = await deps.sessionRepository.listEvents(session.id, input.userId);
+  const missingLinkReply = buildMissingLinkReply(effectiveMessage, events);
+  if (missingLinkReply !== null) {
+    const assistantAt = await appendAssistantMessage(session, deps, missingLinkReply);
+    await deps.sessionRepository.updateSession(session.id, {
+      status: 'waiting_for_user',
+      lastAssistantMessageAt: assistantAt,
+    });
+    await publishReply(input, deps, session.id, missingLinkReply);
+    return { sessionId: session.id };
+  }
+
   const runnerResult = await deps.runner.run({
     session,
     events,
@@ -202,7 +212,8 @@ async function applyRunnerResult(
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
     await appendEvent(deps, session, 'unsupported_request', { message: runnerResult.reply });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
-    await closeSession(session, deps, 'unsupported', 'unsupported_request', {
+    await deps.sessionRepository.updateSession(session.id, {
+      status: 'waiting_for_user',
       lastAssistantMessageAt: assistantAt,
       summary: summarizeUserMessage(input.text),
     });
@@ -218,43 +229,16 @@ async function applyRunnerResult(
   const reply = stripDuplicateSessionPrefix(runnerResult.reply);
   await appendEvent(deps, session, 'tool_call_completed', {
     toolName: runnerResult.toolName,
+    ...(runnerResult.toolResult !== undefined ? { result: runnerResult.toolResult } : {}),
   });
   const assistantAt = await appendAssistantMessage(session, deps, reply);
-  const endedAt = deps.clock.now();
   await deps.sessionRepository.updateSession(session.id, {
-    status: 'completed',
-    endedAt,
+    status: 'waiting_for_user',
     lastAssistantMessageAt: assistantAt,
-    endReason: 'tool_completed',
     activeTool: runnerResult.toolName,
     ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
   });
-  await appendEvent(deps, session, 'session_closed', {
-    status: 'completed',
-    reason: 'tool_completed',
-  }, endedAt);
   await publishReply(input, deps, session.id, reply);
-}
-
-async function closeSession(
-  session: IntexAgentSession,
-  deps: HandleIncomingMessageDeps,
-  status: IntexAgentSessionStatus,
-  endReason: IntexAgentSessionEndReason,
-  metadata: { lastAssistantMessageAt: string; summary: string }
-): Promise<void> {
-  const endedAt = deps.clock.now();
-  await deps.sessionRepository.updateSession(session.id, {
-    status,
-    endedAt,
-    lastAssistantMessageAt: metadata.lastAssistantMessageAt,
-    endReason,
-    summary: metadata.summary,
-  });
-  await appendEvent(deps, session, 'session_closed', {
-    status,
-    reason: endReason,
-  }, endedAt);
 }
 
 async function appendAssistantMessage(
@@ -316,7 +300,8 @@ async function applyUnsupportedRunnerResult(
   const reply = stripDuplicateSessionPrefix(runnerResult.reply);
   await appendEvent(deps, session, 'unsupported_request', { message: runnerResult.reply });
   const assistantAt = await appendAssistantMessage(session, deps, reply);
-  await closeSession(session, deps, 'unsupported', 'unsupported_request', {
+  await deps.sessionRepository.updateSession(session.id, {
+    status: 'waiting_for_user',
     lastAssistantMessageAt: assistantAt,
     summary: summarizeUserMessage(input.text),
   });
@@ -337,4 +322,53 @@ function malformedRunnerResult(): Extract<IntexAgentRunnerResult, { outcome: 'un
     reply:
       'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
   };
+}
+
+function buildMissingLinkReply(message: string, events: IntexAgentSessionEvent[]): string | null {
+  if (!isMissingLinkFollowUp(message)) {
+    return null;
+  }
+
+  const resourceUrl = findLastToolResourceUrl(events);
+  if (resourceUrl === null) {
+    return 'Nie widzę zapisanego linku z poprzedniej akcji. Poproś mnie jeszcze raz wprost, a utworzę zasób od nowa.';
+  }
+
+  return `Link z poprzedniej akcji: ${resourceUrl}`;
+}
+
+function isMissingLinkFollowUp(message: string): boolean {
+  const normalized = message
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return (
+    normalized.includes('link') &&
+    (normalized.includes('nie dost') ||
+      normalized.includes('brak') ||
+      normalized.includes('no link') ||
+      normalized.includes('did not get') ||
+      normalized.includes("didn't get"))
+  );
+}
+
+function findLastToolResourceUrl(events: IntexAgentSessionEvent[]): string | null {
+  for (const event of [...events].reverse()) {
+    if (event.type !== 'tool_call_completed') {
+      continue;
+    }
+
+    const result = event.payload['result'];
+    if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+      continue;
+    }
+
+    const record = result as Record<string, unknown>;
+    const resourceUrl = record['resourceUrl'] ?? record['htmlLink'] ?? record['url'];
+    if (typeof resourceUrl === 'string' && resourceUrl.trim() !== '') {
+      return resourceUrl;
+    }
+  }
+
+  return null;
 }

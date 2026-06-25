@@ -154,6 +154,7 @@ export function createOpenRouterToolCallingClient(
         systemPrompt,
         messages,
         tools,
+        toolChoice = 'required',
         maxIterations = DEFAULT_MAX_ITERATIONS,
         onExhausted,
         repairIterations,
@@ -185,7 +186,13 @@ export function createOpenRouterToolCallingClient(
           while (iteration < effectiveMax) {
             iteration++;
             const iterationStart = Date.now();
-            const requestBody = buildRequestBody(model, conversation, tools, totalToolCalls);
+            const requestBody = buildRequestBody(
+              model,
+              conversation,
+              tools,
+              totalToolCalls,
+              toolChoice
+            );
 
             const response = await fetchWithTimeout(
               `${API_BASE_URL}/chat/completions`,
@@ -362,7 +369,8 @@ function buildRequestBody(
   model: string,
   messages: OpenRouterMessage[],
   tools: ToolDefinition[],
-  totalToolCalls: number
+  totalToolCalls: number,
+  toolChoice: 'auto' | 'required'
 ): Record<string, unknown> {
   return {
     model,
@@ -377,7 +385,7 @@ function buildRequestBody(
           parameters: tool.parameters,
         },
       })),
-      tool_choice: totalToolCalls === 0 ? 'required' : 'auto',
+      tool_choice: totalToolCalls === 0 ? toolChoice : 'auto',
     }),
   };
 }

@@ -52,7 +52,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'create_note',
       description:
-        'Use when the user asks to remember, save, note, write down, keep, or store information for later. Do not use for unsupported external tasks.',
+        'Use only when the user explicitly asks to create, save, note, remember, or write down a note or specific information. Do not use for greetings, smalltalk, follow-up complaints, read-only questions, or unsupported external tasks.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -126,7 +126,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'create_research',
       description:
-        'Use only when the user explicitly asks for a research draft, report, investigation, or comparison about an external topic. Do not use to inspect personal IntexuraOS data such as calendar, notes, bookmarks, code tasks, or WhatsApp history. Creates a research draft for the user to review.',
+        'Use only when the user explicitly says research, research draft, or asks to create a research draft about an external topic. Do not use for general explanations, "how does this work" questions, or to inspect personal IntexuraOS data such as calendar, notes, bookmarks, code tasks, or WhatsApp history.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -157,7 +157,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'create_link',
       description:
-        'Use when the user asks to save, bookmark, keep, or remember a link or URL.',
+        'Use when the user explicitly asks to save a link, add a bookmark, bookmark a URL, or sends a bare URL / URL share with optional surrounding description. Do not use when the user explicitly asks for another resource that includes the URL.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -192,7 +192,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'create_code_task',
       description:
-        'Use when the user asks to create a code task. Code tasks default to planning mode. Use execution mode only when the user explicitly asks for execution mode, says create code task execution, or says the task is in execution stage.',
+        'Use only when the user explicitly asks to create a code task, coding task, or programming task. Code tasks default to planning mode. Use execution mode only when the user explicitly asks for execution mode, says create code task execution, or says the task is in execution stage.',
       parameters: {
         type: 'object',
         additionalProperties: false,

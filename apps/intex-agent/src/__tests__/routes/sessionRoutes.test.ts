@@ -71,6 +71,10 @@ class FakeSessionRepository {
     return null;
   }
 
+  async findContinuableSession(): Promise<IntexAgentSession | null> {
+    return null;
+  }
+
   async createSession(draft: IntexAgentSession): Promise<IntexAgentSession> {
     this.sessions.push(draft);
     return draft;

@@ -31,6 +31,38 @@ describe('FirestoreSessionRepository', () => {
     });
   });
 
+  it('finds the newest continuable WhatsApp session for a user', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const repo = new FirestoreSessionRepository({ firestore });
+
+    await repo.createSession(
+      session({
+        id: 'older-waiting',
+        status: 'waiting_for_user',
+        lastUserMessageAt: '2026-06-24T09:00:00.000Z',
+      })
+    );
+    await repo.createSession(
+      session({
+        id: 'newer-waiting',
+        status: 'waiting_for_user',
+        lastUserMessageAt: '2026-06-24T10:00:00.000Z',
+      })
+    );
+    await repo.createSession(
+      session({
+        id: 'completed',
+        status: 'completed',
+        lastUserMessageAt: '2026-06-24T10:30:00.000Z',
+      })
+    );
+
+    await expect(repo.findContinuableSession('user-1')).resolves.toMatchObject({
+      id: 'newer-waiting',
+      status: 'waiting_for_user',
+    });
+  });
+
   it('returns null when a session is missing or belongs to another user', async () => {
     const firestore = createFakeFirestore() as unknown as Firestore;
     const repo = new FirestoreSessionRepository({ firestore });
