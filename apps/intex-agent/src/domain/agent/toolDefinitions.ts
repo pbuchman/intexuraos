@@ -157,7 +157,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'create_link',
       description:
-        'Use only when the user explicitly asks to save a link, add a bookmark, or bookmark a URL. Do not use for a bare URL without a save/bookmark verb.',
+        'Use when the user explicitly asks to save a link, add a bookmark, bookmark a URL, or sends a bare URL / URL share with optional surrounding description. Do not use when the user explicitly asks for another resource that includes the URL.',
       parameters: {
         type: 'object',
         additionalProperties: false,

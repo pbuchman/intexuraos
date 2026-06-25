@@ -40,7 +40,7 @@ describe('createIntexAgentRunner', () => {
       toolName: 'create_note',
     });
     expect(client.calls[0]?.systemPrompt).toBe(INTEX_AGENT_SYSTEM_PROMPT.text);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('3.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('4.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
@@ -48,6 +48,8 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain('Return no_action');
     expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
     expect(client.calls[0]?.systemPrompt).toContain('what is in my calendar');
+    expect(client.calls[0]?.systemPrompt).toContain('Plain URL shares are the exception');
+    expect(client.calls[0]?.systemPrompt).toContain('keywords inside URLs');
     expect(client.calls[0]?.systemPrompt).toContain('If the request is not one of the supported jobs, do not call a tool');
     expect(client.calls[0]?.systemPrompt).not.toMatch(/approval|command classification|action queue|voice/i);
     expect(client.calls[0]?.messages).toEqual([
@@ -128,6 +130,26 @@ describe('createIntexAgentRunner', () => {
     });
     expect(client.calls[0]?.tools).toEqual([]);
     expect(client.calls[0]?.toolChoice).toBe('auto');
+  });
+
+  it('exposes only the link tool for bare URL shares', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply: 'Ready to save the bookmark.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'https://research-world.com/notes-and-calendar-tasks Interesting launch',
+    });
+
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_link']);
   });
 
   it('blocks read-only calendar questions instead of creating research', async () => {

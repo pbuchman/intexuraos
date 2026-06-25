@@ -11,6 +11,15 @@ describe('classifyIntexAgentIntent', () => {
     ['Przygotuj research draft o cenach GPU', ['create_research']],
     ['Save link https://example.com', ['create_link']],
     ['Save https://example.com/article', ['create_link']],
+    ['https://example.com', ['create_link']],
+    ['https://example.com New launch page with pricing details', ['create_link']],
+    ['check this out https://example.com/case-study nice writeup', ['create_link']],
+    ['https://research-world.com/notes-and-calendar-tasks', ['create_link']],
+    ['Create a note including https://example.com', ['create_note']],
+    ['Save note including https://example.com', ['create_note']],
+    ['Create research draft from https://example.com', ['create_research']],
+    ['Add calendar event with https://example.com tomorrow at 9', ['create_calendar_event']],
+    ['Create code task for https://example.com webhook bug', ['create_code_task']],
     ['Dodaj zakladke https://example.com', ['create_link']],
     ['Create code task to implement explicit intent gating', ['create_code_task']],
     ['Stworz zadanie programistyczne dla intent gating', ['create_code_task']],
@@ -28,11 +37,21 @@ describe('classifyIntexAgentIntent', () => {
     'A jak wygląda taki schemat request o HTTP, który wykonujesz?',
     'Nie dostałam żadnego linku',
     'Remember the old days',
-    'https://example.com',
   ])('does not allow implicit resource creation: %s', (text) => {
     const decision = classifyIntexAgentIntent(text);
 
     expect(decision.kind).not.toBe('tool');
+  });
+
+  it.each([
+    'https://research-world.com',
+    'https://todo-app.io/notes',
+    'https://calendar-task.example/research-notes',
+  ])('ignores command-like keywords inside URLs: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'tool',
+      allowedToolNames: ['create_link'],
+    });
   });
 
   it.each([

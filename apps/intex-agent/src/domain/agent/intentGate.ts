@@ -7,12 +7,14 @@ export type IntexAgentIntentDecision =
 
 export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision {
   const normalized = normalizeIntentText(text);
+  const normalizedWithoutUrls = normalizeIntentText(stripUrls(text));
+  const containsUrl = hasUrl(text);
 
-  if (isGreeting(normalized)) {
+  if (!containsUrl && isGreeting(normalized)) {
     return { kind: 'no_action', reason: 'greeting' };
   }
 
-  const toolNames = explicitToolNames(normalized);
+  const toolNames = explicitToolNames(normalizedWithoutUrls);
   if (toolNames.length === 1) {
     return { kind: 'tool', allowedToolNames: toolNames };
   }
@@ -21,8 +23,12 @@ export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision
     return { kind: 'unsupported', reason: 'multiple_resource_intents' };
   }
 
-  if (isReadOnlyPersonalDataRequest(normalized)) {
+  if (isReadOnlyPersonalDataRequest(normalizedWithoutUrls)) {
     return { kind: 'unsupported', reason: 'read_only_personal_data' };
+  }
+
+  if (containsUrl) {
+    return { kind: 'tool', allowedToolNames: ['create_link'] };
   }
 
   return { kind: 'no_action', reason: 'conversation' };
@@ -70,8 +76,7 @@ function isExplicitResearchRequest(text: string): boolean {
 function isExplicitLinkRequest(text: string): boolean {
   return (
     /\b(save|bookmark|add)\b.*\b(link|url|bookmark|zakladk\w*)\b/u.test(text) ||
-    /\b(zapisz|dodaj)\b.*\b(link|url|zakladk\w*)\b/u.test(text) ||
-    (hasUrl(text) && /\b(save|bookmark|zapisz|dodaj)\b/u.test(text))
+    /\b(zapisz|dodaj)\b.*\b(link|url|zakladk\w*)\b/u.test(text)
   );
 }
 
@@ -95,7 +100,11 @@ function isGreeting(text: string): boolean {
 }
 
 function hasUrl(text: string): boolean {
-  return /\bhttps?\s*(?::\s*)?\/\/\S+/u.test(text);
+  return /\bhttps?:\/\/\S+/iu.test(text);
+}
+
+function stripUrls(text: string): string {
+  return text.replace(/\bhttps?:\/\/\S+/giu, ' ');
 }
 
 function normalizeIntentText(text: string): string {
