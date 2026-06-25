@@ -27,11 +27,9 @@ import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/fire
 import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
-import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import { createLinearIssueService } from '../../../domain/services/linearIssueService.js';
-import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
@@ -49,11 +47,6 @@ describe('GET /code/github-pr-summaries', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-
-    nock('http://actions-agent')
-      .persist()
-      .patch(/\/internal\/actions\/.*\/status/)
-      .reply(200, { success: true });
 
     nock('http://linear-agent:8086')
       .persist()
@@ -112,12 +105,6 @@ describe('GET /code/github-pr-summaries', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -140,11 +127,9 @@ describe('GET /code/github-pr-summaries', () => {
       whatsappNotifier,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
@@ -191,11 +176,9 @@ describe('GET /code/github-pr-summaries', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: typeof logChunkRepo;
       logLineRepo: typeof logLineRepo;
-      actionsAgentClient: typeof actionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: ReturnType<typeof createWhatsAppNotifier>;
       linearIssueService: ReturnType<typeof createLinearIssueService>;
-      statusMirrorService: ReturnType<typeof createStatusMirrorService>;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;

@@ -182,17 +182,6 @@ Publishes test events to local Pub/Sub for development and debugging. Supports a
 node scripts/pubsub-publish-test.mjs [event-type]
 ```
 
-### reset-actions-status.mjs
-
-Resets action documents in Firestore back to `pending` status. Useful for re-testing the action processing flow.
-
-```bash
-node scripts/reset-actions-status.mjs                    # Reset all actions
-node scripts/reset-actions-status.mjs --dry-run          # Preview without applying
-node scripts/reset-actions-status.mjs --type research    # Reset only research actions
-node scripts/reset-actions-status.mjs --status awaiting_approval
-```
-
 ### backfill-research-favourite.mjs
 
 Backfills `favourite: false` on research documents that are missing the field. Requires `FIRESTORE_EMULATOR_HOST` to be set.

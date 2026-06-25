@@ -364,8 +364,6 @@ export interface AppConfig {
   mobileNotificationsServiceUrl: string;
   fishingAssistantServiceUrl: string;
   ResearchAgentUrl: string;
-  commandsAgentServiceUrl: string;
-  actionsAgentUrl: string;
   notesAgentUrl: string;
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
@@ -468,105 +466,6 @@ export interface UserSettings {
   createdAt: string;
   updatedAt: string;
 }
-
-/**
- * Command classification type from commands-agent
- */
-export type CommandType =
-  | 'research'
-  | 'note'
-  | 'link'
-  | 'calendar'
-  | 'reminder'
-  | 'linear'
-  | 'code';
-
-/**
- * Command status
- */
-export type CommandStatus =
-  | 'received'
-  | 'classified'
-  | 'pending_classification'
-  | 'failed'
-  | 'archived';
-
-/**
- * Command source type
- */
-export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
-
-/**
- * Command classification details
- */
-export interface CommandClassification {
-  type: CommandType;
-  confidence: number;
-  reasoning: string;
-  classifiedAt: string;
-}
-
-/**
- * Command from commands-agent
- */
-export interface Command {
-  id: string;
-  userId: string;
-  sourceType: CommandSourceType;
-  externalId: string;
-  text: string;
-  timestamp: string;
-  status: CommandStatus;
-  classification?: CommandClassification;
-  actionId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Action status
- */
-export type ActionStatus =
-  | 'pending'
-  | 'awaiting_approval'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'rejected'
-  | 'archived';
-
-/**
- * Action from commands-agent
- */
-export interface Action {
-  id: string;
-  userId: string;
-  commandId: string;
-  type: CommandType;
-  confidence: number;
-  title: string;
-  status: ActionStatus;
-  payload: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Commands list response
- */
-export interface CommandsResponse {
-  commands: Command[];
-  nextCursor?: string;
-}
-
-/**
- * Actions list response
- */
-export interface ActionsResponse {
-  actions: Action[];
-  nextCursor?: string;
-}
-
 
 /**
  * Note from notes-agent
@@ -1157,8 +1056,6 @@ export interface CodeTask {
   createdAt: string;
   updatedAt: string;
   dispatchedAt?: string;
-  actionId?: string;
-  approvalEventId?: string;
   linearIssueId?: string;
   linearIssue?: {
     identifier: string;

@@ -954,18 +954,22 @@ describe('submitToExecutionAgent', () => {
       expect(EXECUTION_AGENT_PROMPT).toContain('comments (newest first)');
     });
 
-    it('does not copy actionId or approvalEventId from original task to execution task', async () => {
-      // actionId and approvalEventId are Firestore dedup keys.
-      // Copying them to the execution task causes DUPLICATE_APPROVAL for processCodeAction tasks.
-      // retryTask.ts correctly omits these — execution path must do the same.
-      setupHappyPathMocks({ actionId: 'action_abc123', approvalEventId: 'event_xyz456' });
+    it('does not copy legacy action fields from original task to execution task', async () => {
+      // Legacy action fields are not part of new task creation.
+      const removedActionField = ['action', 'Id'].join('');
+      const removedApprovalField = ['approval', 'Event', 'Id'].join('');
+
+      setupHappyPathMocks({
+        [removedActionField]: 'action_abc123',
+        [removedApprovalField]: 'event_xyz456',
+      } as Partial<CodeTask>);
 
       await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       const createCall = mockCodeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(createCall).toBeDefined();
-      expect(createCall?.['actionId']).toBeUndefined();
-      expect(createCall?.['approvalEventId']).toBeUndefined();
+      expect(createCall?.[removedActionField]).toBeUndefined();
+      expect(createCall?.[removedApprovalField]).toBeUndefined();
     });
 
     it('sets workerLocation to queued on execution task', async () => {

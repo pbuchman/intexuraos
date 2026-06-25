@@ -1,7 +1,7 @@
 import type { ApiErrorResponse, ApiResponse } from '@/types';
 import { newRequestId } from '@/services/requestId';
 
-export type ConflictReason = 'duplicate' | 'active' | 'duplicate_approval';
+export type ConflictReason = 'duplicate' | 'active';
 
 export interface ConflictErrorInfo {
   taskId: string;
@@ -25,13 +25,6 @@ export function parseConflictError(message: string): ConflictErrorInfo | null {
   const activeMatch = activePattern.exec(message);
   if (activeMatch?.[1]) {
     return { taskId: activeMatch[1], reason: 'active' };
-  }
-
-  // Pattern 3: "Duplicate: {taskId}"
-  const approvalPattern = /^Duplicate: (.+)/;
-  const approvalMatch = approvalPattern.exec(message);
-  if (approvalMatch?.[1]) {
-    return { taskId: approvalMatch[1], reason: 'duplicate_approval' };
   }
 
   // Unknown format - return null to fall back to generic error handling

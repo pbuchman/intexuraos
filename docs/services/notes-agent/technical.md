@@ -14,7 +14,7 @@ graph TB
     end
 
     subgraph "Internal Callers"
-        Actions[actions-agent]
+        Intex[intex-agent]
         WA[whatsapp-service]
     end
 
@@ -32,7 +32,7 @@ graph TB
 
     Web --> NoteRoutes
     Mobile --> NoteRoutes
-    Actions --> InternalRoutes
+    Intex --> InternalRoutes
     WA --> InternalRoutes
     NoteRoutes --> UseCases
     InternalRoutes --> UseCases
@@ -188,7 +188,7 @@ sequenceDiagram
 
 | Service       | Endpoint          | Purpose                              |
 | ------------- | ----------------- | ------------------------------------ |
-| actions-agent | `/internal/notes` | Creates notes from action executions |
+| intex-agent | `/internal/notes` | Creates notes from direct tool calls |
 
 ### Package Dependencies
 

@@ -82,48 +82,6 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.status).toBe('dispatched');
     });
 
-    it('Layer 0: rejects duplicate approvalEventId with DUPLICATE_APPROVAL', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const input = createTaskInput({ approvalEventId: 'approval-123' });
-      const first = await repo.create(input);
-
-      expect(first.ok).toBe(true);
-
-      const second = await repo.create(input);
-
-      expect(second.ok).toBe(false);
-      if (second.ok) return;
-      expect(second.error.code).toBe('DUPLICATE_APPROVAL');
-      if (second.error.code === 'DUPLICATE_APPROVAL') {
-        expect(second.error.existingTaskId).toBeDefined();
-      }
-    });
-
-    it('Layer 1: rejects duplicate actionId with DUPLICATE_ACTION', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const input = createTaskInput({ actionId: 'action-123' });
-      const first = await repo.create(input);
-
-      expect(first.ok).toBe(true);
-
-      const second = await repo.create(input);
-
-      expect(second.ok).toBe(false);
-      if (second.ok) return;
-      expect(second.error.code).toBe('DUPLICATE_ACTION');
-      if (second.error.code === 'DUPLICATE_ACTION') {
-        expect(second.error.existingTaskId).toBeDefined();
-      }
-    });
-
     it('Layer 2: rejects duplicate prompt within 5 minutes with DUPLICATE_PROMPT', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -511,8 +469,6 @@ describe('firestoreCodeTaskRepository', () => {
       });
 
       const input = createTaskInput({
-        actionId: 'action-123',
-        approvalEventId: 'approval-123',
         linearIssueId: 'LIN-123',
       });
 
@@ -521,8 +477,6 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.actionId).toBe('action-123');
-      expect(result.value.approvalEventId).toBe('approval-123');
       expect(result.value.linearIssueId).toBe('LIN-123');
       expect(result.value).not.toHaveProperty('linearIssueTitle');
       expect(result.value).not.toHaveProperty('linearIssueUrl');

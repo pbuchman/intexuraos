@@ -10,7 +10,7 @@ Research-agent orchestrates parallel AI research across multiple LLM providers (
 graph TB
     subgraph "External"
         WebApp[Web App]
-        OtherSvc[Other Services\nactions-agent etc.]
+        OtherSvc[Other Services\nintex-agent etc.]
     end
 
     subgraph "research-agent"
@@ -189,7 +189,7 @@ sequenceDiagram
 
 | Method | Path                                         | Purpose                                       | Caller               |
 | ------ | -------------------------------------------- | --------------------------------------------- | -------------------- |
-| `POST` | `/internal/research/draft`                   | Create draft research from another service    | actions-agent        |
+| `POST` | `/internal/research/draft`                   | Create draft research from another service    | intex-agent          |
 | `POST` | `/internal/llm/pubsub/process-research`      | Receive `research.process` event from Pub/Sub | Cloud Pub/Sub        |
 | `POST` | `/internal/llm/pubsub/process-llm-call`      | Receive `llm.call` event — execute one model  | Cloud Pub/Sub        |
 | `POST` | `/internal/llm/pubsub/report-analytics`      | Receive `llm.report` analytics event          | Cloud Pub/Sub        |

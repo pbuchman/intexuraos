@@ -6,11 +6,8 @@ interface WhatsAppPubSubEnv {
   INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION: string;
   INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC: string;
   INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION: string;
-  INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC: string;
   INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC: string;
   INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC: string;
-  INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC: string;
-  INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC: string;
 }
 
 interface DevAppSummary {
@@ -74,11 +71,8 @@ function loadWhatsAppPubSubEnv(): WhatsAppPubSubEnv {
           INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION: env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION,
           INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC: env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC,
           INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION: env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION,
-          INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC: env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC,
           INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC: env.INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC,
           INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC: env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC,
-          INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC: env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC,
-          INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC: env.INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC,
         }));
       `,
     ],
@@ -101,7 +95,7 @@ function loadWhatsAppLinkProducerWebAppEnv(): Record<string, string | undefined>
       '-e',
       `
         const config = require('./ecosystem.config.cjs');
-        const names = ${JSON.stringify(['actions-agent', 'code-agent', 'mobile-notifications-service', 'research-agent'])};
+        const names = ${JSON.stringify(['code-agent', 'intex-agent', 'mobile-notifications-service', 'research-agent'])};
         const result = {};
         for (const name of names) {
           const app = config.apps.find((entry) => entry.name === name);
@@ -177,18 +171,15 @@ describe('ecosystem.config.cjs', () => {
       INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION: 'whatsapp-send-message-push',
       INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC: 'whatsapp-media-cleanup',
       INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION: 'whatsapp-media-cleanup-push',
-      INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC: 'commands-ingest',
       INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC: 'intex-message-ingest',
       INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC: 'whatsapp-webhook-process',
-      INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC: 'whatsapp-transcription',
-      INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC: 'approval-reply',
     });
   });
 
   it('uses externally reachable dev web app URL for WhatsApp link producers', () => {
     expect(loadWhatsAppLinkProducerWebAppEnv()).toEqual({
-      'actions-agent': 'https://dev.intexuraos.cloud',
       'code-agent': 'https://dev.intexuraos.cloud',
+      'intex-agent': 'https://dev.intexuraos.cloud',
       'mobile-notifications-service': 'https://dev.intexuraos.cloud',
       'research-agent': 'https://dev.intexuraos.cloud',
     });

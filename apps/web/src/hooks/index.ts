@@ -1,5 +1,4 @@
 export { useApiClient, ApiError } from './useApiClient.js';
-export { useActionChanges, type UseActionChangesResult } from './useActionChanges.js';
 export {
   useBookmarkChanges,
   type UseBookmarkChangesResult,
@@ -15,7 +14,6 @@ export { useGitHubPREvents } from './useGitHubPREvents.js';
 export { useGitHubEventLog, type GitHubEventLogListRow, type UseGitHubEventLogResult } from './useGitHubEventLog.js';
 export { useGitHubPRSummaries } from './useGitHubPRSummaries.js';
 export { useLinearIssueOptions } from './useLinearIssueOptions.js';
-export { useCommandChanges, type UseCommandChangesResult } from './useCommandChanges.js';
 export { useLlmKeys } from './useLlmKeys.js';
 export { useNotes } from './useNotes.js';
 export { useOpenRouterModels } from './useOpenRouterModels.js';

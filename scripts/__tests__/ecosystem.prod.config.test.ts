@@ -29,8 +29,6 @@ const EXPECTED_SERVICES = [
   ['llm-usage-service', '8132'],
   ['intex-agent', '8134'],
   ['user-service', '8110'],
-  ['commands-agent', '8117'],
-  ['actions-agent', '8118'],
   ['research-agent', '8116'],
   ['image-service', '8120'],
   ['calendar-agent', '8125'],
@@ -58,8 +56,6 @@ const PROD_ENV = {
 
 const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
   'user-service',
-  'commands-agent',
-  'actions-agent',
   'research-agent',
   'image-service',
   'calendar-agent',
@@ -327,9 +323,6 @@ describe('ecosystem.config.prod.cjs', () => {
     const config = loadProdConfig();
     const byName = new Map(config.apps.map((app) => [app.name, app]));
 
-    expect(byName.get('actions-agent')?.env.INTEXURAOS_COMMANDS_AGENT_URL).toBe(
-      'http://127.0.0.1:8117'
-    );
     expect(byName.get('linear-agent')?.env.INTEXURAOS_CODE_AGENT_URL).toBe('http://127.0.0.1:8128');
     expect(byName.get('linear-agent')?.env.INTEXURAOS_SERVICE_URL).toBe(
       'https://intexuraos.cloud/api/linear'
@@ -355,9 +348,6 @@ describe('ecosystem.config.prod.cjs', () => {
     );
     expect(byName.get('intex-agent')?.env.INTEXURAOS_LLM_USAGE_SERVICE_URL).toBe(
       'http://127.0.0.1:8132'
-    );
-    expect(byName.get('commands-agent')?.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE).toBe(
-      'intexuraos-actions-queue-dev'
     );
     expect(byName.get('research-agent')?.env.INTEXURAOS_PUBSUB_LLM_CALL_TOPIC).toBe(
       'intexuraos-llm-call-dev'

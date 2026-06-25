@@ -177,20 +177,6 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    commands_agent = {
-      name      = "intexuraos-commands-agent"
-      app_path  = "apps/commands-agent"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
-    actions_agent = {
-      name      = "intexuraos-actions-agent"
-      app_path  = "apps/actions-agent"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
     image_service = {
       name      = "intexuraos-image-service"
       app_path  = "apps/image-service"
@@ -733,30 +719,6 @@ module "pubsub_whatsapp_webhook_process" {
   ]
 }
 
-# Subscription for srt-service transcription completed events (srt-service -> whatsapp-service)
-# Topic is owned by srt-service; whatsapp-service defines the push subscription here.
-module "pubsub_srt_transcription_completed" {
-  source = "../../modules/pubsub-push"
-
-  project_id               = var.project_id
-  project_number           = local.project_number
-  topic_name               = "intexuraos-srt-transcription-completed-${var.environment}"
-  labels                   = local.common_labels
-  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
-
-  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/whatsapp/pubsub/transcription-completed"
-  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = local.retired_cloud_run_push_audience
-  ack_deadline_seconds       = 120
-
-  publisher_service_accounts = {}
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
-}
-
 # Topic for audio stored events (whatsapp-service → transcription Cloud Function)
 # Delivery is via an explicit push subscription (defined below) so we can attach
 # a dead_letter_policy. Cloud Functions Gen2 event triggers create their own
@@ -830,30 +792,6 @@ resource "google_pubsub_subscription" "transcription_dlq_inspect" {
   depends_on = [google_pubsub_topic.transcription_dlq]
 }
 
-# Topic for commands ingest (whatsapp -> commands-agent)
-module "pubsub_commands_ingest" {
-  source = "../../modules/pubsub-push"
-
-  project_id               = var.project_id
-  project_number           = local.project_number
-  topic_name               = "intexuraos-commands-ingest-${var.environment}"
-  labels                   = local.common_labels
-  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
-
-  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/commands"
-  push_service_account_email = module.iam.service_accounts["commands_agent"]
-  push_audience              = local.retired_cloud_run_push_audience
-
-  publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
-}
-
 # Topic for intex-agent WhatsApp Assistant message ingest (whatsapp -> intex-agent)
 module "pubsub_intex_message_ingest" {
   source = "../../modules/pubsub-push"
@@ -871,31 +809,6 @@ module "pubsub_intex_message_ingest" {
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
-}
-
-# Topic for action events (unified queue for all action types)
-module "pubsub_actions_queue" {
-  source = "../../modules/pubsub-push"
-
-  project_id               = var.project_id
-  project_number           = local.project_number
-  topic_name               = "intexuraos-actions-queue-${var.environment}"
-  labels                   = local.common_labels
-  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
-
-  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/actions/process"
-  push_service_account_email = module.iam.service_accounts["actions_agent"]
-  push_audience              = local.retired_cloud_run_push_audience
-
-  publisher_service_accounts = {
-    commands_agent = module.iam.service_accounts["commands_agent"]
-    actions_agent  = module.iam.service_accounts["actions_agent"]
   }
 
   depends_on = [
@@ -979,7 +892,7 @@ module "pubsub_llm_call" {
   ]
 }
 
-# Topic for sending WhatsApp messages (actions-agent, research-agent, code-agent -> whatsapp-service)
+# Topic for sending WhatsApp messages (research-agent, code-agent, intex-agent -> whatsapp-service)
 module "pubsub_whatsapp_send" {
   source = "../../modules/pubsub-push"
 
@@ -994,7 +907,6 @@ module "pubsub_whatsapp_send" {
   push_audience              = local.retired_cloud_run_push_audience
 
   publisher_service_accounts = {
-    actions_agent   = module.iam.service_accounts["actions_agent"]
     research_agent  = module.iam.service_accounts["research_agent"]
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
     code_agent      = module.iam.service_accounts["code_agent"]
@@ -1006,31 +918,6 @@ module "pubsub_whatsapp_send" {
     module.iam,
   ]
 }
-
-# Topic for approval reply events (whatsapp-service -> actions-agent)
-module "pubsub_approval_reply" {
-  source = "../../modules/pubsub-push"
-
-  project_id               = var.project_id
-  project_number           = local.project_number
-  topic_name               = "intexuraos-approval-reply-${var.environment}"
-  labels                   = local.common_labels
-  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
-
-  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/actions/approval-reply"
-  push_service_account_email = module.iam.service_accounts["actions_agent"]
-  push_audience              = local.retired_cloud_run_push_audience
-
-  publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
-}
-
 
 # -----------------------------------------------------------------------------
 # Additional Retained Pub/Sub Topics
@@ -1083,31 +970,6 @@ module "pubsub_bookmark_summarize" {
 
   publisher_service_accounts = {
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
-}
-
-# Topic for calendar preview generation (actions-agent -> calendar-agent)
-module "pubsub_calendar_preview" {
-  source = "../../modules/pubsub-push"
-
-  project_id               = var.project_id
-  project_number           = local.project_number
-  topic_name               = "intexuraos-calendar-preview-${var.environment}"
-  labels                   = local.common_labels
-  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
-
-  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/calendar/generate-preview"
-  push_service_account_email = module.iam.service_accounts["calendar_agent"]
-  push_audience              = local.retired_cloud_run_push_audience
-  ack_deadline_seconds       = 120
-
-  publisher_service_accounts = {
-    actions_agent = module.iam.service_accounts["actions_agent"]
   }
 
   depends_on = [
@@ -1503,30 +1365,20 @@ resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
   member    = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# Topic for transcription completed events (transcription Cloud Function -> whatsapp-service)
-module "pubsub_transcription_completed" {
-  source = "../../modules/pubsub-push"
+# Topic for transcription completed events retained for the transcription worker.
+resource "google_pubsub_topic" "transcription_completed" {
+  name    = "intexuraos-transcription-completed-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
 
-  project_id               = var.project_id
-  project_number           = local.project_number
-  topic_name               = "intexuraos-transcription-completed-${var.environment}"
-  labels                   = local.common_labels
-  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
+  depends_on = [google_project_service.apis]
+}
 
-  push_endpoint              = "${local.retired_cloud_run_push_endpoint}/internal/whatsapp/pubsub/transcription-completed"
-  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = local.retired_cloud_run_push_audience
-  ack_deadline_seconds       = 60
-
-  publisher_service_accounts = {
-    transcription_function = google_service_account.transcription_function.email
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-    google_service_account.transcription_function,
-  ]
+resource "google_pubsub_topic_iam_member" "transcription_publishes_completed" {
+  project = var.project_id
+  topic   = google_pubsub_topic.transcription_completed.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
 module "function_transcription" {
@@ -1561,7 +1413,7 @@ module "function_transcription" {
   env_vars = {
     INTEXURAOS_ENVIRONMENT                          = var.environment
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
-    INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = google_pubsub_topic.transcription_completed.name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC       = google_pubsub_topic.transcription_dlq.name
     INTEXURAOS_USER_SERVICE_URL                     = "${local.public_origin}/api/user"
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
@@ -1581,7 +1433,7 @@ module "function_transcription" {
     google_service_account.transcription_function,
     google_pubsub_topic.audio_stored,
     google_pubsub_topic.transcription_dlq,
-    module.pubsub_transcription_completed,
+    google_pubsub_topic.transcription_completed,
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
     google_secret_manager_secret_iam_member.transcription_sentry_dsn,
@@ -1692,19 +1544,9 @@ output "pubsub_media_cleanup_topic" {
   value       = module.pubsub_media_cleanup.topic_name
 }
 
-output "pubsub_commands_ingest_topic" {
-  description = "Pub/Sub topic for commands ingest events"
-  value       = module.pubsub_commands_ingest.topic_name
-}
-
 output "pubsub_intex_message_ingest_topic" {
   description = "Pub/Sub topic for intex-agent WhatsApp Assistant message ingest events"
   value       = module.pubsub_intex_message_ingest.topic_name
-}
-
-output "pubsub_actions_queue_topic" {
-  description = "Pub/Sub topic for unified actions queue"
-  value       = module.pubsub_actions_queue.topic_name
 }
 
 output "pubsub_research_process_topic" {
@@ -1759,5 +1601,5 @@ output "pubsub_audio_stored_topic" {
 
 output "pubsub_transcription_completed_topic" {
   description = "Pub/Sub topic for transcription completed events"
-  value       = module.pubsub_transcription_completed.topic_name
+  value       = google_pubsub_topic.transcription_completed.name
 }

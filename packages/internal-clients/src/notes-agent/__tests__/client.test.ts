@@ -29,7 +29,7 @@ describe('createNotesAgentServiceClient', () => {
         title: 'Meeting notes',
         content: 'Quarterly goals',
         tags: ['work'],
-        source: 'actions-agent',
+        source: 'intex-agent',
         sourceId: 'action-1',
       })
       .matchHeader('x-internal-auth', 'secret')
@@ -52,7 +52,7 @@ describe('createNotesAgentServiceClient', () => {
       title: 'Meeting notes',
       content: 'Quarterly goals',
       tags: ['work'],
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 
@@ -88,7 +88,7 @@ describe('createNotesAgentServiceClient', () => {
       title: 'Meeting notes',
       content: 'Quarterly goals',
       tags: ['work'],
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 
@@ -115,7 +115,7 @@ describe('createNotesAgentServiceClient', () => {
       title: 'Meeting notes',
       content: 'Quarterly goals',
       tags: ['work'],
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 

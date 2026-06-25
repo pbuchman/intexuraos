@@ -20,7 +20,7 @@
 ## Future Plans
 
 1. **Evaluate decommissioning** — The service has no business endpoints after v3.6.0. Determine whether it should be retired entirely or repurposed for new platform-wide settings (budget management, feature flags, etc.)
-2. **Remove startup dependency chain** — If decommissioned, update `ecosystem.config.cjs` `waitForService` entries for user-service, commands-agent, actions-agent, and research-agent
+2. **Remove startup dependency chain** — If decommissioned, update `ecosystem.config.cjs` `waitForService` entries for user-service, intex-agent, and research-agent
 3. **Clean up Firestore registry** — The `settings` collection in `firestore-collections.json` is still owned by this service but unused
 4. **Remove stale package dependency** — `@intexuraos/llm-contract` is listed in `package.json` but no source file imports it
 

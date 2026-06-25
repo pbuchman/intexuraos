@@ -31,14 +31,12 @@ describe('storeLogChunks', () => {
     const findById = vi.fn().mockResolvedValue(ok({
       workerType: 'claude-opus',
       status: 'running',
-      actionId: 'act-1',
     }));
 
     setServices({
       logChunkRepo: { storeBatch: storeBatchChunks } as never,
       logLineRepo: { storeBatch: storeBatchLines } as never,
       codeTaskRepo: { findById, update: vi.fn().mockResolvedValue(ok(undefined)) } as never,
-      statusMirrorService: { mirrorStatus: vi.fn().mockResolvedValue(undefined) } as never,
     } as unknown as ServiceContainer);
 
     const states = new Map<string, TaskFormatterEntry>();
@@ -64,7 +62,6 @@ describe('storeLogChunks', () => {
 
   it('transitions dispatched tasks to running on first log delivery', async () => {
     const update = vi.fn().mockResolvedValue(ok(undefined));
-    const mirrorStatus = vi.fn().mockResolvedValue(undefined);
 
     setServices({
       logChunkRepo: { storeBatch: vi.fn().mockResolvedValue(ok(undefined)) } as never,
@@ -73,11 +70,9 @@ describe('storeLogChunks', () => {
         findById: vi.fn().mockResolvedValue(ok({
           workerType: 'claude-opus',
           status: 'dispatched',
-          actionId: 'act-X',
         })),
         update,
       } as never,
-      statusMirrorService: { mirrorStatus } as never,
     } as unknown as ServiceContainer);
 
     await storeLogChunks(createMockLogger(), {
@@ -93,18 +88,12 @@ describe('storeLogChunks', () => {
     });
 
     expect(update).toHaveBeenCalledWith('t-disp', { status: 'running' });
-    expect(mirrorStatus).toHaveBeenCalledWith(expect.objectContaining({
-      actionId: 'act-X',
-      taskStatus: 'running',
-      traceId: 'trace-b',
-    }));
   });
 
   it('warns and falls back to default formatter when task lookup fails on first delivery', async () => {
     const storeBatchChunks = vi.fn().mockResolvedValue(ok(undefined));
     const storeBatchLines = vi.fn().mockResolvedValue(ok(undefined));
     const update = vi.fn();
-    const mirrorStatus = vi.fn();
     const warn = vi.fn();
 
     setServices({
@@ -114,7 +103,6 @@ describe('storeLogChunks', () => {
         findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'missing' })),
         update,
       } as never,
-      statusMirrorService: { mirrorStatus } as never,
     } as unknown as ServiceContainer);
 
     const requestLog = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() } as never;
@@ -131,7 +119,6 @@ describe('storeLogChunks', () => {
     expect(result.kind).toBe('received');
     // No transition kicked off because the task could not be resolved
     expect(update).not.toHaveBeenCalled();
-    expect(mirrorStatus).not.toHaveBeenCalled();
     // Warning is logged so the issue is observable in production logs
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 't-missing' }),
@@ -146,7 +133,6 @@ describe('storeLogChunks', () => {
       } as never,
       logLineRepo: { storeBatch: vi.fn() } as never,
       codeTaskRepo: { findById: vi.fn().mockResolvedValue(ok({ workerType: 'claude-opus', status: 'running' })) } as never,
-      statusMirrorService: { mirrorStatus: vi.fn() } as never,
     } as unknown as ServiceContainer);
 
     const states = new Map<string, TaskFormatterEntry>();

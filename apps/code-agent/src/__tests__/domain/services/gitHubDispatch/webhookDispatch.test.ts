@@ -63,7 +63,6 @@ function makeDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): WebhookD
     taskEnqueueService: {} as never,
     whatsappNotifier: {} as never,
     workerSettingsRepo: {} as never,
-    statusMirrorService: {} as never,
     gitHubPRClient: {} as never,
     userServiceClient: {} as never,
     firestore: {} as never,

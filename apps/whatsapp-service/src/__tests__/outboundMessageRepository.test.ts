@@ -8,12 +8,12 @@ describe('createOutboundMessage', () => {
   it('creates outbound message with valid params', () => {
     const result = createOutboundMessage({
       wamid: 'test-wamid',
-      correlationId: 'action-deploy-approval-action-123',
+      correlationId: 'outbound-message-123',
       userId: 'user-456',
     });
 
     expect(result.wamid).toBe('test-wamid');
-    expect(result.correlationId).toBe('action-deploy-approval-action-123');
+    expect(result.correlationId).toBe('outbound-message-123');
     expect(result.userId).toBe('user-456');
     expect(result.sentAt).toBeDefined();
     expect(result.expiresAt).toBeGreaterThan(0);

@@ -491,22 +491,19 @@ describe('submitTaskFeedback', () => {
       }
     });
 
-    it('includes actionId and approvalEventId in create input when original task has them', async () => {
-      const taskWithIds = createMockCompletedTask({
-        actionId: 'action-999',
-        approvalEventId: 'approval-888',
-      });
-      mockCodeTaskRepo.findByIdForUser = vi.fn().mockResolvedValue(ok(taskWithIds));
+    it('does not include removed action fields in create input', async () => {
+      const removedActionField = ['action', 'Id'].join('');
+      const removedApprovalField = ['approval', 'Event', 'Id'].join('');
 
       const result = await submitTaskFeedback(deps, mockRequest);
 
       expect(result.ok).toBe(true);
-      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          actionId: 'action-999',
-          approvalEventId: 'approval-888',
-        }),
-      );
+      const createMock = mockCodeTaskRepo.create as ReturnType<typeof vi.fn>;
+      expect(createMock).toHaveBeenCalledTimes(1);
+      const [createArg] = createMock.mock.calls[0] ?? [];
+      const createCall = createArg as unknown as Record<string, unknown>;
+      expect(createCall[removedActionField]).toBeUndefined();
+      expect(createCall[removedApprovalField]).toBeUndefined();
     });
 
     it('handles enqueue failure by returning error', async () => {

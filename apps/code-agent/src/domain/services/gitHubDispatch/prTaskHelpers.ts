@@ -72,7 +72,7 @@ export async function destroyPreservedContainer(
 
 /** Attempt to reuse a preserved pull_request container by sending it a message. */
 export async function reusePreservedContainer(
-  deps: Pick<WebhookDispatchServiceDeps, 'codeTaskRepo' | 'logLineRepo' | 'taskDispatcher' | 'workerSettingsRepo' | 'statusMirrorService' | 'whatsappNotifier'>,
+  deps: Pick<WebhookDispatchServiceDeps, 'codeTaskRepo' | 'logLineRepo' | 'taskDispatcher' | 'workerSettingsRepo' | 'whatsappNotifier'>,
   preserved: { id: string; userId: string },
   comment: string,
   logger: Logger,
@@ -85,7 +85,6 @@ export async function reusePreservedContainer(
         logLineRepo: deps.logLineRepo,
         taskDispatcher: deps.taskDispatcher,
         workerSettingsRepo: deps.workerSettingsRepo,
-        statusMirrorService: deps.statusMirrorService,
         whatsappNotifier: deps.whatsappNotifier,
       },
       { taskId: preserved.id, userId: preserved.userId, message: comment },

@@ -13,7 +13,6 @@ import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createCodeTaskDispatchStatusService } from './domain/services/codeTaskDispatchStatusService.js';
 import { createLinearIssueService } from './domain/services/linearIssueService.js';
-import { createStatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
 import { createArchiveStaleGroupsUseCase } from './domain/usecases/archiveStaleGroups.js';
@@ -60,7 +59,7 @@ export function initServices(config: ServiceConfig): void {
   const e2eMocks = createE2EMocks(logger);
   const repos = createRepositoryServices({ firestore, logger });
   const { whatsappPublisher, prTriagePublisher } = createPublisherServices({ config, isE2eMode, e2eMocks, logger });
-  const { linearAgentClient, actionsAgentClient, userServiceClient, usageServiceClient, gitHubPRClient, buildUsageSink } =
+  const { linearAgentClient, userServiceClient, usageServiceClient, gitHubPRClient, buildUsageSink } =
     createClientServices({ config, logger, isE2eMode, e2eMocks });
   const { resolveToolCallingClient, executionMemoryEmbeddingClient } = createLlmServices({ config, logger, userServiceClient, buildUsageSink });
 
@@ -78,7 +77,6 @@ export function initServices(config: ServiceConfig): void {
     logger,
   });
   const linearIssueService = createLinearIssueService({ linearAgentClient, logger });
-  const statusMirrorService = createStatusMirrorService({ actionsAgentClient, logger });
   const userLookupService = createUserLookupService({
     gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
     workerSettingsRepo: repos.workerSettingsRepo,
@@ -125,13 +123,13 @@ export function initServices(config: ServiceConfig): void {
     logger, gitHubPRClient, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo, codeTaskRepo: repos.codeTaskRepo,
     userServiceClient, gitHubPREventRepo: repos.gitHubPREventRepo, linearIssueService, taskDispatcher,
     taskEnqueueService, logLineRepo: repos.logLineRepo, workerSettingsRepo: repos.workerSettingsRepo,
-    statusMirrorService, whatsappNotifier, allowedBots: ALLOWED_BOTS, orchestratorSecret: config.orchestratorSecret,
+    whatsappNotifier, allowedBots: ALLOWED_BOTS, orchestratorSecret: config.orchestratorSecret,
   });
 
   const dispatchService: WebhookDispatchService & CIFailureDispatchService = createWebhookDispatchService({
     gitHubPREventRepo: repos.gitHubPREventRepo, codeTaskRepo: repos.codeTaskRepo, logLineRepo: repos.logLineRepo,
     userLookupService, linearIssueService, taskDispatcher, taskEnqueueService, whatsappNotifier,
-    workerSettingsRepo: repos.workerSettingsRepo, statusMirrorService, gitHubPRClient, userServiceClient,
+    workerSettingsRepo: repos.workerSettingsRepo, gitHubPRClient, userServiceClient,
     firestore, messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS), allowedBots: ALLOWED_BOTS,
     orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl,
     dispatchRetryRepo: repos.dispatchRetryRepo, automationLog,
@@ -163,7 +161,7 @@ export function initServices(config: ServiceConfig): void {
   container = {
     firestore, logger, serviceUrl: config.serviceUrl, codeTaskCallbackBaseUrl: config.codeTaskCallbackBaseUrl,
     codeTaskRepo: repos.codeTaskRepo, logChunkRepo: repos.logChunkRepo, logLineRepo: repos.logLineRepo,
-    taskDispatcher, whatsappNotifier, codeTaskDispatchStatusService, actionsAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
+    taskDispatcher, whatsappNotifier, codeTaskDispatchStatusService, linearAgentClient, linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     archiveStaleGroups: createArchiveStaleGroupsUseCase({

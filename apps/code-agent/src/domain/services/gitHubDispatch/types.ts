@@ -9,7 +9,6 @@ import type { TaskDispatcherService } from '../taskDispatcher.js';
 import type { TaskEnqueueService } from '../taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../../ports/workerSettingsRepository.js';
-import type { StatusMirrorService } from '../statusMirrorService.js';
 import type { GitHubPRClient } from '../../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { GitHubPREventRepository } from '../../repositories/gitHubPREventRepository.js';
@@ -68,7 +67,6 @@ export interface WebhookDispatchServiceDeps {
   taskEnqueueService: TaskEnqueueService;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
-  statusMirrorService: StatusMirrorService;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
   firestore: {

@@ -478,7 +478,7 @@ describe('linearIssueService', () => {
         taskPrompt: 'Do something',
       });
 
-      // Auto-created issues MUST have no labels so processCodeAction routes to planning agent
+      // Auto-created issues MUST have no labels so direct task submission routes to the planning agent.
       expect(result.linearIssueLabels).toEqual([]);
       // Verify the code-task label was not passed to the Linear API
       expect(mockCreateIssue).not.toHaveBeenCalledWith(

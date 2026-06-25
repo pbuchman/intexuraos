@@ -64,14 +64,14 @@ export function HeroSection(): React.JSX.Element {
           </h1>
 
           <p className="mx-auto mb-4 max-w-2xl text-lg leading-relaxed text-neutral-600 md:text-xl">
-            Send a WhatsApp voice note while walking. Come back to a calendar event created,
+            Send a WhatsApp text message while walking. Come back to a calendar event created,
             research synthesized from five AI models, code written and tested, project
             task tracked. This is not a convenience shortcut to a desktop workflow.
             It is a fundamentally different interaction model.
           </p>
 
           <p className="mx-auto mb-10 max-w-2xl text-lg font-semibold leading-relaxed text-neutral-500">
-            ChatGPT voice gives you an answer. IntexuraOS gives you a calendar event, a pull request, or a research report.
+            Chat gives you an answer. IntexuraOS gives you a calendar event, a pull request, or a research report.
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">

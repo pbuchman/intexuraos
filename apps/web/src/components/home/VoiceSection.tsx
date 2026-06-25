@@ -1,24 +1,19 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
-  Bot,
   Brain,
-  Clock,
   Code2,
   Layers,
   MessageSquare,
-  Mic,
 } from 'lucide-react';
 
 export function VoiceSection(): React.JSX.Element {
   const actions = [
     { input: 'Fix the Safari login redirect', output: 'Code change created, tests passing, project tracker updated', icon: Code2, tag: 'CODE' },
     { input: 'Research quantum computing breakthroughs', output: '5-model synthesis with citations and disagreement analysis', icon: Brain, tag: 'RESEARCH' },
-    { input: 'Schedule sync with engineering Tuesday 2pm', output: 'Preview shown, approved via emoji, event created', icon: Layers, tag: 'CALENDAR' },
+    { input: 'Schedule sync with engineering Tuesday 2pm', output: 'Calendar event drafted with the right title, time, and guests', icon: Layers, tag: 'CALENDAR' },
     { input: 'Save this link about TypeScript 5.0', output: 'AI summary generated, metadata extracted, bookmarked', icon: MessageSquare, tag: 'LINK' },
-    { input: 'Track the auth refactor as a project issue', output: 'Issue filed with AI-generated title and description', icon: Bot, tag: 'PROJECT' },
     { input: 'Interesting thought about microservice boundaries', output: 'Note created with tags, searchable later', icon: MessageSquare, tag: 'NOTE' },
-    { input: 'Remind me to check CI at 5pm', output: 'Timed reminder set, notification delivered on schedule', icon: Clock, tag: 'REMINDER' },
   ];
 
   return (
@@ -26,16 +21,16 @@ export function VoiceSection(): React.JSX.Element {
       <div className="mx-auto max-w-7xl">
         <div className="mb-16 max-w-2xl">
           <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-cyan-600">
-            Voice-First Intelligence
+            Text-First Intelligence
           </p>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            Speak.{' '}
+            Type.{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
               It understands.
             </span>
           </h2>
           <p className="mb-6 text-lg leading-relaxed text-neutral-600">
-            Seven action types. One interface. Send a WhatsApp voice note or text message.
+            Five tool types. One interface. Send a WhatsApp text message.
             The system figures out what you meant — even when the wording is imprecise — and
             routes it to the right specialist. Polish and English supported.
           </p>
@@ -63,7 +58,7 @@ export function VoiceSection(): React.JSX.Element {
                 </span>
               </div>
               <div className="mb-3 flex items-start gap-2">
-                <Mic className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
                 <p className="text-sm font-semibold italic text-neutral-900">
                   &quot;{action.input}&quot;
                 </p>

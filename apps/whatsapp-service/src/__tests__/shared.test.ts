@@ -13,6 +13,7 @@ import {
   extractMessageType,
   extractPhoneNumberId,
   extractReactionData,
+  extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
   extractWabaId,
@@ -1301,6 +1302,90 @@ describe('shared utilities', () => {
         ],
       };
       expect(extractButtonResponse(payload)).toBeNull();
+    });
+  });
+
+  describe('extractReplyContext', () => {
+    it('returns null when a message has no reply context', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      id: 'wamid.message',
+                      type: 'text',
+                      text: { body: 'Hello' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(extractReplyContext(payload)).toBeNull();
+    });
+
+    it('returns null when the reply context id is not a string', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      id: 'wamid.message',
+                      type: 'text',
+                      text: { body: 'Hello' },
+                      context: {
+                        id: 123,
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(extractReplyContext(payload)).toBeNull();
+    });
+
+    it('extracts reply context id and sender when present', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      id: 'wamid.message',
+                      type: 'text',
+                      text: { body: 'Hello' },
+                      context: {
+                        id: 'wamid.original',
+                        from: '15550987654',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(extractReplyContext(payload)).toEqual({
+        replyToWamid: 'wamid.original',
+        from: '15550987654',
+      });
     });
   });
 });

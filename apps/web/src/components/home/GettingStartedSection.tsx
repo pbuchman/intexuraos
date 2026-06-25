@@ -22,7 +22,7 @@ export function GettingStartedSection(): React.JSX.Element {
           {[
             { num: '1', title: 'Sign Up', desc: 'Create an account through the web app. Link your Google account for calendar access.' },
             { num: '2', title: 'Connect WhatsApp', desc: 'Verify your phone number with a one-time code. Your mobile command center is ready.' },
-            { num: '3', title: 'Send a Message', desc: 'Type or speak your first command. The platform provides fallback AI access for research, bookmarks, and chat — no API keys needed to start. Coding tasks use your own Anthropic subscription.' },
+            { num: '3', title: 'Send a Message', desc: 'Type your first request. The platform provides fallback AI access for research and bookmarks — no API keys needed to start. Coding tasks use your own Anthropic subscription.' },
           ].map((step) => (
             <motion.div
               key={step.num}

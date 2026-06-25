@@ -6,9 +6,6 @@ import type { Logger } from 'pino';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type {
-  ApprovalReplyEvent,
-  AudioStoredEvent,
-  CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
@@ -20,19 +17,6 @@ import type {
 export interface GcpPubSubPublisherConfig {
   projectId: string;
   mediaCleanupTopic: string;
-  /**
-   * Required: triggers srt-service to start audio transcription. Required at the type
-   * level so misconfiguration is caught at construction, not silently no-op'd at runtime.
-   */
-  audioStoredTopic: string;
-  /**
-   * Required: triggers actions-agent to process approval/rejection of pending actions.
-   */
-  approvalReplyTopic: string;
-  /**
-   * Required: commands-agent turns WhatsApp text commands into bookmark records.
-   */
-  commandsIngestTopic: string;
   /**
    * Required: intex-agent handles realtime WhatsApp Assistant conversations.
    */
@@ -47,39 +31,16 @@ export interface GcpPubSubPublisherConfig {
  */
 export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPublisherPort {
   private readonly mediaCleanupTopic: string;
-  private readonly audioStoredTopic: string;
-  private readonly approvalReplyTopic: string;
-  private readonly commandsIngestTopic: string;
   private readonly intexMessageIngestTopic: string;
   private readonly webhookProcessTopic: string | null;
 
   constructor(config: GcpPubSubPublisherConfig) {
     super({ projectId: config.projectId, logger: config.logger });
-    // Belt-and-suspenders runtime guards: types enforce presence, but runtime
-    // callers can still bypass them (e.g., tests using `as unknown as` casts,
-    // JS callers, or empty-string env values that pass Zod at load time only
-    // because an upstream step forgot `.min(1)`). The upstream has .min(1) —
-    // this guard is the last line of defense.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
-    if (config.audioStoredTopic === undefined || config.audioStoredTopic === '') {
-      throw new Error('audioStoredTopic is required');
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
-    if (config.approvalReplyTopic === undefined || config.approvalReplyTopic === '') {
-      throw new Error('approvalReplyTopic is required');
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
-    if (config.commandsIngestTopic === undefined || config.commandsIngestTopic === '') {
-      throw new Error('commandsIngestTopic is required');
-    }
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
     if (config.intexMessageIngestTopic === undefined || config.intexMessageIngestTopic === '') {
       throw new Error('intexMessageIngestTopic is required');
     }
     this.mediaCleanupTopic = config.mediaCleanupTopic;
-    this.audioStoredTopic = config.audioStoredTopic;
-    this.approvalReplyTopic = config.approvalReplyTopic;
-    this.commandsIngestTopic = config.commandsIngestTopic;
     this.intexMessageIngestTopic = config.intexMessageIngestTopic;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;
   }
@@ -90,16 +51,6 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { messageId: event.messageId },
       'media cleanup'
-    );
-    return this.mapToWhatsAppError(result);
-  }
-
-  async publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
-      this.commandsIngestTopic,
-      event,
-      { externalId: event.externalId },
-      'command ingest'
     );
     return this.mapToWhatsAppError(result);
   }
@@ -126,16 +77,6 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     return this.mapToWhatsAppError(result);
   }
 
-  async publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
-      this.audioStoredTopic,
-      event,
-      { messageId: event.messageId },
-      'audio stored'
-    );
-    return this.mapToWhatsAppError(result);
-  }
-
   async publishExtractLinkPreviews(
     event: ExtractLinkPreviewsEvent
   ): Promise<Result<void, WhatsAppError>> {
@@ -144,16 +85,6 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { messageId: event.messageId },
       'extract link previews'
-    );
-    return this.mapToWhatsAppError(result);
-  }
-
-  async publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
-      this.approvalReplyTopic,
-      event,
-      { replyToWamid: event.replyToWamid },
-      'approval reply'
     );
     return this.mapToWhatsAppError(result);
   }

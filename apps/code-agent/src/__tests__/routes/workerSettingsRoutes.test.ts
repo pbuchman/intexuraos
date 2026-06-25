@@ -32,10 +32,8 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
-import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
@@ -100,12 +98,6 @@ describe('Worker Settings Routes', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     const linearAgentClient = createLinearAgentHttpClient(
       {
         baseUrl: 'http://linear-agent:8086',
@@ -136,14 +128,9 @@ describe('Worker Settings Routes', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,

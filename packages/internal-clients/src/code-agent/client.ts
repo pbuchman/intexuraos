@@ -14,7 +14,6 @@ import type {
   NotifyGroupSummaryRecomputeError,
   NotifyGroupSummaryRecomputeRequest,
   SubmitTaskError,
-  SubmitTaskRequest,
   SubmitTaskResponse,
   SubmitToPhase2Error,
   SubmitToPhase2Input,
@@ -37,7 +36,6 @@ interface ErrorBody {
 
 interface SubmitTaskData {
   codeTaskId?: string;
-  taskId?: string;
   resourceUrl?: string;
 }
 
@@ -105,9 +103,7 @@ function isSuccessWithoutDataEnvelope(error: { body?: unknown }): boolean {
 }
 
 function toSubmitTaskSuccess(data: SubmitTaskData): Result<SubmitTaskResponse, SubmitTaskError> {
-  const legacyTaskId = data.taskId;
-  const codeTaskId = data.codeTaskId ?? data.taskId;
-  if (codeTaskId === undefined || (data.resourceUrl === undefined && legacyTaskId === undefined)) {
+  if (data.codeTaskId === undefined || data.resourceUrl === undefined) {
     return err({
       code: 'UNKNOWN',
       message: 'Invalid response from code-agent',
@@ -115,11 +111,8 @@ function toSubmitTaskSuccess(data: SubmitTaskData): Result<SubmitTaskResponse, S
     });
   }
   return ok({
-    codeTaskId,
-    // INT-1531 compatibility: older linear-agent tests still mock
-    // `taskId` without `resourceUrl`; actions-agent callers still
-    // receive the real resourceUrl from the route implementation.
-    resourceUrl: data.resourceUrl ?? '',
+    codeTaskId: data.codeTaskId,
+    resourceUrl: data.resourceUrl,
   });
 }
 
@@ -139,7 +132,7 @@ function toSubmitTaskError(error: InternalHttpClientError): SubmitTaskError {
   }
 
   if (error.status === 409) {
-    const message = readErrorMessage(error.body, 'Task already exists for this approval');
+    const message = readErrorMessage(error.body, 'Task already exists for this request');
     const { existingTaskId } = readErrorDetails(error.body);
     return {
       code: 'DUPLICATE',
@@ -183,25 +176,6 @@ export function createCodeAgentServiceClient(
   });
 
   return {
-    async submitTask(
-      input: SubmitTaskRequest,
-      options?: CodeAgentRequestOptions
-    ): Promise<Result<SubmitTaskResponse, SubmitTaskError>> {
-      const result = await httpClient.request<SubmitTaskData>({
-        path: '/internal/code/process',
-        method: 'POST',
-        body: input,
-        timeoutMs: resolveTimeoutMs(60_000, config, options),
-        requestId: options?.requestId,
-      });
-
-      if (result.ok) {
-        return toSubmitTaskSuccess(result.value);
-      }
-
-      return err(toSubmitTaskError(result.error));
-    },
-
     async createCodeTask(
       input: CreateCodeTaskRequest,
       options?: CodeAgentRequestOptions
@@ -351,6 +325,9 @@ export function createCodeAgentServiceClient(
         if (serverCode === 'active_task_exists') {
           return err({ code: 'ACTIVE_TASK_EXISTS', message: errorMessage });
         }
+        if (serverCode === 'complex_task_no_qualifying_children') {
+          return err({ code: 'COMPLEX_TASK_NO_QUALIFYING_CHILDREN', message: errorMessage });
+        }
         return err({
           code: 'ALREADY_IMPLEMENTED',
           message: errorMessage,
@@ -360,6 +337,10 @@ export function createCodeAgentServiceClient(
 
       if (result.error.status === 503) {
         return err({ code: 'WORKER_NOT_CONFIGURED', message: errorMessage });
+      }
+
+      if (result.error.status === 422 && errorCode === 'PLAN_PR_MERGE_FAILED') {
+        return err({ code: 'PLAN_PR_MERGE_FAILED', message: errorMessage });
       }
 
       return err({

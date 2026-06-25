@@ -24,7 +24,6 @@ Catalog for IntexuraOS services, workers, and packages.
 | **code-worker**                  | Claude resume fix — `--resume <sessionId>` replaces `--continue` for reliable session resumption, `CLAUDE_SESSION_ID` now required for Claude resumes                                                                                                                         |
 | **mobile-notifications-service** | WhatsApp Group Digest pipeline — end-to-end AI-generated daily digests from WhatsApp group messages with headline/bullets summaries, persistent group state, backfill, and WhatsApp delivery via Pub/Sub                                                                      |
 | **hellscript-agent**             | Per-user LLM client resolution via user-service (INT-1369), centralized LLM pricing removal (INT-1387), usage tracking via `HttpInternalAuthUsageSink`                                                                                                                        |
-| **actions-agent**                | Important WhatsApp notification marking (INT-1418), centralized LLM pricing removal (INT-1387)                                                                                                                                                                                |
 | **orchestrator**                 | Execution memory pipeline simplification (soft-warning for memory_acknowledgment), log cap raised to 8MB, task timeout extended to 5h, StatusUpdateClient for redundant status delivery, mimo-pro worker type, test_quality review scope, configurable validation model chain |
 | **code-agent**                   | Robust task finalization via dedicated status endpoint, PR triage through Pub/Sub push, important flag for issue groups, GitHub Agent inherits user LLM settings, task mode selector (planning/execution), self-healing failure triage, draft PR blocking                     |
 
@@ -51,7 +50,6 @@ Catalog for IntexuraOS services, workers, and packages.
 | **Platform**          | Unified Task Enqueue Service (queue-first dispatch), Plan-Based Review Dispatch, Auto-Enforcement of findings                               |
 | **research-agent**    | Research pipeline quality fixes T0-T6: context-aware prompts, low-quality response detection, language-aware synthesis                      |
 | **linear-agent**      | Context proxy endpoint (INT-1040), decomposition sprint (INT-901-907), linearApiClient split, parentId fix                                  |
-| **actions-agent**     | Shared handleAction/executeAction templates, approval module decomposition, auth middleware extraction, worker type detection from keywords |
 
 ## v3.3.0 Highlights (Previous)
 
@@ -73,7 +71,6 @@ Catalog for IntexuraOS services, workers, and packages.
 | **linear-agent**     | Live data hydration                                                                  |
 | **calendar-agent**   | Calendar event previews with rich formatting                                         |
 | **web**              | Code task view enhancements, website redesign                                        |
-| **actions-agent**    | Implement button (planning-to-PR lifecycle)                                          |
 | **Platform**         | CI-enforced prompt versioning, prompt injection hardening, auto-archival of attempts |
 
 ## v3.0.0 Highlights (Previous)
@@ -92,10 +89,8 @@ Catalog for IntexuraOS services, workers, and packages.
 | Service              | Key Changes                                                                                           |
 | -------------------- | ----------------------------------------------------------------------------------------------------- |
 | **whatsapp-service** | Interactive approval buttons, phone verification, voice transcription                                 |
-| **actions-agent**    | Confidence-based auto-execution, Google Calendar linking, resource status tracking                    |
 | **calendar-agent**   | Preview generation before commit                                                                      |
 | **research-agent**   | Natural language model selection, Zod schema validation                                               |
-| **commands-agent**   | 5-step classification, URL isolation, Polish support                                                  |
 | **bookmarks-agent**  | WhatsApp delivery for AI summaries                                                                    |
 | **web-agent**        | @intexuraos/internal-clients integration (INT-269)                                                    |
 | **linear-agent**     | Multi-user webhook fan-out (INT-623), composite keys, 12 internal endpoints, dual-prompt auto-trigger |
@@ -105,7 +100,7 @@ Catalog for IntexuraOS services, workers, and packages.
 
 ## AI Capabilities Overview
 
-IntexuraOS integrates **5 core LLM providers** with **15 LLM contract models** across **20 app services**:
+IntexuraOS integrates **5 core LLM providers** with **15 LLM contract models** across active app services:
 
 ```mermaid
 graph TB
@@ -119,7 +114,7 @@ graph TB
 
     subgraph "Primary AI Agents"
         R[research-agent]
-        C[commands-agent]
+        X[intex-agent]
         I[image-service]
         B[bookmarks-agent]
         F[fishing-assistant-service]
@@ -130,7 +125,7 @@ graph TB
     R --> A
     R --> P
     R --> OR
-    C --> G
+    X --> OR
     I --> O
     I --> G
     B --> G
@@ -147,11 +142,11 @@ graph TB
 | -------------------------------------------- | ---------------------- | ----------------------------------------------- |
 | [research-agent](research-agent/features.md) | 10 static research models + OpenRouter | Parallel queries, synthesis, confidence scoring |
 
-### Intent Classification
+### Direct Tool Conversations
 
-| Service                                      | AI Models                 | Capability                      |
-| -------------------------------------------- | ------------------------- | ------------------------------- |
-| [commands-agent](commands-agent/features.md) | Gemini 2.5 Flash          | Natural language to action type |
+| Service                                | AI Models                        | Capability                                    |
+| -------------------------------------- | -------------------------------- | --------------------------------------------- |
+| [intex-agent](intex-agent/features.md) | OpenRouter Gemini 3 Flash Preview | WhatsApp text conversations with direct tools |
 
 ### Image Generation
 
@@ -184,12 +179,12 @@ graph TB
 | -------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- |
 | [hellscript-agent](hellscript-agent/features.md)         | Gemini 2.5 Flash | Intent interpretation, thought accumulation, categorized writing config, draft generation   |
 
-### Voice & Transcription
+### Messaging & Transcription
 
-| Service                                          | AI Models       | Capability                                                                            |
-| ------------------------------------------------ | --------------- | ------------------------------------------------------------------------------------- |
-| [whatsapp-service](whatsapp-service/features.md) | Via srt-service | Voice transcription, approval buttons, CTA deep links, notification importance filter |
-| [transcription](transcription/features.md)       | Speechmatics    | Audio-to-text with auto language detection and AI summaries                           |
+| Service                                          | AI Models    | Capability                                                                                |
+| ------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------- |
+| [whatsapp-service](whatsapp-service/features.md) | Intex route  | WhatsApp text ingestion, outbound notifications, verification, and delivery                |
+| [transcription](transcription/features.md)       | Speechmatics | Standalone audio-to-text worker retained outside the current WhatsApp text-only Intex path |
 
 ---
 
@@ -201,8 +196,8 @@ Services that directly invoke AI models for their core functionality.
 
 | Service                                                | Purpose                            | AI                                               | Docs                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | ---------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [intex-agent](intex-agent/features.md)                 | WhatsApp text direct tools         | OpenRouter Gemini 3 Flash Preview                | [features](intex-agent/features.md) / [technical](intex-agent/technical.md) / [tutorial](intex-agent/tutorial.md) / [debt](intex-agent/technical-debt.md) / [agent](intex-agent/agent.md)                                        |
 | [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Gemini, Claude, GPT, Sonar                       | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
-| [commands-agent](commands-agent/features.md)           | AI command classification          | Gemini 2.5 Flash                                 | [features](commands-agent/features.md) / [technical](commands-agent/technical.md) / [tutorial](commands-agent/tutorial.md) / [debt](commands-agent/technical-debt.md) / [agent](commands-agent/agent.md)                          |
 | [image-service](image-service/features.md)             | AI image generation                | GPT Image 1, Gemini Flash Image                  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
 | [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries  | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
 | [web-agent](web-agent/features.md)                     | Web scraping with AI               | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
@@ -226,8 +221,7 @@ Core platform services that support the AI agents.
 
 | Service                                                                  | Purpose                                             | AI              | Docs                                                                                                                                                                                                                                                                           |
 | ------------------------------------------------------------------------ | --------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [actions-agent](actions-agent/features.md)                               | Central action orchestration                        | -               | [features](actions-agent/features.md) / [technical](actions-agent/technical.md) / [tutorial](actions-agent/tutorial.md) / [debt](actions-agent/technical-debt.md) / [agent](actions-agent/agent.md)                                                                            |
-| [whatsapp-service](whatsapp-service/features.md)                         | WhatsApp messaging, approvals & notification filter | Via srt-service | [features](whatsapp-service/features.md) / [technical](whatsapp-service/technical.md) / [tutorial](whatsapp-service/tutorial.md) / [debt](whatsapp-service/technical-debt.md) / [agent](whatsapp-service/agent.md)                                                             |
+| [whatsapp-service](whatsapp-service/features.md)                         | WhatsApp text messaging and notification filter      | Intex route     | [features](whatsapp-service/features.md) / [technical](whatsapp-service/technical.md) / [tutorial](whatsapp-service/tutorial.md) / [debt](whatsapp-service/technical-debt.md) / [agent](whatsapp-service/agent.md)                                                             |
 | [user-service](user-service/features.md)                                 | Auth, API keys, model prefs                         | LLM validation  | [features](user-service/features.md) / [technical](user-service/technical.md) / [tutorial](user-service/tutorial.md) / [debt](user-service/technical-debt.md) / [agent](user-service/agent.md)                                                                                 |
 | [mobile-notifications-service](mobile-notifications-service/features.md) | Notification capture + WhatsApp digest              | OpenRouter LLM  | [features](mobile-notifications-service/features.md) / [technical](mobile-notifications-service/technical.md) / [tutorial](mobile-notifications-service/tutorial.md) / [debt](mobile-notifications-service/technical-debt.md) / [agent](mobile-notifications-service/agent.md) |
 | [notion-service](notion-service/features.md)                             | Notion integration                                  | -               | [features](notion-service/features.md) / [technical](notion-service/technical.md) / [tutorial](notion-service/tutorial.md) / [debt](notion-service/technical-debt.md) / [agent](notion-service/agent.md)                                                                       |
@@ -321,7 +315,6 @@ Shared libraries used across apps and workers.
 
 | Package                                                    | Purpose                                                     |
 | ---------------------------------------------------------- | ----------------------------------------------------------- |
-| [calendar-pubsub-client](../packages/calendar-pubsub-client/README.md) | Publisher-side client for calendar preview requests         |
 | [code-task-domain](../packages/code-task-domain/README.md) | Shared code-task worker type and plan-document primitives   |
 | [internal-clients](../packages/internal-clients/README.md) | Typed HTTP clients for internal service APIs (user-service) |
 | [linear-domain](../packages/linear-domain/README.md)       | Linear label normalization and detection utilities          |
@@ -351,13 +344,13 @@ Used for deep research queries with parallel execution. **v2.0.0:** Users can sp
 | Sonar Deep Research   | Perplexity | Comprehensive search |
 | OpenRouter model IDs  | OpenRouter | Curated dynamic model routing |
 
-### Classification Models (1)
+### Fast Conversation Models (1)
 
-Used for intent classification and fast tasks. **v2.0.0:** 5-step decision tree with URL isolation and explicit intent detection.
+Used for direct WhatsApp text conversations and fast tool-call decisions.
 
-| Model            | Provider | Use Case                                 |
-| ---------------- | -------- | ---------------------------------------- |
-| Gemini 2.5 Flash | Google   | Command classification, title generation |
+| Model                  | Provider   | Use Case                                |
+| ---------------------- | ---------- | --------------------------------------- |
+| Gemini 3 Flash Preview | OpenRouter | Intex tool selection and concise replies |
 
 ### Image Models (2)
 
@@ -392,8 +385,7 @@ graph TD
     end
 
     subgraph "Routing"
-        CMD[commands-agent]
-        ACT[actions-agent]
+        INTEX[intex-agent]
     end
 
     subgraph "Execution"
@@ -419,17 +411,15 @@ graph TD
         LLM_USAGE[llm-usage-service]
     end
 
-    WA --> CMD
-    WEB --> CMD
+    WA --> INTEX
+    WEB --> INTEX
     WEB --> FISH
-    CMD --> ACT
 
-    ACT --> RES
-    ACT --> NOTE
-    ACT --> BOOK
-    ACT --> CAL
-    ACT --> LIN
-    ACT --> CODE
+    INTEX --> RES
+    INTEX --> NOTE
+    INTEX --> BOOK
+    INTEX --> CAL
+    INTEX --> CODE
 
     GH_PR --> CODE
     CODE --> ORCH
@@ -453,17 +443,17 @@ graph TD
 
 | Metric                 | Count    |
 | ---------------------- | -------- |
-| Total Apps             | 20       |
+| Total Apps             | Active app docs tracked in `docs/services` |
 | Total Workers          | 6        |
 | Total Packages         | 28       |
-| Apps with features.md  | 20       |
-| Apps with technical.md | 20       |
-| Apps with tutorial.md  | 20       |
-| Apps with tech-debt.md | 20       |
-| Apps with agent.md     | 20       |
+| Apps with features.md  | Current service doc set |
+| Apps with technical.md | Current service doc set |
+| Apps with tutorial.md  | Current service doc set |
+| Apps with tech-debt.md | Current service doc set |
+| Apps with agent.md     | Current service doc set |
 | Packages with README   | 28       |
 | Workers with docs      | 4        |
-| **Coverage**           | **App/package docs complete; 4 of 6 workers documented** |
+| **Coverage**           | **App/package docs tracked; 4 of 6 workers documented** |
 
 ---
 
@@ -473,6 +463,7 @@ graph TD
 
 **I want to...**
 
+- **Use WhatsApp text direct tools**: [intex-agent](intex-agent/features.md)
 - **Do multi-model research**: [research-agent](research-agent/features.md)
 - **Ask grounded fishing questions**: [fishing-assistant-service](fishing-assistant-service/features.md)
 - **Automate coding tasks**: [code-agent](code-agent/features.md)
@@ -505,6 +496,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-06-12
+**Last updated:** 2026-06-24
 
-**Components tracked:** 20 apps + 6 workers + 28 packages = 54 total (log-cleanup and predev-lifecycle have no service doc directories yet)
+**Components tracked:** Active app docs, 6 workers, and shared packages (log-cleanup and predev-lifecycle have no service doc directories yet)

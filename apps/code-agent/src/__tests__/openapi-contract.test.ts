@@ -20,23 +20,19 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/firestore/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
-import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { ok } from '@intexuraos/common-core';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from '../domain/repositories/logLineRepository.js';
-import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
-import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
 import { createArchiveStaleGroupsUseCase } from '../domain/usecases/archiveStaleGroups.js';
@@ -61,12 +57,6 @@ describe('OpenAPI contract', () => {
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
     const logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
-
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
 
     const codeTaskRepo = createFirestoreCodeTaskRepository({
       firestore: fakeFirestore,
@@ -97,16 +87,11 @@ describe('OpenAPI contract', () => {
         firestore: fakeFirestore,
         logger,
       }),
-      actionsAgentClient,
       linearAgentClient: createLinearAgentHttpClient({
         baseUrl: 'http://linear-agent:8086',
         internalAuthToken: 'test-token',
         timeoutMs: 10000,
       }, logger),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -166,11 +151,9 @@ describe('OpenAPI contract', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       logLineRepo: LogLineRepository;
-      actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       workerSettingsRepo: WorkerSettingsRepository;
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
@@ -236,7 +219,9 @@ describe('OpenAPI contract', () => {
     const schema = JSON.parse(response.body);
 
     // Verify internal endpoints exist
-    expect(schema.paths).toHaveProperty('/internal/code/process');
+    const removedProcessPath = ['/internal/code', 'process'].join('/');
+    expect(schema.paths).not.toHaveProperty(removedProcessPath);
+    expect(schema.paths).toHaveProperty('/internal/code/submit');
     expect(schema.paths).toHaveProperty('/internal/code-tasks/{taskId}');
     expect(schema.paths).toHaveProperty('/internal/code-tasks/linear/{linearIssueId}/active');
     expect(schema.paths).toHaveProperty('/internal/code-tasks/zombies');
@@ -247,7 +232,7 @@ describe('OpenAPI contract', () => {
     expect(schema.paths).toHaveProperty('/cancel');
 
     // Verify HTTP methods
-    expect(schema.paths['/internal/code/process']).toHaveProperty('post');
+    expect(schema.paths['/internal/code/submit']).toHaveProperty('post');
     expect(schema.paths['/internal/code-tasks/{taskId}']).toHaveProperty('patch');
     expect(schema.paths['/internal/code-tasks/linear/{linearIssueId}/active']).toHaveProperty('get');
     expect(schema.paths['/internal/code-tasks/zombies']).toHaveProperty('get');
@@ -266,13 +251,13 @@ describe('OpenAPI contract', () => {
 
     const schema = JSON.parse(response.body);
 
-    // Verify POST /internal/code/process responses
-    const processPostEndpoint = schema.paths['/internal/code/process'].post;
-    expect(processPostEndpoint.responses).toHaveProperty('200');
-    expect(processPostEndpoint.responses).toHaveProperty('401');
-    expect(processPostEndpoint.responses).toHaveProperty('409');
-    expect(processPostEndpoint.responses).toHaveProperty('503');
-    expect(processPostEndpoint.responses).toHaveProperty('500');
+    // Verify POST /internal/code/submit responses
+    const submitPostEndpoint = schema.paths['/internal/code/submit'].post;
+    expect(submitPostEndpoint.responses).toHaveProperty('200');
+    expect(submitPostEndpoint.responses).toHaveProperty('401');
+    expect(submitPostEndpoint.responses).toHaveProperty('409');
+    expect(submitPostEndpoint.responses).toHaveProperty('503');
+    expect(submitPostEndpoint.responses).toHaveProperty('500');
 
     // Verify GET /code/tasks/{taskId} responses
     const getByIdEndpoint = schema.paths['/tasks/{taskId}'].get;
@@ -296,8 +281,8 @@ describe('OpenAPI contract', () => {
     const schema = JSON.parse(response.body);
 
     // Check that internal endpoints have 'internal' tag
-    const processEndpoint = schema.paths['/internal/code/process'].post;
-    expect(processEndpoint.tags).toContain('internal');
+    const submitEndpoint = schema.paths['/internal/code/submit'].post;
+    expect(submitEndpoint.tags).toContain('internal');
 
     // Check that public endpoints have 'public' tag
     const tasksListEndpoint = schema.paths['/tasks'].get;
@@ -307,7 +292,7 @@ describe('OpenAPI contract', () => {
     expect(cancelEndpoint.tags).toContain('public');
 
     // Check operation IDs
-    expect(processEndpoint.operationId).toBe('processCodeAction');
+    expect(submitEndpoint.operationId).toBe('internalSubmitCodeTask');
     expect(schema.paths['/tasks/{taskId}'].get.operationId).toBe('getCodeTask');
     expect(schema.paths['/tasks'].get.operationId).toBe('listCodeTasks');
     expect(cancelEndpoint.operationId).toBe('cancelCodeTask');

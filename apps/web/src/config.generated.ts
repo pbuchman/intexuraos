@@ -7,8 +7,6 @@ export const WEB_SERVICE_URLS = [
   { envVar: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL', apiPath: '/api/notifications', proxyTarget: 'http://localhost:8114' },
   { envVar: 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL', apiPath: '/api/fishing-assistant', proxyTarget: 'http://localhost:8119' },
   { envVar: 'INTEXURAOS_RESEARCH_AGENT_URL', apiPath: '/api/research', proxyTarget: 'http://localhost:8116' },
-  { envVar: 'INTEXURAOS_COMMANDS_AGENT_URL', apiPath: '/api/commands', proxyTarget: 'http://localhost:8117' },
-  { envVar: 'INTEXURAOS_ACTIONS_AGENT_URL', apiPath: '/api/actions', proxyTarget: 'http://localhost:8118' },
   { envVar: 'INTEXURAOS_NOTES_AGENT_URL', apiPath: '/api/notes', proxyTarget: 'http://localhost:8121' },
   { envVar: 'INTEXURAOS_BOOKMARKS_AGENT_URL', apiPath: '/api/bookmarks', proxyTarget: 'http://localhost:8124' },
   { envVar: 'INTEXURAOS_CALENDAR_AGENT_URL', apiPath: '/api/calendar', proxyTarget: 'http://localhost:8125' },

@@ -51,7 +51,6 @@ if (!result.ok) {
 ## Used By
 
 - `apps/code-agent`
-- `apps/actions-agent`
 - `apps/bookmarks-agent`
 - `apps/research-agent`
 - `apps/mobile-notifications-service`

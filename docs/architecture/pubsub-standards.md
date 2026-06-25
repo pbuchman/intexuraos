@@ -130,7 +130,7 @@ Topics follow the pattern: `intexuraos-{domain}-{purpose}-{environment}`
 Examples:
 
 - `intexuraos-whatsapp-webhook-process-dev`
-- `intexuraos-commands-ingest-prod`
+- `intexuraos-intex-message-ingest-prod`
 - `intexuraos-research-process-staging`
 
 ## Environment Variables
@@ -140,11 +140,10 @@ All topic configuration uses `INTEXURAOS_PUBSUB_*` prefix:
 | Variable                                   | Service          | Description              |
 | ------------------------------------------ | ---------------- | ------------------------ |
 | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`    | whatsapp-service | Media cleanup events     |
-| `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`  | whatsapp-service | Command ingestion        |
+| `INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC` | whatsapp-service | Intex text ingestion     |
 | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | whatsapp-service | Webhook async processing |
 | `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`    | whatsapp-service | Audio transcription      |
-| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | llm-orchestrator | Research processing      |
-| `INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC` | commands-router  | Research actions         |
+| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | research-agent   | Research processing      |
 
 ## What BasePubSubPublisher Provides
 
@@ -164,7 +163,7 @@ In production, GCP Pub/Sub automatically pushes messages to Cloud Run service en
 Service (publisher) → Pub/Sub Emulator (:8102) → pubsub-ui (:8105) → Service (handler)
 ```
 
-**pubsub-ui** pulls messages from the emulator and POSTs them to local service endpoints (e.g., `http://localhost:8118/internal/actions/process`).
+**pubsub-ui** pulls messages from the emulator and POSTs them to local service endpoints (for example, `http://localhost:8113/internal/whatsapp/pubsub/process-webhook`).
 
 ### Starting Local Pub/Sub
 

@@ -46,8 +46,6 @@ const SERVICES = [
   { name: 'notion-service', port: 8112 },
   { name: 'whatsapp-service', port: 8113 },
   { name: 'mobile-notifications-service', port: 8114 },
-  { name: 'commands-agent', port: 8117 },
-  { name: 'actions-agent', port: 8118 },
   { name: 'notes-agent', port: 8121 },
   { name: 'bookmarks-agent', port: 8124 },
   { name: 'calendar-agent', port: 8125 },

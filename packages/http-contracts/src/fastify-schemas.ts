@@ -19,8 +19,6 @@ import {
   calendarPreviewDataSchema,
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
-  commandsCommandWithTextSchema,
-  commandsGetCommandDataSchema,
   imageGenerateImageRequestSchema,
   imageGeneratePromptRequestSchema,
   imageGeneratedImageDataSchema,
@@ -96,11 +94,6 @@ export const contractFastifySchemas = {
     bookmarksCreateBookmarkDataSchema
   ),
   BookmarksBookmark: toFastifySchema('BookmarksBookmark', bookmarksBookmarkSchema),
-  CommandsCommandWithText: toFastifySchema(
-    'CommandsCommandWithText',
-    commandsCommandWithTextSchema
-  ),
-  CommandsGetCommandData: toFastifySchema('CommandsGetCommandData', commandsGetCommandDataSchema),
   ImageGeneratePromptRequest: toFastifySchema(
     'ImageGeneratePromptRequest',
     imageGeneratePromptRequestSchema

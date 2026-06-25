@@ -198,7 +198,7 @@ After applying a pattern across services:
 
    ```bash
    grep -r "'/internal/.*/pubsub/" apps/*/src/routes --include="*.ts"
-   # Found: whatsapp-service, actions-agent
+   # Found: whatsapp-service, bookmarks-agent
    ```
 
 2. **Check current implementation**
@@ -210,7 +210,7 @@ After applying a pattern across services:
 
 3. **Apply fix systematically**
    - Fixed whatsapp-service (2 endpoints)
-   - Fixed actions-agent (1 endpoint)
+   - Fixed bookmarks-agent (1 endpoint)
    - Updated all tests with Pub/Sub auth coverage
 
 4. **Verify deployment**
@@ -244,8 +244,8 @@ When you complete an audit and apply a pattern:
 
    Applied consistent authentication pattern to all Pub/Sub push endpoints:
    - whatsapp-service (2 endpoints)
-   - actions-agent (1 endpoint)
-   - commands-router (2 endpoints)
+   - bookmarks-agent (1 endpoint)
+   - research-agent (2 endpoints)
 
    All endpoints now check for `from: noreply@google.com` header to detect
    Pub/Sub push vs direct service calls.

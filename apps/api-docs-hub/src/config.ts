@@ -25,8 +25,6 @@ export const OPEN_API_SOURCE_CATALOG = [
   { name: 'Mobile Notifications Service API', openApiUrlEnvVar: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL' },
   { name: 'Fishing Assistant Service API', openApiUrlEnvVar: 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL' },
   { name: 'Research Agent API', openApiUrlEnvVar: 'INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL' },
-  { name: 'Commands Agent API', openApiUrlEnvVar: 'INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL' },
-  { name: 'Actions Agent API', openApiUrlEnvVar: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL' },
   { name: 'Image Service API', openApiUrlEnvVar: 'INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL' },
   { name: 'Application Settings API', openApiUrlEnvVar: 'INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL' },
   { name: 'Notes Agent API', openApiUrlEnvVar: 'INTEXURAOS_NOTES_AGENT_OPENAPI_URL' },

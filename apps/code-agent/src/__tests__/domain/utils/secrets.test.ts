@@ -10,7 +10,7 @@
  * | 4 | generateCancelNonce returns hex string | secrets.ts | Call with no args | Non-empty hex string |
  * | 5 | generateCancelNonce returns unique values | secrets.ts | Two consecutive calls | Different outputs |
  * | 6 | CANCEL_NONCE_TTL_MS equals 15 minutes | secrets.ts | Import constant | 900000 (15 × 60 × 1000) |
- * | 7 | processCodeAction uses shared generateWebhookSecret | processCodeAction.ts | Existing use-case tests still pass | No local function definition remains |
+ * | 7 | submitDirectCodeTask uses shared generateWebhookSecret | submitDirectCodeTask.ts | Existing use-case tests still pass | No local function definition remains |
  * | 8 | retryTask uses shared generateWebhookSecret | retryTask.ts | Existing use-case tests still pass | No local function definition remains |
  * | 9 | submitTaskFeedback uses shared generateWebhookSecret | submitTaskFeedback.ts | Existing use-case tests still pass | No local function definition remains |
  * | 10 | submitToExecutionAgent uses shared utilities | submitToExecutionAgent.ts | Existing use-case tests still pass | No local function definitions remain |

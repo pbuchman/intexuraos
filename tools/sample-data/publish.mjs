@@ -3,11 +3,11 @@
  * Publish sample data to IntexuraOS production Pub/Sub.
  *
  * Usage:
- *   node publish.mjs [data-file] [--topic=commands-ingest] [--user-id=...]
+ *   node publish.mjs [data-file] [--topic=intex-message-ingest] [--user-id=...]
  *
  * Defaults:
  *   data-file:  ./data/notes.json
- *   topic:      intexuraos-commands-ingest-dev
+ *   topic:      intexuraos-intex-message-ingest-dev
  *   user-id:    google-oauth2|102212401347660567351 (demo account)
  *   project-id: intexuraos-dev-pbuchman
  *
@@ -33,7 +33,7 @@ const flags = Object.fromEntries(
 const positional = args.filter((a) => !a.startsWith('--'));
 
 const PROJECT_ID = flags['project-id'] ?? 'intexuraos-dev-pbuchman';
-const TOPIC = flags['topic'] ?? 'intexuraos-commands-ingest-dev';
+const TOPIC = flags['topic'] ?? 'intexuraos-intex-message-ingest-dev';
 const USER_ID = flags['user-id'] ?? 'google-oauth2|102212401347660567351';
 const dataFile = positional[0] ?? resolve(__dirname, 'data', 'notes.json');
 
@@ -48,11 +48,12 @@ console.log(`User ID: ${USER_ID}\n`);
 let published = 0;
 for (const item of items) {
   const event = {
-    type: 'command.ingest',
+    type: 'intex.message.ingest',
     userId: USER_ID,
     sourceType: item.sourceType ?? 'whatsapp_text',
-    externalId: `sample-${item.id}-${Date.now()}`,
+    messageId: `sample-${item.id}-${Date.now()}`,
     text: item.text,
+    whatsappSender: item.whatsappSender ?? '+15551234567',
     ...(item.summary !== undefined && { summary: item.summary }),
     timestamp: new Date().toISOString(),
   };

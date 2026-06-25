@@ -6,7 +6,6 @@ Shared libraries organized by layer. **Source of truth:** this file is regenerat
 
 ```
 apps/*
-  ├── @intexuraos/calendar-pubsub-client   (Calendar Pub/Sub message client)
   ├── @intexuraos/code-task-domain         (Shared code task domain contracts)
   ├── @intexuraos/common-core              (Result types, errors, redaction)
   ├── @intexuraos/common-http              (Fastify plugins, auth, response utilities)
@@ -78,7 +77,6 @@ apps/*
 
 | Package                                                                         | Description                        | Dependencies                                                                                                     |
 | ------------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| [`calendar-pubsub-client`](../docs/packages/calendar-pubsub-client/README.md)   | Calendar Pub/Sub message client    | `common-core`, `infra-pubsub`                                                                                    |
 | [`code-task-domain`](../docs/packages/code-task-domain/README.md)               | Shared code task domain contracts  | None (leaf)                                                                                                      |
 | [`internal-clients`](../docs/packages/internal-clients/README.md)               | HTTP clients for internal services | `common-core`, `common-http`, `http-contracts`, `infra-openrouter`, `llm-contract`, `llm-factory`, `llm-pricing` |
 | [`linear-domain`](../docs/packages/linear-domain/README.md)                     | Shared Linear domain contracts     | None (leaf)                                                                                                      |
@@ -124,7 +122,6 @@ All packages are subject to the repo-wide coverage thresholds defined in `vitest
 
 Enforced by `pnpm run verify:boundaries`:
 
-- `calendar-pubsub-client` → imports from `common-core`, `infra-pubsub`
 - `code-task-domain` → imports nothing
 - `common-core` → imports nothing
 - `common-http` → imports from `common-core`

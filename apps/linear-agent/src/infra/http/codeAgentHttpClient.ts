@@ -12,8 +12,6 @@ export interface TriggerCodeTaskRequest {
   linearIssueId: string;
   prompt: string;
   workerType: CodeTaskWorkerType;
-  actionId: string;
-  approvalEventId: string;
 }
 
 export interface CodeAgentHttpClientConfig {
@@ -68,15 +66,11 @@ export function createCodeAgentHttpClient(
     async triggerCodeTask(
       request: TriggerCodeTaskRequest
     ): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>> {
-      const result = await client.submitTask({
-        actionId: request.actionId,
-        approvalEventId: request.approvalEventId,
+      const result = await client.createCodeTask({
         userId: request.userId,
-        payload: {
-          prompt: request.prompt,
-          workerType: request.workerType,
-          linearIssueId: request.linearIssueId,
-        },
+        prompt: request.prompt,
+        workerType: request.workerType,
+        linearIssueId: request.linearIssueId,
       });
 
       if (!result.ok) {

@@ -21,7 +21,6 @@ import type { Firestore } from '@google-cloud/firestore';
 import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/firestore/firestoreLogLineRepository.js';
-import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
@@ -43,7 +42,6 @@ import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { Result } from '@intexuraos/common-core';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
 import { createLinearIssueService } from '../../../domain/services/linearIssueService.js';
-import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroupSummaryRepository.js';
 import type { UserGroupCounts, TaskGroupSummary } from '../../../domain/models/taskGroupSummary.js';
 import { createFakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
@@ -192,7 +190,6 @@ describe('GET /code/issue-groups', () => {
     codeTaskRepo?: CodeTaskRepository;
     groupSummaryRepo?: ReturnType<typeof makeGroupSummaryRepo>;
   } = {}): ServiceContainer {
-    const actionsClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
     const linearClient = makeLinearAgentClient();
     const repoToUse = overrides.codeTaskRepo ?? codeTaskRepo;
     return {
@@ -207,11 +204,9 @@ describe('GET /code/issue-groups', () => {
       whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
       logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
-      actionsAgentClient: actionsClient,
       linearAgentClient: linearClient,
       linearIssueService: createLinearIssueService({ linearAgentClient: linearClient, logger }),
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
@@ -234,7 +229,7 @@ describe('GET /code/issue-groups', () => {
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
-      prTriagePublisher: { publishPRTriage: async () => ok(undefined) } as never,
+      prTriagePublisher: {} as never,
     };
   }
 
@@ -278,92 +273,8 @@ describe('GET /code/issue-groups', () => {
       logger,
     });
 
-    const taskDispatcher: TaskDispatcherService = {
-      async dispatch(): Promise<Result<DispatchResult, DispatchError>> {
-        return ok({ dispatched: true, workerLocation: 'mac' });
-      },
-      async cancelOnWorker() { return; },
-      async sendMessageToWorker() { return ok({ action: 'queued' }); },
-    };
-
-    const linearAgentClient = makeLinearAgentClient();
-
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
-    const whatsappNotifier = createWhatsAppNotifier({
-      whatsappPublisher: {
-        publishSendMessage: async () => ok(undefined),
-      } as unknown as WhatsAppSendPublisher,
-    });
-
-    const linearIssueService = createLinearIssueService({
-      linearAgentClient,
-      logger,
-    });
-
     setServices({
-      firestore: fakeFirestore as unknown as Firestore,
-      logger,
-      codeTaskRepo,
-      taskDispatcher,
-      whatsappNotifier,
-      logChunkRepo: createFirestoreLogChunkRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
-      logLineRepo: createFirestoreLogLineRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
-      actionsAgentClient,
-      linearAgentClient,
-      linearIssueService,
-      metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
-      processHeartbeat: createProcessHeartbeatUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      detectZombieTasks: createDetectZombieTasksUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
-      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      workerSettingsRepo: createWorkerSettingsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
-      workerHealthProbe: mockWorkerHealthProbe,
-      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
-      gitHubPRSummaryRepo: {} as never,
-      turnMetricsRepo: createFirestoreTurnMetricsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
-      userServiceClient: mockUserServiceClient,
-      gitHubPRClient: {} as never,
-      webhookRules: {} as never,
-      dispatchService: {} as never,
-      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
-      eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
-      dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
-      unifiedEvaluator: {} as never,
-      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
-      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
-      mergeConflictDetector: {
-        detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT),
-      },
-      mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-      prTriagePublisher: {} as never,
+      ...makeBaseServices(),
       groupSummaryRepo: makeGroupSummaryRepo({
         getUserGroupCounts: async () => ok(mockCounts),
         listGroupSummaries: async (input) => {
@@ -1094,25 +1005,12 @@ describe('GET /code/issue-groups', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
-      actionsAgentClient: createActionsAgentClient({
-        baseUrl: 'http://actions-agent',
-        internalAuthToken: 'test-token',
-        logger,
-      }),
       linearAgentClient: makeLinearAgentClient(),
       linearIssueService: createLinearIssueService({
         linearAgentClient: makeLinearAgentClient(),
         logger,
       }),
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient: createActionsAgentClient({
-          baseUrl: 'http://actions-agent',
-          internalAuthToken: 'test-token',
-          logger,
-        }),
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -1200,25 +1098,12 @@ describe('GET /code/issue-groups', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
-      actionsAgentClient: createActionsAgentClient({
-        baseUrl: 'http://actions-agent',
-        internalAuthToken: 'test-token',
-        logger,
-      }),
       linearAgentClient: failingLinearClient,
       linearIssueService: createLinearIssueService({
         linearAgentClient: failingLinearClient,
         logger,
       }),
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient: createActionsAgentClient({
-          baseUrl: 'http://actions-agent',
-          internalAuthToken: 'test-token',
-          logger,
-        }),
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -1434,11 +1319,9 @@ describe('GET /code/issue-groups', () => {
         }),
         logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
-        actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
           linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
-        statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
@@ -1534,11 +1417,9 @@ describe('GET /code/issue-groups', () => {
         }),
         logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
-        actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
           linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
-        statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
@@ -1598,11 +1479,9 @@ describe('GET /code/issue-groups', () => {
         }),
         logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
-        actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
           linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
-        statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
@@ -2696,7 +2575,6 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
     codeTaskRepo?: CodeTaskRepository;
     groupSummaryRepo?: ReturnType<typeof makeGroupSummaryRepo>;
   } = {}): ServiceContainer {
-    const actionsClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
     const linearClient = makeLinearAgentClient();
     const repoToUse = overrides.codeTaskRepo ?? codeTaskRepo;
     return {
@@ -2711,11 +2589,9 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
       whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
       logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
-      actionsAgentClient: actionsClient,
       linearAgentClient: linearClient,
       linearIssueService: createLinearIssueService({ linearAgentClient: linearClient, logger }),
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),

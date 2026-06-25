@@ -13,13 +13,6 @@ export interface CodeAgentRequestOptions {
   timeoutMs?: number;
 }
 
-export interface SubmitTaskRequest {
-  actionId: string;
-  userId: string;
-  approvalEventId: string;
-  payload: unknown;
-}
-
 export interface SubmitTaskResponse {
   codeTaskId: string;
   resourceUrl: string;
@@ -83,6 +76,8 @@ export interface SubmitToPhase2Error {
     | 'LABEL_NOT_READY'
     | 'ALREADY_IMPLEMENTED'
     | 'ACTIVE_TASK_EXISTS'
+    | 'COMPLEX_TASK_NO_QUALIFYING_CHILDREN'
+    | 'PLAN_PR_MERGE_FAILED'
     | 'WORKER_NOT_CONFIGURED'
     | 'NETWORK_ERROR'
     | 'UNKNOWN';
@@ -104,11 +99,6 @@ export interface NotifyGroupSummaryRecomputeError {
 }
 
 export interface CodeAgentServiceClient {
-  submitTask(
-    input: SubmitTaskRequest,
-    options?: CodeAgentRequestOptions
-  ): Promise<Result<SubmitTaskResponse, SubmitTaskError>>;
-
   createCodeTask(
     input: CreateCodeTaskRequest,
     options?: CodeAgentRequestOptions

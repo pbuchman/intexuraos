@@ -20,7 +20,7 @@ describe('Internal Routes', () => {
           url: 'https://example.com',
           title: 'Example',
           tags: ['internal'],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-123',
         },
       });
@@ -32,7 +32,7 @@ describe('Internal Routes', () => {
       expect(body.data.url).toMatch(/^\/#\/bookmarks\//);
       expect(body.data.bookmark.url).toBe('https://example.com');
       expect(body.data.bookmark.userId).toBe('user-1');
-      expect(body.data.bookmark.source).toBe('actions-agent');
+      expect(body.data.bookmark.source).toBe('intex-agent');
     });
 
     it('returns 401 without internal auth header', async () => {
@@ -104,7 +104,7 @@ describe('Internal Routes', () => {
           userId: 'user-1',
           url: 'https://example.com',
           tags: [],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-123',
         },
       });
@@ -124,7 +124,7 @@ describe('Internal Routes', () => {
           userId: 'user-1',
           url: 'https://example.com',
           tags: [],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-minimal',
         },
       });
@@ -159,7 +159,7 @@ describe('Internal Routes', () => {
           userId: 'user-1',
           url: 'https://example.com',
           tags: [],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-123',
         },
       });
@@ -189,7 +189,7 @@ describe('Internal Routes', () => {
           url: 'https://example.com',
           title: 'Example',
           tags: ['internal'],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-123',
         },
       });
@@ -215,7 +215,7 @@ describe('Internal Routes', () => {
           url: 'https://example.com',
           title: 'Example',
           tags: ['internal'],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-123',
         },
       });
@@ -245,7 +245,7 @@ describe('Internal Routes', () => {
           userId: 'user-1',
           url: 'https://example.com/draft',
           tags: [],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-draft',
           status: 'draft',
         },
@@ -786,7 +786,7 @@ describe('Internal Routes', () => {
           userId: 'user-1',
           url: 'https://example.com',
           tags: [],
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-123',
         },
       });

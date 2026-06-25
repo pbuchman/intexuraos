@@ -9,7 +9,6 @@ import {
   Code2,
   ExternalLink,
   RadioTower,
-  Inbox,
   LayoutList,
   List,
   Loader2,
@@ -177,7 +176,7 @@ export function HeroShowcase(): React.JSX.Element {
         <div className="flex min-h-[280px]">
           {/* Sidebar */}
           <div className="w-[130px] shrink-0 border-r border-slate-100 py-1.5">
-            <SbItem icon={Inbox} label="Inbox" />
+            <SbItem icon={LayoutList} label="Activity" />
             <div className="h-1" />
             <SbItem icon={Code2} label="Code Tasks" active chevron="up" />
             <SbSub icon={List} label="Battlefield" active />
@@ -299,47 +298,29 @@ export function HeroShowcase(): React.JSX.Element {
 
         {/* Chat area */}
         <div className="flex min-h-[300px] flex-col gap-1 bg-[#ece5dd] p-1.5">
-          {/* Voice note */}
+          {/* Text request */}
           <WaUser>
-            <div className="flex items-center gap-1 py-0.5">
-              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#075e54]">
-                <svg aria-hidden="true" className="h-2 w-2 fill-white" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-              </div>
-              <div className="flex items-center gap-px h-3">
-                {[5,12,8,16,6,14,10,4].map((h, i) => (
-                  // eslint-disable-next-line no-restricted-syntax -- Dynamic waveform heights computed from array values require inline styles
-                  <span key={i} className="w-[2px] rounded-sm bg-[#075e54]" style={{ height: h * 0.7, animationDelay: `${String(i * 0.08)}s` }} />
-                ))}
-              </div>
-              <span className="text-[8px] text-neutral-500">0:06</span>
-            </div>
+            Resolve merge conflicts on PR 1237
             <WaTime>9:41 AM ✓✓</WaTime>
           </WaUser>
 
-          {/* Transcription */}
+          {/* Code task created */}
           <WaBot>
-            <span className="text-[8px]">🎙️ <strong>Transcription:</strong></span><br />
-            <span className="text-[8px] italic text-neutral-600">&quot;Resolve merge conflicts on PR 1237&quot;</span>
+            <span className="text-[8px]"><strong>INT-937</strong> | Code task created</span><br />
+            <span className="text-[8px] text-neutral-500">Planning complete. Execution started on the selected worker.</span>
             <WaTime align="left">9:41 AM</WaTime>
           </WaBot>
 
-          {/* Design ready */}
+          {/* Progress */}
           <WaBot>
-            <span className="text-[8px]">🎨 <strong>INT-937</strong> | Resolve merge conflicts</span><br />
-            <span className="text-[8px] text-neutral-500">Identified 3 files with conflicts in auth and routing modules. Ready to implement?</span>
-            <WaBtn>▶️ Implement</WaBtn>
+            <span className="text-[8px]"><strong>INT-937</strong> | Running tests</span><br />
+            <span className="text-[8px] text-neutral-500">3 conflicted files fixed in auth and routing modules.</span>
             <WaTime align="left">9:43 AM</WaTime>
           </WaBot>
 
-          {/* User taps Implement */}
-          <WaUser>
-            ▶️ Implement
-            <WaTime>9:43 AM ✓✓</WaTime>
-          </WaUser>
-
           {/* Completion */}
           <WaBot>
-            <div className="text-[9px] font-bold text-emerald-800">✅ INT-937 | Merge conflicts resolved</div>
+            <div className="text-[9px] font-bold text-emerald-800">INT-937 | Merge conflicts resolved</div>
             <div className="text-[8px] text-neutral-500">2 commits · fix/conflicts-pr-1237</div>
             <WaBtn>View Pull Request</WaBtn>
             <WaTime align="left">9:47 AM</WaTime>

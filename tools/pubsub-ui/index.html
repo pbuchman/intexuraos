@@ -198,17 +198,8 @@
       .event.transcription {
         border-left-color: #34d399;
       }
-      .event.commands-ingest {
-        border-left-color: #f59e0b;
-      }
       .event.intex-message-ingest {
         border-left-color: #2563eb;
-      }
-      .event.actions-queue {
-        border-left-color: #06b6d4;
-      }
-      .event.approval-reply {
-        border-left-color: #14b8a6;
       }
       .event.research-process {
         border-left-color: #3b82f6;
@@ -224,9 +215,6 @@
       }
       .event.bookmark-summarize {
         border-left-color: #ec4899;
-      }
-      .event.calendar-preview {
-        border-left-color: #14b8a6;
       }
 
       .event-header {
@@ -269,20 +257,8 @@
         background: #34d399;
         color: white;
       }
-      .commands-ingest .event-badge {
-        background: #f59e0b;
-        color: white;
-      }
       .intex-message-ingest .event-badge {
         background: #2563eb;
-        color: white;
-      }
-      .actions-queue .event-badge {
-        background: #06b6d4;
-        color: white;
-      }
-      .approval-reply .event-badge {
-        background: #14b8a6;
         color: white;
       }
       .research-process .event-badge {
@@ -303,10 +279,6 @@
       }
       .bookmark-summarize .event-badge {
         background: #ec4899;
-        color: white;
-      }
-      .calendar-preview .event-badge {
-        background: #14b8a6;
         color: white;
       }
 
@@ -517,16 +489,12 @@
               <option value="whatsapp-media-cleanup">whatsapp-media-cleanup</option>
               <option value="whatsapp-webhook-process">whatsapp-webhook-process</option>
               <option value="whatsapp-transcription">whatsapp-transcription</option>
-              <option value="commands-ingest">commands-ingest</option>
               <option value="intex-message-ingest">intex-message-ingest</option>
-              <option value="actions-queue">actions-queue</option>
-              <option value="approval-reply">approval-reply</option>
               <option value="research-process">research-process</option>
               <option value="llm-analytics">llm-analytics</option>
               <option value="llm-call">llm-call</option>
               <option value="bookmark-enrich">bookmark-enrich</option>
               <option value="bookmark-summarize">bookmark-summarize</option>
-              <option value="calendar-preview">calendar-preview</option>
             </select>
           </div>
 
@@ -583,14 +551,6 @@
           gcsPath: 'whatsapp/{userId}/audio-{timestamp}.ogg',
           mimeType: 'audio/ogg',
         },
-        'commands-ingest': {
-          type: 'command.ingest',
-          userId: '{userId}',
-          sourceType: 'whatsapp_text',
-          externalId: 'msg-{timestamp}',
-          text: 'Research latest AI developments',
-          timestamp: '{timestamp}',
-        },
         'intex-message-ingest': {
           type: 'intex.message.ingest',
           userId: '{userId}',
@@ -598,28 +558,6 @@
           messageId: 'wamid.ui-{timestamp}',
           text: 'Create a calendar event for tomorrow at 10 for planning',
           whatsappSender: '+15551234567',
-          timestamp: '{timestamp}',
-        },
-        'actions-queue': {
-          type: 'action.created',
-          actionId: 'action-{timestamp}',
-          userId: '{userId}',
-          commandId: 'cmd-{timestamp}',
-          actionType: 'research',
-          title: 'Research Task',
-          payload: {
-            prompt: 'Research latest AI developments',
-            confidence: 0.95,
-            selectedLlms: ['google', 'anthropic'],
-          },
-          timestamp: '{timestamp}',
-        },
-        'approval-reply': {
-          type: 'action.approval.reply',
-          replyToWamid: 'wamid.test-{timestamp}',
-          replyText: 'yes',
-          userId: '{userId}',
-          actionId: 'action-{timestamp}',
           timestamp: '{timestamp}',
         },
         'research-process': {
@@ -655,15 +593,6 @@
           type: 'bookmarks.summarize',
           bookmarkId: 'bookmark-{timestamp}',
           userId: '{userId}',
-        },
-        'calendar-preview': {
-          type: 'calendar.preview.generate',
-          actionId: 'action-{timestamp}',
-          userId: '{userId}',
-          text: 'Create meeting with John tomorrow at 2pm',
-          currentDate: new Date().toISOString().split('T')[0],
-          correlationId: 'ui-{timestamp}',
-          timestamp: '{timestamp}',
         },
       };
 

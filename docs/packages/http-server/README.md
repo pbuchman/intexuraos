@@ -153,7 +153,7 @@ app.setErrorHandler(createValidationErrorHandler());
 
 ## Used By
 
-**Apps (16):** `actions-agent`, `api-docs-hub`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `code-agent`, `commands-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `user-service`, `web-agent`, `whatsapp-service`
+**Apps:** `api-docs-hub`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `code-agent`, `image-service`, `intex-agent`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `user-service`, `web-agent`, `whatsapp-service`
 
 ## Recent Changes
 

@@ -15,10 +15,6 @@ vi.mock('jose', () => ({
   jwtVerify: vi.fn(),
 }));
 
-// Mock processCodeAction to control error responses
-vi.mock('../../domain/usecases/processCodeAction.js', () => ({
-  processCodeAction: vi.fn(),
-}));
 
 // Mock submitToExecutionAgent to control error responses
 vi.mock('../../domain/usecases/submitToExecutionAgent.js', () => ({
@@ -62,12 +58,10 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
-import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
@@ -79,14 +73,12 @@ import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/fire
 import { createGitHubPRHttpClient } from '../../infra/http/gitHubPRHttpClient.js';
 
 // Import mocked functions
-import { processCodeAction } from '../../domain/usecases/processCodeAction.js';
 import { submitToExecutionAgent } from '../../domain/usecases/submitToExecutionAgent.js';
 import { submitTaskFeedback } from '../../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../../domain/usecases/sendTaskMessage.js';
 import { retryTask } from '../../domain/usecases/retryTask.js';
 import { cancelTaskWithNonce } from '../../domain/usecases/cancelTaskWithNonce.js';
 
-const mockedProcessCodeAction = vi.mocked(processCodeAction);
 const mockedSubmitToExecutionAgent = vi.mocked(submitToExecutionAgent);
 const mockedSubmitTaskFeedback = vi.mocked(submitTaskFeedback);
 const mockedSendTaskMessage = vi.mocked(sendTaskMessage);
@@ -99,10 +91,6 @@ describe('codeRoutes branch coverage', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent')
-      .persist()
-      .patch(/\/internal\/actions\/.*\/status/)
-      .reply(200, { success: true });
 
     nock('http://linear-agent:8086')
       .persist()
@@ -162,11 +150,6 @@ describe('codeRoutes branch coverage', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
 
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
@@ -192,14 +175,9 @@ describe('codeRoutes branch coverage', () => {
       whatsappNotifier,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -266,13 +244,6 @@ describe('codeRoutes branch coverage', () => {
       dispatchSigningSecret: 'test-dispatch-secret',
     });
 
-    // Default: success for mocked use cases
-    mockedProcessCodeAction.mockResolvedValue(ok({
-      codeTaskId: 'task-123',
-      resourceUrl: 'https://example.com/task-123',
-      workerLocation: 'home-mac',
-    }));
-
     mockedSubmitToExecutionAgent.mockResolvedValue(ok({
       codeTaskId: 'exec-task-123',
       resourceUrl: 'https://example.com/exec-task-123',
@@ -335,8 +306,6 @@ describe('codeRoutes branch coverage', () => {
         linearIssueId: 'INT-100',
         prNumber: 42,
         agentType: 'planning',
-        actionId: 'action-abc',
-        approvalEventId: 'approval-xyz',
         parentTaskId: 'parent-task-1',
         followUpReason: 'retry',
       });
@@ -403,8 +372,8 @@ describe('codeRoutes branch coverage', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       const task = body.data;
-      // Fastify serialization strips fields not in schema (actionId, approvalEventId),
-      // but the code paths in taskToApiResponse are still executed. fanOutChildTaskIds
+      // Fastify serialization strips fields not in schema, but the code paths
+      // in taskToApiResponse are still executed. fanOutChildTaskIds
       // is included in the serializer path for coverage even if Fastify strips it here.
       expect(task.implementationTaskId).toBe('impl-task-1');
       expect(task.parentTaskId).toBe('parent-task-1');
@@ -577,204 +546,6 @@ describe('codeRoutes branch coverage', () => {
       expect(body.data.updatedAt).toBe('');
       expect(body.data.dispatchStatus.firstSeenAt).toBe('');
       expect(body.data.dispatchStatus.lastSeenAt).toBe('');
-    });
-  });
-
-  // ============================================================
-  // POST /internal/code/process error codes (lines 569, 573, 577, 580)
-  // ============================================================
-  describe('POST /internal/code/process error branches', () => {
-    it('returns 409 for duplicate_approval error', async () => {
-      mockedProcessCodeAction.mockResolvedValue(err({
-        code: 'duplicate_approval',
-        message: 'Duplicate approval',
-        existingTaskId: 'existing-task-1',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: { prompt: 'Fix the bug', repository: 'test/repo', baseBranch: 'main' },
-        },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toContain('existing-task-1');
-    });
-
-    it('returns 409 for duplicate_prompt error', async () => {
-      mockedProcessCodeAction.mockResolvedValue(err({
-        code: 'duplicate_prompt',
-        message: 'Duplicate prompt',
-        existingTaskId: 'existing-task-2',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: { prompt: 'Fix the bug', repository: 'test/repo', baseBranch: 'main' },
-        },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toContain('Similar task');
-    });
-
-    it('returns 409 for active_task_exists error', async () => {
-      mockedProcessCodeAction.mockResolvedValue(err({
-        code: 'active_task_exists',
-        message: 'Active task exists',
-        existingTaskId: 'existing-task-3',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: { prompt: 'Fix the bug', repository: 'test/repo', baseBranch: 'main' },
-        },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toContain('Active task already exists');
-    });
-
-    it('returns WORKER_NOT_CONFIGURED for worker_not_configured error', async () => {
-      mockedProcessCodeAction.mockResolvedValue(err({
-        code: 'worker_not_configured',
-        message: 'No workers configured',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: { prompt: 'Fix the bug', repository: 'test/repo', baseBranch: 'main' },
-        },
-      });
-
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
-    });
-
-    it('handles duplicate error with no existingTaskId', async () => {
-      mockedProcessCodeAction.mockResolvedValue(err({
-        code: 'duplicate_approval',
-        message: 'Duplicate approval',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: { prompt: 'Fix the bug', repository: 'test/repo', baseBranch: 'main' },
-        },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.message).toContain('Duplicate:');
-    });
-
-    it('handles duplicate_prompt error with no existingTaskId', async () => {
-      mockedProcessCodeAction.mockResolvedValue(err({
-        code: 'duplicate_prompt',
-        message: 'Duplicate prompt',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: { prompt: 'Fix the bug', repository: 'test/repo', baseBranch: 'main' },
-        },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.message).toContain('Similar task');
-    });
-
-    it('handles active_task_exists error with no existingTaskId', async () => {
-      mockedProcessCodeAction.mockResolvedValue(err({
-        code: 'active_task_exists',
-        message: 'Active task exists',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: { prompt: 'Fix the bug', repository: 'test/repo', baseBranch: 'main' },
-        },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.message).toContain('Active task already exists');
-    });
-
-    it('handles process with linearIssueId in payload', async () => {
-      mockedProcessCodeAction.mockResolvedValue(ok({
-        codeTaskId: 'task-123',
-        resourceUrl: 'https://example.com/task-123',
-        workerLocation: 'home-mac',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: {
-            prompt: 'Fix the bug',
-            repository: 'test/repo',
-            baseBranch: 'main',
-            linearIssueId: 'INT-456',
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
     });
   });
 
@@ -2613,29 +2384,6 @@ describe('codeRoutes branch coverage', () => {
     });
   });
 
-  // ============================================================
-  // POST /internal/code/process without optional fields (lines 534, 537)
-  // ============================================================
-  describe('POST /internal/code/process without optional payload fields', () => {
-    it('processes without repository and baseBranch', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: {
-            prompt: 'Fix the bug',
-            // repository and baseBranch intentionally omitted
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-  });
 
   // ============================================================
   // POST /code/submit - enqueue queue_full error (line 1317)

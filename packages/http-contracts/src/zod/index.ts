@@ -18,14 +18,6 @@ export {
   type BookmarksCreateBookmarkRequest,
 } from './bookmarks-agent.js';
 export {
-  commandsCommandWithTextSchema,
-  commandsGetCommandDataSchema,
-  commandsGetCommandResponseSchema,
-  type CommandsCommandWithText,
-  type CommandsGetCommandData,
-  type CommandsGetCommandResponse,
-} from './commands-agent.js';
-export {
   notesCreateNoteRequestSchema,
   notesCreateNoteResponseSchema,
   type NotesCreateNoteRequest,

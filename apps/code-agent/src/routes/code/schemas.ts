@@ -238,8 +238,6 @@ const codeTaskSchema = {
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
     dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
-    actionId: { type: 'string', nullable: true },
-    approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
     linearIssue: {
       ...linearIssueForDisplaySchema,

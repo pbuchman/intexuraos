@@ -3,8 +3,8 @@
 Publisher-side leaf client for the WhatsApp send Pub/Sub topic.
 
 This package exists so that services which only need to **enqueue** WhatsApp
-messages (e.g. `code-agent`, `actions-agent`, `bookmarks-agent`,
-`research-agent`, `mobile-notifications-service`) can do so without depending
+messages (e.g. `code-agent`, `bookmarks-agent`, `research-agent`,
+`mobile-notifications-service`) can do so without depending
 on the WhatsApp consumer service (`whatsapp-service`) and without polluting
 the generic `@intexuraos/infra-pubsub` package with domain-specific
 publishers.

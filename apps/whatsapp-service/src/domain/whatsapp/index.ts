@@ -113,14 +113,10 @@ export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepositor
 
 // Events
 export type {
-  ApprovalReplyEvent,
-  AudioStoredEvent,
-  CommandIngestEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   MediaCleanupEvent,
   SendMessageEvent,
-  TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
   WhatsAppInteractiveButton,
@@ -144,11 +140,6 @@ export {
   type ProcessAudioMessageLogger,
   type AudioMediaInfo,
 } from './usecases/processAudioMessage.js';
-
-export {
-  HandleTranscriptionCompletedUseCase,
-  type HandleTranscriptionCompletedDeps,
-} from './usecases/handleTranscriptionCompleted.js';
 
 export {
   ExtractLinkPreviewsUseCase,

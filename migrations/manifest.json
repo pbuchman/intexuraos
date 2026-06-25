@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "114",
+  "lastReservedId": "115",
   "entries": [
     {
       "id": "001",
@@ -570,6 +570,11 @@
       "id": "114",
       "name": "private-whatsapp-day-message-pagination-index",
       "checksum": "sha256:5f05418aaa8dc994c490be313bf371d6645c138f5d4b4b0fffe0c538cbfd0471"
+    },
+    {
+      "id": "115",
+      "name": "private-whatsapp-chat-pagination-indexes",
+      "checksum": "sha256:91dd3afa29ceb6b20b85bd907931c6e883e1b44c52fedb5624bcdfbbc0b382f8"
     }
   ]
 }

@@ -41,7 +41,6 @@ import { createFirestoreLogChunkRepository } from '../../infra/firestore/firesto
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
-import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -54,8 +53,6 @@ import { fetchWithAuth, type UserServiceClient } from '@intexuraos/internal-clie
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
-import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
-import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
@@ -210,7 +207,6 @@ describe('POST /internal/webhooks/task-complete', () => {
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
   let logLineRepo: LogLineRepository;
-  let actionsAgentClient: ActionsAgentClient;
   let mockFetchWithAuth: ReturnType<typeof vi.fn>;
   let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
 
@@ -256,12 +252,6 @@ describe('POST /internal/webhooks/task-complete', () => {
     };
     const whatsappNotifier = createWhatsAppNotifier({
       whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
-    });
-
-    actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
     });
 
     const linearAgentClient = createLinearAgentHttpClient({
@@ -316,14 +306,9 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -375,11 +360,9 @@ describe('POST /internal/webhooks/task-complete', () => {
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
@@ -6147,620 +6130,6 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
   });
 
-  describe('actions-agent callback', () => {
-    it('calls actions-agent when task has actionId', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: '550e8400-e29b-41d4-a716-446655440000',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      const payload = {
-        taskId: task.id,
-        status: 'completed' as const,
-        result: {
-          branch: 'test-branch',
-          commits: 1,
-          summary: 'Fixed the bug',
-          prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
-        },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      // Verify actions-agent was called
-      expect(mockFetchWithAuth).toHaveBeenCalledWith(
-        expect.objectContaining({
-          baseUrl: 'http://actions-agent',
-          internalAuthToken: 'test-token',
-        }),
-        `/internal/actions/550e8400-e29b-41d4-a716-446655440000/status`,
-        expect.objectContaining({
-          method: 'PATCH',
-          body: JSON.stringify({
-            resource_status: 'completed',
-            resource_result: {
-              prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
-            },
-          }),
-        })
-      );
-    });
-
-    it('does not call actions-agent for tasks without actionId', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        // No actionId
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      const payload = {
-        taskId: task.id,
-        status: 'completed' as const,
-        result: {
-          branch: 'test-branch',
-          commits: 1,
-          summary: 'Fixed the bug',
-        },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      // Verify WhatsApp notification was sent (but not actions-agent)
-      expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
-      expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId: 'user-123',
-        })
-      );
-    });
-
-    it('calls actions-agent for completed task without prUrl', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: '660e8400-e29b-41d4-a716-446655440001',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      const payload = {
-        taskId: task.id,
-        status: 'completed' as const,
-        result: {
-          branch: 'test-branch',
-          commits: 1,
-          summary: 'Fixed but no PR',
-        },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      // Verify actions-agent was called without prUrl
-      expect(mockFetchWithAuth).toHaveBeenCalledWith(
-        expect.objectContaining({
-          baseUrl: 'http://actions-agent',
-          internalAuthToken: 'test-token',
-        }),
-        `/internal/actions/660e8400-e29b-41d4-a716-446655440001/status`,
-        expect.objectContaining({
-          method: 'PATCH',
-          body: JSON.stringify({
-            resource_status: 'completed',
-          }),
-        })
-      );
-    });
-
-    it('calls actions-agent for failed task with actionId', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: '770e8400-e29b-41d4-a716-446655440002',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      const payload = {
-        taskId: task.id,
-        status: 'failed' as const,
-        error: {
-          code: 'WORKER_ERROR',
-          message: 'Worker failed to process task',
-        },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      // Verify actions-agent was called with 'failed' status
-      expect(mockFetchWithAuth).toHaveBeenCalledWith(
-        expect.objectContaining({
-          baseUrl: 'http://actions-agent',
-          internalAuthToken: 'test-token',
-        }),
-        `/internal/actions/770e8400-e29b-41d4-a716-446655440002/status`,
-        expect.objectContaining({
-          method: 'PATCH',
-          body: JSON.stringify({
-            resource_status: 'failed',
-            resource_result: {
-              error: 'Worker failed to process task',
-            },
-          }),
-        })
-      );
-    });
-
-    it('handles task update failure gracefully', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: '880e8400-e29b-41d4-a716-446655440003',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      // Mock task update to fail
-      const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
-        err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })
-      );
-
-      const payload = {
-        taskId: task.id,
-        status: 'completed' as const,
-        result: {
-          branch: 'test-branch',
-          commits: 1,
-          summary: 'Completed but update fails',
-          prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
-        },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(500);
-      expect(response.json()).toMatchObject({
-        success: false,
-        error: {
-          code: 'INTERNAL_ERROR',
-        },
-      });
-
-      updateSpy.mockRestore();
-    });
-
-    it('calls actions-agent for completed task without prUrl', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: '990e8400-e29b-41d4-a716-446655440004',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      const payload = {
-        taskId: task.id,
-        status: 'interrupted' as const,
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      // Verify actions-agent was called with 'interrupted' status (INT-1119: statusMirrorService maps correctly)
-      expect(mockFetchWithAuth).toHaveBeenCalledWith(
-        expect.any(Object),
-        '/internal/actions/990e8400-e29b-41d4-a716-446655440004/status',
-        expect.objectContaining({
-          body: JSON.stringify({
-            resource_status: 'interrupted',
-            resource_result: {
-              error: 'Worker was interrupted during task execution',
-            },
-          }),
-        })
-      );
-    });
-
-    it('handles actions-agent failure gracefully', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: 'aa0e8400-e29b-41d4-a716-446655440005',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      const payload = {
-        taskId: task.id,
-        status: 'completed' as const,
-        result: {
-          branch: 'test-branch',
-          commits: 1,
-          summary: 'Fixed the bug',
-        },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      // Mock actions-agent failure
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'NETWORK_ERROR',
-          message: 'Connection refused',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      // Webhook still succeeds even though actions-agent callback failed
-      expect(response.statusCode).toBe(200);
-
-      // Task was still updated
-      const getResult = await codeTaskRepo.findById(task.id);
-      expect(getResult.ok).toBe(true);
-      if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('implemented');
-    });
-
-    it('returns 500 when update fails for failed status', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: 'action-fail-notify',
-      });
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      // Mock update to fail
-      const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
-        err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })
-      );
-
-      const payload = {
-        taskId: task.id,
-        status: 'failed' as const,
-        error: { code: 'WORKER_ERROR', message: 'Worker crashed' },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(500);
-      expect(response.json()).toMatchObject({
-        success: false,
-        error: { code: 'INTERNAL_ERROR' },
-      });
-
-      updateSpy.mockRestore();
-    });
-
-    it('returns 500 when update fails for interrupted status', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: 'action-interrupt-notify',
-      });
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
-        err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })
-      );
-
-      const payload = {
-        taskId: task.id,
-        status: 'interrupted' as const,
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(500);
-      expect(response.json()).toMatchObject({
-        success: false,
-        error: { code: 'INTERNAL_ERROR' },
-      });
-
-      updateSpy.mockRestore();
-    });
-
-    it('continues when actions-agent fails for failed status', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: 'action-fail-notify',
-      });
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      mockFetchWithAuth.mockResolvedValueOnce(
-        err({ code: 'NETWORK_ERROR', message: 'Connection refused' })
-      );
-
-      const payload = {
-        taskId: task.id,
-        status: 'failed' as const,
-        error: { code: 'WORKER_ERROR', message: 'Worker crashed' },
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      // Webhook succeeds even if actions-agent fails
-      expect(response.statusCode).toBe(200);
-
-      // Task was still updated
-      const getResult = await codeTaskRepo.findById(task.id);
-      expect(getResult.ok).toBe(true);
-      if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('failed');
-    });
-
-    it('continues when actions-agent fails for interrupted status', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'user-123',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-        webhookSecret: 'test-webhook-secret',
-        actionId: 'action-interrupt-notify',
-      });
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const task = createResult.value;
-
-      mockFetchWithAuth.mockResolvedValueOnce(
-        err({ code: 'NETWORK_ERROR', message: 'Connection refused' })
-      );
-
-      const payload = {
-        taskId: task.id,
-        status: 'interrupted' as const,
-      };
-
-      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/webhooks/task-complete',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-          'x-request-timestamp': timestamp,
-          'x-request-signature': signature,
-        },
-        payload,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      const getResult = await codeTaskRepo.findById(task.id);
-      expect(getResult.ok).toBe(true);
-      if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('interrupted');
-    });
-  });
-
   describe('Linear In Review transition', () => {
     it('calls markInReview when completed task has prUrl and linearIssueId', async () => {
       const createResult = await codeTaskRepo.create({
@@ -7259,12 +6628,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     setFirestore(fakeFirestore as unknown as Firestore);
     logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     codeTaskRepo = createFirestoreCodeTaskRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -7308,14 +6671,9 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: mockMetricsClient as unknown as MetricsClient,
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -7367,11 +6725,9 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
       logLineRepo: LogLineRepository;
-      actionsAgentClient: ActionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
@@ -7634,11 +6990,6 @@ describe('POST /internal/logs', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
 
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
@@ -7648,11 +6999,6 @@ describe('POST /internal/logs', () => {
 
     const linearIssueService = createLinearIssueService({
       linearAgentClient,
-      logger,
-    });
-
-    const statusMirrorService = createStatusMirrorService({
-      actionsAgentClient,
       logger,
     });
 
@@ -7670,10 +7016,8 @@ describe('POST /internal/logs', () => {
       logLineRepo,
       taskDispatcher,
       workerSettingsRepo,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
-      statusMirrorService,
       whatsappNotifier,
       metricsClient: createNoOpMetricsClient(),
       processHeartbeat: createProcessHeartbeatUseCase({
@@ -7727,11 +7071,9 @@ describe('POST /internal/logs', () => {
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
@@ -8494,7 +7836,6 @@ describe('POST /internal/logs', () => {
       baseBranch: 'development',
       traceId: 'trace_123',
       webhookSecret: 'test-webhook-secret',
-      actionId: 'action-first-log',
       initialStatus: 'dispatched',
     });
 
@@ -8544,7 +7885,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
-  let actionsAgentClient: ActionsAgentClient;
   let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
@@ -8584,12 +7924,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
     });
 
-    actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -8610,14 +7944,9 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -8669,11 +7998,9 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
@@ -9430,12 +8757,6 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -9488,11 +8809,9 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       whatsappNotifier,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
@@ -9533,11 +8852,9 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
@@ -10834,40 +10151,6 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.value.error?.message).toContain('missing result payload');
   });
 
-  it('handles cancelled status with actionId and actions-agent failure and duration', async () => {
-    const createResult = await codeTaskRepo.create({
-      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
-      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't32', webhookSecret: 'test-webhook-secret', actionId: 'action-cancel',
-    });
-    expect(createResult.ok).toBe(true);
-    if (!createResult.ok) throw new Error('Failed');
-    const task = createResult.value;
-    vi.mocked(fetchWithAuth).mockResolvedValueOnce(err({ code: 'NETWORK_ERROR' as const, message: 'down' }));
-    const payload = { taskId: task.id, status: 'cancelled' as const, duration: 10 };
-    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
-    expect(response.statusCode).toBe(200);
-    const g = await codeTaskRepo.findById(task.id);
-    expect(g.ok).toBe(true);
-    if (!g.ok) throw new Error('Failed');
-    expect(g.value.status).toBe('cancelled');
-  });
-
-  it('handles cancelled status with actionId and actions-agent success', async () => {
-    const createResult = await codeTaskRepo.create({
-      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
-      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't32b', webhookSecret: 'test-webhook-secret', actionId: 'action-cancel-ok',
-    });
-    expect(createResult.ok).toBe(true);
-    if (!createResult.ok) throw new Error('Failed');
-    const task = createResult.value;
-    vi.mocked(fetchWithAuth).mockResolvedValueOnce(ok({ data: { success: true } }));
-    const payload = { taskId: task.id, status: 'cancelled' as const };
-    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
-    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
-    expect(response.statusCode).toBe(200);
-  });
-
   it('returns 500 when update fails for cancelled status', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
@@ -11366,20 +10649,20 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
     logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
     const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
     const logLineRepo = createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
-    const actionsAgentClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
     const linearAgentClient = createLinearAgentHttpClient({ baseUrl: 'http://linear-agent:8086', internalAuthToken: 'test-token', timeoutMs: 10000 }, logger);
 
     setServices({
-      firestore: fakeFirestore as unknown as Firestore, logger, codeTaskRepo,
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo,
       logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       logLineRepo,
       taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
-      actionsAgentClient, linearAgentClient,
+      linearAgentClient,
       linearIssueService: createLinearIssueService({ linearAgentClient, logger }),
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
@@ -11389,40 +10672,20 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       gitHubPRSummaryRepo: {} as never,
       turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       userServiceClient: mockUserServiceClient,
-      gitHubPRClient: {} as never, webhookRules: {} as never, dispatchService: {} as never, resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
-      eventDecisionRepo: {} as never, dispatchRetryRepo: {} as never, unifiedEvaluator: {} as never,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
+      unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
       taskEnqueueService: {} as never,
       mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue({ processed: 0 }) },
       mergeQueueWatchRepo: { create: vi.fn(), findById: vi.fn(), findActiveByUserAndBranch: vi.fn(), findAllActive: vi.fn(), findByUserAndRepo: vi.fn(), update: vi.fn(), appendMergedPr: vi.fn() },
       prTriagePublisher: {} as never,
-    } as {
-      firestore: Firestore; logger: Logger; codeTaskRepo: CodeTaskRepository; logChunkRepo: LogChunkRepository; logLineRepo: LogLineRepository;
-      taskDispatcher: TaskDispatcherService; workerSettingsRepo: WorkerSettingsRepository; actionsAgentClient: ActionsAgentClient;
-      linearAgentClient: LinearAgentClient; whatsappNotifier: WhatsAppNotifier;
-      linearIssueService: LinearIssueService; statusMirrorService: StatusMirrorService; metricsClient: MetricsClient;
-      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
-      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
-      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
-      workerHealthProbe: WorkerHealthProbe;
-      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
-      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
-      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
-      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
-      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
-      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
-      resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../../domain/usecases/githubAgent.js').GitHubAgentError>>;
-      eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
-      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
-      unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
-      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
-      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
-      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
-    });
+    } as never);
+
     app = await buildServer();
   });
 
@@ -11530,12 +10793,6 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -11559,14 +10816,9 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -11618,11 +10870,9 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
-      actionsAgentClient: ActionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;

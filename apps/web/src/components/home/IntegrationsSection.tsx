@@ -11,8 +11,8 @@ import {
 
 export function IntegrationsSection(): React.JSX.Element {
   const integrations = [
-    { name: 'WhatsApp', description: 'Mobile command center — voice notes, text, approvals', icon: Smartphone },
-    { name: 'Google Calendar', description: 'Events from voice, previewed before creation', icon: Layers },
+    { name: 'WhatsApp', description: 'Mobile text requests routed to specialist tools', icon: Smartphone },
+    { name: 'Google Calendar', description: 'Events from text requests, previewed before creation', icon: Layers },
     { name: 'Linear', description: 'Project tracking with real-time board sync', icon: CheckCircle2 },
     { name: 'Notion', description: 'Export research reports as structured pages', icon: MessageSquare },
     { name: 'GitHub', description: 'PRs, code reviews, and feedback loops', icon: GitPullRequest },

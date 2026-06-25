@@ -9,7 +9,6 @@ import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryR
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { MergeConflictDetector, ReconcileResult } from '../services/mergeConflictDetector.js';
-import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
@@ -37,7 +36,6 @@ export interface DetectMergeConflictsOnPushDeps {
   taskEnqueueService: TaskEnqueueService;
   logLineRepo: LogLineRepository;
   workerSettingsRepo: WorkerSettingsRepository;
-  statusMirrorService: StatusMirrorService;
   whatsappNotifier: WhatsAppNotifier;
   allowedBots: Set<string>;
   orchestratorSecret: string;

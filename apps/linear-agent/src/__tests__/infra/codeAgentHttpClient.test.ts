@@ -31,8 +31,6 @@ const validRequest = {
   linearIssueId: 'issue-456',
   prompt: 'Fix the bug',
   workerType: 'auto' as const,
-  actionId: 'action-789',
-  approvalEventId: 'approval-001',
 };
 
 describe('createCodeAgentHttpClient', () => {
@@ -47,8 +45,14 @@ describe('createCodeAgentHttpClient', () => {
   describe('successful request', () => {
     it('returns codeTaskId on success', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
-        .reply(200, { success: true, data: { taskId: 'task-abc' } });
+        .post('/internal/code/submit')
+        .reply(200, {
+          success: true,
+          data: {
+            codeTaskId: 'task-abc',
+            resourceUrl: 'https://dev.intexuraos.cloud/#/code-tasks/task-abc',
+          },
+        });
 
       const client = createTestClient();
       const result = await client.triggerCodeTask(validRequest);
@@ -63,7 +67,7 @@ describe('createCodeAgentHttpClient', () => {
   describe('HTTP error responses', () => {
     it('returns INVALID_REQUEST on 4xx response', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .reply(400, 'Bad request body');
 
       const client = createTestClient();
@@ -78,7 +82,7 @@ describe('createCodeAgentHttpClient', () => {
 
     it('returns INVALID_REQUEST on 422 response', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .reply(422, 'Unprocessable entity');
 
       const client = createTestClient();
@@ -92,12 +96,12 @@ describe('createCodeAgentHttpClient', () => {
 
     it('maps duplicate code-task responses to INVALID_REQUEST', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .reply(409, {
           success: false,
           error: {
             code: 'DUPLICATE',
-            message: 'Task already exists for this approval',
+            message: 'Task already exists for this request',
           },
         });
 
@@ -107,13 +111,13 @@ describe('createCodeAgentHttpClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_REQUEST');
-        expect(result.error.message).toBe('Task already exists for this approval');
+        expect(result.error.message).toBe('Task already exists for this request');
       }
     });
 
     it('returns UNAVAILABLE on 5xx response', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .reply(500, 'Internal server error');
 
       const client = createTestClient();
@@ -128,7 +132,7 @@ describe('createCodeAgentHttpClient', () => {
 
     it('returns UNAVAILABLE on 503 response', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .reply(503, 'Service unavailable');
 
       const client = createTestClient();
@@ -144,7 +148,7 @@ describe('createCodeAgentHttpClient', () => {
   describe('invalid response body', () => {
     it('returns UNKNOWN when success=false in response', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .reply(200, { success: false, error: { code: 'SOME_ERROR' } });
 
       const client = createTestClient();
@@ -159,7 +163,7 @@ describe('createCodeAgentHttpClient', () => {
 
     it('returns UNKNOWN when data is undefined in response', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .reply(200, { success: true });
 
       const client = createTestClient();
@@ -176,7 +180,7 @@ describe('createCodeAgentHttpClient', () => {
   describe('network errors', () => {
     it('returns UNKNOWN on network error', async () => {
       nock(BASE_URL)
-        .post('/internal/code/process')
+        .post('/internal/code/submit')
         .replyWithError('Connection refused');
 
       const client = createTestClient();

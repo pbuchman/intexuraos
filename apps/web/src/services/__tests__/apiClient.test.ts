@@ -60,25 +60,19 @@ describe('parseConflictError', () => {
     });
   });
 
-  describe('Duplicate approval pattern', () => {
-    it('extracts task ID from duplicate approval message', () => {
+  describe('Retired approval duplicate pattern', () => {
+    it('does not parse retired duplicate approval messages', () => {
       const message = 'Duplicate: task_cc7666d5-bdf1-4498-b52b-1c12af89a580';
       const result = parseConflictError(message);
 
-      expect(result).toEqual({
-        taskId: 'task_cc7666d5-bdf1-4498-b52b-1c12af89a580',
-        reason: 'duplicate_approval',
-      } satisfies ConflictErrorInfo);
+      expect(result).toBeNull();
     });
 
-    it('extracts task ID with simple format', () => {
+    it('does not parse simple retired duplicate approval messages', () => {
       const message = 'Duplicate: task_simple-123';
       const result = parseConflictError(message);
 
-      expect(result).toEqual({
-        taskId: 'task_simple-123',
-        reason: 'duplicate_approval',
-      } satisfies ConflictErrorInfo);
+      expect(result).toBeNull();
     });
   });
 

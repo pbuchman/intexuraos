@@ -111,9 +111,6 @@ describe('drainRetryQueue', () => {
   let mockLogLineRepo: {
     storeBatch: ReturnType<typeof vi.fn>;
   };
-  let mockStatusMirrorService: {
-    mirrorStatus: ReturnType<typeof vi.fn>;
-  };
   let mockDispatchStatusService: CodeTaskDispatchStatusService;
   let mockUserServiceClient: {
     getLlmClient: ReturnType<typeof vi.fn>;
@@ -197,7 +194,6 @@ describe('drainRetryQueue', () => {
       whatsappNotifier: mockWhatsappNotifier as unknown as DrainRetryQueueDeps['whatsappNotifier'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
       logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
-      statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
       codeTaskDispatchStatusService: mockDispatchStatusService,
       createTaskForPRFn: mockCreateTaskForPRFn,
       userServiceClient: mockUserServiceClient as never,
@@ -254,10 +250,6 @@ describe('drainRetryQueue', () => {
 
     mockLogLineRepo = {
       storeBatch: vi.fn().mockResolvedValue(ok(undefined)),
-    };
-
-    mockStatusMirrorService = {
-      mirrorStatus: vi.fn().mockResolvedValue(ok(undefined)),
     };
 
     mockDispatchStatusService = {
@@ -2268,7 +2260,6 @@ describe('drainRetryQueue', () => {
         whatsappNotifier: mockWhatsappNotifier as unknown as DrainRetryQueueDeps['whatsappNotifier'],
         workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainRetryQueueDeps['workerSettingsRepo'],
         logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
-        statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
       };
 
       const result = await drainRetryQueue(depsWithoutFallback as DrainRetryQueueDeps);

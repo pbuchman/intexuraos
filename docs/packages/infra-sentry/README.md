@@ -213,18 +213,17 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 
 ## Used By
 
-19 apps import this package (all Fastify-based services):
+Fastify-based services import this package:
 
 | App                          | Usage                                            |
 | ---------------------------- | ------------------------------------------------ |
-| actions-agent                | `initSentry` + `createAppLogger` + error handler |
 | api-docs-hub                 | `initSentry` + `createAppLogger`                 |
 | app-settings-service         | `initSentry` + `createAppLogger` + error handler |
 | bookmarks-agent              | `initSentry` + `createAppLogger` + error handler |
 | calendar-agent               | `initSentry` + `createAppLogger` + error handler |
 | code-agent                   | `initSentry` + `createAppLogger` + error handler |
-| commands-agent               | `initSentry` + `createAppLogger` + error handler |
 | image-service                | `initSentry` + `createAppLogger` + error handler |
+| intex-agent                  | `initSentry` + `createAppLogger` + error handler |
 | linear-agent                 | `initSentry` + `createAppLogger` + error handler |
 | mobile-notifications-service | `initSentry` + `createAppLogger` + error handler |
 | notes-agent                  | `initSentry` + `createAppLogger` + error handler |

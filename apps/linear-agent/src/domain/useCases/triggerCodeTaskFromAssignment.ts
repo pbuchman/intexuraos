@@ -44,8 +44,6 @@ export async function triggerCodeTaskFromAssignment(
     linearIssueId: event.data.identifier,
     prompt,
     workerType: 'auto',
-    actionId: `webhook-assign-${event.data.identifier}-${String(event.webhookTimestamp)}`,
-    approvalEventId: `webhook-assign-${event.data.identifier}-${String(event.webhookTimestamp)}`,
   });
 
   if (result.ok) {

@@ -72,6 +72,13 @@ describe('Fastify Schemas', () => {
     });
   });
 
+  describe('contractFastifySchemas', () => {
+    it('does not include retired command contract schemas', () => {
+      expect(contractFastifySchemas).not.toHaveProperty('CommandsCommandWithText');
+      expect(contractFastifySchemas).not.toHaveProperty('CommandsGetCommandData');
+    });
+  });
+
   describe('registerCoreSchemas', () => {
     it('registers all core schemas on the app', () => {
       const addSchema = vi.fn();

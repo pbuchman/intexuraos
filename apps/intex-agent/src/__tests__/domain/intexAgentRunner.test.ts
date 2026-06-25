@@ -48,6 +48,8 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain('Return no_action');
     expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
     expect(client.calls[0]?.systemPrompt).toContain('what is in my calendar');
+    expect(client.calls[0]?.systemPrompt).toContain('If the request is not one of the supported jobs, do not call a tool');
+    expect(client.calls[0]?.systemPrompt).not.toMatch(/approval|command classification|action queue|voice/i);
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'create event tomorrow' },
       { role: 'assistant', content: 'What time?' },

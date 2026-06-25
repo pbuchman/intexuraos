@@ -317,7 +317,7 @@ Now that you understand the basics:
 2. Explore the draft workflow — use `POST /draft` to create a review-before-run flow
 3. Use `POST /validate-input` to check prompt quality before submitting
 4. Read the [Technical Reference](technical.md) for full API schemas and the complete status lifecycle
-5. See how [actions-agent](../actions-agent/technical.md) triggers draft research from natural language commands
+5. See how [Intex](../intex-agent/technical.md) creates draft research from WhatsApp text conversations
 
 ---
 

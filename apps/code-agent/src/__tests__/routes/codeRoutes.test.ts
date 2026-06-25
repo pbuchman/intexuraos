@@ -25,20 +25,16 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
-import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
-import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
@@ -91,11 +87,6 @@ describe('codeRoutes', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    // Mock actions-agent HTTP calls to avoid hanging in CI
-    nock('http://actions-agent')
-      .persist()
-      .patch(/\/internal\/actions\/.*\/status/)
-      .reply(200, { success: true });
 
     // Mock linear-agent HTTP calls
     nock('http://linear-agent:8086')
@@ -163,12 +154,6 @@ describe('codeRoutes', () => {
       logger,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -188,14 +173,9 @@ describe('codeRoutes', () => {
       whatsappNotifier,
       logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -256,11 +236,9 @@ describe('codeRoutes', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       logLineRepo: LogLineRepository;
-      actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
@@ -1211,122 +1189,6 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(404);
     });
 
-  });
-
-  describe('POST /internal/code/process error handling', () => {
-    it('returns 500 for internal errors from repository', async () => {
-      // Mock codeTaskRepo.create() to return a non-duplicate error
-      const mockRepo = {
-        create: vi.fn().mockResolvedValue({
-          ok: false,
-          error: { code: 'FIRESTORE_ERROR', message: 'Database connection failed' },
-        }),
-      } as unknown as CodeTaskRepository;
-
-      // Mock workerSettingsRepo to return valid settings for user-123
-      const mockWorkerSettingsRepo = {
-        getSettings: vi.fn().mockResolvedValue({
-          ok: true,
-          value: {
-            userId: 'user-123',
-            workers: [
-              {
-                name: 'home-mac',
-                url: 'https://cc-mac.intexuraos.cloud',
-                cfAccessClientId: 'test-client-id',
-                cfAccessClientSecret: 'test-client-secret',
-                dispatchSigningSecret: 'test-dispatch-secret',
-                enabled: true,
-              },
-            ],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        }),
-      } as unknown as WorkerSettingsRepository;
-
-      setServices({
-        ...getServices(),
-        codeTaskRepo: mockRepo,
-        workerSettingsRepo: mockWorkerSettingsRepo,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: {
-            prompt: 'Fix the bug',
-            repository: 'test/repo',
-            baseBranch: 'main',
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-      expect(body.error.message).toBe('Database connection failed');
-    });
-
-    it('returns 400 INVALID_REQUEST for prompt containing a base64 blob (injection sanitization)', async () => {
-      // Mock workerSettingsRepo to return valid settings (so we reach sanitization)
-      const mockWorkerSettingsRepo = {
-        getSettings: vi.fn().mockResolvedValue({
-          ok: true,
-          value: {
-            userId: 'user-123',
-            workers: [
-              {
-                name: 'home-mac',
-                url: 'https://cc-mac.intexuraos.cloud',
-                cfAccessClientId: 'test-client-id',
-                cfAccessClientSecret: 'test-client-secret',
-                dispatchSigningSecret: 'test-dispatch-secret',
-                enabled: true,
-              },
-            ],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        }),
-      } as unknown as WorkerSettingsRepository;
-
-      setServices({
-        ...getServices(),
-        workerSettingsRepo: mockWorkerSettingsRepo,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: {
-            prompt: 'A'.repeat(3500),
-            repository: 'test/repo',
-            baseBranch: 'main',
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-    });
   });
 
   describe('timestampToIso', () => {
@@ -2671,25 +2533,6 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-    });
-  });
-
-  describe('POST /internal/code/process', () => {
-    it('returns 401 when missing auth header', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/process',
-        payload: {
-          actionId: 'action-123',
-          approvalEventId: 'approval-123',
-          userId: 'user-123',
-          payload: {
-            prompt: 'Fix the bug',
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
     });
   });
 

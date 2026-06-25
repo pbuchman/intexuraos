@@ -166,4 +166,117 @@ describe('postServiceFeedback', () => {
       },
     });
   });
+
+  it('returns an error when a non-2xx response has no envelope body', async () => {
+    nock(BASE_URL).post('/internal/test').reply(500, 'server exploded');
+
+    const result = await postServiceFeedback(
+      {
+        baseUrl: BASE_URL,
+        internalAuthToken: 'secret',
+        logger: { warn: () => undefined },
+      },
+      {
+        path: '/internal/test',
+        body: { ok: true },
+        invalidJsonMessage: 'invalid json',
+        invalidEnvelopeMessage: 'invalid envelope',
+        networkErrorPrefix: 'network error',
+        getDefaultHttpErrorMessage: (response) => `HTTP ${String(response.status)}`,
+      }
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: new Error('HTTP 500'),
+    });
+  });
+
+  it('uses default failed feedback when an error envelope omits code and message', async () => {
+    nock(BASE_URL).post('/internal/test').reply(500, {
+      success: false,
+      error: {},
+    });
+
+    const result = await postServiceFeedback(
+      {
+        baseUrl: BASE_URL,
+        internalAuthToken: 'secret',
+        logger: { warn: () => undefined },
+      },
+      {
+        path: '/internal/test',
+        body: { ok: true },
+        invalidJsonMessage: 'invalid json',
+        invalidEnvelopeMessage: 'invalid envelope',
+        networkErrorPrefix: 'network error',
+        getDefaultHttpErrorMessage: (response) => `HTTP ${String(response.status)}`,
+      }
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        status: 'failed',
+        message: 'HTTP 500',
+      },
+    });
+  });
+
+  it('uses default failed feedback when an object error response omits error details', async () => {
+    nock(BASE_URL).post('/internal/test').reply(500, {
+      success: false,
+    });
+
+    const result = await postServiceFeedback(
+      {
+        baseUrl: BASE_URL,
+        internalAuthToken: 'secret',
+        logger: { warn: () => undefined },
+      },
+      {
+        path: '/internal/test',
+        body: { ok: true },
+        invalidJsonMessage: 'invalid json',
+        invalidEnvelopeMessage: 'invalid envelope',
+        networkErrorPrefix: 'network error',
+        getDefaultHttpErrorMessage: (response) => `HTTP ${String(response.status)}`,
+      }
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        status: 'failed',
+        message: 'HTTP 500',
+      },
+    });
+  });
+
+  it('returns the invalid JSON message for 2xx responses without an envelope', async () => {
+    nock(BASE_URL).post('/internal/test').reply(200, {
+      status: 'completed',
+    });
+
+    const result = await postServiceFeedback(
+      {
+        baseUrl: BASE_URL,
+        internalAuthToken: 'secret',
+        logger: { warn: () => undefined },
+      },
+      {
+        path: '/internal/test',
+        body: { ok: true },
+        invalidJsonMessage: 'invalid json',
+        invalidEnvelopeMessage: 'invalid envelope',
+        networkErrorPrefix: 'network error',
+        getDefaultHttpErrorMessage: (response) => `HTTP ${String(response.status)}`,
+      }
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: new Error('invalid json'),
+    });
+  });
 });

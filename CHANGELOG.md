@@ -461,7 +461,7 @@
 - Added `/tech-debt-triage` skill for scanning technical debt docs and creating consolidated Linear issues
 - Changed completion verification to be lenient for user-resumed tasks
 - Changed `@claude` and `@codex` PR comment mentions to skip webhook dispatch (handled by GitHub Actions)
-- Improved 27 LLM prompts across all domains — fixed unsafe casts, XML delimiters, date injection, and migrated `approvalIntentPrompt` to PromptBuilder
+- Improved LLM prompts across all domains — fixed unsafe casts, XML delimiters, date injection, and PromptBuilder coverage
 - Improved `/code/submit` timeout from 30s to 90s with server-side 120s safety net and timeout-aware error recovery UI (INT-505)
 - Improved CI pipeline from 5m to 3m43s with 3-way test sharding, parallel type/lint matrix, and artifact-based coverage reports
 - Removed scheduled snapshot refresh saving ~zł50/week in LLM token costs
@@ -600,7 +600,7 @@
 - Added GPT-5.2 and GLM-4 (Zai provider) pricing support
 - Added image generation via Gemini native (`nano-banana-pro`/`gemini-2.5-flash-image`)
 - Changed `llm-orchestrator` → `research-agent` for descriptive naming
-- Changed `commands-router` → `commands-agent` for consistent naming
+- Changed the original command router service name for consistent naming
 - Changed `data-insights-service` → `data-insights-agent`
 - Changed `whatsapp-service` domain from `inbox` to `whatsapp`
 - Changed model selection UI with improved UX
@@ -614,14 +614,14 @@
 
 Initial release with core platform functionality.
 
-- Added Actions Agent for action management with status workflow (pending → completed/failed)
+- Added the original action management service with status workflow (pending -> completed/failed)
 - Added User Service with Auth0 integration and OAuth Device Authorization Flow
 - Added WhatsApp Service for message handling with media support
 - Added Mobile Notifications Service for notification aggregation
 - Added Notion Service for prompt storage integration
 - Added PromptVault Service for prompt template management
 - Added Research Agent for multi-LLM research orchestration
-- Added Commands Agent for natural language command processing
+- Added the original natural language command processing service
 - Added Data Insights Agent for user data analysis
 - Added React web application with PWA support
 - Added WhatsApp Business Cloud API integration

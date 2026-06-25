@@ -14,7 +14,6 @@ import Fastify from 'fastify';
 import { taskRoutes } from '../../../routes/code/task-routes.js';
 
 const EXPECTED_ROUTES: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: string }[] = [
-  { method: 'POST', url: '/internal/code/process' },
   { method: 'POST', url: '/internal/code/submit' },
   { method: 'PATCH', url: '/internal/code-tasks/:taskId' },
   { method: 'GET', url: '/internal/code-tasks/zombies' },

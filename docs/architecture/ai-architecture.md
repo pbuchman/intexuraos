@@ -230,22 +230,14 @@ interface LlmResearchProvider {
 ```mermaid
 graph TB
     subgraph "Input Layer"
-        WA[WhatsApp Voice]
+        WA[WhatsApp Text]
         WEB[Web Interface]
         API[Direct API]
     end
 
-    subgraph "Transcription"
-        SM[Speechmatics]
-    end
-
-    subgraph "Classification Layer"
-        CMD[Commands Agent]
-        GEM1[Gemini 2.5 Flash]
-    end
-
-    subgraph "Action Router"
-        AA[Actions Agent]
+    subgraph "Conversation Layer"
+        INTEX[Intex Agent]
+        OR3[OpenRouter Gemini 3 Flash Preview]
     end
 
     subgraph "AI Agents"
@@ -263,24 +255,20 @@ graph TB
         O4[O4 Mini Deep Research]
     end
 
-    subgraph "Synthesis"
+    subgraph "Research Synthesis"
         SYN[Synthesizer]
     end
 
-    WA -->|Audio| SM
-    SM -->|Text| CMD
-    WEB --> CMD
-    API --> CMD
+    WA --> INTEX
+    WEB --> INTEX
+    API --> INTEX
 
-    CMD --> GEM1
-    CMD --> GLM1
-    GEM1 --> AA
-    GLM1 --> AA
+    INTEX --> OR3
 
-    AA --> RA
-    AA --> CA
-    AA --> LA
-    AA --> IS
+    INTEX --> RA
+    INTEX --> CA
+    INTEX --> LA
+    INTEX --> IS
 
     RA --> CLAUDE
     RA --> GPT
@@ -299,18 +287,18 @@ graph TB
 
 ## Agent AI Capabilities
 
-### Commands Agent
+### Intex Agent
 
-**Purpose**: Classify user intent from natural language
+**Purpose**: Handle WhatsApp text conversations and call supported direct tools
 
-**AI Models**: Gemini 2.5 Flash
+**AI Models**: OpenRouter Gemini 3 Flash Preview
 
 **Process**:
 
-1. Receive transcribed text or typed input
-2. Use structured output (JSON mode) for classification
-3. Detect action type: research, note, link, calendar, linear
-4. Detect model preferences from explicit mentions ("use Claude", "ask GPT")
+1. Receive WhatsApp text, web, or trusted API input
+2. Decide whether the request fits the supported tools
+3. Call exactly one direct tool for notes, calendar events, research drafts, bookmarks, or code tasks
+4. Return unsupported for requests outside the current boundary
 
 ### Research Agent
 

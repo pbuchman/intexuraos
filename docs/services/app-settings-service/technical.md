@@ -9,7 +9,7 @@ App-settings-service is a Fastify-based microservice running on Cloud Run (port 
 ```mermaid
 graph TB
     subgraph "External"
-        Services[Downstream Services<br/>user-service, commands-agent, etc.]
+        Services[Downstream Services<br/>user-service, intex-agent, etc.]
         ApiDocs[api-docs-hub<br/>OpenAPI catalog]
     end
 
@@ -90,8 +90,7 @@ These services poll `/health` before starting (configured in `ecosystem.config.c
 | Service        | Why                                            |
 | -------------- | ---------------------------------------------- |
 | user-service   | Startup dependency (waitForService)            |
-| commands-agent | Startup dependency (waitForService)            |
-| actions-agent  | Startup dependency (waitForService)            |
+| intex-agent    | Startup dependency (waitForService)            |
 | research-agent | Startup dependency (waitForService)            |
 
 ### Service Catalog
@@ -124,7 +123,7 @@ Api-docs-hub registers app-settings-service in its OpenAPI source catalog.
 
 ## Gotchas
 
-- **Four services still depend on this service's health endpoint.** Removing or decommissioning the service requires updating `ecosystem.config.cjs` `waitForService` entries for user-service, commands-agent, actions-agent, and research-agent.
+- **Several services still depend on this service's health endpoint.** Removing or decommissioning the service requires updating `ecosystem.config.cjs` `waitForService` entries for user-service, intex-agent, and research-agent.
 - **Empty service container.** `ServiceContainer` is typed as `Record<string, never>` — it holds no adapters. The DI wiring (`getServices`, `setServices`, `resetServices`) exists but is unused.
 - **No test files.** All test files were removed with the pricing migration. The service currently has no test coverage.
 - **Firestore collection still registered.** The `settings` collection is registered in `firestore-collections.json` with `app-settings-service` as owner, but nothing in the service code reads or writes it.

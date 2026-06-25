@@ -8,8 +8,11 @@ import {
 describe('buildInternalApiOpenApiSources', () => {
   it('does not include removed agent services', () => {
     const catalogKeys = INTERNAL_API_SERVICE_CATALOG.map((entry) => entry.key);
+    const retiredKeys = ['todo', 'chat', 'cron', 'command', 'action'].map(
+      (name) => `${name}s-agent`
+    );
 
-    for (const retiredKey of ['todos', 'chat', 'cron'].map((name) => `${name}-agent`)) {
+    for (const retiredKey of retiredKeys) {
       expect(catalogKeys).not.toContain(retiredKey);
     }
   });

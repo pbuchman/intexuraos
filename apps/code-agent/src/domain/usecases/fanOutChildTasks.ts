@@ -115,7 +115,6 @@ async function persistBatch(
       repository: planningTask.repository,
       baseBranch: planningTask.baseBranch,
       traceId: `execution-${planningTask.traceId}-${prepared.child.identifier}`,
-      approvalEventId: `fanout_approval_${randomUUID()}`,
       linearIssueId: prepared.child.identifier,
       parentTaskId: planningTask.id,
       followUpReason: 'execution_implement',
