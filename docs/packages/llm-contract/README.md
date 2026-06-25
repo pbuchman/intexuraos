@@ -229,7 +229,7 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 **Packages (8):** `llm-factory`, `llm-pricing`, `llm-prompts`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-perplexity`, `internal-clients`
 
-**Apps (11):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `commands-agent`, `image-service`, `linear-agent`, `research-agent`, `user-service`, `web`, `web-agent`
+**Apps:** `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `image-service`, `intex-agent`, `linear-agent`, `research-agent`, `user-service`, `web`, `web-agent`
 
 **Workers (1):** `orchestrator`
 

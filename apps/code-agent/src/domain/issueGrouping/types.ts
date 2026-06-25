@@ -42,8 +42,6 @@ export interface SerializedTask {
   updatedAt: string;
   dispatchedAt?: string;
   completedAt?: string;
-  actionId?: string;
-  approvalEventId?: string;
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;

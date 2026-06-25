@@ -11,9 +11,6 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
-  ApprovalReplyEvent,
-  AudioStoredEvent,
-  CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
@@ -1343,36 +1340,16 @@ export class FakeMediaStorage implements MediaStoragePort {
  */
 export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
-  private commandIngestEvents: CommandIngestEvent[] = [];
   private intexMessageIngestEvents: IntexMessageIngestEvent[] = [];
   private webhookProcessEvents: WebhookProcessEvent[] = [];
-  private audioStoredEvents: AudioStoredEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
-  private approvalReplyEvents: ApprovalReplyEvent[] = [];
-  private approvalReplyFailureMessage: string | null = null;
   private extractLinkPreviewsFailureMessage: string | null = null;
-  private commandIngestFailureMessage: string | null = null;
   private intexMessageIngestFailureMessage: string | null = null;
-  private audioStoredFailureMessage: string | null = null;
   private webhookProcessFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
     return Promise.resolve(ok(undefined));
-  }
-
-  publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>> {
-    if (this.commandIngestFailureMessage !== null) {
-      return Promise.resolve(
-        err({ code: 'INTERNAL_ERROR' as const, message: this.commandIngestFailureMessage })
-      );
-    }
-    this.commandIngestEvents.push(event);
-    return Promise.resolve(ok(undefined));
-  }
-
-  setCommandIngestFailure(message: string): void {
-    this.commandIngestFailureMessage = message;
   }
 
   publishIntexMessageIngest(event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>> {
@@ -1403,20 +1380,6 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.webhookProcessFailureMessage = message;
   }
 
-  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
-    if (this.audioStoredFailureMessage !== null) {
-      return Promise.resolve(
-        err({ code: 'INTERNAL_ERROR' as const, message: this.audioStoredFailureMessage })
-      );
-    }
-    this.audioStoredEvents.push(event);
-    return Promise.resolve(ok(undefined));
-  }
-
-  setAudioStoredFailure(message: string): void {
-    this.audioStoredFailureMessage = message;
-  }
-
   publishExtractLinkPreviews(
     event: ExtractLinkPreviewsEvent
   ): Promise<Result<void, WhatsAppError>> {
@@ -1433,26 +1396,8 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.extractLinkPreviewsFailureMessage = message;
   }
 
-  publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>> {
-    if (this.approvalReplyFailureMessage !== null) {
-      return Promise.resolve(
-        err({ code: 'INTERNAL_ERROR' as const, message: this.approvalReplyFailureMessage })
-      );
-    }
-    this.approvalReplyEvents.push(event);
-    return Promise.resolve(ok(undefined));
-  }
-
-  setApprovalReplyFailure(message: string): void {
-    this.approvalReplyFailureMessage = message;
-  }
-
   getMediaCleanupEvents(): MediaCleanupEvent[] {
     return [...this.mediaCleanupEvents];
-  }
-
-  getCommandIngestEvents(): CommandIngestEvent[] {
-    return [...this.commandIngestEvents];
   }
 
   getIntexMessageIngestEvents(): IntexMessageIngestEvent[] {
@@ -1463,31 +1408,17 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.webhookProcessEvents];
   }
 
-  getAudioStoredEvents(): AudioStoredEvent[] {
-    return [...this.audioStoredEvents];
-  }
-
   getExtractLinkPreviewsEvents(): ExtractLinkPreviewsEvent[] {
     return [...this.extractLinkPreviewsEvents];
   }
 
-  getApprovalReplyEvents(): ApprovalReplyEvent[] {
-    return [...this.approvalReplyEvents];
-  }
-
   clear(): void {
     this.mediaCleanupEvents = [];
-    this.commandIngestEvents = [];
     this.intexMessageIngestEvents = [];
     this.webhookProcessEvents = [];
-    this.audioStoredEvents = [];
     this.extractLinkPreviewsEvents = [];
-    this.approvalReplyEvents = [];
-    this.approvalReplyFailureMessage = null;
     this.extractLinkPreviewsFailureMessage = null;
-    this.commandIngestFailureMessage = null;
     this.intexMessageIngestFailureMessage = null;
-    this.audioStoredFailureMessage = null;
     this.webhookProcessFailureMessage = null;
   }
 }

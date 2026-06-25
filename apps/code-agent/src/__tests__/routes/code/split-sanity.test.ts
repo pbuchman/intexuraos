@@ -82,7 +82,6 @@ describe('routes/code split (INT-1430) sanity', () => {
 
     const EXPECTED = new Set<string>([
       // task-routes
-      'POST /internal/code/process',
       'POST /internal/code/submit',
       'PATCH /internal/code-tasks/:taskId',
       'GET /internal/code-tasks/zombies',

@@ -10,7 +10,7 @@ Good ideas are scattered. A thought captured during a WhatsApp conversation live
 
 Built for anyone who needs to write something down without deciding where it goes.
 
-You are reviewing a research report when a follow-up question comes to mind. Instead of opening a separate app, you create a note directly in IntexuraOS, tag it with the project name, and move on. Later that afternoon, the actions-agent processes a voice command you sent via WhatsApp — "save a note about the quarterly budget review" — and a note appears in your list, tagged and timestamped, without you lifting a finger.
+You are reviewing a research report when a follow-up question comes to mind. Instead of opening a separate app, you create a note directly in IntexuraOS, tag it with the project name, and move on. Later that afternoon, Intex processes a WhatsApp text message — "save a note about the quarterly budget review" — and a note appears in your list, tagged and timestamped, without you lifting a finger.
 
 At the end of the week, you open your notes, scan the most recently updated ones at the top, and decide which thoughts deserve action and which can wait.
 
@@ -24,7 +24,7 @@ There is no formatting engine, no folder hierarchy, no collaboration layer. That
 
 ### Notes That Write Themselves
 
-Other agents in the system can create notes on your behalf. When you send a voice command via WhatsApp — "save a note about the quarterly budget review" — the actions-agent picks it up and a note appears in your list automatically, tagged and timestamped, without you lifting a finger. Any agent in IntexuraOS can do the same: preserve a finding, capture a result, store a reference. The more agents you use, the more your note store fills with things worth remembering — even when you were not actively taking notes.
+Other agents in the system can create notes on your behalf. When you send a WhatsApp text message — "save a note about the quarterly budget review" — Intex picks it up and a note appears in your list automatically, tagged and timestamped, without you lifting a finger. Any supported agent flow can do the same: preserve a finding, capture a result, store a reference. The more agents you use, the more your note store fills with things worth remembering — even when you were not actively taking notes.
 
 ## Key Benefits
 

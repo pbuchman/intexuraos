@@ -67,10 +67,10 @@ export function SelfBuildingSection(): React.JSX.Element {
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
               <Eye className="h-6 w-6" />
             </div>
-            <h3 className="mb-2 text-lg font-bold text-neutral-900">You Approve Before It Runs</h3>
+            <h3 className="mb-2 text-lg font-bold text-neutral-900">You Stay In Control</h3>
             <p className="text-neutral-600">
-              You approve the design before code runs. Calendar events before they are created.
-              High-stakes actions before they execute. You stay in control without becoming a bottleneck.
+              Code tasks keep plans, logs, and pull requests visible as they move.
+              Calendar events and project updates stay reviewable from the web app as direct tool results.
             </p>
           </motion.div>
         </div>

@@ -13,8 +13,6 @@ Final integration review for the Hetzner migration replacement PR.
 | whatsapp-service | app service | migrated | INT-1634, INT-1635 | PM2 port 8113, `/api/whatsapp`, and `/internal/whatsapp/*` routes |
 | mobile-notifications-service | app service | migrated | INT-1634, INT-1635 | PM2 port 8114 and Scheduler route `/internal/notifications/digest/run-yesterday` |
 | research-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8116 and `/internal/llm/*` routes |
-| commands-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8117 and `/internal/commands` route |
-| actions-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8118 and `/internal/actions/*` routes |
 | fishing-assistant-service | app service | migrated | INT-1634 | PM2 port 8119 and nginx `/api/fishing-assistant` route |
 | image-service | app service | migrated | INT-1634, INT-1636 | PM2 port 8120 and nginx `/api/images` route |
 | notes-agent | app service | migrated | INT-1634 | PM2 port 8121 and nginx `/api/notes` route |

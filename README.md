@@ -15,26 +15,26 @@
   </p>
 </div>
 
-> 55-component TypeScript monorepo — 20 app workspaces, 6 workers, 29 shared packages — built and maintained by a single developer under strict engineering discipline: 100% branch coverage as a CI gate, cross-LLM verification where no model evaluates its own output, 27 CI verification scripts, and 26 Claude Code hooks enforcing quality at every stage. The system takes a WhatsApp voice note and turns it into a tested pull request. It researches topics across 15 AI models from 5 core providers. It tracks tasks and manages project issues — all from a single voice or text command.
+> TypeScript monorepo — app services, workers, and shared packages — built and maintained by a single developer under strict engineering discipline: 100% branch coverage as a CI gate, cross-LLM verification where no model evaluates its own output, 27 CI verification scripts, and 26 Claude Code hooks enforcing quality at every stage. The system takes a WhatsApp text message or web task and turns it into notes, calendar events, research drafts, bookmarks, or tested code changes.
 >
 > IntexuraOS does not use AI as a feature. It deploys AI agents that use software as a tool. The platform researches, schedules, manages tasks, and **writes and ships its own code**.
 
 ### Engineering Highlights
 
-|                                  |                                                                                                             |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Cross-LLM Verification**       | Writer and verifier are always different providers — Claude executes, Gemini verifies, TypeScript validates |
-| **55 Components, One Developer** | 20 app services, 6 workers, 29 packages in a strict TypeScript monorepo                                     |
-| **Autonomous Code Pipeline**     | WhatsApp voice note → intent classification → Docker-isolated execution → tested PR                         |
-| **Container Isolation**          | Non-root, all capabilities dropped, network-restricted, read-only secrets per task                          |
-| **26 Claude Code Hooks**         | 1 SessionStart, 15 PreToolUse, 7 PostToolUse, 3 Stop — enforcing patterns before code is written            |
-| **27 CI Verification Scripts**   | Automated gates covering coverage, types, contracts, env vars, and cross-linking                            |
-| **Prompt Versioning**            | Semver-versioned prompts with SHA-256 audit trail and CI-enforced bump validation                           |
-| **Multi-Provider AI Council**    | 15 models across 5 core providers queried in parallel with attributed synthesis                             |
-| **Result Type Discipline**       | Every operation returns typed success or failure — no silent crashes, no unhandled exceptions               |
-| **Event-Driven Architecture**    | 40 Pub/Sub topics decoupling 20 app services with crash-safe state persistence                              |
+|                                |                                                                                                             |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| **Cross-LLM Verification**     | Writer and verifier are always different providers — Claude executes, Gemini verifies, TypeScript validates |
+| **Monorepo, One Developer**    | App services, workers, and packages in a strict TypeScript monorepo                                         |
+| **Autonomous Code Pipeline**   | WhatsApp text or web task → code planning → Docker-isolated execution → tested PR                           |
+| **Container Isolation**        | Non-root, all capabilities dropped, network-restricted, read-only secrets per task                          |
+| **26 Claude Code Hooks**       | 1 SessionStart, 15 PreToolUse, 7 PostToolUse, 3 Stop — enforcing patterns before code is written            |
+| **27 CI Verification Scripts** | Automated gates covering coverage, types, contracts, env vars, and cross-linking                            |
+| **Prompt Versioning**          | Semver-versioned prompts with SHA-256 audit trail and CI-enforced bump validation                           |
+| **Multi-Provider AI Council**  | 15 models across 5 core providers queried in parallel with attributed synthesis                             |
+| **Result Type Discipline**     | Every operation returns typed success or failure — no silent crashes, no unhandled exceptions               |
+| **Event-Driven Architecture**  | Pub/Sub topics decouple services with crash-safe state persistence                                          |
 
-**[The Self-Building System](#the-self-building-system)** · **[Cross-LLM Verification](#cross-llm-verification-pipeline)** · **[The Council of AI](#the-council-of-ai)** · **[Architecture](#architecture)** · **[Engineering Standards](#engineering-standards)** · **[Voice-First Intelligence](#voice-first-intelligence)** · **[Getting Started](#getting-started)** · **[Documentation](#documentation)**
+**[The Self-Building System](#the-self-building-system)** · **[Cross-LLM Verification](#cross-llm-verification-pipeline)** · **[The Council of AI](#the-council-of-ai)** · **[Architecture](#architecture)** · **[Engineering Standards](#engineering-standards)** · **[Direct-Tool Intelligence](#direct-tool-intelligence)** · **[Getting Started](#getting-started)** · **[Documentation](#documentation)**
 
 ---
 
@@ -42,13 +42,13 @@
 
 You submit tasks while walking, while commuting, while thinking of something else. The primary interface is WhatsApp — an app already on your phone, already open, always available. This is not a convenience shortcut to a desktop workflow. It is a fundamentally different interaction model: ambient task submission that fits into the gaps of a working day.
 
-Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent, and executes. A voice note about a bug becomes a code task. A question about solid-state batteries becomes a five-model research report. A mention of lunch Friday becomes a calendar event you approve with one tap.
+Send a text message to WhatsApp. IntexuraOS routes it through Intex, which can create notes, calendar events, research drafts, bookmarks, and code tasks directly. A message about a bug becomes a code task. A question about solid-state batteries becomes a multi-model research draft. A mention of lunch Friday becomes a calendar event when the required details are clear.
 
 ## The Self-Building System
 
 Most AI coding tools wait for you to sit at a keyboard. IntexuraOS does not.
 
-You describe what needs to change — via WhatsApp voice note, text message, or web dashboard. The platform takes it from there: it designs the approach, writes the code inside an isolated container, runs automated tests, creates a code change for review, and updates the project issue. If the first attempt fails verification, it retries with preserved context. The entire pipeline runs without human intervention. You approve the result when you are ready.
+You describe what needs to change — via WhatsApp text message or the web dashboard. The platform takes it from there: it designs the approach, writes the code inside an isolated container, runs automated tests, creates a code change for review, and updates the project issue. If the first attempt fails verification, it retries with preserved context. Code tasks default to planning mode so you can review the design before implementation.
 
 Your source code never leaves your network. The coding agent runs on your machine, under your AI subscription, inside containers you control. Any Unix machine becomes a worker station, connected through a single secure outbound connection — no firewall changes, no open ports. No third-party cloud touches your codebase.
 
@@ -60,7 +60,7 @@ graph LR
     end
 
     subgraph "Intelligence Layer"
-        CMD[Intent Classifier]
+        INTEX[Intex Agent]
         CA[Code Agent]
     end
 
@@ -75,7 +75,7 @@ graph LR
         NOTIFY[WhatsApp Notification]
     end
 
-    WA --> CMD --> CA
+    WA --> INTEX --> CA
     WEB --> CA
     CA -->|"Secure handoff"| ORCH
     ORCH -->|"Separate environment"| CW
@@ -86,11 +86,11 @@ graph LR
     CA --> NOTIFY
 ```
 
-### End-to-End: From Voice Note to Research Report
+### End-to-End: From Message to Research Draft
 
-You record a WhatsApp voice note: _"Research the latest developments in solid-state batteries."_ The WhatsApp service transcribes it with domain-aware vocabulary. The commands agent reads the transcript, recognizes a research intent, and classifies it. The actions agent checks the confidence score — well above the auto-execution threshold — and dispatches to the research agent without asking for approval. Five AI models receive the same structured research plan simultaneously. Minutes later, a synthesis arrives with attributed claims, rated disagreements, and full source reports. A WhatsApp notification tells you the results are ready.
+You send a WhatsApp text message: _"Research the latest developments in solid-state batteries."_ Intex recognizes that the request fits the research tool and creates a research draft for review. Five AI models can receive the same structured research plan simultaneously. Minutes later, a synthesis arrives with attributed claims, rated disagreements, and full source reports. A WhatsApp notification tells you the results are ready.
 
-The same path works for every domain. A voice note about a bug becomes a code task. A message about lunch Friday becomes a calendar preview you approve with one tap. A shared link becomes an enriched bookmark with an AI summary delivered to your phone. The entry point is always the same — say what you need — and the system decides which specialists handle it, whether to ask permission or act immediately, and how to deliver the result.
+The same direct-tool boundary covers the supported domains. A text message about a bug becomes a code task. A message about lunch Friday becomes a calendar event once the date and time are clear. A shared link becomes an enriched bookmark with an AI summary delivered to your phone. Unsupported requests get a clear response instead of being forced through a generic workflow.
 
 ### The Code Pipeline
 
@@ -178,7 +178,7 @@ Single-model assistants hallucinate. A council of models cross-checks. When thre
 
 _This section is for developers and builders evaluating the system internals. As a user, this complexity exists so you do not have to think about it — you say what you need, and the platform routes your request to the right agent automatically._
 
-### From Voice to Merged Code
+### From Message to Merged Code
 
 55 components — 20 app services, 6 workers, and 29 shared packages — all in a single repository with strict TypeScript. Many of these operate as autonomous agents and services. The architecture exists because one person needed leverage: each specialist handles one domain, so research output can feed a code task, a code task result can be pushed to project tracking and WhatsApp simultaneously, and the full loop closes without a human switching tools. No single-domain tool — coding assistant, research chatbot, or project tracker — can replicate this chain.
 
@@ -191,8 +191,7 @@ graph TD
     end
 
     subgraph "Routing"
-        CMD3["Commands Agent<br><small>Intent Classifier</small>"]
-        ACT["Actions Agent<br><small>Dispatcher</small>"]
+        INTEX3["Intex Agent<br><small>Direct Tools</small>"]
     end
 
     subgraph "Specialist Agents"
@@ -211,10 +210,10 @@ graph TD
         CW3["Claude Worker<br><small>Isolated Container</small>"]
     end
 
-    WA3 & WEB3 --> CMD3 --> ACT
-    WEB3 --> CHAT
+    WA3 --> INTEX3
+    WEB3 --> INTEX3
     GH --> CODE3
-    ACT --> RES & CODE3 & TODO & CAL & LIN3 & BOOK & NOTE
+    INTEX3 --> RES & CODE3 & CAL & BOOK & NOTE
     CODE3 --> ORCH3 --> CW3
 ```
 
@@ -292,23 +291,19 @@ Every AI prompt in the system is semver-versioned. CI enforces that prompt chang
 
 ---
 
-## Voice-First Intelligence
+## Direct-Tool Intelligence
 
-You submit tasks while walking, while commuting, while thinking of something else. The primary interface is WhatsApp — an app already on your phone, already open, always available. Cursor and Copilot accelerate a developer at the keyboard. IntexuraOS operates while you are away from one.
+You submit tasks while walking, while commuting, while thinking of something else. The primary mobile interface is WhatsApp text — an app already on your phone, already open, always available. Cursor and Copilot accelerate a developer at the keyboard. IntexuraOS operates while you are away from one.
 
-| You Say                                            | What Happens                                                      |
-| -------------------------------------------------- | ----------------------------------------------------------------- |
-| _"Fix the login redirect on Safari"_               | Code Agent dispatches to worker, you get a code change for review |
-| _"Research quantum computing with Claude and GPT"_ | Council of AI queries specified models, synthesizes               |
-| _"Schedule a sync with engineering Tuesday at 2"_  | Shows preview, waits for approval, then creates event             |
-| _"Add a task to review the Q4 report by Friday"_   | Extracts task with priority and deadline                          |
-| _"Save this link about TypeScript 5.0"_            | AI-generated summary and preview card                             |
-| _"Create a Linear issue for the auth refactor"_    | Issue filed with AI-generated title and description               |
-| _"Remind me to follow up with the designer"_       | Reminder created with extracted deadline                          |
+| You Say                                            | What Happens                                                   |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| _"Fix the login redirect on Safari"_               | Code task starts in planning mode for design review            |
+| _"Research quantum computing with Claude and GPT"_ | Research draft is created for review                           |
+| _"Schedule a sync with engineering Tuesday at 2"_  | Calendar event is created when title, date, and time are clear |
+| _"Save a note about the Q4 report"_                | Note is saved with a generated title                           |
+| _"Save this link about TypeScript 5.0"_            | Bookmark is saved with AI-generated context                    |
 
-**8 action types**: research, todo, note, link, calendar, linear, reminder, code — classified by a 5-step decision tree that isolates URL keywords, detects explicit intent, and supports Polish language input.
-
-**Approval as a design principle.** The system never acts irreversibly without your permission. Calendar events, code tasks, and project tracking changes all pause for your "yes." Reply with text, react with an emoji — "looks good", "go ahead", "nah" all work. High-confidence actions execute immediately; everything else asks first. You stay in control without becoming a bottleneck.
+**5 direct tools**: notes, calendar events, research drafts, bookmarks, and code tasks. Intex does not currently support voice messages, general approval workflows, task reminders, or project-tracker issue creation as standalone WhatsApp tools.
 
 ---
 
@@ -407,7 +402,7 @@ You need three things: a WhatsApp account, a Google account, and a web browser.
 
 1. **Sign up** through the [web app](https://intexuraos.cloud/) and connect your WhatsApp number with a one-time verification code.
 2. **Link your Google account** for calendar access.
-3. **Send your first message** — typed or spoken — and the system handles it immediately.
+3. **Send your first text message** and the system handles it immediately.
 
 The platform provides fallback AI model access, so you can run research and generate bookmarks before configuring your own API keys. For coding tasks, connect a worker machine — any Mac or Linux computer. For project tracking, connect Linear. For research exports, connect Notion. Each integration is optional and independent.
 
@@ -435,38 +430,37 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 
 ## Documentation
 
-| Document                                                    | Description                                                                               |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **[Platform Overview](docs/overview.md)**                   | What IntexuraOS does — specialized agents and services, from voice notes to finished code |
-| **[Services Catalog](docs/services/index.md)**              | All 20 app services + 6 workers + 29 packages with technical details                      |
-| **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 15 models across 5 core providers                                          |
-| **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step cloud and local environment setup                                            |
+| Document                                                    | Description                                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **[Platform Overview](docs/overview.md)**                   | What IntexuraOS does — specialized agents and services, from WhatsApp text to finished code |
+| **[Services Catalog](docs/services/index.md)**              | All 20 app services + 6 workers + 29 packages with technical details                        |
+| **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 15 models across 5 core providers                                            |
+| **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step cloud and local environment setup                                              |
 
 <details>
 <summary><strong>All Services</strong></summary>
 
-| Service                                                                                    | What It Does                                                                    |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| **[code-agent](docs/services/code-agent/features.md)**                                     | Autonomous code execution — design review, code-change lifecycle, cost controls |
-| **[orchestrator](docs/services/orchestrator/features.md)**                                 | Container-isolated coding sessions with completion verification                 |
-| **[claude-worker](docs/services/claude-worker/features.md)**                               | Pre-configured coding environment inside each container                         |
-| **[research-agent](docs/services/research-agent/features.md)**                             | Multi-model research with conflict analysis across 5 providers                  |
-| **[web-agent](docs/services/web-agent/features.md)**                                       | Reads web pages for other agents, preserving source language                    |
-| **[commands-agent](docs/services/commands-agent/features.md)**                             | 8-category intent classification with URL isolation and Polish support          |
-| **[actions-agent](docs/services/actions-agent/features.md)**                               | Confidence-based dispatch — auto-execute or ask for approval                    |
-| **[whatsapp-service](docs/services/whatsapp-service/features.md)**                         | Voice transcription, message routing, interactive approval workflows            |
-| **[calendar-agent](docs/services/calendar-agent/features.md)**                             | Voice-to-calendar with preview, multilingual dates, failed event recovery       |
-| **[notes-agent](docs/services/notes-agent/features.md)**                                   | Tag-based notes from dashboard or voice commands                                |
-| **[bookmarks-agent](docs/services/bookmarks-agent/features.md)**                           | Link saving with AI-generated summary and metadata extraction                   |
-| **[linear-agent](docs/services/linear-agent/features.md)**                                 | Voice-to-issue with AI-generated titles and urgency mapping                     |
-| **[mobile-notifications-service](docs/services/mobile-notifications-service/features.md)** | Android notification capture with filtering and pattern discovery               |
-| **[user-service](docs/services/user-service/features.md)**                                 | Encrypted API key vault, multi-method auth, provider key validation             |
-| **[app-settings-service](docs/services/app-settings-service/features.md)**                 | AI cost tracking per provider, model, and call type                             |
-| **[image-service](docs/services/image-service/features.md)**                               | AI-generated cover images for shared research reports                           |
-| **[notion-service](docs/services/notion-service/features.md)**                             | Research export to Notion with synthesis and per-model child pages              |
-| **[web](docs/services/web/features.md)**                                                   | Real-time dashboard with code streaming, approvals, and share menu              |
-| **[vm-lifecycle](docs/services/vm-lifecycle/features.md)**                                 | Weekday auto-start/stop for coding worker machines                              |
-| **[api-docs-hub](docs/services/api-docs-hub/features.md)**                                 | Unified interactive API reference for all backend services                      |
+| Service                                                                                    | What It Does                                                                                           |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **[code-agent](docs/services/code-agent/features.md)**                                     | Autonomous code execution — design review, code-change lifecycle, cost controls                        |
+| **[orchestrator](docs/services/orchestrator/features.md)**                                 | Container-isolated coding sessions with completion verification                                        |
+| **[claude-worker](docs/services/claude-worker/features.md)**                               | Pre-configured coding environment inside each container                                                |
+| **[research-agent](docs/services/research-agent/features.md)**                             | Multi-model research with conflict analysis across 5 providers                                         |
+| **[web-agent](docs/services/web-agent/features.md)**                                       | Reads web pages for other agents, preserving source language                                           |
+| **[intex-agent](docs/services/intex-agent/features.md)**                                   | WhatsApp text conversations with direct tools for notes, calendar, research, bookmarks, and code tasks |
+| **[whatsapp-service](docs/services/whatsapp-service/features.md)**                         | Text ingestion, outbound notifications, verification, and message delivery                             |
+| **[calendar-agent](docs/services/calendar-agent/features.md)**                             | Calendar event creation, multilingual dates, failed event recovery                                     |
+| **[notes-agent](docs/services/notes-agent/features.md)**                                   | Tag-based notes from dashboard or Intex tool calls                                                     |
+| **[bookmarks-agent](docs/services/bookmarks-agent/features.md)**                           | Link saving with AI-generated summary and metadata extraction                                          |
+| **[linear-agent](docs/services/linear-agent/features.md)**                                 | Linear issue sync, assignment-triggered code tasks, and cleanup workflows                              |
+| **[mobile-notifications-service](docs/services/mobile-notifications-service/features.md)** | Android notification capture with filtering and pattern discovery                                      |
+| **[user-service](docs/services/user-service/features.md)**                                 | Encrypted API key vault, multi-method auth, provider key validation                                    |
+| **[app-settings-service](docs/services/app-settings-service/features.md)**                 | AI cost tracking per provider, model, and call type                                                    |
+| **[image-service](docs/services/image-service/features.md)**                               | AI-generated cover images for shared research reports                                                  |
+| **[notion-service](docs/services/notion-service/features.md)**                             | Research export to Notion with synthesis and per-model child pages                                     |
+| **[web](docs/services/web/features.md)**                                                   | Real-time dashboard with code streaming, integrations, and share menu                                  |
+| **[vm-lifecycle](docs/services/vm-lifecycle/features.md)**                                 | Weekday auto-start/stop for coding worker machines                                                     |
+| **[api-docs-hub](docs/services/api-docs-hub/features.md)**                                 | Unified interactive API reference for all backend services                                             |
 
 </details>
 
@@ -501,5 +495,5 @@ IntexuraOS is what happens when a single engineer builds agents that work for hi
 ---
 
 <div align="center">
-  <sub>20 app services. 6 workers. 29 packages. 15 AI models. 26 hooks. 27 CI scripts. 100% branch coverage. One developer.</sub>
+  <sub>App services, workers, packages, AI models, hooks, CI scripts, 100% branch coverage. One developer.</sub>
 </div>

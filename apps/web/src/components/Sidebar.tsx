@@ -4,7 +4,6 @@ import {
   BookOpenText,
   Calendar,
   Code2,
-  Inbox,
   LayoutList,
   MessageSquare,
   Newspaper,
@@ -66,7 +65,6 @@ export function Sidebar(): React.JSX.Element {
         />
 
         <nav ref={s.navRef} className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
-          <TopLevelNavLink to="/inbox" label="Inbox" icon={Inbox} isCollapsed={s.isCollapsed} />
           <TopLevelNavLink to="/code-tasks" label="Battlefield" icon={Swords} isCollapsed={s.isCollapsed} />
           <TopLevelNavLink to="/notifications/digests" label="Digests" icon={Newspaper} isCollapsed={s.isCollapsed} />
 

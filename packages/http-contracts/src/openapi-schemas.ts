@@ -18,8 +18,6 @@ import {
   calendarPreviewDataSchema,
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
-  commandsCommandWithTextSchema,
-  commandsGetCommandDataSchema,
   imageGenerateImageRequestSchema,
   imageGeneratePromptRequestSchema,
   imageGeneratedImageDataSchema,
@@ -178,14 +176,6 @@ export const contractComponentSchemas = {
     bookmarksCreateBookmarkDataSchema
   ),
   BookmarksBookmark: toOpenApiComponentSchema('BookmarksBookmark', bookmarksBookmarkSchema),
-  CommandsCommandWithText: toOpenApiComponentSchema(
-    'CommandsCommandWithText',
-    commandsCommandWithTextSchema
-  ),
-  CommandsGetCommandData: toOpenApiComponentSchema(
-    'CommandsGetCommandData',
-    commandsGetCommandDataSchema
-  ),
   ImageGeneratePromptRequest: toOpenApiComponentSchema(
     'ImageGeneratePromptRequest',
     imageGeneratePromptRequestSchema

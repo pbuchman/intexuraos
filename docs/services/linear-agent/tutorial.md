@@ -104,7 +104,7 @@ curl http://localhost:3000/connection \
 
 ## Part 2: Create Issues via AI (10 minutes)
 
-Issues are created through the internal API when actions-agent routes a `linear` action type.
+Issues are created through the internal API by trusted services and synchronization flows.
 
 ### Step 2.1: Direct Internal API Call (Testing)
 

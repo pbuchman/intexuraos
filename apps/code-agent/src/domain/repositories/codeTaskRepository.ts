@@ -66,8 +66,6 @@ export interface CreateTaskInput {
   repository: string;
   baseBranch: string;
   traceId: string;
-  actionId?: string;
-  approvalEventId?: string;
   linearIssueId?: string;
   webhookSecret?: string;
   /**
@@ -167,22 +165,18 @@ export interface ListTasksOutput {
  */
 export type RepositoryError =
   | { code: 'NOT_FOUND'; message: string }
-  | { code: 'DUPLICATE_APPROVAL'; message: string; existingTaskId: string }
-  | { code: 'DUPLICATE_ACTION'; message: string; existingTaskId: string }
   | { code: 'DUPLICATE_PROMPT'; message: string; existingTaskId: string }
   | { code: 'ACTIVE_TASK_EXISTS'; message: string; existingTaskId: string }
   | { code: 'FIRESTORE_ERROR'; message: string };
 
 export interface CodeTaskRepository {
   /**
-   * Create a new task with three-layer deduplication.
+   * Create a new task with prompt and active-task deduplication.
    * Design reference: Lines 1526-1563
    *
    * Dedup layers (in order):
-   * 0. approvalEventId (prevents approval replays) - lines 1532-1536
-   * 1. actionId (prevents Pub/Sub retries) - lines 1538-1541
-   * 2. dedupKey (prevents UI double-taps) - lines 1543-1554
-   * 3. linearIssueId active check for non-review tasks - lines 448-458
+   * 1. dedupKey (prevents UI double-taps) - lines 1543-1554
+   * 2. linearIssueId active check for non-review tasks - lines 448-458
    */
   create(input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>>;
 

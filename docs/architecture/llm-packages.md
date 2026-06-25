@@ -111,17 +111,17 @@ const cost = calculateCost({
 
 **Domains:**
 
-| Domain           | Prompts                                                                                     | Purpose                    |
-| ---------------- | ------------------------------------------------------------------------------------------- | -------------------------- |
-| `generation`     | `titlePrompt`, `labelPrompt`                                                                | Generate text from content |
-| `classification` | `commandClassifierPrompt`, `calendarActionExtractionPrompt`, `linearActionExtractionPrompt` | Classify and extract       |
-| `validation`     | `inputQualityPrompt`, `inputImprovementPrompt`                                              | Validate input quality     |
-| `research`       | `buildResearchPrompt`, `buildInferResearchContextPrompt`                                    | Research operations        |
-| `synthesis`      | `buildSynthesisPrompt`, `buildInferSynthesisContextPrompt`                                  | Multi-model synthesis      |
-| `dataInsights`   | `dataAnalysisPrompt`, `chartDefinitionPrompt`, `dataTransformPrompt`                        | Data analysis              |
-| `image`          | `thumbnailPrompt`, `generateThumbnailPrompt`                                                | Image generation           |
-| `approvals`      | `approvalIntentPrompt`                                                                      | Approval classification    |
-| `todos`          | `itemExtractionPrompt`                                                                      | Todo extraction            |
+| Domain         | Prompts                                                              | Purpose                    |
+| -------------- | -------------------------------------------------------------------- | -------------------------- |
+| `generation`   | `titlePrompt`, `labelPrompt`                                         | Generate text from content |
+| `validation`   | `inputQualityPrompt`, `inputImprovementPrompt`                       | Validate input quality     |
+| `research`     | `buildResearchPrompt`, `buildInferResearchContextPrompt`             | Research operations        |
+| `synthesis`    | `buildSynthesisPrompt`, `buildInferSynthesisContextPrompt`           | Multi-model synthesis      |
+| `dataInsights` | `dataAnalysisPrompt`, `chartDefinitionPrompt`, `dataTransformPrompt` | Data analysis              |
+| `image`        | `thumbnailPrompt`, `generateThumbnailPrompt`                         | Image generation           |
+| `calendar`     | `calendarActionExtractionPrompt`                                     | Calendar event extraction  |
+| `linear`       | `linearActionExtractionPrompt`, `linearIssueTitlePrompt`             | Linear issue extraction    |
+| `todos`        | `itemExtractionPrompt`                                               | Todo extraction            |
 
 **Zod Schemas:**
 

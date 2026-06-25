@@ -77,7 +77,7 @@ _Teamwork. Each element must support the others. Departments and groups within t
 
 **Engineering translation:** Fix issues everywhere, not just "your" code.
 
-Your PR touches `actions-agent`. CI fails in `calendar-agent` due to a shared package change. You don't say "calendar-agent isn't my PR." You _cover_ for calendar-agent by fixing it too.
+Your PR touches `bookmarks-agent`. CI fails in `calendar-agent` due to a shared package change. You don't say "calendar-agent isn't my PR." You _cover_ for calendar-agent by fixing it too.
 
 The word "OTHER" when describing failures is your signal you're NOT covering. There is no "other team's code" in CI — there's only code that passed and code that didn't.
 

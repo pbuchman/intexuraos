@@ -3,7 +3,7 @@
  *
  * Historically each app that consumed Cloud Scheduler / Pub/Sub push traffic
  * defined its own copy of these helpers (`apps/code-agent/.../internalAuth.ts`,
- * `apps/commands-agent/.../internalAuth.ts`, `apps/actions-agent/.../pubsubAuth.ts`,
+ * `apps/bookmarks-agent/.../internalAuth.ts`, `apps/whatsapp-service/.../pubsubAuth.ts`,
  * etc.). They drifted into subtly different shapes despite covering the same
  * threat model. This module is the single home; consumers import from
  * `@intexuraos/common-http` rather than copy-pasting the helper.

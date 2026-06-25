@@ -124,8 +124,7 @@ interface HealthCheck {
 | Service        | Dependency Type           |
 | -------------- | ------------------------- |
 | user-service   | Startup health polling    |
-| commands-agent | Startup health polling    |
-| actions-agent  | Startup health polling    |
+| intex-agent    | Startup health polling    |
 | research-agent | Startup health polling    |
 
 ---

@@ -93,9 +93,6 @@ const GoogleCalendarConnectionPage = React.lazy(() =>
 const HomePage = React.lazy(() =>
   import('@/pages/HomePage').then((m) => ({ default: m.HomePage })),
 );
-const InboxPage = React.lazy(() =>
-  import('@/pages/InboxPage').then((m) => ({ default: m.InboxPage })),
-);
 const IntexAgentSessionsPage = React.lazy(() =>
   import('@/pages/IntexAgentSessionsPage').then((m) => ({ default: m.IntexAgentSessionsPage })),
 );
@@ -200,7 +197,7 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/inbox" replace />;
+    return <Navigate to="/whatsapp/sessions" replace />;
   }
 
   return <>{children}</>;
@@ -218,7 +215,7 @@ function HomeRoute(): React.JSX.Element {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/inbox" replace />;
+    return <Navigate to="/whatsapp/sessions" replace />;
   }
 
   return <HomePage />;
@@ -297,7 +294,6 @@ function AppRoutes(): React.JSX.Element {
           <Route path="/research/:id" element={<ResearchDetailPage />} />
           <Route path="/research" element={<ResearchListPage />} />
           {/* Feature routes */}
-          <Route path="/inbox" element={<InboxPage />} />
           <Route path="/share-target" element={<ShareTargetPage />} />
           <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
           <Route path="/whatsapp/sessions" element={<IntexAgentSessionsPage />} />
@@ -349,7 +345,7 @@ function AppRoutes(): React.JSX.Element {
         />
         <Route path="/settings/workers" element={<Navigate to="/settings/code" replace />} />
         {/* 404 fallback */}
-        <Route path="*" element={<Navigate to="/inbox" replace />} />
+        <Route path="*" element={<Navigate to="/whatsapp/sessions" replace />} />
       </Routes>
     </Suspense>
   );

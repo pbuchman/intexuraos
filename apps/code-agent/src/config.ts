@@ -34,7 +34,6 @@ export interface Config {
   whatsappSendTopic: string;
   prTriageTopic: string;
   linearAgentUrl: string;
-  actionsAgentUrl: string;
   webhookVerifySecret: string;
   tokenEncryptionKey: string;
   orchestratorSecret: string;
@@ -68,7 +67,6 @@ export function loadConfig(): Config {
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '';
   const prTriageTopic = process.env['INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC'] ?? '';
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
-  const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? ''; // validated in REQUIRED_ENV
@@ -97,7 +95,6 @@ export function loadConfig(): Config {
     whatsappSendTopic,
     prTriageTopic,
     linearAgentUrl,
-    actionsAgentUrl,
     webhookVerifySecret,
     orchestratorSecret,
     serviceUrl,

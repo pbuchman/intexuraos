@@ -133,66 +133,6 @@ importers:
         specifier: ^4.1.8
         version: 4.1.18
 
-  apps/actions-agent:
-    dependencies:
-      '@fastify/cors':
-        specifier: ^10.0.1
-        version: 10.1.0
-      '@fastify/swagger':
-        specifier: ^9.4.2
-        version: 9.6.1
-      '@fastify/swagger-ui':
-        specifier: ^5.2.1
-        version: 5.2.4
-      '@intexuraos/code-task-domain':
-        specifier: workspace:*
-        version: link:../../packages/code-task-domain
-      '@intexuraos/common-core':
-        specifier: workspace:*
-        version: link:../../packages/common-core
-      '@intexuraos/common-http':
-        specifier: workspace:*
-        version: link:../../packages/common-http
-      '@intexuraos/http-contracts':
-        specifier: workspace:*
-        version: link:../../packages/http-contracts
-      '@intexuraos/http-server':
-        specifier: workspace:*
-        version: link:../../packages/http-server
-      '@intexuraos/infra-firestore':
-        specifier: workspace:*
-        version: link:../../packages/infra-firestore
-      '@intexuraos/infra-pubsub':
-        specifier: workspace:*
-        version: link:../../packages/infra-pubsub
-      '@intexuraos/infra-sentry':
-        specifier: workspace:*
-        version: link:../../packages/infra-sentry
-      '@intexuraos/internal-clients':
-        specifier: workspace:*
-        version: link:../../packages/internal-clients
-      '@intexuraos/llm-contract':
-        specifier: workspace:*
-        version: link:../../packages/llm-contract
-      '@intexuraos/llm-factory':
-        specifier: workspace:*
-        version: link:../../packages/llm-factory
-      '@intexuraos/llm-pricing':
-        specifier: workspace:*
-        version: link:../../packages/llm-pricing
-      '@intexuraos/llm-prompts':
-        specifier: workspace:*
-        version: link:../../packages/llm-prompts
-      '@intexuraos/whatsapp-pubsub-client':
-        specifier: workspace:*
-        version: link:../../packages/whatsapp-pubsub-client
-      fastify:
-        specifier: 'catalog:'
-        version: 5.6.2
-      pino:
-        specifier: 'catalog:'
-        version: 10.1.1
-
   apps/api-docs-hub:
     dependencies:
       '@fastify/swagger':
@@ -486,72 +426,6 @@ importers:
       vitest:
         specifier: ^4.0.16
         version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  apps/commands-agent:
-    dependencies:
-      '@fastify/cors':
-        specifier: ^10.0.1
-        version: 10.1.0
-      '@fastify/swagger':
-        specifier: ^9.4.2
-        version: 9.6.1
-      '@fastify/swagger-ui':
-        specifier: ^5.2.1
-        version: 5.2.4
-      '@google-cloud/pubsub':
-        specifier: ^4.9.0
-        version: 4.11.0(encoding@0.1.13)
-      '@intexuraos/common-core':
-        specifier: workspace:*
-        version: link:../../packages/common-core
-      '@intexuraos/common-http':
-        specifier: workspace:*
-        version: link:../../packages/common-http
-      '@intexuraos/http-contracts':
-        specifier: workspace:*
-        version: link:../../packages/http-contracts
-      '@intexuraos/http-server':
-        specifier: workspace:*
-        version: link:../../packages/http-server
-      '@intexuraos/infra-firestore':
-        specifier: workspace:*
-        version: link:../../packages/infra-firestore
-      '@intexuraos/infra-gemini':
-        specifier: workspace:*
-        version: link:../../packages/infra-gemini
-      '@intexuraos/infra-pubsub':
-        specifier: workspace:*
-        version: link:../../packages/infra-pubsub
-      '@intexuraos/infra-sentry':
-        specifier: workspace:*
-        version: link:../../packages/infra-sentry
-      '@intexuraos/internal-clients':
-        specifier: workspace:*
-        version: link:../../packages/internal-clients
-      '@intexuraos/llm-contract':
-        specifier: workspace:*
-        version: link:../../packages/llm-contract
-      '@intexuraos/llm-factory':
-        specifier: workspace:*
-        version: link:../../packages/llm-factory
-      '@intexuraos/llm-pricing':
-        specifier: workspace:*
-        version: link:../../packages/llm-pricing
-      '@intexuraos/llm-prompts':
-        specifier: workspace:*
-        version: link:../../packages/llm-prompts
-      '@intexuraos/llm-utils':
-        specifier: workspace:*
-        version: link:../../packages/llm-utils
-      fastify:
-        specifier: 'catalog:'
-        version: 5.6.2
-      jose:
-        specifier: ^5.9.6
-        version: 5.10.0
-      pino:
-        specifier: 'catalog:'
-        version: 10.1.1
 
   apps/fishing-assistant-service:
     dependencies:
@@ -1239,9 +1113,6 @@ importers:
       '@sentry/react':
         specifier: ^8.55.0
         version: 8.55.0(react@19.2.3)
-      '@types/js-yaml':
-        specifier: ^4.0.9
-        version: 4.0.9
       '@uiw/react-markdown-preview':
         specifier: ^5.1.5
         version: 5.1.5(@types/react@19.2.8)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -1257,9 +1128,6 @@ importers:
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
-      js-yaml:
-        specifier: ^4.1.1
-        version: 4.1.1
       libphonenumber-js:
         specifier: ^1.12.33
         version: 1.12.34
@@ -1515,25 +1383,6 @@ importers:
         version: 4.21.0
 
   migrations: {}
-
-  packages/calendar-pubsub-client:
-    dependencies:
-      '@intexuraos/common-core':
-        specifier: workspace:*
-        version: link:../common-core
-      '@intexuraos/infra-pubsub':
-        specifier: workspace:*
-        version: link:../infra-pubsub
-      pino:
-        specifier: ^10.1.0
-        version: 10.1.1
-    devDependencies:
-      '@google-cloud/pubsub':
-        specifier: ^4.9.0
-        version: 4.11.0(encoding@0.1.13)
-      vitest:
-        specifier: ^4.0.16
-        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/code-task-domain: {}
 
@@ -7186,12 +7035,6 @@ packages:
     resolution:
       {
         integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==,
-      }
-
-  '@types/js-yaml@4.0.9':
-    resolution:
-      {
-        integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==,
       }
 
   '@types/json-schema@7.0.15':
@@ -19987,8 +19830,6 @@ snapshots:
       '@types/unist': 3.0.3
 
   '@types/http-errors@2.0.5': {}
-
-  '@types/js-yaml@4.0.9': {}
 
   '@types/json-schema@7.0.15': {}
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Pm2LogEntry } from './usePm2Logs.js';
 import type { PubSubEvent } from './usePubSubEvents.js';
 
-type Tab = 'commands' | 'pubsub' | 'logs';
+type Tab = 'pubsub' | 'logs';
 type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 interface DevBarFilters {
@@ -37,6 +37,10 @@ const DEFAULT_FILTERS: DevBarFilters = {
   followLogs: true,
   followPubSub: true,
 };
+
+function isTab(value: unknown): value is Tab {
+  return value === 'pubsub' || value === 'logs';
+}
 
 function loadState(): Partial<DevBarState> {
   if (typeof window === 'undefined') return {};
@@ -80,7 +84,10 @@ export function useDevBarState(): {
   minWidth: number;
 } {
   const [isExpanded, setIsExpandedState] = useState(() => loadState().isExpanded ?? false);
-  const [activeTab, setActiveTabState] = useState<Tab>(() => loadState().activeTab ?? 'commands');
+  const [activeTab, setActiveTabState] = useState<Tab>(() => {
+    const stored = loadState().activeTab;
+    return isTab(stored) ? stored : 'pubsub';
+  });
   const [height, setHeightState] = useState(() => loadState().height ?? DEFAULT_HEIGHT);
   const [width, setWidthState] = useState(() => loadState().width ?? DEFAULT_WIDTH);
   const [persistedLogs, setPersistedLogs] = useState<Pm2LogEntry[]>(() => loadState().logs ?? []);
@@ -150,7 +157,7 @@ export function useDevBarState(): {
   useEffect(() => {
     const stored = loadState();
     if (stored.isExpanded !== undefined) setIsExpandedState(stored.isExpanded);
-    if (stored.activeTab !== undefined) setActiveTabState(stored.activeTab);
+    if (stored.activeTab !== undefined) setActiveTabState(isTab(stored.activeTab) ? stored.activeTab : 'pubsub');
     if (stored.height !== undefined) setHeightState(stored.height);
     if (stored.width !== undefined) setWidthState(stored.width);
     if (stored.logs !== undefined) setPersistedLogs(stored.logs);

@@ -11,7 +11,7 @@ const data = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'
 const results = Object.entries(data)
   .filter(([key]) => key !== 'total')
   .map(([filePath, metrics]) => {
-    // Extract package from absolute path like /Users/.../apps/actions-agent/src/...
+    // Extract package from absolute path like /Users/.../apps/bookmarks-agent/src/...
     const match = filePath.match(/\/(apps|packages|workers)\/([^/]+)\//);
     const pkg = match ? match[1] + '/' + match[2] : 'other';
     const filename = filePath.split('/').pop() || 'unknown';

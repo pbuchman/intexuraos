@@ -58,7 +58,7 @@ Click the dropdown at the top of the Swagger UI page. You will see entries such 
 
 - User Service API
 - Research Agent API
-- Commands Agent API
+- Intex Agent API
 - Code Agent API
 - Hellscript Agent API
 - ... and 12 more
@@ -193,6 +193,6 @@ Switch through each of the 20 services in the dropdown and tally the endpoint co
 
 ### Exercise 3: Internal-Only Services
 
-Review each service spec. Services like actions-agent and commands-agent have a mix of public and internal endpoints. The api-docs-hub itself has only public endpoints (`/docs` and `/health`).
+Review each service spec. Services with internal endpoints should document them separately from public routes. The api-docs-hub itself has only public endpoints (`/docs` and `/health`).
 
 </details>

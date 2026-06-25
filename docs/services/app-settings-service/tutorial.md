@@ -84,8 +84,7 @@ Four services wait for app-settings-service to be healthy before starting:
 
 ```
 user-service       --> polls http://localhost:8122/health
-commands-agent     --> polls http://localhost:8122/health
-actions-agent      --> polls http://localhost:8122/health
+intex-agent        --> polls http://localhost:8122/health
 research-agent     --> polls http://localhost:8122/health
 ```
 

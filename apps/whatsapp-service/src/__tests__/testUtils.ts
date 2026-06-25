@@ -102,10 +102,7 @@ export const testConfig: Config = {
   mediaBucket: 'test-media-bucket',
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
-  commandsIngestTopic: 'test-commands-ingest',
   intexMessageIngestTopic: 'test-intex-message-ingest',
-  audioStoredTopic: 'test-audio-stored',
-  approvalReplyTopic: 'test-approval-reply',
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: 'test-internal-auth-token',
@@ -236,7 +233,7 @@ export function createImageWebhookPayload(options?: {
 
 /**
  * Create a WhatsApp text message webhook payload with reply context.
- * Used to test approval reply handling when a user replies to a previous message.
+ * Used to test reply handling when a user replies to a previous message.
  */
 export function createReplyWebhookPayload(options: {
   replyToWamid: string;
@@ -293,12 +290,9 @@ export function createReplyWebhookPayload(options: {
 
 /**
  * Create a WhatsApp button response webhook payload.
- * Used to test approval button handling (approve/cancel/convert buttons).
+ * Used to test unsupported interactive button handling.
  *
- * Button ID format: "intent:actionId[:nonce]"
- * - approve: "approve:action-123:a3f2" (requires nonce)
- * - cancel: "cancel:action-123"
- * - convert: "convert:action-123"
+ * Button ID format depends on the producer.
  */
 export function createButtonWebhookPayload(options: {
   replyToWamid: string;
@@ -409,7 +403,7 @@ export function createAudioWebhookPayload(options?: { mediaId?: string }): objec
 
 /**
  * Create a WhatsApp reaction webhook payload.
- * Used to test reaction-based approval/rejection handling.
+ * Used to test unsupported reaction handling.
  */
 export function createReactionWebhookPayload(options: {
   emoji: string;

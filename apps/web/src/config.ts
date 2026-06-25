@@ -37,8 +37,6 @@ export function getConfig(): AppConfig {
     mobileNotificationsServiceUrl: serviceUrls.INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL,
     fishingAssistantServiceUrl: serviceUrls.INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL,
     ResearchAgentUrl: serviceUrls.INTEXURAOS_RESEARCH_AGENT_URL,
-    commandsAgentServiceUrl: serviceUrls.INTEXURAOS_COMMANDS_AGENT_URL,
-    actionsAgentUrl: serviceUrls.INTEXURAOS_ACTIONS_AGENT_URL,
     notesAgentUrl: serviceUrls.INTEXURAOS_NOTES_AGENT_URL,
     bookmarksAgentUrl: serviceUrls.INTEXURAOS_BOOKMARKS_AGENT_URL,
     calendarAgentUrl: serviceUrls.INTEXURAOS_CALENDAR_AGENT_URL,

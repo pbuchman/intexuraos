@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { Inbox } from 'lucide-react';
+import { StickyNote } from 'lucide-react';
 import { TopLevelNavLink } from '../TopLevelNavLink.js';
 
 describe('TopLevelNavLink', () => {
@@ -17,25 +17,25 @@ describe('TopLevelNavLink', () => {
   it('renders the label when not collapsed', () => {
     render(
       <MemoryRouter>
-        <TopLevelNavLink to="/inbox" label="Inbox" icon={Inbox} isCollapsed={false} />
+        <TopLevelNavLink to="/my-notes" label="Notes" icon={StickyNote} isCollapsed={false} />
       </MemoryRouter>
     );
-    expect(screen.getByText('Inbox')).toBeInTheDocument();
+    expect(screen.getByText('Notes')).toBeInTheDocument();
   });
 
   it('hides label when collapsed', () => {
     render(
       <MemoryRouter>
-        <TopLevelNavLink to="/inbox" label="Inbox" icon={Inbox} isCollapsed={true} />
+        <TopLevelNavLink to="/my-notes" label="Notes" icon={StickyNote} isCollapsed={true} />
       </MemoryRouter>
     );
-    expect(screen.queryByText('Inbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Notes')).not.toBeInTheDocument();
   });
 
   it('renders link with correct href', () => {
     render(
       <MemoryRouter>
-        <TopLevelNavLink to="/calendar" label="Calendar" icon={Inbox} isCollapsed={false} />
+        <TopLevelNavLink to="/calendar" label="Calendar" icon={StickyNote} isCollapsed={false} />
       </MemoryRouter>
     );
     const link = screen.getByRole('link', { name: /calendar/i });

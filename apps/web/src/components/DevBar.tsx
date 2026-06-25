@@ -1,12 +1,9 @@
-import { useState, useCallback, useEffect, useMemo, type KeyboardEvent } from 'react';
-import { config } from '@/config';
-import { useApiClient, ApiError } from '@/hooks/useApiClient';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context';
 import { usePubSubEvents } from '@/hooks/usePubSubEvents';
 import { usePm2Logs } from '@/hooks/usePm2Logs';
 import { useDevBarState } from '@/hooks/useDevBarState';
 import {
-  DevBarCommandsTab,
   DevBarPubSubTab,
   DevBarLogsTab,
   ConnectionStatus,
@@ -17,12 +14,6 @@ function getEnvironment(): 'DEV' | null {
   if (import.meta.env['INTEXURAOS_ENVIRONMENT'] === 'development') return 'DEV';
   if (import.meta.env.DEV) return 'DEV';
   return null;
-}
-
-interface CommandResult {
-  success: boolean;
-  message: string;
-  timestamp: Date;
 }
 
 export function DevBar(): React.JSX.Element | null {
@@ -43,11 +34,7 @@ export function DevBar(): React.JSX.Element | null {
     setFilters,
   } = useDevBarState();
 
-  const [command, setCommand] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [results, setResults] = useState<CommandResult[]>([]);
   const [isResizing, setIsResizing] = useState(false);
-  const { request, isAuthenticated } = useApiClient();
   const { user } = useAuth();
 
   const environment = getEnvironment();
@@ -107,47 +94,6 @@ export function DevBar(): React.JSX.Element | null {
     clearEvents();
     persistPubSubEvents([]);
   }, [clearEvents, persistPubSubEvents]);
-
-  const handleSubmit = useCallback(async () => {
-    if (command.trim() === '' || isSubmitting) return;
-
-    setIsSubmitting(true);
-    const commandText = command.trim();
-    setCommand('');
-
-    try {
-      await request<{ command: unknown }>(config.commandsAgentServiceUrl, '/', {
-        method: 'POST',
-        body: {
-          text: commandText,
-          source: 'pwa-shared',
-        },
-      });
-
-      setResults((prev) => [
-        { success: true, message: `Sent: "${commandText}"`, timestamp: new Date() },
-        ...prev.slice(0, 9),
-      ]);
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Unknown error';
-      setResults((prev) => [
-        { success: false, message: `Failed: ${message}`, timestamp: new Date() },
-        ...prev.slice(0, 9),
-      ]);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [command, isSubmitting, request]);
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        void handleSubmit();
-      }
-    },
-    [handleSubmit]
-  );
 
   const handleHeightResize = useCallback(
     (delta: number) => {
@@ -227,8 +173,7 @@ export function DevBar(): React.JSX.Element | null {
     );
   }
 
-  const tabs: { id: 'commands' | 'pubsub' | 'logs'; label: string; hasConnection?: boolean; isConnected?: boolean }[] = [
-    { id: 'commands', label: 'Commands' },
+  const tabs: { id: 'pubsub' | 'logs'; label: string; hasConnection?: boolean; isConnected?: boolean }[] = [
     { id: 'pubsub', label: 'Pub/Sub', hasConnection: true, isConnected: isPubSubConnected },
     { id: 'logs', label: 'Logs', hasConnection: true, isConnected: isLogsConnected },
   ];
@@ -276,48 +221,6 @@ export function DevBar(): React.JSX.Element | null {
           </div>
         </div>
 
-        {/* Command Input in Header */}
-        <div className="flex flex-1 items-center gap-2 mx-4 max-w-xl">
-          <input
-            type="text"
-            value={command}
-            onChange={(e) => {
-              setCommand(e.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Send command..."
-            disabled={!isAuthenticated || isSubmitting}
-            className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-50"
-          />
-          <button
-            onClick={() => {
-              void handleSubmit();
-            }}
-            disabled={!isAuthenticated || isSubmitting || command.trim() === ''}
-            className="rounded bg-amber-500 px-3 py-1 text-xs font-medium text-slate-900 transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-            ) : (
-              'Send'
-            )}
-          </button>
-        </div>
-
         {/* Right side */}
         <div className="flex items-center gap-2">
           <button
@@ -336,7 +239,7 @@ export function DevBar(): React.JSX.Element | null {
             </svg>
           </button>
           <span className="text-xs text-slate-500">
-            {isAuthenticated ? (user?.email ?? 'Auth') : 'No auth'}
+            {user?.email ?? 'No auth'}
           </span>
           <span className="rounded px-2 py-0.5 text-xs bg-slate-800 text-slate-400">
             {environment}
@@ -357,7 +260,6 @@ export function DevBar(): React.JSX.Element | null {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden p-4">
-        {activeTab === 'commands' && <DevBarCommandsTab results={results} />}
         {activeTab === 'pubsub' && (
           <DevBarPubSubTab
             events={allPubSubEvents}

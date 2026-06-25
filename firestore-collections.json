@@ -86,10 +86,6 @@
       "owner": "research-agent",
       "description": "LLM research queries, responses, and synthesized results"
     },
-    "commands": {
-      "owner": "commands-agent",
-      "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
-    },
     "intex_agent_sessions": {
       "owner": "intex-agent",
       "description": "Product-visible WhatsApp Assistant sessions owned by intex-agent, including lifecycle status and summary fields."
@@ -97,18 +93,6 @@
     "intex_agent_session_events": {
       "owner": "intex-agent",
       "description": "Chronological timeline events for intex-agent WhatsApp Assistant sessions, including user messages, assistant replies, clarifications, tool calls, and close events."
-    },
-    "actions": {
-      "owner": "actions-agent",
-      "description": "Action items and their execution lifecycle"
-    },
-    "actions_transitions": {
-      "owner": "actions-agent",
-      "description": "Logs of user corrections to action types for ML training"
-    },
-    "approval_messages": {
-      "owner": "actions-agent",
-      "description": "Tracks outgoing approval request WhatsApp messages for reply matching"
     },
     "generated_images": {
       "owner": "image-service",

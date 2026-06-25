@@ -2,7 +2,7 @@
  * Use case: Drain task queue by dispatching oldest queued task.
  *
  * Called by Cloud Scheduler via POST /internal/drain-queue.
- * Uses dedicated dispatch-only path (not processCodeAction) to avoid dedup rejection.
+ * Uses dedicated dispatch-only path to avoid create-time dedup rejection.
  *
  * INT-619: Task queueing when workers are at capacity.
  */

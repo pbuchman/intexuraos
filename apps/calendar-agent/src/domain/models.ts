@@ -80,7 +80,7 @@ export interface FailedEvent {
   id: string;
   /** User ID who requested the event creation */
   userId: string;
-  /** Original action ID from actions-agent */
+  /** Original request ID from the caller */
   actionId: string;
   /** Original user message text */
   originalText: string;

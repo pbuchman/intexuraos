@@ -38,8 +38,6 @@ const SERVICE_PORTS = {
   'mobile-notifications-service': 8114,
   'fishing-assistant-service': 8119,
   'research-agent': 8116,
-  'commands-agent': 8117,
-  'actions-agent': 8118,
   'image-service': 8120,
   'notes-agent': 8121,
   'app-settings-service': 8122,
@@ -61,8 +59,6 @@ const SERVICE_URL_ENV = {
   'mobile-notifications-service': 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
   'fishing-assistant-service': 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL',
   'research-agent': 'INTEXURAOS_RESEARCH_AGENT_URL',
-  'commands-agent': 'INTEXURAOS_COMMANDS_AGENT_URL',
-  'actions-agent': 'INTEXURAOS_ACTIONS_AGENT_URL',
   'image-service': 'INTEXURAOS_IMAGE_SERVICE_URL',
   'notes-agent': 'INTEXURAOS_NOTES_AGENT_URL',
   'app-settings-service': 'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
@@ -84,8 +80,6 @@ const PUBLIC_API_PATHS = {
   'mobile-notifications-service': '/api/notifications',
   'fishing-assistant-service': '/api/fishing-assistant',
   'research-agent': '/api/research',
-  'commands-agent': '/api/commands',
-  'actions-agent': '/api/actions',
   'notes-agent': '/api/notes',
   'bookmarks-agent': '/api/bookmarks',
   'calendar-agent': '/api/calendar',
@@ -106,8 +100,6 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8114/openapi.json',
   INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8119/openapi.json',
   INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://127.0.0.1:8116/openapi.json',
-  INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL: 'http://127.0.0.1:8117/openapi.json',
-  INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://127.0.0.1:8118/openapi.json',
   INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8120/openapi.json',
   INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8122/openapi.json',
   INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://127.0.0.1:8121/openapi.json',
@@ -133,8 +125,6 @@ const PROD_SERVICE_ORDER = [
   'llm-usage-service',
   'intex-agent',
   'user-service',
-  'commands-agent',
-  'actions-agent',
   'research-agent',
   'image-service',
   'calendar-agent',
@@ -145,8 +135,6 @@ const PROD_SERVICE_ORDER = [
 
 const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
   'user-service',
-  'commands-agent',
-  'actions-agent',
   'research-agent',
   'image-service',
   'calendar-agent',
@@ -233,8 +221,6 @@ const SERVICE_SECRET_KEYS = {
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_TOKEN_ENCRYPTION_KEY',
   ],
-  'commands-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-  'actions-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'research-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'image-service': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'calendar-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
@@ -275,16 +261,10 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION:
       envValue('INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION') ??
       `${topic('whatsapp-media-cleanup')}-push`,
-    INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
-      envValue('INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC') ?? topic('commands-ingest'),
     INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC:
       envValue('INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC') ?? topic('intex-message-ingest'),
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC') ?? topic('whatsapp-webhook-process'),
-    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC:
-      envValue('INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC') ?? topic('audio-stored'),
-    INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC:
-      envValue('INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC') ?? topic('approval-reply'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
   },
@@ -311,21 +291,6 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_SHARE_BASE_URL:
       envValue('INTEXURAOS_SHARE_BASE_URL') ?? `${PUBLIC_ORIGIN}/share/research`,
     INTEXURAOS_IMAGE_PUBLIC_BASE_URL: envValue('INTEXURAOS_IMAGE_PUBLIC_BASE_URL') ?? PUBLIC_ORIGIN,
-  },
-  'commands-agent': {
-    INTEXURAOS_SERVICE_URL:
-      envValue('INTEXURAOS_COMMANDS_SERVICE_URL') ?? publicServiceUrl('commands-agent'),
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE:
-      envValue('INTEXURAOS_PUBSUB_ACTIONS_QUEUE') ?? topic('actions-queue'),
-  },
-  'actions-agent': {
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE:
-      envValue('INTEXURAOS_PUBSUB_ACTIONS_QUEUE') ?? topic('actions-queue'),
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
-    INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC:
-      envValue('INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC') ?? topic('calendar-preview'),
-    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   },
   'image-service': {
     INTEXURAOS_IMAGE_BUCKET:

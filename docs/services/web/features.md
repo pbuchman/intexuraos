@@ -6,17 +6,17 @@ Your window into the machine — one interface for everything IntexuraOS is doin
 
 Running software that works through tasks on its own is only useful if you can see what it is doing. Without a central interface, you are left checking multiple tools, refreshing dashboards, and hoping nothing went wrong while you were not looking. The system might be classifying your inbox, writing code, or running research — but if you cannot observe and intervene, autonomy becomes anxiety.
 
-The deeper problem is control. Autonomous systems make decisions, and some of those decisions need human approval. If approvals are buried in notifications across different apps, things slip through. A code task finishes its planning phase and needs a green light before the system starts writing code. A research query returns results that need review. A message arrives that requires your judgment. Without a single place to act on these, you either slow the system down by missing prompts or speed it up by rubber-stamping things you did not read.
+The deeper problem is control. Autonomous systems make decisions, and those decisions need to stay visible. If task state, research output, calendar changes, and project updates are scattered across different apps, things slip through. A code task finishes its planning phase, a research query returns results, or a message arrives that changes what should happen next. Without a single place to inspect those moments, autonomy becomes guesswork.
 
 This is not a passive dashboard. The web app closes a loop: you observe what the system did, and that observation directly unblocks what it does next. Your attention is not optional — it is the mechanism that keeps autonomous work moving safely.
 
 ## Use Case: A Morning of Agent Oversight
 
-You wake up and open the web app on your phone — it is installed as a standalone app, no browser chrome, just your system. Overnight, the agents processed twelve commands from your inbox. Three turned into action items waiting for your approval. One kicked off a code task that finished its design phase — the plan is sitting there, ready for you to read and greenlight. A research report on competitor pricing came back with four sources. Your calendar shows two meetings today, and a Linear issue you filed yesterday already has sub-issues broken out by the planning agent.
+You wake up and open the web app on your phone — it is installed as a standalone app, no browser chrome, just your system. Overnight, one code task finished its design phase, a research report on competitor pricing came back with four sources, your calendar shows two meetings today, and a Linear issue you filed yesterday already has sub-issues broken out by the planning agent.
 
-You approve two actions, reject one that misread your intent, read the code task plan and tap to start execution. While you eat breakfast, the log stream shows the code agent working — cyan lines for your original request, blue lines as it writes files, yellow flashes when it runs tools. You scroll up to check something, and the stream pauses so you do not lose your place. When you scroll back to the bottom, it catches up automatically.
+You read the code task plan and start execution. While you eat breakfast, the log stream shows the code agent working — cyan lines for your original request, blue lines as it writes files, yellow flashes when it runs tools. You scroll up to check something, and the stream pauses so you do not lose your place. When you scroll back to the bottom, it catches up automatically.
 
-By the time you sit down at your desk, half your morning work is already done. You did not write a single line of code or open a single email. You just watched, approved, and moved on.
+By the time you sit down at your desk, half your morning work is already done. You did not write a single line of code or open a single email. You inspected the work, gave follow-up context where needed, and moved on.
 
 ## How It Helps
 
@@ -30,11 +30,11 @@ The stream follows the agent's output in real time. If you scroll up to re-read 
 
 ### Approve a Plan Before the System Writes Code
 
-Code tasks run in two phases, and you control the gate between them. The design phase produces a plan — what the agent intends to build, which files it will touch, what approach it will take. That plan lands in your web app as a reviewable document. Nothing happens until you approve it.
+Code tasks run in two phases. The design phase produces a plan — what the agent intends to build, which files it will touch, what approach it will take. That plan lands in your web app as a reviewable document, with direct controls to continue into implementation when you are ready.
 
-Once you approve, the execution phase begins. The web app links the two phases together with color-coded banners — on the execution task, a violet banner links back to the design; on the design task, an emerald banner links forward to the implementation. You can navigate between them to compare what was planned against what was built. When the execution finishes, GitHub pull request events appear inline, with expandable details and clickable links straight to the code.
+Once execution begins, the web app links the two phases together with color-coded banners — on the execution task, a violet banner links back to the design; on the design task, an emerald banner links forward to the implementation. You can navigate between them to compare what was planned against what was built. When the execution finishes, GitHub pull request events appear inline, with expandable details and clickable links straight to the code.
 
-**Example:** You ask the system to refactor your authentication module. The design phase comes back with a plan that proposes changing three files and adding a new utility. You read it, notice it missed an edge case in token refresh, and type that feedback as a follow-up. The agent revises the plan. You approve the updated version, and execution begins. Twenty minutes later, the PR events show up — you expand them, read the review comments and activity, and click through to GitHub to merge.
+**Example:** You ask the system to refactor your authentication module. The design phase comes back with a plan that proposes changing three files and adding a new utility. You read it, notice it missed an edge case in token refresh, and type that feedback as a follow-up. The agent revises the plan. You start implementation, and twenty minutes later the PR events show up — you expand them, read the review comments and activity, and click through to GitHub to merge.
 
 ### Track GitHub Activity with an Event Decision Log
 
@@ -42,13 +42,13 @@ Every GitHub event that passes through the system — pull request reviews, webh
 
 **Example:** A pull request you opened yesterday had three review events. You open the PR Events page, filter to pending decisions, and see one event that the system has not acted on yet. You expand it to read the event details and decide whether to nudge the agent or wait.
 
-### Act on Everything From One Inbox
+### Review Activity From One Surface
 
-Commands and actions flow into a single inbox. Commands are things the system received — messages, requests, inputs from various channels. Actions are things the system wants to do about them. Some actions just need your awareness. Others need your explicit approval before the system proceeds.
+Current work flows into dedicated, inspectable surfaces: code tasks, WhatsApp sessions, Linear boards, research reports, notes, bookmarks, and calendar pages. Each surface keeps the domain-specific controls close to the underlying data instead of routing everything through a separate inbox.
 
-Each action item shows configurable buttons — approve, reject, or whatever responses the originating service defined. You do not need to context-switch to another app or remember which service generated the request. The inbox is the one place where human judgment enters the loop.
+You do not need to context-switch to another app or remember which service generated an update. The web app gives you the current state, the related history, and the next available command in the same place.
 
-**Example:** You sent a WhatsApp message last night saying "cancel my dentist appointment and reschedule for next week." The system classified it, created an action item, and is waiting. You open the inbox this morning, see the proposed calendar changes, tap approve, and the system handles the rest — cancellation message, new appointment request, calendar update. One tap, three operations.
+**Example:** You sent a WhatsApp text asking the system to create a note, save a link, and start a research request. The WhatsApp session shows the original text and replies, the note and bookmark appear in their lists, and the research report lands in the research view when it finishes.
 
 ### Track Your Projects as They Move
 
@@ -87,10 +87,10 @@ Install the web app from your browser — on mobile, use "Add to Home Screen." S
 ## Key Benefits
 
 - **One screen for autonomous operations** — every agent's work surfaces in a single interface, so you stop checking five different tools
-- **Approval without context-switching** — action items, code task gates, and research reviews all happen in the same app you are already looking at
+- **Review without context-switching** — code task plans, research reports, WhatsApp sessions, and project state all live in the same app you are already looking at
 - **Real-time visibility into code generation** — color-coded log streams show exactly what the agent is doing, not a summary after the fact
 - **Phone-native experience** — install it to your home screen, share content from any app, and the shell loads even offline — the system is always one tap away
-- **Control without friction** — follow-up messages, approval buttons, and phase gates give you authority over the system's next move without slowing it down
+- **Control without friction** — follow-up messages and direct task controls give you authority over the system's next move without slowing it down
 - **GitHub event transparency** — the decision log shows every webhook event and its outcome, so nothing disappears silently into the system
 
 ## Limitations

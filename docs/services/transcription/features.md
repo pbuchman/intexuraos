@@ -38,7 +38,7 @@ A built-in vocabulary of 100+ domain-specific terms ensures accurate transcripti
 
 A user is walking and remembers three things they need to do for their IntexuraOS project. They open WhatsApp, record a voice note: "I need to pushowac the changes to the monorepo, check the Sentry alerts for the calendar-agent, and create a Linear issue for the Firestore migration."
 
-The whatsapp-service stores the audio in GCS and publishes an `audio-stored` event. The transcription worker picks it up, generates a signed URL for the audio file, submits it to Speechmatics with the custom vocabulary, polls until complete, and publishes the transcript. The whatsapp-service receives the text and passes it to the commands-agent for task extraction — all within minutes, with every technical term spelled correctly.
+When a standalone audio job is published, the transcription worker generates a signed URL for the audio file, submits it to Speechmatics with the custom vocabulary, polls until complete, and publishes the transcript. WhatsApp Intex conversations do not currently use this path; voice messages are answered with a text-only unsupported reply.
 
 ## Key Benefits
 

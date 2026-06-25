@@ -31,7 +31,7 @@ describe('decodeIntexMessageIngestPush', () => {
 
   it('rejects messages with another event type', () => {
     expect(() =>
-      decodeIntexMessageIngestPush(push({ type: 'command.ingest', text: 'remember this' }))
+      decodeIntexMessageIngestPush(push({ type: 'legacy.ingest', text: 'remember this' }))
     ).toThrow('Expected intex.message.ingest event');
   });
 

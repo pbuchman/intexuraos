@@ -48,8 +48,6 @@ function taskToSerializedTask(task: {
   updatedAt: unknown;
   completedAt?: unknown;
   dispatchedAt?: unknown;
-  actionId?: string;
-  approvalEventId?: string;
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
@@ -115,10 +113,6 @@ function taskToSerializedTask(task: {
   /* v8 ignore start -- test-infra: FakeFirestore update() drops Timestamp fields (isFieldValueDelete matches Timestamp.isEqual) so dispatchedAt/completedAt cannot be reliably set in tests @preserve */
   if (dispatchedAt !== undefined) { serialized.dispatchedAt = dispatchedAt; }
   if (completedAt !== undefined) { serialized.completedAt = completedAt; }
-  /* v8 ignore stop @preserve */
-  /* v8 ignore start -- test-infra: FakeFirestore create() cannot populate actionId/approvalEventId without triggering dedup-layer rejection @preserve */
-  if (task.actionId !== undefined) { serialized.actionId = task.actionId; }
-  if (task.approvalEventId !== undefined) { serialized.approvalEventId = task.approvalEventId; }
   /* v8 ignore stop @preserve */
   if (task.linearIssueId !== undefined) { serialized.linearIssueId = task.linearIssueId; }
   if (task.agentType !== undefined) { serialized.agentType = task.agentType; }

@@ -28,8 +28,6 @@ Generated post-cutover values must be:
 | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | `/api/notifications`      | `https://intexuraos.cloud/api/notifications`               |
 | `INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL`   | `/api/fishing-assistant`  | `https://intexuraos.cloud/api/fishing-assistant`           |
 | `INTEXURAOS_RESEARCH_AGENT_URL`              | `/api/research`           | `https://intexuraos.cloud/api/research`                    |
-| `INTEXURAOS_COMMANDS_AGENT_URL`              | `/api/commands`           | `https://intexuraos.cloud/api/commands`                    |
-| `INTEXURAOS_ACTIONS_AGENT_URL`               | `/api/actions`            | `https://intexuraos.cloud/api/actions`                     |
 | `INTEXURAOS_NOTES_AGENT_URL`                 | `/api/notes`              | `https://intexuraos.cloud/api/notes`                       |
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`             | `/api/bookmarks`          | `https://intexuraos.cloud/api/bookmarks`                   |
 | `INTEXURAOS_CALENDAR_AGENT_URL`              | `/api/calendar`           | `https://intexuraos.cloud/api/calendar`                    |
@@ -192,7 +190,6 @@ for path in \
   /api/linear/connection \
   /api/code/tasks \
   /api/research \
-  /api/actions \
   /api/notifications \
   /api/llm-usage/pricing; do
   status="$(curl -sS -o /dev/null -w '%{http_code}' "https://intexuraos.cloud${path}")"

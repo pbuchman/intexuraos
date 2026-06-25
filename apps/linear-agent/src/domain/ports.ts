@@ -229,8 +229,6 @@ export interface CodeAgentClient {
     linearIssueId: string;
     prompt: string;
     workerType: CodeTaskWorkerType;
-    actionId: string;
-    approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;
 
   notifyGroupSummaryRecompute(request: {

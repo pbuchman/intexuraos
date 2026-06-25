@@ -13,36 +13,6 @@
       "description": "Index of all service documentation"
     },
     {
-      "path": "services/actions-agent/features.md",
-      "title": "Actions Agent",
-      "category": "services",
-      "description": "Features documentation for actions-agent"
-    },
-    {
-      "path": "services/actions-agent/technical.md",
-      "title": "Actions Agent \u2014 Technical Reference",
-      "category": "services",
-      "description": "Technical documentation for actions-agent"
-    },
-    {
-      "path": "services/actions-agent/tutorial.md",
-      "title": "Actions Agent \u2014 Tutorial",
-      "category": "services",
-      "description": "Tutorial documentation for actions-agent"
-    },
-    {
-      "path": "services/actions-agent/agent.md",
-      "title": "actions-agent - Agent Interface",
-      "category": "services",
-      "description": "Agent documentation for actions-agent"
-    },
-    {
-      "path": "services/actions-agent/technical-debt.md",
-      "title": "Actions Agent - Technical Debt",
-      "category": "services",
-      "description": "Technical-Debt documentation for actions-agent"
-    },
-    {
       "path": "services/api-docs-hub/features.md",
       "title": "API Docs Hub",
       "category": "services",
@@ -50,25 +20,25 @@
     },
     {
       "path": "services/api-docs-hub/technical.md",
-      "title": "API Docs Hub \u2014 Technical Reference",
+      "title": "API Docs Hub — Technical Reference",
       "category": "services",
       "description": "Technical documentation for api-docs-hub"
     },
     {
       "path": "services/api-docs-hub/tutorial.md",
-      "title": "API Docs Hub \u2014 Tutorial",
+      "title": "API Docs Hub — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for api-docs-hub"
     },
     {
       "path": "services/api-docs-hub/agent.md",
-      "title": "api-docs-hub \u2014 Agent Interface",
+      "title": "api-docs-hub — Agent Interface",
       "category": "services",
       "description": "Agent documentation for api-docs-hub"
     },
     {
       "path": "services/api-docs-hub/technical-debt.md",
-      "title": "API Docs Hub \u2014 Technical Debt",
+      "title": "API Docs Hub — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for api-docs-hub"
     },
@@ -110,25 +80,25 @@
     },
     {
       "path": "services/bookmarks-agent/technical.md",
-      "title": "Bookmarks Agent \u2014 Technical Reference",
+      "title": "Bookmarks Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for bookmarks-agent"
     },
     {
       "path": "services/bookmarks-agent/tutorial.md",
-      "title": "Bookmarks Agent \u2014 Tutorial",
+      "title": "Bookmarks Agent — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for bookmarks-agent"
     },
     {
       "path": "services/bookmarks-agent/agent.md",
-      "title": "bookmarks-agent \u2014 Agent Interface",
+      "title": "bookmarks-agent — Agent Interface",
       "category": "services",
       "description": "Agent documentation for bookmarks-agent"
     },
     {
       "path": "services/bookmarks-agent/technical-debt.md",
-      "title": "Bookmarks Agent \u2014 Technical Debt",
+      "title": "Bookmarks Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for bookmarks-agent"
     },
@@ -140,13 +110,13 @@
     },
     {
       "path": "services/calendar-agent/technical.md",
-      "title": "Calendar Agent \u2014 Technical Reference",
+      "title": "Calendar Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for calendar-agent"
     },
     {
       "path": "services/calendar-agent/tutorial.md",
-      "title": "Calendar Agent \u2014 Tutorial",
+      "title": "Calendar Agent — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for calendar-agent"
     },
@@ -158,7 +128,7 @@
     },
     {
       "path": "services/calendar-agent/technical-debt.md",
-      "title": "Calendar Agent \u2014 Technical Debt",
+      "title": "Calendar Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for calendar-agent"
     },
@@ -170,7 +140,7 @@
     },
     {
       "path": "services/code-worker/technical.md",
-      "title": "Code Worker \u2014 Technical Reference",
+      "title": "Code Worker — Technical Reference",
       "category": "services",
       "description": "Technical documentation for code-worker"
     },
@@ -182,7 +152,7 @@
     },
     {
       "path": "services/code-worker/agent.md",
-      "title": "code-worker \u2014 Agent Interface",
+      "title": "code-worker — Agent Interface",
       "category": "services",
       "description": "Agent documentation for code-worker"
     },
@@ -200,57 +170,27 @@
     },
     {
       "path": "services/code-agent/technical.md",
-      "title": "Code Agent \u2014 Technical Reference",
+      "title": "Code Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for code-agent"
     },
     {
       "path": "services/code-agent/tutorial.md",
-      "title": "Code Agent \u2014 Getting Started Tutorial",
+      "title": "Code Agent — Getting Started Tutorial",
       "category": "services",
       "description": "Tutorial documentation for code-agent"
     },
     {
       "path": "services/code-agent/agent.md",
-      "title": "Code Agent \u2014 Agent Interface",
+      "title": "Code Agent — Agent Interface",
       "category": "services",
       "description": "Agent documentation for code-agent"
     },
     {
       "path": "services/code-agent/technical-debt.md",
-      "title": "Code Agent \u2014 Technical Debt",
+      "title": "Code Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for code-agent"
-    },
-    {
-      "path": "services/commands-agent/features.md",
-      "title": "Commands Agent",
-      "category": "services",
-      "description": "Features documentation for commands-agent"
-    },
-    {
-      "path": "services/commands-agent/technical.md",
-      "title": "Commands Agent \u2014 Technical Reference",
-      "category": "services",
-      "description": "Technical documentation for commands-agent"
-    },
-    {
-      "path": "services/commands-agent/tutorial.md",
-      "title": "Commands Agent \u2014 Tutorial",
-      "category": "services",
-      "description": "Tutorial documentation for commands-agent"
-    },
-    {
-      "path": "services/commands-agent/agent.md",
-      "title": "Commands Agent \u2014 Agent Interface",
-      "category": "services",
-      "description": "Agent documentation for commands-agent"
-    },
-    {
-      "path": "services/commands-agent/technical-debt.md",
-      "title": "Commands Agent \u2014 Technical Debt",
-      "category": "services",
-      "description": "Technical-Debt documentation for commands-agent"
     },
     {
       "path": "services/hellscript-agent/features.md",
@@ -260,27 +200,57 @@
     },
     {
       "path": "services/hellscript-agent/technical.md",
-      "title": "Hellscript Agent \u2014 Technical Reference",
+      "title": "Hellscript Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for hellscript-agent"
     },
     {
       "path": "services/hellscript-agent/tutorial.md",
-      "title": "Hellscript Agent \u2014 Tutorial",
+      "title": "Hellscript Agent — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for hellscript-agent"
     },
     {
       "path": "services/hellscript-agent/agent.md",
-      "title": "hellscript-agent \u2014 Agent Interface",
+      "title": "hellscript-agent — Agent Interface",
       "category": "services",
       "description": "Agent documentation for hellscript-agent"
     },
     {
       "path": "services/hellscript-agent/technical-debt.md",
-      "title": "Hellscript Agent \u2014 Technical Debt",
+      "title": "Hellscript Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for hellscript-agent"
+    },
+    {
+      "path": "services/intex-agent/features.md",
+      "title": "Intex Agent",
+      "category": "services",
+      "description": "Features documentation for intex-agent"
+    },
+    {
+      "path": "services/intex-agent/technical.md",
+      "title": "Intex Agent — Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for intex-agent"
+    },
+    {
+      "path": "services/intex-agent/tutorial.md",
+      "title": "Intex Agent — Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for intex-agent"
+    },
+    {
+      "path": "services/intex-agent/agent.md",
+      "title": "Intex Agent — Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for intex-agent"
+    },
+    {
+      "path": "services/intex-agent/technical-debt.md",
+      "title": "Intex Agent — Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for intex-agent"
     },
     {
       "path": "services/image-service/features.md",
@@ -290,25 +260,25 @@
     },
     {
       "path": "services/image-service/technical.md",
-      "title": "Image Service \u2014 Technical Reference",
+      "title": "Image Service — Technical Reference",
       "category": "services",
       "description": "Technical documentation for image-service"
     },
     {
       "path": "services/image-service/tutorial.md",
-      "title": "Image Service \u2014 Tutorial",
+      "title": "Image Service — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for image-service"
     },
     {
       "path": "services/image-service/agent.md",
-      "title": "image-service \u2014 Agent Interface",
+      "title": "image-service — Agent Interface",
       "category": "services",
       "description": "Agent documentation for image-service"
     },
     {
       "path": "services/image-service/technical-debt.md",
-      "title": "Image Service \u2014 Technical Debt",
+      "title": "Image Service — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for image-service"
     },
@@ -320,25 +290,25 @@
     },
     {
       "path": "services/linear-agent/technical.md",
-      "title": "Linear Agent \u2014 Technical Reference",
+      "title": "Linear Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for linear-agent"
     },
     {
       "path": "services/linear-agent/tutorial.md",
-      "title": "Linear Agent \u2014 Tutorial",
+      "title": "Linear Agent — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for linear-agent"
     },
     {
       "path": "services/linear-agent/agent.md",
-      "title": "linear-agent \u2014 Agent Interface",
+      "title": "linear-agent — Agent Interface",
       "category": "services",
       "description": "Agent documentation for linear-agent"
     },
     {
       "path": "services/linear-agent/technical-debt.md",
-      "title": "Linear Agent \u2014 Technical Debt",
+      "title": "Linear Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for linear-agent"
     },
@@ -350,25 +320,25 @@
     },
     {
       "path": "services/mobile-notifications-service/technical.md",
-      "title": "Mobile Notifications Service \u2014 Technical Reference",
+      "title": "Mobile Notifications Service — Technical Reference",
       "category": "services",
       "description": "Technical documentation for mobile-notifications-service"
     },
     {
       "path": "services/mobile-notifications-service/tutorial.md",
-      "title": "Mobile Notifications Service \u2014 Tutorial",
+      "title": "Mobile Notifications Service — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for mobile-notifications-service"
     },
     {
       "path": "services/mobile-notifications-service/agent.md",
-      "title": "mobile-notifications-service \u2014 Agent Interface",
+      "title": "mobile-notifications-service — Agent Interface",
       "category": "services",
       "description": "Agent documentation for mobile-notifications-service"
     },
     {
       "path": "services/mobile-notifications-service/technical-debt.md",
-      "title": "Mobile Notifications Service \u2014 Technical Debt",
+      "title": "Mobile Notifications Service — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for mobile-notifications-service"
     },
@@ -380,25 +350,25 @@
     },
     {
       "path": "services/notes-agent/technical.md",
-      "title": "Notes Agent \u2014 Technical Reference",
+      "title": "Notes Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for notes-agent"
     },
     {
       "path": "services/notes-agent/tutorial.md",
-      "title": "Notes Agent \u2014 Tutorial",
+      "title": "Notes Agent — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for notes-agent"
     },
     {
       "path": "services/notes-agent/agent.md",
-      "title": "notes-agent \u2014 Agent Interface",
+      "title": "notes-agent — Agent Interface",
       "category": "services",
       "description": "Agent documentation for notes-agent"
     },
     {
       "path": "services/notes-agent/technical-debt.md",
-      "title": "Notes Agent \u2014 Technical Debt",
+      "title": "Notes Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for notes-agent"
     },
@@ -410,25 +380,25 @@
     },
     {
       "path": "services/notion-service/technical.md",
-      "title": "Notion Service \u2014 Technical Reference",
+      "title": "Notion Service — Technical Reference",
       "category": "services",
       "description": "Technical documentation for notion-service"
     },
     {
       "path": "services/notion-service/tutorial.md",
-      "title": "Notion Service \u2014 Tutorial",
+      "title": "Notion Service — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for notion-service"
     },
     {
       "path": "services/notion-service/agent.md",
-      "title": "notion-service \u2014 Agent Interface",
+      "title": "notion-service — Agent Interface",
       "category": "services",
       "description": "Agent documentation for notion-service"
     },
     {
       "path": "services/notion-service/technical-debt.md",
-      "title": "Notion Service \u2014 Technical Debt",
+      "title": "Notion Service — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for notion-service"
     },
@@ -440,25 +410,25 @@
     },
     {
       "path": "services/orchestrator/technical.md",
-      "title": "Orchestrator \u2014 Technical Reference",
+      "title": "Orchestrator — Technical Reference",
       "category": "services",
       "description": "Technical documentation for orchestrator"
     },
     {
       "path": "services/orchestrator/tutorial.md",
-      "title": "Orchestrator \u2014 Tutorial",
+      "title": "Orchestrator — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for orchestrator"
     },
     {
       "path": "services/orchestrator/agent.md",
-      "title": "orchestrator \u2014 Agent Interface",
+      "title": "orchestrator — Agent Interface",
       "category": "services",
       "description": "Agent documentation for orchestrator"
     },
     {
       "path": "services/orchestrator/technical-debt.md",
-      "title": "Orchestrator \u2014 Technical Debt",
+      "title": "Orchestrator — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for orchestrator"
     },
@@ -470,25 +440,25 @@
     },
     {
       "path": "services/research-agent/technical.md",
-      "title": "Research Agent \u2014 Technical Reference",
+      "title": "Research Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for research-agent"
     },
     {
       "path": "services/research-agent/tutorial.md",
-      "title": "Research Agent \u2014 Tutorial",
+      "title": "Research Agent — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for research-agent"
     },
     {
       "path": "services/research-agent/agent.md",
-      "title": "research-agent \u2014 Agent Interface",
+      "title": "research-agent — Agent Interface",
       "category": "services",
       "description": "Agent documentation for research-agent"
     },
     {
       "path": "services/research-agent/technical-debt.md",
-      "title": "Research Agent \u2014 Technical Debt",
+      "title": "Research Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for research-agent"
     },
@@ -500,25 +470,25 @@
     },
     {
       "path": "services/transcription/technical.md",
-      "title": "Transcription Worker \u2014 Technical Reference",
+      "title": "Transcription Worker — Technical Reference",
       "category": "services",
       "description": "Technical documentation for transcription"
     },
     {
       "path": "services/transcription/tutorial.md",
-      "title": "Transcription Worker \u2014 Tutorial",
+      "title": "Transcription Worker — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for transcription"
     },
     {
       "path": "services/transcription/agent.md",
-      "title": "Transcription Worker \u2014 Agent Interface",
+      "title": "Transcription Worker — Agent Interface",
       "category": "services",
       "description": "Agent documentation for transcription"
     },
     {
       "path": "services/transcription/technical-debt.md",
-      "title": "Transcription Worker \u2014 Technical Debt",
+      "title": "Transcription Worker — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for transcription"
     },
@@ -530,13 +500,13 @@
     },
     {
       "path": "services/user-service/technical.md",
-      "title": "User Service \u2014 Technical Reference",
+      "title": "User Service — Technical Reference",
       "category": "services",
       "description": "Technical documentation for user-service"
     },
     {
       "path": "services/user-service/tutorial.md",
-      "title": "User Service \u2014 Tutorial",
+      "title": "User Service — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for user-service"
     },
@@ -560,25 +530,25 @@
     },
     {
       "path": "services/vm-lifecycle/technical.md",
-      "title": "VM Lifecycle Worker \u2014 Technical Reference",
+      "title": "VM Lifecycle Worker — Technical Reference",
       "category": "services",
       "description": "Technical documentation for vm-lifecycle"
     },
     {
       "path": "services/vm-lifecycle/tutorial.md",
-      "title": "VM Lifecycle Worker \u2014 Tutorial",
+      "title": "VM Lifecycle Worker — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for vm-lifecycle"
     },
     {
       "path": "services/vm-lifecycle/agent.md",
-      "title": "vm-lifecycle \u2014 Agent Interface",
+      "title": "vm-lifecycle — Agent Interface",
       "category": "services",
       "description": "Agent documentation for vm-lifecycle"
     },
     {
       "path": "services/vm-lifecycle/technical-debt.md",
-      "title": "VM Lifecycle Worker \u2014 Technical Debt",
+      "title": "VM Lifecycle Worker — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for vm-lifecycle"
     },
@@ -590,7 +560,7 @@
     },
     {
       "path": "services/web/technical.md",
-      "title": "Web App \u2014 Technical Reference",
+      "title": "Web App — Technical Reference",
       "category": "services",
       "description": "Technical documentation for web"
     },
@@ -602,13 +572,13 @@
     },
     {
       "path": "services/web/agent.md",
-      "title": "Web App \u2014 Agent Interface",
+      "title": "Web App — Agent Interface",
       "category": "services",
       "description": "Agent documentation for web"
     },
     {
       "path": "services/web/technical-debt.md",
-      "title": "Web App \u2014 Technical Debt",
+      "title": "Web App — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for web"
     },
@@ -620,25 +590,25 @@
     },
     {
       "path": "services/web-agent/technical.md",
-      "title": "Web Agent \u2014 Technical Reference",
+      "title": "Web Agent — Technical Reference",
       "category": "services",
       "description": "Technical documentation for web-agent"
     },
     {
       "path": "services/web-agent/tutorial.md",
-      "title": "Web Agent \u2014 Tutorial",
+      "title": "Web Agent — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for web-agent"
     },
     {
       "path": "services/web-agent/agent.md",
-      "title": "web-agent \u2014 Agent Interface",
+      "title": "web-agent — Agent Interface",
       "category": "services",
       "description": "Agent documentation for web-agent"
     },
     {
       "path": "services/web-agent/technical-debt.md",
-      "title": "Web Agent \u2014 Technical Debt",
+      "title": "Web Agent — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for web-agent"
     },
@@ -650,33 +620,27 @@
     },
     {
       "path": "services/whatsapp-service/technical.md",
-      "title": "WhatsApp Service \u2014 Technical Reference",
+      "title": "WhatsApp Service — Technical Reference",
       "category": "services",
       "description": "Technical documentation for whatsapp-service"
     },
     {
       "path": "services/whatsapp-service/tutorial.md",
-      "title": "WhatsApp Service \u2014 Tutorial",
+      "title": "WhatsApp Service — Tutorial",
       "category": "services",
       "description": "Tutorial documentation for whatsapp-service"
     },
     {
       "path": "services/whatsapp-service/agent.md",
-      "title": "whatsapp-service \u2014 Agent Interface",
+      "title": "whatsapp-service — Agent Interface",
       "category": "services",
       "description": "Agent documentation for whatsapp-service"
     },
     {
       "path": "services/whatsapp-service/technical-debt.md",
-      "title": "WhatsApp Service \u2014 Technical Debt",
+      "title": "WhatsApp Service — Technical Debt",
       "category": "services",
       "description": "Technical-Debt documentation for whatsapp-service"
-    },
-    {
-      "path": "architecture/action-configuration-dsl.md",
-      "title": "Action Configuration DSL Reference",
-      "category": "architecture",
-      "description": "Architecture: action configuration dsl"
     },
     {
       "path": "architecture/ai-architecture.md",
@@ -692,7 +656,7 @@
     },
     {
       "path": "architecture/container-lifecycle.md",
-      "title": "Container Lifecycle \u2014 Orchestrator Worker Containers",
+      "title": "Container Lifecycle — Orchestrator Worker Containers",
       "category": "architecture",
       "description": "Architecture: container lifecycle"
     },
@@ -728,7 +692,7 @@
     },
     {
       "path": "architecture/research-flow.md",
-      "title": "Research Flow \u2014 Complete Lifecycle",
+      "title": "Research Flow — Complete Lifecycle",
       "category": "architecture",
       "description": "Architecture: research flow"
     },
@@ -854,7 +818,7 @@
     },
     {
       "path": "packages/common-core/technical-debt.md",
-      "title": "@intexuraos/common-core \u2014 Technical Debt",
+      "title": "@intexuraos/common-core — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for common-core"
     },
@@ -866,7 +830,7 @@
     },
     {
       "path": "packages/common-http/technical-debt.md",
-      "title": "@intexuraos/common-http \u2014 Technical Debt",
+      "title": "@intexuraos/common-http — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for common-http"
     },
@@ -878,7 +842,7 @@
     },
     {
       "path": "packages/http-contracts/technical-debt.md",
-      "title": "@intexuraos/http-contracts \u2014 Technical Debt",
+      "title": "@intexuraos/http-contracts — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for http-contracts"
     },
@@ -890,7 +854,7 @@
     },
     {
       "path": "packages/http-server/technical-debt.md",
-      "title": "@intexuraos/http-server \u2014 Technical Debt",
+      "title": "@intexuraos/http-server — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for http-server"
     },
@@ -998,7 +962,7 @@
     },
     {
       "path": "packages/infra-sentry/technical-debt.md",
-      "title": "infra-sentry \u2014 Technical Debt",
+      "title": "infra-sentry — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for infra-sentry"
     },
@@ -1022,7 +986,7 @@
     },
     {
       "path": "packages/internal-clients/technical-debt.md",
-      "title": "@intexuraos/internal-clients \u2014 Technical Debt",
+      "title": "@intexuraos/internal-clients — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for internal-clients"
     },
@@ -1034,7 +998,7 @@
     },
     {
       "path": "packages/llm-contract/technical-debt.md",
-      "title": "@intexuraos/llm-contract \u2014 Technical Debt",
+      "title": "@intexuraos/llm-contract — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for llm-contract"
     },
@@ -1046,7 +1010,7 @@
     },
     {
       "path": "packages/llm-factory/technical-debt.md",
-      "title": "@intexuraos/llm-factory \u2014 Technical Debt",
+      "title": "@intexuraos/llm-factory — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for llm-factory"
     },
@@ -1058,7 +1022,7 @@
     },
     {
       "path": "packages/llm-pricing/technical-debt.md",
-      "title": "@intexuraos/llm-pricing \u2014 Technical Debt",
+      "title": "@intexuraos/llm-pricing — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for llm-pricing"
     },
@@ -1070,7 +1034,7 @@
     },
     {
       "path": "packages/llm-prompts/technical-debt.md",
-      "title": "@intexuraos/llm-prompts \u2014 Technical Debt",
+      "title": "@intexuraos/llm-prompts — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for llm-prompts"
     },
@@ -1082,96 +1046,23 @@
     },
     {
       "path": "packages/llm-utils/technical-debt.md",
-      "title": "@intexuraos/llm-utils \u2014 Technical Debt",
+      "title": "@intexuraos/llm-utils — Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for llm-utils"
-    },
-    {
-      "path": "validation/ai-models-validation.md",
-      "title": "AI Models Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: ai models validation"
-    },
-    {
-      "path": "validation/env-vars-validation.md",
-      "title": "Environment Variables Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: env vars validation"
-    },
-    {
-      "path": "validation/error-contracts-validation.md",
-      "title": "Error Contract Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: error contracts validation"
-    },
-    {
-      "path": "validation/firestore-validation.md",
-      "title": "Firestore Collection Ownership Validation Report",
-      "category": "validation",
-      "description": "Validation report: firestore validation"
-    },
-    {
-      "path": "validation/http-contracts-validation.md",
-      "title": "HTTP Contracts Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: http contracts validation"
-    },
-    {
-      "path": "validation/meta-validation-report.md",
-      "title": "Meta-Validation Report \u2014 Cross-Report Consistency",
-      "category": "validation",
-      "description": "Validation report: meta validation report"
-    },
-    {
-      "path": "validation/package-deps-validation.md",
-      "title": "Package Dependency Documentation Validation",
-      "category": "validation",
-      "description": "Validation report: package deps validation"
-    },
-    {
-      "path": "validation/pubsub-contracts-validation.md",
-      "title": "Pub/Sub Contracts Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: pubsub contracts validation"
-    },
-    {
-      "path": "validation/route-auth-validation.md",
-      "title": "Route Authentication Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: route auth validation"
-    },
-    {
-      "path": "validation/service-urls-validation.md",
-      "title": "Service URL Configuration Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: service urls validation"
-    },
-    {
-      "path": "validation/terraform-code-sync-validation.md",
-      "title": "Terraform-Code Sync Cross-Validation Report",
-      "category": "validation",
-      "description": "Validation report: terraform code sync validation"
-    },
-    {
-      "path": "validation/v3.0.0-documentation-run-report.md",
-      "title": "v3.0.0 Documentation Run Report",
-      "category": "validation",
-      "description": "Validation report: v3.0.0 documentation run report"
     }
   ],
   "statistics": {
-    "total": 211,
+    "total": 175,
     "byCategory": {
       "overview": 1,
       "services-index": 1,
-      "services": 125,
+      "services": 105,
       "architecture": 14,
       "setup": 14,
-      "packages": 44,
-      "validation": 12
+      "packages": 40
     },
     "version": "4.0.0",
-    "lastUpdated": "2026-03-16",
-    "generatedAt": "2026-03-16T00:08:02.977972"
+    "lastUpdated": "2026-06-24",
+    "generatedAt": "2026-06-24T00:00:00.000000"
   }
 }

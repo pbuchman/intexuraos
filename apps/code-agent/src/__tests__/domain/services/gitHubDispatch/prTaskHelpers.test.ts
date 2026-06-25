@@ -247,7 +247,6 @@ describe('prTaskHelpers / reusePreservedContainer', () => {
     logLineRepo: never;
     taskDispatcher: never;
     workerSettingsRepo: never;
-    statusMirrorService: never;
     whatsappNotifier: never;
   } {
     return {
@@ -255,7 +254,6 @@ describe('prTaskHelpers / reusePreservedContainer', () => {
       logLineRepo: {} as never,
       taskDispatcher: {} as never,
       workerSettingsRepo: {} as never,
-      statusMirrorService: {} as never,
       whatsappNotifier: {} as never,
     };
   }

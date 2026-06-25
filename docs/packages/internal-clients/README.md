@@ -191,15 +191,14 @@ interface ServiceClientError {
 
 ## Used By
 
-12 apps import this package:
+Apps import this package:
 
 | App                 | Primary Use                           |
 | ------------------- | ------------------------------------- |
-| actions-agent       | LLM client + OAuth tokens             |
 | calendar-agent      | LLM client + OAuth tokens             |
 | code-agent          | fetchWithAuth for cross-service calls |
-| commands-agent      | LLM client for command processing     |
 | image-service       | LLM client for image generation       |
+| intex-agent         | Typed clients for direct tools        |
 | linear-agent        | LLM client for issue management       |
 | research-agent      | LLM client for research tasks         |
 | web-agent           | LLM client for web browsing           |

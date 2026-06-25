@@ -21,7 +21,6 @@ import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
-import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { CodeTaskDispatchStatusService } from '../services/codeTaskDispatchStatusService.js';
 import {
   classifyCodeTaskDispatchability,
@@ -282,7 +281,6 @@ export interface DrainRetryQueueDeps {
   logLineRepo: LogLineRepository;
   automationLog?: AutomationLog;
   codeTaskDispatchNotificationRepo?: CodeTaskDispatchNotificationRepository;
-  statusMirrorService: StatusMirrorService;
   codeTaskDispatchStatusService?: CodeTaskDispatchStatusService;
   executionMemory?: PrepareExecutionMemoryResources;
   userServiceClient?: Pick<UserServiceClient, 'getLlmClient'>;

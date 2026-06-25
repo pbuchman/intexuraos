@@ -24,21 +24,17 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
-import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
-import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
@@ -59,10 +55,6 @@ describe('POST /internal/code/submit', () => {
 
   beforeEach(async () => {
     // Mock HTTP endpoints to avoid hanging DNS lookups in CI
-    nock('http://actions-agent')
-      .persist()
-      .patch(/\/internal\/actions\/.*\/status/)
-      .reply(200, { success: true });
 
     nock('http://linear-agent:8086')
       .persist()
@@ -111,12 +103,6 @@ describe('POST /internal/code/submit', () => {
       } as unknown as WhatsAppSendPublisher,
     });
 
-    const actionsAgentClient = createActionsAgentClient({
-      baseUrl: 'http://actions-agent',
-      internalAuthToken: 'test-token',
-      logger,
-    });
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -136,14 +122,9 @@ describe('POST /internal/code/submit', () => {
       whatsappNotifier,
       logChunkRepo: _logChunkRepo,
       logLineRepo,
-      actionsAgentClient,
       linearAgentClient,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -198,11 +179,9 @@ describe('POST /internal/code/submit', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       logLineRepo: LogLineRepository;
-      actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
       linearIssueService: LinearIssueService;
-      statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
@@ -463,7 +442,7 @@ describe('POST /internal/code/submit', () => {
 
   it('returns 424 when user has no workers configured', async () => {
     // No workers seeded for test-user-id — getSettings returns null (no doc),
-    // which processCodeAction treats the same as empty workers → worker_not_configured
+    // which direct task submission treats the same as empty workers → worker_not_configured
 
     const response = await app.inject({
       method: 'POST',

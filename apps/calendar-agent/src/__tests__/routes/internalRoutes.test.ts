@@ -333,7 +333,7 @@ describe('Internal Routes', () => {
         messageId: 'msg-123',
         publishTime: '2025-01-15T10:00:00Z',
       },
-      subscription: 'projects/test/subscriptions/calendar-preview-generate',
+      subscription: 'projects/test/subscriptions/calendar-event-preview-generate',
     });
 
     it('generates preview successfully from valid Pub/Sub message', async () => {
@@ -365,7 +365,7 @@ describe('Internal Routes', () => {
           messageId: 'msg-123',
           publishTime: '2025-01-15T10:00:00Z',
         },
-        subscription: 'projects/test/subscriptions/calendar-preview-generate',
+        subscription: 'projects/test/subscriptions/calendar-event-preview-generate',
       };
 
       const response = await app.inject({
@@ -388,7 +388,7 @@ describe('Internal Routes', () => {
           messageId: 'msg-123',
           publishTime: '2025-01-15T10:00:00Z',
         },
-        subscription: 'projects/test/subscriptions/calendar-preview-generate',
+        subscription: 'projects/test/subscriptions/calendar-event-preview-generate',
       };
 
       const response = await app.inject({

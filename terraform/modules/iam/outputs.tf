@@ -8,8 +8,6 @@ output "service_accounts" {
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
     fishing_assistant_service    = google_service_account.fishing_assistant_service.email
     research_agent               = google_service_account.research_agent.email
-    commands_agent               = google_service_account.commands_agent.email
-    actions_agent                = google_service_account.actions_agent.email
     image_service                = google_service_account.image_service.email
     notes_agent                  = google_service_account.notes_agent.email
     app_settings_service         = google_service_account.app_settings_service.email
@@ -57,16 +55,6 @@ output "fishing_assistant_service_sa" {
 output "research_agent_sa" {
   description = "Research Agent service account email"
   value       = google_service_account.research_agent.email
-}
-
-output "commands_agent_sa" {
-  description = "Commands Agent service account email"
-  value       = google_service_account.commands_agent.email
-}
-
-output "actions_agent_sa" {
-  description = "Actions Agent service account email"
-  value       = google_service_account.actions_agent.email
 }
 
 output "image_service_sa" {

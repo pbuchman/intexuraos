@@ -250,8 +250,6 @@ ${feedback.trim()}
     parentTaskId: originalTask.id,
     followUpReason: 'user_feedback' as const,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
-    ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
-    ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
     ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
     ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
     agentType,

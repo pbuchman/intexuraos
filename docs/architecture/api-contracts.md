@@ -221,8 +221,7 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 | `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | whatsapp-service             |
 | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | mobile-notifications-service |
 | `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | research-agent               |
-| `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | commands-agent               |
-| `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | actions-agent                |
+| `INTEXURAOS_INTEX_AGENT_OPENAPI_URL`                  | intex-agent                  |
 | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | image-service                |
 | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | notes-agent                  |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | app-settings-service         |

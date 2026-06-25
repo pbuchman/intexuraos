@@ -94,8 +94,6 @@ function taskToApiResponse(task: {
   createdAt: unknown;
   updatedAt: unknown;
   dispatchedAt?: unknown;
-  actionId?: string;
-  approvalEventId?: string;
   linearIssueId?: string;
   prNumber?: number;
   agentType?: AgentType;
@@ -151,8 +149,6 @@ function taskToApiResponse(task: {
   createdAt: string;
   updatedAt: string;
   dispatchedAt?: string;
-  actionId?: string;
-  approvalEventId?: string;
   linearIssueId?: string;
   prNumber?: number;
   agentType?: AgentType;
@@ -296,8 +292,6 @@ function taskToApiResponse(task: {
     createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
     updatedAt: timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '',
     ...(task.dispatchedAt !== undefined && { dispatchedAt: timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined) as string }),
-    ...(task.actionId !== undefined && { actionId: task.actionId }),
-    ...(task.approvalEventId !== undefined && { approvalEventId: task.approvalEventId }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     ...(task.agentType !== undefined && { agentType: task.agentType }),

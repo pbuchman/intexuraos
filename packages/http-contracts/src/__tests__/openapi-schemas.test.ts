@@ -145,6 +145,11 @@ describe('OpenAPI Schemas', () => {
       expect(contractComponentSchemas).not.toHaveProperty('TodosCreateTodoResponse');
     });
 
+    it('does not include retired command contract schemas', () => {
+      expect(contractComponentSchemas).not.toHaveProperty('CommandsCommandWithText');
+      expect(contractComponentSchemas).not.toHaveProperty('CommandsGetCommandData');
+    });
+
     it('includes generated schemas for internal client contracts', () => {
       expect((contractComponentSchemas.ServiceFeedback as { type?: string }).type).toBe('object');
       expect((contractComponentSchemas.NotesCreateNoteRequest as { type?: string }).type).toBe(

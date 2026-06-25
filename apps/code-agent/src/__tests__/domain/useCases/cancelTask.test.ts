@@ -2,7 +2,7 @@
  * Tests for the cancelTask use case (INT-1430).
  *
  * Mirrors the test shape of cancelTaskWithNonce.test.ts: each domain error code
- * has a dedicated assertion, the happy path verifies worker + status-mirror
+ * has a dedicated assertion, the happy path verifies worker
  * side effects, and the "best effort" branches (worker unreachable, no worker
  * credentials) are exercised so the handler never surfaces them to the caller.
  */
@@ -15,7 +15,6 @@ import { cancelTask } from '../../../domain/usecases/cancelTask.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
-import type { StatusMirrorService } from '../../../domain/services/statusMirrorService.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 
 describe('cancelTask', () => {
@@ -23,7 +22,6 @@ describe('cancelTask', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let workerSettingsRepo: WorkerSettingsRepository;
-  let statusMirrorService: StatusMirrorService;
 
   const baseTask: CodeTask = {
     id: 'task-123',
@@ -39,7 +37,6 @@ describe('cancelTask', () => {
     status: 'running',
     callbackReceived: false,
     dedupKey: 'dedup-key-123',
-    actionId: 'action-456',
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   } as CodeTask;
@@ -90,14 +87,10 @@ describe('cancelTask', () => {
       reorderWorkers: vi.fn(),
       updateTestResult: vi.fn(),
     } as unknown as WorkerSettingsRepository;
-
-    statusMirrorService = {
-      mirrorStatus: vi.fn().mockResolvedValue(undefined),
-    };
   });
 
   function deps(): Parameters<typeof cancelTask>[0] {
-    return { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, statusMirrorService };
+    return { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo };
   }
 
   it('returns task_not_found when the task does not exist', async () => {
@@ -113,7 +106,6 @@ describe('cancelTask', () => {
     }
     expect(codeTaskRepo.update).not.toHaveBeenCalled();
     expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
-    expect(statusMirrorService.mirrorStatus).not.toHaveBeenCalled();
   });
 
   it('returns not_owner when the requesting user does not own the task', async () => {
@@ -154,10 +146,9 @@ describe('cancelTask', () => {
       expect(result.error.code).toBe('internal_error');
     }
     expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
-    expect(statusMirrorService.mirrorStatus).not.toHaveBeenCalled();
   });
 
-  it('cancels the task, notifies the worker with credentials, and mirrors status', async () => {
+  it('cancels the task and notifies the worker with credentials', async () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
 
     const result = await cancelTask(deps(), {
@@ -176,11 +167,6 @@ describe('cancelTask', () => {
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'client-id',
       cfAccessClientSecret: 'client-secret',
-    });
-    expect(statusMirrorService.mirrorStatus).toHaveBeenCalledWith({
-      actionId: 'action-456',
-      taskStatus: 'cancelled',
-      traceId: 'trace-xyz',
     });
   });
 
@@ -211,8 +197,6 @@ describe('cancelTask', () => {
 
     expect(result.ok).toBe(true);
     expect(logger.warn).toHaveBeenCalled();
-    // Status mirror must still run so UI reflects the cancellation.
-    expect(statusMirrorService.mirrorStatus).toHaveBeenCalled();
   });
 
   it('skips worker credentials when the matching worker is disabled', async () => {

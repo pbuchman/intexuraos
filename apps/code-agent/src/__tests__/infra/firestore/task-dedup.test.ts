@@ -137,62 +137,7 @@ describe('checkDedupLayers', () => {
     expect(result.value).toBeNull();
   });
 
-  describe('Layer 0 (approvalEventId)', () => {
-    it('hits on existing approvalEventId', async () => {
-      await seed('task_existing', {
-        userId: 'u1',
-        status: 'queued',
-        approvalEventId: 'appr-1',
-        dedupKey: 'xx',
-        createdAt: Timestamp.fromDate(new Date('2025-06-01T00:00:00Z')),
-      });
-      const result = await runCheck(baseInput({ approvalEventId: 'appr-1' }));
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error.code).toBe('DUPLICATE_APPROVAL');
-      if (result.error.code === 'DUPLICATE_APPROVAL') {
-        expect(result.error.existingTaskId).toBe('task_existing');
-      }
-    });
-
-    it('skips Layer 0 when approvalEventId is undefined', async () => {
-      const result = await runCheck(baseInput());
-      expect(result.ok).toBe(true);
-    });
-  });
-
-  describe('Layer 1 (actionId)', () => {
-    it('hits on existing actionId', async () => {
-      await seed('task_a', {
-        userId: 'u1',
-        status: 'queued',
-        actionId: 'act-1',
-        dedupKey: 'xx',
-        createdAt: Timestamp.fromDate(new Date('2025-06-01')),
-      });
-      const result = await runCheck(baseInput({ actionId: 'act-1' }));
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error.code).toBe('DUPLICATE_ACTION');
-      if (result.error.code === 'DUPLICATE_ACTION') {
-        expect(result.error.existingTaskId).toBe('task_a');
-      }
-    });
-
-    it('no hit when actionId differs', async () => {
-      await seed('task_a', {
-        userId: 'u1',
-        status: 'queued',
-        actionId: 'other',
-        dedupKey: 'xx',
-        createdAt: Timestamp.fromDate(new Date('2025-06-01')),
-      });
-      const result = await runCheck(baseInput({ actionId: 'act-1' }));
-      expect(result.ok).toBe(true);
-    });
-  });
-
-  describe('Layer 2 (dedupKey + 5-minute window)', () => {
+  describe('dedupKey + 5-minute window', () => {
     it('hits when active task has same dedupKey within window', async () => {
       const now = new Date('2025-06-01T00:05:00Z');
       const dedupKey = generateDedupKey('u1', 'hello');

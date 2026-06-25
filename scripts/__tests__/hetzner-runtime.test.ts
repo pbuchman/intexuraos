@@ -185,10 +185,7 @@ describe('Hetzner nginx runtime config', () => {
     const config = readRequired(nginxConfigPath);
     const routes = [
       ['/internal/whatsapp/', 'whatsapp_service'],
-      ['/internal/actions/', 'actions_agent'],
-      ['/internal/actions', 'actions_agent'],
       ['/internal/llm/', 'research_agent'],
-      ['/internal/commands', 'commands_agent'],
       ['/internal/calendar/', 'calendar_agent'],
       ['/internal/bookmarks/', 'bookmarks_agent'],
       ['/internal/bookmarks', 'bookmarks_agent'],
@@ -207,7 +204,6 @@ describe('Hetzner nginx runtime config', () => {
       ['/internal/linear/sync-all', 'linear_agent'],
       ['/internal/linear/prune-issues', 'linear_agent'],
       ['/internal/notifications/', 'mobile_notifications_service'],
-      ['/internal/retry-pending', 'commands_agent'],
       ['/internal/drain-queue', 'code_agent'],
     ];
 
@@ -254,6 +250,15 @@ describe('Hetzner nginx runtime config', () => {
     expect(verifier).not.toContain(
       'intexuraos-mobile-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
+    const retiredCommandServiceAccount = `intexuraos-${retiredDashed(
+      'commands',
+      'agents'
+    )}-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com`;
+    const retiredActionServiceAccount = `intexuraos-${retiredDashed(
+      'actions'
+    )}-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com`;
+    expect(verifier).not.toContain(retiredCommandServiceAccount);
+    expect(verifier).not.toContain(retiredActionServiceAccount);
     expect(verifier).toContain('claims.email');
     expect(verifier).toContain('ngx.HTTP_FORBIDDEN');
     expect(verifier).toContain('ngx.req.clear_header("Authorization")');
@@ -702,19 +707,13 @@ describe('Hetzner async edge cutover', () => {
     for (const moduleName of [
       'pubsub_media_cleanup',
       'pubsub_whatsapp_webhook_process',
-      'pubsub_srt_transcription_completed',
-      'pubsub_commands_ingest',
       'pubsub_intex_message_ingest',
-      'pubsub_actions_queue',
       'pubsub_research_process',
       'pubsub_llm_analytics',
       'pubsub_llm_call',
       'pubsub_whatsapp_send',
-      'pubsub_approval_reply',
       'pubsub_bookmark_enrich',
       'pubsub_bookmark_summarize',
-      'pubsub_calendar_preview',
-      'pubsub_transcription_completed',
     ]) {
       const moduleBody = devTerraform.split(`module "${moduleName}" {`)[1]?.split('\n}')[0] ?? '';
       expect(moduleBody, moduleName).toContain(
@@ -738,13 +737,15 @@ describe('Hetzner async edge cutover', () => {
     expect(devTerraform).not.toContain(
       'resource "google_pubsub_subscription" "audio_stored_push" {\n  count'
     );
+    expect(devTerraform).toContain('resource "google_pubsub_topic" "transcription_completed"');
+    expect(devTerraform).not.toContain(
+      ['internal', 'whatsapp', 'pubsub', 'transcription-completed'].join('/')
+    );
 
     for (const schedulerResource of [
       'mobile_notifications_digest_yesterday',
       'linear_sync_hourly',
       'linear_issues_prune_hourly',
-      'retry_pending_commands',
-      'retry_pending_actions',
       'drain_task_queue',
       'merge_conflict_reconcile',
       'merge_queue_tick',
@@ -977,13 +978,8 @@ describe('Hetzner secret loader', () => {
       'intexuraos-llm-analytics-prod-hetzner',
       'intexuraos-whatsapp-webhook-process-prod-hetzner',
       'intexuraos-bookmark-enrich-prod-hetzner',
-      'intexuraos-actions-queue-prod-hetzner',
-      'intexuraos-commands-ingest-prod-hetzner',
-      'intexuraos-approval-reply-prod-hetzner',
-      'intexuraos-calendar-preview-prod-hetzner',
       'intexuraos-research-process-prod-hetzner',
       'intexuraos-llm-call-prod-hetzner',
-      'intexuraos-srt-transcription-completed-prod-hetzner',
     ]) {
       expect(hetznerImports).toContain(importId);
     }

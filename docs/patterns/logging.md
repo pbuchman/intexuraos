@@ -114,8 +114,8 @@ const notesServiceClient = createNotesServiceHttpClient({
 
 **Examples:**
 
-- `apps/actions-agent/src/infra/http/notesServiceHttpClient.ts`
-- `apps/commands-agent/src/infra/user/userServiceClient.ts`
+- `apps/bookmarks-agent/src/infra/http/webAgentHttpClient.ts`
+- `apps/intex-agent/src/infra/http/notesAgentHttpClient.ts`
 
 ---
 

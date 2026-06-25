@@ -289,8 +289,6 @@ function buildCreateTaskInput(params: {
     repository: params.repository,
     baseBranch: params.baseBranch,
     traceId: params.eventId,
-    actionId: `merge-conflict/${params.repository}/${String(params.prNumber)}/${params.eventId}`,
-    approvalEventId: params.eventId,
     prNumber: params.prNumber,
     webhookSecret: params.webhookSecret,
     agentType: 'pull_request',

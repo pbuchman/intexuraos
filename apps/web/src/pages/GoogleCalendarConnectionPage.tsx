@@ -149,8 +149,8 @@ export function GoogleCalendarConnectionPage(): React.JSX.Element {
           <Card title="Connect Google Calendar">
             <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
               Connect your Google account to allow IntexuraOS to create and manage calendar events
-              on your behalf. This enables voice commands like &quot;schedule a meeting&quot; to
-              work with your calendar.
+              on your behalf. This enables WhatsApp text requests like &quot;schedule a meeting&quot;
+              to work with your calendar.
             </p>
 
             <div className="bg-slate-50 rounded-lg p-4 mb-4 dark:bg-slate-700">

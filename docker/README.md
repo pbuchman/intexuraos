@@ -62,17 +62,17 @@ The bridge reads topic-to-endpoint mappings from `tools/pubsub-ui/topics.json`:
 
 ```json
 {
-  "actions-queue": {
-    "endpoint": "http://localhost:8118/internal/actions/process",
-    "description": "Process queued actions"
+  "intex-message-ingest": {
+    "endpoint": "http://localhost:8134/internal/intex-agent/messages",
+    "description": "Route WhatsApp text messages into Intex"
   }
 }
 ```
 
-When a message is published to `actions-queue`, pubsub-ui:
+When a message is published to `intex-message-ingest`, pubsub-ui:
 
 1. Pulls the message from the emulator
-2. POSTs it to `http://localhost:8118/internal/actions/process`
+2. POSTs it to `http://localhost:8134/internal/intex-agent/messages`
 3. Acknowledges the message after successful delivery
 
 ## Environment Variables
@@ -132,7 +132,7 @@ docker compose -f docker/docker-compose.local.yaml up -d --build
 **Fix:** Restart the affected service after pubsub-ui is fully running:
 
 ```bash
-pnpm exec pm2 restart actions-agent
+pnpm exec pm2 restart <service-name>
 ```
 
 ### Verifying Pub/Sub is working
@@ -145,7 +145,7 @@ curl http://localhost:8105/health | jq '.topics | length'
 # 2. Publish a test message
 curl -X POST http://localhost:8105/publish \
   -H "Content-Type: application/json" \
-  -d '{"topic": "actions-queue", "data": {"type": "test"}}'
+  -d '{"topic": "intex-message-ingest", "data": {"type": "intex.message.ingest", "userId": "test-user", "message": "create a note", "sourceType": "whatsapp_text", "whatsappMessageId": "wamid.test", "whatsappSender": "+15551234567"}}'
 
 # 3. Check pubsub-ui logs for forwarding
 docker compose -f docker/docker-compose.local.yaml logs pubsub-ui --tail 10

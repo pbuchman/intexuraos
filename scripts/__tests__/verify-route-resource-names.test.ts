@@ -47,11 +47,11 @@ function writeManifest(rootDir: string): void {
           serviceUrl: 'http://localhost:8114',
         },
         {
-          name: 'actions-agent',
-          envSuffix: 'ACTIONS_AGENT',
-          apiPath: '/api/actions',
-          proxyTarget: 'http://localhost:8118',
-          serviceUrl: 'http://localhost:8118',
+          name: 'calendar-agent',
+          envSuffix: 'CALENDAR_AGENT',
+          apiPath: '/api/calendar',
+          proxyTarget: 'http://localhost:8125',
+          serviceUrl: 'http://localhost:8125',
         },
         {
           name: 'code-agent',
@@ -305,17 +305,17 @@ export async function listCodeTasks(config, query, accessToken) {
     expect(result.stderr).toMatch(/\/code\/tasks/);
   });
 
-  it('fails action-config service-base entries that repeat the service mount resource', () => {
+  it('fails YAML service-base entries that repeat the service mount resource', () => {
     writeFixture(
       rootDir,
-      'apps/web/src/config/action-config.yaml',
+      'apps/web/src/config/calendar-config.yaml',
       `
-actions:
-  approve:
+calendar:
+  preview:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /calendar/events
       method: POST
-      baseUrl: \${INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: \${INTEXURAOS_CALENDAR_AGENT_URL}
 `
     );
 
@@ -323,8 +323,8 @@ actions:
 
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/action-config/);
-    expect(result.stderr).toMatch(/INTEXURAOS_ACTIONS_AGENT_URL/);
-    expect(result.stderr).toMatch(/\/actions\/\{actionId\}\/execute/);
+    expect(result.stderr).toMatch(/INTEXURAOS_CALENDAR_AGENT_URL/);
+    expect(result.stderr).toMatch(/\/calendar\/events/);
   });
 
   it('fails e2e code-agent service-base calls that repeat the service mount resource', () => {

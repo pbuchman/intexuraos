@@ -11,7 +11,7 @@ graph TB
     subgraph "External"
         Client[Web Dashboard]
         WA[WhatsApp Service]
-        Actions[Actions Agent]
+        Intex[Intex Agent]
     end
 
     subgraph "Bookmarks Agent"
@@ -102,9 +102,9 @@ sequenceDiagram
 
 ### WhatsApp Bookmark Recovery Boundary
 
-WhatsApp webhook recovery is owned by whatsapp-service, but bookmarks-agent provides the idempotent bookmark boundary it depends on. WhatsApp text messages publish `command.ingest` events; command handling calls `POST /internal/bookmarks` for bookmark saves. If that upstream path is replayed for the same user and URL, bookmarks-agent checks `findByUserIdAndUrl()` before creating and returns `409 CONFLICT` with `error.details.existingBookmarkId`, allowing callers to recover the existing bookmark instead of duplicating it.
+WhatsApp webhook recovery is owned by whatsapp-service, but bookmarks-agent provides the idempotent bookmark boundary it depends on. WhatsApp text messages publish `intex.message.ingest` events; Intex calls `POST /internal/bookmarks` for bookmark saves. If that upstream path is replayed for the same user and URL, bookmarks-agent checks `findByUserIdAndUrl()` before creating and returns `409 CONFLICT` with `error.details.existingBookmarkId`, allowing callers to recover the existing bookmark instead of duplicating it.
 
-PR #2127 made `command.ingest` required in whatsapp-service, marks failed command-ingest publishes as retryable, and adds `/internal/whatsapp/webhooks/retry-pending` on whatsapp-service for pending/retryable webhook events. No bookmarks-agent endpoint or environment variable was added for that recovery path.
+Text ingestion failures are handled by whatsapp-service and Intex. No bookmarks-agent endpoint or environment variable is needed for that recovery path.
 
 ## Recent Changes
 

@@ -231,8 +231,6 @@ describe('toFirestoreDoc', () => {
     const doc = toFirestoreDoc(
       {
         ...baseCreate(),
-        actionId: 'a1',
-        approvalEventId: 'ap1',
         linearIssueId: 'L1',
         webhookSecret: 's1',
         retriedFrom: 'task_orig',
@@ -262,8 +260,6 @@ describe('toFirestoreDoc', () => {
       },
       opts
     );
-    expect(doc.actionId).toBe('a1');
-    expect(doc.approvalEventId).toBe('ap1');
     expect(doc.linearIssueId).toBe('L1');
     expect(doc.webhookSecret).toBe('s1');
     expect(doc.retriedFrom).toBe('task_orig');
@@ -296,8 +292,6 @@ describe('toFirestoreDoc', () => {
 
   it('omits optional fields when not provided', () => {
     const doc = toFirestoreDoc(baseCreate(), opts);
-    expect(doc.actionId).toBeUndefined();
-    expect(doc.approvalEventId).toBeUndefined();
     expect(doc.linearIssueId).toBeUndefined();
     expect(doc.webhookSecret).toBeUndefined();
     expect(doc.retriedFrom).toBeUndefined();

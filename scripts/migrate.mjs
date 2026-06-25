@@ -112,6 +112,7 @@ async function discoverMigrations() {
       indexes: module.indexes ?? [],
       fieldOverrides: module.fieldOverrides ?? [],
       removedCollectionGroups: module.removedCollectionGroups ?? [],
+      removedRulePaths: module.removedRulePaths ?? [],
       rules: module.rules ?? {},
     });
   }

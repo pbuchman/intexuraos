@@ -277,8 +277,6 @@ export interface CodeTask {
 
   // Correlation and idempotency
   traceId: string;              // End-to-end correlation ID (design line 1998)
-  actionId?: string;            // Link to parent action (for dedup, design line 1539)
-  approvalEventId?: string;     // Unique per approval (design lines 1532-1536)
   retriedFrom?: string;         // Original taskId if retry
 
   // User and worker info

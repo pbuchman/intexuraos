@@ -52,26 +52,20 @@ export async function storeLogChunks(
   // `logger` is the use-case-scoped logger; the route-scoped `requestLog`
   // is kept for per-request context logs (preserves pre-existing log shape
   // exactly).
-  const { body, requestLog, traceId, taskFormatterStates } = input;
-  const { logChunkRepo, logLineRepo, codeTaskRepo, statusMirrorService } = getServices();
+  const { body, requestLog, taskFormatterStates } = input;
+  const { logChunkRepo, logLineRepo, codeTaskRepo } = getServices();
   const { taskId, chunks } = body;
 
   logger.debug({ taskId, count: chunks.length }, 'storeLogChunks: processing batch');
   requestLog.debug({ taskId, count: chunks.length }, 'Storing log chunks');
 
   // First log delivery for this task — task might still be dispatched.
-  // Update to running and mirror to action.
+  // Update to running so the task list reflects active execution.
   let formatterEntry = taskFormatterStates.get(taskId);
   if (formatterEntry === undefined) {
     const taskResult = await codeTaskRepo.findById(taskId);
     if (taskResult.ok && taskResult.value.status === 'dispatched') {
       await codeTaskRepo.update(taskId, { status: 'running' });
-      // Mirror running status to action (non-fatal)
-      await statusMirrorService.mirrorStatus({
-        actionId: taskResult.value.actionId,
-        taskStatus: 'running',
-        traceId,
-      });
     }
     if (taskResult.ok) {
       const resolvedFormatterEntry = createTaskFormatterEntry(taskResult.value.workerType);

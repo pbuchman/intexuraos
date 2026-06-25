@@ -16,7 +16,7 @@ In v3.6.0, LLM pricing and usage cost analytics were migrated to the dedicated `
 
 Multiple services poll the app-settings-service health endpoint before starting. This dependency chain ensures that shared infrastructure (Firestore, secrets) is verified before downstream services begin accepting traffic.
 
-**Example:** When the dev environment starts, user-service, commands-agent, actions-agent, and research-agent all wait for app-settings-service to report healthy before booting.
+**Example:** When the dev environment starts, user-service, intex-agent, and research-agent all wait for app-settings-service to report healthy before booting.
 
 ### OpenAPI Service Catalog Participant
 
