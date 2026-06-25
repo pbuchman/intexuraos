@@ -65,6 +65,12 @@ variable "activate_hetzner_async_consumers" {
   default     = false
 }
 
+variable "enable_retired_async_consumer_cleanup" {
+  description = "When true, runs the one-time guarded cleanup for stale prod-hetzner Scheduler jobs and Pub/Sub push subscriptions that no longer appear in the active Hetzner async maps."
+  type        = bool
+  default     = false
+}
+
 variable "hetzner_location" {
   description = "Hetzner location for the prod VM and primary IPv4."
   type        = string
