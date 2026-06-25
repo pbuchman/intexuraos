@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, GitBranch, Layers, Shield, Terminal } from 'lucide-react';
+import { Bot, FileCode, GitBranch, Layers, Shield, Terminal } from 'lucide-react';
 import { ModernCard } from './ModernCard.js';
 
 export function EngineeringSection(): React.JSX.Element {
@@ -55,7 +55,7 @@ export function EngineeringSection(): React.JSX.Element {
               details, and each service in control of its data instead of sharing hidden state.
             </p>
           </ModernCard>
-          <ModernCard title="Prompt Versioning" icon={Layers}>
+          <ModernCard title="Prompt Versioning" icon={FileCode}>
             <p className="text-neutral-600">
               Agent prompt versioning makes behavior reviewable. System prompts, repair prompts, and
               execution lessons evolve as code artifacts rather than invisible runtime folklore.

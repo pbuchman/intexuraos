@@ -32,16 +32,29 @@ describe('homepage showcase messaging', () => {
 
   it('adds an agentic patterns section to the homepage flow', () => {
     const sectionPath = resolve(__dirname, '..', 'AgentPatternsSection.tsx');
+    const section = readFileSync(sectionPath, 'utf-8');
     const homePage = readFileSync(resolve(__dirname, '../../../pages/HomePage.tsx'), 'utf-8');
 
     expect(existsSync(sectionPath)).toBe(true);
     expect(homePage).toContain('AgentPatternsSection');
+    expect(section).toContain('Direct-tool action agent');
+    expect(section).toContain('Citation-validated RAG');
+    expect(section).toContain('Autonomous code execution');
+    expect(section).toContain('safe specialists');
+    expect(section).toContain('Agentic Patterns In Production');
   });
 
   it('uses precise claims for code execution, research, and engineering proof', () => {
+    const voice = readHomeFile('VoiceSection.tsx');
     const selfBuilding = readHomeFile('SelfBuildingSection.tsx');
     const council = readHomeFile('CouncilSection.tsx');
     const engineering = readHomeFile('EngineeringSection.tsx');
+    const about = readHomeFile('AboutSection.tsx');
+
+    expect(voice).toContain('Direct-Tool Intelligence');
+    expect(voice).toContain('Safe action out');
+    expect(voice).toContain('Unsupported requests get a clear response');
+    expect(voice).not.toContain('Text-First Intelligence');
 
     expect(selfBuilding).toContain('independent verification');
     expect(selfBuilding).not.toContain('Cursor and Copilot send your code to the cloud');
@@ -52,5 +65,9 @@ describe('homepage showcase messaging', () => {
     expect(engineering).toContain('prompt versioning');
     expect(engineering).toContain('service ownership');
     expect(engineering).toContain('cross-LLM verification');
+
+    expect(about).toContain('agents as infrastructure, not demos');
+    expect(about).toContain('safe specialist agents');
+    expect(about).not.toContain('refuses to accept');
   });
 });
