@@ -9,9 +9,9 @@ import {
 
 export function VoiceSection(): React.JSX.Element {
   const actions = [
-    { input: 'Fix the Safari login redirect', output: 'Code change created, tests passing, project tracker updated', icon: Code2, tag: 'CODE' },
-    { input: 'Research quantum computing breakthroughs', output: '5-model synthesis with citations and disagreement analysis', icon: Brain, tag: 'RESEARCH' },
-    { input: 'Schedule sync with engineering Tuesday 2pm', output: 'Calendar event drafted with the right title, time, and guests', icon: Layers, tag: 'CALENDAR' },
+    { input: 'Fix the Safari login redirect', output: 'Code task starts in planning mode for design review', icon: Code2, tag: 'CODE' },
+    { input: 'Research quantum computing breakthroughs', output: 'Multi-model synthesis with citations and disagreement analysis', icon: Brain, tag: 'RESEARCH' },
+    { input: 'Schedule sync with engineering Tuesday 2pm', output: 'Calendar event created when title, date, and time are clear', icon: Layers, tag: 'CALENDAR' },
     { input: 'Save this link about TypeScript 5.0', output: 'AI summary generated, metadata extracted, bookmarked', icon: MessageSquare, tag: 'LINK' },
     { input: 'Interesting thought about microservice boundaries', output: 'Note created with tags, searchable later', icon: MessageSquare, tag: 'NOTE' },
   ];
@@ -21,21 +21,21 @@ export function VoiceSection(): React.JSX.Element {
       <div className="mx-auto max-w-7xl">
         <div className="mb-16 max-w-2xl">
           <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-cyan-600">
-            Text-First Intelligence
+            Direct-Tool Intelligence
           </p>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            Type.{' '}
+            Text in.{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              It understands.
+              Safe action out.
             </span>
           </h2>
           <p className="mb-6 text-lg leading-relaxed text-neutral-600">
-            Five tool types. One interface. Send a WhatsApp text message.
-            The system figures out what you meant — even when the wording is imprecise — and
-            routes it to the right specialist. Polish and English supported.
+            Five tool types. One mobile interface. Send a WhatsApp text message and Intex
+            exposes only the supported action that fits: note, event, research draft, bookmark,
+            or code task. Polish and English are first-class paths.
           </p>
           <p className="text-sm leading-relaxed text-neutral-500">
-            This is not one AI that tries to do everything. It is 24 services, each built for a single domain.
+            Unsupported requests get a clear response instead of being forced through a generic workflow.
           </p>
         </div>
 
@@ -78,7 +78,8 @@ export function VoiceSection(): React.JSX.Element {
             <div>
               <p className="text-sm font-semibold text-cyan-700">Fishing Assistant</p>
               <p className="mt-1 text-sm text-neutral-600">
-                Plan sessions, inspect digests, and keep chat history grounded in the fishing knowledge base with source citations.
+                Ask questions against saved knowledge, digest summaries, and recent message context.
+                Answers are grounded in retrieved evidence and validated citations.
               </p>
             </div>
           </div>
