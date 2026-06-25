@@ -14,10 +14,14 @@ export function AboutSection(): React.JSX.Element {
           </span>
         </h2>
         <p className="mx-auto mb-8 max-w-2xl text-lg leading-relaxed text-neutral-400">
-          IntexuraOS is what happens when a single engineer refuses to accept that one person can&apos;t
-          build and maintain a 24-service distributed system (plus 22 shared packages) with enterprise-grade reliability.
-          The answer isn&apos;t working harder. It&apos;s building agents that work for you — then building
-          agents that build agents.
+          IntexuraOS is what happens when one engineer treats agents as infrastructure, not demos.
+          It is a working personal product and an engineering artifact at the same time: distributed
+          system, agent platform, execution harness, and portfolio proof in one codebase.
+        </p>
+        <p className="mx-auto mb-8 max-w-2xl text-base leading-relaxed text-neutral-500">
+          The point is not that one person did everything manually. The point is that the system
+          captures intent, routes it to safe specialist agents, verifies the result, and leaves a trail
+          that another engineer can inspect.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <a

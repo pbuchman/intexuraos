@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Bot, Layers, Shield, Terminal } from 'lucide-react';
+import { Bot, GitBranch, Layers, Shield, Terminal } from 'lucide-react';
 import { ModernCard } from './ModernCard.js';
 
 export function EngineeringSection(): React.JSX.Element {
@@ -23,18 +23,19 @@ export function EngineeringSection(): React.JSX.Element {
             The compiler and the test suite are both gates that must pass before code ships.
           </p>
           <p className="text-sm leading-relaxed text-neutral-500">
-            This section is for developers evaluating the engineering standards behind the platform.
+            This section is for developers evaluating the engineering standards behind the platform:
+            prompt versioning, service ownership, Terraform, typed results, and cross-LLM verification.
           </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <ModernCard title="Every Path Tested" icon={Shield}>
+          <ModernCard title="Coverage Gate" icon={Shield}>
             <p className="text-neutral-600">
-              100% branch coverage. CI fails on any unaccounted branch. Every exemption requires a category
-              and justification. The test suite is the specification — if it passes, it works.
+              Branch coverage is enforced in CI. Every exemption requires a category and justification,
+              turning the test suite into executable documentation instead of a vanity metric.
             </p>
           </ModernCard>
-          <ModernCard title="The Compiler Is a Gate" icon={Layers}>
+          <ModernCard title="Strict TypeScript" icon={Layers}>
             <p className="text-neutral-600">
               Strict TypeScript catches what tests might miss:{' '}
               <code className="rounded bg-neutral-100 px-1 text-xs">noUncheckedIndexedAccess</code>,{' '}
@@ -42,36 +43,34 @@ export function EngineeringSection(): React.JSX.Element {
               <code className="rounded bg-neutral-100 px-1 text-xs">strictBooleanExpressions</code>.
             </p>
           </ModernCard>
-          <ModernCard title="Swap Any Part" icon={Layers}>
+          <ModernCard title="Typed Results" icon={Bot}>
             <p className="text-neutral-600">
-              Hexagonal architecture: domain logic is pure — no database imports, no HTTP frameworks.
-              Firestore, WhatsApp, GitHub are just adapters. Swap any without touching business rules.
+              Domain operations return explicit success or typed failure. Agents and adapters cannot hide
+              uncertainty behind exceptions, undefined values, or unstructured model text.
             </p>
           </ModernCard>
-          <ModernCard title="Extreme Ownership" icon={Shield}>
-            <p className="mb-3 text-neutral-600">
-              Based on Jocko Willink&apos;s principles. CI failure = your problem. No &quot;other services
-              failed&quot; rationalizations. Discovery creates ownership.
-            </p>
-            <a
-              href="https://github.com/pbuchman/intexuraos/blob/main/docs/philosophy/extreme-ownership.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm font-semibold text-cyan-600 transition-colors hover:text-cyan-700"
-            >
-              Read Philosophy <ArrowRight className="h-3.5 w-3.5" />
-            </a>
-          </ModernCard>
-          <ModernCard title="AI-Native Development" icon={Bot}>
+          <ModernCard title="Service Ownership" icon={GitBranch}>
             <p className="text-neutral-600">
-              AI isn&apos;t a feature — it&apos;s a team member. Custom skills for Linear issues, Sentry triage,
-              documentation generation. Cross-linking between all artifacts is automatic.
+              Explicit service ownership keeps domain logic pure, adapters responsible for integration
+              details, and each service in control of its data instead of sharing hidden state.
+            </p>
+          </ModernCard>
+          <ModernCard title="Prompt Versioning" icon={Layers}>
+            <p className="text-neutral-600">
+              Agent prompt versioning makes behavior reviewable. System prompts, repair prompts, and
+              execution lessons evolve as code artifacts rather than invisible runtime folklore.
             </p>
           </ModernCard>
           <ModernCard title="Infrastructure as Code" icon={Terminal}>
             <p className="text-neutral-600">
               Everything in Terraform. Cloud Run, Cloud Functions, Pub/Sub, IAM — reproducible, auditable,
               version-controlled. No manual console clicks.
+            </p>
+          </ModernCard>
+          <ModernCard title="Cross-LLM Verification" icon={Bot}>
+            <p className="text-neutral-600">
+              A cross-LLM verification pass is used where judgment matters: independent model checks review
+              plans, research synthesis, and code-task outcomes before work is presented as complete.
             </p>
           </ModernCard>
         </div>

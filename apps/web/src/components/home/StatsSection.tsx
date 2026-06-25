@@ -12,7 +12,7 @@ export function StatsSection(): React.JSX.Element {
           <StatBlock value="24" label="Services" />
           <StatBlock value="5" label="Direct Tools" />
           <StatBlock value="5" label="AI Providers" />
-          <StatBlock value="16" label="AI Models" />
+          <StatBlock value="15" label="AI Models" />
           <StatBlock value="1" label="Developer" />
         </div>
       </div>
