@@ -334,6 +334,33 @@ the activation. The `scripts/hetzner/cutover-gcp-edge.sh` helper prints the
 equivalent `gcloud` updates for audit or emergency use, but Terraform is the
 source of truth.
 
+## Retired Async Cleanup
+
+After removed app services are absent from PM2 on dev and production, use the
+guarded cleanup marker in `terraform/hetzner-prod/retired-async-cleanup.tf` to
+delete stale prod-Hetzner Scheduler jobs and Pub/Sub push subscriptions that no
+longer appear in the active async maps. The marker describes each target first
+and exits without deleting if the live endpoint differs from the Terraform
+inventory.
+
+Run the one-time cleanup with the normal Hetzner Terraform credentials:
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod apply \
+  -var='enable_retired_async_consumer_cleanup=true'
+```
+
+After the cleanup apply succeeds, return to the committed default so later
+plain applies do not keep a cleanup marker in state:
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod apply
+```
+
 ## Pre-Cutover Smoke Test
 
 Before changing DNS, every PM2 process must respond on localhost:
