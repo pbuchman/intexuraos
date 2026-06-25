@@ -83,7 +83,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'create_calendar_event',
       description:
-        'Use when the user wants a calendar event, appointment, meeting, scheduled block, or calendar item created. Ask a clarification before calling this tool if the title, date, time, start, or end is missing or ambiguous.',
+        'Use only when the user wants a calendar event, appointment, meeting, scheduled block, or calendar item created. Do not use to list, inspect, summarize, or answer questions about existing calendar events. Ask a clarification before calling this tool if the title, date, time, start, or end is missing or ambiguous.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -126,7 +126,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'create_research',
       description:
-        'Use when the user asks to research, investigate, compare, look up, or gather information. Creates a research draft for the user to review.',
+        'Use only when the user explicitly asks for a research draft, report, investigation, or comparison about an external topic. Do not use to inspect personal IntexuraOS data such as calendar, notes, bookmarks, code tasks, or WhatsApp history. Creates a research draft for the user to review.',
       parameters: {
         type: 'object',
         additionalProperties: false,

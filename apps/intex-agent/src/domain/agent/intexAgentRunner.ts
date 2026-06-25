@@ -4,7 +4,15 @@ import type {
   IntexAgentRunnerResult,
 } from '../messages/handleIncomingMessage.js';
 import type { IntexAgentSessionEvent, IntexAgentToolName } from '../sessions/types.js';
-import { createIntexAgentToolDefinitions, type IntexAgentToolExecutor } from './toolDefinitions.js';
+import {
+  createIntexAgentToolDefinitions,
+  type CreateCalendarEventToolArgs,
+  type CreateCodeTaskToolArgs,
+  type CreateLinkToolArgs,
+  type CreateNoteToolArgs,
+  type CreateResearchToolArgs,
+  type IntexAgentToolExecutor,
+} from './toolDefinitions.js';
 import { INTEX_AGENT_SYSTEM_PROMPT } from './systemPrompt.js';
 
 const SUPPORTED_CAPABILITIES =
@@ -18,10 +26,13 @@ export interface IntexAgentRunnerConfig {
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
   return {
     async run(input): Promise<IntexAgentRunnerResult> {
+      const executedToolNames: IntexAgentToolName[] = [];
       const result = await config.client.run({
         systemPrompt: INTEX_AGENT_SYSTEM_PROMPT.text,
         messages: buildMessages(input.events, input.message),
-        tools: createIntexAgentToolDefinitions(config.toolExecutor),
+        tools: createIntexAgentToolDefinitions(
+          createTrackingToolExecutor(config.toolExecutor, executedToolNames)
+        ),
         promptType: 'intex-agent-whatsapp-session',
         maxIterations: 5,
       });
@@ -33,7 +44,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
-      return parseRunnerContent(result.value.content);
+      return parseRunnerContent(result.value.content, executedToolNames);
     },
   };
 }
@@ -66,7 +77,10 @@ function messageFromEvent(event: IntexAgentSessionEvent): ToolCallingMessage | n
   return null;
 }
 
-function parseRunnerContent(content: string): IntexAgentRunnerResult {
+function parseRunnerContent(
+  content: string,
+  executedToolNames: IntexAgentToolName[]
+): IntexAgentRunnerResult {
   const parsed = parseJsonObject(content);
   if (parsed === null) {
     return malformedResult();
@@ -82,22 +96,72 @@ function parseRunnerContent(content: string): IntexAgentRunnerResult {
     return { outcome, reply };
   }
 
+  if (outcome === 'no_action') {
+    return { outcome, reply };
+  }
+
   if (outcome === 'unsupported') {
     return { outcome, reply };
   }
 
   if (outcome === 'completed') {
     const summary = parsed['summary'];
-    const toolName = parsed['toolName'];
+    const completedToolName = getCompletedToolName(executedToolNames);
+    if (completedToolName === undefined) {
+      return malformedResult();
+    }
+
     return {
       outcome,
       reply,
       ...(typeof summary === 'string' ? { summary } : {}),
-      ...(isSupportedToolName(toolName) ? { toolName } : {}),
+      toolName: completedToolName,
     };
   }
 
   return malformedResult();
+}
+
+function createTrackingToolExecutor(
+  executor: IntexAgentToolExecutor,
+  executedToolNames: IntexAgentToolName[]
+): IntexAgentToolExecutor {
+  return {
+    async createNote(args: CreateNoteToolArgs): Promise<string> {
+      executedToolNames.push('create_note');
+      return await executor.createNote(args);
+    },
+    async createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string> {
+      executedToolNames.push('create_calendar_event');
+      return await executor.createCalendarEvent(args);
+    },
+    async createResearch(args: CreateResearchToolArgs): Promise<string> {
+      executedToolNames.push('create_research');
+      return await executor.createResearch(args);
+    },
+    async createLink(args: CreateLinkToolArgs): Promise<string> {
+      executedToolNames.push('create_link');
+      return await executor.createLink(args);
+    },
+    async createCodeTask(args: CreateCodeTaskToolArgs): Promise<string> {
+      executedToolNames.push('create_code_task');
+      return await executor.createCodeTask(args);
+    },
+  };
+}
+
+function getCompletedToolName(executedToolNames: IntexAgentToolName[]): IntexAgentToolName | undefined {
+  const uniqueExecutedToolNames = [...new Set(executedToolNames)];
+  if (uniqueExecutedToolNames.length === 1) {
+    const [executedToolName] = uniqueExecutedToolNames as [IntexAgentToolName];
+    return executedToolName;
+  }
+
+  if (uniqueExecutedToolNames.length > 1) {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function parseJsonObject(content: string): Record<string, unknown> | null {
@@ -117,14 +181,4 @@ function malformedResult(): IntexAgentRunnerResult {
     outcome: 'unsupported',
     reply: `I could not safely understand that request. I can create ${SUPPORTED_CAPABILITIES}.`,
   };
-}
-
-function isSupportedToolName(toolName: unknown): toolName is IntexAgentToolName {
-  return (
-    toolName === 'create_note' ||
-    toolName === 'create_calendar_event' ||
-    toolName === 'create_research' ||
-    toolName === 'create_link' ||
-    toolName === 'create_code_task'
-  );
 }

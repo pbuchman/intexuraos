@@ -63,7 +63,45 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages).toEqual([
       {
         userId: 'user-1',
-        message: 'New session started.\n\nSaved that note.',
+        message: 'Saved that note.',
+        replyToMessageId: 'wamid-1',
+        correlationId: 'session-1',
+      },
+    ]);
+  });
+
+  it('keeps greeting sessions open without publishing lifecycle text', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'no_action',
+        reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    const result = await handleIncomingMessage(
+      message({ text: 'Cześć! Co u Ciebie?' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(result).toEqual({ sessionId: 'session-1' });
+    expect(repo.sessions[0]).toMatchObject({
+      id: 'session-1',
+      status: 'waiting_for_user',
+      startReason: 'no_active_session',
+    });
+    expect(repo.sessions[0]?.endedAt).toBeUndefined();
+    expect(repo.sessions[0]?.endReason).toBeUndefined();
+    expect(eventTypes(repo)).toEqual([
+      'session_started',
+      'user_message',
+      'assistant_message',
+    ]);
+    expect(replies.messages).toEqual([
+      {
+        userId: 'user-1',
+        message: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
         replyToMessageId: 'wamid-1',
         correlationId: 'session-1',
       },
@@ -76,7 +114,6 @@ describe('handleIncomingMessage', () => {
       {
         outcome: 'completed',
         reply: 'Created the calendar event.',
-        summary: 'Created dentist appointment.',
         toolName: 'create_calendar_event',
       },
     ]);
@@ -89,10 +126,11 @@ describe('handleIncomingMessage', () => {
 
     expect(repo.sessions[0]?.status).toBe('completed');
     expect(repo.sessions[0]?.activeTool).toBe('create_calendar_event');
+    expect(repo.sessions[0]?.summary).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')[0]).toMatchObject({
       toolName: 'create_calendar_event',
     });
-    expect(replies.messages[0]?.message).toBe('New session started.\n\nCreated the calendar event.');
+    expect(replies.messages[0]?.message).toBe('Created the calendar event.');
   });
 
   it('asks for clarification and keeps the session waiting when a calendar date is missing', async () => {
@@ -117,9 +155,7 @@ describe('handleIncomingMessage', () => {
       'clarification_requested',
       'assistant_message',
     ]);
-    expect(replies.messages[0]?.message).toBe(
-      'New session started.\n\nWhich day should I schedule it for?'
-    );
+    expect(replies.messages[0]?.message).toBe('Which day should I schedule it for?');
   });
 
   it('continues a waiting session when the user answers a clarification', async () => {
@@ -195,7 +231,7 @@ describe('handleIncomingMessage', () => {
       'session_closed',
     ]);
     expect(replies.messages[0]?.message).toBe(
-      'New session started.\n\nI do not support that yet. I can create notes and calendar events.'
+      'I do not support that yet. I can create notes and calendar events.'
     );
   });
 
@@ -289,11 +325,11 @@ describe('handleIncomingMessage', () => {
     ]);
     expect(runner.calls).toEqual([]);
     expect(replies.messages[0]?.message).toBe(
-      'Previous session superseded. New session started.\n\nWhat would you like me to help with? I can create notes and calendar events.'
+      'What would you like me to help with? I can create notes, calendar events, research drafts, bookmarks, and code tasks.'
     );
   });
 
-  it('expires a stale session, starts a new one, and completes without optional summary metadata', async () => {
+  it('expires a stale session and rejects completed runner results without a tool name', async () => {
     const repo = new FakeSessionRepository();
     repo.seedSession({
       id: 'session-stale',
@@ -325,15 +361,15 @@ describe('handleIncomingMessage', () => {
       },
       {
         id: 'session-1',
-        status: 'completed',
-        endReason: 'tool_completed',
+        status: 'unsupported',
+        endReason: 'unsupported_request',
       },
     ]);
-    expect(repo.sessions[1]?.activeTool).toBeUndefined();
-    expect(repo.sessions[1]?.summary).toBeUndefined();
-    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([{}]);
+    expect(repo.sessions[1]?.status).toBe('unsupported');
+    expect(repo.sessions[1]?.endReason).toBe('unsupported_request');
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
     expect(replies.messages[0]?.message).toBe(
-      'Previous session expired. New session started.\n\nSaved it.'
+      'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.'
     );
   });
 });

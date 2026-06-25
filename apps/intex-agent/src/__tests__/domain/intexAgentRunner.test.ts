@@ -12,7 +12,10 @@ import type { IntexAgentSession, IntexAgentSessionEvent } from '../../domain/ses
 
 describe('createIntexAgentRunner', () => {
   it('uses the versioned prompt, transcript messages, and supported tools', async () => {
-    const client = new FakeToolCallingClient([
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'The door code is 1234.', title: 'Door code' },
+    }, [
       ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' })),
     ]);
 
@@ -37,11 +40,14 @@ describe('createIntexAgentRunner', () => {
       toolName: 'create_note',
     });
     expect(client.calls[0]?.systemPrompt).toBe(INTEX_AGENT_SYSTEM_PROMPT.text);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('2.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('2.1.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
     expect(client.calls[0]?.systemPrompt).toContain('execution');
+    expect(client.calls[0]?.systemPrompt).toContain('Return no_action');
+    expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
+    expect(client.calls[0]?.systemPrompt).toContain('what is in my calendar');
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'create event tomorrow' },
       { role: 'assistant', content: 'What time?' },
@@ -89,6 +95,25 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('normalizes no-action responses for greetings without closing the session', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply: 'Cześć! W czym mogę pomóc?',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({ session: session(), events: [], message: 'Cześć! Co u Ciebie?' })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'Cześć! W czym mogę pomóc?',
+    });
+  });
+
   it('returns unsupported when the model result is malformed instead of executing a hidden action', async () => {
     const client = new FakeToolCallingClient([
       ok({
@@ -110,8 +135,18 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('ignores malformed historical events when building the transcript', async () => {
-    const client = new FakeToolCallingClient([
-      ok(toolResult({ outcome: 'completed', reply: 'Done.', summary: 'Saved note' })),
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'Parking spot is B12.' },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          summary: 'Saved note',
+          toolName: 'create_note',
+        })
+      ),
     ]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
@@ -128,6 +163,7 @@ describe('createIntexAgentRunner', () => {
       outcome: 'completed',
       reply: 'Done.',
       summary: 'Saved note',
+      toolName: 'create_note',
     });
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'remember the parking spot' },
@@ -185,7 +221,10 @@ describe('createIntexAgentRunner', () => {
   it.each(['create_research', 'create_link', 'create_code_task'] as const)(
     'keeps supported completed tool names: %s',
     async (toolName) => {
-      const client = new FakeToolCallingClient([
+      const client = new ToolExecutingFakeToolCallingClient({
+        toolName,
+        args: toolArgsFor(toolName),
+      }, [
         ok(
           toolResult({
             outcome: 'completed',
@@ -208,7 +247,112 @@ describe('createIntexAgentRunner', () => {
     }
   );
 
-  it('drops unsupported completed tool names from normalized responses', async () => {
+  it('uses the executed tool name when the final model JSON omits toolName', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_research',
+      args: {
+        title: 'Calendar events tomorrow',
+        prompt: 'Prepare a research draft about tomorrow calendar events.',
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Created a research draft.',
+          summary: 'Calendar events tomorrow',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Chciałbym zobaczyć, jakie mam wydarzenia w kalendarzu na jutro',
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Created a research draft.',
+      summary: 'Calendar events tomorrow',
+      toolName: 'create_research',
+    });
+  });
+
+  it('rejects completed responses when no tool actually ran and no supported toolName is present', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          summary: 'Handled request.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({ session: session(), events: [], message: 'Cześć! Co u Ciebie?' })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
+    });
+  });
+
+  it('rejects completed responses when the model claims a supported toolName but no tool ran', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          summary: 'Handled request.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({ session: session(), events: [], message: 'remember this' })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
+    });
+  });
+
+  it('rejects completed responses when multiple tools ran in one turn', async () => {
+    const client = new ToolExecutingFakeToolCallingClient([
+      {
+        toolName: 'create_note',
+        args: { title: 'Trip idea', content: 'Visit Lisbon' },
+      },
+      {
+        toolName: 'create_link',
+        args: { url: 'https://example.com', title: 'Example' },
+      },
+    ], [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          summary: 'Handled multiple requests.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({ session: session(), events: [], message: 'remember Lisbon and save example.com' })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
+    });
+  });
+
+  it('rejects unsupported completed tool names from normalized responses', async () => {
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
@@ -224,9 +368,9 @@ describe('createIntexAgentRunner', () => {
     await expect(
       runner.run({ session: session(), events: [], message: 'remember this' })
     ).resolves.toEqual({
-      outcome: 'completed',
-      reply: 'Done.',
-      summary: 'Handled request.',
+      outcome: 'unsupported',
+      reply:
+        'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
     });
   });
 
@@ -286,6 +430,16 @@ function fakeToolExecutor(): IntexAgentToolExecutor {
   };
 }
 
+function toolArgsFor(toolName: 'create_research' | 'create_link' | 'create_code_task'): Record<string, unknown> {
+  if (toolName === 'create_research') {
+    return { title: 'Research topic', prompt: 'Research this topic.' };
+  }
+  if (toolName === 'create_link') {
+    return { url: 'https://example.com', title: 'Example' };
+  }
+  return { prompt: 'Investigate this code issue.' };
+}
+
 class FakeToolCallingClient implements ToolCallingClient {
   readonly calls: Parameters<ToolCallingClient['run']>[0][] = [];
 
@@ -298,5 +452,28 @@ class FakeToolCallingClient implements ToolCallingClient {
       throw new Error('No fake tool result configured');
     }
     return Promise.resolve(next);
+  }
+}
+
+class ToolExecutingFakeToolCallingClient extends FakeToolCallingClient {
+  constructor(
+    private readonly toolCalls: { toolName: string; args: Record<string, unknown> } | { toolName: string; args: Record<string, unknown> }[],
+    results: Result<ToolCallingResult, LLMError>[]
+  ) {
+    super(results);
+  }
+
+  override async run(
+    params: Parameters<ToolCallingClient['run']>[0]
+  ): Promise<Result<ToolCallingResult, LLMError>> {
+    const toolCalls = Array.isArray(this.toolCalls) ? this.toolCalls : [this.toolCalls];
+    for (const toolCall of toolCalls) {
+      const tool = params.tools.find((candidate) => candidate.name === toolCall.toolName);
+      if (tool === undefined) {
+        throw new Error(`Missing fake tool ${toolCall.toolName}`);
+      }
+      await tool.run(toolCall.args);
+    }
+    return await super.run(params);
   }
 }

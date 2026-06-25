@@ -234,6 +234,33 @@ describe('executeResearchAction usecase', () => {
     expect(messages[0]?.message).toContain('https://app.test.com/#/research/notified-research-123');
   });
 
+  it('does not prepend webAppUrl when research-agent returns an absolute resource URL', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeResearchClient.setNextResponse({
+      status: 'completed',
+      message: 'Research draft created successfully',
+      resourceUrl: 'https://intexuraos.cloud/#/research/notified-research-123',
+    });
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.message).toContain(
+      'View it here: https://intexuraos.cloud/#/research/notified-research-123'
+    );
+    expect(messages[0]?.message).not.toContain('https://app.test.comhttps://intexuraos.cloud');
+  });
+
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);

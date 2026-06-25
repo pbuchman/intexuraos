@@ -3488,6 +3488,30 @@ describe('Internal Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('completed');
       expect(body.data.message).toBe('Research "Test Draft Research" created successfully');
+      expect(body.data.resourceUrl).toBe('https://app.example.com/#/research/generated-id-123');
+    });
+
+    it('keeps draft research resource URLs relative when webAppUrl is empty', async () => {
+      getServices().webAppUrl = '';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          originalMessage: 'Research AI using gemini and o4',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
+      expect(body.success).toBe(true);
       expect(body.data.resourceUrl).toBe('/#/research/generated-id-123');
     });
 
