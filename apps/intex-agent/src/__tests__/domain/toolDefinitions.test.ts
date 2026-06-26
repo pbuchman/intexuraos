@@ -11,6 +11,7 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(tools.map((tool) => tool.name)).toEqual([
       'create_note',
       'create_calendar_event',
+      'query_calendar_events',
       'create_research',
       'create_link',
       'create_code_task',
@@ -38,6 +39,24 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(calendarTool?.description).toContain('date');
     expect(calendarTool?.description).toContain('time');
     expect(calendarTool?.parameters['required']).toEqual(['summary', 'start', 'end']);
+  });
+
+  it('describes read-only calendar event queries', () => {
+    const calendarQueryTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'query_calendar_events'
+    );
+
+    expect(calendarQueryTool?.description).toContain('read-only');
+    expect(calendarQueryTool?.description).toContain('list');
+    expect(calendarQueryTool?.description).toContain('count');
+    expect(calendarQueryTool?.parameters['required']).toEqual(['mode', 'timeMin', 'timeMax']);
+    expect(calendarQueryTool?.parameters['properties']).toMatchObject({
+      maxResults: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 2500,
+      },
+    });
   });
 
   it('does not expose unsupported work as a tool', () => {
@@ -205,6 +224,34 @@ describe('createIntexAgentToolDefinitions', () => {
     ]);
   });
 
+  it('delegates calendar query execution to the injected executor', async () => {
+    const executor = createExecutor();
+    const calendarQueryTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'query_calendar_events'
+    );
+
+    await expect(
+      calendarQueryTool?.run({
+        mode: 'count',
+        timeMin: '2026-05-01T00:00:00.000Z',
+        timeMax: '2026-06-01T00:00:00.000Z',
+        query: 'Dentist',
+        calendarId: 'work',
+        maxResults: 50,
+      })
+    ).resolves.toBe('calendar-query-completed');
+    expect(executor.calendarQueryArgs).toEqual([
+      {
+        mode: 'count',
+        timeMin: '2026-05-01T00:00:00.000Z',
+        timeMax: '2026-06-01T00:00:00.000Z',
+        query: 'Dentist',
+        calendarId: 'work',
+        maxResults: 50,
+      },
+    ]);
+  });
+
   it('delegates research execution to the injected executor', async () => {
     const executor = createExecutor();
     const researchTool = createIntexAgentToolDefinitions(executor).find(
@@ -352,12 +399,87 @@ describe('createIntexAgentToolDefinitions', () => {
     await expect(
       codeTaskTool?.run({ prompt: 'Implement this', taskMode: 'fast' })
     ).rejects.toThrow('Tool argument taskMode must be one of: planning, execution');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'latest',
+          timeMin: '2026-05-01T00:00:00.000Z',
+          timeMax: '2026-06-01T00:00:00.000Z',
+        })
+    ).rejects.toThrow('Tool argument mode must be one of: list, count');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'list',
+          timeMin: '2026-05-01T00:00:00.000Z',
+          timeMax: '2026-06-01T00:00:00.000Z',
+          maxResults: 0,
+        })
+    ).rejects.toThrow('Tool argument maxResults must be a positive integer');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'list',
+          timeMin: 'tomorrow',
+          timeMax: '2026-06-01T00:00:00.000Z',
+        })
+    ).rejects.toThrow('Tool argument timeMin must be an ISO date-time string');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'list',
+          timeMin: '2026-05-01T00:00:00',
+          timeMax: '2026-06-01T00:00:00.000Z',
+        })
+    ).rejects.toThrow('Tool argument timeMin must be an ISO date-time string');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'list',
+          timeMin: '2026-02-31T00:00:00Z',
+          timeMax: '2026-06-01T00:00:00.000Z',
+        })
+    ).rejects.toThrow('Tool argument timeMin must be an ISO date-time string');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'list',
+          timeMin: '2026-01-01T24:00:00Z',
+          timeMax: '2026-06-01T00:00:00.000Z',
+        })
+    ).rejects.toThrow('Tool argument timeMin must be an ISO date-time string');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'list',
+          timeMin: '2026-06-01T00:00:00.000Z',
+          timeMax: '2026-05-01T00:00:00.000Z',
+        })
+    ).rejects.toThrow('Tool argument timeMax must be after timeMin');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'query_calendar_events')
+        ?.run({
+          mode: 'list',
+          timeMin: '2026-05-01T00:00:00.000Z',
+          timeMax: '2026-06-01T00:00:00.000Z',
+          maxResults: 2501,
+        })
+    ).rejects.toThrow('Tool argument maxResults must be a positive integer');
   });
 });
 
 function createExecutor(): IntexAgentToolExecutor & {
   noteArgs: unknown[];
   calendarArgs: unknown[];
+  calendarQueryArgs: unknown[];
   researchArgs: unknown[];
   linkArgs: unknown[];
   codeTaskArgs: unknown[];
@@ -365,6 +487,7 @@ function createExecutor(): IntexAgentToolExecutor & {
   return {
     noteArgs: [],
     calendarArgs: [],
+    calendarQueryArgs: [],
     researchArgs: [],
     linkArgs: [],
     codeTaskArgs: [],
@@ -375,6 +498,10 @@ function createExecutor(): IntexAgentToolExecutor & {
     createCalendarEvent(args): Promise<string> {
       this.calendarArgs.push(args);
       return Promise.resolve('calendar-created');
+    },
+    queryCalendarEvents(args): Promise<string> {
+      this.calendarQueryArgs.push(args);
+      return Promise.resolve('calendar-query-completed');
     },
     createResearch(args): Promise<string> {
       this.researchArgs.push(args);

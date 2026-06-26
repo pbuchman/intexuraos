@@ -17,13 +17,14 @@ The current tools are defined in `apps/intex-agent/src/domain/agent/toolDefiniti
 
 - `create_note`
 - `create_calendar_event`
+- `query_calendar_events`
 - `create_research`
 - `create_link`
 - `create_code_task`
 
 The system prompt in `apps/intex-agent/src/domain/agent/systemPrompt.ts` is the runtime contract. Requests outside those jobs must return `unsupported` rather than being routed through a fallback action system.
 
-`classifyIntexAgentIntent` gates tool exposure before the LLM call. It exposes only the single matched tool for explicit create/save intent, exposes `create_link` for bare URL shares, blocks read-only calendar questions, and rejects messages that contain multiple supported resource intents.
+`classifyIntexAgentIntent` gates tool exposure before the LLM call. It exposes only the single matched tool for explicit create/save intent, exposes `create_link` for bare URL shares, routes read-only calendar list/count questions only through `query_calendar_events`, and rejects messages that contain multiple supported resource intents. Other read-only personal-data requests remain unsupported.
 
 ## Downstream Services
 
@@ -31,6 +32,7 @@ The system prompt in `apps/intex-agent/src/domain/agent/systemPrompt.ts` is the 
 | --- | --- |
 | `create_note` | notes-agent |
 | `create_calendar_event` | calendar-agent |
+| `query_calendar_events` | calendar-agent |
 | `create_research` | research-agent |
 | `create_link` | bookmarks-agent |
 | `create_code_task` | code-agent |

@@ -28,6 +28,7 @@ export type IntexAgentSessionEndReason =
 export type IntexAgentToolName =
   | 'create_note'
   | 'create_calendar_event'
+  | 'query_calendar_events'
   | 'create_research'
   | 'create_link'
   | 'create_code_task';
