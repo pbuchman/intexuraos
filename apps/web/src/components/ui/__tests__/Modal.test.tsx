@@ -75,6 +75,15 @@ describe('<Modal/>', () => {
     expect(screen.getByRole('dialog').className).toBe('custom-class');
   });
 
+  it('uses overlayClassName override when provided', () => {
+    render(
+      <Modal open onOpenChange={vi.fn()} title="Hi" overlayClassName="custom-overlay-class">
+        <div>body</div>
+      </Modal>
+    );
+    expect(document.querySelector('.custom-overlay-class')).toBeInTheDocument();
+  });
+
   it('omits padding when padded is false', () => {
     render(
       <Modal open onOpenChange={vi.fn()} title="Hi" padded={false}>
