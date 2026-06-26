@@ -87,6 +87,23 @@ describe('createIntexAgentToolDefinitions', () => {
     });
   });
 
+  it('describes code task worker type as optional and user-specified', () => {
+    const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_code_task'
+    );
+
+    expect(codeTaskTool?.parameters['required']).toEqual(['prompt']);
+    expect(codeTaskTool?.parameters['required']).not.toContain('workerType');
+    expect(codeTaskTool?.parameters['properties']).toMatchObject({
+      workerType: {
+        type: 'string',
+        description: expect.stringMatching(
+          /only when explicitly requested.*specified by the user/
+        ),
+      },
+    });
+  });
+
   it('delegates note execution to the injected executor', async () => {
     const executor = createExecutor();
     const [noteTool] = createIntexAgentToolDefinitions(executor);

@@ -204,7 +204,8 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
           },
           workerType: {
             type: 'string',
-            description: 'Optional worker type to request.',
+            description:
+              'Optional worker type. Set only when explicitly requested or specified by the user.',
           },
           linearIssueId: {
             type: 'string',
