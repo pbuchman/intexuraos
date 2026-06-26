@@ -10,6 +10,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Button, ErrorBanner, Layout } from '@/components';
+import { PrivateWhatsAppImagePreview } from '@/components/whatsapp/PrivateWhatsAppImagePreview';
 import { usePrivateWhatsAppLog } from '@/hooks/usePrivateWhatsAppLog';
 import { formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
 import type {
@@ -94,7 +95,20 @@ function getMessageTypeClass(messageType: PrivateWhatsAppMessageType): string {
   }
 }
 
+function hasStoredImage(message: PrivateWhatsAppMessage): boolean {
+  return (
+    message.messageType === 'image' &&
+    message.media?.storageStatus === 'stored' &&
+    message.media.hasMedia === true &&
+    message.media.hasThumbnail === true
+  );
+}
+
 function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element {
+  if (hasStoredImage(message)) {
+    return <PrivateWhatsAppImagePreview message={message} />;
+  }
+
   if (message.text !== undefined && message.text.trim() !== '') {
     return (
       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">

@@ -15,6 +15,12 @@ vi.mock('@/hooks/usePrivateWhatsAppLog', () => ({
   usePrivateWhatsAppLog: (): UsePrivateWhatsAppLogResult => mockUsePrivateWhatsAppLog(),
 }));
 
+vi.mock('@/components/whatsapp/PrivateWhatsAppImagePreview', () => ({
+  PrivateWhatsAppImagePreview: ({ message }: { message: { id: string } }): React.JSX.Element => (
+    <div data-testid="private-whatsapp-image-preview">{message.id}</div>
+  ),
+}));
+
 vi.mock('@/components', async () => {
   const actual = await vi.importActual<typeof import('@/components')>('@/components');
   return {
@@ -206,5 +212,59 @@ describe('PrivateWhatsAppLogPage', () => {
 
     expect(screen.getByText('Jun 22, 2026')).toBeInTheDocument();
     expect(screen.queryByText(/utc-helper:/)).not.toBeInTheDocument();
+  });
+
+  it('renders stored private images as image previews and old images as placeholders', () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'stored-image',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'image',
+            text: 'stored image',
+            media: {
+              mxcUri: 'mxc://home-dev/stored',
+              mimeType: 'image/jpeg',
+              fileName: 'stored.jpg',
+              storageStatus: 'stored',
+              hasMedia: true,
+              hasThumbnail: true,
+            },
+            eventTimestamp: '2026-06-22T09:00:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:00:02.000Z',
+            ingestedAt: '2026-06-22T09:00:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'old-placeholder-image',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'image',
+            media: {
+              mxcUri: 'mxc://home-dev/old',
+              mimeType: 'image/jpeg',
+              fileName: 'image.jpg',
+            },
+            eventTimestamp: '2026-06-22T09:01:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:01:02.000Z',
+            ingestedAt: '2026-06-22T09:01:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('private-whatsapp-image-preview')).toHaveTextContent('stored-image');
+    expect(screen.getByText('image.jpg')).toBeInTheDocument();
   });
 });
