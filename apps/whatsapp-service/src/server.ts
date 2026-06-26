@@ -147,6 +147,14 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     }
   });
 
+  app.addContentTypeParser(
+    'application/octet-stream',
+    { parseAs: 'buffer' },
+    (_req, body, done) => {
+      done(null, body);
+    }
+  );
+
   await app.register(intexuraFastifyPlugin);
 
   // Register core schemas for $ref usage in routes (Diagnostics, ErrorCode, ErrorBody)

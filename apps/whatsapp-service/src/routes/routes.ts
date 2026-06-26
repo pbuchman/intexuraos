@@ -20,6 +20,7 @@
  * GET    /whatsapp/private/senders    → ./privateReadRoutes.ts
  * GET    /whatsapp/private/messages   → ./privateReadRoutes.ts
  * GET    /whatsapp/private/sender-days → ./privateReadRoutes.ts
+ * POST   /internal/whatsapp/private/media         → ./privateMediaRoutes.ts
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
  * POST   /internal/whatsapp/webhooks/retry-pending → ./internalRoutes.ts
  * POST   /internal/whatsapp/private/events        → ./privateSyncRoutes.ts
