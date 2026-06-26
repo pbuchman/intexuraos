@@ -39,6 +39,8 @@ export interface CreateCodeTaskToolArgs {
   taskMode?: 'planning' | 'execution';
 }
 
+const EXPLICIT_CODE_TASK_WORKER_TYPES = ['codex', 'codex-xhigh', 'minimax'] as const;
+
 export interface IntexAgentToolExecutor {
   createNote(args: CreateNoteToolArgs): Promise<string>;
   createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string>;
@@ -204,7 +206,9 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
           },
           workerType: {
             type: 'string',
-            description: 'Optional worker type to request.',
+            enum: [...EXPLICIT_CODE_TASK_WORKER_TYPES],
+            description:
+              'Optional worker type. Set only when explicitly requested by the user. Available choices: Codex (codex), Codex extra high (codex-xhigh), MiniMax (minimax).',
           },
           linearIssueId: {
             type: 'string',

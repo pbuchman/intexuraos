@@ -395,7 +395,7 @@ describe('createIntexAgentToolExecutor', () => {
     ).rejects.toThrow('Failed to create link: bookmarks-agent unavailable');
   });
 
-  it('creates planning code tasks by default through the code client', async () => {
+  it('creates planning code tasks by default without sending omitted worker types', async () => {
     const codeClient = new FakeCodeTaskClient();
     const executor = createIntexAgentToolExecutor(createExecutorDeps({
       codeClient,
@@ -403,7 +403,6 @@ describe('createIntexAgentToolExecutor', () => {
 
     const result = await executor.createCodeTask({
       prompt: 'Plan the new import flow.',
-      workerType: 'fullstack',
       linearIssueId: 'LIN-123',
     });
 
@@ -411,16 +410,37 @@ describe('createIntexAgentToolExecutor', () => {
       {
         userId: 'user-1',
         prompt: 'Plan the new import flow.',
-        workerType: 'fullstack',
         linearIssueId: 'LIN-123',
         taskMode: 'planning',
       },
     ]);
+    expect(codeClient.calls[0]).not.toHaveProperty('workerType');
     expect(JSON.parse(result)).toEqual({
       status: 'completed',
       codeTaskId: 'task-1',
       resourceUrl: '/code/tasks/task-1',
     });
+  });
+
+  it('forwards explicit code task worker types unchanged', async () => {
+    const codeClient = new FakeCodeTaskClient();
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({
+      codeClient,
+    }));
+
+    await executor.createCodeTask({
+      prompt: 'Plan the new import flow.',
+      workerType: 'codex',
+    });
+
+    expect(codeClient.calls).toEqual([
+      {
+        userId: 'user-1',
+        prompt: 'Plan the new import flow.',
+        workerType: 'codex',
+        taskMode: 'planning',
+      },
+    ]);
   });
 
   it('creates execution code tasks when explicitly requested', async () => {
