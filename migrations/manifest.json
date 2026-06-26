@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "110",
+  "lastReservedId": "115",
   "entries": [
     {
       "id": "001",
@@ -550,6 +550,31 @@
       "id": "110",
       "name": "whatsapp-webhook-retry-indexes",
       "checksum": "sha256:71172362d85eb9b83bb165aa398d23f19c3f8b9629864fa87d6ef631fd3de632"
+    },
+    {
+      "id": "111",
+      "name": "private-whatsapp-sender-day-indexes",
+      "checksum": "sha256:dc59ce6a66641389040aa0e53922d79552d12f58034deb41cab19978d81079c0"
+    },
+    {
+      "id": "112",
+      "name": "retire-obsolete-agent-firestore-artifacts",
+      "checksum": "sha256:acc11d2c210d7b46efa82fd31fa864220d1c820d496257e794eef2ad674f3a91"
+    },
+    {
+      "id": "113",
+      "name": "private-whatsapp-sender-pagination-index",
+      "checksum": "sha256:993d60460f7731e8e2e953acc606770407e6a5d56fd2fe7d8417b7407c7eac1e"
+    },
+    {
+      "id": "114",
+      "name": "private-whatsapp-day-message-pagination-index",
+      "checksum": "sha256:5f05418aaa8dc994c490be313bf371d6645c138f5d4b4b0fffe0c538cbfd0471"
+    },
+    {
+      "id": "115",
+      "name": "private-whatsapp-chat-pagination-indexes",
+      "checksum": "sha256:91dd3afa29ceb6b20b85bd907931c6e883e1b44c52fedb5624bcdfbbc0b382f8"
     }
   ]
 }

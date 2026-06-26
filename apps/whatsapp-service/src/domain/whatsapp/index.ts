@@ -38,6 +38,39 @@ export type {
   PhoneVerificationStatus,
 } from './models/PhoneVerification.js';
 
+export type {
+  DisablePrivateWhatsAppAccountInput,
+  PrivateWhatsAppAccount,
+  PrivateWhatsAppAccountStatus,
+  PrivateWhatsAppChat,
+  PrivateWhatsAppChatInput,
+  PrivateWhatsAppChatQueryInput,
+  PrivateWhatsAppChatQueryResult,
+  PrivateWhatsAppChatType,
+  PrivateWhatsAppDeliveryMode,
+  PrivateWhatsAppAggregateRebuildInput,
+  PrivateWhatsAppAggregateRebuildResult,
+  PrivateWhatsAppIngestEventResult,
+  PrivateWhatsAppIngestOutcome,
+  PrivateWhatsAppIngestResult,
+  PrivateWhatsAppMediaInfo,
+  PrivateWhatsAppMessage,
+  PrivateWhatsAppMessageDirection,
+  PrivateWhatsAppMessageQueryInput,
+  PrivateWhatsAppMessageQueryResult,
+  PrivateWhatsAppMessageInput,
+  PrivateWhatsAppMessageType,
+  PrivateWhatsAppSender,
+  PrivateWhatsAppSenderQueryInput,
+  PrivateWhatsAppSenderQueryResult,
+  PrivateWhatsAppSenderDay,
+  PrivateWhatsAppSenderDayQueryInput,
+  PrivateWhatsAppSenderDayQueryResult,
+  PrivateWhatsAppSummaryStatus,
+  StorePrivateWhatsAppMessageInput,
+  UpsertPrivateWhatsAppAccountInput,
+} from './models/PrivateWhatsApp.js';
+
 // Ports
 export type {
   WhatsAppUserMapping,
@@ -76,15 +109,14 @@ export type {
 
 export type { NotificationPreferencesRepository } from './ports/notificationPreferencesRepository.js';
 
+export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepository.js';
+
 // Events
 export type {
-  ApprovalReplyEvent,
-  AudioStoredEvent,
-  CommandIngestEvent,
   ExtractLinkPreviewsEvent,
+  IntexMessageIngestEvent,
   MediaCleanupEvent,
   SendMessageEvent,
-  TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
   WhatsAppInteractiveButton,
@@ -110,11 +142,6 @@ export {
 } from './usecases/processAudioMessage.js';
 
 export {
-  HandleTranscriptionCompletedUseCase,
-  type HandleTranscriptionCompletedDeps,
-} from './usecases/handleTranscriptionCompleted.js';
-
-export {
   ExtractLinkPreviewsUseCase,
   type ExtractLinkPreviewsInput,
   type ExtractLinkPreviewsDeps,
@@ -132,6 +159,13 @@ export {
   type RetryPendingWebhookEventsInput,
   type RetryPendingWebhookEventsResult,
 } from './usecases/retryPendingWebhookEvents.js';
+
+export {
+  IngestPrivateWhatsAppEventsUseCase,
+  type IngestPrivateWhatsAppEventInput,
+  type IngestPrivateWhatsAppEventsDeps,
+  type IngestPrivateWhatsAppEventsInput,
+} from './usecases/ingestPrivateWhatsAppEvents.js';
 
 export {
   shouldDeliverMessage,

@@ -43,8 +43,8 @@ These all have a parent issue that retains the full context. Deleting the sub-is
 
 | #   | Identifier  | Title                                                            | Parent   | Reasoning                                                                                  |
 | --- | ----------- | ---------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
-| 7   | INT-957     | cron-agent backend service                                       | INT-956  | Sub-issue of "Allow scheduling and monitoring of recurring tasks" — parent retains context |
-| 8   | INT-958     | cron-agent web app UI                                            | INT-956  | Sub-issue — parent retains context, frontend implementation detail                         |
+| 7   | INT-957     | retired-scheduler-service backend service                                       | INT-956  | Sub-issue of "Allow scheduling and monitoring of recurring tasks" — parent retains context |
+| 8   | INT-958     | retired-scheduler-service web app UI                                            | INT-956  | Sub-issue — parent retains context, frontend implementation detail                         |
 | 9   | INT-1059    | Backend — Payload Endpoint (code-agent)                          | INT-1027 | Sub-issue — parent "GitHub Event Log — expandable rows" retains context                    |
 | 10  | INT-1060    | Frontend — Expandable Rows with Payload Display (web)            | INT-1027 | Sub-issue — parent retains context                                                         |
 | 11  | INT-1071    | Orchestrator V8 ignore triage: replace 118 override blocks       | INT-1070 | Sub-issue — mechanical test replacement, parent retains plan                               |

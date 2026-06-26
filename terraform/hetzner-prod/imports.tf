@@ -24,21 +24,6 @@ import {
 }
 
 import {
-  to = google_pubsub_subscription.hetzner_push["whatsapp_srt_transcription"]
-  id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-srt-transcription-completed-prod-hetzner"
-}
-
-import {
-  to = google_pubsub_subscription.hetzner_push["commands_ingest"]
-  id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-commands-ingest-prod-hetzner"
-}
-
-import {
-  to = google_pubsub_subscription.hetzner_push["actions_queue"]
-  id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-actions-queue-prod-hetzner"
-}
-
-import {
   to = google_pubsub_subscription.hetzner_push["research_process"]
   id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-research-process-prod-hetzner"
 }
@@ -54,11 +39,6 @@ import {
 }
 
 import {
-  to = google_pubsub_subscription.hetzner_push["calendar_preview"]
-  id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-calendar-preview-prod-hetzner"
-}
-
-import {
   to = google_pubsub_subscription.hetzner_push["bookmark_enrich"]
   id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-bookmark-enrich-prod-hetzner"
 }
@@ -66,14 +46,4 @@ import {
 import {
   to = google_pubsub_subscription.hetzner_push["bookmark_summarize"]
   id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-bookmark-summarize-prod-hetzner"
-}
-
-import {
-  to = google_pubsub_subscription.hetzner_push["todos_processing"]
-  id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-todos-processing-prod-hetzner"
-}
-
-import {
-  to = google_pubsub_subscription.hetzner_push["approval_reply"]
-  id = "projects/intexuraos-dev-pbuchman/subscriptions/intexuraos-approval-reply-prod-hetzner"
 }

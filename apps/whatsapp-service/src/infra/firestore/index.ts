@@ -48,3 +48,15 @@ export {
   getPreferences,
   savePreferences,
 } from './notificationPreferencesRepository.js';
+
+export {
+  PRIVATE_WHATSAPP_CHATS_COLLECTION,
+  PRIVATE_WHATSAPP_MESSAGES_COLLECTION,
+  PRIVATE_WHATSAPP_SENDERS_COLLECTION,
+  PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION,
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+  createPrivateWhatsAppRepository,
+} from './privateWhatsAppRepository.js';

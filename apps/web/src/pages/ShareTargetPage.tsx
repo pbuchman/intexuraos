@@ -44,7 +44,7 @@ export function ShareTargetPage(): React.JSX.Element {
 
   useEffect(() => {
     if (initialContent === '') {
-      void navigate('/inbox', { replace: true });
+      void navigate('/my-notes', { replace: true });
     }
   }, [initialContent, navigate]);
 
@@ -54,11 +54,11 @@ export function ShareTargetPage(): React.JSX.Element {
     }
 
     addShare(content.trim());
-    void navigate('/inbox', { replace: true });
+    void navigate('/my-notes', { replace: true });
   };
 
   const handleCancel = (): void => {
-    void navigate('/inbox', { replace: true });
+    void navigate('/my-notes', { replace: true });
   };
 
   if (initialContent === '') {
@@ -82,7 +82,7 @@ export function ShareTargetPage(): React.JSX.Element {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Shared Content</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Review and save to your inbox</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Review and save as a note</p>
               </div>
             </div>
 

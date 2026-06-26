@@ -225,7 +225,7 @@ curl -s -X POST http://localhost:8121/internal/notes \
     "title": "Research Results: AI Trends 2026",
     "content": "Key findings from multi-model research query...",
     "tags": ["research", "ai"],
-    "source": "actions-agent",
+    "source": "intex-agent",
     "sourceId": "act_789",
     "status": "draft"
   }' | jq

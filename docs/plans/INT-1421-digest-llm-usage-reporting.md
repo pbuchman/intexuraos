@@ -4,7 +4,7 @@
 
 **Goal:** Wire `mobile-notifications-service` digest LLM calls to the `llm-usage-service` so regenerations (and scheduled runs + backfills) appear in the LLM Usage view.
 
-**Architecture:** Replace the hard-coded no-op `usageSink` inside `apps/mobile-notifications-service/src/routes/digestRoutes.ts` with a real `HttpInternalAuthUsageSink` (already used by every other service — chat-agent, user-service, research-agent, image-service, etc.). Add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to `REQUIRED_ENV`. Sink identifies the events as `service: 'mobile-notifications-service', component: 'digest'`.
+**Architecture:** Replace the hard-coded no-op `usageSink` inside `apps/mobile-notifications-service/src/routes/digestRoutes.ts` with a real `HttpInternalAuthUsageSink` (already used by every other service — retired-chat-service, user-service, research-agent, image-service, etc.). Add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to `REQUIRED_ENV`. Sink identifies the events as `service: 'mobile-notifications-service', component: 'digest'`.
 
 **Tech Stack:** TypeScript (strict), Fastify, `@intexuraos/llm-factory`, `@intexuraos/llm-pricing` (`HttpInternalAuthUsageSink`, `FakeUsageSink`), Vitest, `nock`.
 
@@ -40,7 +40,7 @@ Every LLM call that the digest pipeline makes (`aggregateDigest` → `callAndPar
 1. **Code**: `usageSink: { log: () => Promise.resolve() }` in `digestRoutes.ts:158` — the only `usageSink` reference in the entire `apps/mobile-notifications-service` tree (`grep -r usageSink apps/mobile-notifications-service` returns exactly one hit, and that hit is the no-op).
 2. **Contract**: `packages/llm-factory/src/llmClientFactory.ts:63-64` says "`usageSink` — Required. Pass `NoopUsageSink` to explicitly opt out." — so the field is mandatory; somebody wrote a bespoke inline no-op rather than deliberately opting out via the documented helper.
 3. **Prod logs**: `gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="intexuraos-llm-usage-service" AND jsonPayload.source.service="mobile-notifications-service"'` returns `[]` — the ingest endpoint has **never** received an event tagged with `source.service = "mobile-notifications-service"`.
-4. **Cross-service comparison**: Every other app that uses `createLlmClient`/`createToolCallingClient` wires `new HttpInternalAuthUsageSink({ usageServiceUrl, internalAuthToken, service: '<svc>', component: '<area>', logger })` (see `apps/chat-agent/src/services.ts:102-116`, `apps/research-agent/src/services.ts`, `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`, etc.).
+4. **Cross-service comparison**: Every other app that uses `createLlmClient`/`createToolCallingClient` wires `new HttpInternalAuthUsageSink({ usageServiceUrl, internalAuthToken, service: '<svc>', component: '<area>', logger })` (see `apps/retired-chat-service/src/services.ts:102-116`, `apps/research-agent/src/services.ts`, `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`, etc.).
 5. **Env var already available**: `INTEXURAOS_LLM_USAGE_SERVICE_URL` is declared in Terraform `common_service_env_vars` (`terraform/environments/dev/main.tf:302`) and in PM2 `COMMON_SERVICE_URLS` (`ecosystem.config.cjs:59`). Both environments already inject it into `mobile-notifications-service`; the service just never reads it.
 
 ### Endpoint Changes
@@ -53,7 +53,7 @@ Every LLM call that the digest pipeline makes (`aggregateDigest` → `callAndPar
 - Modify: `apps/mobile-notifications-service/src/index.ts` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to `REQUIRED_ENV`.
 - Modify: `apps/mobile-notifications-service/src/routes/digestRoutes.ts` — import `HttpInternalAuthUsageSink`, build a module-level sink reading env, pass it into `buildLlmClient`.
 - Modify: `apps/mobile-notifications-service/src/__tests__/routes/digestRoutes.test.ts` — set the new env var in `beforeEach`; add tests that verify a usage event is emitted per successful digest run (via `FakeUsageSink` + `createLlmClient` mock, or `nock` against the usage ingest URL).
-- Read for context only: `packages/llm-pricing/src/httpInternalAuthUsageSink.ts`, `packages/llm-factory/src/llmClientFactory.ts`, `apps/chat-agent/src/services.ts`, `apps/mobile-notifications-service/src/domain/usecases/aggregateDigest.ts`.
+- Read for context only: `packages/llm-pricing/src/httpInternalAuthUsageSink.ts`, `packages/llm-factory/src/llmClientFactory.ts`, `apps/retired-chat-service/src/services.ts`, `apps/mobile-notifications-service/src/domain/usecases/aggregateDigest.ts`.
 
 ---
 

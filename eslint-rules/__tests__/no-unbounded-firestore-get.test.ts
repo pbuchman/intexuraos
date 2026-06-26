@@ -18,7 +18,7 @@ describe('no-unbounded-firestore-get', () => {
           "await db.collection('users').limit(10).get();",
           "await db.collection('users').where('active', '==', true).get();",
           "await db.collection('users').orderBy('createdAt').limit(25).get();",
-          "await db.collection('doc_embeddings').findNearest('embedding', vector, { limit: 10, distanceMeasure: 'COSINE' }).get();",
+          "await db.collection('vector_chunks').findNearest('embedding', vector, { limit: 10, distanceMeasure: 'COSINE' }).get();",
           "const query = db.collection('users').where('active', '==', true); await query.get();",
           "const ref = db.collection('users').doc(userId); await ref.get();",
         ],

@@ -1,5 +1,5 @@
 import { type SpawnSyncReturns, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -47,25 +47,11 @@ function writeManifest(rootDir: string): void {
           serviceUrl: 'http://localhost:8114',
         },
         {
-          name: 'actions-agent',
-          envSuffix: 'ACTIONS_AGENT',
-          apiPath: '/api/actions',
-          proxyTarget: 'http://localhost:8118',
-          serviceUrl: 'http://localhost:8118',
-        },
-        {
-          name: 'todos-agent',
-          envSuffix: 'TODOS_AGENT',
-          apiPath: '/api/todos',
-          proxyTarget: 'http://localhost:8120',
-          serviceUrl: 'http://localhost:8120',
-        },
-        {
-          name: 'chat-agent',
-          envSuffix: 'CHAT_AGENT',
-          apiPath: '/api/chat',
-          proxyTarget: 'http://localhost:8129',
-          serviceUrl: 'http://localhost:8129',
+          name: 'calendar-agent',
+          envSuffix: 'CALENDAR_AGENT',
+          apiPath: '/api/calendar',
+          proxyTarget: 'http://localhost:8125',
+          serviceUrl: 'http://localhost:8125',
         },
         {
           name: 'code-agent',
@@ -96,6 +82,12 @@ describe('verify-route-resource-names', () => {
 
   afterEach(() => {
     rmSync(rootDir, { recursive: true, force: true });
+  });
+
+  it('does not retain route aliases for removed agents', () => {
+    const source = readFileSync(SCRIPT, 'utf8');
+
+    expect(source).not.toContain(`['${['cron', 'agent'].join('-')}'`);
   });
 
   it('fails when a public route repeats its service mount resource', () => {
@@ -296,10 +288,10 @@ export async function listIssues(config, accessToken) {
   it('fails frontend service-base template calls that repeat the service mount resource', () => {
     writeFixture(
       rootDir,
-      'apps/web/src/services/todosApi.ts',
+      'apps/web/src/services/codeTasksApi.ts',
       `
-export async function listTodos(config, query, accessToken) {
-  return apiRequest(config.todosAgentUrl, \`/todos\${query}\`, accessToken);
+export async function listCodeTasks(config, query, accessToken) {
+  return apiRequest(config.codeAgentUrl, \`/code/tasks\${query}\`, accessToken);
 }
 `
     );
@@ -308,42 +300,22 @@ export async function listTodos(config, query, accessToken) {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/frontend/);
-    expect(result.stderr).toMatch(/apps\/web\/src\/services\/todosApi\.ts:3/);
-    expect(result.stderr).toMatch(/config\.todosAgentUrl/);
-    expect(result.stderr).toMatch(/\/todos/);
+    expect(result.stderr).toMatch(/apps\/web\/src\/services\/codeTasksApi\.ts:3/);
+    expect(result.stderr).toMatch(/config\.codeAgentUrl/);
+    expect(result.stderr).toMatch(/\/code\/tasks/);
   });
 
-  it('fails frontend direct URL templates that repeat the service mount resource', () => {
+  it('fails YAML service-base entries that repeat the service mount resource', () => {
     writeFixture(
       rootDir,
-      'apps/web/src/services/chatService.ts',
+      'apps/web/src/config/calendar-config.yaml',
       `
-export async function sendGuestMessage(config, body) {
-  return fetch(\`\${config.chatAgentUrl}/chat\`, { method: 'POST', body });
-}
-`
-    );
-
-    const result = runScript(rootDir);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/frontend URL/);
-    expect(result.stderr).toMatch(/apps\/web\/src\/services\/chatService\.ts:3/);
-    expect(result.stderr).toMatch(/config\.chatAgentUrl/);
-    expect(result.stderr).toMatch(/\/chat/);
-  });
-
-  it('fails action-config service-base entries that repeat the service mount resource', () => {
-    writeFixture(
-      rootDir,
-      'apps/web/src/config/action-config.yaml',
-      `
-actions:
-  approve:
+calendar:
+  preview:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /calendar/events
       method: POST
-      baseUrl: \${INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: \${INTEXURAOS_CALENDAR_AGENT_URL}
 `
     );
 
@@ -351,8 +323,8 @@ actions:
 
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/action-config/);
-    expect(result.stderr).toMatch(/INTEXURAOS_ACTIONS_AGENT_URL/);
-    expect(result.stderr).toMatch(/\/actions\/\{actionId\}\/execute/);
+    expect(result.stderr).toMatch(/INTEXURAOS_CALENDAR_AGENT_URL/);
+    expect(result.stderr).toMatch(/\/calendar\/events/);
   });
 
   it('fails e2e code-agent service-base calls that repeat the service mount resource', () => {

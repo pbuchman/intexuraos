@@ -13,20 +13,15 @@ Final integration review for the Hetzner migration replacement PR.
 | whatsapp-service | app service | migrated | INT-1634, INT-1635 | PM2 port 8113, `/api/whatsapp`, and `/internal/whatsapp/*` routes |
 | mobile-notifications-service | app service | migrated | INT-1634, INT-1635 | PM2 port 8114 and Scheduler route `/internal/notifications/digest/run-yesterday` |
 | research-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8116 and `/internal/llm/*` routes |
-| commands-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8117 and `/internal/commands` route |
-| actions-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8118 and `/internal/actions/*` routes |
 | fishing-assistant-service | app service | migrated | INT-1634 | PM2 port 8119 and nginx `/api/fishing-assistant` route |
 | image-service | app service | migrated | INT-1634, INT-1636 | PM2 port 8120 and nginx `/api/images` route |
 | notes-agent | app service | migrated | INT-1634 | PM2 port 8121 and nginx `/api/notes` route |
 | app-settings-service | app service | migrated | INT-1634 | PM2 port 8122 and nginx `/api/settings` route |
-| todos-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8123 and `/internal/todos/*` route |
 | bookmarks-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8124 and `/internal/bookmarks/*` routes |
 | calendar-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8125 and `/internal/calendar/generate-preview` route |
 | linear-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8126 and linear Scheduler routes |
 | web-agent | app service | migrated | INT-1634 | PM2 port 8127 and nginx `/api/web` route |
 | code-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8128, `/api/code`, PR triage, drain queue, and execution-memory routes |
-| chat-agent | app service | migrated | INT-1634 | PM2 port 8129 and nginx `/api/chat` route |
-| cron-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8130 and `/internal/cron/tick` route |
 | hellscript-agent | app service | migrated | INT-1634 | PM2 port 8131 and nginx `/api/hellscript-agent` route |
 | llm-usage-service | app service | migrated | INT-1634 | PM2 port 8132 and nginx `/api/llm-usage` route |
 | api-docs-hub | app service | migrated | INT-1634 | PM2 port 8133; api-docs-hub remains local-only on Hetzner and is not exposed through the web service manifest |

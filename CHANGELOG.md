@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.8.0
+
+### Added
+
+- Intex Agent Unified Actions: one Intex Agent workflow now creates code tasks, research drafts, bookmarks, notes, and calendar actions while replacing duplicated legacy action agents (INT-1682, INT-1683, INT-1677).
+- Private WhatsApp Workspace: private chat ingest, conversations, read-only logs, sender/day aggregation, Matrix sync, and preserved group context now work together as one private WhatsApp surface (INT-1673, INT-1674, INT-1675, INT-1676, INT-1678).
+- Intex Agent WhatsApp sessions now keep assistant conversations open with reliable reply delivery, timeline display, session routing, and explicit intent gates for action tools (INT-1679, INT-1680, INT-1681, INT-1691, INT-1692).
+
+### Changed
+
+- Obsolete command action agents were removed from the runtime so Intex Agent is the single action entry point (INT-1677).
+- README and homepage showcase content now reflect the current Intex Agent and private WhatsApp capabilities (INT-1694).
+- Dash0 Secret Manager references were removed from setup documentation (INT-1667).
+
+### Fixed
+
+- Code task documentation review dispatch now routes requested documentation reviews reliably (INT-1665).
+- Intex Agent WhatsApp replies, session routing, timeline dates, and explicit tool intent handling are more reliable (INT-1680, INT-1681, INT-1691, INT-1692).
+
+### Improved
+
+- Code task and orchestrator reliability now handles Docker hangs and completed task finalization more consistently while reducing handled Sentry noise (INT-1668).
+- Artifact Registry retention keeps deployment storage leaner and more predictable (INT-1666).
+- Retired async cleanup is guarded more safely for stale background work (INT-1693).
+- Repository composition analysis and project Superpowers automation were refreshed for maintainers (INT-1670, INT-1671).
+
 ## 3.7.0
 
 ### Added
@@ -125,7 +151,7 @@
 - OpenRouter integration with backend infrastructure, frontend model selection, and pricing display (INT-1011)
 - Code task backend pagination and group-level Firestore aggregation for Linear issue representation (INT-1173, INT-1184)
 - Batch archive selection and V3 loading UX for code tasks (INT-1166, INT-1218)
-- Cron Agent utilizing internal APIs to handle user tasks on schedule with security validation (INT-1288)
+- Retired Scheduler Service utilizing internal APIs to handle user tasks on schedule with security validation (INT-1288)
 - Cloudflare Browser Rendering for web-agent, replacing Crawl4AI for JS-rendered pages (INT-1153)
 - Per-agent-type worker settings for independent performance and cost tuning (INT-1124)
 - Ask Agent for interactive back-and-forth Claude Code sessions from the UI (INT-1293)
@@ -181,7 +207,7 @@
 ### Added
 
 - Hellscript Agent with backend service, web UI, and Terraform infrastructure (INT-1032)
-- Cron Agent backend service for scheduled task execution (INT-957)
+- Retired Scheduler Service backend service for scheduled task execution (INT-957)
 - Merge Queue for automatic PR queuing and merging (INT-1020)
 - Review agent plan awareness for requirements validation (INT-1038)
 - Merge conflict detection via dedicated cron reconciliation job (INT-1023)
@@ -461,7 +487,7 @@
 - Added `/tech-debt-triage` skill for scanning technical debt docs and creating consolidated Linear issues
 - Changed completion verification to be lenient for user-resumed tasks
 - Changed `@claude` and `@codex` PR comment mentions to skip webhook dispatch (handled by GitHub Actions)
-- Improved 27 LLM prompts across all domains — fixed unsafe casts, XML delimiters, date injection, and migrated `approvalIntentPrompt` to PromptBuilder
+- Improved LLM prompts across all domains — fixed unsafe casts, XML delimiters, date injection, and PromptBuilder coverage
 - Improved `/code/submit` timeout from 30s to 90s with server-side 120s safety net and timeout-aware error recovery UI (INT-505)
 - Improved CI pipeline from 5m to 3m43s with 3-way test sharding, parallel type/lint matrix, and artifact-based coverage reports
 - Removed scheduled snapshot refresh saving ~zł50/week in LLM token costs
@@ -492,7 +518,7 @@
 - Added Orchestrator worker for Docker-isolated Claude Code execution — spawns containers with git worktree isolation, Anthropic OAuth credential management, state persistence across restarts, and GitHub App token rotation (INT-272)
 - Added two-phase execution model: Phase 1 design agent enriches Linear issues and creates subissues, Phase 2 strict execution agent implements code, runs CI, creates PR, and updates Linear (INT-486)
 - Added LLM-based completion verifier (Gemini) that checks each worker attempt against a completion contract with automatic resume via `--continue` for incomplete tasks
-- Added Intex Chat with real-time conversational AI — full `chat-agent` service with WebSocket support, conversation history, and guest sessions (INT-431)
+- Added Intex Chat with real-time conversational AI — full `retired-chat-service` service with WebSocket support, conversation history, and guest sessions (INT-431)
 - Added dark mode across web application with `ThemeContext` provider and Tailwind `dark:` classes
 - Added task retry mechanism with context preservation, `retriedFrom` linking, and 1-minute cool-off period (INT-524)
 - Added task messaging for running and completed tasks — messages queue during execution and trigger `--continue` resume on terminal tasks
@@ -581,7 +607,7 @@
 
 ## 1.4.0
 
-- Added Todos Agent for task management with Pub/Sub processing
+- Added Retired Checklist Service for task management with Pub/Sub processing
 - Added Notes Agent for note-taking with tags and sources
 - Added App Settings Service for centralized LLM pricing
 - Added Image Service for prompt generation and image generation via multiple providers
@@ -600,7 +626,7 @@
 - Added GPT-5.2 and GLM-4 (Zai provider) pricing support
 - Added image generation via Gemini native (`nano-banana-pro`/`gemini-2.5-flash-image`)
 - Changed `llm-orchestrator` → `research-agent` for descriptive naming
-- Changed `commands-router` → `commands-agent` for consistent naming
+- Changed the original command router service name for consistent naming
 - Changed `data-insights-service` → `data-insights-agent`
 - Changed `whatsapp-service` domain from `inbox` to `whatsapp`
 - Changed model selection UI with improved UX
@@ -614,14 +640,14 @@
 
 Initial release with core platform functionality.
 
-- Added Actions Agent for action management with status workflow (pending → completed/failed)
+- Added the original action management service with status workflow (pending -> completed/failed)
 - Added User Service with Auth0 integration and OAuth Device Authorization Flow
 - Added WhatsApp Service for message handling with media support
 - Added Mobile Notifications Service for notification aggregation
 - Added Notion Service for prompt storage integration
 - Added PromptVault Service for prompt template management
 - Added Research Agent for multi-LLM research orchestration
-- Added Commands Agent for natural language command processing
+- Added the original natural language command processing service
 - Added Data Insights Agent for user data analysis
 - Added React web application with PWA support
 - Added WhatsApp Business Cloud API integration

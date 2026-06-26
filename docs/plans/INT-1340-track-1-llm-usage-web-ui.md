@@ -763,7 +763,7 @@ This forces the component to remount when the user navigates from one event to a
 
 Export the two new pages from `apps/web/src/pages/index.ts`.
 
-**`Sidebar.tsx`:** add a new collapsible section between "Code Tasks" and "Cron Agent". Model it on the Code Tasks section (lines 427–477):
+**`Sidebar.tsx`:** add a new collapsible section between "Code Tasks" and "Retired Scheduler Service". Model it on the Code Tasks section (lines 427–477):
 
 ```tsx
 const llmUsageItems: NavItem[] = [

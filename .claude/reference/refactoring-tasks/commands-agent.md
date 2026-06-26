@@ -38,7 +38,7 @@ The `commandsRoutes.ts` file has owner-check logic on lines 270 and 376 (DELETE 
 3. Inside the existing `describe('PATCH /commands/:commandId (authenticated)')` block (starting at line 1386), add the following test case after the existing tests (after line 1483):
 
    **Test 3: Cross-user PATCH attempt returns 404**
-   - Add a command with `userId: 'user-patch-owner'`, `id: 'cmd-cross-user-patch'`, status `'classified'`, with a classification object (type `'todo'`, confidence `0.9`, reasoning `'Test'`, promptVersion `'1.0.0'`, classifiedAt `'2025-01-01T12:00:01.000Z'`).
+   - Add a command with `userId: 'user-patch-owner'`, `id: 'cmd-cross-user-patch'`, status `'classified'`, with a classification object (type `'note'`, confidence `0.9`, reasoning `'Test'`, promptVersion `'1.0.0'`, classifiedAt `'2025-01-01T12:00:01.000Z'`).
    - Create an access token for a different user `'user-patch-other'`.
    - Send `PATCH /commands/cmd-cross-user-patch` with the other user's token and body `{ status: 'archived' }`.
    - Assert `response.statusCode` is `404`.
@@ -833,7 +833,7 @@ The `commandsRoutes.ts` file defines a large inline `commandSchema` object (line
          properties: {
            type: {
              type: 'string',
-             enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear', 'code'],
+             enum: ['research', 'note', 'link', 'calendar', 'reminder', 'linear', 'code'],
            },
            confidence: { type: 'number' },
            reasoning: { type: 'string' },

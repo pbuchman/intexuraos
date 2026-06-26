@@ -24,20 +24,17 @@ All internal endpoints follow the pattern:
 
 | Service                        | Prefix                            | Description                                  |
 | ------------------------------ | --------------------------------- | -------------------------------------------- |
-| `actions-agent`                | `actions`                         | Action processing, approval replies, retries |
 | `app-settings-service`         | (no prefix — direct)              | Pricing and configuration lookup             |
 | `bookmarks-agent`              | `bookmarks`                       | Bookmark management and enrichment           |
 | `calendar-agent`               | `calendar`                        | Calendar event generation and preview        |
-| `chat-agent`                   | (no internal routes)              | RAG-based chat assistant                     |
 | `code-agent`                   | (no internal routes)              | Code execution and GitHub integration        |
-| `commands-agent`               | `commands`                        | Command creation and status                  |
 | `image-service`                | `images`                          | AI image generation and storage              |
+| `intex-agent`                  | `intex-agent`                     | WhatsApp text direct tools                   |
 | `linear-agent`                 | `linear`                          | Linear issue sync and action processing      |
 | `mobile-notifications-service` | `mobile-notifications`            | Push notification delivery                   |
 | `notes-agent`                  | `notes`                           | Note management                              |
 | `notion-service`               | `notion`                          | Notion integration and page preview          |
 | `research-agent`               | `llm`, `research`                 | LLM orchestration and research processing    |
-| `todos-agent`                  | `todos`                           | Todo management                              |
 | `user-service`                 | `users`                           | User settings, LLM API keys, OAuth tokens    |
 | `web-agent`                    | `link-previews`, `page-summaries` | Web scraping and link preview                |
 | `whatsapp-service`             | (webhook receiver)                | WhatsApp inbound webhook handling            |

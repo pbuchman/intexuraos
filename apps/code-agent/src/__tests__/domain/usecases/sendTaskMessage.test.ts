@@ -17,7 +17,6 @@ import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
-import type { StatusMirrorService } from '../../../domain/services/statusMirrorService.js';
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 import {
   sendTaskMessage,
@@ -38,9 +37,6 @@ describe('sendTaskMessage', () => {
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
-  };
-  let mockStatusMirrorService: {
-    mirrorStatus: ReturnType<typeof vi.fn>;
   };
   let mockWhatsappNotifier: {
     notifyTaskResumed: ReturnType<typeof vi.fn>;
@@ -86,10 +82,6 @@ describe('sendTaskMessage', () => {
       getSettings: vi.fn(),
     };
 
-    mockStatusMirrorService = {
-      mirrorStatus: vi.fn().mockResolvedValue(undefined),
-    };
-
     mockWhatsappNotifier = {
       notifyTaskResumed: vi.fn().mockResolvedValue(ok(undefined)),
     };
@@ -132,7 +124,6 @@ describe('sendTaskMessage', () => {
       logLineRepo: mockLogLineRepo as unknown as SendTaskMessageDeps['logLineRepo'],
       taskDispatcher: mockTaskDispatcher as unknown as SendTaskMessageDeps['taskDispatcher'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SendTaskMessageDeps['workerSettingsRepo'],
-      statusMirrorService: mockStatusMirrorService as unknown as StatusMirrorService,
       whatsappNotifier: mockWhatsappNotifier as unknown as WhatsAppNotifier,
     };
   }
@@ -795,7 +786,7 @@ describe('sendTaskMessage', () => {
 
   describe('resume side-effects', () => {
     it('should update Firestore status to running on resume', async () => {
-      const task = createMockTask({ status: 'planned', actionId: 'action-1' });
+      const task = createMockTask({ status: 'planned' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
@@ -806,23 +797,6 @@ describe('sendTaskMessage', () => {
 
       expect(result.ok).toBe(true);
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { status: 'running', error: null, pendingUserMessages: [] });
-    });
-
-    it('should mirror status to running on resume', async () => {
-      const task = createMockTask({ status: 'planned', actionId: 'action-1', traceId: 'trace-abc' });
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
-      setupWorkerSettings();
-      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
-
-      await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      expect(mockStatusMirrorService.mirrorStatus).toHaveBeenCalledWith({
-        actionId: 'action-1',
-        taskStatus: 'running',
-        traceId: 'trace-abc',
-      });
     });
 
     it('should send WhatsApp notification on resume', async () => {
@@ -844,9 +818,8 @@ describe('sendTaskMessage', () => {
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
       expect(result.ok).toBe(true);
-      // update IS called to save pendingUserMessages, but NOT for status/mirror/whatsapp
+      // update IS called to save pendingUserMessages, but NOT for status/whatsapp
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { pendingUserMessages: [message] });
-      expect(mockStatusMirrorService.mirrorStatus).not.toHaveBeenCalled();
       expect(mockWhatsappNotifier.notifyTaskResumed).not.toHaveBeenCalled();
     });
 
@@ -867,27 +840,6 @@ describe('sendTaskMessage', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId }),
         expect.stringContaining('Failed to update task status')
-      );
-    });
-
-    it('should succeed even if status mirror fails (best-effort)', async () => {
-      const task = createMockTask({ status: 'planned', actionId: 'action-1' });
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
-      setupWorkerSettings();
-      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
-      mockStatusMirrorService.mirrorStatus.mockRejectedValueOnce(new Error('Mirror failed'));
-
-      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.action).toBe('resumed');
-      }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId }),
-        expect.stringContaining('Failed to mirror resumed status')
       );
     });
 

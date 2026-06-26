@@ -26,8 +26,6 @@ function createBaseTask(overrides: Partial<CodeTask> = {}): CodeTask {
     createdAt: new Date(),
     updatedAt: new Date(),
     traceId: 'trace',
-    actionId: 'action',
-    approvalEventId: 'event',
     dedupKey: 'dedup',
     ...overrides,
   } as CodeTask;

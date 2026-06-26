@@ -18,7 +18,7 @@ export {
 } from './llmKeysApi.js';
 export * from './researchAgentApi.js';
 export * from './researchSettingsApi.js';
-export * from './commandsApi.js';
+export * from './intexAgentApi.js';
 export {
   initializeFirebase,
   getFirestoreClient,

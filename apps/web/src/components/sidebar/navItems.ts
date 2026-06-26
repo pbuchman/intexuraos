@@ -1,5 +1,4 @@
 import {
-  Activity,
   Bell,
   Bot,
   Calendar,
@@ -12,6 +11,7 @@ import {
   Library,
   LayoutList,
   List,
+  MessagesSquare,
   MessageCircle,
   PenTool,
   Plus,
@@ -36,6 +36,12 @@ export const settingsItems: NavItem[] = [
   { to: '/settings/github', label: 'GitHub', icon: GitBranch },
   { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
+];
+
+export const whatsappItems: NavItem[] = [
+  { to: '/whatsapp/assistant', label: 'Assistant', icon: MessageCircle },
+  { to: '/whatsapp/sessions', label: 'Sessions', icon: Clock },
+  { to: '/whatsapp/private', label: 'Private', icon: MessagesSquare },
 ];
 
 export const researchAgentItems: NavItem[] = [
@@ -66,11 +72,6 @@ export const linearItems: NavItem[] = [
 export const llmUsageItems: NavItem[] = [
   { to: '/llm-usage', label: 'Events', icon: List },
   { to: '/llm-usage/pricing', label: 'Pricing', icon: DollarSign },
-];
-
-export const cronAgentItems: NavItem[] = [
-  { to: '/cron-agent', label: 'Schedules', icon: List },
-  { to: '/cron-agent/executions', label: 'Executions', icon: Activity },
 ];
 
 export const fishingAssistantItems: NavItem[] = [

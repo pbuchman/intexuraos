@@ -7,21 +7,17 @@ const COMMON_SERVICE_URLS_GENERATED = {
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL: 'http://localhost:8114',
   INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL: 'http://localhost:8119',
   INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
-  INTEXURAOS_COMMANDS_AGENT_URL: 'http://localhost:8117',
-  INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
   INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
-  INTEXURAOS_TODOS_AGENT_URL: 'http://localhost:8123',
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
-  INTEXURAOS_CHAT_AGENT_URL: 'http://localhost:8129',
   INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
   INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
   INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
   INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',
-  INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
   INTEXURAOS_HELLSCRIPT_AGENT_URL: 'http://localhost:8131',
   INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
+  INTEXURAOS_INTEX_AGENT_URL: 'http://localhost:8134',
 };
 
 module.exports = { COMMON_SERVICE_URLS_GENERATED };

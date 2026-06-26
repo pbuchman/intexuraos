@@ -30,6 +30,9 @@ import type { DispatcherContext } from './dispatcher-context.js';
 import { verifyCompletion } from '../completion-verifier.js';
 import type { WorkerRuntime } from '../runtime/index.js';
 import type { ResumeSummaryExtractor } from '../completion-verifier.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { withTimeout } from '../../with-timeout.js';
+import { WORKER_DESTROY_TIMEOUT_MS } from './retry-logic.js';
 
 /**
  * Legacy test-only verdict shape. Production code never emits this; only
@@ -468,7 +471,12 @@ export class CompletionPipeline {
     // codes 137/139) are terminal — finalize as TASK_RUNTIME_HARD_ERROR.
     if (verification.kind === 'hard-error') {
       ctx.logger.warn(
-        { taskId: task.taskId, code: verification.code, message: verification.message },
+        {
+          taskId: task.taskId,
+          code: verification.code,
+          message: verification.message,
+          [SKIP_SENTRY_KEY]: true,
+        },
         'Verifier hard error'
       );
       ctx.appendOrchestratorTaskLog(
@@ -1223,47 +1231,6 @@ export class CompletionPipeline {
       ctx.logForwarder.close(task.taskId);
     }
 
-    if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
-      /* v8 ignore start -- source-map: optional chaining on listPreservedWorkers not tracked by v8 even though test covers both undefined and array paths @preserve */
-      const preserved = (await ctx.isolation.provider.listPreservedWorkers?.()) ?? [];
-      /* v8 ignore stop @preserve */
-      if (preserved.length > 0) {
-        const savedState = await ctx.statePersistence.load();
-        for (const p of preserved) {
-          const preservedTask = savedState.tasks[p.taskId];
-          if (
-            preservedTask?.agentType === 'pull_request' &&
-            preservedTask.prNumber === task.prNumber &&
-            preservedTask.taskId !== task.taskId
-          ) {
-            ctx.logger.info(
-              { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
-              'Destroying previous preserved pull_request container for same PR'
-            );
-            await ctx.isolation.provider.destroyWorker(p.taskId);
-          }
-        }
-      }
-    }
-    if (shouldPreserve) {
-      /* v8 ignore start -- ts-type: optional chaining + nullish coalescing on preserveWorker; IsolationProvider.preserveWorker is structurally optional but always defined by both DockerProvider and the FakeIsolationProvider, so the undefined branch is unreachable from any test entry point @preserve */
-      const preserved = (await ctx.isolation.provider.preserveWorker?.(task.taskId)) ?? false;
-      /* v8 ignore stop @preserve */
-      if (preserved) {
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Preserved worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
-        );
-      } else {
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to preserve worker container (no tracked worker): taskId=${task.taskId} status=${finalStatus}`
-        );
-        await ctx.teardownAttempt(task.taskId, false);
-      }
-    } else {
-      await ctx.teardownAttempt(task.taskId, false);
-    }
     ctx.isolation.tokenRefresher.unregisterTask(task.taskId);
     ctx.claudeErrors.delete(task.taskId);
     ctx.taskExitCodes.delete(task.taskId);
@@ -1411,6 +1378,78 @@ export class CompletionPipeline {
     ctx.logger.info(
       {},
       `Task finalized: id=${task.taskId} status=${finalStatus} durationMs=${String(new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime())}`
+    );
+    await this.cleanupFinalizedWorker(task, finalStatus, shouldPreserve);
+  }
+
+  private async cleanupFinalizedWorker(
+    task: Task,
+    finalStatus: 'completed' | 'failed' | 'interrupted' | 'cancelled',
+    shouldPreserve: boolean
+  ): Promise<void> {
+    const ctx = this.ctx;
+    try {
+      if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
+        /* v8 ignore start -- source-map: optional chaining on listPreservedWorkers not tracked by v8 even though test covers both undefined and array paths @preserve */
+        const preserved = (await ctx.isolation.provider.listPreservedWorkers?.()) ?? [];
+        /* v8 ignore stop @preserve */
+        if (preserved.length > 0) {
+          const savedState = await ctx.statePersistence.load();
+          for (const p of preserved) {
+            const preservedTask = savedState.tasks[p.taskId];
+            if (
+              preservedTask?.agentType === 'pull_request' &&
+              preservedTask.prNumber === task.prNumber &&
+              preservedTask.taskId !== task.taskId
+            ) {
+              ctx.logger.info(
+                { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
+                'Destroying previous preserved pull_request container for same PR'
+              );
+              await this.withWorkerCleanupTimeout(
+                p.taskId,
+                ctx.isolation.provider.destroyWorker(p.taskId)
+              );
+            }
+          }
+        }
+      }
+      if (shouldPreserve) {
+        /* v8 ignore start -- ts-type: optional chaining + nullish coalescing on preserveWorker; IsolationProvider.preserveWorker is structurally optional but always defined by both DockerProvider and the FakeIsolationProvider, so the undefined branch is unreachable from any test entry point @preserve */
+        const preserved = (await ctx.isolation.provider.preserveWorker?.(task.taskId)) ?? false;
+        /* v8 ignore stop @preserve */
+        if (preserved) {
+          ctx.appendOrchestratorTaskLog(
+            task.taskId,
+            `Preserved worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
+          );
+        } else {
+          ctx.appendOrchestratorTaskLog(
+            task.taskId,
+            `Failed to preserve worker container (no tracked worker): taskId=${task.taskId} status=${finalStatus}`
+          );
+          await this.withWorkerCleanupTimeout(task.taskId, ctx.teardownAttempt(task.taskId, false));
+        }
+      } else {
+        await this.withWorkerCleanupTimeout(task.taskId, ctx.teardownAttempt(task.taskId, false));
+      }
+    } catch (cleanupError) {
+      ctx.logger.warn(
+        { taskId: task.taskId, error: cleanupError, _skipSentry: true },
+        'Worker cleanup after task finalization failed'
+      );
+      ctx.appendOrchestratorTaskLog(
+        task.taskId,
+        `Worker cleanup after finalization failed: ${String(cleanupError)}`
+      );
+    }
+  }
+
+  private async withWorkerCleanupTimeout<T>(taskId: string, cleanup: Promise<T>): Promise<T> {
+    return await withTimeout(
+      cleanup,
+      WORKER_DESTROY_TIMEOUT_MS,
+      `worker cleanup timed out after ${String(WORKER_DESTROY_TIMEOUT_MS / 1000)}s for ${taskId}`
     );
   }
 }

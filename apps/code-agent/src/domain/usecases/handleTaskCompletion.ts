@@ -10,7 +10,7 @@
  *   - Execution-memory post-run queueing decisions
  *   - Remediation decision + automation log recording
  *   - Task failure automation logging
- *   - Status mirroring, WhatsApp notifications, metrics emission
+ *   - WhatsApp notifications and metrics emission
  *   - PR task lock cleanup + post-completion drain triggering
  *   - Log-line flushing on terminal transitions
  *
@@ -138,7 +138,6 @@ export async function handleTaskCompletion(
   const { body, requestLog, traceId, taskFormatterStates } = input;
       const {
         codeTaskRepo,
-        statusMirrorService,
         whatsappNotifier,
         metricsClient,
         linearIssueService,
@@ -164,7 +163,7 @@ export async function handleTaskCompletion(
         'Processing task-complete webhook'
       );
 
-      // Get task details first (to check for actionId)
+      // Get task details first so downstream notifications can use persisted context.
       const taskResult = await codeTaskRepo.findById(taskId);
       if (!taskResult.ok) {
         requestLog.error({ taskId, error: taskResult.error }, 'Task not found');
@@ -1483,13 +1482,6 @@ export async function handleTaskCompletion(
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 
-        await statusMirrorService.mirrorStatus({
-          actionId: task.actionId,
-          taskStatus: resolvedStatus,
-          ...(result?.prUrl !== undefined && { resourceUrl: result.prUrl }),
-          traceId,
-        });
-
         // Send WhatsApp notification (use updated task with result populated)
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
 
@@ -1628,14 +1620,7 @@ export async function handleTaskCompletion(
               'Task auto-retried by failure triage'
             );
 
-            // Even though retry is in flight, original task's failure must be mirrored
             await cleanupLockIfPR();
-            await statusMirrorService.mirrorStatus({
-              actionId: task.actionId,
-              taskStatus: 'failed',
-              errorMessage: taskError.message,
-              traceId,
-            });
 
             metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((metricsErr) => {
               requestLog.warn({ taskId, error: metricsErr }, 'Failed to record task completion metric');
@@ -1662,13 +1647,6 @@ export async function handleTaskCompletion(
         }
 
         await cleanupLockIfPR();
-
-        await statusMirrorService.mirrorStatus({
-          actionId: task.actionId,
-          taskStatus: 'failed',
-          errorMessage: taskError.message,
-          traceId,
-        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,
@@ -1708,13 +1686,6 @@ export async function handleTaskCompletion(
           return { kind: 'fail' as const, code: 'INTERNAL_ERROR', message: updateResult.error.message };
         }
         await cleanupLockIfPR();
-
-        await statusMirrorService.mirrorStatus({
-          actionId: task.actionId,
-          taskStatus: 'interrupted',
-          errorMessage: 'Worker was interrupted during task execution',
-          traceId,
-        });
 
         // Send WhatsApp notification for interrupted task
         await whatsappNotifier.notifyTaskFailed(
@@ -1760,12 +1731,6 @@ export async function handleTaskCompletion(
           return { kind: 'fail' as const, code: 'INTERNAL_ERROR', message: updateResult.error.message };
         }
         await cleanupLockIfPR();
-
-        await statusMirrorService.mirrorStatus({
-          actionId: task.actionId,
-          taskStatus: 'cancelled',
-          traceId,
-        });
 
         await whatsappNotifier.notifyTaskFailed(
           task.userId,

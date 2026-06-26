@@ -22,12 +22,12 @@
 - Shared internal-auth helpers (`authenticateInternalScheduler`, `authenticateInternalPubSub`) moved to `@intexuraos/common-http/auth`.
 - Shared generic `createFirestoreCrudRepository<T>` in `@intexuraos/infra-firestore`.
 - Port of all 21 `apps/*/src/server.ts` + `apps/*/src/index.ts` + `apps/*/src/services.ts` to the new shape.
-- Rename `useCases` → `usecases` (calendar-agent) and `use-cases` → `usecases` (cron-agent). No rename needed for linear-agent (already `usecases`).
+- Rename `useCases` → `usecases` (calendar-agent) and `use-cases` → `usecases` (retired-scheduler-service). No rename needed for linear-agent (already `usecases`).
 - Removal of all local `MinimalLogger` declarations in `apps/`.
 - Removal of `as string` casts and `?? ''` fallbacks after `validateRequiredEnv` in every `apps/*/src/index.ts`.
 - Split of `apps/code-agent/src/routes/code/task-routes.ts` (3,260 LoC) and `apps/research-agent/src/routes/researchRoutes.ts` (1,630 LoC) by resource.
 - Move direct Firestore access in `apps/code-agent/src/routes/webhooks/complianceReport.ts` into a repository.
-- Migration of `apps/{notes-agent,todos-agent,bookmarks-agent,commands-agent}` CRUD repositories onto `createFirestoreCrudRepository<T>`.
+- Migration of `apps/{notes-agent,retired-checklist-service,bookmarks-agent,commands-agent}` CRUD repositories onto `createFirestoreCrudRepository<T>`.
 
 **Out of scope (addressed by sibling issues INT-1530..INT-1538):**
 - Workers layer (INT-1530), S2S HTTP clients (INT-1531), Firestore migration immutability (INT-1532), LLM factory (INT-1533), web app (INT-1534), testing gate (INT-1535), env/IaC drift (INT-1536), shared packages leaf contract (INT-1537), observability (INT-1538).
@@ -82,7 +82,7 @@
 
 ### Modified files (apps — per-app port, 21 services)
 
-For every service in `apps/{actions-agent, api-docs-hub, app-settings-service, bookmarks-agent, calendar-agent, chat-agent, code-agent, commands-agent, cron-agent, hellscript-agent, image-service, linear-agent, llm-usage-service, mobile-notifications-service, notes-agent, notion-service, research-agent, todos-agent, user-service, web-agent, whatsapp-service}`:
+For every service in `apps/{actions-agent, api-docs-hub, app-settings-service, bookmarks-agent, calendar-agent, retired-chat-service, code-agent, commands-agent, retired-scheduler-service, hellscript-agent, image-service, linear-agent, llm-usage-service, mobile-notifications-service, notes-agent, notion-service, research-agent, retired-checklist-service, user-service, web-agent, whatsapp-service}`:
 
 | Path                                    | Change                                                                                                                                                                                                                                          |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -95,13 +95,13 @@ For every service in `apps/{actions-agent, api-docs-hub, app-settings-service, b
 
 | Path                                                                      | Change                                                                                                                                    |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/todos-agent/src/domain/usecases/*.ts` (13 files)                    | Remove local `interface MinimalLogger { … }` declarations; import `Logger` from `@intexuraos/common-core`.                                |
-| `apps/notes-agent/src/domain/usecases/*.ts`                               | Same as todos-agent (if present).                                                                                                         |
+| `apps/retired-checklist-service/src/domain/usecases/*.ts` (13 files)                    | Remove local `interface MinimalLogger { … }` declarations; import `Logger` from `@intexuraos/common-core`.                                |
+| `apps/notes-agent/src/domain/usecases/*.ts`                               | Same as retired-checklist-service (if present).                                                                                                         |
 | `apps/calendar-agent/src/infra/gemini/calendarActionExtractionService.ts` | Replace `type MinimalLogger = pino.Logger` with `import type { Logger } from '@intexuraos/common-core'` and use `Logger`.                 |
 | `apps/calendar-agent/src/domain/useCases/**`                              | Rename directory → `apps/calendar-agent/src/domain/usecases/`.                                                                            |
 | `apps/calendar-agent/src/__tests__/domain/useCases/**`                    | Rename directory → `apps/calendar-agent/src/__tests__/domain/usecases/`.                                                                  |
-| `apps/cron-agent/src/domain/use-cases/**`                                 | Rename directory → `apps/cron-agent/src/domain/usecases/`.                                                                                |
-| `apps/cron-agent/src/domain/use-cases/__tests__/**`                       | Rename directory → `apps/cron-agent/src/domain/usecases/__tests__/`.                                                                      |
+| `apps/retired-scheduler-service/src/domain/use-cases/**`                                 | Rename directory → `apps/retired-scheduler-service/src/domain/usecases/`.                                                                                |
+| `apps/retired-scheduler-service/src/domain/use-cases/__tests__/**`                       | Rename directory → `apps/retired-scheduler-service/src/domain/usecases/__tests__/`.                                                                      |
 | `apps/linear-agent/src/__tests__/domain/useCases/**`                      | Rename directory → `apps/linear-agent/src/__tests__/domain/usecases/`.                                                                    |
 | `apps/code-agent/src/routes/helpers/internalAuth.ts`                      | Delete; update imports to `@intexuraos/common-http`.                                                                                      |
 | `apps/commands-agent/src/routes/helpers/internalAuth.ts`                  | Delete; update imports.                                                                                                                   |
@@ -109,7 +109,7 @@ For every service in `apps/{actions-agent, api-docs-hub, app-settings-service, b
 | `apps/actions-agent/src/routes/pubsubAuth.ts`                             | Delete; update imports.                                                                                                                   |
 | `apps/mobile-notifications-service/src/routes/digestRoutes.ts`            | Replace inline `process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN']` reads with `validateInternalAuth(request)` from `@intexuraos/common-http`. |
 | `apps/actions-agent/src/index.ts:38-51`                                   | Delete `as string` casts; use `loadEnv` for typed access.                                                                                 |
-| `apps/todos-agent/src/index.ts`                                           | Same cleanup.                                                                                                                             |
+| `apps/retired-checklist-service/src/index.ts`                                           | Same cleanup.                                                                                                                             |
 | `apps/linear-agent/src/index.ts`                                          | Same cleanup.                                                                                                                             |
 
 ### Oversized route splits
@@ -149,7 +149,7 @@ For every service in `apps/{actions-agent, api-docs-hub, app-settings-service, b
 
 ### CRUD repository consolidation
 
-Each of `apps/{notes-agent,todos-agent,bookmarks-agent,commands-agent}/src/infra/firestore/firestore*Repository.ts` keeps its file path but is reimplemented to delegate to `createFirestoreCrudRepository<T>`. External imports unchanged.
+Each of `apps/{notes-agent,retired-checklist-service,bookmarks-agent,commands-agent}/src/infra/firestore/firestore*Repository.ts` keeps its file path but is reimplemented to delegate to `createFirestoreCrudRepository<T>`. External imports unchanged.
 
 ---
 
@@ -1109,12 +1109,12 @@ Every service is ported using the **same 3-step pattern** from Phase 2 (services
 
 1. `app-settings-service`
 2. `bookmarks-agent`
-3. `chat-agent`
+3. `retired-chat-service`
 4. `image-service`
 5. `llm-usage-service`
 6. `notes-agent`
 7. `notion-service`
-8. `todos-agent`
+8. `retired-checklist-service`
 9. `web-agent`
 10. `whatsapp-service`
 11. `api-docs-hub` (note: currently lacks `services.ts`; only server + index get migrated)
@@ -1122,7 +1122,7 @@ Every service is ported using the **same 3-step pattern** from Phase 2 (services
 **3.B — With internal-auth / Pub/Sub (must be done after Task 4.1 lands the shared helpers):**
 
 12. `calendar-agent`
-13. `cron-agent`
+13. `retired-scheduler-service`
 14. `linear-agent`
 15. `commands-agent`
 16. `actions-agent`
@@ -1159,7 +1159,7 @@ Every service is ported using the **same 3-step pattern** from Phase 2 (services
 ### Task 4.1: Remove all `MinimalLogger` declarations
 
 **Files (confirmed via grep):**
-- `apps/todos-agent/src/domain/usecases/*.ts` (13 files)
+- `apps/retired-checklist-service/src/domain/usecases/*.ts` (13 files)
 - `apps/calendar-agent/src/infra/gemini/calendarActionExtractionService.ts`
 - Any other matches from `grep -rn "MinimalLogger" apps/` at plan-execution time (re-run; the list may include notes-agent if new code has been added).
 
@@ -1193,8 +1193,8 @@ git commit -m "refactor(apps): replace local MinimalLogger with common-core Logg
 **Files:**
 - `apps/calendar-agent/src/domain/useCases/` → `apps/calendar-agent/src/domain/usecases/`
 - `apps/calendar-agent/src/__tests__/domain/useCases/` → `apps/calendar-agent/src/__tests__/domain/usecases/`
-- `apps/cron-agent/src/domain/use-cases/` → `apps/cron-agent/src/domain/usecases/`
-- `apps/cron-agent/src/domain/use-cases/__tests__/` → `apps/cron-agent/src/domain/usecases/__tests__/`
+- `apps/retired-scheduler-service/src/domain/use-cases/` → `apps/retired-scheduler-service/src/domain/usecases/`
+- `apps/retired-scheduler-service/src/domain/use-cases/__tests__/` → `apps/retired-scheduler-service/src/domain/usecases/__tests__/`
 - `apps/linear-agent/src/__tests__/domain/useCases/` → `apps/linear-agent/src/__tests__/domain/usecases/`
 
 - [ ] **Step 1: Rename via git**
@@ -1202,7 +1202,7 @@ git commit -m "refactor(apps): replace local MinimalLogger with common-core Logg
 ```bash
 git mv apps/calendar-agent/src/domain/useCases apps/calendar-agent/src/domain/usecases
 git mv apps/calendar-agent/src/__tests__/domain/useCases apps/calendar-agent/src/__tests__/domain/usecases
-git mv apps/cron-agent/src/domain/use-cases apps/cron-agent/src/domain/usecases
+git mv apps/retired-scheduler-service/src/domain/use-cases apps/retired-scheduler-service/src/domain/usecases
 git mv apps/linear-agent/src/__tests__/domain/useCases apps/linear-agent/src/__tests__/domain/usecases
 ```
 
@@ -1494,7 +1494,7 @@ git commit -m "refactor(code-agent): extract compliance report Firestore access 
 
 For each of:
 - `apps/notes-agent/src/infra/firestore/firestoreNoteRepository.ts`
-- `apps/todos-agent/src/infra/firestore/firestoreTodoRepository.ts`
+- `apps/retired-checklist-service/src/infra/firestore/firestoreTodoRepository.ts`
 - `apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts`
 - `apps/commands-agent/src/infra/firestore/firestoreCommandRepository.ts`
 

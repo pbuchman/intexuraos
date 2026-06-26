@@ -219,8 +219,6 @@ class FakeCodeAgentClient implements CodeAgentClient {
     linearIssueId: string;
     prompt: string;
     workerType: string;
-    actionId: string;
-    approvalEventId: string;
   }): Promise<Result<{ codeTaskId: string }, { code: string; message: string }>> {
     return ok({ codeTaskId: 'task-123' });
   }

@@ -4,6 +4,7 @@ import { join, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { type Logger, IntexuraOSError } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 const defaultExecFileAsync = promisify(execFile);
 
@@ -119,7 +120,7 @@ export class WorktreeManager {
         } catch (fetchError: unknown) {
           const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
           this.logger.warn(
-            { taskId, baseBranch, error: message },
+            { taskId, baseBranch, error: message, [SKIP_SENTRY_KEY]: true },
             'Failed to fetch base branch — proceeding with existing local state'
           );
         }
@@ -143,7 +144,7 @@ export class WorktreeManager {
               throw fetchError;
             }
             this.logger.warn(
-              { taskId, continuationPrBranch, baseBranch },
+              { taskId, continuationPrBranch, baseBranch, [SKIP_SENTRY_KEY]: true },
               'Continuation PR branch no longer exists on origin (likely merged + deleted) — falling back to base branch'
             );
           }

@@ -8,16 +8,12 @@
  *   - send-message
  *   - webhook-process
  *   - transcription
- *   - commands-ingest
- *   - actions-queue
- *   - approval-reply
+ *   - intex-message-ingest
  *   - research-process
  *   - llm-analytics
  *   - llm-call
  *   - bookmark-enrich
  *   - bookmark-summarize
- *   - todos-processing
- *   - calendar-preview
  *   - all (publishes one of each)
  */
 import { PubSub } from '@google-cloud/pubsub';
@@ -98,42 +94,15 @@ const EVENTS = {
       mimeType: 'audio/ogg',
     },
   },
-  'commands-ingest': {
-    topic: 'commands-ingest',
+  'intex-message-ingest': {
+    topic: 'intex-message-ingest',
     data: {
-      type: 'command.ingest',
+      type: 'intex.message.ingest',
       userId: 'test-user-789',
       sourceType: 'whatsapp_text',
-      externalId: 'msg-' + Date.now(),
-      text: 'Research latest AI developments',
-      timestamp: new Date().toISOString(),
-    },
-  },
-  'actions-queue': {
-    topic: 'actions-queue',
-    data: {
-      type: 'action.created',
-      actionId: 'action-' + Date.now(),
-      userId: 'test-user-101',
-      commandId: 'cmd-' + Date.now(),
-      actionType: 'research',
-      title: 'Research Task',
-      payload: {
-        prompt: 'Research latest AI developments',
-        confidence: 0.95,
-        selectedLlms: ['google', 'anthropic'],
-      },
-      timestamp: new Date().toISOString(),
-    },
-  },
-  'approval-reply': {
-    topic: 'approval-reply',
-    data: {
-      type: 'action.approval.reply',
-      replyToWamid: 'wamid.test-' + Date.now(),
-      replyText: 'yes',
-      userId: 'test-user-101',
-      actionId: 'action-' + Date.now(),
+      messageId: 'wamid.test-' + Date.now(),
+      text: 'Create a calendar event for tomorrow at 10 for planning',
+      whatsappSender: '+15551234567',
       timestamp: new Date().toISOString(),
     },
   },
@@ -184,28 +153,6 @@ const EVENTS = {
       type: 'bookmarks.summarize',
       bookmarkId: 'bookmark-' + Date.now(),
       userId: 'test-user-303',
-    },
-  },
-  'todos-processing': {
-    topic: 'todos-processing-local',
-    data: {
-      type: 'todos.processing.created',
-      todoId: 'todo-' + Date.now(),
-      userId: 'test-user-202',
-      correlationId: 'corr-' + Date.now(),
-      timestamp: new Date().toISOString(),
-    },
-  },
-  'calendar-preview': {
-    topic: 'calendar-preview',
-    data: {
-      type: 'calendar.preview.generate',
-      actionId: 'action-' + Date.now(),
-      userId: 'test-user-404',
-      text: 'Create meeting with John tomorrow at 2pm',
-      currentDate: new Date().toISOString().split('T')[0],
-      correlationId: 'corr-' + Date.now(),
-      timestamp: new Date().toISOString(),
     },
   },
 };

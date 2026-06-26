@@ -13,12 +13,11 @@ import { createE2EMocks } from '../../../services/factories/e2eMocks.js';
 const logger = pino({ level: 'silent' }) as unknown as Logger;
 
 describe('createE2EMocks', () => {
-  it('returns all four mocked services', () => {
+  it('returns external mocks still used by code-agent', () => {
     const mocks = createE2EMocks(logger);
     expect(mocks.whatsappPublisher).toBeDefined();
     expect(mocks.prTriagePublisher).toBeDefined();
     expect(mocks.linearAgentClient).toBeDefined();
-    expect(mocks.actionsAgentClient).toBeDefined();
   });
 
   describe('whatsappPublisher', () => {
@@ -35,14 +34,6 @@ describe('createE2EMocks', () => {
       const result = await prTriagePublisher.publishPRTriage({
         eventId: 'e1', repository: 'o/r', pullRequestNumber: 7, correlationId: 'c1',
       });
-      expect(result.ok).toBe(true);
-    });
-  });
-
-  describe('actionsAgentClient', () => {
-    it('updateActionStatus resolves to ok', async () => {
-      const { actionsAgentClient } = createE2EMocks(logger);
-      const result = await actionsAgentClient.updateActionStatus('a1', 'completed');
       expect(result.ok).toBe(true);
     });
   });

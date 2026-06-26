@@ -112,7 +112,6 @@ describe('handleTaskCompletion', () => {
   describe('interrupted path', () => {
     it('updates the task, notifies, and returns received for an interrupted status', async () => {
       const update = vi.fn().mockResolvedValue(ok(undefined));
-      const mirrorStatus = vi.fn().mockResolvedValue(undefined);
       const notifyTaskFailed = vi.fn().mockResolvedValue(ok(undefined));
 
       setServices({
@@ -123,12 +122,10 @@ describe('handleTaskCompletion', () => {
             workerType: 'claude-opus',
             status: 'running',
             agentType: 'execution',
-            actionId: 'act-1',
             dispatchedAt: Timestamp.now(),
           })),
           update,
         } as never,
-        statusMirrorService: { mirrorStatus } as never,
         whatsappNotifier: { notifyTaskFailed } as never,
         metricsClient: {
           incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
@@ -151,8 +148,32 @@ describe('handleTaskCompletion', () => {
           callbackReceived: true,
         }),
       );
-      expect(mirrorStatus).toHaveBeenCalledWith(expect.objectContaining({ taskStatus: 'interrupted' }));
       expect(notifyTaskFailed).toHaveBeenCalled();
+    });
+
+    it('returns fail when interrupted status update fails', async () => {
+      const update = vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+          })),
+          update,
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-interrupted',
+        status: 'interrupted',
+      }));
+
+      expect(result).toEqual({ kind: 'fail', code: 'INTERNAL_ERROR', message: 'write failed' });
     });
   });
 
@@ -175,7 +196,6 @@ describe('handleTaskCompletion', () => {
       process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
 
       const update = vi.fn().mockResolvedValue(ok(undefined));
-      const mirrorStatus = vi.fn().mockResolvedValue(undefined);
       const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
       const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
       const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
@@ -196,12 +216,10 @@ describe('handleTaskCompletion', () => {
             status: 'running',
             agentType: 'execution',
             linearIssueId: 'INT-1',
-            actionId: 'act-1',
             // No prNumber → cleanupLockIfPR + triggerDrainForPR short-circuit.
           })),
           update,
         } as never,
-        statusMirrorService: { mirrorStatus } as never,
         whatsappNotifier: { notifyTaskComplete } as never,
         metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
         linearAgentClient: {
@@ -239,9 +257,6 @@ describe('handleTaskCompletion', () => {
       // Automation/observability: metrics emitted + whatsapp notified.
       expect(incrementTasksCompleted).toHaveBeenCalledWith('claude-opus', 'implemented');
       expect(notifyTaskComplete).toHaveBeenCalled();
-      expect(mirrorStatus).toHaveBeenCalledWith(expect.objectContaining({
-        taskStatus: 'implemented',
-      }));
     });
   });
 
@@ -249,7 +264,6 @@ describe('handleTaskCompletion', () => {
     it('records a required remediation decision when a review completes with needs_remediation=1', async () => {
       const update = vi.fn().mockResolvedValue(ok(undefined));
       const automationRecord = vi.fn().mockResolvedValue(undefined);
-      const mirrorStatus = vi.fn().mockResolvedValue(undefined);
       const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
       const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
       const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
@@ -263,13 +277,11 @@ describe('handleTaskCompletion', () => {
             status: 'running',
             agentType: 'review',
             linearIssueId: 'INT-1',
-            actionId: 'act-2',
             // No prNumber on the task — prNumber is resolved from prUrl in result.
           })),
           update,
           findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
         } as never,
-        statusMirrorService: { mirrorStatus } as never,
         whatsappNotifier: { notifyTaskComplete } as never,
         metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
         automationLog: { record: automationRecord } as never,
@@ -317,7 +329,6 @@ describe('handleTaskCompletion', () => {
   describe('failed path', () => {
     it('returns received for a failed status with permanent_failure triage', async () => {
       const update = vi.fn().mockResolvedValue(ok(undefined));
-      const mirrorStatus = vi.fn().mockResolvedValue(undefined);
       const notifyTaskFailed = vi.fn().mockResolvedValue(ok(undefined));
 
       setServices({
@@ -328,11 +339,9 @@ describe('handleTaskCompletion', () => {
             workerType: 'claude-opus',
             status: 'running',
             agentType: 'execution',
-            actionId: 'act-1',
           })),
           update,
         } as never,
-        statusMirrorService: { mirrorStatus } as never,
         whatsappNotifier: { notifyTaskFailed } as never,
         metricsClient: {
           incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
@@ -361,6 +370,68 @@ describe('handleTaskCompletion', () => {
         }),
       );
       expect(notifyTaskFailed).toHaveBeenCalled();
+    });
+
+    it('returns fail when failed status update fails', async () => {
+      const update = vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+          })),
+          update,
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-failed',
+        status: 'failed',
+        error: { code: 'EXECUTION_AGENT_CRASH', message: 'boom' },
+      }));
+
+      expect(result).toEqual({ kind: 'fail', code: 'INTERNAL_ERROR', message: 'write failed' });
+    });
+  });
+
+  describe('cancelled path', () => {
+    it('records duration metrics when a task is cancelled with duration', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskFailed = vi.fn().mockResolvedValue(ok(undefined));
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskFailed } as never,
+        metricsClient: {
+          incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
+          recordTaskDuration,
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-cancelled',
+        status: 'cancelled',
+        duration: 123,
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(recordTaskDuration).toHaveBeenCalledWith('claude-opus', 123);
     });
   });
 });

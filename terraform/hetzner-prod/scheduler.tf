@@ -39,45 +39,6 @@ locals {
       min_backoff_duration = "10s"
       max_backoff_duration = "60s"
     }
-    cron_agent_tick = {
-      job_name             = "intexuraos-cron-agent-tick-prod-hetzner"
-      description          = "Trigger cron-agent tick every minute via Hetzner edge"
-      schedule             = "*/1 * * * *"
-      time_zone            = "UTC"
-      path                 = "/internal/cron/tick"
-      body                 = null
-      headers              = {}
-      retry_count          = 1
-      max_retry_duration   = null
-      min_backoff_duration = "10s"
-      max_backoff_duration = "30s"
-    }
-    retry_pending_commands = {
-      job_name             = "intexuraos-retry-pending-commands-prod-hetzner"
-      description          = "Retry classification for commands stuck in pending_classification via Hetzner edge"
-      schedule             = "*/5 * * * *"
-      time_zone            = "UTC"
-      path                 = "/internal/retry-pending"
-      body                 = null
-      headers              = {}
-      retry_count          = 1
-      max_retry_duration   = "60s"
-      min_backoff_duration = "5s"
-      max_backoff_duration = "30s"
-    }
-    retry_pending_actions = {
-      job_name             = "intexuraos-retry-pending-actions-prod-hetzner"
-      description          = "Retry processing for actions stuck in pending status via Hetzner edge"
-      schedule             = "*/5 * * * *"
-      time_zone            = "UTC"
-      path                 = "/internal/actions/retry-pending"
-      body                 = null
-      headers              = {}
-      retry_count          = 1
-      max_retry_duration   = "60s"
-      min_backoff_duration = "5s"
-      max_backoff_duration = "30s"
-    }
     retry_pending_whatsapp_webhooks = {
       job_name             = "intexuraos-retry-pending-whatsapp-webhooks-prod-hetzner"
       description          = "Retry persisted WhatsApp webhook events stuck before async processing via Hetzner edge"
@@ -136,8 +97,8 @@ locals {
       schedule             = "*/5 * * * *"
       time_zone            = "UTC"
       path                 = "/internal/code/detect-zombies"
-      body                 = null
-      headers              = {}
+      body                 = base64encode("{}")
+      headers              = { "Content-Type" = "application/json" }
       retry_count          = 1
       max_retry_duration   = "60s"
       min_backoff_duration = "5s"

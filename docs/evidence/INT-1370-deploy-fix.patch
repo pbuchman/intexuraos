@@ -28,7 +28,7 @@ index 2d1554870..78c3e33ea 100644
            bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
 -          bash cloudbuild/scripts/build-push-monitored.sh data-insights-agent apps/data-insights-agent/Dockerfile &
            bash cloudbuild/scripts/build-push-monitored.sh notes-agent apps/notes-agent/Dockerfile &
-           bash cloudbuild/scripts/build-push-monitored.sh todos-agent apps/todos-agent/Dockerfile &
+           bash cloudbuild/scripts/build-push-monitored.sh retired-checklist-service apps/retired-checklist-service/Dockerfile &
            bash cloudbuild/scripts/build-push-monitored.sh bookmarks-agent apps/bookmarks-agent/Dockerfile &
 @@ -172,7 +171,7 @@ jobs:
            SERVICES=(
@@ -36,8 +36,8 @@ index 2d1554870..78c3e33ea 100644
              app-settings-service mobile-notifications-service research-agent
 -            commands-agent actions-agent data-insights-agent notes-agent
 +            commands-agent actions-agent notes-agent
-             todos-agent bookmarks-agent calendar-agent linear-agent
-             web-agent code-agent chat-agent cron-agent hellscript-agent
+             retired-checklist-service bookmarks-agent calendar-agent linear-agent
+             web-agent code-agent retired-chat-service retired-scheduler-service hellscript-agent
              llm-usage-service
 @@ -194,7 +193,6 @@ jobs:
              "research-agent:RESEARCH_AGENT"
@@ -45,7 +45,7 @@ index 2d1554870..78c3e33ea 100644
              "actions-agent:ACTIONS_AGENT"
 -            "data-insights-agent:DATA_INSIGHTS_AGENT"
              "notes-agent:NOTES_AGENT"
-             "todos-agent:TODOS_AGENT"
+             "retired-checklist-service:RETIRED_CHECKLIST_SERVICE"
              "bookmarks-agent:BOOKMARKS_AGENT"
 @@ -379,7 +377,6 @@ jobs:
                  "research-agent:RESEARCH_AGENT"
@@ -53,7 +53,7 @@ index 2d1554870..78c3e33ea 100644
                  "actions-agent:ACTIONS_AGENT"
 -                "data-insights-agent:DATA_INSIGHTS_AGENT"
                  "notes-agent:NOTES_AGENT"
-                 "todos-agent:TODOS_AGENT"
+                 "retired-checklist-service:RETIRED_CHECKLIST_SERVICE"
                  "bookmarks-agent:BOOKMARKS_AGENT"
 -- 
 2.52.0

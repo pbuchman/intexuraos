@@ -480,6 +480,44 @@ describe('FakeFirestore', () => {
         expect(firstPage.docs.map((doc) => doc.id)).toEqual(['user-1', 'user-2']);
         expect(secondPage.docs.map((doc) => doc.id)).toEqual(['user-3', 'user-4']);
       });
+
+      it('supports multi-field cursors for stable pagination', async () => {
+        const firstPage = await db
+          .collection('users')
+          .orderBy('age', 'desc')
+          .orderBy(FieldPath.documentId(), 'desc')
+          .limit(2)
+          .get();
+
+        const secondPage = await db
+          .collection('users')
+          .orderBy('age', 'desc')
+          .orderBy(FieldPath.documentId(), 'desc')
+          .startAfter(firstPage.docs[1]?.data()?.['age'], firstPage.docs[1]?.id)
+          .get();
+
+        expect(firstPage.docs.map((doc) => doc.id)).toEqual(['user-3', 'user-2']);
+        expect(secondPage.docs.map((doc) => doc.id)).toEqual(['user-4', 'user-1']);
+      });
+
+      it('supports multi-field cursors when __name__ orders by document id', async () => {
+        const firstPage = await db
+          .collection('users')
+          .orderBy('age', 'desc')
+          .orderBy('__name__', 'desc')
+          .limit(2)
+          .get();
+
+        const secondPage = await db
+          .collection('users')
+          .orderBy('age', 'desc')
+          .orderBy('__name__', 'desc')
+          .startAfter(firstPage.docs[1]?.data()?.['age'], firstPage.docs[1]?.id)
+          .get();
+
+        expect(firstPage.docs.map((doc) => doc.id)).toEqual(['user-3', 'user-2']);
+        expect(secondPage.docs.map((doc) => doc.id)).toEqual(['user-4', 'user-1']);
+      });
     });
 
     describe('combined operations', () => {

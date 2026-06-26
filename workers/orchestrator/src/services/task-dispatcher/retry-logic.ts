@@ -16,6 +16,7 @@ export const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
 export const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
 export const EVIDENCE_CAPTURE_TIMEOUT_MS = 30_000; // 30s — copyOut/statsSnapshot are best-effort pre-kill telemetry
 export const WORKER_DESTROY_TIMEOUT_MS = 30_000; // 30s — bound destroyWorker so docker unresponsiveness cannot wedge the task in 'running'
+export const DOCKER_LIVENESS_CHECK_TIMEOUT_MS = 30_000; // 30s — bound Docker inspect so completion signals can still finalize tasks
 export const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — no output triggers kill+restart
 export const MAX_INACTIVITY_RESTARTS = 3; // max consecutive restarts before task is failed
 

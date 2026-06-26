@@ -14,10 +14,6 @@ describe('POST /internal/merge-queue/tick', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent')
-      .persist()
-      .patch(/\/internal\/actions\/.*\/status/)
-      .reply(200, { success: true });
 
     nock('http://linear-agent:8086')
       .persist()

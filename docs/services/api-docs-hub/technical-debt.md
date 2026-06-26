@@ -94,13 +94,12 @@ None.
 | 2026-04-07 | No config.test.ts                                 | Added `config.test.ts` covering env var validation and URL trimming       |
 | 2026-03-22 | Hardcoded 18-service config in config.ts          | Replaced with shared `INTERNAL_API_SERVICE_CATALOG` from common-core      |
 | 2026-03-22 | No test coverage                                  | Added `server.test.ts` with health check and Swagger UI tests             |
-| 2026-03-22 | Missing cron-agent and hellscript-agent specs     | Added via shared catalog (20 services total)                              |
+| 2026-03-22 | Missing hellscript-agent spec                     | Added via shared catalog                                                  |
 | 2026-03-15 | Package version bump to 3.3.0                     | Release v3.3.0 — no source changes, package.json version updated          |
 | 2026-03-07 | Package version bump to 3.2.0                     | Release v3.2.0 — no source changes, package.json version updated          |
 | 2026-02-22 | Missing code-agent, linear-agent, web-agent specs | Added 3 new `INTEXURAOS_*_OPENAPI_URL` env vars, bumped spec to 0.0.5     |
 | 2026-02-16 | Dev-mode log formatting                           | `createLogStream()` now emits human-readable output under PM2             |
 | 2026-02-14 | Broken start:local script                         | Fixed to use `tsx` instead of `node --experimental-strip-types`           |
-| 2026-02-01 | Chat Agent spec missing                           | Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` env var (INT-431)               |
 | 2026-01-26 | PromptVault reference after removal               | Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` env var (INT-319)    |
 
 ---

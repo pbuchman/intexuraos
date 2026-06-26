@@ -13,11 +13,9 @@ import { createFirestoreLogLineRepository } from '../../infra/firestore/firestor
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createCodeTaskDispatchStatusService } from '../../domain/services/codeTaskDispatchStatusService.js';
-import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { ok, err } from '@intexuraos/common-core';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
-import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
@@ -107,7 +105,7 @@ export const mockWorkerHealthProbe: WorkerHealthProbe = {
   },
 };
 
-export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
+export function setupTestServices(): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
   setFirestore(fakeFirestore);
   const logger = pino({ name: 'test', level: 'silent' });
@@ -122,12 +120,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
 
   const linearIssueService = createLinearIssueService({
     linearAgentClient,
-    logger,
-  });
-
-  const actionsAgentClient = createActionsAgentClient({
-    baseUrl: actionsAgentUrl,
-    internalAuthToken: 'test-token',
     logger,
   });
 
@@ -171,7 +163,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
     }),
     workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore, logger }),
-    statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
     userServiceClient: mockUserServiceClient,
     firestore: fakeFirestore,
@@ -227,12 +218,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     whatsappNotifier,
     codeTaskDispatchStatusService,
-    actionsAgentClient,
     linearAgentClient,
-    statusMirrorService: createStatusMirrorService({
-      actionsAgentClient,
-      logger,
-    }),
     linearIssueService,
     metricsClient,
     processHeartbeat: createProcessHeartbeatUseCase({

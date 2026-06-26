@@ -1,4 +1,6 @@
 import type {
+  CalendarCreateEventRequest,
+  CalendarCreatedEvent,
   CalendarGeneratePreviewRequest,
   CalendarProcessActionRequest,
 } from '@intexuraos/http-contracts';
@@ -14,6 +16,8 @@ export interface CalendarAgentServiceConfig {
 }
 
 export type ProcessCalendarRequest = CalendarProcessActionRequest;
+export type CreateCalendarEventRequest = CalendarCreateEventRequest;
+export type CreatedCalendarEvent = CalendarCreatedEvent;
 export type GeneratePreviewRequest = CalendarGeneratePreviewRequest;
 
 export type CalendarPreviewStatus = 'pending' | 'ready' | 'failed';
@@ -37,6 +41,11 @@ export interface CalendarPreview {
 export type CalendarAgentRequestOptions = ServiceFeedbackRequestOptions;
 
 export interface CalendarAgentServiceClient {
+  createEvent(
+    request: CreateCalendarEventRequest,
+    options?: CalendarAgentRequestOptions
+  ): Promise<Result<CreatedCalendarEvent>>;
+
   processAction(
     request: ProcessCalendarRequest,
     options?: CalendarAgentRequestOptions

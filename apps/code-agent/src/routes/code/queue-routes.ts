@@ -139,7 +139,6 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         }),
         /* v8 ignore stop @preserve */
         workerSettingsRepo: services.workerSettingsRepo,
-        statusMirrorService: services.statusMirrorService,
         /* v8 ignore start -- ts-type: optional property conditional spread for exactOptionalPropertyTypes; production initServices always provides codeTaskDispatchStatusService @preserve */
         ...(services.codeTaskDispatchStatusService !== undefined && {
           codeTaskDispatchStatusService: services.codeTaskDispatchStatusService,

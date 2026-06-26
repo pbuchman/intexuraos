@@ -157,6 +157,200 @@ export interface WhatsAppMessagesResponse {
   nextCursor?: string;
 }
 
+export type PrivateWhatsAppMessageType =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'file'
+  | 'sticker'
+  | 'reaction'
+  | 'redaction'
+  | 'unknown';
+
+export type PrivateWhatsAppDeliveryMode = 'live' | 'backfill';
+
+export interface PrivateWhatsAppMedia {
+  mxcUri?: string;
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+}
+
+export interface PrivateWhatsAppSender {
+  id: string;
+  senderKey: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  senderPhoneNumberNormalized?: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  messageCount: number;
+  chatIds: string[];
+  updatedAt: string;
+  schemaVersion: number;
+}
+
+export interface PrivateWhatsAppChat {
+  id: string;
+  chatType: 'direct' | 'group' | 'unknown';
+  displayName?: string;
+  avatarMxcUri?: string;
+  messageCount: number;
+  participantCount: number;
+  firstSeenAt: string;
+  lastEventAt: string;
+  updatedAt: string;
+  schemaVersion?: number;
+}
+
+export interface PrivateWhatsAppMessage {
+  id: string;
+  chatId: string;
+  senderKey?: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  senderPhoneNumberNormalized?: string;
+  direction: 'incoming' | 'outgoing';
+  messageType: PrivateWhatsAppMessageType;
+  text?: string;
+  media?: PrivateWhatsAppMedia;
+  eventTimestamp: string;
+  eventDayKey?: string;
+  eventTimeZone?: string;
+  chatDisplayName?: string;
+  chatType?: string;
+  receivedAt: string;
+  ingestedAt: string;
+  deliveryMode: PrivateWhatsAppDeliveryMode;
+  schemaVersion?: number;
+}
+
+export interface PrivateWhatsAppSenderDay {
+  id: string;
+  senderKey: string;
+  eventDayKey: string;
+  eventTimeZone: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  messageCount: number;
+  messageTypeCounts: Record<string, number>;
+  summaryStatus: 'not_started' | 'running' | 'completed' | 'failed';
+  summaryText?: string;
+  summaryGeneratedAt?: string;
+  summarySourceMessageCount: number;
+  updatedAt: string;
+  schemaVersion: number;
+}
+
+export type PrivateWhatsAppAccountStatus = 'active' | 'disabled';
+
+export interface PrivateWhatsAppAccount {
+  sourceAccountId: string;
+  phoneNumberNormalized: string;
+  displayName: string;
+  status: PrivateWhatsAppAccountStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastIngestAt?: string;
+  lastEventAt?: string;
+  messageCount?: number;
+  senderCount?: number;
+  schemaVersion: 1;
+}
+
+export interface PrivateWhatsAppSendersResponse {
+  senders: PrivateWhatsAppSender[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppChatsResponse {
+  chats: PrivateWhatsAppChat[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppMessagesResponse {
+  messages: PrivateWhatsAppMessage[];
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppSenderDaysResponse {
+  senderDays: PrivateWhatsAppSenderDay[];
+  nextCursor?: string;
+}
+
+export type IntexAgentSessionStatus =
+  | 'active'
+  | 'waiting_for_user'
+  | 'executing_tool'
+  | 'completed'
+  | 'unsupported'
+  | 'expired'
+  | 'cancelled'
+  | 'superseded';
+
+export type IntexAgentSessionStartReason =
+  | 'no_active_session'
+  | 'previous_completed'
+  | 'previous_expired'
+  | 'user_requested_new_session'
+  | 'previous_superseded';
+
+export type IntexAgentSessionEndReason =
+  | 'tool_completed'
+  | 'tool_failed'
+  | 'unsupported_request'
+  | 'timeout'
+  | 'cancelled_by_user'
+  | 'superseded_by_user';
+
+export type IntexAgentToolName =
+  | 'create_note'
+  | 'create_calendar_event'
+  | 'create_research'
+  | 'create_link'
+  | 'create_code_task';
+
+export interface IntexAgentSession {
+  id: string;
+  userId: string;
+  channel: 'whatsapp';
+  status: IntexAgentSessionStatus;
+  startedAt: string;
+  endedAt?: string;
+  lastUserMessageAt: string;
+  lastAssistantMessageAt?: string;
+  startReason: IntexAgentSessionStartReason;
+  endReason?: IntexAgentSessionEndReason;
+  activeTool?: IntexAgentToolName;
+  summary?: string;
+}
+
+export type IntexAgentSessionEventType =
+  | 'session_started'
+  | 'session_closed'
+  | 'user_message'
+  | 'assistant_message'
+  | 'clarification_requested'
+  | 'tool_call_started'
+  | 'tool_call_completed'
+  | 'tool_call_failed'
+  | 'unsupported_request';
+
+export interface IntexAgentSessionEvent {
+  id: string;
+  sessionId: string;
+  userId: string;
+  type: IntexAgentSessionEventType;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
 /**
  * Application config from environment
  */
@@ -170,21 +364,17 @@ export interface AppConfig {
   mobileNotificationsServiceUrl: string;
   fishingAssistantServiceUrl: string;
   ResearchAgentUrl: string;
-  commandsAgentServiceUrl: string;
-  actionsAgentUrl: string;
   notesAgentUrl: string;
-  todosAgentUrl: string;
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
   linearAgentUrl: string;
   codeAgentUrl: string;
-  chatAgentUrl: string;
-  cronAgentUrl: string;
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
   llmUsageServiceUrl: string;
   imageServiceUrl: string;
   webAgentUrl: string;
+  intexAgentUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
@@ -278,106 +468,6 @@ export interface UserSettings {
 }
 
 /**
- * Command classification type from commands-agent
- */
-export type CommandType =
-  | 'todo'
-  | 'research'
-  | 'note'
-  | 'link'
-  | 'calendar'
-  | 'reminder'
-  | 'linear'
-  | 'code';
-
-/**
- * Command status
- */
-export type CommandStatus =
-  | 'received'
-  | 'classified'
-  | 'pending_classification'
-  | 'failed'
-  | 'archived';
-
-/**
- * Command source type
- */
-export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
-
-/**
- * Command classification details
- */
-export interface CommandClassification {
-  type: CommandType;
-  confidence: number;
-  reasoning: string;
-  classifiedAt: string;
-}
-
-/**
- * Command from commands-agent
- */
-export interface Command {
-  id: string;
-  userId: string;
-  sourceType: CommandSourceType;
-  externalId: string;
-  text: string;
-  timestamp: string;
-  status: CommandStatus;
-  classification?: CommandClassification;
-  actionId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Action status
- */
-export type ActionStatus =
-  | 'pending'
-  | 'awaiting_approval'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'rejected'
-  | 'archived';
-
-/**
- * Action from commands-agent
- */
-export interface Action {
-  id: string;
-  userId: string;
-  commandId: string;
-  type: CommandType;
-  confidence: number;
-  title: string;
-  status: ActionStatus;
-  payload: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Commands list response
- */
-export interface CommandsResponse {
-  commands: Command[];
-  nextCursor?: string;
-}
-
-/**
- * Actions list response
- */
-export interface ActionsResponse {
-  actions: Action[];
-  nextCursor?: string;
-}
-
-
-/**
  * Note from notes-agent
  */
 export interface Note {
@@ -413,122 +503,9 @@ export interface UpdateNoteRequest {
 }
 
 /**
- * Todo priority levels
- */
-export type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
-
-/**
- * Todo status values
- */
-export type TodoStatus =
-  | 'draft'
-  | 'processing'
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled';
-
-/**
- * Todo item (nested within a todo)
- */
-export interface TodoItem {
-  id: string;
-  title: string;
-  status: TodoStatus;
-  priority: TodoPriority | null;
-  dueDate: string | null;
-  position: number;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Todo from todos-agent
- */
-export interface Todo {
-  id: string;
-  userId: string;
-  title: string;
-  description: string | null;
-  tags: string[];
-  priority: TodoPriority;
-  dueDate: string | null;
-  source: string;
-  sourceId: string;
-  status: TodoStatus;
-  archived: boolean;
-  items: TodoItem[];
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Request to create a todo
- */
-export interface CreateTodoRequest {
-  title: string;
-  description?: string | null;
-  tags: string[];
-  priority?: TodoPriority;
-  dueDate?: string | null;
-  source: string;
-  sourceId: string;
-  items?: {
-    title: string;
-    priority?: TodoPriority | null;
-    dueDate?: string | null;
-  }[];
-}
-
-/**
- * Request to update a todo
- */
-export interface UpdateTodoRequest {
-  title?: string;
-  description?: string | null;
-  tags?: string[];
-  priority?: TodoPriority;
-  dueDate?: string | null;
-}
-
-/**
- * Request to create a todo item
- */
-export interface CreateTodoItemRequest {
-  title: string;
-  priority?: TodoPriority | null;
-  dueDate?: string | null;
-}
-
-/**
- * Request to update a todo item
- */
-export interface UpdateTodoItemRequest {
-  title?: string;
-  status?: TodoStatus;
-  priority?: TodoPriority | null;
-  dueDate?: string | null;
-}
-
-/**
  * LLM provider type
  */
 export type { LlmProvider };
-
-/**
- * Chat types for Intex Chat feature.
- */
-export type {
-  ChatRole,
-  ChatMessage,
-  ChatSource,
-  SuggestedAction,
-  ChatResponse,
-  ChatSession,
-  ChatRequest,
-} from './chat.js';
 
 /**
  * Image size for pricing
@@ -1079,8 +1056,6 @@ export interface CodeTask {
   createdAt: string;
   updatedAt: string;
   dispatchedAt?: string;
-  actionId?: string;
-  approvalEventId?: string;
   linearIssueId?: string;
   linearIssue?: {
     identifier: string;
@@ -1407,19 +1382,6 @@ export type {
   LlmUsageQueryRequest,
   LlmUsageQueryResponse,
 } from './llmUsage.js';
-
-// Cron Agent types
-export type {
-  CronSchedule,
-  CronScheduleStatus,
-  CronExecution,
-  CronExecutionStatus,
-  ToolCallLog,
-  ServiceInfo,
-  ListSchedulesResponse,
-  ListExecutionsResponse,
-  CreateScheduleRequest,
-} from './cronAgent.js';
 
 export type {
   FishingContentType,

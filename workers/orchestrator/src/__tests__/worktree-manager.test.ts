@@ -182,7 +182,11 @@ describe('WorktreeManager', () => {
 
       expect(worktreePath).toBe(join(worktreeBasePath, 'task-fetch-fail'));
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task-fetch-fail', baseBranch: 'development' }),
+        expect.objectContaining({
+          taskId: 'task-fetch-fail',
+          baseBranch: 'development',
+          _skipSentry: true,
+        }),
         'Failed to fetch base branch — proceeding with existing local state'
       );
       warnSpy.mockRestore();
@@ -212,7 +216,11 @@ describe('WorktreeManager', () => {
 
       expect(worktreePath).toBe(join(worktreeBasePath, 'task-fetch-non-error'));
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task-fetch-non-error', error: 'Unknown error' }),
+        expect.objectContaining({
+          taskId: 'task-fetch-non-error',
+          error: 'Unknown error',
+          _skipSentry: true,
+        }),
         'Failed to fetch base branch — proceeding with existing local state'
       );
       warnSpy.mockRestore();
@@ -301,6 +309,7 @@ describe('WorktreeManager', () => {
           taskId: 'task-gone-branch',
           continuationPrBranch: 'feature/int-1561',
           baseBranch: 'development',
+          _skipSentry: true,
         }),
         expect.stringContaining('Continuation PR branch no longer exists on origin')
       );

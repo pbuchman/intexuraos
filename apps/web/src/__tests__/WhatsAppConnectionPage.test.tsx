@@ -19,10 +19,13 @@ vi.mock('@/services', () => ({
   ApiError: class ApiError extends Error {},
   confirmVerificationCode: vi.fn(),
   connectWhatsApp: vi.fn(),
+  disablePrivateWhatsAppAccount: vi.fn(),
+  getPrivateWhatsAppAccount: vi.fn().mockResolvedValue(null),
   disconnectWhatsApp: vi.fn(),
   getVerificationStatus: vi.fn(),
   getWhatsAppStatus: vi.fn().mockResolvedValue(null),
   sendVerificationCode: vi.fn(),
+  upsertPrivateWhatsAppAccount: vi.fn(),
 }));
 
 vi.mock('@/services/whatsappPreferencesApi', () => ({
@@ -58,5 +61,72 @@ describe('WhatsAppConnectionPage', () => {
         screen.getByText('Notification Preferences')
       ).toBeInTheDocument();
     });
+  });
+
+  it('shows private mirror adapter settings for a connected WhatsApp phone', async () => {
+    const services = await import('@/services');
+    vi.mocked(services.getWhatsAppStatus).mockResolvedValue({
+      connected: true,
+      phoneNumbers: ['48123456789'],
+      createdAt: '2026-06-22T00:00:00.000Z',
+      updatedAt: '2026-06-22T00:00:00.000Z',
+    });
+    vi.mocked(services.getVerificationStatus).mockResolvedValue({
+      phoneNumber: '+48123456789',
+      verified: true,
+      verifiedAt: '2026-06-22T00:00:00.000Z',
+    });
+    vi.mocked(services.getPrivateWhatsAppAccount).mockResolvedValue({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      phoneNumberNormalized: '48123456789',
+      displayName: '+48123456789',
+      status: 'active',
+      createdAt: '2026-06-22T00:00:00.000Z',
+      updatedAt: '2026-06-22T00:00:00.000Z',
+      schemaVersion: 1,
+    });
+
+    render(<WhatsAppConnectionPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('pbuchman-private-whatsapp').length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText('Private WhatsApp Mirror')).toBeInTheDocument();
+    expect(screen.getByText('https://intexuraos.cloud/internal/whatsapp/private/events')).toBeInTheDocument();
+  });
+
+  it('asks the user to verify an assistant phone before enabling private mirror sync', async () => {
+    const services = await import('@/services');
+    vi.mocked(services.getWhatsAppStatus).mockResolvedValue(null);
+    vi.mocked(services.getPrivateWhatsAppAccount).mockResolvedValue(null);
+
+    render(<WhatsAppConnectionPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Verify an assistant WhatsApp phone first.')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Private WhatsApp Mirror')).toBeInTheDocument();
+  });
+
+  it('shows active private mirror controls when assistant phones are disconnected', async () => {
+    const services = await import('@/services');
+    vi.mocked(services.getWhatsAppStatus).mockResolvedValue(null);
+    vi.mocked(services.getPrivateWhatsAppAccount).mockResolvedValue({
+      sourceAccountId: 'private-wa-existing-source',
+      phoneNumberNormalized: '48123456789',
+      displayName: '+48123456789',
+      status: 'active',
+      createdAt: '2026-06-22T00:00:00.000Z',
+      updatedAt: '2026-06-22T00:00:00.000Z',
+      schemaVersion: 1,
+    });
+
+    render(<WhatsAppConnectionPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('private-wa-existing-source').length).toBeGreaterThan(0);
+    });
+    expect(screen.getByRole('button', { name: /disable private mirror/i })).toBeInTheDocument();
+    expect(screen.queryByText('Verify an assistant WhatsApp phone first.')).not.toBeInTheDocument();
   });
 });

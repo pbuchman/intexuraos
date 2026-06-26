@@ -25,7 +25,6 @@ const CATEGORIES = {
   'common-worker': 'common-http',
   'http-contracts': 'common-http',
   'http-server': 'common-http',
-  'calendar-pubsub-client': 'integration',
   'code-task-domain': 'integration',
   'infra-claude': 'infrastructure',
   'infra-firestore': 'infrastructure',
@@ -46,7 +45,6 @@ const CATEGORIES = {
   'internal-clients': 'integration',
   'pr-triage-pubsub-client': 'integration',
   'service-catalog': 'integration',
-  'todos-pubsub-client': 'integration',
   'whatsapp-pubsub-client': 'integration',
 };
 
@@ -58,7 +56,6 @@ const DESCRIPTIONS = {
   'common-worker': 'Shared worker bootstrap utilities',
   'http-contracts': 'OpenAPI & Fastify JSON schemas',
   'http-server': 'Health checks, validation handler',
-  'calendar-pubsub-client': 'Calendar Pub/Sub message client',
   'code-task-domain': 'Shared code task domain contracts',
   'infra-claude': 'Anthropic Claude API client',
   'infra-firestore': 'Firestore singleton & fake',
@@ -79,7 +76,6 @@ const DESCRIPTIONS = {
   'llm-utils': 'Redaction utilities, LLM parse error helpers',
   'pr-triage-pubsub-client': 'PR triage Pub/Sub message client',
   'service-catalog': 'Service registry metadata',
-  'todos-pubsub-client': 'Todos Pub/Sub message client',
   'whatsapp-pubsub-client': 'WhatsApp Pub/Sub message client',
 };
 

@@ -18,29 +18,22 @@ export {
   type BookmarksCreateBookmarkRequest,
 } from './bookmarks-agent.js';
 export {
-  commandsCommandWithTextSchema,
-  commandsGetCommandDataSchema,
-  commandsGetCommandResponseSchema,
-  type CommandsCommandWithText,
-  type CommandsGetCommandData,
-  type CommandsGetCommandResponse,
-} from './commands-agent.js';
-export {
   notesCreateNoteRequestSchema,
   notesCreateNoteResponseSchema,
   type NotesCreateNoteRequest,
 } from './notes-agent.js';
-export {
-  todosCreateTodoRequestSchema,
-  todosCreateTodoResponseSchema,
-  type TodosCreateTodoRequest,
-} from './todos-agent.js';
 export {
   researchCreateDraftRequestSchema,
   researchCreateDraftResponseSchema,
   type ResearchCreateDraftRequest,
 } from './research-agent.js';
 export {
+  calendarCreateEventDataSchema,
+  calendarCreateEventInputSchema,
+  calendarCreateEventRequestSchema,
+  calendarCreateEventResponseSchema,
+  calendarCreatedEventSchema,
+  calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewEnvelopeSchema,
@@ -48,6 +41,12 @@ export {
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
   calendarProcessActionResponseSchema,
+  type CalendarCreateEventData,
+  type CalendarCreateEventInput,
+  type CalendarCreateEventRequest,
+  type CalendarCreateEventResponse,
+  type CalendarCreatedEvent,
+  type CalendarEventDateTime,
   type CalendarGeneratePreviewRequest,
   type CalendarPreview,
   type CalendarPreviewData,

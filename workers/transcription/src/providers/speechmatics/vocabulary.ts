@@ -24,11 +24,8 @@ export const ADDITIONAL_VOCAB = [
   // Service agents
   { content: 'service-scribe', sounds_like: ['service scribe'] },
   { content: 'coverage-orchestrator', sounds_like: ['coverage orchestrator'] },
-  { content: 'actions-agent', sounds_like: ['actions agent'] },
   { content: 'research-agent', sounds_like: ['research agent'] },
-  { content: 'commands-agent', sounds_like: ['commands agent'] },
   { content: 'bookmarks-agent', sounds_like: ['bookmarks agent'] },
-  { content: 'todos-agent', sounds_like: ['to dos agent', 'todos agent'] },
   { content: 'web-agent', sounds_like: ['web agent'] },
   { content: 'calendar-agent', sounds_like: ['calendar agent'] },
   { content: 'linear-agent', sounds_like: ['linear agent'] },

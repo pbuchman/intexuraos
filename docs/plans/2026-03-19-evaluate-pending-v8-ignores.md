@@ -17,7 +17,7 @@
 | Service          | PENDING Key                       | Files   | Blocks   | Primary Action                                                  |
 | ---------------- | --------------------------------- | ------- | -------- | --------------------------------------------------------------- |
 | bookmarks-agent  | PENDING-apps-bookmarks-agent      | 1       | 1        | Standardize (ts-type)                                           |
-| todos-agent      | PENDING-apps-todos-agent          | 1       | 1        | Standardize (ts-type)                                           |
+| retired-checklist-service      | PENDING-apps-retired-checklist-service          | 1       | 1        | Standardize (ts-type)                                           |
 | user-service     | PENDING-apps-user-service         | 5       | ~6       | Mixed: remove some v8-ignores (tests exist), standardize others |
 | whatsapp-service | PENDING-apps-whatsapp-service     | 3       | ~5       | Mixed: write tests for testable blocks, standardize ts-type     |
 | linear-agent     | PENDING-apps-linear-agent         | 2       | 2        | Write tests (FakeFirestore supports `in` queries)               |
@@ -71,17 +71,17 @@ git commit -m "fix(bookmarks-agent): standardize v8-ignore from PENDING to perma
 
 ---
 
-## Task 2: todos-agent — Standardize ts-type v8-ignore
+## Task 2: retired-checklist-service — Standardize ts-type v8-ignore
 
 **Files:**
-- Modify: `apps/todos-agent/src/domain/usecases/reorderTodoItems.ts:61-65`
-- Modify: `v8-ignore-overrides.json` (remove `PENDING-apps-todos-agent` entry)
+- Modify: `apps/retired-checklist-service/src/domain/usecases/reorderTodoItems.ts:61-65`
+- Modify: `v8-ignore-overrides.json` (remove `PENDING-apps-retired-checklist-service` entry)
 
 **Block analysis:**
 - Lines 61-65: `if (item === undefined) throw new Error(...)` after validation on lines 49-56 guarantees all IDs exist in itemMap. The `Map.get()` return type includes `undefined` per TypeScript, but the prior loop validates every ID. Unreachable branch.
 - **Action:** Verify the existing v8-ignore passes validation without override, fix if needed, remove override.
 
-- [ ] **Step 1: Run verify-v8-ignore with --no-overrides, grep for todos-agent**
+- [ ] **Step 1: Run verify-v8-ignore with --no-overrides, grep for retired-checklist-service**
 
 ```bash
 node scripts/verify-v8-ignore.mjs --no-overrides 2>&1 | grep -i todos
@@ -89,7 +89,7 @@ node scripts/verify-v8-ignore.mjs --no-overrides 2>&1 | grep -i todos
 
 - [ ] **Step 2a (if passes): Remove override entry**
 
-Remove `PENDING-apps-todos-agent` from `v8-ignore-overrides.json`.
+Remove `PENDING-apps-retired-checklist-service` from `v8-ignore-overrides.json`.
 
 - [ ] **Step 2b (if fails): Fix the v8-ignore comment**
 
@@ -103,14 +103,14 @@ Then remove the override entry.
 - [ ] **Step 3: Verify workspace passes**
 
 ```bash
-pnpm run verify:workspace:tracked -- todos-agent
+pnpm run verify:workspace:tracked -- retired-checklist-service
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/todos-agent/src/domain/usecases/reorderTodoItems.ts v8-ignore-overrides.json
-git commit -m "fix(todos-agent): standardize v8-ignore from PENDING to permanent ts-type"
+git add apps/retired-checklist-service/src/domain/usecases/reorderTodoItems.ts v8-ignore-overrides.json
+git commit -m "fix(retired-checklist-service): standardize v8-ignore from PENDING to permanent ts-type"
 ```
 
 ---

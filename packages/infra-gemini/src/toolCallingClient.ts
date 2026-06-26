@@ -76,6 +76,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         systemPrompt,
         messages,
         tools,
+        toolChoice = 'required',
         maxIterations = DEFAULT_MAX_ITERATIONS,
         onExhausted,
         repairIterations,
@@ -135,7 +136,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
                     functionCallingConfig: {
                       mode:
                         totalToolCalls === 0
-                          ? FunctionCallingConfigMode.ANY
+                          ? firstTurnFunctionCallingMode(toolChoice)
                           : FunctionCallingConfigMode.AUTO,
                     },
                   },
@@ -332,6 +333,12 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
       }
     },
   };
+}
+
+function firstTurnFunctionCallingMode(
+  toolChoice: 'auto' | 'required'
+): typeof FunctionCallingConfigMode.AUTO | typeof FunctionCallingConfigMode.ANY {
+  return toolChoice === 'auto' ? FunctionCallingConfigMode.AUTO : FunctionCallingConfigMode.ANY;
 }
 
 function addUsage(a: NormalizedUsage, b: NormalizedUsage): NormalizedUsage {

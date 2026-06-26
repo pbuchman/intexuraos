@@ -3,6 +3,7 @@ import { Navbar } from '@/components/home/Navbar.js';
 import { HeroSection } from '@/components/home/HeroSection.js';
 import { StatsSection } from '@/components/home/StatsSection.js';
 import { VoiceSection } from '@/components/home/VoiceSection.js';
+import { AgentPatternsSection } from '@/components/home/AgentPatternsSection.js';
 import { SelfBuildingSection } from '@/components/home/SelfBuildingSection.js';
 import { CouncilSection } from '@/components/home/CouncilSection.js';
 import { IntegrationsSection } from '@/components/home/IntegrationsSection.js';
@@ -20,6 +21,7 @@ export function HomePage(): React.JSX.Element {
       <HeroSection />
       <StatsSection />
       <VoiceSection />
+      <AgentPatternsSection />
       <SelfBuildingSection />
       <CouncilSection />
       <IntegrationsSection />

@@ -10,11 +10,8 @@ const KNOWN_TOPICS = [
   'research-process',
   'llm-call',
   'whatsapp-media-cleanup',
-  'commands-ingest',
+  'intex-message-ingest',
   'whatsapp-webhook-process',
-  'whatsapp-transcription',
-  'approval-reply',
-  'calendar-preview',
 ];
 
 interface DevBarPubSubTabProps {

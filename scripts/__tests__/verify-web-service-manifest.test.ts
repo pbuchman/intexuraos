@@ -27,6 +27,7 @@ const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
 const ENV_SUFFIX_REGEX = /^[A-Z][A-Z0-9_]+$/;
 const API_PATH_REGEX = /^\/api\/[a-z0-9-]+$/;
 const URL_REGEX = /^https?:\/\/\S+$/;
+const retiredAgentNames = ['todos', 'chat', 'cron'].map((prefix) => `${prefix}-agent`);
 
 describe('apps/web/service-manifest.json', () => {
   it('exists and parses as JSON', () => {
@@ -35,10 +36,13 @@ describe('apps/web/service-manifest.json', () => {
     expect(() => JSON.parse(raw)).not.toThrow();
   });
 
-  it('has at least 20 service entries', () => {
+  it('has at least 17 active service entries', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     expect(Array.isArray(manifest.services)).toBe(true);
-    expect(manifest.services.length).toBeGreaterThanOrEqual(20);
+    expect(manifest.services.length).toBeGreaterThanOrEqual(17);
+    expect(manifest.services.map((service) => service.name)).not.toEqual(
+      expect.arrayContaining(retiredAgentNames)
+    );
   });
 
   it('each entry has valid name, envSuffix, apiPath, proxyTarget, and serviceUrl fields', () => {

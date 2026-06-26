@@ -53,4 +53,26 @@ describe('sendInternalRequest', () => {
       rawText: '',
     });
   });
+
+  it('uses thrown string values as network error messages', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      throw 'socket closed';
+    });
+
+    const result = await sendInternalRequest({
+      baseUrl: 'https://service.example.com',
+      path: '/internal/test',
+      method: 'GET',
+      token: 'secret',
+      logger: { warn: () => undefined },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: 'socket closed',
+      },
+    });
+  });
 });

@@ -11,18 +11,14 @@ This document describes the Cloud Run service configuration and operations.
 | WhatsApp Service             | `intexuraos-whatsapp-service`             | 8113       | `/health`       |
 | Mobile Notifications Service | `intexuraos-mobile-notifications-service` | 8114       | `/health`       |
 | Research Agent               | `intexuraos-research-agent`               | 8116       | `/health`       |
-| Commands Agent               | `intexuraos-commands-agent`               | 8117       | `/health`       |
-| Actions Agent                | `intexuraos-actions-agent`                | 8118       | `/health`       |
 | Image Service                | `intexuraos-image-service`                | 8120       | `/health`       |
 | Notes Agent                  | `intexuraos-notes-agent`                  | 8121       | `/health`       |
 | App Settings Service         | `intexuraos-app-settings-service`         | 8122       | `/health`       |
-| Todos Agent                  | `intexuraos-todos-agent`                  | 8123       | `/health`       |
 | Bookmarks Agent              | `intexuraos-bookmarks-agent`              | 8124       | `/health`       |
 | Calendar Agent               | `intexuraos-calendar-agent`               | 8125       | `/health`       |
 | Linear Agent                 | `intexuraos-linear-agent`                 | 8126       | `/health`       |
 | Web Agent                    | `intexuraos-web-agent`                    | 8127       | `/health`       |
 | Code Agent                   | `intexuraos-code-agent`                   | 8128       | `/health`       |
-| Chat Agent                   | `intexuraos-chat-agent`                   | 8129       | `/health`       |
 | API Docs Hub                 | `intexuraos-api-docs-hub`                 | —          | `/health`       |
 
 ## Service Configuration
@@ -103,18 +99,14 @@ SERVICES=(
   intexuraos-whatsapp-service
   intexuraos-mobile-notifications-service
   intexuraos-research-agent
-  intexuraos-commands-agent
-  intexuraos-actions-agent
   intexuraos-image-service
   intexuraos-notes-agent
   intexuraos-app-settings-service
-  intexuraos-todos-agent
   intexuraos-bookmarks-agent
   intexuraos-calendar-agent
   intexuraos-linear-agent
   intexuraos-web-agent
   intexuraos-code-agent
-  intexuraos-chat-agent
   intexuraos-api-docs-hub
 )
 
@@ -163,7 +155,7 @@ curl -s $USER_URL/openapi.json | jq
 
 ## Manual Deployment
 
-Deploy a specific image manually (replace `<service-name>` with the app directory name, e.g. `user-service`, `chat-agent`):
+Deploy a specific image manually (replace `<service-name>` with the app directory name, e.g. `user-service`, `code-agent`):
 
 ```bash
 gcloud run deploy intexuraos-<service-name> \
@@ -172,7 +164,7 @@ gcloud run deploy intexuraos-<service-name> \
   --platform=managed
 ```
 
-All 19 backend services follow this pattern. Service names correspond to their `apps/` directory names (e.g. `apps/chat-agent` → `intexuraos-chat-agent`).
+Backend services follow this pattern. Service names correspond to their `apps/` directory names (e.g. `apps/code-agent` -> `intexuraos-code-agent`).
 
 In normal operation, deployments are handled automatically by Cloud Build on push to the `development` branch (managed by Terraform).
 

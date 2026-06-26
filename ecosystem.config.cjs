@@ -41,6 +41,7 @@ const COMMON_SERVICE_ENV = {
 // All service URLs - mirrors Terraform local.common_service_env_vars
 const COMMON_SERVICE_URLS = {
   ...COMMON_SERVICE_URLS_GENERATED,
+  INTEXURAOS_INTEX_AGENT_URL: 'http://localhost:8134',
   INTEXURAOS_API_DOCS_HUB_URL: 'http://localhost:8133',
 };
 
@@ -53,20 +54,16 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
   INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
   INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8116/openapi.json',
-  INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL: 'http://localhost:8117/openapi.json',
-  INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
   INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
   INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL: 'http://localhost:8122/openapi.json',
   INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
-  INTEXURAOS_TODOS_AGENT_OPENAPI_URL: 'http://localhost:8123/openapi.json',
   INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://localhost:8124/openapi.json',
   INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
-  INTEXURAOS_CHAT_AGENT_OPENAPI_URL: 'http://localhost:8129/openapi.json',
   INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'https://dev.intexuraos.cloud/api/code/openapi.json',
   INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://localhost:8126/openapi.json',
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://localhost:8127/openapi.json',
-  INTEXURAOS_CRON_AGENT_OPENAPI_URL: 'http://localhost:8130/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://localhost:8131/openapi.json',
+  INTEXURAOS_INTEX_AGENT_OPENAPI_URL: 'http://localhost:8134/openapi.json',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -94,8 +91,8 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'whatsapp-send-message-push',
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC:
       process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'whatsapp-media-cleanup',
-    INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
+    INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC ?? 'intex-message-ingest',
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN: process.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN,
     INTEXURAOS_WHATSAPP_APP_SECRET: process.env.INTEXURAOS_WHATSAPP_APP_SECRET,
     INTEXURAOS_WHATSAPP_WABA_ID: process.env.INTEXURAOS_WHATSAPP_WABA_ID,
@@ -107,17 +104,6 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ?? 'whatsapp-media-cleanup-push',
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? 'whatsapp-webhook-process',
-    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC ?? 'whatsapp-transcription',
-    INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC ?? 'approval-reply',
-  },
-  'actions-agent': {
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
-    INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC ?? 'calendar-preview',
   },
   'code-agent': {
     INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/code',
@@ -157,14 +143,6 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_IMAGE_PUBLIC_BASE_URL:
       process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
   },
-  'commands-agent': {
-    INTEXURAOS_SERVICE_URL: 'http://localhost:8117',
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
-  },
-  'todos-agent': {
-    INTEXURAOS_TODOS_PROCESSING_TOPIC:
-      process.env.INTEXURAOS_TODOS_PROCESSING_TOPIC ?? 'todos-processing',
-  },
   'user-service': {
     INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY,
     INTEXURAOS_ENCRYPTION_KEY: process.env.INTEXURAOS_ENCRYPTION_KEY,
@@ -176,12 +154,6 @@ const SERVICE_ENV_MAPPINGS = {
   'web-agent': {
     INTEXURAOS_CLOUDFLARE_ACCOUNT_ID: process.env.INTEXURAOS_CLOUDFLARE_ACCOUNT_ID,
     INTEXURAOS_CLOUDFLARE_API_TOKEN: process.env.INTEXURAOS_CLOUDFLARE_API_TOKEN,
-  },
-  'chat-agent': {
-    // OpenAI API key for embeddings (from .envrc)
-    INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
-    // HS256 secret used to sign guest session JWTs (>=32 bytes; from .envrc)
-    INTEXURAOS_GUEST_SESSION_SECRET: process.env.INTEXURAOS_GUEST_SESSION_SECRET,
   },
   'fishing-assistant-service': {
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
@@ -195,6 +167,13 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+  },
+  'intex-agent': {
+    INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+    INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS:
+      process.env.INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS ?? '1800000',
   },
   'api-docs-hub': {
     ...API_DOCS_HUB_OPENAPI_URLS,
@@ -270,21 +249,17 @@ module.exports = {
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),
-    createServiceConfig('cron-agent', 8130),
     createServiceConfig('hellscript-agent', 8131),
     createServiceConfig('llm-usage-service', 8132),
+    createServiceConfig('intex-agent', 8134),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)
     createServiceConfig('user-service', 8110, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('commands-agent', 8117, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('actions-agent', 8118, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('todos-agent', 8123, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('chat-agent', 8129, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('web-agent', 8127, { waitForService: 'http://localhost:8122/health' }),
 
     // Aggregates `/openapi.json` from every other service — register last so

@@ -21,7 +21,6 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     whatsappSendTopic: 'whatsapp-send',
     prTriageTopic: 'pr-triage',
     linearAgentUrl: 'http://linear-agent',
-    actionsAgentUrl: 'http://actions-agent',
     webhookVerifySecret: 'webhook',
     orchestratorSecret: 'orch',
     serviceUrl: 'http://code-agent',
@@ -62,10 +61,8 @@ describe('initServices', () => {
     expect(c.taskDispatcher).toBeDefined();
     expect(c.whatsappNotifier).toBeDefined();
     expect(c.codeTaskDispatchStatusService).toBeDefined();
-    expect(c.actionsAgentClient).toBeDefined();
     expect(c.linearAgentClient).toBeDefined();
     expect(c.linearIssueService).toBeDefined();
-    expect(c.statusMirrorService).toBeDefined();
     expect(c.processHeartbeat).toBeDefined();
     expect(c.detectZombieTasks).toBeDefined();
     expect(c.archiveStaleGroups).toBeDefined();
@@ -115,37 +112,6 @@ describe('initServices', () => {
     initServices(makeConfig());
     const c = getServices();
     expect(c.linearAgentClient).toBeDefined();
-    expect(c.actionsAgentClient).toBeDefined();
-  });
-
-  it('composes services so statusMirrorService forwards through actionsAgentClient', async () => {
-    // Spot-check an actual wiring edge: if the composer created a second
-    // actionsAgentClient by mistake, this test would fail.
-    process.env['E2E_MODE'] = 'true';
-    initServices(makeConfig());
-    const c = getServices();
-
-    const calls: { actionId: string; status: string }[] = [];
-    // Replace the in-container client's method so we can observe calls from
-    // statusMirrorService. If statusMirrorService was constructed with a
-    // DIFFERENT client instance, the spy would never fire.
-    c.actionsAgentClient.updateActionStatus = async (
-      actionId,
-      status,
-    ): Promise<{ ok: true; value: undefined }> => {
-      calls.push({ actionId, status });
-      return { ok: true, value: undefined };
-    };
-
-    // Use a real UUID so isRealActionId() allows the forward.
-    await c.statusMirrorService.mirrorStatus({
-      actionId: '11111111-1111-4111-8111-111111111111',
-      taskStatus: 'running',
-    });
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.actionId).toBe('11111111-1111-4111-8111-111111111111');
-    expect(calls[0]?.status).toBe('running');
   });
 
   it('throws from getServices() before initServices()', () => {

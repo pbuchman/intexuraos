@@ -50,8 +50,8 @@ Include only the relevant frames:
 
 ```
 ✅ Good - Relevant frames only:
-at TodoService.findById (apps/todos-agent/src/domain/todos/service.ts:45:12)
-at processRequest (apps/todos-agent/src/routes/routes.ts:128:24)
+at UserService.findById (apps/user-service/src/domain/users/service.ts:45:12)
+at processRequest (apps/user-service/src/routes/routes.ts:128:24)
 at handleWebhook (apps/whatsapp-service/src/routes/webhookRoutes.ts:67:8)
 
 ❌ Bad - Too much noise:

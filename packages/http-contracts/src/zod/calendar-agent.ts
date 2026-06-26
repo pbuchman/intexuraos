@@ -21,6 +21,91 @@ export const calendarProcessActionRequestSchema = z
 export const calendarProcessActionResponseSchema =
   createApiSuccessEnvelopeSchema(serviceFeedbackZodSchema);
 
+type CalendarEventDateTimeSchema = z.ZodObject<
+  {
+    dateTime: z.ZodOptional<z.ZodString>;
+    date: z.ZodOptional<z.ZodString>;
+    timeZone: z.ZodOptional<z.ZodString>;
+  },
+  'strict'
+>;
+
+const createCalendarEventDateTimeSchema = (): CalendarEventDateTimeSchema =>
+  z
+    .object({
+      dateTime: z.string().optional(),
+      date: z.string().optional(),
+      timeZone: z.string().optional(),
+    })
+    .strict();
+
+export const calendarEventDateTimeSchema = createCalendarEventDateTimeSchema();
+
+export const calendarCreateEventInputSchema = z
+  .object({
+    summary: z.string(),
+    description: z.string().optional(),
+    location: z.string().optional(),
+    start: createCalendarEventDateTimeSchema(),
+    end: createCalendarEventDateTimeSchema(),
+    attendees: z.array(z.object({ email: z.string() }).strict()).optional(),
+  })
+  .strict();
+
+export const calendarCreateEventRequestSchema = z
+  .object({
+    userId: z.string(),
+    calendarId: z.string().optional(),
+    event: calendarCreateEventInputSchema,
+  })
+  .strict();
+
+export const calendarCreatedEventSchema = z
+  .object({
+    id: z.string(),
+    summary: z.string(),
+    description: z.string().optional(),
+    location: z.string().optional(),
+    start: createCalendarEventDateTimeSchema(),
+    end: createCalendarEventDateTimeSchema(),
+    status: z.enum(['confirmed', 'tentative', 'cancelled']).optional(),
+    htmlLink: z.string().optional(),
+    created: z.string().optional(),
+    updated: z.string().optional(),
+    organizer: z
+      .object({
+        email: z.string().optional(),
+        displayName: z.string().optional(),
+        self: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    attendees: z
+      .array(
+        z
+          .object({
+            email: z.string().optional(),
+            displayName: z.string().optional(),
+            self: z.boolean().optional(),
+            responseStatus: z.enum(['needsAction', 'declined', 'tentative', 'accepted']).optional(),
+            optional: z.boolean().optional(),
+          })
+          .strict()
+      )
+      .optional(),
+  })
+  .strict();
+
+export const calendarCreateEventDataSchema = z
+  .object({
+    event: calendarCreatedEventSchema,
+  })
+  .strict();
+
+export const calendarCreateEventResponseSchema = createApiSuccessEnvelopeSchema(
+  calendarCreateEventDataSchema
+);
+
 export const calendarPreviewSchema = z
   .object({
     actionId: z.string(),
@@ -63,6 +148,12 @@ export const calendarGeneratePreviewRequestSchema = z
   .strict();
 
 export type CalendarProcessActionRequest = z.infer<typeof calendarProcessActionRequestSchema>;
+export type CalendarEventDateTime = z.infer<typeof calendarEventDateTimeSchema>;
+export type CalendarCreateEventInput = z.infer<typeof calendarCreateEventInputSchema>;
+export type CalendarCreateEventRequest = z.infer<typeof calendarCreateEventRequestSchema>;
+export type CalendarCreatedEvent = z.infer<typeof calendarCreatedEventSchema>;
+export type CalendarCreateEventData = z.infer<typeof calendarCreateEventDataSchema>;
+export type CalendarCreateEventResponse = z.infer<typeof calendarCreateEventResponseSchema>;
 export type CalendarPreview = z.infer<typeof calendarPreviewSchema>;
 export type CalendarPreviewData = z.infer<typeof calendarPreviewDataSchema>;
 export type CalendarPreviewResponse = z.infer<typeof calendarPreviewResponseSchema>;

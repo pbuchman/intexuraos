@@ -22,6 +22,7 @@ import type {
   NotificationPreferencesRepository,
   OutboundMessageRepository,
   PhoneVerificationRepository,
+  PrivateWhatsAppRepository,
   ThumbnailGeneratorPort,
   WhatsAppCloudApiPort,
   WhatsAppMessageRepository,
@@ -30,6 +31,7 @@ import type {
   WhatsAppWebhookEventRepository,
 } from './domain/whatsapp/index.js';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
+import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
 
 /**
  * Configuration for service initialization.
@@ -38,9 +40,7 @@ export interface ServiceConfig {
   mediaBucket: string;
   gcpProjectId: string;
   mediaCleanupTopic: string;
-  audioStoredTopic: string;
-  approvalReplyTopic: string;
-  commandsIngestTopic: string;
+  intexMessageIngestTopic: string;
   webhookProcessTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
@@ -52,9 +52,7 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
   const pubsubConfig: GcpPubSubPublisherConfig = {
     projectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
-    audioStoredTopic: config.audioStoredTopic,
-    approvalReplyTopic: config.approvalReplyTopic,
-    commandsIngestTopic: config.commandsIngestTopic,
+    intexMessageIngestTopic: config.intexMessageIngestTopic,
     logger: createAppLogger({ name: 'whatsapp-pubsub-publisher' }),
   };
   if (config.webhookProcessTopic !== undefined) {
@@ -74,6 +72,7 @@ export interface ServiceContainer {
   outboundMessageRepository: OutboundMessageRepository;
   phoneVerificationRepository: PhoneVerificationRepository;
   notificationPreferencesRepository: NotificationPreferencesRepository;
+  privateWhatsAppRepository: PrivateWhatsAppRepository;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
@@ -113,6 +112,7 @@ export function getServices(): ServiceContainer {
     outboundMessageRepository: createOutboundMessageRepository(),
     phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
+    privateWhatsAppRepository: createPrivateWhatsAppRepository(),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(

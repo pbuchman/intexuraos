@@ -69,26 +69,26 @@ export function getMediaUrl(mediaId: string): Promise<Result<string>> {
 **When to use:** Factory functions that create configurable clients.
 
 ```typescript
-// src/infra/http/todosServiceHttpClient.ts
+// src/infra/http/notesServiceHttpClient.ts
 import type { Logger } from 'pino';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
-export interface TodosServiceHttpClientConfig {
+export interface NotesServiceHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
   logger?: Logger; // ← Optional for flexibility
 }
 
-const defaultLogger = createAppLogger({ name: 'todosServiceHttpClient' });
+const defaultLogger = createAppLogger({ name: 'notesServiceHttpClient' });
 
-export function createTodosServiceHttpClient(
-  config: TodosServiceHttpClientConfig
-): TodosServiceClient {
+export function createNotesServiceHttpClient(
+  config: NotesServiceHttpClientConfig
+): NotesServiceClient {
   const logger = config.logger ?? defaultLogger;
 
   return {
-    async createTodo(request: CreateTodoRequest) {
-      logger.info({ url, userId: request.userId }, 'Creating todo via todos-agent');
+    async createNote(request: CreateNoteRequest) {
+      logger.info({ url, userId: request.userId }, 'Creating note via notes-agent');
       // ...
     },
   };
@@ -100,10 +100,10 @@ export function createTodosServiceHttpClient(
 ```typescript
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const todosServiceClient = createTodosServiceHttpClient({
-  baseUrl: config.todosAgentUrl,
+const notesServiceClient = createNotesServiceHttpClient({
+  baseUrl: config.notesAgentUrl,
   internalAuthToken: config.internalAuthToken,
-  logger: createAppLogger({ name: 'todosServiceClient' }), // ← Required in production
+  logger: createAppLogger({ name: 'notesServiceClient' }), // ← Required in production
 });
 ```
 
@@ -114,8 +114,8 @@ const todosServiceClient = createTodosServiceHttpClient({
 
 **Examples:**
 
-- `apps/actions-agent/src/infra/http/todosServiceHttpClient.ts`
-- `apps/commands-agent/src/infra/user/userServiceClient.ts`
+- `apps/bookmarks-agent/src/infra/http/webAgentHttpClient.ts`
+- `apps/intex-agent/src/infra/http/notesAgentHttpClient.ts`
 
 ---
 

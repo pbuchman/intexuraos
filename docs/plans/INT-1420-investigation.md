@@ -4,7 +4,7 @@
 
 **Goal:** Restore the daily WhatsApp mobile-notification digest run by fixing the broken Cloud Scheduler → `mobile-notifications-service` call, add a regression test, and backfill the three missed days (2026-04-17, 2026-04-18, 2026-04-19).
 
-**Architecture:** The Cloud Scheduler job `mobile-notifications-digest-yesterday-dev` fires daily at `0 1 * * *` UTC and POSTs to `/internal/notifications/digest/run-yesterday` on `mobile-notifications-service`. Today it fails with HTTP 415 at the Fastify content-type parser (returned as 500). Fix by removing the pointless request body in Terraform and broadening the route's auth to accept the OIDC bearer sent by Cloud Scheduler (aligned with how `cron-agent` handles the same pattern). Post-deploy, trigger the existing `/notifications/digests/backfill` route to regenerate the three missed days.
+**Architecture:** The Cloud Scheduler job `mobile-notifications-digest-yesterday-dev` fires daily at `0 1 * * *` UTC and POSTs to `/internal/notifications/digest/run-yesterday` on `mobile-notifications-service`. Today it fails with HTTP 415 at the Fastify content-type parser (returned as 500). Fix by removing the pointless request body in Terraform and broadening the route's auth to accept the OIDC bearer sent by Cloud Scheduler (aligned with how `retired-scheduler-service` handles the same pattern). Post-deploy, trigger the existing `/notifications/digests/backfill` route to regenerate the three missed days.
 
 **Tech Stack:** Terraform (Google Cloud Scheduler), Fastify (TypeScript, `@intexuraos/common-http`), pnpm workspace, Vitest.
 
@@ -125,7 +125,7 @@ async (req, reply) => {
   }
 ```
 
-`validateInternalAuth` reads the `x-internal-auth` header (`packages/common-http/src/auth/internalAuth.ts:24`). The scheduler does not send it, so the next failure after unblocking Content-Type would be a 401. No other scheduler in `terraform/environments/dev/main.tf` passes `x-internal-auth`; they all rely on the OIDC invoker IAM binding plus an application-layer check for a JWT-shaped bearer. The pattern is established in `apps/cron-agent/src/routes/internal-routes.ts:42-68` (see below for the template we mirror).
+`validateInternalAuth` reads the `x-internal-auth` header (`packages/common-http/src/auth/internalAuth.ts:24`). The scheduler does not send it, so the next failure after unblocking Content-Type would be a 401. No other scheduler in `terraform/environments/dev/main.tf` passes `x-internal-auth`; they all rely on the OIDC invoker IAM binding plus an application-layer check for a JWT-shaped bearer. The pattern is established in `apps/retired-scheduler-service/src/routes/internal-routes.ts:42-68` (see below for the template we mirror).
 
 ### 5. Why other schedulers work and this one doesn't
 
@@ -133,7 +133,7 @@ Sibling schedulers (`cron_agent_tick`, `linear_sync_hourly`, `retry_pending_comm
 
 - **No `body` attribute** → Cloud Scheduler sends an empty POST, no default Content-Type header is applied, Fastify never parses a body.
 - **No `headers` block** → rely entirely on OIDC token + IAM invoker role.
-- **Route accepts OIDC bearer** (`cron-agent` example, lines 52-68 of `internal-routes.ts`).
+- **Route accepts OIDC bearer** (`retired-scheduler-service` example, lines 52-68 of `internal-routes.ts`).
 
 The digest scheduler deviated from this pattern in the wrong direction: it added a body (which introduced the Content-Type mismatch) and kept an application-level auth check that the scheduler can't satisfy.
 
@@ -148,7 +148,7 @@ The `POST /internal/notifications/digest/run-yesterday` handler never reaches `r
 | #   | Area      | Change                                                                                                                                                  | File                                                                          |
 | --- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | 1   | Terraform | Drop `body = base64encode("{}")` from the scheduler (matches sibling schedulers; eliminates the Content-Type mismatch).                                 | `terraform/environments/dev/main.tf:1031-1040`                                |
-| 2   | Route     | Accept either a JWT-shaped `Authorization: Bearer …` (OIDC) **or** the existing `x-internal-auth` header. Mirrors `cron-agent/internal/cron/tick`.      | `apps/mobile-notifications-service/src/routes/digestRoutes.ts:257-262`        |
+| 2   | Route     | Accept either a JWT-shaped `Authorization: Bearer …` (OIDC) **or** the existing `x-internal-auth` header. Mirrors `retired-scheduler-service/internal/cron/tick`.      | `apps/mobile-notifications-service/src/routes/digestRoutes.ts:257-262`        |
 | 3   | Tests     | Add regression tests: (a) OIDC Bearer is accepted; (b) bare `Bearer garbage` is rejected; (c) no auth at all is rejected (existing test, leave intact). | `apps/mobile-notifications-service/src/__tests__/routes/digestRoutes.test.ts` |
 | 4   | Backfill  | After the fix deploys, trigger `/notifications/digests/backfill` for `fromDate=2026-04-17 toDate=2026-04-19` per active subscription.                   | Operational, not code.                                                        |
 
@@ -158,7 +158,7 @@ The `POST /internal/notifications/digest/run-yesterday` handler never reaches `r
 
 - **Modified:**
   - `terraform/environments/dev/main.tf` — remove one line from `google_cloud_scheduler_job.mobile_notifications_digest_yesterday`.
-  - `apps/mobile-notifications-service/src/routes/digestRoutes.ts` — replace the `validateInternalAuth`-only check on `run-yesterday` with the dual-auth helper pattern used by cron-agent.
+  - `apps/mobile-notifications-service/src/routes/digestRoutes.ts` — replace the `validateInternalAuth`-only check on `run-yesterday` with the dual-auth helper pattern used by retired-scheduler-service.
   - `apps/mobile-notifications-service/src/__tests__/routes/digestRoutes.test.ts` — add two tests (OIDC accepted / bare Bearer rejected).
 - **Created:** none.
 - **Removed:** none.
@@ -242,7 +242,7 @@ it('rejects bare "Bearer <garbage>" to prevent auth bypass', async () => {
 });
 ```
 
-Rationale: the OIDC test proves the new path authenticates; the bare-bearer test guards against the trivial bypass that's documented in the cron-agent comment (lines 53-56).
+Rationale: the OIDC test proves the new path authenticates; the bare-bearer test guards against the trivial bypass that's documented in the retired-scheduler-service comment (lines 53-56).
 
 - [ ] **Step 2: Run the tests; the new OIDC test MUST fail**
 
@@ -282,7 +282,7 @@ async (req, reply) => {
   }
 ```
 
-Replace with (mirrors `apps/cron-agent/src/routes/internal-routes.ts:42-68`):
+Replace with (mirrors `apps/retired-scheduler-service/src/routes/internal-routes.ts:42-68`):
 
 ```typescript
 async (req, reply) => {
@@ -411,7 +411,7 @@ gh pr create \
   --body "$(cat <<'EOF'
 ## Summary
 - Fix Cloud Scheduler → mobile-notifications-service: drop pointless POST body so Fastify no longer rejects `application/octet-stream` with 415.
-- Broaden `/internal/notifications/digest/run-yesterday` auth to accept OIDC Bearer (Cloud Scheduler) in addition to `x-internal-auth`. Matches cron-agent pattern.
+- Broaden `/internal/notifications/digest/run-yesterday` auth to accept OIDC Bearer (Cloud Scheduler) in addition to `x-internal-auth`. Matches retired-scheduler-service pattern.
 - Adds regression tests for both OIDC and bare-Bearer paths.
 
 ## Root cause
@@ -454,6 +454,6 @@ EOF
 
 **2. Placeholder scan:** no TODO/TBD/"similar to previous" placeholders; every code block is complete.
 
-**3. Type consistency:** the new OIDC guard uses `req.headers.authorization` (Fastify types it as `string | string[] | undefined`), matching cron-agent's identical check; `JWT_STRUCTURE` is declared inside the handler so no cross-file type drift.
+**3. Type consistency:** the new OIDC guard uses `req.headers.authorization` (Fastify types it as `string | string[] | undefined`), matching retired-scheduler-service's identical check; `JWT_STRUCTURE` is declared inside the handler so no cross-file type drift.
 
 **4. Blast radius:** changes are confined to `mobile-notifications-service` (one route + its tests) and one line in `terraform/environments/dev/main.tf`. No other schedulers, services, or Firestore collections are touched.

@@ -99,7 +99,7 @@ The fake implementation throws `Error` when:
 
 This is the most widely used infrastructure package. Consumed by virtually every app and several packages:
 
-**Apps:** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `whatsapp-service`
+**Apps:** `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `code-agent`, `image-service`, `intex-agent`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `user-service`, `whatsapp-service`
 
 **Packages:** `http-server`, `llm-pricing`
 

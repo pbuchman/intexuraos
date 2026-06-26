@@ -7,7 +7,6 @@ import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { XiaomiBatteryGuide } from '@/components/XiaomiBatteryGuide';
 import { DevBar } from '@/components/DevBar';
-import { Chat } from '@/components/Chat';
 import { ProtectedLayout } from '@/components/routing/ProtectedLayout';
 import { FullPageSpinner } from '@/components/routing/FullPageSpinner';
 import { config } from '@/config';
@@ -41,22 +40,6 @@ const CodeTaskNewPage = React.lazy(() =>
 );
 const CodeTasksPage = React.lazy(() =>
   import('@/pages/CodeTasksPage').then((m) => ({ default: m.CodeTasksPage })),
-);
-const CronExecutionsPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronExecutionsPage').then((m) => ({ default: m.CronExecutionsPage })),
-);
-const CronScheduleNewPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronScheduleNewPage').then((m) => ({
-    default: m.CronScheduleNewPage,
-  })),
-);
-const CronSchedulesPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronSchedulesPage').then((m) => ({ default: m.CronSchedulesPage })),
-);
-const CronScheduleViewPage = React.lazy(() =>
-  import('@/pages/cron-agent/CronScheduleViewPage').then((m) => ({
-    default: m.CronScheduleViewPage,
-  })),
 );
 const DispatchQueuePage = React.lazy(() =>
   import('@/pages/DispatchQueuePage').then((m) => ({ default: m.DispatchQueuePage })),
@@ -110,8 +93,8 @@ const GoogleCalendarConnectionPage = React.lazy(() =>
 const HomePage = React.lazy(() =>
   import('@/pages/HomePage').then((m) => ({ default: m.HomePage })),
 );
-const InboxPage = React.lazy(() =>
-  import('@/pages/InboxPage').then((m) => ({ default: m.InboxPage })),
+const IntexAgentSessionsPage = React.lazy(() =>
+  import('@/pages/IntexAgentSessionsPage').then((m) => ({ default: m.IntexAgentSessionsPage })),
 );
 const LlmUsagePage = React.lazy(() =>
   import('@/pages/LlmUsagePage').then((m) => ({ default: m.LlmUsagePage })),
@@ -168,6 +151,9 @@ const NotesListPage = React.lazy(() =>
 const NotionConnectionPage = React.lazy(() =>
   import('@/pages/NotionConnectionPage').then((m) => ({ default: m.NotionConnectionPage })),
 );
+const PrivateWhatsAppLogPage = React.lazy(() =>
+  import('@/pages/PrivateWhatsAppLogPage').then((m) => ({ default: m.PrivateWhatsAppLogPage })),
+);
 const GitHubEventLogPage = React.lazy(() =>
   import('@/pages/GitHubEventLogPage').then((m) => ({ default: m.GitHubEventLogPage })),
 );
@@ -182,9 +168,6 @@ const ShareHistoryPage = React.lazy(() =>
 );
 const ShareTargetPage = React.lazy(() =>
   import('@/pages/ShareTargetPage').then((m) => ({ default: m.ShareTargetPage })),
-);
-const TodosListPage = React.lazy(() =>
-  import('@/pages/TodosListPage').then((m) => ({ default: m.TodosListPage })),
 );
 const WhatsAppConnectionPage = React.lazy(() =>
   import('@/pages/WhatsAppConnectionPage').then((m) => ({ default: m.WhatsAppConnectionPage })),
@@ -214,7 +197,7 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/inbox" replace />;
+    return <Navigate to="/whatsapp/sessions" replace />;
   }
 
   return <>{children}</>;
@@ -232,7 +215,7 @@ function HomeRoute(): React.JSX.Element {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/inbox" replace />;
+    return <Navigate to="/whatsapp/sessions" replace />;
   }
 
   return <HomePage />;
@@ -241,11 +224,6 @@ function HomeRoute(): React.JSX.Element {
 function NoteDetailRedirect(): React.JSX.Element {
   const { id } = useParams();
   return <Navigate to={`/my-notes?id=${id ?? ''}`} replace />;
-}
-
-function TodoDetailRedirect(): React.JSX.Element {
-  const { id } = useParams();
-  return <Navigate to={`/my-todos?id=${id ?? ''}`} replace />;
 }
 
 function BookmarkDetailRedirect(): React.JSX.Element {
@@ -311,23 +289,17 @@ function AppRoutes(): React.JSX.Element {
           <Route path="/llm-usage" element={<LlmUsagePage />} />
           <Route path="/llm-usage/pricing" element={<LlmUsagePricingPage />} />
           <Route path="/llm-usage/:eventId" element={<LlmUsageViewPageKeyed />} />
-          {/* Cron Agent routes */}
-          <Route path="/cron-agent" element={<CronSchedulesPage />} />
-          <Route path="/cron-agent/new" element={<CronScheduleNewPage />} />
-          <Route path="/cron-agent/executions" element={<CronExecutionsPage />} />
-          <Route path="/cron-agent/:id" element={<CronScheduleViewPage />} />
           {/* Research Agent routes */}
           <Route path="/research/new" element={<ResearchAgentPage />} />
           <Route path="/research/:id" element={<ResearchDetailPage />} />
           <Route path="/research" element={<ResearchListPage />} />
           {/* Feature routes */}
-          <Route path="/inbox" element={<InboxPage />} />
           <Route path="/share-target" element={<ShareTargetPage />} />
-          <Route path="/notes" element={<WhatsAppNotesPage />} />
+          <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
+          <Route path="/whatsapp/sessions" element={<IntexAgentSessionsPage />} />
+          <Route path="/whatsapp/private" element={<PrivateWhatsAppLogPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />
-          <Route path="/my-todos" element={<TodosListPage />} />
-          <Route path="/todos/:id" element={<TodoDetailRedirect />} />
           <Route path="/my-bookmarks" element={<BookmarksListPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/linear/prune-candidates" element={<LinearPruneCandidatesPage />} />
@@ -363,8 +335,9 @@ function AppRoutes(): React.JSX.Element {
         </Route>
         {/* Redirects for old URLs (backward compatibility) */}
         <Route path="/notion" element={<Navigate to="/settings/notion" replace />} />
-        <Route path="/whatsapp" element={<Navigate to="/settings/whatsapp" replace />} />
-        <Route path="/whatsapp-notes" element={<Navigate to="/notes" replace />} />
+        <Route path="/whatsapp" element={<Navigate to="/whatsapp/assistant" replace />} />
+        <Route path="/notes" element={<Navigate to="/whatsapp/assistant" replace />} />
+        <Route path="/whatsapp-notes" element={<Navigate to="/whatsapp/assistant" replace />} />
         <Route path="/mobile-notifications" element={<Navigate to="/settings/mobile" replace />} />
         <Route
           path="/mobile-notifications/list"
@@ -372,7 +345,7 @@ function AppRoutes(): React.JSX.Element {
         />
         <Route path="/settings/workers" element={<Navigate to="/settings/code" replace />} />
         {/* 404 fallback */}
-        <Route path="*" element={<Navigate to="/inbox" replace />} />
+        <Route path="*" element={<Navigate to="/whatsapp/sessions" replace />} />
       </Routes>
     </Suspense>
   );
@@ -403,7 +376,6 @@ export function App(): React.JSX.Element {
                   <AndroidInstallBanner />
                   <XiaomiBatteryGuide />
                   <DevBar />
-                  <Chat />
                 </SyncQueueProvider>
               </AuthProvider>
             </HashRouter>

@@ -38,15 +38,6 @@ interface PromptDeps {
 | `labelPrompt`    | `{ content: string }`                    | `maxLength?`                                   |
 | `feedNamePrompt` | `{ name: string; description?: string }` | —                                              |
 
-### classification
-
-| Export                     | Input type                  | Output format                  |
-| -------------------------- | --------------------------- | ------------------------------ |
-| `commandClassifierPrompt`  | `{ message: string }`       | Single category string         |
-| `intelligentPromptBuilder` | `{ message: string }`       | Category with confidence       |
-
-Categories: `'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code'`
-
 ### research
 
 | Export                  | Input type             | Output format                          |
@@ -90,12 +81,6 @@ Categories: `'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | '
 | ------------------------------ | ------------------------- | ----------------------------- |
 | `linearActionExtractionPrompt` | `{ description: string }` | JSON Linear issue fields      |
 | `linearIssueTitlePrompt`       | `{ description: string }` | Plain title string            |
-
-### approvals
-
-| Export                 | Input type              | Output format                         |
-| ---------------------- | ----------------------- | ------------------------------------- |
-| `approvalIntentPrompt` | `{ message: string }`   | JSON `{ intent: 'approve'             | 'reject' | 'unclear' }` |
 
 ### validation
 

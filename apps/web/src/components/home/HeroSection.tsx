@@ -46,12 +46,12 @@ export function HeroSection(): React.JSX.Element {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
             </span>
-            IntexuraOS v3.7.0
+            IntexuraOS v3.8.0
           </div>
 
           <p className="mx-auto mb-4 max-w-xl text-lg leading-relaxed text-neutral-600">
             You remember the bug while walking to lunch. You think of a research question on the commute home.
-            You are not at a keyboard.
+            You need a system that can safely act before the moment disappears.
           </p>
 
           <h1 className="mx-auto mb-8 max-w-4xl text-5xl font-extrabold tracking-tight text-neutral-900 md:text-7xl lg:text-[5.5rem] lg:leading-[1]">
@@ -64,14 +64,13 @@ export function HeroSection(): React.JSX.Element {
           </h1>
 
           <p className="mx-auto mb-4 max-w-2xl text-lg leading-relaxed text-neutral-600 md:text-xl">
-            Send a WhatsApp voice note while walking. Come back to a calendar event created,
-            research synthesized from five AI models, code written and tested, project
-            task tracked. This is not a convenience shortcut to a desktop workflow.
-            It is a fundamentally different interaction model.
+            IntexuraOS is a personal agentic operating system made of specialist agents.
+            Send a WhatsApp text message or dashboard task and come back to a calendar event,
+            cited research report, summarized bookmark, writing draft, or tested pull request.
           </p>
 
           <p className="mx-auto mb-10 max-w-2xl text-lg font-semibold leading-relaxed text-neutral-500">
-            ChatGPT voice gives you an answer. IntexuraOS gives you a calendar event, a pull request, or a research report.
+            The AI brings judgment; deterministic software boundaries decide what it may touch.
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">

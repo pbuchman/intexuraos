@@ -8,7 +8,7 @@
 
 **Tech Stack:** Fastify 5, TypeScript strict mode, Vitest, Firestore, Gemini, OpenAPI/Swagger, React 19, React Router hash routing, TailwindCSS.
 
-**Reference Files:** `.claude/commands/create-service.md`, `.claude/reference/architecture.md`, `apps/notes-agent/src/server.ts`, `apps/notes-agent/src/__tests__/testUtils.ts`, `apps/notes-agent/src/__tests__/firestoreNoteRepository.test.ts`, `apps/cron-agent/src/index.ts`, `apps/cron-agent/src/services.ts`, `apps/web/src/pages/CodeTasksPage.tsx`, `apps/web/src/pages/CodeTaskNewPage.tsx`, `apps/web/src/pages/CodeTaskViewPageV2.tsx`, `apps/web/src/components/Sidebar.tsx`
+**Reference Files:** `.claude/commands/create-service.md`, `.claude/reference/architecture.md`, `apps/notes-agent/src/server.ts`, `apps/notes-agent/src/__tests__/testUtils.ts`, `apps/notes-agent/src/__tests__/firestoreNoteRepository.test.ts`, `apps/retired-scheduler-service/src/index.ts`, `apps/retired-scheduler-service/src/services.ts`, `apps/web/src/pages/CodeTasksPage.tsx`, `apps/web/src/pages/CodeTaskNewPage.tsx`, `apps/web/src/pages/CodeTaskViewPageV2.tsx`, `apps/web/src/components/Sidebar.tsx`
 
 ---
 
@@ -177,7 +177,7 @@ This remains one plan because the MVP only works when all of these ship together
 - Create: `apps/hellscript-agent/src/{index,config,services,server}.ts`
 - Create: `apps/hellscript-agent/src/__tests__/{config.test.ts,services.test.ts,server.test.ts}`
 
-- [ ] Read `notes-agent`, `cron-agent`, and `/create-service` references before scaffolding.
+- [ ] Read `notes-agent`, `retired-scheduler-service`, and `/create-service` references before scaffolding.
 - [ ] Write failing tests for config loading, DI lifecycle, `/health`, `/openapi.json`, `/docs`, and CORS.
 - [ ] Run `pnpm --filter @intexuraos/hellscript-agent test -- src/__tests__/config.test.ts src/__tests__/services.test.ts src/__tests__/server.test.ts` and confirm failure.
 - [ ] Implement the minimal service shell:

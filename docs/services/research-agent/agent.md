@@ -306,7 +306,7 @@ interface OpenRouterModelInfo {
 
 **Auth:** `X-Internal-Auth` header
 
-**When to use:** When another service (e.g., actions-agent) wants to create a research that requires user approval before LLM calls are made.
+**When to use:** When another service, such as Intex, wants to create a research draft for review before LLM calls are made.
 
 **Input Schema:**
 

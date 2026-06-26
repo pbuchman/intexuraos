@@ -8,19 +8,15 @@ output "service_accounts" {
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
     fishing_assistant_service    = google_service_account.fishing_assistant_service.email
     research_agent               = google_service_account.research_agent.email
-    commands_agent               = google_service_account.commands_agent.email
-    actions_agent                = google_service_account.actions_agent.email
     image_service                = google_service_account.image_service.email
     notes_agent                  = google_service_account.notes_agent.email
     app_settings_service         = google_service_account.app_settings_service.email
-    todos_agent                  = google_service_account.todos_agent.email
     bookmarks_agent              = google_service_account.bookmarks_agent.email
     calendar_agent               = google_service_account.calendar_agent.email
     web_agent                    = google_service_account.web_agent.email
     linear_agent                 = google_service_account.linear_agent.email
-    chat_agent                   = google_service_account.chat_agent.email
+    intex_agent                  = google_service_account.intex_agent.email
     code_agent                   = google_service_account.code_agent.email
-    cron_agent                   = google_service_account.cron_agent.email
     hellscript_agent             = google_service_account.hellscript_agent.email
     llm_usage_service            = google_service_account.llm_usage_service.email
   }
@@ -61,16 +57,6 @@ output "research_agent_sa" {
   value       = google_service_account.research_agent.email
 }
 
-output "commands_agent_sa" {
-  description = "Commands Agent service account email"
-  value       = google_service_account.commands_agent.email
-}
-
-output "actions_agent_sa" {
-  description = "Actions Agent service account email"
-  value       = google_service_account.actions_agent.email
-}
-
 output "image_service_sa" {
   description = "Image Service service account email"
   value       = google_service_account.image_service.email
@@ -84,11 +70,6 @@ output "notes_agent_sa" {
 output "app_settings_service_sa" {
   description = "App Settings Service service account email"
   value       = google_service_account.app_settings_service.email
-}
-
-output "todos_agent_sa" {
-  description = "Todos Agent service account email"
-  value       = google_service_account.todos_agent.email
 }
 
 output "bookmarks_agent_sa" {
@@ -111,19 +92,14 @@ output "linear_agent_sa" {
   value       = google_service_account.linear_agent.email
 }
 
-output "chat_agent_sa" {
-  description = "Chat Agent service account email"
-  value       = google_service_account.chat_agent.email
+output "intex_agent_sa" {
+  description = "Intex Agent service account email"
+  value       = google_service_account.intex_agent.email
 }
 
 output "code_agent_sa" {
   description = "Code Agent service account email"
   value       = google_service_account.code_agent.email
-}
-
-output "cron_agent_sa" {
-  description = "Cron Agent service account email"
-  value       = google_service_account.cron_agent.email
 }
 
 output "hellscript_agent_sa" {

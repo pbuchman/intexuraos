@@ -38,6 +38,26 @@
       "owner": "whatsapp-service",
       "description": "Phone number verification codes with TTL-based expiry for WhatsApp connection"
     },
+    "whatsapp_private_accounts": {
+      "owner": "whatsapp-service",
+      "description": "Per-user private WhatsApp mirror accounts mapping external Matrix source account IDs to canonical IntexuraOS users."
+    },
+    "whatsapp_private_chats": {
+      "owner": "whatsapp-service",
+      "description": "Private WhatsApp chat metadata synchronized from Matrix/mautrix bridge events. Separate from WhatsApp Business API collections."
+    },
+    "whatsapp_private_messages": {
+      "owner": "whatsapp-service",
+      "description": "Read-only private WhatsApp messages synchronized from Matrix/mautrix bridge events. Separate from WhatsApp Business API messages and mobile notifications."
+    },
+    "whatsapp_private_senders": {
+      "owner": "whatsapp-service",
+      "description": "Per-private-WhatsApp-sender profile aggregate keyed by source account and sender identity."
+    },
+    "whatsapp_private_sender_days": {
+      "owner": "whatsapp-service",
+      "description": "Per-private-WhatsApp-sender daily aggregates for time-range reads and future daily summaries."
+    },
     "mobile_notifications": {
       "owner": "mobile-notifications-service",
       "description": "Mobile push notifications received from user devices"
@@ -66,21 +86,13 @@
       "owner": "research-agent",
       "description": "LLM research queries, responses, and synthesized results"
     },
-    "commands": {
-      "owner": "commands-agent",
-      "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
+    "intex_agent_sessions": {
+      "owner": "intex-agent",
+      "description": "Product-visible WhatsApp Assistant sessions owned by intex-agent, including lifecycle status and summary fields."
     },
-    "actions": {
-      "owner": "actions-agent",
-      "description": "Action items and their execution lifecycle"
-    },
-    "actions_transitions": {
-      "owner": "actions-agent",
-      "description": "Logs of user corrections to action types for ML training"
-    },
-    "approval_messages": {
-      "owner": "actions-agent",
-      "description": "Tracks outgoing approval request WhatsApp messages for reply matching"
+    "intex_agent_session_events": {
+      "owner": "intex-agent",
+      "description": "Chronological timeline events for intex-agent WhatsApp Assistant sessions, including user messages, assistant replies, clarifications, tool calls, and close events."
     },
     "generated_images": {
       "owner": "image-service",
@@ -93,10 +105,6 @@
     "settings": {
       "owner": "app-settings-service",
       "description": "Application settings (usage statistics)"
-    },
-    "todos": {
-      "owner": "todos-agent",
-      "description": "User-scoped todos with items, priority, and due dates"
     },
     "bookmarks": {
       "owner": "bookmarks-agent",
@@ -151,10 +159,6 @@
     "code_worker_settings": {
       "owner": "code-agent",
       "description": "Per-user worker configuration with encrypted credentials (CF Access, dispatch signing) for Mac and VM workers"
-    },
-    "doc_embeddings": {
-      "owner": "chat-agent",
-      "description": "Documentation chunks with vector embeddings for RAG similarity search (1536-dim OpenAI embeddings)"
     },
     "github-pr-events": {
       "owner": "code-agent",
@@ -221,14 +225,6 @@
       "owner": "code-agent",
       "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)",
       "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
-    },
-    "cron_schedules": {
-      "owner": "cron-agent",
-      "description": "User-defined recurring schedules with cron expressions and action definitions"
-    },
-    "cron_executions": {
-      "owner": "cron-agent",
-      "description": "Execution log entries for cron schedule runs"
     },
     "hellscript_buffers": {
       "owner": "hellscript-agent",

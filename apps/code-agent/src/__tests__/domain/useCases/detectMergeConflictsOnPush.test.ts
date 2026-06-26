@@ -55,9 +55,6 @@ interface TestDeps {
   workerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
   };
-  statusMirrorService: {
-    mirrorStatus: ReturnType<typeof vi.fn>;
-  };
   whatsappNotifier: {
     notifyTaskResumed: ReturnType<typeof vi.fn>;
   };
@@ -272,7 +269,6 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
     workerSettingsRepo: {
       getSettings: vi.fn().mockResolvedValue(ok(createWorkerSettings())),
     },
-    statusMirrorService: { mirrorStatus: vi.fn() },
     whatsappNotifier: { notifyTaskResumed: vi.fn() },
     allowedBots: new Set(['intexuraos-code-worker[bot]', 'claude[bot]']),
     orchestratorSecret: 'orchestrator-secret',

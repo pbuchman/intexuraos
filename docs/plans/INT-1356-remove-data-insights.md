@@ -38,7 +38,7 @@ This is not a hidden feature flag. The cleanup must remove explicit routes, navi
 The repo contains several common-package references that exist because Data Insights was registered as a first-class service:
 - `packages/common-core/src/internalServiceCatalog.ts`
 - `apps/api-docs-hub/src/config.ts`
-- `apps/cron-agent/src/config.ts`
+- `apps/retired-scheduler-service/src/config.ts`
 - `packages/llm-pricing/src/usageLogger.ts`
 - `packages/internal-clients/src/usage-service/types.ts`
 - `apps/llm-usage-service/src/domain/models/usageEvent.ts`
@@ -66,7 +66,7 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 
 - Modify: `packages/common-core/src/internalServiceCatalog.ts`
 - Modify: `apps/api-docs-hub/src/config.ts`
-- Modify: `apps/cron-agent/src/config.ts`
+- Modify: `apps/retired-scheduler-service/src/config.ts`
 - Modify: `packages/llm-pricing/src/usageLogger.ts`
 - Modify: `packages/internal-clients/src/usage-service/types.ts`
 - Modify: `apps/llm-usage-service/src/domain/models/usageEvent.ts`
@@ -238,7 +238,7 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 **Files:**
 - Modify: `packages/common-core/src/internalServiceCatalog.ts`
 - Modify: `apps/api-docs-hub/src/config.ts`
-- Modify: `apps/cron-agent/src/config.ts`
+- Modify: `apps/retired-scheduler-service/src/config.ts`
 - Modify: `apps/llm-usage-service/src/domain/models/usageEvent.ts`
 - Modify: `packages/internal-clients/src/usage-service/types.ts`
 - Modify: `packages/llm-pricing/src/usageLogger.ts`
@@ -253,11 +253,11 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - [ ] Verify affected workspaces:
   `pnpm run verify:workspace:tracked -- common-core`
   `pnpm run verify:workspace:tracked -- api-docs-hub`
-  `pnpm run verify:workspace:tracked -- cron-agent`
+  `pnpm run verify:workspace:tracked -- retired-scheduler-service`
   `pnpm run verify:workspace:tracked -- llm-usage-service`
 
 **Implementation notes:**
-- `cron-agent` only appears to reference Data Insights through a catalog entry for `computeVisualization`; removing that entry should be mechanical.
+- `retired-scheduler-service` only appears to reference Data Insights through a catalog entry for `computeVisualization`; removing that entry should be mechanical.
 - `api-docs-hub` currently fails fast if all listed OpenAPI env vars are not present, so removing Data Insights there is mandatory once Terraform/web envs stop producing that URL.
 
 ### Task 4: Remove infrastructure, deployment, and Firestore ownership for the retired service
@@ -327,7 +327,7 @@ Run from `/repo` after the implementation branch contains the cleanup:
 1. `pnpm run verify:workspace:tracked -- web`
 2. `pnpm run verify:workspace:tracked -- common-core`
 3. `pnpm run verify:workspace:tracked -- api-docs-hub`
-4. `pnpm run verify:workspace:tracked -- cron-agent`
+4. `pnpm run verify:workspace:tracked -- retired-scheduler-service`
 5. `pnpm run verify:workspace:tracked -- llm-usage-service`
 6. `pnpm run ci:tracked`
 7. `rg -n "INTEXURAOS_DATA_INSIGHTS_AGENT|data-insights-agent|/data-insights|composite_feeds|custom_data_sources|composite_feed_snapshots|visualization_insights|visualization_vegalite" apps packages terraform docs ecosystem.config.cjs cloudbuild .github firestore-collections.json firestore.indexes.json README.md .envrc.local.example --glob '!**/dist/**'`

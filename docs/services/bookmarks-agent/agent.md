@@ -52,7 +52,7 @@ interface CreateBookmarkOutput {
 **Endpoint:** `POST /internal/bookmarks`
 **Auth:** `X-Internal-Auth` header
 
-**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch -> AI summary -> WhatsApp notification with important flag).
+**When to use:** When creating a bookmark from another service, such as Intex. Triggers async enrichment pipeline (OG fetch -> AI summary -> WhatsApp notification with important flag).
 
 **Input Schema:**
 
@@ -349,7 +349,7 @@ WhatsApp message delivered to user (bypasses notification level filter)
 
 ## Integration Notes
 
-### From WhatsApp and actions-agent
+### From WhatsApp and Intex
 
 When processing a `link` action from WhatsApp:
 

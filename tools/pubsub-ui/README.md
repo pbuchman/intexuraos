@@ -34,15 +34,12 @@ node scripts/pubsub-publish-test.mjs media-cleanup
 node scripts/pubsub-publish-test.mjs send-message
 node scripts/pubsub-publish-test.mjs webhook-process
 node scripts/pubsub-publish-test.mjs transcription
-node scripts/pubsub-publish-test.mjs commands-ingest
-node scripts/pubsub-publish-test.mjs actions-queue
+node scripts/pubsub-publish-test.mjs intex-message-ingest
 node scripts/pubsub-publish-test.mjs research-process
 node scripts/pubsub-publish-test.mjs llm-analytics
 node scripts/pubsub-publish-test.mjs llm-call
 node scripts/pubsub-publish-test.mjs bookmark-enrich
 node scripts/pubsub-publish-test.mjs bookmark-summarize
-node scripts/pubsub-publish-test.mjs todos-processing
-node scripts/pubsub-publish-test.mjs calendar-preview
 ```
 
 ## Monitored Topics
@@ -53,15 +50,12 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 | `whatsapp-send-message`    | Green        | Outbound WhatsApp messages  |
 | `whatsapp-webhook-process` | Light Purple | WhatsApp webhook processing |
 | `whatsapp-transcription`   | Light Green  | Audio transcription         |
-| `commands-ingest`          | Orange       | Command routing             |
-| `actions-queue`            | Cyan         | Action processing           |
+| `intex-message-ingest`     | Blue         | Intex Agent message routing |
 | `research-process`         | Blue         | Research task processing    |
 | `llm-analytics`            | Indigo       | LLM usage analytics         |
 | `llm-call`                 | Purple       | LLM API calls               |
 | `bookmark-enrich`          | Orange       | Bookmark metadata enriching |
 | `bookmark-summarize`       | Teal         | Bookmark AI summarization   |
-| `todos-processing`         | Pink         | Todo processing events      |
-| `calendar-preview`         | Teal         | Calendar preview generation |
 
 ## Architecture
 
@@ -105,15 +99,12 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 - `whatsapp-media-cleanup` → `POST /internal/whatsapp/pubsub/media-cleanup` (:8113)
 - `whatsapp-webhook-process` → `POST /internal/whatsapp/pubsub/process-webhook` (:8113)
 - `whatsapp-transcription` → `POST /internal/whatsapp/pubsub/transcribe-audio` (:8113)
-- `commands-ingest` → `POST /internal/commands` (:8117)
-- `actions-queue` → `POST /internal/actions/process` (:8118)
+- `intex-message-ingest` → `POST /internal/intex-agent/messages` (:8134)
 - `research-process` → `POST /internal/llm/pubsub/process-research` (:8116)
 - `llm-analytics` → `POST /internal/llm/pubsub/report-analytics` (:8116)
 - `llm-call` → `POST /internal/llm/pubsub/process-llm-call` (:8116)
 - `bookmark-enrich` → `POST /internal/bookmarks/pubsub/enrich` (:8124)
 - `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
-- `todos-processing` → `POST /internal/todos/pubsub/todos-processing` (:8123)
-- `calendar-preview` → `POST /internal/calendar/generate-preview` (:8125)
 
 ## Environment Variables
 
@@ -147,15 +138,12 @@ const TOPICS = [
   'whatsapp-send-message',
   'whatsapp-webhook-process',
   'whatsapp-transcription',
-  'commands-ingest',
-  'actions-queue',
+  'intex-message-ingest',
   'research-process',
   'llm-analytics',
   'llm-call',
   'bookmark-enrich',
   'bookmark-summarize',
-  'todos-processing',
-  'calendar-preview',
   'your-new-topic', // Add here
 ];
 ```

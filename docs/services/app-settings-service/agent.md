@@ -66,7 +66,7 @@ interface HealthCheck {
 
 **Endpoint:** `GET /openapi.json`
 
-**When to use:** When the cron-agent or api-docs-hub needs to discover this service's API contract.
+**When to use:** When api-docs-hub needs to discover this service's API contract.
 
 **Output Schema:**
 
@@ -97,12 +97,12 @@ interface HealthCheck {
 3. When status === 'ok', downstream service starts
 ```
 
-### Pattern 2: Service Catalog Discovery (cron-agent)
+### Pattern 2: API Docs Discovery
 
 ```
-1. cron-agent reads service catalog config
+1. api-docs-hub reads service catalog config
 2. Fetches GET /openapi.json for API contract
-3. allowedOperations is [] — no callable operations
+3. Serves the specification in the aggregated Swagger UI
 ```
 
 ## Error Handling
@@ -124,11 +124,8 @@ interface HealthCheck {
 | Service        | Dependency Type           |
 | -------------- | ------------------------- |
 | user-service   | Startup health polling    |
-| commands-agent | Startup health polling    |
-| actions-agent  | Startup health polling    |
+| intex-agent    | Startup health polling    |
 | research-agent | Startup health polling    |
-| todos-agent    | Startup health polling    |
-| cron-agent     | Service catalog (OpenAPI) |
 
 ---
 

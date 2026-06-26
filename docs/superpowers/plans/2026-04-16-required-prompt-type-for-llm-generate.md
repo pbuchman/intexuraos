@@ -39,12 +39,12 @@ PR #1837 introduced optional `promptType` tracking. This plan makes it mandatory
 | ---------------- | --------- | -------- |
 | linear-agent     | 3 files   | 4 calls  |
 | research-agent   | 7 files   | 16 calls |
-| chat-agent       | 2 files   | 2 calls  |
-| todos-agent      | 1 file    | 1 call   |
+| retired-chat-service       | 2 files   | 2 calls  |
+| retired-checklist-service      | 1 file    | 1 call   |
 | calendar-agent   | 1 file    | 2 calls  |
 | commands-agent   | 1 file    | 1 call   |
 | hellscript-agent | 3 files   | 4 calls  |
-| cron-agent       | 1 file    | 1 call   |
+| retired-scheduler-service       | 1 file    | 1 call   |
 | web-agent        | 1 file    | 2 calls  |
 | user-service     | 1 file    | 9 calls  |
 | code-agent       | 3 files   | 5 calls  |
@@ -656,18 +656,18 @@ git commit -m "[INT-1392] Update research-agent adapters to pass required prompt
 
 ---
 
-## Task 10: Update chat-agent
+## Task 10: Update retired-chat-service
 
 **Files:**
-- Modify: `apps/chat-agent/src/infra/llm/chatClient.ts`
-- Modify: `apps/chat-agent/src/domain/usecases/generateResponse.ts`
+- Modify: `apps/retired-chat-service/src/infra/llm/chatClient.ts`
+- Modify: `apps/retired-chat-service/src/domain/usecases/generateResponse.ts`
 
-Note: chat-agent uses a custom LLMClient interface with different options structure (systemPrompt, conversationHistory). This needs careful handling.
+Note: retired-chat-service uses a custom LLMClient interface with different options structure (systemPrompt, conversationHistory). This needs careful handling.
 
 - [ ] **Step 1: Update chatClient.ts local LLMClient interface**
 
 ```typescript
-// apps/chat-agent/src/infra/llm/chatClient.ts
+// apps/retired-chat-service/src/infra/llm/chatClient.ts
 // The local chatClient wraps an external LlmGenerateClient
 // Find generate call (line ~59):
 const result = await llmClient.generate(fullPrompt, { promptType: 'chat-response-generation' });
@@ -676,7 +676,7 @@ const result = await llmClient.generate(fullPrompt, { promptType: 'chat-response
 - [ ] **Step 2: Update generateResponse.ts**
 
 ```typescript
-// apps/chat-agent/src/domain/usecases/generateResponse.ts
+// apps/retired-chat-service/src/domain/usecases/generateResponse.ts
 
 // This file has a LOCAL LLMClient interface (lines 60-68) that's different:
 export interface LLMClient {
@@ -698,21 +698,21 @@ export interface LLMClient {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add apps/chat-agent/src/infra/llm/chatClient.ts
-git commit -m "[INT-1392] Update chat-agent to pass promptType to underlying LlmGenerateClient"
+git add apps/retired-chat-service/src/infra/llm/chatClient.ts
+git commit -m "[INT-1392] Update retired-chat-service to pass promptType to underlying LlmGenerateClient"
 ```
 
 ---
 
-## Task 11: Update todos-agent
+## Task 11: Update retired-checklist-service
 
 **Files:**
-- Modify: `apps/todos-agent/src/infra/gemini/todoItemExtractionService.ts`
+- Modify: `apps/retired-checklist-service/src/infra/gemini/todoItemExtractionService.ts`
 
 - [ ] **Step 1: Update generate call**
 
 ```typescript
-// apps/todos-agent/src/infra/gemini/todoItemExtractionService.ts line 79:
+// apps/retired-checklist-service/src/infra/gemini/todoItemExtractionService.ts line 79:
 const result = await llmClient.generate(prompt, { promptType: 'todo-item-extraction' });
 ```
 
@@ -728,8 +728,8 @@ const result = await llmClient.generate(prompt, { promptType: itemExtractionProm
 - [ ] **Step 3: Commit**
 
 ```bash
-git add apps/todos-agent/src/infra/gemini/todoItemExtractionService.ts
-git commit -m "[INT-1392] Update todos-agent to pass required promptType"
+git add apps/retired-checklist-service/src/infra/gemini/todoItemExtractionService.ts
+git commit -m "[INT-1392] Update retired-checklist-service to pass required promptType"
 ```
 
 ---
@@ -829,23 +829,23 @@ git commit -m "[INT-1392] Update hellscript-agent to pass required promptType"
 
 ---
 
-## Task 15: Update cron-agent
+## Task 15: Update retired-scheduler-service
 
 **Files:**
-- Modify: `apps/cron-agent/src/domain/use-cases/parse-schedule.ts`
+- Modify: `apps/retired-scheduler-service/src/domain/use-cases/parse-schedule.ts`
 
 - [ ] **Step 1: Update generate call**
 
 ```typescript
-// apps/cron-agent/src/domain/use-cases/parse-schedule.ts line 30:
+// apps/retired-scheduler-service/src/domain/use-cases/parse-schedule.ts line 30:
 const result = await geminiClient.generate(prompt, { promptType: 'cron-schedule-parsing' });
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add apps/cron-agent/src/domain/use-cases/parse-schedule.ts
-git commit -m "[INT-1392] Update cron-agent to pass required promptType"
+git add apps/retired-scheduler-service/src/domain/use-cases/parse-schedule.ts
+git commit -m "[INT-1392] Update retired-scheduler-service to pass required promptType"
 ```
 
 ---

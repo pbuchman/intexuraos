@@ -38,7 +38,7 @@ Attach tags to any bookmark for lightweight grouping. Tag links by topic, projec
 
 The system will not save the same link twice. If you bookmark a URL you have already saved, it recognizes the duplicate and points you to the existing bookmark instead. One less source of clutter.
 
-This duplicate response is also the service-facing recovery path for replayed WhatsApp bookmark commands: if WhatsApp webhook processing retries the same saved link after an async command-ingest failure, bookmarks-agent returns the existing bookmark ID instead of creating a second record.
+This duplicate response is also the service-facing recovery path for replayed WhatsApp bookmark saves: if webhook processing retries the same saved link after an async delivery failure, bookmarks-agent returns the existing bookmark ID instead of creating a second record.
 
 ### Mobile Bookmark Rows
 

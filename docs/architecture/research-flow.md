@@ -411,7 +411,7 @@ const showSynthesisNotAvailable =
 | Topic             | Publisher        | Subscriber       | Purpose                   |
 | ----------------- | ---------------- | ---------------- | ------------------------- |
 | `llm-call`        | llm-orchestrator | llm-orchestrator | Trigger LLM API call      |
-| `research-events` | llm-orchestrator | actions-agent    | Research lifecycle events |
+| `research-events` | research-agent   | research-agent   | Research lifecycle events |
 
 ### Key Files
 

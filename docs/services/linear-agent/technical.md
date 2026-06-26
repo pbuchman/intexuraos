@@ -2,7 +2,7 @@
 
 ## Overview
 
-Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables natural language issue creation through voice messages with AI-powered extraction, real-time webhook synchronization with multi-user fan-out, full issue sync, issue validation, AI title generation, cross-service context proxying, programmatic issue management for code agents, and AI-powered issue pruning with user-reviewed deletion. The service runs on Cloud Run with auto-scaling and uses the `@linear/sdk` for GraphQL API communication. The dashboard reads from local Firestore (populated by webhook sync) for fast, offline-capable issue listing.
+Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables real-time webhook synchronization with multi-user fan-out, full issue sync, issue validation, AI title generation, cross-service context proxying, programmatic issue management for code agents, assignment-triggered code tasks, and AI-powered issue pruning with user-reviewed deletion. The service runs on Cloud Run with auto-scaling and uses the `@linear/sdk` for GraphQL API communication. The dashboard reads from local Firestore (populated by webhook sync) for fast, offline-capable issue listing.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Linear Agent provides bidirectional integration between IntexuraOS and Linear pr
 graph TB
     subgraph "External"
         WA[WhatsApp Service]
-        AA[Actions Agent]
+        Intex[Intex Agent]
         CA[Code Agent]
         Scheduler[Cloud Scheduler]
         Linear[Linear API]
@@ -125,11 +125,11 @@ graph TB
 
 ## Data Flow
 
-### Voice-to-Issue Pipeline
+### Internal Issue Creation Pipeline
 
 ```mermaid
 sequenceDiagram
-    participant AA as Actions Agent
+    participant Intex as Intex Agent
     participant LA as Linear Agent
     participant LES as LLM Extraction
     participant Linear as Linear API
@@ -718,9 +718,9 @@ The client is split into three focused modules:
 | ------------------ | ---------------------------------------------- | --------------------------------------------------- |
 | user-service       | `/internal/user/llm-client`                    | LLM client resolution (per-user model)              |
 | llm-usage-service  | `/internal/llm-usage`                          | LLM usage reporting (via HttpInternalAuthUsageSink) |
-| code-agent         | `/internal/code/process`                       | Auto-trigger code tasks on issue assignment         |
+| code-agent         | `/internal/code/submit`                        | Auto-trigger code tasks on issue assignment         |
 | code-agent         | `/internal/issue-groups/:id/recompute-summary` | Recompute group summaries on label changes          |
-| actions-agent      | (caller)                                       | Upstream orchestrator                               |
+| intex-agent        | (caller)                                       | Supported direct-tool caller                        |
 | code-agent         | (caller)                                       | Programmatic issue management                       |
 
 ### External Services

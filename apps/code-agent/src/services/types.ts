@@ -17,13 +17,11 @@ import type { LogLineRepository } from '../domain/repositories/logLineRepository
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { CodeTaskDispatchStatusService } from '../domain/services/codeTaskDispatchStatusService.js';
-import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import type { UserLookupService } from '../domain/ports/userLookupService.js';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
-import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import type { ProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import type { DetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
 import type { ArchiveStaleGroupsUseCase } from '../domain/usecases/archiveStaleGroups.js';
@@ -66,10 +64,8 @@ export interface ServiceContainer {
   logLineRepo: LogLineRepository;
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
-  actionsAgentClient: ActionsAgentClient;
   linearAgentClient: LinearAgentClient;
   linearIssueService: LinearIssueService;
-  statusMirrorService: StatusMirrorService;
   processHeartbeat: ProcessHeartbeatUseCase;
   detectZombieTasks: DetectZombieTasksUseCase;
   archiveStaleGroups: ArchiveStaleGroupsUseCase;
@@ -124,7 +120,6 @@ export interface ServiceConfig {
   whatsappSendTopic: string;
   prTriageTopic: string;
   linearAgentUrl: string;
-  actionsAgentUrl: string;
   webhookVerifySecret: string;
   orchestratorSecret: string;
   serviceUrl: string;

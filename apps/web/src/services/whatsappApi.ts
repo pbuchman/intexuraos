@@ -1,6 +1,15 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { WhatsAppConnectResponse, WhatsAppMessagesResponse, WhatsAppStatus } from '@/types';
+import type {
+  PrivateWhatsAppAccount,
+  PrivateWhatsAppChatsResponse,
+  PrivateWhatsAppMessagesResponse,
+  PrivateWhatsAppSenderDaysResponse,
+  PrivateWhatsAppSendersResponse,
+  WhatsAppConnectResponse,
+  WhatsAppMessagesResponse,
+  WhatsAppStatus,
+} from '@/types';
 
 export interface SendVerificationRequest {
   phoneNumber: string;
@@ -121,6 +130,181 @@ export async function getWhatsAppMessages(
   const path = queryString !== '' ? `/messages?${queryString}` : '/messages';
 
   return await apiRequest<WhatsAppMessagesResponse>(config.whatsappServiceUrl, path, accessToken);
+}
+
+export interface ListPrivateWhatsAppSendersOptions {
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListPrivateWhatsAppChatsOptions {
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListPrivateWhatsAppMessagesOptions {
+  senderKey: string;
+  eventDayKey?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListPrivateWhatsAppChatMessagesOptions {
+  chatId: string;
+  eventDayKey?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListPrivateWhatsAppSenderDaysOptions {
+  senderKey: string;
+  fromDay?: string;
+  toDay?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface UpsertPrivateWhatsAppAccountRequest {
+  phoneNumber: string;
+}
+
+function appendOptionalNumber(params: URLSearchParams, key: string, value: number | undefined): void {
+  if (value !== undefined) {
+    params.set(key, String(value));
+  }
+}
+
+function appendOptionalString(params: URLSearchParams, key: string, value: string | undefined): void {
+  if (value !== undefined && value !== '') {
+    params.set(key, value);
+  }
+}
+
+export async function listPrivateWhatsAppSenders(
+  accessToken: string,
+  options: ListPrivateWhatsAppSendersOptions = {}
+): Promise<PrivateWhatsAppSendersResponse> {
+  const params = new URLSearchParams();
+  appendOptionalNumber(params, 'limit', options.limit);
+  appendOptionalString(params, 'cursor', options.cursor);
+  const queryString = params.toString();
+  const path = queryString !== '' ? `/private/senders?${queryString}` : '/private/senders';
+
+  return await apiRequest<PrivateWhatsAppSendersResponse>(
+    config.whatsappServiceUrl,
+    path,
+    accessToken
+  );
+}
+
+export async function listPrivateWhatsAppChats(
+  accessToken: string,
+  options: ListPrivateWhatsAppChatsOptions = {}
+): Promise<PrivateWhatsAppChatsResponse> {
+  const params = new URLSearchParams();
+  appendOptionalNumber(params, 'limit', options.limit);
+  appendOptionalString(params, 'cursor', options.cursor);
+  const queryString = params.toString();
+  const path = queryString !== '' ? `/private/chats?${queryString}` : '/private/chats';
+
+  return await apiRequest<PrivateWhatsAppChatsResponse>(
+    config.whatsappServiceUrl,
+    path,
+    accessToken
+  );
+}
+
+export async function listPrivateWhatsAppMessages(
+  accessToken: string,
+  options: ListPrivateWhatsAppMessagesOptions
+): Promise<PrivateWhatsAppMessagesResponse> {
+  const params = new URLSearchParams();
+  params.set('senderKey', options.senderKey);
+  appendOptionalString(params, 'eventDayKey', options.eventDayKey);
+  appendOptionalNumber(params, 'limit', options.limit);
+  appendOptionalString(params, 'cursor', options.cursor);
+
+  return await apiRequest<PrivateWhatsAppMessagesResponse>(
+    config.whatsappServiceUrl,
+    `/private/messages?${params.toString()}`,
+    accessToken
+  );
+}
+
+export async function listPrivateWhatsAppChatMessages(
+  accessToken: string,
+  options: ListPrivateWhatsAppChatMessagesOptions
+): Promise<PrivateWhatsAppMessagesResponse> {
+  const params = new URLSearchParams();
+  appendOptionalString(params, 'eventDayKey', options.eventDayKey);
+  appendOptionalNumber(params, 'limit', options.limit);
+  appendOptionalString(params, 'cursor', options.cursor);
+  const queryString = params.toString();
+  const encodedChatId = encodeURIComponent(options.chatId);
+  const path =
+    queryString !== ''
+      ? `/private/chats/${encodedChatId}/messages?${queryString}`
+      : `/private/chats/${encodedChatId}/messages`;
+
+  return await apiRequest<PrivateWhatsAppMessagesResponse>(
+    config.whatsappServiceUrl,
+    path,
+    accessToken
+  );
+}
+
+export async function listPrivateWhatsAppSenderDays(
+  accessToken: string,
+  options: ListPrivateWhatsAppSenderDaysOptions
+): Promise<PrivateWhatsAppSenderDaysResponse> {
+  const params = new URLSearchParams();
+  params.set('senderKey', options.senderKey);
+  appendOptionalString(params, 'fromDay', options.fromDay);
+  appendOptionalString(params, 'toDay', options.toDay);
+  appendOptionalNumber(params, 'limit', options.limit);
+  appendOptionalString(params, 'cursor', options.cursor);
+
+  return await apiRequest<PrivateWhatsAppSenderDaysResponse>(
+    config.whatsappServiceUrl,
+    `/private/sender-days?${params.toString()}`,
+    accessToken
+  );
+}
+
+export async function getPrivateWhatsAppAccount(
+  accessToken: string
+): Promise<PrivateWhatsAppAccount | null> {
+  return await apiRequest<PrivateWhatsAppAccount | null>(
+    config.whatsappServiceUrl,
+    '/private/account',
+    accessToken
+  );
+}
+
+export async function upsertPrivateWhatsAppAccount(
+  accessToken: string,
+  request: UpsertPrivateWhatsAppAccountRequest
+): Promise<PrivateWhatsAppAccount> {
+  return await apiRequest<PrivateWhatsAppAccount>(
+    config.whatsappServiceUrl,
+    '/private/account',
+    accessToken,
+    {
+      method: 'PUT',
+      body: request,
+    }
+  );
+}
+
+export async function disablePrivateWhatsAppAccount(
+  accessToken: string
+): Promise<PrivateWhatsAppAccount> {
+  return await apiRequest<PrivateWhatsAppAccount>(
+    config.whatsappServiceUrl,
+    '/private/account',
+    accessToken,
+    { method: 'DELETE' }
+  );
 }
 
 export async function deleteWhatsAppMessage(accessToken: string, messageId: string): Promise<void> {

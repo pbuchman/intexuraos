@@ -45,14 +45,14 @@ The current repo has 22 Dockerized app services plus the static web frontend. Th
 | `image-service` | 8120 | `/api/images` | Uses retained generated-images GCS bucket |
 | `notes-agent` | 8121 | `/api/notes` | CRUD service |
 | `app-settings-service` | 8122 | `/api/settings` | Startup dependency for many services |
-| `todos-agent` | 8123 | `/api/todos` | Pub/Sub todos processing |
+| `retired-checklist-service` | 8123 | `/api/todos` | Pub/Sub todos processing |
 | `bookmarks-agent` | 8124 | `/api/bookmarks` | Pub/Sub enrich and summarize |
 | `calendar-agent` | 8125 | `/api/calendar` | Calendar preview Pub/Sub target |
 | `linear-agent` | 8126 | `/api/linear` | Scheduler sync/prune targets |
 | `web-agent` | 8127 | `/api/web` | Cloudflare Browser Rendering secrets retained in GCP |
 | `code-agent` | 8128 | `/api/code` | Code task UI/API, schedulers, PR triage |
-| `chat-agent` | 8129 | `/api/chat` | OpenAI and guest session secret |
-| `cron-agent` | 8130 | `/api/cron-agent` | Scheduler tick target |
+| `retired-chat-service` | 8129 | `/api/chat` | OpenAI and guest session secret |
+| `retired-scheduler-service` | 8130 | `/api/retired-scheduler-service` | Scheduler tick target |
 | `hellscript-agent` | 8131 | `/api/hellscript-agent` | Thought buffer service |
 | `llm-usage-service` | 8132 | `/api/llm-usage` | Orchestrator usage webhook target |
 | `api-docs-hub` | 8133 | not in web manifest | Now active in PM2 and Cloud Run; include in Hetzner PM2 and expose only if needed |
@@ -70,7 +70,7 @@ The current repo has 22 Dockerized app services plus the static web frontend. Th
 
 - PR #1747 referenced `data-insights-agent`; current repo has `fishing-assistant-service`.
 - PR #1747 treated `api-docs-hub` as optional; current repo runs it in PM2, Terraform, Cloud Build, and deploy workflows.
-- PR #1747 nginx route names do not match the current web manifest for `/api/notifications`, `/api/fishing-assistant`, `/api/images`, `/api/settings`, `/api/cron-agent`, and `/api/hellscript-agent`.
+- PR #1747 nginx route names do not match the current web manifest for `/api/notifications`, `/api/fishing-assistant`, `/api/images`, `/api/settings`, `/api/retired-scheduler-service`, and `/api/hellscript-agent`.
 - PR #1747 Pub/Sub coverage predates `pr-triage`, `audio-stored` explicit DLQ handling, transcription worker refactor, and current scheduler jobs.
 - PR #1747 used a specific Hetzner primary IP datacenter in one version. The refreshed plan must keep primary IP and server placement aligned by using `location` consistently or deriving the datacenter from the same input.
 - PR #1747 temporarily removed monitoring in one commit and then restored it. The refreshed plan keeps monitoring unchanged until an explicit post-cutover observability cleanup.
@@ -300,18 +300,18 @@ fishing-assistant-service:8119
 notes-agent:8121
 bookmarks-agent:8124
 code-agent:8128
-cron-agent:8130
+retired-scheduler-service:8130
 hellscript-agent:8131
 llm-usage-service:8132
 user-service:8110
 commands-agent:8117
 actions-agent:8118
 research-agent:8116
-todos-agent:8123
+retired-checklist-service:8123
 image-service:8120
 calendar-agent:8125
 linear-agent:8126
-chat-agent:8129
+retired-chat-service:8129
 web-agent:8127
 api-docs-hub:8133
 ```
@@ -344,16 +344,16 @@ Routes must match `apps/web/service-manifest.json`:
 /api/commands -> commands-agent
 /api/actions -> actions-agent
 /api/notes -> notes-agent
-/api/todos -> todos-agent
+/api/todos -> retired-checklist-service
 /api/bookmarks -> bookmarks-agent
 /api/calendar -> calendar-agent
-/api/chat -> chat-agent
+/api/chat -> retired-chat-service
 /api/linear -> linear-agent
 /api/code -> code-agent
 /api/images -> image-service
 /api/web -> web-agent
 /api/settings -> app-settings-service
-/api/cron-agent -> cron-agent
+/api/retired-scheduler-service -> retired-scheduler-service
 /api/hellscript-agent -> hellscript-agent
 /api/llm-usage -> llm-usage-service
 ```
@@ -371,7 +371,7 @@ The `/internal/*` route must verify Google OIDC JWTs before proxying, then fan o
 /internal/commands -> commands-agent
 /internal/calendar/ -> calendar-agent
 /internal/bookmarks/ -> bookmarks-agent
-/internal/todos/ -> todos-agent
+/internal/todos/ -> retired-checklist-service
 /internal/code/ -> code-agent
 /internal/code-tasks/ -> code-agent
 /internal/webhooks/ -> code-agent
@@ -383,7 +383,7 @@ The `/internal/*` route must verify Google OIDC JWTs before proxying, then fan o
 /internal/archive-stale-groups -> code-agent
 /internal/auto-archive-merged-tasks -> code-agent
 /internal/linear/ -> linear-agent or code-agent according to the current route owner
-/internal/cron/ -> cron-agent
+/internal/cron/ -> retired-scheduler-service
 /internal/notifications/ -> mobile-notifications-service
 /internal/retry-pending -> commands-agent
 /internal/drain-queue -> code-agent
@@ -428,7 +428,7 @@ Create additive prod-Hetzner subscriptions for every app push handler:
 | `intexuraos-calendar-preview-dev` | `/internal/calendar/generate-preview` | `calendar-agent` |
 | `intexuraos-bookmark-enrich-dev` | `/internal/bookmarks/pubsub/enrich` | `bookmarks-agent` |
 | `intexuraos-bookmark-summarize-dev` | `/internal/bookmarks/pubsub/summarize` | `bookmarks-agent` |
-| `intexuraos-todos-processing-dev` | `/internal/todos/pubsub/todos-processing` | `todos-agent` |
+| `intexuraos-retired-checklist-processing-dev` | `/internal/todos/pubsub/retired-checklist-processing` | `retired-checklist-service` |
 | `intexuraos-approval-reply-dev` | `/internal/actions/approval-reply` | `actions-agent` |
 | `intexuraos-pr-triage-dev` | `/internal/code/pubsub/pr-triage` | `code-agent` |
 
@@ -449,7 +449,7 @@ Create additive prod-Hetzner jobs for these app endpoints:
 | `mobile-notifications-digest-yesterday-dev` | `/internal/notifications/digest/run-yesterday` |
 | `intexuraos-linear-sync-hourly-dev` | `/internal/linear/sync-all` |
 | `intexuraos-linear-issues-prune-hourly-dev` | `/internal/linear/prune-issues` |
-| `intexuraos-cron-agent-tick-dev` | `/internal/cron/tick` |
+| `intexuraos-retired-scheduler-service-tick-dev` | `/internal/cron/tick` |
 | `intexuraos-retry-pending-commands-dev` | `/internal/retry-pending` |
 | `intexuraos-retry-pending-actions-dev` | `/internal/actions/retry-pending` |
 | `intexuraos-drain-task-queue-dev` | `/internal/drain-queue` |

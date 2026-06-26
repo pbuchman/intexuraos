@@ -15,7 +15,7 @@ import {
 } from 'react';
 import * as Sentry from '@sentry/react';
 import { useAuth } from './AuthContext.js';
-import { createCommand } from '../services/commandsApi.js';
+import { createNote } from '../services/notesApi.js';
 import {
   addToQueue,
   calculateNextRetryDelay,
@@ -56,6 +56,12 @@ function getStatusCode(error: unknown): number | null {
   return null;
 }
 
+function getShareNoteTitle(content: string): string {
+  const firstLine = content.split(/\r?\n/).find((line) => line.trim() !== '')?.trim();
+  if (firstLine === undefined) return 'Shared content';
+  return firstLine.length <= 80 ? firstLine : `${firstLine.slice(0, 77)}...`;
+}
+
 export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.JSX.Element {
   const { isAuthenticated, getAccessToken } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
@@ -91,13 +97,15 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
         refreshHistory();
 
         try {
-          const command = await createCommand(token, {
-            text: item.content,
+          const note = await createNote(token, {
+            title: getShareNoteTitle(item.content),
+            content: item.content,
+            tags: ['shared'],
             source: item.source,
-            externalId: item.externalId,
+            sourceId: item.externalId,
           });
 
-          markAsSynced(item.id, command.id);
+          markAsSynced(item.id, note.id);
           refreshHistory();
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : 'Sync failed';

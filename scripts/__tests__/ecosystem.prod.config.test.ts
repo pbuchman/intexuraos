@@ -25,21 +25,27 @@ const EXPECTED_SERVICES = [
   ['notes-agent', '8121'],
   ['bookmarks-agent', '8124'],
   ['code-agent', '8128'],
-  ['cron-agent', '8130'],
   ['hellscript-agent', '8131'],
   ['llm-usage-service', '8132'],
+  ['intex-agent', '8134'],
   ['user-service', '8110'],
-  ['commands-agent', '8117'],
-  ['actions-agent', '8118'],
   ['research-agent', '8116'],
-  ['todos-agent', '8123'],
   ['image-service', '8120'],
   ['calendar-agent', '8125'],
   ['linear-agent', '8126'],
-  ['chat-agent', '8129'],
   ['web-agent', '8127'],
   ['api-docs-hub', '8133'],
 ] as const;
+
+const REMOVED_AGENT_NAMES = ['todos', 'chat', 'cron'].map((name) => `${name}-agent`);
+const REMOVED_AGENT_ENV_KEYS = [
+  ...['TODOS', 'CHAT', 'CRON'].flatMap((name) => [
+    `INTEXURAOS_${name}_AGENT_URL`,
+    `INTEXURAOS_${name}_AGENT_OPENAPI_URL`,
+  ]),
+  ['INTEXURAOS', 'TODOS', 'PROCESSING', 'TOPIC'].join('_'),
+  'INTEXURAOS_GUEST_SESSION_SECRET',
+];
 
 const PROD_ENV = {
   HOME: '/home/deploy',
@@ -50,14 +56,10 @@ const PROD_ENV = {
 
 const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
   'user-service',
-  'commands-agent',
-  'actions-agent',
   'research-agent',
-  'todos-agent',
   'image-service',
   'calendar-agent',
   'linear-agent',
-  'chat-agent',
   'web-agent',
 ]);
 
@@ -126,6 +128,22 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(config.apps.map((app) => [app.name, app.env.PORT])).toEqual(EXPECTED_SERVICES);
     expect(config.apps.some((app) => app.name === 'web')).toBe(false);
     expect(config.apps.some((app) => app.name === 'data-insights-agent')).toBe(false);
+    for (const removed of REMOVED_AGENT_NAMES) {
+      expect(config.apps.some((app) => app.name === removed)).toBe(false);
+    }
+  });
+
+  it('does not export runtime env for removed agents', () => {
+    const config = loadProdConfig({
+      ...PROD_ENV,
+      INTEXURAOS_GUEST_SESSION_SECRET: 'guest-session-secret',
+    });
+
+    for (const app of config.apps) {
+      for (const envKey of REMOVED_AGENT_ENV_KEYS) {
+        expect(app.env[envKey], `${app.name} ${envKey}`).toBeUndefined();
+      }
+    }
   });
 
   it('sets production runtime env without Pub/Sub emulator leakage', () => {
@@ -275,15 +293,16 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('user-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
     expect(byName.get('notion-service')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('notion-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
-    expect(byName.get('chat-agent')?.env.INTEXURAOS_GUEST_SESSION_SECRET).toBe(
-      'guest-session-secret'
-    );
     expect(byName.get('code-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
     expect(byName.get('user-service')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBe(
       'github-oauth-secret'
     );
-    expect(byName.get('chat-agent')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBeUndefined();
+    for (const removed of REMOVED_AGENT_NAMES) {
+      expect(byName.has(removed)).toBe(false);
+    }
   });
 
   it('waits for app-settings-service before starting app-settings-dependent services', () => {
@@ -304,9 +323,6 @@ describe('ecosystem.config.prod.cjs', () => {
     const config = loadProdConfig();
     const byName = new Map(config.apps.map((app) => [app.name, app]));
 
-    expect(byName.get('actions-agent')?.env.INTEXURAOS_COMMANDS_AGENT_URL).toBe(
-      'http://127.0.0.1:8117'
-    );
     expect(byName.get('linear-agent')?.env.INTEXURAOS_CODE_AGENT_URL).toBe('http://127.0.0.1:8128');
     expect(byName.get('linear-agent')?.env.INTEXURAOS_SERVICE_URL).toBe(
       'https://intexuraos.cloud/api/linear'
@@ -320,8 +336,18 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'
     );
-    expect(byName.get('commands-agent')?.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE).toBe(
-      'intexuraos-actions-queue-dev'
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC).toBe(
+      'intexuraos-intex-message-ingest-dev'
+    );
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
+      'intexuraos-whatsapp-send-dev'
+    );
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_NOTES_AGENT_URL).toBe('http://127.0.0.1:8121');
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_CALENDAR_AGENT_URL).toBe(
+      'http://127.0.0.1:8125'
+    );
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_LLM_USAGE_SERVICE_URL).toBe(
+      'http://127.0.0.1:8132'
     );
     expect(byName.get('research-agent')?.env.INTEXURAOS_PUBSUB_LLM_CALL_TOPIC).toBe(
       'intexuraos-llm-call-dev'

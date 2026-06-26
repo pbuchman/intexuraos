@@ -80,7 +80,7 @@ The bookmark was created with `ogFetchStatus: pending` and no metadata. The publ
 
 ### Step 2.1: Create a bookmark via the internal API
 
-This is how actions-agent creates bookmarks from WhatsApp links:
+This is how Intex creates bookmarks from WhatsApp links:
 
 ```bash
 curl -X POST http://localhost:8124/internal/bookmarks \

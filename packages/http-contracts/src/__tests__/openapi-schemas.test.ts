@@ -140,12 +140,19 @@ describe('OpenAPI Schemas', () => {
   });
 
   describe('contractComponentSchemas', () => {
+    it('does not include retired checklist contract schemas', () => {
+      expect(contractComponentSchemas).not.toHaveProperty('TodosCreateTodoRequest');
+      expect(contractComponentSchemas).not.toHaveProperty('TodosCreateTodoResponse');
+    });
+
+    it('does not include retired command contract schemas', () => {
+      expect(contractComponentSchemas).not.toHaveProperty('CommandsCommandWithText');
+      expect(contractComponentSchemas).not.toHaveProperty('CommandsGetCommandData');
+    });
+
     it('includes generated schemas for internal client contracts', () => {
       expect((contractComponentSchemas.ServiceFeedback as { type?: string }).type).toBe('object');
       expect((contractComponentSchemas.NotesCreateNoteRequest as { type?: string }).type).toBe(
-        'object'
-      );
-      expect((contractComponentSchemas.TodosCreateTodoRequest as { type?: string }).type).toBe(
         'object'
       );
       expect((contractComponentSchemas.ResearchCreateDraftRequest as { type?: string }).type).toBe(
@@ -154,6 +161,12 @@ describe('OpenAPI Schemas', () => {
       expect(
         (contractComponentSchemas.CalendarProcessActionRequest as { type?: string }).type
       ).toBe('object');
+      expect((contractComponentSchemas.CalendarCreateEventRequest as { type?: string }).type).toBe(
+        'object'
+      );
+      expect((contractComponentSchemas.CalendarCreatedEvent as { type?: string }).type).toBe(
+        'object'
+      );
       expect((contractComponentSchemas.CalendarPreview as { type?: string }).type).toBe('object');
       expect((contractComponentSchemas.LinearProcessActionRequest as { type?: string }).type).toBe(
         'object'
@@ -171,8 +184,23 @@ describe('OpenAPI Schemas', () => {
           };
         };
       };
+      const calendarCreateEventRequestSchema =
+        contractComponentSchemas.CalendarCreateEventRequest as {
+          additionalProperties?: boolean;
+          properties?: {
+            event?: {
+              required?: string[];
+            };
+          };
+        };
 
       expect(notesSchema.additionalProperties).toBe(false);
+      expect(calendarCreateEventRequestSchema.additionalProperties).toBe(false);
+      expect(calendarCreateEventRequestSchema.properties?.event?.required).toEqual([
+        'summary',
+        'start',
+        'end',
+      ]);
       expect(calendarPreviewSchema.properties?.status?.enum).toEqual([
         'pending',
         'ready',

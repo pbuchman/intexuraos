@@ -1,76 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "actions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "actions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updatedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "actions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "commands",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "commands",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "mobile_notifications",
       "queryScope": "COLLECTION",
       "fields": [
@@ -217,35 +147,7 @@
       ]
     },
     {
-      "collectionGroup": "todos",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "bookmarks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updatedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "todos",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -262,24 +164,6 @@
       "collectionGroup": "notes",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updatedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "actions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
         {
           "fieldPath": "userId",
           "order": "ASCENDING"
@@ -318,42 +202,6 @@
         },
         {
           "fieldPath": "startedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "actions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "actions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
           "order": "DESCENDING"
         }
       ]
@@ -521,19 +369,6 @@
         {
           "fieldPath": "createdAt",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "doc_embeddings",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "embedding",
-          "vectorConfig": {
-            "dimension": 1536,
-            "flat": {}
-          }
         }
       ]
     },
@@ -720,102 +555,6 @@
         {
           "fieldPath": "queuedAt",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "cron_schedules",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "nextExecutionAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "cron_schedules",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "cron_executions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "cron_executions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "scheduleId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "cron_executions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "cron_executions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "scheduleId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
         }
       ]
     },
@@ -1945,6 +1684,228 @@
         {
           "fieldPath": "waMessageId",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventTimestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "senderKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventTimestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventDayKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "senderKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventTimestamp",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_senders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastEventAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_sender_days",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventDayKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "senderKey",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_sender_days",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "senderKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventDayKey",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_senders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastEventAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "senderKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventDayKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventTimestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_chats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastEventAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "chatId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventTimestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "whatsapp_private_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sourceAccountId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "chatId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventDayKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "eventTimestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
         }
       ]
     }

@@ -33,10 +33,12 @@ import {
   extractMessageType,
   extractPhoneNumberId,
   extractReactionData,
-  extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
 } from '../../../routes/shared.js';
+
+const VOICE_UNSUPPORTED_MESSAGE =
+  'Voice messages are not supported by Intex yet. Please send text for now.';
 
 /**
  * Dependencies for ProcessWebhookEventUseCase.
@@ -314,12 +316,12 @@ export class ProcessWebhookEventUseCase {
       if (messageType === 'reaction' && reactionData !== null) {
         logger.info(
           { eventId: savedEvent.id, emoji: reactionData.emoji },
-          'Ignoring reaction message (approval via buttons only)'
+          'Ignoring reaction message because Intex supports text messages only'
         );
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
           ignoredReason: {
             code: 'REACTION_NOT_SUPPORTED',
-            message: 'Reactions are no longer used for approvals. Use interactive buttons instead.',
+            message: 'Reactions are not supported by Intex yet. Please send text for now.',
             details: { emoji: reactionData.emoji },
           },
         });
@@ -427,8 +429,7 @@ export class ProcessWebhookEventUseCase {
   }
 
   /**
-   * Handle audio message using ProcessAudioMessageUseCase.
-   * Transcription is triggered via Pub/Sub event.
+   * Handle audio/voice messages while Intex is text-only.
    */
   private async handleAudioMessage(
     payload: WebhookPayload,
@@ -443,17 +444,16 @@ export class ProcessWebhookEventUseCase {
     audioMedia: { id: string; mimeType: string; sha256?: string },
     logger: Logger
   ): Promise<void> {
-    const { webhookEventRepository, messageRepository, mediaStorage, whatsappCloudApi, eventPublisher } = this.deps;
+    const { webhookEventRepository, messageRepository, mediaStorage, whatsappCloudApi } = this.deps;
 
     const usecase = new ProcessAudioMessageUseCase({
       webhookEventRepository,
       messageRepository,
       mediaStorage,
       whatsappCloudApi,
-      eventPublisher,
     });
 
-    const result = await usecase.execute(
+    const processResult = await usecase.execute(
       {
         eventId: savedEvent.id,
         userId,
@@ -468,17 +468,39 @@ export class ProcessWebhookEventUseCase {
       logger
     );
 
-    if (result.ok) {
-      // Mark as read with typing indicator (shows user something is happening)
+    if (!processResult.ok) {
+      return;
+    }
+
+    if (phoneNumberId !== null) {
       await this.markAudioAsReadWithTyping(payload, savedEvent, whatsappCloudApi, logger);
+
+      const sendResult = await whatsappCloudApi.sendMessage(
+        phoneNumberId,
+        fromNumber,
+        VOICE_UNSUPPORTED_MESSAGE,
+        waMessageId
+      );
+
+      if (!sendResult.ok) {
+        const failureDetails = `Failed to send unsupported voice response: ${sendResult.error.message}`;
+        logger.error({ eventId: savedEvent.id, error: sendResult.error }, failureDetails);
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+          failureDetails,
+          retryable: true,
+        });
+        return;
+      }
+    } else {
+      logger.info(
+        { eventId: savedEvent.id },
+        'Cannot send unsupported voice response because phoneNumberId is missing'
+      );
     }
   }
 
   /**
-   * Handle button message for action approval/rejection.
-   *
-   * Button responses come from interactive messages with action-specific nonces.
-   * Button ID format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
+   * Handle button messages while Intex is text-only.
    */
   private async handleButtonMessage(
     payload: WebhookPayload,
@@ -487,7 +509,7 @@ export class ProcessWebhookEventUseCase {
     buttonResponse: { buttonId: string; buttonTitle: string; replyToWamid: string },
     logger: Logger
   ): Promise<void> {
-    const { webhookEventRepository, eventPublisher, whatsappCloudApi } = this.deps;
+    const { webhookEventRepository, whatsappCloudApi } = this.deps;
 
     // Fire-and-forget: mark as read + show typing indicator
     const originalMessageId = extractMessageId(payload);
@@ -516,123 +538,15 @@ export class ProcessWebhookEventUseCase {
         buttonTitle: buttonResponse.buttonTitle,
         replyToWamid: buttonResponse.replyToWamid,
       },
-      'Processing button message'
+      'Ignoring button message because Intex is text-only'
     );
-
-    // Parse button ID to extract action and intent
-    // Format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
-    const parts = buttonResponse.buttonId.split(':');
-
-    if (parts.length < 2) {
-      logger.error(
-        { eventId: savedEvent.id, buttonId: buttonResponse.buttonId },
-        'Invalid button ID format'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
-        ignoredReason: {
-          code: 'INVALID_BUTTON_FORMAT',
-          message: 'Button ID does not match expected format',
-          details: { buttonId: buttonResponse.buttonId },
-        },
-      });
-      return;
-    }
-
-    const [intent, actionId, nonce] = parts;
-
-    // Validate intent
-    // Action approval intents: approve, cancel, convert
-    // Code task intents: cancel-task (INT-379), view-task (INT-379)
-    // Execution intents: proceed-implementation (INT-678)
-    const validIntents = [
-      'approve',
-      'cancel',
-      'reject',
-      'convert',
-      'cancel-task',
-      'view-task',
-      'proceed-implementation',
-    ];
-    /* v8 ignore start -- ts-type: intent and validIntents.includes null-coalescing branch unreachable after split @preserve */
-    if (!validIntents.includes(intent ?? '')) {
-      /* v8 ignore stop @preserve */
-      logger.error({ eventId: savedEvent.id, intent }, 'Unknown button intent');
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
-        ignoredReason: {
-          code: 'UNKNOWN_BUTTON_INTENT',
-          message: `Unknown button intent: ${String(intent)}`,
-          details: { intent, buttonId: buttonResponse.buttonId },
-        },
-      });
-      return;
-    }
-
-    logger.info(
-      {
-        eventId: savedEvent.id,
-        userId,
-        actionId,
-        intent,
-        hasNonce: nonce !== undefined,
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'BUTTON_NOT_SUPPORTED',
+        message: 'Interactive button replies are not supported by Intex yet. Please send text for now.',
+        details: { userId, buttonId: buttonResponse.buttonId },
       },
-      'Button response parsed successfully, publishing approval reply event'
-    );
-
-    // Publish approval reply event with button data
-    // replyText is a human-readable indicator of the intent
-    const intentToReplyText: Record<string, string> = {
-      approve: 'yes',
-      cancel: 'no',
-      reject: 'no',
-      convert: 'convert',
-      'cancel-task': 'cancel-task',
-      'view-task': 'view-task',
-      'proceed-implementation': 'proceed-implementation',
-    };
-    const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
-      type: 'action.approval.reply',
-      replyToWamid: buttonResponse.replyToWamid,
-      /* v8 ignore start -- ts-type: intent always defined after Array.split with length >= 2 @preserve */
-      replyText: intentToReplyText[intent ?? ''] ?? (intent ?? ''),
-      /* v8 ignore stop @preserve */
-      userId,
-      timestamp: new Date().toISOString(),
-      /* v8 ignore start -- ts-type: actionId always defined after Array.split with length >= 2 @preserve */
-      actionId: actionId ?? '', // For cancel-task/view-task, this is the taskId
-      /* v8 ignore stop @preserve */
-      buttonId: buttonResponse.buttonId,
-      buttonTitle: buttonResponse.buttonTitle,
-    };
-
-    const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
-
-    if (!approvalPublishResult.ok) {
-      logger.error(
-        {
-          eventId: savedEvent.id,
-          error: approvalPublishResult.error,
-          replyToWamid: buttonResponse.replyToWamid,
-        },
-        'Failed to publish approval reply event'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-        failureDetails: `Failed to publish approval reply: ${approvalPublishResult.error.message}`,
-      });
-      return;
-    }
-
-    logger.info(
-      {
-        eventId: savedEvent.id,
-        userId,
-        replyToWamid: buttonResponse.replyToWamid,
-        actionId,
-        intent,
-      },
-      'Published approval reply event from button response'
-    );
-
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
+    });
   }
 
   /**
@@ -651,8 +565,7 @@ export class ProcessWebhookEventUseCase {
     messageText: string,
     logger: Logger
   ): Promise<void> {
-    const { webhookEventRepository, messageRepository, outboundMessageRepository, eventPublisher } =
-      this.deps;
+    const { webhookEventRepository, messageRepository, eventPublisher } = this.deps;
 
     // Build text message object
     const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
@@ -728,126 +641,32 @@ export class ProcessWebhookEventUseCase {
       'Text message saved to database'
     );
 
-    // Check if this is a reply to another message (potential approval response)
-    const replyContext = extractReplyContext(payload);
+    logger.info(
+      { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+      'Publishing intex.message.ingest event'
+    );
 
-    // Declare actionId outside the if block so it's accessible later
-    // If actionId is defined, this is a confirmed approval reply and we should skip command.ingest
-    let actionId: string | undefined;
+    const ingestPublishResult = await eventPublisher.publishIntexMessageIngest({
+      type: 'intex.message.ingest',
+      userId,
+      messageId: waMessageId,
+      sourceType: 'whatsapp_text',
+      text: messageText,
+      whatsappSender: fromNumber,
+      timestamp,
+    });
 
-    if (replyContext !== null) {
-      // This message is a reply - look up the original message to get correlationId
-      logger.info(
-        {
-          eventId: savedEvent.id,
-          userId,
-          replyToWamid: replyContext.replyToWamid,
-        },
-        'Message is a reply, looking up outbound message'
+    if (!ingestPublishResult.ok) {
+      const failureDetails = `Failed to publish intex message ingest: ${ingestPublishResult.error.message}`;
+      logger.error(
+        { eventId: savedEvent.id, error: ingestPublishResult.error },
+        'Failed to publish intex.message.ingest event'
       );
-
-      // Try to find the original outbound message to extract actionId
-      const outboundResult = await outboundMessageRepository.findByWamid(replyContext.replyToWamid);
-
-      if (outboundResult.ok && outboundResult.value !== null) {
-        const correlationId = outboundResult.value.correlationId;
-        // Extract actionId from correlationId (format: action-{type}-approval-{actionId})
-        const match = /action-[^-]+-approval-(.+)$/.exec(correlationId);
-        if (match !== null) {
-          actionId = match[1];
-          logger.info(
-            { correlationId, actionId },
-            'Extracted actionId from correlationId'
-          );
-        } else {
-          logger.info(
-            { correlationId, replyToWamid: replyContext.replyToWamid },
-            'Outbound message found but correlationId does not match approval pattern'
-          );
-        }
-      } else if (outboundResult.ok) {
-        logger.info(
-          { replyToWamid: replyContext.replyToWamid },
-          'No outbound message found for this wamid (may not be an approval message)'
-        );
-      } else {
-        logger.error(
-          { replyToWamid: replyContext.replyToWamid, error: outboundResult.error.message },
-          'Failed to look up outbound message'
-        );
-      }
-
-      // Only publish approval reply event if we found an actionId
-      // If no actionId was extracted, this is not a reply to an approval message
-      if (actionId !== undefined) {
-        const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
-          type: 'action.approval.reply',
-          replyToWamid: replyContext.replyToWamid,
-          replyText: messageText,
-          userId,
-          actionId,
-          timestamp: new Date().toISOString(),
-        };
-
-        const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
-
-        if (!approvalPublishResult.ok) {
-          logger.error(
-            {
-              eventId: savedEvent.id,
-              error: approvalPublishResult.error,
-              replyToWamid: replyContext.replyToWamid,
-            },
-            'Failed to publish approval reply event'
-          );
-        } else {
-          logger.info(
-            {
-              eventId: savedEvent.id,
-              userId,
-              replyToWamid: replyContext.replyToWamid,
-              actionId,
-            },
-            'Published approval reply event'
-          );
-        }
-      }
-    }
-
-    // Only publish command.ingest if this is NOT a confirmed approval reply
-    // If actionId is defined, we've already handled this via approval reply event
-    if (actionId !== undefined) {
-      logger.info(
-        { eventId: savedEvent.id, actionId, userId },
-        'Skipping command.ingest for approval reply with known actionId'
-      );
-    } else {
-      logger.info(
-        { eventId: savedEvent.id, userId, messageId: savedMessage.id },
-        'Publishing command.ingest event'
-      );
-
-      const commandPublishResult = await eventPublisher.publishCommandIngest({
-        type: 'command.ingest',
-        userId,
-        sourceType: 'whatsapp_text',
-        externalId: waMessageId,
-        text: messageText,
-        timestamp,
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+        failureDetails,
+        retryable: true,
       });
-
-      if (!commandPublishResult.ok) {
-        const failureDetails = `Failed to publish command ingest: ${commandPublishResult.error.message}`;
-        logger.error(
-          { eventId: savedEvent.id, error: commandPublishResult.error },
-          'Failed to publish command ingest event'
-        );
-        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-          failureDetails,
-          retryable: true,
-        });
-        throw new RetryableWebhookProcessingError(failureDetails);
-      }
+      throw new RetryableWebhookProcessingError(failureDetails);
     }
 
     // Publish link preview extraction event to Pub/Sub

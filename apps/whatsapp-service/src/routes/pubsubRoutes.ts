@@ -9,12 +9,10 @@ import type {
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
   SendMessageEvent,
-  TranscriptionCompletedEvent,
   WebhookProcessEvent,
 } from '../domain/whatsapp/index.js';
 import {
   ExtractLinkPreviewsUseCase,
-  HandleTranscriptionCompletedUseCase,
   ProcessWebhookEventUseCase,
   shouldDeliverMessage,
 } from '../domain/whatsapp/index.js';
@@ -518,123 +516,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           );
           return await reply.fail('INTERNAL_ERROR', 'Cleanup failed');
         }
-      }
-    );
-
-    fastify.post(
-      '/internal/whatsapp/pubsub/transcription-completed',
-      {
-        schema: {
-          operationId: 'processTranscriptionCompleted',
-          summary: 'Process transcription completed event from PubSub',
-          description:
-            'Internal endpoint for PubSub push. Receives transcription completed events from srt-service and updates Firestore and sends WhatsApp messages.',
-          tags: ['internal'],
-          body: {
-            type: 'object',
-            properties: {
-              message: {
-                type: 'object',
-                properties: {
-                  data: { type: 'string', description: 'Base64 encoded message data' },
-                  messageId: { type: 'string' },
-                  publishTime: { type: 'string' },
-                },
-                required: ['data', 'messageId'],
-              },
-              subscription: { type: 'string' },
-            },
-            required: ['message'],
-          },
-          response: {
-            200: {
-              description: 'Event acknowledged',
-              type: 'object',
-              properties: {
-                success: { type: 'boolean' },
-              },
-              required: ['success'],
-            },
-            401: {
-              description: 'Unauthorized',
-              type: 'object',
-              properties: {
-                success: { type: 'boolean', const: false },
-                error: { $ref: 'ErrorBody#' },
-              },
-              required: ['success', 'error'],
-            },
-          },
-        },
-      },
-      async (request: FastifyRequest, reply: FastifyReply) => {
-        logIncomingRequest(request, {
-          message: 'Received request to /internal/whatsapp/pubsub/transcription-completed',
-          bodyPreviewLength: 200,
-        });
-
-        const fromHeader = request.headers.from;
-        const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
-
-        if (isPubSubPush) {
-          request.log.info(
-            { from: fromHeader, userAgent: request.headers['user-agent'] },
-            'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
-          );
-        } else {
-          const authResult = validateInternalAuth(request);
-
-          if (!authResult.valid) {
-            request.log.warn(
-              { reason: authResult.reason },
-              'Internal auth failed for pubsub/transcription-completed endpoint'
-            );
-            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/transcription-completed endpoint');
-          }
-
-        }
-
-        const body = request.body as PubSubPushMessage;
-
-        let eventData: TranscriptionCompletedEvent;
-        try {
-          const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-          eventData = JSON.parse(decoded) as TranscriptionCompletedEvent;
-        } catch {
-          request.log.error(
-            { messageId: body.message.messageId },
-            'Failed to decode PubSub message'
-          );
-          return await reply.ok({});
-        }
-
-        const parsedType = eventData.type as string;
-        if (parsedType !== 'srt.transcription.completed') {
-          request.log.warn({ type: parsedType }, 'Unexpected event type');
-          return await reply.ok({});
-        }
-
-        request.log.info(
-          {
-            pubsubMessageId: body.message.messageId,
-            messageId: eventData.messageId,
-            userId: eventData.userId,
-            status: eventData.status,
-          },
-          'Processing transcription completed event'
-        );
-
-        const services = getServices();
-
-        const usecase = new HandleTranscriptionCompletedUseCase({
-          messageRepository: services.messageRepository,
-          whatsappCloudApi: services.whatsappCloudApi,
-          eventPublisher: services.eventPublisher,
-        });
-
-        await usecase.execute(eventData, request.log);
-
-        return await reply.ok({});
       }
     );
 

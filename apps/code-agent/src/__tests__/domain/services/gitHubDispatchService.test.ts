@@ -116,7 +116,6 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     taskEnqueueService: {} as never,
     whatsappNotifier: {} as never,
     workerSettingsRepo: {} as never,
-    statusMirrorService: {} as never,
     gitHubPRClient: createMockGitHubPRClient(),
     userServiceClient: createMockUserServiceClient(),
     firestore: {} as never,

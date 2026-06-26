@@ -33,7 +33,7 @@ describe('verify-no-raw-fetch', () => {
   it('passes when target files avoid raw fetch and non-target files still use it', () => {
     writeFixture(
       rootDir,
-      'apps/actions-agent/src/infra/http/client.ts',
+      'apps/bookmarks-agent/src/infra/http/client.ts',
       `
 import { sendInternalRequest } from '@intexuraos/internal-clients';
 
@@ -60,7 +60,7 @@ export async function stillAllowedOutsideScope() {
   it('fails when a scoped adapter uses raw fetch', () => {
     writeFixture(
       rootDir,
-      'apps/actions-agent/src/infra/http/bad.ts',
+      'apps/bookmarks-agent/src/infra/http/bad.ts',
       `
 export async function bad() {
   return fetch('https://example.com/internal');
@@ -71,7 +71,7 @@ export async function bad() {
     const result = runScript(rootDir);
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/raw fetch\(\) is forbidden here/);
-    expect(result.stderr).toMatch(/apps\/actions-agent\/src\/infra\/http\/bad\.ts:3/);
+    expect(result.stderr).toMatch(/apps\/bookmarks-agent\/src\/infra\/http\/bad\.ts:3/);
   });
 
   it('fails when any app infra file uses raw fetch outside the migrated client directories', () => {

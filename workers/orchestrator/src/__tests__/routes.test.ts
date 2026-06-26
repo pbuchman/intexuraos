@@ -17,10 +17,10 @@ describe('Routes', () => {
   let isolationProvider: IsolationProvider;
 
   const mockLogger: Logger = {
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-    debug: () => undefined,
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   };
 
   const orchestratorSecret = 'test-secret';
@@ -46,6 +46,7 @@ describe('Routes', () => {
   };
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     app = Fastify();
 
     dispatcher = {
@@ -545,6 +546,26 @@ describe('Routes', () => {
       );
     });
 
+    it('forwards documentation reviewTypes to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'task_00000000-0000-0000-0000-00000000d0c5',
+        workerType: 'mimo-pro',
+        prompt: 'Review documentation changes',
+        webhookUrl: 'https://intexuraos.cloud/api/code/internal/task-hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+        reviewTypes: ['documentation'],
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ reviewTypes: ['documentation'] })
+      );
+    });
+
     it('forwards retriedFrom to dispatcher.submitTask', async () => {
       const payload = {
         taskId: 'task_00000000-0000-0000-0000-0000000000f1',
@@ -680,6 +701,10 @@ describe('Routes', () => {
       });
 
       expect(response.statusCode).toBe(404);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ _skipSentry: true }),
+        'GET 404 /tasks/non-existent'
+      );
     });
   });
 
@@ -1429,6 +1454,10 @@ describe('Routes', () => {
         error:
           'Session has expired — the worker container was cleaned up. Please start a new session.',
       });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ _skipSentry: true }),
+        'POST 410 /tasks/expired-session/message'
+      );
     });
   });
 

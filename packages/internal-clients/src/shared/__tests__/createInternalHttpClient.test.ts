@@ -316,6 +316,25 @@ describe('createInternalHttpClient', () => {
     }
   });
 
+  it('allows raw object success payloads when explicitly requested', async () => {
+    nock(BASE).post('/raw-success').reply(200, {
+      cancelled: true,
+    });
+
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: 'secret',
+      logger: noopLogger,
+    });
+    const result = await client.request<{ cancelled: boolean }>({
+      method: 'POST',
+      path: '/raw-success',
+      allowRawSuccess: true,
+    });
+
+    expect(result).toEqual({ ok: true, value: { cancelled: true } });
+  });
+
   it('extraHeaders are propagated to the outbound request', async () => {
     nock(BASE).get('/h').matchHeader('x-foo', 'bar').reply(200, { success: true, data: 'ok' });
 

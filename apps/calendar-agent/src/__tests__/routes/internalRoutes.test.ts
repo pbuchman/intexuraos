@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { err } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 import { buildServer } from '../../server.js';
 import { resetServices, setServices } from '../../services.js';
 import {
@@ -54,6 +54,156 @@ describe('Internal Routes', () => {
   afterEach(async () => {
     await app.close();
     resetServices();
+  });
+
+  describe('POST /internal/calendar/events', () => {
+    const validPayload = {
+      userId: 'user-456',
+      calendarId: 'primary',
+      event: {
+        summary: 'Dentist appointment',
+        description: 'Annual checkup',
+        location: 'Dental clinic',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        attendees: [{ email: 'assistant@example.com' }],
+      },
+    };
+
+    it('creates an event through the internal service endpoint', async () => {
+      fakeCalendarClient.setCreateResult(ok({
+        id: 'calendar-event-123',
+        summary: 'Dentist appointment',
+        description: 'Annual checkup',
+        location: 'Dental clinic',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        htmlLink: 'https://calendar.google.com/event?eid=calendar-event-123',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          event: {
+            id: string;
+            summary: string;
+            htmlLink?: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.event).toMatchObject({
+        id: 'calendar-event-123',
+        summary: 'Dentist appointment',
+        htmlLink: 'https://calendar.google.com/event?eid=calendar-event-123',
+      });
+    });
+
+    it('creates an event with the primary calendar when calendarId is omitted', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          userId: 'user-456',
+          event: {
+            summary: 'Dentist appointment',
+            start: {
+              dateTime: '2026-06-25T09:00:00.000Z',
+            },
+            end: {
+              dateTime: '2026-06-25T10:00:00.000Z',
+            },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          event: {
+            summary: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.event.summary).toBe('Dentist appointment');
+    });
+
+    it('returns 401 without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events',
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 for invalid event payloads', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          userId: 'user-456',
+          event: {
+            summary: 'Dentist appointment',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('maps calendar domain failures through the shared error handler', async () => {
+      fakeCalendarClient.setCreateResult(err({
+        code: 'TOKEN_ERROR',
+        message: 'OAuth token expired',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+      expect(body.error.message).toBe('OAuth token expired');
+    });
   });
 
   describe('POST /internal/calendar/process-action', () => {
@@ -183,7 +333,7 @@ describe('Internal Routes', () => {
         messageId: 'msg-123',
         publishTime: '2025-01-15T10:00:00Z',
       },
-      subscription: 'projects/test/subscriptions/calendar-preview-generate',
+      subscription: 'projects/test/subscriptions/calendar-event-preview-generate',
     });
 
     it('generates preview successfully from valid Pub/Sub message', async () => {
@@ -215,7 +365,7 @@ describe('Internal Routes', () => {
           messageId: 'msg-123',
           publishTime: '2025-01-15T10:00:00Z',
         },
-        subscription: 'projects/test/subscriptions/calendar-preview-generate',
+        subscription: 'projects/test/subscriptions/calendar-event-preview-generate',
       };
 
       const response = await app.inject({
@@ -238,7 +388,7 @@ describe('Internal Routes', () => {
           messageId: 'msg-123',
           publishTime: '2025-01-15T10:00:00Z',
         },
-        subscription: 'projects/test/subscriptions/calendar-preview-generate',
+        subscription: 'projects/test/subscriptions/calendar-event-preview-generate',
       };
 
       const response = await app.inject({

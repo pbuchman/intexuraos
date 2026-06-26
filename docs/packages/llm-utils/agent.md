@@ -92,8 +92,8 @@ common-core
   <- llm-utils
        <- llm-prompts
        <- common-http
-       <- 6 apps (calendar-agent, commands-agent, linear-agent,
-                   research-agent, todos-agent, web-agent)
+       <- apps (calendar-agent, intex-agent, linear-agent,
+                   research-agent, web-agent)
 ```
 
 ## Usage Patterns

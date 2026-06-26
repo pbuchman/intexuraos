@@ -12,20 +12,18 @@
  *   3. Check the task is in a cancellable state (`dispatched`, `running`, `queued`)
  *   4. Update Firestore status to `cancelled` (source of truth)
  *   5. Notify the worker to stop (best effort — failures are logged, not fatal)
- *   6. Mirror the cancelled status to the originating action (best effort)
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
-import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 
 export interface CancelTaskRequest {
   taskId: string;
   userId: string;
-  /** Optional trace ID forwarded to the status-mirror side-effect. */
+  /** Optional trace ID for request correlation. */
   traceId?: string;
 }
 
@@ -45,7 +43,6 @@ export interface CancelTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   taskDispatcher: TaskDispatcherService;
   workerSettingsRepo: WorkerSettingsRepository;
-  statusMirrorService: StatusMirrorService;
 }
 
 const CANCELLABLE_STATUSES = ['dispatched', 'running', 'queued'] as const;
@@ -54,7 +51,7 @@ export async function cancelTask(
   deps: CancelTaskDeps,
   request: CancelTaskRequest
 ): Promise<Result<{ cancelled: true }, CancelTaskError>> {
-  const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, statusMirrorService } = deps;
+  const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo } = deps;
   const { taskId, userId, traceId } = request;
 
   // Step 1: Fetch task
@@ -107,15 +104,6 @@ export async function cancelTask(
     logger.warn({ taskId, error }, 'Failed to notify worker of cancellation');
   }
 
-  // Step 6: Mirror cancelled status to the originating action (non-fatal).
-  // `traceId` is optional on mirrorStatus — only pass it when the caller
-  // supplied one so exactOptionalPropertyTypes doesn't reject `undefined`.
-  await statusMirrorService.mirrorStatus({
-    actionId: task.actionId,
-    taskStatus: 'cancelled',
-    ...(traceId !== undefined ? { traceId } : {}),
-  });
-
-  logger.info({ taskId }, 'Code task cancelled successfully');
+  logger.info({ taskId, traceId }, 'Code task cancelled successfully');
   return ok({ cancelled: true });
 }

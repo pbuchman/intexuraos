@@ -6,6 +6,10 @@ describe('loadConfig', () => {
   const openApiEnvVarKeys = new Set<string>(
     OPEN_API_SOURCE_CATALOG.map((entry) => entry.openApiUrlEnvVar)
   );
+  const retiredOpenApiNames = ['Todos', 'Chat', 'Cron'].map((name) => `${name} Agent API`);
+  const retiredOpenApiEnvVars = ['TODOS', 'CHAT', 'CRON'].map(
+    (suffix) => `INTEXURAOS_${suffix}_AGENT_OPENAPI_URL`
+  );
 
   beforeEach(() => {
     process.env = Object.fromEntries(
@@ -17,6 +21,14 @@ describe('loadConfig', () => {
 
   afterEach(() => {
     process.env = { ...originalEnv };
+  });
+
+  it('does not require removed agent OpenAPI sources', () => {
+    const openApiNames = OPEN_API_SOURCE_CATALOG.map((entry) => entry.name);
+    const openApiEnvVars = OPEN_API_SOURCE_CATALOG.map((entry) => entry.openApiUrlEnvVar);
+
+    expect(openApiNames).not.toEqual(expect.arrayContaining(retiredOpenApiNames));
+    expect(openApiEnvVars).not.toEqual(expect.arrayContaining(retiredOpenApiEnvVars));
   });
 
   it('throws when required OpenAPI source URLs are missing', () => {

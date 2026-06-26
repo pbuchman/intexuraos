@@ -6,7 +6,7 @@ describe('Logger utilities', () => {
   describe('shouldLogRequest', () => {
     it('returns true for non-health-check paths', () => {
       expect(shouldLogRequest('/api/users')).toBe(true);
-      expect(shouldLogRequest('/internal/actions')).toBe(true);
+      expect(shouldLogRequest('/internal/bookmarks')).toBe(true);
       expect(shouldLogRequest('/')).toBe(true);
     });
 
@@ -117,10 +117,10 @@ describe('Logger utilities', () => {
 
     it('uses custom message', () => {
       logIncomingRequest(mockRequest as FastifyRequest, {
-        message: 'Received PubSub push to /internal/commands',
+        message: 'Received PubSub push to /internal/bookmarks',
       });
 
-      expect(loggedPayloads[0]?.message).toBe('Received PubSub push to /internal/commands');
+      expect(loggedPayloads[0]?.message).toBe('Received PubSub push to /internal/bookmarks');
     });
 
     it('includes additional fields', () => {

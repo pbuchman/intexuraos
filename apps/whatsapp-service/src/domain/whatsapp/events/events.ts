@@ -3,46 +3,6 @@
  */
 
 /**
- * Event published when audio is stored and ready for transcription.
- */
-export interface AudioStoredEvent {
-  /**
-   * Event type identifier.
-   */
-  type: 'whatsapp.audio.stored';
-
-  /**
-   * IntexuraOS user ID.
-   */
-  userId: string;
-
-  /**
-   * WhatsApp message ID.
-   */
-  messageId: string;
-
-  /**
-   * WhatsApp media ID.
-   */
-  mediaId: string;
-
-  /**
-   * GCS path to the audio file.
-   */
-  gcsPath: string;
-
-  /**
-   * MIME type of the audio file.
-   */
-  mimeType: string;
-
-  /**
-   * Event timestamp (ISO 8601).
-   */
-  timestamp: string;
-}
-
-/**
  * Event published when media needs cleanup (message deleted).
  */
 export interface MediaCleanupEvent {
@@ -65,61 +25,6 @@ export interface MediaCleanupEvent {
    * GCS paths to delete (original + thumbnail if applicable).
    */
   gcsPaths: string[];
-
-  /**
-   * Event timestamp (ISO 8601).
-   */
-  timestamp: string;
-}
-
-/**
- * Event published when transcription is completed.
- */
-export interface TranscriptionCompletedEvent {
-  /**
-   * Event type identifier.
-   */
-  type: 'srt.transcription.completed';
-
-  /**
-   * IntexuraOS user ID.
-   */
-  userId: string;
-
-  /**
-   * WhatsApp message ID.
-   */
-  messageId: string;
-
-  /**
-   * Transcription job ID (srt-service internal ID).
-   */
-  jobId: string;
-
-  /**
-   * Status of transcription.
-   */
-  status: 'completed' | 'failed';
-
-  /**
-   * Transcription text (when completed successfully).
-   */
-  transcript?: string;
-
-  /**
-   * AI-generated summary of the transcription.
-   */
-  summary?: string;
-
-  /**
-   * Detected language of the audio (e.g., 'pl', 'en').
-   */
-  detectedLanguage?: string;
-
-  /**
-   * Error message (when failed).
-   */
-  error?: string;
 
   /**
    * Event timestamp (ISO 8601).
@@ -194,14 +99,14 @@ export interface WhatsAppInteractiveButton {
 }
 
 /**
- * Event published when a command is ready for ingestion.
- * Triggers the commands-agent to classify and create actions.
+ * Event published when a WhatsApp Assistant message is ready for intex-agent.
+ * Triggers realtime session handling and tool execution.
  */
-export interface CommandIngestEvent {
+export interface IntexMessageIngestEvent {
   /**
    * Event type identifier.
    */
-  type: 'command.ingest';
+  type: 'intex.message.ingest';
 
   /**
    * IntexuraOS user ID.
@@ -209,25 +114,24 @@ export interface CommandIngestEvent {
   userId: string;
 
   /**
-   * Source type identifier.
+   * WhatsApp message ID.
    */
-  sourceType: 'whatsapp_text' | 'whatsapp_voice';
+  messageId: string;
 
   /**
-   * External ID (WhatsApp message ID).
-   */
-  externalId: string;
-
-  /**
-   * Command text content.
+   * Message text content.
    */
   text: string;
 
   /**
-   * AI-generated summary (key points) from transcription.
-   * Only present for voice messages.
+   * Source type identifier.
    */
-  summary?: string;
+  sourceType: 'whatsapp_text';
+
+  /**
+   * Optional WhatsApp sender phone number for diagnostics.
+   */
+  whatsappSender?: string;
 
   /**
    * Event timestamp (ISO 8601).
@@ -258,36 +162,11 @@ export interface ExtractLinkPreviewsEvent {
 }
 
 /**
- * Event published when a user replies to an approval request message.
- * Triggers actions-agent to process the approval/rejection.
- */
-export interface ApprovalReplyEvent {
-  type: 'action.approval.reply';
-  /** The wamid of the original approval message being replied to */
-  replyToWamid: string;
-  /** The user's reply text (for text-based replies) */
-  replyText: string;
-  /** The user ID */
-  userId: string;
-  /** Event timestamp (ISO 8601) */
-  timestamp: string;
-  /** Optional action ID extracted from correlation ID (e.g., action-todo-approval-{actionId}) */
-  actionId?: string;
-  /** Optional button response data (for interactive button clicks) */
-  buttonId?: string;
-  /** Optional button title (for interactive button clicks) */
-  buttonTitle?: string;
-}
-
-/**
  * Union of all event types for type safety.
  */
 export type WhatsAppEvent =
-  | AudioStoredEvent
   | MediaCleanupEvent
-  | TranscriptionCompletedEvent
-  | CommandIngestEvent
+  | IntexMessageIngestEvent
   | SendMessageEvent
   | WebhookProcessEvent
-  | ExtractLinkPreviewsEvent
-  | ApprovalReplyEvent;
+  | ExtractLinkPreviewsEvent;

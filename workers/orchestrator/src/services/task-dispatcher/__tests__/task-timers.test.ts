@@ -166,6 +166,38 @@ describe('TaskTimers', () => {
       expect(harness.handleTaskCompletion).toHaveBeenCalledTimes(1);
     });
 
+    it('finalizes from attempt completion signal without waiting for Docker liveness', async () => {
+      harness.ctx.attemptCompletionSignals.add('task-1');
+      harness.isWorkerRunning.mockImplementationOnce(() => new Promise<boolean>(() => undefined));
+
+      timers.startCompletionMonitoring('task-1');
+
+      await vi.advanceTimersByTimeAsync(COMPLETION_CHECK_INTERVAL_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(harness.isWorkerRunning).not.toHaveBeenCalled();
+      expect(harness.handleTaskCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    it('bounds Docker liveness checks when no attempt completion signal exists', async () => {
+      harness.isWorkerRunning.mockImplementationOnce(() => new Promise<boolean>(() => undefined));
+
+      timers.startCompletionMonitoring('task-1');
+
+      await vi.advanceTimersByTimeAsync(COMPLETION_CHECK_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(31_000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(harness.handleTaskCompletion).not.toHaveBeenCalled();
+      expect(harness.ctx.completionInProgress.has('task-1')).toBe(false);
+      expect(harness.logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-1' }),
+        'Docker liveness check timed out; treating worker as still running'
+      );
+    });
+
     it('clears its own timer when the task is no longer running', async () => {
       const completedTask = makeTask({ status: 'completed' });
       harness.tasks.set(completedTask.taskId, completedTask);

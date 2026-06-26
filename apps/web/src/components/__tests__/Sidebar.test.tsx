@@ -30,9 +30,9 @@ describe('Sidebar', () => {
     cleanup();
   });
 
-  it('renders Battlefield as a top-level NavLink positioned between Inbox and Digests', () => {
+  it('renders Battlefield as the first top-level NavLink before Digests', () => {
     render(
-      <MemoryRouter initialEntries={['/inbox']}>
+      <MemoryRouter initialEntries={['/code-tasks']}>
         <Sidebar />
       </MemoryRouter>
     );
@@ -42,13 +42,9 @@ describe('Sidebar', () => {
     expect(battlefieldLink).toBeInTheDocument();
     expect(battlefieldLink.getAttribute('href')).toMatch(/\/code-tasks$/);
 
-    // Verify DOM order: Inbox -> Battlefield -> Digests.
-    const inboxLink = screen.getByRole('link', { name: /inbox/i });
+    // Verify DOM order: Battlefield -> Digests.
     const digestsLink = screen.getByRole('link', { name: /digests/i });
 
-    expect(
-      inboxLink.compareDocumentPosition(battlefieldLink) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
     expect(
       battlefieldLink.compareDocumentPosition(digestsLink) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
@@ -56,7 +52,7 @@ describe('Sidebar', () => {
 
   it('Battlefield link carries top-level styling (py-2.5, text-sm, font-medium, rounded-lg), not sub-item py-2', () => {
     render(
-      <MemoryRouter initialEntries={['/inbox']}>
+      <MemoryRouter initialEntries={['/code-tasks']}>
         <Sidebar />
       </MemoryRouter>
     );
@@ -74,7 +70,7 @@ describe('Sidebar', () => {
 
   it('renders Digests as a top-level NavLink positioned between Battlefield and Hellscript', () => {
     render(
-      <MemoryRouter initialEntries={['/inbox']}>
+      <MemoryRouter initialEntries={['/notifications/digests']}>
         <Sidebar />
       </MemoryRouter>
     );
@@ -98,7 +94,7 @@ describe('Sidebar', () => {
 
   it('Digests link carries top-level styling (py-2.5, text-sm, font-medium, rounded-lg), not sub-item py-2', () => {
     render(
-      <MemoryRouter initialEntries={['/inbox']}>
+      <MemoryRouter initialEntries={['/notifications/digests']}>
         <Sidebar />
       </MemoryRouter>
     );
@@ -134,5 +130,28 @@ describe('Sidebar', () => {
       'href',
       '/fishing-assistant/chat'
     );
+  });
+
+  it('renders WhatsApp as an expanded section with Assistant, Sessions, and Private entries', () => {
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/private']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('button', { name: /^whatsapp$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /assistant/i })).toHaveAttribute(
+      'href',
+      '/whatsapp/assistant'
+    );
+    expect(screen.getByRole('link', { name: /sessions/i })).toHaveAttribute(
+      'href',
+      '/whatsapp/sessions'
+    );
+    expect(screen.getByRole('link', { name: /private/i })).toHaveAttribute(
+      'href',
+      '/whatsapp/private'
+    );
+    expect(screen.queryByRole('link', { name: /^whatsapp$/i })).not.toBeInTheDocument();
   });
 });

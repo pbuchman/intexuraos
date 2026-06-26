@@ -87,7 +87,7 @@ Merge results into a documentation plan:
 
 ```
 APPS:
-  NEW: [chat-agent, code-agent]           → Opus agents
+  NEW: [notes-agent, code-agent]          → Opus agents
   UPDATED: [user-service, whatsapp-service, ...]  → Sonnet agents
   REMOVED: [promptvault-service]          → Clean up docs
 

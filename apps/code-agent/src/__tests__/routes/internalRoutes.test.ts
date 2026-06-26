@@ -38,8 +38,7 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    // Suppress outbound HTTP calls made by actions-agent/linear-agent clients
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
+    // Suppress outbound HTTP calls made by the Linear client.
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -163,7 +162,6 @@ describe('GET /internal/linear/issue-context/:identifier', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -309,7 +307,6 @@ describe('POST /internal/execution-memory/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -463,7 +460,6 @@ describe('POST /internal/archive-stale-groups', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -581,7 +577,6 @@ describe('POST /internal/execution-memory/sweep-errored', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -661,7 +656,6 @@ describe('POST /internal/execution-memory/prune-stale', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
     nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';

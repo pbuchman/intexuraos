@@ -9,7 +9,7 @@
 
 ## Executive summary
 
-Today, `app-settings-service` owns the `settings/llm_pricing/providers/{provider}` Firestore sub-collection and exposes `GET /internal/settings/pricing`. Every cost-emitting app (`chat-agent`, `actions-agent`, `web-agent`, `linear-agent`, `commands-agent`, `user-service`, `research-agent`, `image-service`, `todos-agent`, `data-insights-agent`, `calendar-agent`) pulls that payload at boot via `fetchAllPricing()` from `@intexuraos/llm-pricing` and hydrates a `PricingContext`. Track 5 (INT-1343) wants to surface pricing in the UI via a public endpoint on `llm-usage-service`.
+Today, `app-settings-service` owns the `settings/llm_pricing/providers/{provider}` Firestore sub-collection and exposes `GET /internal/settings/pricing`. Every cost-emitting app (`retired-chat-service`, `actions-agent`, `web-agent`, `linear-agent`, `commands-agent`, `user-service`, `research-agent`, `image-service`, `retired-checklist-service`, `data-insights-agent`, `calendar-agent`) pulls that payload at boot via `fetchAllPricing()` from `@intexuraos/llm-pricing` and hydrates a `PricingContext`. Track 5 (INT-1343) wants to surface pricing in the UI via a public endpoint on `llm-usage-service`.
 
 This track transplants pricing ownership from `app-settings-service` into `llm-usage-service` as a new `llm_pricing` Firestore collection, adds a new internal `POST /internal/pricing` write route and a public `GET /llm-usage/pricing` read route (Auth0 bearer, for the pricing UI), performs a one-time Firestore migration copying `settings/llm_pricing/providers/*` into `llm_pricing/{provider}`, updates all 11 consumers' `fetchAllPricing()` callers to point at the new endpoint (in-place URL swap, not a new symbol), and **atomically deletes** the old `GET /internal/settings/pricing` endpoint in the same PR.
 
@@ -469,14 +469,14 @@ All 11 consumers:
 5. `apps/linear-agent/src/index.ts:45-47`
 6. `apps/commands-agent/src/services.ts:67`
 7. `apps/actions-agent/src/services.ts:176-186`
-8. `apps/todos-agent/src/services.ts:31`
+8. `apps/retired-checklist-service/src/services.ts:31`
 9. `apps/user-service/src/index.ts:48-52`
 10. `apps/web-agent/src/index.ts:35-45`
-11. `apps/chat-agent/src/services.ts:80-109`
+11. `apps/retired-chat-service/src/services.ts:80-109`
 
 **Env var check for each consumer:**
 
-- `apps/<name>/src/index.ts` `REQUIRED_ENV` array — if the consumer previously required `INTEXURAOS_APP_SETTINGS_SERVICE_URL` **only for pricing** (not for anything else), remove it from `REQUIRED_ENV` and add `INTEXURAOS_LLM_USAGE_SERVICE_URL`. Run `rg "APP_SETTINGS_SERVICE_URL" apps/<name>` first — if it's still used elsewhere (e.g. todos-agent uses it for saving model preferences), KEEP it.
+- `apps/<name>/src/index.ts` `REQUIRED_ENV` array — if the consumer previously required `INTEXURAOS_APP_SETTINGS_SERVICE_URL` **only for pricing** (not for anything else), remove it from `REQUIRED_ENV` and add `INTEXURAOS_LLM_USAGE_SERVICE_URL`. Run `rg "APP_SETTINGS_SERVICE_URL" apps/<name>` first — if it's still used elsewhere (e.g. retired-checklist-service uses it for saving model preferences), KEEP it.
 - `terraform/environments/dev/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL = module.llm_usage_service.service_url` to each consumer's env map IF NOT ALREADY PRESENT.
 - `ecosystem.config.cjs` — same check. `INTEXURAOS_LLM_USAGE_SERVICE_URL` is already defined globally at line 57, so it should flow to every PM2 app that imports the shared env.
 

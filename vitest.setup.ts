@@ -55,7 +55,7 @@ process.setMaxListeners(50);
   });
 }
 
-// Set LOG_LEVEL to test the environment variable branch in commandsAgentClient.ts
+// Set LOG_LEVEL to test environment variable branches in logging clients.
 process.env['LOG_LEVEL'] = 'debug';
 
 // Mock @notionhq/client globally to prevent any real HTTP calls

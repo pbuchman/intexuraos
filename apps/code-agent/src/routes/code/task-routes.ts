@@ -19,7 +19,7 @@ import {
 } from '@intexuraos/code-task-domain';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
-import { processCodeAction } from '../../domain/usecases/processCodeAction.js';
+import { submitDirectCodeTask } from '../../domain/usecases/submitDirectCodeTask.js';
 import { cancelTask, type CancelTaskErrorCode } from '../../domain/usecases/cancelTask.js';
 import { cancelTaskWithNonce } from '../../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../../domain/usecases/retryTask.js';
@@ -157,287 +157,13 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
   // ==== Internal routes (X-Internal-Auth / scheduler) ====
 
-  // POST /internal/code/process - Called by actions-agent
-  fastify.post<{
-    Body: {
-      actionId: string;
-      approvalEventId: string;
-      userId: string;
-      payload: {
-        prompt: string;
-        workerType?: WorkerType;
-        linearIssueId?: string;
-        repository?: string;
-        baseBranch?: string;
-      };
-    };
-  }>(
-    '/internal/code/process',
-    {
-      schema: {
-        operationId: 'processCodeAction',
-        summary: 'Process code action from actions-agent',
-        description: 'Internal endpoint for processing code actions. Called by actions-agent when a code action is approved.',
-        tags: ['internal'],
-        body: {
-          type: 'object',
-          properties: {
-            actionId: { type: 'string' },
-            approvalEventId: { type: 'string' },
-            userId: { type: 'string' },
-            payload: {
-              type: 'object',
-              properties: {
-                prompt: { type: 'string' },
-                workerType: workerTypeSchema,
-                linearIssueId: { type: 'string' },
-                repository: { type: 'string' },
-                baseBranch: { type: 'string' },
-              },
-              required: ['prompt'],
-            },
-          },
-          required: ['actionId', 'approvalEventId', 'userId', 'payload'],
-        },
-        response: {
-          200: {
-            description: 'Task submitted successfully',
-            type: 'object',
-            required: ['success', 'data'],
-            properties: {
-              success: { type: 'boolean', enum: [true] },
-              data: {
-                type: 'object',
-                properties: {
-                  status: { type: 'string', enum: ['submitted'] },
-                  codeTaskId: { type: 'string' },
-                  resourceUrl: { type: 'string' },
-                },
-                required: ['status', 'codeTaskId', 'resourceUrl'],
-              },
-            },
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
-                  message: { type: 'string' },
-                },
-                required: ['code', 'message'],
-              },
-            },
-            required: ['success', 'error'],
-          },
-          400: {
-            description: 'Invalid request — prompt failed injection sanitization',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-          409: {
-            description: 'Duplicate task (deduplication triggered)',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['CONFLICT'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-          503: {
-            description: 'Worker unavailable',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['MISCONFIGURED'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-          500: {
-            description: 'Server error',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                required: ['code', 'message'],
-                properties: {
-                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: WorkerType; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
-      logIncomingRequest(request, {
-        message: 'Received request to POST /internal/code/process',
-      });
-
-      // Validate internal auth
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code process');
-        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
-      }
-
-      const services = getServices();
-      const body = request.body;
-
-      // Extract or generate traceId from headers
-      const traceId = extractOrGenerateTraceId(request.headers);
-
-      request.log.info(
-        {
-          actionId: body.actionId,
-          userId: body.userId,
-          workerType: body.payload.workerType,
-          repository: body.payload.repository,
-          traceId,
-        },
-        'Processing code action'
-      );
-
-      // Process the code action using use case
-      const processRequest: {
-        actionId: string;
-        approvalEventId: string;
-        userId: string;
-        prompt: string;
-        workerType: WorkerType;
-        linearIssueId?: string;
-        repository?: string;
-        baseBranch?: string;
-        traceId?: string;
-      } = {
-        actionId: body.actionId,
-        approvalEventId: body.approvalEventId,
-        userId: body.userId,
-        prompt: body.payload.prompt,
-        workerType: body.payload.workerType ?? 'auto',
-        traceId,
-      };
-
-      // Only include optional fields if they are defined
-      if (body.payload.linearIssueId !== undefined) {
-        processRequest.linearIssueId = body.payload.linearIssueId;
-      }
-      if (body.payload.repository !== undefined) {
-        processRequest.repository = body.payload.repository;
-      }
-      if (body.payload.baseBranch !== undefined) {
-        processRequest.baseBranch = body.payload.baseBranch;
-      }
-
-      const result = await processCodeAction(
-        {
-          logger: services.logger,
-          codeTaskRepo: services.codeTaskRepo,
-          taskEnqueueService: services.taskEnqueueService,
-          linearIssueService: services.linearIssueService,
-          linearAgentClient: services.linearAgentClient,
-          whatsappNotifier: services.whatsappNotifier,
-          metricsClient: services.metricsClient,
-          workerSettingsRepo: services.workerSettingsRepo,
-          orchestratorSecret: loadConfig().orchestratorSecret,
-        },
-        processRequest
-      );
-
-      if (!result.ok) {
-        const error = result.error;
-        request.log.warn(
-          {
-            errorCode: error.code,
-            errorMessage: error.message,
-            existingTaskId: error.existingTaskId,
-          },
-          'Failed to process code action'
-        );
-
-        // Handle specific error codes
-        if (error.code === 'duplicate_approval' || error.code === 'duplicate_action') {
-          return await reply.fail('CONFLICT', `Duplicate: ${error.existingTaskId ?? ''}`);
-        }
-
-        if (error.code === 'duplicate_prompt') {
-          return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${error.existingTaskId ?? ''}`);
-        }
-
-        if (error.code === 'active_task_exists') {
-          return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${error.existingTaskId ?? ''}`);
-        }
-
-        if (error.code === 'worker_not_configured') {
-          return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
-        }
-
-        if (error.code === 'validation_error') {
-          return await reply.fail('INVALID_REQUEST', error.message);
-        }
-
-        return await reply.fail('INTERNAL_ERROR', error.message);
-      }
-
-      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully'); // @allow-result-access -- narrowed by !result.ok guard above
-
-      // Mirror dispatched status to action (non-fatal)
-      try {
-        await services.statusMirrorService.mirrorStatus({
-          actionId: body.actionId,
-          taskStatus: 'dispatched',
-          resourceUrl: result.value.resourceUrl, // @allow-result-access -- narrowed by !result.ok guard above
-          traceId,
-        });
-      } catch (mirrorError) {
-        request.log.warn({ actionId: body.actionId, error: mirrorError }, 'Failed to mirror status to action');
-      }
-
-      return await reply.ok({
-        status: 'submitted',
-        codeTaskId: result.value.codeTaskId, // @allow-result-access -- narrowed by !result.ok guard above
-        resourceUrl: result.value.resourceUrl, // @allow-result-access -- narrowed by !result.ok guard above
-      });
-    }
-  );
-
   // POST /internal/code/submit - Internal endpoint to create tasks on behalf of a user (INT-1287)
   fastify.post<{
     Body: {
       userId: string;
       prompt: string;
       workerType?: WorkerType;
+      taskMode?: 'planning' | 'execution';
       linearIssueId?: string;
     };
   }>(
@@ -456,6 +182,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             userId: { type: 'string', minLength: 1 },
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: workerTypeSchema,
+            taskMode: { type: 'string', enum: ['planning', 'execution'] },
             linearIssueId: { type: 'string' },
           },
           required: ['userId', 'prompt'],
@@ -583,6 +310,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           userId: string;
           prompt: string;
           workerType?: WorkerType;
+          taskMode?: 'planning' | 'execution';
           linearIssueId?: string;
         };
       }>,
@@ -615,23 +343,15 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         'Internal code task submission on behalf of user'
       );
 
-      // Generate synthetic actionId/approvalEventId for processCodeAction.
-      // These are prefixed with 'internal-submit-' so they are distinguishable
-      // from real action approvals and won't collide with Layer 0/1 dedup.
-      const syntheticId = `internal-submit-${randomUUID()}`;
-
       const processRequest: {
-        actionId: string;
-        approvalEventId: string;
         userId: string;
         prompt: string;
         workerType: WorkerType;
+        taskMode?: 'planning' | 'execution';
         linearIssueId?: string;
         traceId?: string;
         source?: 'whatsapp' | 'web';
       } = {
-        actionId: syntheticId,
-        approvalEventId: syntheticId,
         userId: body.userId,
         prompt: body.prompt,
         workerType: body.workerType ?? 'auto',
@@ -639,11 +359,14 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         source: 'web',
       };
 
+      if (body.taskMode !== undefined) {
+        processRequest.taskMode = body.taskMode;
+      }
       if (body.linearIssueId !== undefined) {
         processRequest.linearIssueId = body.linearIssueId;
       }
 
-      const result = await processCodeAction(
+      const result = await submitDirectCodeTask(
         {
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
@@ -1658,7 +1381,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const taskId = `task_${randomUUID()}`;
         const webhookSecret = generateWebhookSecret(config.orchestratorSecret, taskId);
 
-        // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
+        // Create task with prompt deduplication.
         const createInput: {
           id: string;
           userId: string;
@@ -1951,7 +1674,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
-        // Parse comma-separated status filter (matching actions-agent pattern)
+        // Parse comma-separated status filter.
         const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled', 'archived'];
         let statusFilter: TaskStatus[] | undefined;
         if (request.query.status !== undefined) {
@@ -2515,7 +2238,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           includeParams: true,
         });
 
-        const { codeTaskRepo, taskDispatcher, statusMirrorService, workerSettingsRepo } = getServices();
+        const { codeTaskRepo, taskDispatcher, workerSettingsRepo } = getServices();
         const { taskId } = request.body;
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in cancel-task route — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
@@ -2527,7 +2250,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             codeTaskRepo,
             taskDispatcher,
             workerSettingsRepo,
-            statusMirrorService,
           },
           {
             taskId,

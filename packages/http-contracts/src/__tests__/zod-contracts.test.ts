@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
+import * as contracts from '../index.js';
 import {
   bookmarksCreateBookmarkRequestSchema,
   imageGenerateImageRequestSchema,
@@ -7,11 +8,9 @@ import {
   notionPagePreviewSchema,
   notionTokenContextSchema,
   calendarPreviewSchema,
-  commandsCommandWithTextSchema,
   notesCreateNoteRequestSchema,
   researchCreateDraftRequestSchema,
   serviceFeedbackZodSchema,
-  todosCreateTodoRequestSchema,
   webAgentFetchLinkPreviewsRequestSchema,
   webAgentPageSummarySchema,
   webAgentSummarizePageRequestSchema,
@@ -48,27 +47,19 @@ describe('Zod contracts', () => {
 
   it('accepts nullable optional fields where the current clients do', () => {
     expect(
-      todosCreateTodoRequestSchema.parse({
-        userId: 'user-1',
-        title: 'Todo',
-        description: null,
-        tags: ['ops'],
-        dueDate: null,
-        source: 'command',
-        sourceId: 'source-1',
-      }).description
+      notionTokenContextSchema.parse({
+        connected: false,
+        token: null,
+      }).token
     ).toBeNull();
   });
 
-  it('parses commands, research, and calendar payloads', () => {
-    expect(
-      commandsCommandWithTextSchema.parse({
-        id: 'cmd-1',
-        text: 'do it',
-        sourceType: 'whatsapp',
-      }).sourceType
-    ).toBe('whatsapp');
+  it('does not export retired command contract schemas', () => {
+    expect(contracts).not.toHaveProperty('commandsCommandWithTextSchema');
+    expect(contracts).not.toHaveProperty('commandsGetCommandDataSchema');
+  });
 
+  it('parses research and calendar payloads', () => {
     expect(
       researchCreateDraftRequestSchema.parse({
         userId: 'user-1',

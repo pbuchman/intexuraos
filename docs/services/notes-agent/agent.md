@@ -230,7 +230,7 @@ interface ServiceFeedback {
   "content": "Results from research query",
   "tags": ["research"],
   "status": "draft",
-  "source": "actions-agent",
+  "source": "intex-agent",
   "sourceId": "act_123"
 }
 

@@ -29,7 +29,6 @@ const IGNORED_ROUTES = new Set(['/health', '/openapi.json', '/docs']);
 const ALIAS_RESOURCE_SEGMENTS = new Map([
   ['mobile-notifications-service', ['mobile-notifications', 'notifications']],
   ['fishing-assistant-service', ['fishing']],
-  ['cron-agent', ['cron']],
   ['hellscript-agent', ['hellscript']],
 ]);
 const CANONICAL_PROVIDER_WEBHOOK_ROUTES = new Map([

@@ -1,5 +1,8 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
-import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
+import {
+  createInternalHttpClient,
+  type InternalHttpClientError,
+} from '../shared/createInternalHttpClient.js';
 import type {
   CancelTaskError,
   CancelTaskWithNonceInput,
@@ -7,10 +10,10 @@ import type {
   CodeAgentRequestOptions,
   CodeAgentServiceClient,
   CodeAgentServiceConfig,
+  CreateCodeTaskRequest,
   NotifyGroupSummaryRecomputeError,
   NotifyGroupSummaryRecomputeRequest,
   SubmitTaskError,
-  SubmitTaskRequest,
   SubmitTaskResponse,
   SubmitToPhase2Error,
   SubmitToPhase2Input,
@@ -33,7 +36,6 @@ interface ErrorBody {
 
 interface SubmitTaskData {
   codeTaskId?: string;
-  taskId?: string;
   resourceUrl?: string;
 }
 
@@ -100,6 +102,69 @@ function isSuccessWithoutDataEnvelope(error: { body?: unknown }): boolean {
   );
 }
 
+function toSubmitTaskSuccess(data: SubmitTaskData): Result<SubmitTaskResponse, SubmitTaskError> {
+  if (data.codeTaskId === undefined || data.resourceUrl === undefined) {
+    return err({
+      code: 'UNKNOWN',
+      message: 'Invalid response from code-agent',
+      status: 200,
+    });
+  }
+  return ok({
+    codeTaskId: data.codeTaskId,
+    resourceUrl: data.resourceUrl,
+  });
+}
+
+function toSubmitTaskError(error: InternalHttpClientError): SubmitTaskError {
+  if (error.code === 'NETWORK_ERROR' || error.code === 'TIMEOUT') {
+    return {
+      code: 'NETWORK_ERROR',
+      message: toNetworkErrorMessage(error.message),
+    };
+  }
+
+  if (error.code !== 'API_ERROR') {
+    return {
+      code: 'UNKNOWN',
+      message: 'Invalid response from code-agent',
+    };
+  }
+
+  if (error.status === 409) {
+    const message = readErrorMessage(error.body, 'Task already exists for this request');
+    const { existingTaskId } = readErrorDetails(error.body);
+    return {
+      code: 'DUPLICATE',
+      message,
+      status: 409,
+      ...(existingTaskId !== undefined ? { existingTaskId } : {}),
+    };
+  }
+
+  if (error.status === 424 || error.status === 503) {
+    return {
+      code: 'WORKER_UNAVAILABLE',
+      message: readErrorMessage(error.body, 'No workers available'),
+      status: 503,
+    };
+  }
+
+  if (error.status >= 500) {
+    return {
+      code: 'UNAVAILABLE',
+      message: 'code-agent unavailable',
+      status: error.status,
+    };
+  }
+
+  return {
+    code: 'INVALID_REQUEST',
+    message: error.rawText !== '' ? error.rawText : `Unexpected response: ${String(error.status)}`,
+    status: error.status,
+  };
+}
+
 export function createCodeAgentServiceClient(
   config: CodeAgentServiceConfig
 ): CodeAgentServiceClient {
@@ -111,95 +176,23 @@ export function createCodeAgentServiceClient(
   });
 
   return {
-    async submitTask(
-      input: SubmitTaskRequest,
+    async createCodeTask(
+      input: CreateCodeTaskRequest,
       options?: CodeAgentRequestOptions
     ): Promise<Result<SubmitTaskResponse, SubmitTaskError>> {
       const result = await httpClient.request<SubmitTaskData>({
-        path: '/internal/code/process',
+        path: '/internal/code/submit',
         method: 'POST',
         body: input,
         timeoutMs: resolveTimeoutMs(60_000, config, options),
         requestId: options?.requestId,
       });
 
-      if (
-        !result.ok &&
-        (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')
-      ) {
-        return err({
-          code: 'NETWORK_ERROR',
-          message: toNetworkErrorMessage(result.error.message),
-        });
-      }
-
       if (result.ok) {
-        const legacyTaskId = result.value.taskId;
-        const codeTaskId = result.value.codeTaskId ?? result.value.taskId;
-        if (
-          codeTaskId === undefined ||
-          (result.value.resourceUrl === undefined && legacyTaskId === undefined)
-        ) {
-          return err({
-            code: 'UNKNOWN',
-            message: 'Invalid response from code-agent',
-            status: 200,
-          });
-        }
-        return ok({
-          codeTaskId,
-          // INT-1531 compatibility: older linear-agent tests still mock
-          // `taskId` without `resourceUrl`; actions-agent callers still
-          // receive the real resourceUrl from the route implementation.
-          resourceUrl: result.value.resourceUrl ?? '',
-        });
+        return toSubmitTaskSuccess(result.value);
       }
 
-      if (result.error.code !== 'API_ERROR') {
-        return err({
-          code: 'UNKNOWN',
-          message: 'Invalid response from code-agent',
-        });
-      }
-
-      if (result.error.status === 409) {
-        const message = readErrorMessage(
-          result.error.body,
-          'Task already exists for this approval'
-        );
-        const { existingTaskId } = readErrorDetails(result.error.body);
-        return err({
-          code: 'DUPLICATE',
-          message,
-          status: 409,
-          ...(existingTaskId !== undefined ? { existingTaskId } : {}),
-        });
-      }
-
-      if (result.error.status === 503) {
-        return err({
-          code: 'WORKER_UNAVAILABLE',
-          message: readErrorMessage(result.error.body, 'No workers available'),
-          status: 503,
-        });
-      }
-
-      if (result.error.status >= 500) {
-        return err({
-          code: 'UNAVAILABLE',
-          message: 'code-agent unavailable',
-          status: result.error.status,
-        });
-      }
-
-      return err({
-        code: 'INVALID_REQUEST',
-        message:
-          result.error.rawText !== ''
-            ? result.error.rawText
-            : `Unexpected response: ${String(result.error.status)}`,
-        status: result.error.status,
-      });
+      return err(toSubmitTaskError(result.error));
     },
 
     async cancelTaskWithNonce(
@@ -332,6 +325,9 @@ export function createCodeAgentServiceClient(
         if (serverCode === 'active_task_exists') {
           return err({ code: 'ACTIVE_TASK_EXISTS', message: errorMessage });
         }
+        if (serverCode === 'complex_task_no_qualifying_children') {
+          return err({ code: 'COMPLEX_TASK_NO_QUALIFYING_CHILDREN', message: errorMessage });
+        }
         return err({
           code: 'ALREADY_IMPLEMENTED',
           message: errorMessage,
@@ -341,6 +337,10 @@ export function createCodeAgentServiceClient(
 
       if (result.error.status === 503) {
         return err({ code: 'WORKER_NOT_CONFIGURED', message: errorMessage });
+      }
+
+      if (result.error.status === 422 && errorCode === 'PLAN_PR_MERGE_FAILED') {
+        return err({ code: 'PLAN_PR_MERGE_FAILED', message: errorMessage });
       }
 
       return err({

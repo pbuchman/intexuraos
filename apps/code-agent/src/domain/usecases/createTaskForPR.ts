@@ -297,8 +297,6 @@ export async function createTaskForPR(
         repository,
         baseBranch: resolvedBaseBranch ?? 'main',
         traceId: eventId,
-        actionId: `pr-comment/${repository}/${String(prNumber)}/${eventId}`,
-        approvalEventId: eventId,
         prNumber,
         webhookSecret,
         agentType: 'pull_request',

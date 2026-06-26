@@ -3,13 +3,11 @@ import {
   Bookmark,
   Calendar,
   Check,
-  CheckSquare,
   ChevronDown,
   ChevronUp,
   Code2,
   ExternalLink,
   RadioTower,
-  Inbox,
   LayoutList,
   List,
   Loader2,
@@ -155,7 +153,7 @@ export function HeroShowcase(): React.JSX.Element {
               <span className="text-[10px] font-black text-white">I</span>
             </div>
             <span className="text-[11px] font-bold text-slate-900">IntexuraOS</span>
-            <span className="text-[8px] text-slate-400">ver. 3.3.0</span>
+            <span className="text-[8px] text-slate-400">ver. 3.8.0</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
@@ -177,7 +175,7 @@ export function HeroShowcase(): React.JSX.Element {
         <div className="flex min-h-[280px]">
           {/* Sidebar */}
           <div className="w-[130px] shrink-0 border-r border-slate-100 py-1.5">
-            <SbItem icon={Inbox} label="Inbox" />
+            <SbItem icon={LayoutList} label="Activity" />
             <div className="h-1" />
             <SbItem icon={Code2} label="Code Tasks" active chevron="up" />
             <SbSub icon={List} label="Battlefield" active />
@@ -193,7 +191,7 @@ export function HeroShowcase(): React.JSX.Element {
             <div className="h-1" />
             <SbItem icon={BellRing} label="Mobile" chevron="down" />
             <SbItem icon={StickyNote} label="Notes" />
-            <SbItem icon={CheckSquare} label="Checklists" />
+            <SbItem icon={Sparkles} label="Fishing" />
             <div className="h-1" />
             <SbItem icon={Settings} label="Settings" chevron="down" />
           </div>
@@ -203,8 +201,8 @@ export function HeroShowcase(): React.JSX.Element {
             {/* Page header */}
             <div className="mb-2 flex items-center justify-between">
               <div>
-                <div className="text-sm font-bold text-slate-900">Code Tasks</div>
-                <div className="text-[8px] text-slate-400">4 issues · 1 needs attention · 0 failed</div>
+                <div className="text-sm font-bold text-slate-900">Agent Activity</div>
+                <div className="text-[8px] text-slate-400">4 workflows · 3 verified outputs · 0 failed</div>
               </div>
               <div className="flex items-center gap-1 rounded-md bg-blue-500 px-2 py-0.5 text-[9px] font-semibold text-white">
                 <Plus className="h-2.5 w-2.5" /> New Task
@@ -214,11 +212,10 @@ export function HeroShowcase(): React.JSX.Element {
             {/* Filter pills */}
             <div className="mb-2 flex gap-1">
               {[
-                { label: 'Active', count: '2', color: 'bg-blue-500', active: true },
-                { label: 'Needs Action', count: '1', color: 'bg-green-500' },
-                { label: 'Done', count: '47', color: 'bg-emerald-500' },
-                { label: 'Failed', count: '0', color: 'bg-red-500' },
-                { label: 'Archived', count: '12', color: 'bg-slate-400' },
+                { label: 'Tools', count: '5', color: 'bg-cyan-500', active: true },
+                { label: 'Research', count: '2', color: 'bg-blue-500' },
+                { label: 'Code', count: '1', color: 'bg-violet-500' },
+                { label: 'Digest', count: '1', color: 'bg-emerald-500' },
               ].map((p, idx) => (
                 <div key={idx} className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${p.active === true ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${p.color}`} />
@@ -229,7 +226,7 @@ export function HeroShowcase(): React.JSX.Element {
 
             {/* Column headers */}
             <div className="mb-1 grid grid-cols-[1fr_1fr_80px_70px_20px] gap-1 px-2 text-[7px] font-semibold uppercase tracking-wider text-slate-400">
-              <span>Issue</span><span>Pipeline</span><span>Time</span><span className="text-right">Output</span><span />
+              <span>Work item</span><span>Pipeline</span><span>Time</span><span className="text-right">Output</span><span />
             </div>
 
             {/* Task rows */}
@@ -243,26 +240,26 @@ export function HeroShowcase(): React.JSX.Element {
                 output={<span className="inline-flex rounded-full border border-blue-200 bg-blue-50 p-1"><Loader2 className="h-2.5 w-2.5 animate-spin text-blue-500" /></span>}
               />
               <TaskRow
-                issueId="INT-936"
-                title="Remove legacy CodeTaskViewPage"
-                pipeline={<><Dot state="done" /><PipeConn /><Dot state="done" /><PipeConn /><Dot state="done" /><span className="ml-0.5 text-slate-500">#1260</span></>}
-                time={<><span className="text-slate-500">Created</span> 2h ago<br /><span className="text-slate-500">Started</span> 2h ago</>}
-                output={<span className="inline-flex items-center gap-0.5 rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[8px] font-semibold text-blue-600"><ExternalLink className="h-2 w-2" />#1260</span>}
+                issueId="RES-42"
+                title="Research draft ready: battery supply chain"
+                pipeline={<><Dot state="done" /><span className="ml-0.5 text-slate-500">Draft</span><PipeConn /><Dot state="done" /><span className="ml-0.5 text-slate-500">Council</span><PipeConn /><Dot state="done" /></>}
+                time={<><span className="text-slate-500">Created</span> 18m ago<br /><span className="text-slate-500">Models</span> 5 providers</>}
+                output={<span className="inline-flex items-center gap-0.5 rounded-full border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[8px] font-semibold text-cyan-700"><ExternalLink className="h-2 w-2" />Report</span>}
               />
               <TaskRow
-                issueId="INT-935"
-                title="Streamline mobile chat bottom sheet"
+                issueId="CAL"
+                title="Calendar event created: dentist Friday 9:00"
                 accent="green"
-                pipeline={<><Dot state="done" /><span className="ml-0.5 text-slate-500">Plan</span><PipeConn /><Dot state="action" /><span className="ml-0.5 text-green-600">Implement</span></>}
-                time={<><span className="text-slate-500">Created</span> 5h ago<br /><span className="text-slate-500">Started</span> Pending</>}
-                output={<span className="inline-flex items-center gap-0.5 rounded bg-green-600 px-1.5 py-0.5 text-[8px] font-semibold text-white"><Play className="h-2 w-2 fill-white" />Implement</span>}
+                pipeline={<><Dot state="done" /><span className="ml-0.5 text-slate-500">Extract</span><PipeConn /><Dot state="done" /><span className="ml-0.5 text-slate-500">Create</span></>}
+                time={<><span className="text-slate-500">Created</span> 31m ago<br /><span className="text-slate-500">Calendar</span> Primary</>}
+                output={<span className="inline-flex items-center gap-0.5 rounded bg-green-600 px-1.5 py-0.5 text-[8px] font-semibold text-white"><Check className="h-2 w-2" />Done</span>}
               />
               <TaskRow
-                issueId="INT-934"
-                title="Add horizontal scrolling for mobile logs"
-                pipeline={<><Dot state="done" /><PipeConn /><Dot state="done" /><PipeConn /><Dot state="done" /><span className="ml-0.5 text-slate-500">#1258</span></>}
-                time={<><span className="text-slate-500">Created</span> 1d ago<br /><span className="text-slate-500">Started</span> 1d ago</>}
-                output={<span className="inline-flex items-center gap-0.5 rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[8px] font-semibold text-blue-600"><ExternalLink className="h-2 w-2" />#1258</span>}
+                issueId="LINK"
+                title="Bookmark summarized: TypeScript 5 migration"
+                pipeline={<><Dot state="done" /><span className="ml-0.5 text-slate-500">Fetch</span><PipeConn /><Dot state="done" /><span className="ml-0.5 text-slate-500">Summarize</span></>}
+                time={<><span className="text-slate-500">Created</span> 1h ago<br /><span className="text-slate-500">Source</span> Web</>}
+                output={<span className="inline-flex items-center gap-0.5 rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[8px] font-semibold text-blue-600"><Bookmark className="h-2 w-2" />Saved</span>}
               />
             </div>
           </div>
@@ -299,49 +296,31 @@ export function HeroShowcase(): React.JSX.Element {
 
         {/* Chat area */}
         <div className="flex min-h-[300px] flex-col gap-1 bg-[#ece5dd] p-1.5">
-          {/* Voice note */}
+          {/* Text request */}
           <WaUser>
-            <div className="flex items-center gap-1 py-0.5">
-              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#075e54]">
-                <svg aria-hidden="true" className="h-2 w-2 fill-white" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-              </div>
-              <div className="flex items-center gap-px h-3">
-                {[5,12,8,16,6,14,10,4].map((h, i) => (
-                  // eslint-disable-next-line no-restricted-syntax -- Dynamic waveform heights computed from array values require inline styles
-                  <span key={i} className="w-[2px] rounded-sm bg-[#075e54]" style={{ height: h * 0.7, animationDelay: `${String(i * 0.08)}s` }} />
-                ))}
-              </div>
-              <span className="text-[8px] text-neutral-500">0:06</span>
-            </div>
+            Research battery supply chain and save this link
             <WaTime>9:41 AM ✓✓</WaTime>
           </WaUser>
 
-          {/* Transcription */}
+          {/* Research created */}
           <WaBot>
-            <span className="text-[8px]">🎙️ <strong>Transcription:</strong></span><br />
-            <span className="text-[8px] italic text-neutral-600">&quot;Resolve merge conflicts on PR 1237&quot;</span>
+            <span className="text-[8px]"><strong>RES-42</strong> | Research draft ready</span><br />
+            <span className="text-[8px] text-neutral-500">5 providers selected. Synthesis will preserve attribution.</span>
             <WaTime align="left">9:41 AM</WaTime>
           </WaBot>
 
-          {/* Design ready */}
+          {/* Bookmark */}
           <WaBot>
-            <span className="text-[8px]">🎨 <strong>INT-937</strong> | Resolve merge conflicts</span><br />
-            <span className="text-[8px] text-neutral-500">Identified 3 files with conflicts in auth and routing modules. Ready to implement?</span>
-            <WaBtn>▶️ Implement</WaBtn>
+            <span className="text-[8px]"><strong>LINK</strong> | Bookmark summarized</span><br />
+            <span className="text-[8px] text-neutral-500">Metadata extracted and AI summary saved.</span>
             <WaTime align="left">9:43 AM</WaTime>
           </WaBot>
 
-          {/* User taps Implement */}
-          <WaUser>
-            ▶️ Implement
-            <WaTime>9:43 AM ✓✓</WaTime>
-          </WaUser>
-
           {/* Completion */}
           <WaBot>
-            <div className="text-[9px] font-bold text-emerald-800">✅ INT-937 | Merge conflicts resolved</div>
-            <div className="text-[8px] text-neutral-500">2 commits · fix/conflicts-pr-1237</div>
-            <WaBtn>View Pull Request</WaBtn>
+            <div className="text-[9px] font-bold text-emerald-800">RES-42 | Research report ready</div>
+            <div className="text-[8px] text-neutral-500">Agreement map · source reports · citations</div>
+            <WaBtn>View Research</WaBtn>
             <WaTime align="left">9:47 AM</WaTime>
           </WaBot>
         </div>

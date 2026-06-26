@@ -1,0 +1,13 @@
+{
+  "name": "whatsapp-private-matrix-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test src/*.test.mjs"
+  },
+  "dependencies": {
+    "google-auth-library": "^10.0.0"
+  }
+}

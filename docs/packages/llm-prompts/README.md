@@ -24,14 +24,10 @@ Prompts are organized by domain. Each domain has an `index.ts` that re-exports a
 ```
 src/
   generation/     Title, label, and feed name generation
-  classification/ Command classification and intelligent routing
   research/       Research queries, synthesis, attribution, model extraction
   synthesis/      Multi-source synthesis with conflict detection
   validation/     Input quality scoring and improvement suggestions
-  todos/          Todo item extraction from natural language
   image/          Thumbnail generation prompts
-  dataInsights/   Data analysis, chart definitions, Vega-Lite configs
-  approvals/      Approval intent detection
   calendar/       Calendar event extraction and repair
   linear/         Linear issue extraction and title generation
   shared/         Cross-cutting types, guards, and schemas
@@ -85,15 +81,6 @@ const prompt = titlePrompt.build(
 | `titlePrompt`    | `PromptBuilder` | Generate concise titles from content        |
 | `labelPrompt`    | `PromptBuilder` | Generate classification labels from content |
 
-### Classification (`src/classification/`)
-
-| Export                     | Type            | Purpose                                              |
-| -------------------------- | --------------- | ---------------------------------------------------- |
-| `commandClassifierPrompt`  | `PromptBuilder` | Classify user messages into command categories       |
-| `intelligentPromptBuilder` | `PromptBuilder` | Context-aware classification with richer routing     |
-
-Command categories: `'todo'` | `'research'` | `'note'` | `'link'` | `'calendar'` | `'reminder'` | `'linear'` | `'code'`
-
 ### Research (`src/research/`)
 
 | Export                   | Type            | Purpose                                              |
@@ -120,24 +107,12 @@ Research context types: `ResearchContext` with `domain`, `mode`, `language`, `sa
 | `inputImprovementPrompt`            | `PromptBuilder` | Suggest improved research prompt            |
 | `buildInputValidationRepairPrompt`  | function        | Build repair prompt for invalid input       |
 
-### Todos (`src/todos/`)
-
-| Export                  | Type            | Purpose                                             |
-| ----------------------- | --------------- | --------------------------------------------------- |
-| `itemExtractionPrompt`  | `PromptBuilder` | Extract structured todo items from natural language |
-
 ### Image (`src/image/`)
 
 | Export                    | Type            | Purpose                                         |
 | ------------------------- | --------------- | ----------------------------------------------- |
 | `thumbnailPrompt`         | `PromptBuilder` | Generate image generation prompt for thumbnails |
 | `generateThumbnailPrompt` | function        | Build thumbnail prompt from content metadata    |
-
-### Approvals (`src/approvals/`)
-
-| Export                  | Type            | Purpose                                        |
-| ----------------------- | --------------- | ---------------------------------------------- |
-| `approvalIntentPrompt`  | `PromptBuilder` | Detect approval/rejection intent from message  |
 
 ### Calendar (`src/calendar/`)
 
@@ -176,7 +151,7 @@ This pattern is consistently applied across all domains.
 
 ## Used By
 
-**Apps (12):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`, `code-agent`, `user-service`
+**Apps:** `bookmarks-agent`, `calendar-agent`, `code-agent`, `image-service`, `intex-agent`, `linear-agent`, `research-agent`, `user-service`, `web-agent`
 
 **Workers (1):** `orchestrator`
 
@@ -194,14 +169,10 @@ This pattern is consistently applied across all domains.
 | Directory             | Contents                                                     |
 | --------------------- | ------------------------------------------------------------ |
 | `src/generation/`     | `titlePrompt`, `labelPrompt`                                 |
-| `src/classification/` | `commandClassifierPrompt`, `intelligentPromptBuilder`        |
 | `src/research/`       | Research, synthesis, model extraction, repair prompts        |
 | `src/synthesis/`      | Multi-source synthesis context and repair                    |
 | `src/validation/`     | Input quality, improvement, and repair prompts               |
-| `src/todos/`          | `itemExtractionPrompt`                                       |
 | `src/image/`          | `thumbnailPrompt`, `generateThumbnailPrompt`                 |
-| `src/dataInsights/`   | Analysis, chart, transform prompts + response parsers        |
-| `src/approvals/`      | `approvalIntentPrompt`                                       |
 | `src/calendar/`       | `calendarActionExtractionPrompt`, `repairPrompt`             |
 | `src/linear/`         | `linearActionExtractionPrompt`, `linearIssueTitlePrompt`     |
 | `src/shared/`         | `PromptBuilder`, `PromptDeps`, domain/mode types and schemas |

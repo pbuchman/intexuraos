@@ -9,12 +9,15 @@ import {
   bookmarksBookmarkSchema,
   bookmarksCreateBookmarkDataSchema,
   bookmarksCreateBookmarkRequestSchema,
+  calendarCreateEventDataSchema,
+  calendarCreateEventInputSchema,
+  calendarCreateEventRequestSchema,
+  calendarCreatedEventSchema,
+  calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
-  commandsCommandWithTextSchema,
-  commandsGetCommandDataSchema,
   imageGenerateImageRequestSchema,
   imageGeneratePromptRequestSchema,
   imageGeneratedImageDataSchema,
@@ -25,7 +28,6 @@ import {
   notesCreateNoteRequestSchema,
   researchCreateDraftRequestSchema,
   serviceFeedbackZodSchema,
-  todosCreateTodoRequestSchema,
   webAgentFetchLinkPreviewsRequestSchema,
   webAgentLinkPreviewSchema,
   webAgentPageSummarySchema,
@@ -174,14 +176,6 @@ export const contractComponentSchemas = {
     bookmarksCreateBookmarkDataSchema
   ),
   BookmarksBookmark: toOpenApiComponentSchema('BookmarksBookmark', bookmarksBookmarkSchema),
-  CommandsCommandWithText: toOpenApiComponentSchema(
-    'CommandsCommandWithText',
-    commandsCommandWithTextSchema
-  ),
-  CommandsGetCommandData: toOpenApiComponentSchema(
-    'CommandsGetCommandData',
-    commandsGetCommandDataSchema
-  ),
   ImageGeneratePromptRequest: toOpenApiComponentSchema(
     'ImageGeneratePromptRequest',
     imageGeneratePromptRequestSchema
@@ -204,13 +198,29 @@ export const contractComponentSchemas = {
   ),
   NotionTokenContext: toOpenApiComponentSchema('NotionTokenContext', notionTokenContextSchema),
   NotionPagePreview: toOpenApiComponentSchema('NotionPagePreview', notionPagePreviewSchema),
-  TodosCreateTodoRequest: toOpenApiComponentSchema(
-    'TodosCreateTodoRequest',
-    todosCreateTodoRequestSchema
-  ),
   ResearchCreateDraftRequest: toOpenApiComponentSchema(
     'ResearchCreateDraftRequest',
     researchCreateDraftRequestSchema
+  ),
+  CalendarEventDateTime: toOpenApiComponentSchema(
+    'CalendarEventDateTime',
+    calendarEventDateTimeSchema
+  ),
+  CalendarCreateEventInput: toOpenApiComponentSchema(
+    'CalendarCreateEventInput',
+    calendarCreateEventInputSchema
+  ),
+  CalendarCreateEventRequest: toOpenApiComponentSchema(
+    'CalendarCreateEventRequest',
+    calendarCreateEventRequestSchema
+  ),
+  CalendarCreatedEvent: toOpenApiComponentSchema(
+    'CalendarCreatedEvent',
+    calendarCreatedEventSchema
+  ),
+  CalendarCreateEventData: toOpenApiComponentSchema(
+    'CalendarCreateEventData',
+    calendarCreateEventDataSchema
   ),
   CalendarProcessActionRequest: toOpenApiComponentSchema(
     'CalendarProcessActionRequest',

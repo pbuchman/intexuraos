@@ -56,20 +56,6 @@ export const INTERNAL_API_SERVICE_CATALOG: InternalApiServiceCatalogEntry[] = [
     openApiUrlEnvVar: 'INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL',
   },
   {
-    key: 'commands-agent',
-    name: 'Commands Agent',
-    apiDocsName: 'Commands Agent API',
-    baseUrlEnvVar: 'INTEXURAOS_COMMANDS_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL',
-  },
-  {
-    key: 'actions-agent',
-    name: 'Actions Agent',
-    apiDocsName: 'Actions Agent API',
-    baseUrlEnvVar: 'INTEXURAOS_ACTIONS_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL',
-  },
-  {
     key: 'image-service',
     name: 'Image Service',
     apiDocsName: 'Image Service API',
@@ -91,13 +77,6 @@ export const INTERNAL_API_SERVICE_CATALOG: InternalApiServiceCatalogEntry[] = [
     openApiUrlEnvVar: 'INTEXURAOS_NOTES_AGENT_OPENAPI_URL',
   },
   {
-    key: 'todos-agent',
-    name: 'Todos Agent',
-    apiDocsName: 'Todos Agent API',
-    baseUrlEnvVar: 'INTEXURAOS_TODOS_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_TODOS_AGENT_OPENAPI_URL',
-  },
-  {
     key: 'bookmarks-agent',
     name: 'Bookmarks Agent',
     apiDocsName: 'Bookmarks Agent API',
@@ -110,13 +89,6 @@ export const INTERNAL_API_SERVICE_CATALOG: InternalApiServiceCatalogEntry[] = [
     apiDocsName: 'Calendar Agent API',
     baseUrlEnvVar: 'INTEXURAOS_CALENDAR_AGENT_URL',
     openApiUrlEnvVar: 'INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL',
-  },
-  {
-    key: 'chat-agent',
-    name: 'Chat Agent',
-    apiDocsName: 'Chat Agent API',
-    baseUrlEnvVar: 'INTEXURAOS_CHAT_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_CHAT_AGENT_OPENAPI_URL',
   },
   {
     key: 'code-agent',
@@ -138,13 +110,6 @@ export const INTERNAL_API_SERVICE_CATALOG: InternalApiServiceCatalogEntry[] = [
     apiDocsName: 'Web Agent API',
     baseUrlEnvVar: 'INTEXURAOS_WEB_AGENT_URL',
     openApiUrlEnvVar: 'INTEXURAOS_WEB_AGENT_OPENAPI_URL',
-  },
-  {
-    key: 'cron-agent',
-    name: 'Cron Agent',
-    apiDocsName: 'Cron Agent API',
-    baseUrlEnvVar: 'INTEXURAOS_CRON_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_CRON_AGENT_OPENAPI_URL',
   },
   {
     key: 'hellscript-agent',

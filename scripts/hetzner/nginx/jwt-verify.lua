@@ -4,16 +4,20 @@ local openidc = require("resty.openidc")
 local EXPECTED_ISS = "https://accounts.google.com"
 local EXPECTED_AUD = "https://intexuraos.cloud"
 local INTERNAL_AUTH_TOKEN_FILE = "/etc/intexuraos/internal-auth-token"
-local ALLOWED_SERVICE_ACCOUNTS = {
+local GLOBAL_ALLOWED_SERVICE_ACCOUNTS = {
   ["intexuraos-scheduler-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-whatsapp-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
-  ["intexuraos-commands-agents-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
-  ["intexuraos-actions-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-research-agent-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-calendar-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-bookmarks-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
-  ["intexuraos-todos-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  ["intexuraos-intex-agent-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+}
+
+local ROUTE_ALLOWED_SERVICE_ACCOUNTS = {
+  ["/internal/whatsapp/private/events"] = {
+    ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
 }
 
 local opts = {
@@ -58,6 +62,15 @@ local function read_internal_auth_token()
   return token
 end
 
+local function is_service_account_allowed(email)
+  local route_allowed_service_accounts = ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]
+  if route_allowed_service_accounts ~= nil then
+    return route_allowed_service_accounts[email] == true
+  end
+
+  return GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email] == true
+end
+
 local auth_header = ngx.var.http_authorization
 if auth_header == nil then
   return deny(ngx.HTTP_UNAUTHORIZED, "missing_authorization_header")
@@ -96,7 +109,7 @@ if not aud_ok then
   return deny(ngx.HTTP_UNAUTHORIZED, "invalid_audience")
 end
 
-if type(claims.email) ~= "string" or not ALLOWED_SERVICE_ACCOUNTS[claims.email] then
+if type(claims.email) ~= "string" or not is_service_account_allowed(claims.email) then
   ngx.log(ngx.WARN, "Google OIDC service account is not allowed")
   return deny(ngx.HTTP_FORBIDDEN, "forbidden_service_account")
 end

@@ -11,24 +11,19 @@ locals {
   }
 
   retained_gcp_pubsub_topics = {
-    whatsapp_media_cleanup      = "intexuraos-whatsapp-media-cleanup-${local.retained_gcp_environment}"
-    whatsapp_webhook_process    = "intexuraos-whatsapp-webhook-process-${local.retained_gcp_environment}"
-    srt_transcription_completed = "intexuraos-srt-transcription-completed-${local.retained_gcp_environment}"
-    audio_stored                = "intexuraos-audio-stored-${local.retained_gcp_environment}"
-    transcription_audio_dlq     = "intexuraos-transcription-audio-stored-dlq-${local.retained_gcp_environment}"
-    commands_ingest             = "intexuraos-commands-ingest-${local.retained_gcp_environment}"
-    actions_queue               = "intexuraos-actions-queue-${local.retained_gcp_environment}"
-    research_process            = "intexuraos-research-process-${local.retained_gcp_environment}"
-    llm_analytics               = "intexuraos-llm-analytics-${local.retained_gcp_environment}"
-    llm_call                    = "intexuraos-llm-call-${local.retained_gcp_environment}"
-    whatsapp_send               = "intexuraos-whatsapp-send-${local.retained_gcp_environment}"
-    approval_reply              = "intexuraos-approval-reply-${local.retained_gcp_environment}"
-    bookmark_enrich             = "intexuraos-bookmark-enrich-${local.retained_gcp_environment}"
-    bookmark_summarize          = "intexuraos-bookmark-summarize-${local.retained_gcp_environment}"
-    todos_processing            = "intexuraos-todos-processing-${local.retained_gcp_environment}"
-    calendar_preview            = "intexuraos-calendar-preview-${local.retained_gcp_environment}"
-    pr_triage                   = "intexuraos-pr-triage-${local.retained_gcp_environment}"
-    transcription_completed     = "intexuraos-transcription-completed-${local.retained_gcp_environment}"
+    whatsapp_media_cleanup   = "intexuraos-whatsapp-media-cleanup-${local.retained_gcp_environment}"
+    whatsapp_webhook_process = "intexuraos-whatsapp-webhook-process-${local.retained_gcp_environment}"
+    audio_stored             = "intexuraos-audio-stored-${local.retained_gcp_environment}"
+    transcription_audio_dlq  = "intexuraos-transcription-audio-stored-dlq-${local.retained_gcp_environment}"
+    intex_message_ingest     = "intexuraos-intex-message-ingest-${local.retained_gcp_environment}"
+    research_process         = "intexuraos-research-process-${local.retained_gcp_environment}"
+    llm_analytics            = "intexuraos-llm-analytics-${local.retained_gcp_environment}"
+    llm_call                 = "intexuraos-llm-call-${local.retained_gcp_environment}"
+    whatsapp_send            = "intexuraos-whatsapp-send-${local.retained_gcp_environment}"
+    bookmark_enrich          = "intexuraos-bookmark-enrich-${local.retained_gcp_environment}"
+    bookmark_summarize       = "intexuraos-bookmark-summarize-${local.retained_gcp_environment}"
+    pr_triage                = "intexuraos-pr-triage-${local.retained_gcp_environment}"
+    transcription_completed  = "intexuraos-transcription-completed-${local.retained_gcp_environment}"
   }
 
   retained_gcp_cloud_function_names = {
@@ -62,19 +57,15 @@ locals {
     mobile_notifications_service = "intexuraos-mobile-svc-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     fishing_assistant_service    = "intexuraos-fishing-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     research_agent               = "intexuraos-research-agent-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
-    commands_agent               = "intexuraos-commands-agents-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
-    actions_agent                = "intexuraos-actions-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
+    intex_agent                  = "intexuraos-intex-agent-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     image_service                = "intexuraos-image-svc-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     notes_agent                  = "intexuraos-notes-svc-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     app_settings_service         = "intexuraos-settings-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
-    todos_agent                  = "intexuraos-todos-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     bookmarks_agent              = "intexuraos-bookmarks-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     code_agent                   = "intexuraos-code-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     calendar_agent               = "intexuraos-calendar-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     web_agent                    = "intexuraos-web-agent-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     linear_agent                 = "intexuraos-linear-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
-    chat_agent                   = "intexuraos-chat-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
-    cron_agent                   = "intexuraos-cron-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     api_docs_hub                 = "intexuraos-docs-hub-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     hellscript_agent             = "intexuraos-hellscript-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     llm_usage_service            = "intexuraos-llm-usage-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
@@ -111,7 +102,6 @@ locals {
     "INTEXURAOS_CLOUDFLARE_API_TOKEN",
     var.cloudflare_dns_api_token_secret_id,
     "INTEXURAOS_OPENAI_APP_API_KEY",
-    "INTEXURAOS_GUEST_SESSION_SECRET",
     "INTEXURAOS_MINIMAX_APP_API_KEY",
     "INTEXURAOS_MIMO_APP_API_KEY",
     "INTEXURAOS_GEMINI_APP_API_KEY",

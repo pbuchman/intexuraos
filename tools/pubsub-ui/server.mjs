@@ -16,16 +16,12 @@ const TOPICS = [
   'whatsapp-send-message',
   'whatsapp-webhook-process',
   'whatsapp-transcription',
-  'commands-ingest',
-  'actions-queue',
-  'approval-reply',
+  'intex-message-ingest',
   'research-process',
   'llm-analytics',
   'llm-call',
   'bookmark-enrich',
   'bookmark-summarize',
-  'todos-processing',
-  'calendar-preview',
 ];
 
 const TOPIC_ENDPOINTS = {
@@ -36,16 +32,12 @@ const TOPIC_ENDPOINTS = {
     'http://host.docker.internal:8113/internal/whatsapp/pubsub/process-webhook',
   'whatsapp-transcription':
     'http://host.docker.internal:8113/internal/whatsapp/pubsub/transcribe-audio',
-  'commands-ingest': 'http://host.docker.internal:8117/internal/commands',
-  'actions-queue': 'http://host.docker.internal:8118/internal/actions/process',
-  'approval-reply': 'http://host.docker.internal:8118/internal/actions/approval-reply',
+  'intex-message-ingest': 'http://host.docker.internal:8134/internal/intex-agent/messages',
   'research-process': 'http://host.docker.internal:8116/internal/llm/pubsub/process-research',
   'llm-analytics': 'http://host.docker.internal:8116/internal/llm/pubsub/report-analytics',
   'llm-call': 'http://host.docker.internal:8116/internal/llm/pubsub/process-llm-call',
   'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
-  'todos-processing': 'http://host.docker.internal:8123/internal/todos/pubsub/todos-processing',
-  'calendar-preview': 'http://host.docker.internal:8125/internal/calendar/generate-preview',
 };
 
 const app = express();

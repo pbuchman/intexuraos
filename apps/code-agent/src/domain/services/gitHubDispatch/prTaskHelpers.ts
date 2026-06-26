@@ -72,7 +72,7 @@ export async function destroyPreservedContainer(
 
 /** Attempt to reuse a preserved pull_request container by sending it a message. */
 export async function reusePreservedContainer(
-  deps: Pick<WebhookDispatchServiceDeps, 'codeTaskRepo' | 'logLineRepo' | 'taskDispatcher' | 'workerSettingsRepo' | 'statusMirrorService' | 'whatsappNotifier'>,
+  deps: Pick<WebhookDispatchServiceDeps, 'codeTaskRepo' | 'logLineRepo' | 'taskDispatcher' | 'workerSettingsRepo' | 'whatsappNotifier'>,
   preserved: { id: string; userId: string },
   comment: string,
   logger: Logger,
@@ -85,7 +85,6 @@ export async function reusePreservedContainer(
         logLineRepo: deps.logLineRepo,
         taskDispatcher: deps.taskDispatcher,
         workerSettingsRepo: deps.workerSettingsRepo,
-        statusMirrorService: deps.statusMirrorService,
         whatsappNotifier: deps.whatsappNotifier,
       },
       { taskId: preserved.id, userId: preserved.userId, message: comment },
@@ -94,12 +93,12 @@ export async function reusePreservedContainer(
       return { success: true, dispatched: true };
     }
     logger.warn(
-      { taskId: preserved.id, error: sendResult.error },
+      { taskId: preserved.id, error: sendResult.error, _skipSentry: true },
       'Failed to send message to preserved container, falling through to new task',
     );
   } catch (error) {
     logger.warn(
-      { taskId: preserved.id, error },
+      { taskId: preserved.id, error, _skipSentry: true },
       'Error sending to preserved container, falling through',
     );
   }

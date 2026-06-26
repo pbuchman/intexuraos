@@ -52,9 +52,7 @@ describe('GcpPubSubPublisher', () => {
     publisher = new GcpPubSubPublisher({
       projectId: 'test-project',
       mediaCleanupTopic: 'media-cleanup-topic',
-      audioStoredTopic: 'audio-stored-topic',
-      approvalReplyTopic: 'approval-reply-topic',
-      commandsIngestTopic: 'commands-ingest-topic',
+      intexMessageIngestTopic: 'intex-message-ingest-topic',
       logger: pino({ name: 'test', level: 'silent' }),
     });
   });
@@ -64,44 +62,16 @@ describe('GcpPubSubPublisher', () => {
   });
 
   describe('constructor', () => {
-    it('throws when audioStoredTopic is missing', () => {
+    it('throws when intexMessageIngestTopic is missing', () => {
       expect(
         () =>
           new GcpPubSubPublisher({
             projectId: 'test-project',
             mediaCleanupTopic: 'media-cleanup-topic',
-            approvalReplyTopic: 'approval-reply-topic',
             logger: pino({ name: 'test', level: 'silent' }),
             // Cast: testing the runtime guard for callers that bypass the type system
           } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
-      ).toThrow('audioStoredTopic is required');
-    });
-
-    it('throws when approvalReplyTopic is missing', () => {
-      expect(
-        () =>
-          new GcpPubSubPublisher({
-            projectId: 'test-project',
-            mediaCleanupTopic: 'media-cleanup-topic',
-            audioStoredTopic: 'audio-stored-topic',
-            logger: pino({ name: 'test', level: 'silent' }),
-            // Cast: testing the runtime guard for callers that bypass the type system
-          } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
-      ).toThrow('approvalReplyTopic is required');
-    });
-
-    it('throws when commandsIngestTopic is missing', () => {
-      expect(
-        () =>
-          new GcpPubSubPublisher({
-            projectId: 'test-project',
-            mediaCleanupTopic: 'media-cleanup-topic',
-            audioStoredTopic: 'audio-stored-topic',
-            approvalReplyTopic: 'approval-reply-topic',
-            logger: pino({ name: 'test', level: 'silent' }),
-            // Cast: testing the runtime guard for callers that bypass the type system
-          } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
-      ).toThrow('commandsIngestTopic is required');
+      ).toThrow('intexMessageIngestTopic is required');
     });
   });
 
@@ -145,81 +115,25 @@ describe('GcpPubSubPublisher', () => {
     });
   });
 
-  describe('publishCommandIngest', () => {
-    it('publishes to the required command ingest topic', async () => {
+  describe('publishIntexMessageIngest', () => {
+    it('publishes to the required intex message ingest topic', async () => {
       const event = {
-        type: 'command.ingest' as const,
+        type: 'intex.message.ingest' as const,
         userId: 'user-123',
+        messageId: 'wamid.abc',
+        text: 'Remember the garage code',
         sourceType: 'whatsapp_text' as const,
-        externalId: 'wamid.abc',
-        text: 'Test command',
+        whatsappSender: '+15551234567',
         timestamp: new Date().toISOString(),
       };
 
-      const result = await publisher.publishCommandIngest(event);
+      const result = await publisher.publishIntexMessageIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
-        externalId: 'wamid.abc',
+      expect(mockPublishToTopic).toHaveBeenCalledWith('intex-message-ingest-topic', event, {
+        messageId: 'wamid.abc',
       });
       expect(mockPublishToOptionalTopic).not.toHaveBeenCalled();
-    });
-
-    it('publishes event when topic is configured', async () => {
-      const publisherWithTopic = new GcpPubSubPublisher({
-        projectId: 'test-project',
-        mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        approvalReplyTopic: 'approval-reply-topic',
-        commandsIngestTopic: 'commands-ingest-topic',
-        logger: pino({ name: 'test', level: 'silent' }),
-      });
-
-      const event = {
-        type: 'command.ingest' as const,
-        userId: 'user-123',
-        sourceType: 'whatsapp_voice' as const,
-        externalId: 'wamid.voice123',
-        text: 'Voice transcription text',
-        timestamp: new Date().toISOString(),
-      };
-
-      const result = await publisherWithTopic.publishCommandIngest(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
-        externalId: 'wamid.voice123',
-      });
-    });
-
-    it('returns error when publish fails', async () => {
-      const publisherWithTopic = new GcpPubSubPublisher({
-        projectId: 'test-project',
-        mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        approvalReplyTopic: 'approval-reply-topic',
-        commandsIngestTopic: 'commands-ingest-topic',
-        logger: pino({ name: 'test', level: 'silent' }),
-      });
-      mockPublishToTopic.mockResolvedValue({
-        ok: false,
-        error: { code: 'PUBLISH_FAILED', message: 'Topic unavailable' },
-      });
-
-      const result = await publisherWithTopic.publishCommandIngest({
-        type: 'command.ingest',
-        userId: 'user-789',
-        sourceType: 'whatsapp_text',
-        externalId: 'wamid.fail',
-        text: 'Test',
-        timestamp: new Date().toISOString(),
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Topic unavailable');
-      }
     });
   });
 
@@ -245,9 +159,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        approvalReplyTopic: 'approval-reply-topic',
-        commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -272,9 +184,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        approvalReplyTopic: 'approval-reply-topic',
-        commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -299,69 +209,6 @@ describe('GcpPubSubPublisher', () => {
     });
   });
 
-  describe('publishAudioStored', () => {
-    it('publishes event when topic is configured', async () => {
-      const event = {
-        type: 'whatsapp.audio.stored' as const,
-        messageId: 'msg-123',
-        userId: 'user-456',
-        mediaId: 'media-789',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        timestamp: new Date().toISOString(),
-      };
-
-      const result = await publisher.publishAudioStored(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('audio-stored-topic', event, {
-        messageId: 'msg-123',
-      });
-    });
-
-    it('returns error when publish fails', async () => {
-      mockPublishToTopic.mockResolvedValue({
-        ok: false,
-        error: { code: 'PUBLISH_FAILED', message: 'Publish timeout' },
-      });
-
-      const result = await publisher.publishAudioStored({
-        type: 'whatsapp.audio.stored',
-        messageId: 'msg-fail',
-        userId: 'user-456',
-        mediaId: 'media-xyz',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        timestamp: new Date().toISOString(),
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Publish timeout');
-      }
-    });
-  });
-
-  describe('publishApprovalReply', () => {
-    it('publishes event when topic is configured', async () => {
-      const event = {
-        type: 'action.approval.reply' as const,
-        replyToWamid: 'wamid.reply123',
-        replyText: 'yes',
-        userId: 'user-456',
-        timestamp: new Date().toISOString(),
-      };
-
-      const result = await publisher.publishApprovalReply(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('approval-reply-topic', event, {
-        replyToWamid: 'wamid.reply123',
-      });
-    });
-  });
-
   describe('publishExtractLinkPreviews', () => {
     it('skips publish when topic is not configured', async () => {
       const event = {
@@ -383,9 +230,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        approvalReplyTopic: 'approval-reply-topic',
-        commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -409,9 +254,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        approvalReplyTopic: 'approval-reply-topic',
-        commandsIngestTopic: 'commands-ingest-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });

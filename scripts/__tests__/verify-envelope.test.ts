@@ -33,11 +33,11 @@ describe('verify-envelope', () => {
   it('passes when targeted internal routes use reply.ok and reply.fail', () => {
     writeRoute(
       rootDir,
-      'apps/actions-agent/src/routes/internalRoutes.ts',
+      'apps/bookmarks-agent/src/routes/internalRoutes.ts',
       `
 export const routes = (fastify) => {
-  fastify.post('/internal/actions', async (_request, reply) => {
-    return await reply.ok({ actionId: 'act_123' });
+  fastify.post('/internal/bookmarks', async (_request, reply) => {
+    return await reply.ok({ bookmarkId: 'bm_123' });
   });
 };
 `
@@ -106,7 +106,7 @@ export const routes = (fastify) => {
     });
   });
 
-  fastify.post('/internal/code/process', async (_request, reply) => {
+  fastify.post('/internal/code/diagnostics', async (_request, reply) => {
     return await reply.ok({ codeTaskId: 'task_123', resourceUrl: 'http://localhost/resource' });
   });
 };

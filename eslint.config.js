@@ -206,23 +206,11 @@ export default tseslint.config(
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@intexuraos/commands-agent', '@intexuraos/commands-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/actions-agent', '@intexuraos/actions-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
               group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
@@ -297,23 +285,11 @@ export default tseslint.config(
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@intexuraos/commands-agent', '@intexuraos/commands-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/actions-agent', '@intexuraos/actions-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
               group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
@@ -445,23 +421,11 @@ export default tseslint.config(
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@intexuraos/commands-agent', '@intexuraos/commands-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/actions-agent', '@intexuraos/actions-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
               group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
@@ -601,23 +565,11 @@ export default tseslint.config(
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@intexuraos/commands-agent', '@intexuraos/commands-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/actions-agent', '@intexuraos/actions-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
               group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {

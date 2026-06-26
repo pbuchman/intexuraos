@@ -2,7 +2,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Button } from './ui/Button.js';
 import { Modal } from './ui/Modal.js';
 
-export type ConflictReason = 'duplicate' | 'active' | 'duplicate_approval';
+export type ConflictReason = 'duplicate' | 'active';
 
 interface TaskConflictModalProps {
   isOpen: boolean;
@@ -25,11 +25,6 @@ const CONFLICT_MESSAGES: Record<
     title: 'Active Task Exists',
     description:
       'An active task already exists for this Linear issue. You can view the existing task or close this to continue.',
-  },
-  duplicate_approval: {
-    title: 'Already Processed',
-    description:
-      'This approval has already been processed. You can view the existing task or close this to continue.',
   },
 };
 

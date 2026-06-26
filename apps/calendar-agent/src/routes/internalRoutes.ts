@@ -5,9 +5,18 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { Result } from '@intexuraos/common-core';
+import type { CalendarCreateEventRequest } from '@intexuraos/http-contracts';
 import { getServices } from '../services.js';
-import { processCalendarAction, generateCalendarPreview, type CalendarError, type CalendarPreview } from '../domain/index.js';
+import {
+  createEvent,
+  processCalendarAction,
+  generateCalendarPreview,
+  type CalendarError,
+  type CalendarPreview,
+  type CreateEventRequest,
+} from '../domain/index.js';
 import { handleCalendarError } from './calendarErrorHandler.js';
+import { buildCreateEventInput } from './calendarHelpers.js';
 
 interface ProcessActionBody {
   action: {
@@ -79,6 +88,118 @@ async function callGeneratePreview(
 }
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.post<{ Body: CalendarCreateEventRequest }>(
+    '/internal/calendar/events',
+    {
+      schema: {
+        operationId: 'createInternalCalendarEvent',
+        summary: 'Create a calendar event for a user',
+        description: 'Internal service endpoint for creating a Google Calendar event on behalf of a user',
+        tags: ['internal'],
+        body: { $ref: 'CalendarCreateEventRequest#' },
+        response: {
+          201: {
+            description: 'Success',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['event'],
+                properties: {
+                  event: { $ref: 'CalendarCreatedEvent#' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          400: {
+            description: 'Bad Request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: CalendarCreateEventRequest }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+      const createRequest: CreateEventRequest = {
+        userId: request.body.userId,
+        event: buildCreateEventInput(request.body.event),
+      };
+      if (request.body.calendarId !== undefined) {
+        createRequest.calendarId = request.body.calendarId;
+      }
+
+      request.log.info(
+        {
+          userId: request.body.userId,
+          calendarId: request.body.calendarId ?? 'primary',
+          title: request.body.event.summary,
+        },
+        'internal/createCalendarEvent: creating event'
+      );
+
+      const result = await createEvent(createRequest, {
+        userServiceClient: services.userServiceClient,
+        googleCalendarClient: services.googleCalendarClient,
+        logger: request.log,
+      });
+
+      if (!result.ok) {
+        return await handleCalendarError(result.error, reply);
+      }
+
+      request.log.info(
+        { userId: request.body.userId, eventId: result.value.id }, // @allow-result-access -- guarded by !result.ok check above
+        'internal/createCalendarEvent: complete'
+      );
+
+      reply.status(201);
+      return await reply.ok({ event: result.value }); // @allow-result-access -- guarded by !result.ok check above
+    }
+  );
+
   fastify.post<{ Body: ProcessActionBody }>(
     '/internal/calendar/process-action',
     {

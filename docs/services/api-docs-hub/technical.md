@@ -45,9 +45,9 @@ sequenceDiagram
 | `4c899442`  | Reverted to local `OPEN_API_SOURCE_CATALOG` in config.ts; added `config.test.ts`   | 2026-03-26 |
 | `7dc46e30`  | Restored shared `buildInternalApiOpenApiSources` from common-core (intermediate)   | 2026-03-25 |
 | `fff14842`  | Address Opus code review findings for shared catalog                               | 2026-03-20 |
-| `4c9e4003`  | Implement LLM-driven recurring schedule backend (cron-agent added)                 | 2026-03-18 |
+| `4c9e4003`  | Expand API catalog coverage                                                       | 2026-03-18 |
 
-**v3.5.0 summary:** The shared `INTERNAL_API_SERVICE_CATALOG` import from `@intexuraos/common-core` was removed from `config.ts`. The service now maintains its own local `OPEN_API_SOURCE_CATALOG` constant with inline display names and environment variable mappings for all 20 services. A new `config.test.ts` was added covering env var validation and URL trimming. The `buildOpenApiSources()` function is now defined locally rather than imported. Despite this, `@intexuraos/common-core` remains a package.json dependency (unused in source).
+**v3.5.0 summary:** The shared `INTERNAL_API_SERVICE_CATALOG` import from `@intexuraos/common-core` was removed from `config.ts`. The service now maintains its own local `OPEN_API_SOURCE_CATALOG` constant with inline display names and environment variable mappings for active services. A new `config.test.ts` was added covering env var validation and URL trimming. The `buildOpenApiSources()` function is now defined locally rather than imported. Despite this, `@intexuraos/common-core` remains a package.json dependency (unused in source).
 
 ## API Endpoints
 
@@ -79,7 +79,7 @@ interface Config {
 }
 ```
 
-## Aggregated Services (20)
+## Aggregated Services (17)
 
 | Display Name                     | Environment Variable                                      |
 | -------------------------------- | --------------------------------------------------------- |
@@ -88,19 +88,15 @@ interface Config {
 | WhatsApp Service API             | `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`                 |
 | Mobile Notifications Service API | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL`     |
 | Research Agent API               | `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`                   |
-| Commands Agent API               | `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`                   |
-| Actions Agent API                | `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                    |
+| Intex Agent API                  | `INTEXURAOS_INTEX_AGENT_OPENAPI_URL`                      |
 | Image Service API                | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                    |
 | Application Settings API         | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`             |
 | Notes Agent API                  | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                      |
-| Todos Agent API                  | `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                      |
 | Bookmarks Agent API              | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`                  |
 | Calendar Agent API               | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`                   |
-| Chat Agent API                   | `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                       |
 | Code Agent API                   | `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                       |
 | Linear Agent API                 | `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                     |
 | Web Agent API                    | `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                        |
-| Cron Agent API                   | `INTEXURAOS_CRON_AGENT_OPENAPI_URL`                       |
 | Hellscript Agent API             | `INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL`                 |
 
 ## Pub/Sub
@@ -152,19 +148,15 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 | `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | WhatsApp Service OpenAPI URL       |
 | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | Mobile Notifications URL           |
 | `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | Research Agent OpenAPI URL         |
-| `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | Commands Agent OpenAPI URL         |
-| `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | Actions Agent OpenAPI URL          |
+| `INTEXURAOS_INTEX_AGENT_OPENAPI_URL`                  | Intex Agent OpenAPI URL            |
 | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | Image Service OpenAPI URL          |
 | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | Notes Agent OpenAPI URL            |
-| `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | Todos Agent OpenAPI URL            |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | Application Settings URL           |
 | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`              | Bookmarks Agent OpenAPI URL        |
 | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`               | Calendar Agent OpenAPI URL         |
-| `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                   | Chat Agent OpenAPI URL             |
 | `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                   | Code Agent OpenAPI URL             |
 | `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                 | Linear Agent OpenAPI URL           |
 | `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                    | Web Agent OpenAPI URL              |
-| `INTEXURAOS_CRON_AGENT_OPENAPI_URL`                   | Cron Agent OpenAPI URL             |
 | `INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL`             | Hellscript Agent OpenAPI URL       |
 
 ### Optional Environment Variables

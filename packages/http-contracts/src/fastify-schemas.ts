@@ -10,12 +10,15 @@ import {
   bookmarksBookmarkSchema,
   bookmarksCreateBookmarkDataSchema,
   bookmarksCreateBookmarkRequestSchema,
+  calendarCreateEventDataSchema,
+  calendarCreateEventInputSchema,
+  calendarCreateEventRequestSchema,
+  calendarCreatedEventSchema,
+  calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
-  commandsCommandWithTextSchema,
-  commandsGetCommandDataSchema,
   imageGenerateImageRequestSchema,
   imageGeneratePromptRequestSchema,
   imageGeneratedImageDataSchema,
@@ -26,7 +29,6 @@ import {
   notesCreateNoteRequestSchema,
   researchCreateDraftRequestSchema,
   serviceFeedbackZodSchema,
-  todosCreateTodoRequestSchema,
   webAgentFetchLinkPreviewsRequestSchema,
   webAgentLinkPreviewSchema,
   webAgentPageSummarySchema,
@@ -92,11 +94,6 @@ export const contractFastifySchemas = {
     bookmarksCreateBookmarkDataSchema
   ),
   BookmarksBookmark: toFastifySchema('BookmarksBookmark', bookmarksBookmarkSchema),
-  CommandsCommandWithText: toFastifySchema(
-    'CommandsCommandWithText',
-    commandsCommandWithTextSchema
-  ),
-  CommandsGetCommandData: toFastifySchema('CommandsGetCommandData', commandsGetCommandDataSchema),
   ImageGeneratePromptRequest: toFastifySchema(
     'ImageGeneratePromptRequest',
     imageGeneratePromptRequestSchema
@@ -113,10 +110,23 @@ export const contractFastifySchemas = {
   NotesCreateNoteRequest: toFastifySchema('NotesCreateNoteRequest', notesCreateNoteRequestSchema),
   NotionTokenContext: toFastifySchema('NotionTokenContext', notionTokenContextSchema),
   NotionPagePreview: toFastifySchema('NotionPagePreview', notionPagePreviewSchema),
-  TodosCreateTodoRequest: toFastifySchema('TodosCreateTodoRequest', todosCreateTodoRequestSchema),
   ResearchCreateDraftRequest: toFastifySchema(
     'ResearchCreateDraftRequest',
     researchCreateDraftRequestSchema
+  ),
+  CalendarEventDateTime: toFastifySchema('CalendarEventDateTime', calendarEventDateTimeSchema),
+  CalendarCreateEventInput: toFastifySchema(
+    'CalendarCreateEventInput',
+    calendarCreateEventInputSchema
+  ),
+  CalendarCreateEventRequest: toFastifySchema(
+    'CalendarCreateEventRequest',
+    calendarCreateEventRequestSchema
+  ),
+  CalendarCreatedEvent: toFastifySchema('CalendarCreatedEvent', calendarCreatedEventSchema),
+  CalendarCreateEventData: toFastifySchema(
+    'CalendarCreateEventData',
+    calendarCreateEventDataSchema
   ),
   CalendarProcessActionRequest: toFastifySchema(
     'CalendarProcessActionRequest',

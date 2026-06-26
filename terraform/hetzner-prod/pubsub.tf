@@ -30,42 +30,12 @@ locals {
       retry_maximum_backoff = "600s"
       max_delivery_attempts = 5
     }
-    whatsapp_srt_transcription = {
-      subscription_name     = "intexuraos-srt-transcription-completed-prod-hetzner"
-      topic_name            = local.pubsub_topics.whatsapp_srt_transcription
-      push_path             = "/internal/whatsapp/pubsub/transcription-completed"
-      service_account_key   = "whatsapp_service"
+    intex_message_ingest = {
+      subscription_name     = "intexuraos-intex-message-ingest-prod-hetzner"
+      topic_name            = local.pubsub_topics.intex_message_ingest
+      push_path             = "/internal/intex-agent/messages"
+      service_account_key   = "intex_agent"
       ack_deadline_seconds  = 120
-      retry_minimum_backoff = "10s"
-      retry_maximum_backoff = "600s"
-      max_delivery_attempts = 5
-    }
-    transcription_completed = {
-      subscription_name     = "intexuraos-transcription-completed-prod-hetzner"
-      topic_name            = local.pubsub_topics.transcription_completed
-      push_path             = "/internal/whatsapp/pubsub/transcription-completed"
-      service_account_key   = "whatsapp_service"
-      ack_deadline_seconds  = 60
-      retry_minimum_backoff = "10s"
-      retry_maximum_backoff = "600s"
-      max_delivery_attempts = 5
-    }
-    commands_ingest = {
-      subscription_name     = "intexuraos-commands-ingest-prod-hetzner"
-      topic_name            = local.pubsub_topics.commands_ingest
-      push_path             = "/internal/commands"
-      service_account_key   = "commands_agent"
-      ack_deadline_seconds  = 60
-      retry_minimum_backoff = "10s"
-      retry_maximum_backoff = "600s"
-      max_delivery_attempts = 5
-    }
-    actions_queue = {
-      subscription_name     = "intexuraos-actions-queue-prod-hetzner"
-      topic_name            = local.pubsub_topics.actions_queue
-      push_path             = "/internal/actions/process"
-      service_account_key   = "actions_agent"
-      ack_deadline_seconds  = 60
       retry_minimum_backoff = "10s"
       retry_maximum_backoff = "600s"
       max_delivery_attempts = 5
@@ -100,16 +70,6 @@ locals {
       retry_maximum_backoff = "600s"
       max_delivery_attempts = 5
     }
-    calendar_preview = {
-      subscription_name     = "intexuraos-calendar-preview-prod-hetzner"
-      topic_name            = local.pubsub_topics.calendar_preview
-      push_path             = "/internal/calendar/generate-preview"
-      service_account_key   = "calendar_agent"
-      ack_deadline_seconds  = 120
-      retry_minimum_backoff = "10s"
-      retry_maximum_backoff = "600s"
-      max_delivery_attempts = 5
-    }
     bookmark_enrich = {
       subscription_name     = "intexuraos-bookmark-enrich-prod-hetzner"
       topic_name            = local.pubsub_topics.bookmark_enrich
@@ -129,26 +89,6 @@ locals {
       retry_minimum_backoff = "30s"
       retry_maximum_backoff = "600s"
       max_delivery_attempts = 50
-    }
-    todos_processing = {
-      subscription_name     = "intexuraos-todos-processing-prod-hetzner"
-      topic_name            = local.pubsub_topics.todos_processing
-      push_path             = "/internal/todos/pubsub/todos-processing"
-      service_account_key   = "todos_agent"
-      ack_deadline_seconds  = 60
-      retry_minimum_backoff = "10s"
-      retry_maximum_backoff = "600s"
-      max_delivery_attempts = 5
-    }
-    approval_reply = {
-      subscription_name     = "intexuraos-approval-reply-prod-hetzner"
-      topic_name            = local.pubsub_topics.approval_reply
-      push_path             = "/internal/actions/approval-reply"
-      service_account_key   = "actions_agent"
-      ack_deadline_seconds  = 60
-      retry_minimum_backoff = "10s"
-      retry_maximum_backoff = "600s"
-      max_delivery_attempts = 5
     }
     pr_triage = {
       subscription_name     = "intexuraos-pr-triage-prod-hetzner"

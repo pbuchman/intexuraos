@@ -27,7 +27,7 @@ describe('createBookmarksAgentServiceClient', () => {
       .post('/internal/bookmarks', {
         userId: 'user-1',
         url: 'https://example.com/article',
-        source: 'actions-agent',
+        source: 'intex-agent',
         sourceId: 'action-1',
       })
       .matchHeader('x-internal-auth', 'secret')
@@ -49,7 +49,7 @@ describe('createBookmarksAgentServiceClient', () => {
     const result = await client.createBookmark({
       userId: 'user-1',
       url: 'https://example.com/article',
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 
@@ -86,7 +86,7 @@ describe('createBookmarksAgentServiceClient', () => {
             ogFetchStatus: 'processed',
             aiSummary: null,
             aiSummarizedAt: null,
-            source: 'actions-agent',
+            source: 'intex-agent',
             sourceId: 'action-2',
             archived: false,
             createdAt: '2026-05-10T00:00:00.000Z',
@@ -103,7 +103,7 @@ describe('createBookmarksAgentServiceClient', () => {
     const result = await client.createBookmark({
       userId: 'user-2',
       url: 'https://example.com/nested',
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-2',
     });
 
@@ -140,7 +140,7 @@ describe('createBookmarksAgentServiceClient', () => {
     const result = await client.createBookmark({
       userId: 'user-1',
       url: 'https://example.com/article',
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 
@@ -150,6 +150,112 @@ describe('createBookmarksAgentServiceClient', () => {
         message: 'Bookmark already exists',
         errorCode: 'ALREADY_EXISTS',
         existingBookmarkId: 'bookmark-existing-1',
+      },
+    });
+  });
+
+  it('falls back to HTTP status text when create errors have a primitive body', async () => {
+    nock(BASE_URL).post('/internal/bookmarks').reply(500, 'server exploded');
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createBookmark({
+      userId: 'user-1',
+      url: 'https://example.com/article',
+      source: 'intex-agent',
+      sourceId: 'source-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        message: 'HTTP 500: Internal Server Error',
+      },
+    });
+  });
+
+  it('omits optional create error fields when the envelope omits them', async () => {
+    nock(BASE_URL)
+      .post('/internal/bookmarks')
+      .reply(409, {
+        success: false,
+        error: {
+          message: 'Bookmark already exists',
+          details: {
+            existingBookmarkId: '',
+          },
+        },
+      });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createBookmark({
+      userId: 'user-1',
+      url: 'https://example.com/article',
+      source: 'intex-agent',
+      sourceId: 'source-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        message: 'Bookmark already exists',
+      },
+    });
+  });
+
+  it('falls back to the HTTP status when create API errors omit an error object', async () => {
+    nock(BASE_URL).post('/internal/bookmarks').reply(500, {
+      success: false,
+    });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createBookmark({
+      userId: 'user-1',
+      url: 'https://example.com/article',
+      source: 'intex-agent',
+      sourceId: 'source-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        message: 'HTTP 500: Internal Server Error',
+      },
+    });
+  });
+
+  it('maps malformed create success envelopes to a create error', async () => {
+    nock(BASE_URL).post('/internal/bookmarks').reply(200, {
+      success: true,
+    });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createBookmark({
+      userId: 'user-1',
+      url: 'https://example.com/article',
+      source: 'intex-agent',
+      sourceId: 'source-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        message: 'Invalid response from bookmarks-agent',
       },
     });
   });
@@ -173,7 +279,7 @@ describe('createBookmarksAgentServiceClient', () => {
     const result = await client.createBookmark({
       userId: 'user-1',
       url: 'not-a-url',
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 
@@ -201,7 +307,7 @@ describe('createBookmarksAgentServiceClient', () => {
     const result = await client.createBookmark({
       userId: 'user-1',
       url: 'https://example.com/article',
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 
@@ -224,7 +330,7 @@ describe('createBookmarksAgentServiceClient', () => {
     const result = await client.createBookmark({
       userId: 'user-1',
       url: 'https://example.com/article',
-      source: 'actions-agent',
+      source: 'intex-agent',
       sourceId: 'action-1',
     });
 
@@ -290,7 +396,7 @@ describe('createBookmarksAgentServiceClient', () => {
           ogFetchStatus: 'processed',
           aiSummary: null,
           aiSummarizedAt: null,
-          source: 'actions-agent',
+          source: 'intex-agent',
           sourceId: 'action-2',
           archived: false,
           createdAt: '2026-05-10T00:00:00.000Z',
@@ -323,6 +429,61 @@ describe('createBookmarksAgentServiceClient', () => {
     });
   });
 
+  it('normalizes empty ogPreview fields to explicit nulls on refresh success', async () => {
+    nock(BASE_URL)
+      .post('/internal/bookmarks/bookmark-3/force-refresh')
+      .reply(200, {
+        success: true,
+        data: {
+          id: 'bookmark-3',
+          url: 'https://example.com/empty-preview',
+          status: 'active',
+          ogPreview: {},
+          ogFetchStatus: 'processed',
+        },
+      });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.forceRefreshBookmark('bookmark-3');
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: 'bookmark-3',
+        url: 'https://example.com/empty-preview',
+        status: 'active',
+        ogPreview: {
+          title: null,
+          description: null,
+          image: null,
+          siteName: null,
+          favicon: null,
+        },
+        ogFetchStatus: 'processed',
+      },
+    });
+  });
+
+  it('maps refresh transport failures to errors', async () => {
+    nock(BASE_URL).post('/internal/bookmarks/bookmark-1/force-refresh').replyWithError('offline');
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.forceRefreshBookmark('bookmark-1');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain('Failed to call bookmarks-agent');
+    }
+  });
+
   it('returns http error messages for refresh failures', async () => {
     nock(BASE_URL)
       .post('/internal/bookmarks/bookmark-1/force-refresh')
@@ -344,6 +505,60 @@ describe('createBookmarksAgentServiceClient', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toBe('Bookmark not found');
+    }
+  });
+
+  it('falls back to status text for primitive refresh API error bodies', async () => {
+    nock(BASE_URL)
+      .post('/internal/bookmarks/bookmark-1/force-refresh')
+      .reply(500, 'server exploded');
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.forceRefreshBookmark('bookmark-1');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('HTTP 500: Internal Server Error');
+    }
+  });
+
+  it('falls back to status text when refresh API error envelopes omit a message', async () => {
+    nock(BASE_URL).post('/internal/bookmarks/bookmark-1/force-refresh').reply(500, {
+      success: false,
+    });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.forceRefreshBookmark('bookmark-1');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('HTTP 500: Internal Server Error');
+    }
+  });
+
+  it('maps malformed refresh success envelopes to fallback errors', async () => {
+    nock(BASE_URL).post('/internal/bookmarks/bookmark-1/force-refresh').reply(200, {
+      success: true,
+    });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.forceRefreshBookmark('bookmark-1');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Invalid response from bookmarks-agent');
     }
   });
 

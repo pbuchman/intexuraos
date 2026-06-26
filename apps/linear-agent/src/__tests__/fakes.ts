@@ -1026,7 +1026,7 @@ export class FakeLinearCommentRepository implements LinearCommentRepository {
 export class FakeCodeAgentClient implements CodeAgentClient {
   private shouldFail = false;
   private failError: CodeAgentError = { code: 'UNAVAILABLE', message: 'code-agent unavailable' };
-  private lastRequest: { userId: string; linearIssueId: string; prompt: string; workerType: string; actionId: string; approvalEventId: string } | null = null;
+  private lastRequest: { userId: string; linearIssueId: string; prompt: string; workerType: string } | null = null;
   private taskIdCounter = 1;
   private recomputeCalls: { userId: string; linearIssueId: string; labels: { id: string; name: string }[]; sourceTimestamp: string }[] = [];
 
@@ -1035,16 +1035,12 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     linearIssueId: string;
     prompt: string;
     workerType: CodeTaskWorkerType;
-    actionId: string;
-    approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>> {
     this.lastRequest = {
       userId: request.userId,
       linearIssueId: request.linearIssueId,
       prompt: request.prompt,
       workerType: request.workerType,
-      actionId: request.actionId,
-      approvalEventId: request.approvalEventId,
     };
 
     if (this.shouldFail) return err(this.failError);

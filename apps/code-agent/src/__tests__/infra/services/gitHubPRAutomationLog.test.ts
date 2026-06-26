@@ -385,7 +385,7 @@ describe('GitHubPRAutomationLog', () => {
       );
     });
 
-    it('should not throw when getIssueComment fails on append', async () => {
+    it('posts a replacement comment when stored comment was deleted before append', async () => {
       await repo.create({
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
@@ -398,15 +398,74 @@ describe('GitHubPRAutomationLog', () => {
 
       gitHubPRClient = createFakeGitHubPRClient({
         getIssueComment: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'Comment deleted' } satisfies GitHubPRClientError)),
+        postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 200 })),
       });
 
       const log = createLog();
-      await expect(log.record(prRef, webhookEvent)).resolves.toBeUndefined();
+      const result = await log.recordWithResult?.(prRef, webhookEvent);
 
-      expect(logger.warn).toHaveBeenCalled();
+      expect(result).toEqual(ok(undefined));
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledOnce();
+      expect(gitHubPRClient.updateIssueComment).not.toHaveBeenCalled();
+      const stored = await repo.get('pbuchman/intexuraos', 42);
+      expect(stored?.commentId).toBe(200);
+      expect(stored?.eventCount).toBe(1);
     });
 
-    it('should not throw when updateIssueComment fails on append', async () => {
+    it('does not post a replacement comment when fetching existing comment is rate limited', async () => {
+      await repo.create({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        commentId: 100,
+        tokenUserId: 'user-123',
+        eventCount: 1,
+        createdAt: '2026-03-14T12:00:00.000Z',
+        updatedAt: '2026-03-14T12:00:00.000Z',
+      });
+
+      gitHubPRClient = createFakeGitHubPRClient({
+        getIssueComment: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Rate limited' } satisfies GitHubPRClientError)),
+      });
+
+      const log = createLog();
+      const result = await log.recordWithResult?.(prRef, webhookEvent);
+
+      expect(result).toEqual(err({ code: 'AUTOMATION_LOG_FAILED', message: 'Rate limited' }));
+      expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+      expect(gitHubPRClient.updateIssueComment).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: prRef.repository, prNumber: prRef.prNumber, commentId: 100 }),
+        'Automation log: failed to GET existing comment for append'
+      );
+    });
+
+    it('posts a replacement comment when patching existing comment is unauthorized', async () => {
+      await repo.create({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        commentId: 100,
+        tokenUserId: 'user-123',
+        eventCount: 1,
+        createdAt: '2026-03-14T12:00:00.000Z',
+        updatedAt: '2026-03-14T12:00:00.000Z',
+      });
+
+      gitHubPRClient = createFakeGitHubPRClient({
+        updateIssueComment: vi.fn().mockResolvedValue(err({ code: 'UNAUTHORIZED', message: 'Token cannot edit comment' } satisfies GitHubPRClientError)),
+        postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 201 })),
+      });
+
+      const log = createLog();
+      const result = await log.recordWithResult?.(prRef, webhookEvent);
+
+      expect(result).toEqual(ok(undefined));
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledOnce();
+      const stored = await repo.get('pbuchman/intexuraos', 42);
+      expect(stored?.commentId).toBe(201);
+      expect(stored?.eventCount).toBe(1);
+    });
+
+    it('does not post a replacement comment when update is rate limited', async () => {
       await repo.create({
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
@@ -422,9 +481,10 @@ describe('GitHubPRAutomationLog', () => {
       });
 
       const log = createLog();
-      await expect(log.record(prRef, webhookEvent)).resolves.toBeUndefined();
+      const result = await log.recordWithResult?.(prRef, webhookEvent);
 
-      expect(logger.warn).toHaveBeenCalled();
+      expect(result).toEqual(err({ code: 'AUTOMATION_LOG_FAILED', message: 'Rate limited' }));
+      expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
     });
 
     it('should not throw when an unexpected error occurs', async () => {

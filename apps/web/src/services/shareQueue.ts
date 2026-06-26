@@ -29,7 +29,7 @@ export interface ShareHistoryItem {
   createdAt: string;
   status: ShareStatus;
   syncedAt?: string;
-  commandId?: string;
+  noteId?: string;
   lastError?: string;
   nextRetryAt?: string;
 }
@@ -134,7 +134,7 @@ export function updateQueueItem(id: string, updates: Partial<ShareQueueItem>): v
   }
 }
 
-export function markAsSynced(id: string, commandId: string): void {
+export function markAsSynced(id: string, noteId: string): void {
   removeFromQueue(id);
 
   const history = getHistory();
@@ -144,7 +144,7 @@ export function markAsSynced(id: string, commandId: string): void {
       ...history[index],
       status: 'synced',
       syncedAt: new Date().toISOString(),
-      commandId,
+      noteId,
     };
     saveHistory(history);
   }

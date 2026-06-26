@@ -30,8 +30,6 @@ Generic Pub/Sub infrastructure: a thin wrapper around `@google-cloud/pubsub` tha
         │ extends
         │
 @intexuraos/whatsapp-pubsub-client     → consumed by whatsapp-service
-@intexuraos/todos-pubsub-client        → consumed by todos-agent
-@intexuraos/calendar-pubsub-client     → consumed by calendar-agent
 @intexuraos/pr-triage-pubsub-client    → consumed by code-agent
 ```
 
@@ -111,8 +109,6 @@ Use these to publish typed events to the corresponding consumer service. None of
 | Package                                 | Factory                          | Event type                   | Consumer           |
 | --------------------------------------- | -------------------------------- | ---------------------------- | ------------------ |
 | `@intexuraos/whatsapp-pubsub-client`    | `createWhatsAppSendPublisher`    | `whatsapp.message.send`      | `whatsapp-service` |
-| `@intexuraos/todos-pubsub-client`       | `createTodosProcessingPublisher` | `todos.processing.created`   | `todos-agent`      |
-| `@intexuraos/calendar-pubsub-client`    | `createCalendarPreviewPublisher` | `calendar.preview.generate`  | `calendar-agent`   |
 | `@intexuraos/pr-triage-pubsub-client`   | `createPRTriagePublisher`        | `code.pr.triage.requested`   | `code-agent`       |
 
 ## Usage — extending `BasePubSubPublisher`
@@ -166,8 +162,8 @@ if (!result.ok) {
 
 `BasePubSubPublisher` is extended by publishers across the monorepo, including:
 
-- Each of the four `*-pubsub-client` leaf packages (above).
-- App-internal publishers under `apps/*/src/infra/pubsub/` (e.g. `actions-agent` action-event publisher, `bookmarks-agent` enrich/summarize publishers, `commands-agent` action-event publisher, `research-agent` analytics/llm-call/research-event publishers, `whatsapp-service` outbound-message publisher).
+- The `*-pubsub-client` leaf packages above.
+- App-internal publishers under `apps/*/src/infra/pubsub/` (e.g. `bookmarks-agent` enrich/summarize publishers, `research-agent` analytics/llm-call/research-event publishers, `whatsapp-service` outbound-message publisher).
 - `workers/transcription` transcription-completed publisher.
 
 ## Source Files

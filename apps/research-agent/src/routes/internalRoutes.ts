@@ -176,7 +176,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateDraftResearchBody;
-      const { researchRepo, generateId, userServiceClient } = getServices();
+      const { researchRepo, generateId, userServiceClient, webAppUrl } = getServices();
       const researchId = generateId();
 
       // Extract model preferences from original message using LLM
@@ -260,7 +260,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.ok(feedback);
       }
 
-      const resourceUrl = `/#/research/${researchId}`;
+      const resourceUrl = buildWebAppResourceUrl(webAppUrl, `/#/research/${researchId}`);
       const feedback: ServiceFeedback = {
         status: 'completed',
         message: `Research "${body.title}" created successfully`,
@@ -1045,3 +1045,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+
+function buildWebAppResourceUrl(webAppUrl: string, path: string): string {
+  const normalizedBase = webAppUrl.replace(/\/+$/, '');
+  return normalizedBase === '' ? path : `${normalizedBase}${path}`;
+}

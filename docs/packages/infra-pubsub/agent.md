@@ -48,37 +48,6 @@ interface WhatsAppSendPublisherConfig {
   logger: Logger;
 }
 
-interface TodoProcessingEvent {
-  type: 'todos.processing.created';
-  todoId: string;
-  userId: string;
-  title: string;
-  correlationId: string;
-  timestamp: string;
-}
-
-interface TodosProcessingPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
-}
-
-interface CalendarPreviewGenerateEvent {
-  type: 'calendar.preview.generate';
-  actionId: string;
-  userId: string;
-  text: string;
-  currentDate: string;
-  correlationId: string;
-  timestamp: string;
-}
-
-interface CalendarPreviewPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
-}
-
 // basePublisher.ts
 interface BasePubSubPublisherConfig {
   projectId: string;
@@ -102,24 +71,6 @@ interface WhatsAppSendPublisher {
   }): Promise<Result<void, PublishError>>;
 }
 
-interface TodosProcessingPublisher {
-  publishTodoCreated(params: {
-    todoId: string;
-    userId: string;
-    title: string;
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>>;
-}
-
-interface CalendarPreviewPublisher {
-  publishGeneratePreview(params: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>>;
-}
 ```
 
 ## Exported Classes
@@ -142,12 +93,6 @@ abstract class BasePubSubPublisher {
 
 ```typescript
 function createWhatsAppSendPublisher(config: WhatsAppSendPublisherConfig): WhatsAppSendPublisher;
-function createTodosProcessingPublisher(
-  config: TodosProcessingPublisherConfig
-): TodosProcessingPublisher;
-function createCalendarPreviewPublisher(
-  config: CalendarPreviewPublisherConfig
-): CalendarPreviewPublisher;
 ```
 
 ## Event Type Registry
@@ -155,27 +100,20 @@ function createCalendarPreviewPublisher(
 | Event Type                  | Publisher                | Consumer         |
 | --------------------------- | ------------------------ | ---------------- |
 | `whatsapp.message.send`     | WhatsAppSendPublisher    | whatsapp-service |
-| `todos.processing.created`  | TodosProcessingPublisher | todos-agent      |
-| `calendar.preview.generate` | CalendarPreviewPublisher | calendar-agent   |
 
 ## Environment Variables (per consumer)
 
 ```
 INTEXURAOS_GCP_PROJECT_ID         - GCP project ID
 INTEXURAOS_WHATSAPP_SEND_TOPIC    - Topic for WhatsApp send events
-INTEXURAOS_TODOS_PROCESSING_TOPIC - Topic for todo processing events
-INTEXURAOS_CALENDAR_PREVIEW_TOPIC - Topic for calendar preview events
 ```
 
 ## Dependency Graph
 
 ```
-common-core -> infra-pubsub -> actions-agent
-                             -> bookmarks-agent
+common-core -> infra-pubsub -> bookmarks-agent
                              -> code-agent
-                             -> commands-agent
                              -> research-agent
-                             -> todos-agent
                              -> whatsapp-service
                              -> workers/transcription
 ```

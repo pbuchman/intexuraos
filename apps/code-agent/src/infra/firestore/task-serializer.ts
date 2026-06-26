@@ -205,12 +205,6 @@ export function toFirestoreDoc(
     updatedAt: taskTimestamp,
   };
 
-  if (input.actionId !== undefined) {
-    taskData.actionId = input.actionId;
-  }
-  if (input.approvalEventId !== undefined) {
-    taskData.approvalEventId = input.approvalEventId;
-  }
   if (input.linearIssueId !== undefined) {
     taskData.linearIssueId = input.linearIssueId;
   }

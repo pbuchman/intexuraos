@@ -13,7 +13,6 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
-import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 
 export interface SendTaskMessageRequest {
@@ -47,7 +46,6 @@ export interface SendTaskMessageDeps {
   logLineRepo: LogLineRepository;
   taskDispatcher: TaskDispatcherService;
   workerSettingsRepo: WorkerSettingsRepository;
-  statusMirrorService: StatusMirrorService;
   whatsappNotifier: WhatsAppNotifier;
 }
 
@@ -55,7 +53,7 @@ export async function sendTaskMessage(
   deps: SendTaskMessageDeps,
   request: SendTaskMessageRequest
 ): Promise<Result<SendTaskMessageResult, SendTaskMessageError>> {
-  const { logger, codeTaskRepo, logLineRepo, taskDispatcher, workerSettingsRepo, statusMirrorService, whatsappNotifier } = deps;
+  const { logger, codeTaskRepo, logLineRepo, taskDispatcher, workerSettingsRepo, whatsappNotifier } = deps;
   const { taskId, userId, message } = request;
 
   // Step 1: Load task and validate ownership
@@ -206,17 +204,6 @@ export async function sendTaskMessage(
 
   // Best-effort side-effects when task is resumed
   if (action === 'resumed') {
-    // Mirror running status to actions inbox
-    try {
-      await statusMirrorService.mirrorStatus({
-        actionId: task.actionId,
-        taskStatus: 'running',
-        traceId: task.traceId,
-      });
-    } catch (mirrorError: unknown) {
-      logger.warn({ taskId, error: mirrorError }, 'Failed to mirror resumed status');
-    }
-
     // Notify user via WhatsApp
     try {
       await whatsappNotifier.notifyTaskResumed(userId, task);

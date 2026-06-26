@@ -135,10 +135,12 @@ describe('triggerCodeTaskFromAssignment', () => {
     expect(req?.prompt).toBe('Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.');
   });
 
-  it('uses identifier and timestamp for actionId and approvalEventId deduplication', async () => {
+  it('does not add removed action fields to the code task request', async () => {
     const client = new FakeCodeAgentClient();
     const logger = createFakeLogger();
     const timestamp = 1706291940000;
+    const removedActionField = ['action', 'Id'].join('');
+    const removedApprovalField = ['approval', 'Event', 'Id'].join('');
 
     await triggerCodeTaskFromAssignment(
       createEvent({ webhookTimestamp: timestamp }),
@@ -146,10 +148,10 @@ describe('triggerCodeTaskFromAssignment', () => {
       { codeAgentClient: client, logger }
     );
 
-    const req = client.getLastRequest();
+    const req = client.getLastRequest() as Record<string, unknown> | null;
     expect(req).not.toBeNull();
-    expect(req?.actionId).toBe(`webhook-assign-INT-123-${String(timestamp)}`);
-    expect(req?.approvalEventId).toBe(`webhook-assign-INT-123-${String(timestamp)}`);
+    expect(req?.[removedActionField]).toBeUndefined();
+    expect(req?.[removedApprovalField]).toBeUndefined();
   });
 
   it('does not throw on successful trigger', async () => {

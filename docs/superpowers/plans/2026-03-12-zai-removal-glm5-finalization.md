@@ -73,15 +73,15 @@
 - Modify: `apps/actions-agent/src/services.ts`
 - Modify: `apps/calendar-agent/src/index.ts`
 - Modify: `apps/calendar-agent/src/services.ts`
-- Modify: `apps/chat-agent/src/index.ts`
-- Modify: `apps/chat-agent/src/services.ts`
-- Modify: `apps/chat-agent/src/__tests__/services.test.ts`
+- Modify: `apps/retired-chat-service/src/index.ts`
+- Modify: `apps/retired-chat-service/src/services.ts`
+- Modify: `apps/retired-chat-service/src/__tests__/services.test.ts`
 - Modify: `apps/commands-agent/src/services.ts`
 - Modify: `apps/data-insights-agent/src/index.ts`
 - Modify: `apps/image-service/src/services.ts`
 - Modify: `apps/linear-agent/src/index.ts`
 - Modify: `apps/linear-agent/src/services.ts`
-- Modify: `apps/todos-agent/src/services.ts`
+- Modify: `apps/retired-checklist-service/src/services.ts`
 - Modify: `apps/web-agent/src/services.ts`
 - Modify: `apps/web/src/services/llmKeysApi.types.ts`
 - Modify: `apps/web/src/services/researchAgentApi.types.ts`
@@ -302,7 +302,7 @@ git commit -m "refactor: remove zai from shared llm contracts"
 - Modify: `apps/user-service/src/__tests__/internalRoutes.test.ts`
 - Modify: `apps/user-service/src/__tests__/infra/llmValidator.test.ts`
 - Modify: `packages/internal-clients/src/user-service/__tests__/client.test.ts`
-- Modify: `apps/chat-agent/src/__tests__/services.test.ts`
+- Modify: `apps/retired-chat-service/src/__tests__/services.test.ts`
 
 - [ ] **Step 1: Update user-service route tests**
 
@@ -319,9 +319,9 @@ Make the tests fail unless:
 - user-service client no longer returns `zai` in `DecryptedApiKeys`
 - app fallback stays Gemini-only
 
-- [ ] **Step 3: Update chat-agent services test**
+- [ ] **Step 3: Update retired-chat-service services test**
 
-Change the guest-client test so it fails unless `chat-agent` stops requiring `INTEXURAOS_ZAI_APP_API_KEY` and stops constructing a GLM guest client.
+Change the guest-client test so it fails unless `retired-chat-service` stops requiring `INTEXURAOS_ZAI_APP_API_KEY` and stops constructing a GLM guest client.
 
 - [ ] **Step 4: Run the focused tests and confirm failure**
 
@@ -333,7 +333,7 @@ pnpm vitest run \
   apps/user-service/src/__tests__/internalRoutes.test.ts \
   apps/user-service/src/__tests__/infra/llmValidator.test.ts \
   packages/internal-clients/src/user-service/__tests__/client.test.ts \
-  apps/chat-agent/src/__tests__/services.test.ts
+  apps/retired-chat-service/src/__tests__/services.test.ts
 ```
 
 Expected: FAIL because the code still exposes `zai` and GLM fallbacks.
@@ -351,15 +351,15 @@ Expected: FAIL because the code still exposes `zai` and GLM fallbacks.
 - Modify: `apps/actions-agent/src/services.ts`
 - Modify: `apps/calendar-agent/src/index.ts`
 - Modify: `apps/calendar-agent/src/services.ts`
-- Modify: `apps/chat-agent/src/index.ts`
-- Modify: `apps/chat-agent/src/services.ts`
+- Modify: `apps/retired-chat-service/src/index.ts`
+- Modify: `apps/retired-chat-service/src/services.ts`
 - Modify: `apps/commands-agent/src/services.ts`
 - Modify: `apps/data-insights-agent/src/index.ts`
 - Modify: `apps/image-service/src/services.ts`
 - Modify: `apps/linear-agent/src/index.ts`
 - Modify: `apps/linear-agent/src/services.ts`
 - Modify: `apps/research-agent/src/services.ts`
-- Modify: `apps/todos-agent/src/services.ts`
+- Modify: `apps/retired-checklist-service/src/services.ts`
 - Modify: `apps/web-agent/src/services.ts`
 
 - [ ] **Step 1: Remove `zai` from user settings models and response schemas**
@@ -423,7 +423,7 @@ Run:
 ```bash
 pnpm run verify:workspace:tracked -- user-service
 pnpm run verify:workspace:tracked -- app-settings-service
-pnpm run verify:workspace:tracked -- chat-agent
+pnpm run verify:workspace:tracked -- retired-chat-service
 ```
 
 Expected: PASS.
@@ -446,16 +446,16 @@ git add \
   apps/actions-agent/src/services.ts \
   apps/calendar-agent/src/index.ts \
   apps/calendar-agent/src/services.ts \
-  apps/chat-agent/src/index.ts \
-  apps/chat-agent/src/services.ts \
-  apps/chat-agent/src/__tests__/services.test.ts \
+  apps/retired-chat-service/src/index.ts \
+  apps/retired-chat-service/src/services.ts \
+  apps/retired-chat-service/src/__tests__/services.test.ts \
   apps/commands-agent/src/services.ts \
   apps/data-insights-agent/src/index.ts \
   apps/image-service/src/services.ts \
   apps/linear-agent/src/index.ts \
   apps/linear-agent/src/services.ts \
   apps/research-agent/src/services.ts \
-  apps/todos-agent/src/services.ts \
+  apps/retired-checklist-service/src/services.ts \
   apps/web-agent/src/services.ts \
   apps/web/src/services/llmKeysApi.types.ts \
   apps/web/src/services/researchAgentApi.types.ts \

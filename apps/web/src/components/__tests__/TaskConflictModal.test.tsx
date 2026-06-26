@@ -69,14 +69,6 @@ describe('TaskConflictModal', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders modal with duplicate_approval reason', () => {
-      render(<TaskConflictModal {...defaultProps} reason="duplicate_approval" />);
-
-      expect(screen.getAllByText('Already Processed').length).toBeGreaterThan(0);
-      expect(
-        screen.getByText(/This approval has already been processed/)
-      ).toBeInTheDocument();
-    });
   });
 
   describe('User interactions', () => {

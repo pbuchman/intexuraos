@@ -103,11 +103,11 @@ logger.info(
   'Classification completed'
 );
 
-// Action creation and publishing
-logger.info({ commandId, actionId: action.id }, 'Created action from classification');
-logger.info({ commandId, actionId }, 'Publishing action.created event to PubSub');
-await eventPublisher.publishActionCreated(event);
-logger.info({ commandId, actionId }, 'Action event published successfully');
+// Event creation and publishing
+logger.info({ commandId, eventId: event.id }, 'Created event from classification');
+logger.info({ commandId, eventId: event.id }, 'Publishing event to PubSub');
+await eventPublisher.publish(event);
+logger.info({ commandId, eventId: event.id }, 'Event published successfully');
 
 // Success
 logger.info(
@@ -223,8 +223,8 @@ export function createFakeServices(deps: {
 
 ## Reference Implementations
 
-- `apps/commands-router/src/domain/usecases/processCommand.ts` - Comprehensive command classification logging (13 log points)
-- `apps/actions-agent/src/domain/usecases/handleResearchAction.ts` - Research action processing
+- `apps/intex-agent/src/domain/agent/toolExecutor.ts` - Direct tool execution logging
+- `apps/research-agent/src/domain/useCases/createResearchDraft.ts` - Research draft processing
 
 ## Verification Checklist
 

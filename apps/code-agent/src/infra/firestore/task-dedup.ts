@@ -1,7 +1,7 @@
 /**
  * Deduplication logic for CodeTask creation.
  *
- * Produces the dedupKey and runs the 4-layer dedup check inside a Firestore
+ * Produces the dedupKey and runs the active dedup checks inside a Firestore
  * transaction so that Firestore's transaction retries re-run the checks.
  */
 
@@ -37,8 +37,6 @@ export const DEDUP_CANDIDATE_LIMIT = 5;
  */
 export type DedupError = Extract<
   RepositoryError,
-  | { code: 'DUPLICATE_APPROVAL' }
-  | { code: 'DUPLICATE_ACTION' }
   | { code: 'DUPLICATE_PROMPT' }
   | { code: 'ACTIVE_TASK_EXISTS' }
 >;
@@ -65,15 +63,13 @@ export function generateDedupKey(
 }
 
 /**
- * Run the 4-layer dedup check against the code_tasks collection inside a
+ * Run dedup checks against the code_tasks collection inside a
  * transaction. Returns a DedupError if a duplicate is found, or `null` when
  * creation should proceed.
  *
- * Layer 0: approvalEventId — prevents approval replay (design 1532-1536).
- * Layer 1: actionId — prevents Pub/Sub retries (design 1538-1541).
- * Layer 2: dedupKey within 5-minute window, active status (design 1543-1554).
+ * Layer 1: dedupKey within 5-minute window, active status (design 1543-1554).
  *          Skipped for retried tasks or follow-up implementation tasks.
- * Layer 3: active task for same Linear issue, non-review (design 448-458).
+ * Layer 2: active task for same Linear issue, non-review (design 448-458).
  */
 export async function checkDedupLayers(
   transaction: FirestoreTransaction,
@@ -84,57 +80,7 @@ export async function checkDedupLayers(
   const { logger, dedupKey, now } = deps;
   const dedupWindowStart = new Date(now.getTime() - DEDUP_WINDOW_MS);
 
-  // Layer 0: approvalEventId
-  if (input.approvalEventId !== undefined) {
-    const approvalQuery = collection
-      .where('approvalEventId', '==', input.approvalEventId)
-      .limit(1);
-    const approvalSnapshot = await transaction.get(approvalQuery);
-
-    if (!approvalSnapshot.empty) {
-      const existingTask = approvalSnapshot.docs[0]!;
-      logger.info(
-        {
-          dedupLayer: 0,
-          dedupType: 'DUPLICATE_APPROVAL',
-          existingTaskId: existingTask.id,
-          approvalEventId: input.approvalEventId,
-        },
-        'Dedup triggered: duplicate approval event'
-      );
-      return err({
-        code: 'DUPLICATE_APPROVAL',
-        message: 'Duplicate approval event',
-        existingTaskId: existingTask.id,
-      });
-    }
-  }
-
-  // Layer 1: actionId
-  if (input.actionId !== undefined) {
-    const actionQuery = collection.where('actionId', '==', input.actionId).limit(1);
-    const actionSnapshot = await transaction.get(actionQuery);
-
-    if (!actionSnapshot.empty) {
-      const existingTask = actionSnapshot.docs[0]!;
-      logger.info(
-        {
-          dedupLayer: 1,
-          dedupType: 'DUPLICATE_ACTION',
-          existingTaskId: existingTask.id,
-          actionId: input.actionId,
-        },
-        'Dedup triggered: duplicate action'
-      );
-      return err({
-        code: 'DUPLICATE_ACTION',
-        message: 'Duplicate action',
-        existingTaskId: existingTask.id,
-      });
-    }
-  }
-
-  // Layer 2: dedupKey within 5-minute window
+  // Layer 1: dedupKey within 5-minute window
   if (
     input.retriedFrom === undefined &&
     input.followUpReason !== 'execution_implement'
@@ -152,7 +98,7 @@ export async function checkDedupLayers(
     if (activeMatch !== undefined) {
       logger.info(
         {
-          dedupLayer: 2,
+          dedupLayer: 1,
           dedupType: 'DUPLICATE_PROMPT',
           existingTaskId: activeMatch.id,
           dedupKey,
@@ -167,7 +113,7 @@ export async function checkDedupLayers(
     }
   }
 
-  // Layer 3: active task for Linear issue (non-review, non-merge-conflict)
+  // Layer 2: active task for Linear issue (non-review, non-merge-conflict)
   if (
     input.linearIssueId !== undefined &&
     input.agentType !== 'review' &&
@@ -189,7 +135,7 @@ export async function checkDedupLayers(
 
       logger.info(
         {
-          dedupLayer: 3,
+          dedupLayer: 2,
           dedupType: 'ACTIVE_TASK_EXISTS',
           existingTaskId: existingTask.id,
           linearIssueId: input.linearIssueId,

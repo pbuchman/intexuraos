@@ -50,20 +50,6 @@ resource "google_service_account" "research_agent" {
   description  = "Service account for research-agent Cloud Run deployment"
 }
 
-# Service account for commands-agent
-resource "google_service_account" "commands_agent" {
-  account_id   = "intexuraos-commands-agents-${var.environment}"
-  display_name = "IntexuraOS Commands Agent (${var.environment})"
-  description  = "Service account for commands-agent Cloud Run deployment"
-}
-
-# Service account for actions-agent
-resource "google_service_account" "actions_agent" {
-  account_id   = "intexuraos-actions-${var.environment}"
-  display_name = "IntexuraOS Actions Agent (${var.environment})"
-  description  = "Service account for actions-agent Cloud Run deployment"
-}
-
 # Service account for image-service
 resource "google_service_account" "image_service" {
   account_id   = "intexuraos-image-svc-${var.environment}"
@@ -83,13 +69,6 @@ resource "google_service_account" "app_settings_service" {
   account_id   = "intexuraos-settings-${var.environment}"
   display_name = "IntexuraOS App Settings Service (${var.environment})"
   description  = "Service account for app-settings-service Cloud Run deployment"
-}
-
-# Service account for todos-agent
-resource "google_service_account" "todos_agent" {
-  account_id   = "intexuraos-todos-${var.environment}"
-  display_name = "IntexuraOS Todos Agent (${var.environment})"
-  description  = "Service account for todos-agent Cloud Run deployment"
 }
 
 # Service account for bookmarks-agent
@@ -127,20 +106,12 @@ resource "google_service_account" "linear_agent" {
   description  = "Service account for linear-agent Cloud Run deployment"
 }
 
-# Service account for chat-agent
-resource "google_service_account" "chat_agent" {
-  account_id   = "intexuraos-chat-${var.environment}"
-  display_name = "IntexuraOS Chat Agent (${var.environment})"
-  description  = "Service account for chat-agent Cloud Run deployment"
+# Service account for intex-agent
+resource "google_service_account" "intex_agent" {
+  account_id   = "intexuraos-intex-agent-${var.environment}"
+  display_name = "IntexuraOS Intex Agent (${var.environment})"
+  description  = "Service account for intex-agent Cloud Run deployment"
 }
-
-# Service account for cron-agent
-resource "google_service_account" "cron_agent" {
-  account_id   = "intexuraos-cron-${var.environment}"
-  display_name = "IntexuraOS Cron Agent (${var.environment})"
-  description  = "Service account for cron-agent Cloud Run deployment"
-}
-
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -196,24 +167,6 @@ resource "google_secret_manager_secret_iam_member" "research_agent_secrets" {
   member    = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
-# Commands Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "commands_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.commands_agent.email}"
-}
-
-# Actions Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "actions_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.actions_agent.email}"
-}
-
 # Image Service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "image_service_secrets" {
   for_each = var.secret_ids
@@ -239,15 +192,6 @@ resource "google_secret_manager_secret_iam_member" "app_settings_service_secrets
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.app_settings_service.email}"
-}
-
-# Todos Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "todos_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.todos_agent.email}"
 }
 
 # Bookmarks Agent: Secret Manager access
@@ -286,6 +230,15 @@ resource "google_secret_manager_secret_iam_member" "linear_agent_secrets" {
   member    = "serviceAccount:${google_service_account.linear_agent.email}"
 }
 
+# Intex Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "intex_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.intex_agent.email}"
+}
+
 # Code Agent: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "code_agent_secrets" {
   for_each = var.secret_ids
@@ -293,24 +246,6 @@ resource "google_secret_manager_secret_iam_member" "code_agent_secrets" {
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.code_agent.email}"
-}
-
-# Chat Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "chat_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.chat_agent.email}"
-}
-
-# Cron Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "cron_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.cron_agent.email}"
 }
 
 # API Docs Hub: Secret Manager access
@@ -379,20 +314,6 @@ resource "google_project_iam_member" "research_agent_firestore" {
   member  = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
-# Commands Agent: Firestore access
-resource "google_project_iam_member" "commands_agent_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.commands_agent.email}"
-}
-
-# Actions Agent: Firestore access
-resource "google_project_iam_member" "actions_agent_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.actions_agent.email}"
-}
-
 # Image Service: Firestore access
 resource "google_project_iam_member" "image_service_firestore" {
   project = var.project_id
@@ -414,13 +335,6 @@ resource "google_project_iam_member" "app_settings_service_firestore" {
   member  = "serviceAccount:${google_service_account.app_settings_service.email}"
 }
 
-# Todos Agent: Firestore access
-resource "google_project_iam_member" "todos_agent_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.todos_agent.email}"
-}
-
 # Bookmarks Agent: Firestore access
 resource "google_project_iam_member" "bookmarks_agent_firestore" {
   project = var.project_id
@@ -433,6 +347,13 @@ resource "google_project_iam_member" "linear_agent_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.linear_agent.email}"
+}
+
+# Intex Agent: Firestore access
+resource "google_project_iam_member" "intex_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.intex_agent.email}"
 }
 
 # Calendar Agent: Firestore access
@@ -448,21 +369,6 @@ resource "google_project_iam_member" "code_agent_firestore" {
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.code_agent.email}"
 }
-
-# Chat Agent: Firestore access
-resource "google_project_iam_member" "chat_agent_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.chat_agent.email}"
-}
-
-# Cron Agent: Firestore access
-resource "google_project_iam_member" "cron_agent_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.cron_agent.email}"
-}
-
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
@@ -520,20 +426,6 @@ resource "google_project_iam_member" "research_agent_logging" {
   member  = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
-# Commands Agent: Cloud Logging
-resource "google_project_iam_member" "commands_agent_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.commands_agent.email}"
-}
-
-# Actions Agent: Cloud Logging
-resource "google_project_iam_member" "actions_agent_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.actions_agent.email}"
-}
-
 # Image Service: Cloud Logging
 resource "google_project_iam_member" "image_service_logging" {
   project = var.project_id
@@ -553,13 +445,6 @@ resource "google_project_iam_member" "app_settings_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.app_settings_service.email}"
-}
-
-# Todos Agent: Cloud Logging
-resource "google_project_iam_member" "todos_agent_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.todos_agent.email}"
 }
 
 # Bookmarks Agent: Cloud Logging
@@ -590,25 +475,18 @@ resource "google_project_iam_member" "linear_agent_logging" {
   member  = "serviceAccount:${google_service_account.linear_agent.email}"
 }
 
+# Intex Agent: Cloud Logging
+resource "google_project_iam_member" "intex_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.intex_agent.email}"
+}
+
 # Code Agent: Cloud Logging
 resource "google_project_iam_member" "code_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.code_agent.email}"
-}
-
-# Chat Agent: Cloud Logging
-resource "google_project_iam_member" "chat_agent_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.chat_agent.email}"
-}
-
-# Cron Agent: Cloud Logging
-resource "google_project_iam_member" "cron_agent_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.cron_agent.email}"
 }
 
 # Hellscript Agent

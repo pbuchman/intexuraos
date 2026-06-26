@@ -247,7 +247,6 @@ describe('prTaskHelpers / reusePreservedContainer', () => {
     logLineRepo: never;
     taskDispatcher: never;
     workerSettingsRepo: never;
-    statusMirrorService: never;
     whatsappNotifier: never;
   } {
     return {
@@ -255,7 +254,6 @@ describe('prTaskHelpers / reusePreservedContainer', () => {
       logLineRepo: {} as never,
       taskDispatcher: {} as never,
       workerSettingsRepo: {} as never,
-      statusMirrorService: {} as never,
       whatsappNotifier: {} as never,
     };
   }
@@ -280,6 +278,10 @@ describe('prTaskHelpers / reusePreservedContainer', () => {
       mockLogger,
     );
     expect(result).toBeNull();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-1', _skipSentry: true }),
+      'Failed to send message to preserved container, falling through to new task',
+    );
   });
 
   it('returns null when sendTaskMessage throws', async () => {

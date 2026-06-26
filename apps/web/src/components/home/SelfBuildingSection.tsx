@@ -31,9 +31,9 @@ export function SelfBuildingSection(): React.JSX.Element {
           <p className="mb-6 text-lg leading-relaxed text-neutral-600">
             Most AI coding tools wait for you to sit at a keyboard. IntexuraOS doesn&apos;t. You describe
             what needs to change — while walking, while commuting, wherever the idea hits.
-            The platform designs the approach, writes the code in a sealed container on your
-            machine, runs the full test suite, creates a code change for review, and updates the
-            project issue. If verification fails, it retries with preserved context.
+            The platform designs the approach, writes the code in an isolated container on your
+            worker machine, runs the full test suite, creates a code change for review, and updates the
+            project issue. A separate independent verification pass decides whether the attempt is complete.
           </p>
           <p className="text-sm leading-relaxed text-neutral-500">
             24 services communicate over authenticated HTTP. No shared databases. Each service owns its data.
@@ -53,8 +53,8 @@ export function SelfBuildingSection(): React.JSX.Element {
             </div>
             <h3 className="mb-2 text-lg font-bold text-neutral-900">Your Code Never Leaves Your Network</h3>
             <p className="text-neutral-600">
-              Cursor and Copilot send your code to the cloud. IntexuraOS runs on your machine, inside
-              isolated containers, powered by your own AI subscription. Your source code stays where it belongs.
+              The orchestrator runs on a worker you control. Each task receives its own checkout,
+              credentials, and container, powered by your configured coding runtime.
             </p>
           </motion.div>
           <motion.div
@@ -67,10 +67,10 @@ export function SelfBuildingSection(): React.JSX.Element {
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
               <Eye className="h-6 w-6" />
             </div>
-            <h3 className="mb-2 text-lg font-bold text-neutral-900">You Approve Before It Runs</h3>
+            <h3 className="mb-2 text-lg font-bold text-neutral-900">You Stay In Control</h3>
             <p className="text-neutral-600">
-              You approve the design before code runs. Calendar events before they are created.
-              High-stakes actions before they execute. You stay in control without becoming a bottleneck.
+              Code tasks keep plans, logs, and pull requests visible as they move.
+              Calendar events and project updates stay reviewable from the web app as direct tool results.
             </p>
           </motion.div>
         </div>
@@ -93,7 +93,7 @@ export function SelfBuildingSection(): React.JSX.Element {
           <PipelineStep
             number="Verify"
             title="Check"
-            description="An independent verifier checks the work against completion criteria: correct files modified, tests passing, code change created. If not, the system resumes automatically."
+            description="A separate independent verification step checks the work against completion criteria: correct files modified, tests passing, code change created. If not, the system resumes automatically."
             icon={CheckCircle2}
             accent="bg-green-100 text-green-700"
           />

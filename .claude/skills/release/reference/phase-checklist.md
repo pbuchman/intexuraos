@@ -80,7 +80,6 @@ Multiple Task calls in single message for parallel execution
 - [ ] Update ALL package.json versions (root, apps/\*, packages/\*, workers/\*)
 - [ ] Update CHANGELOG.md with new version entry (sorted type subcategories)
 - [ ] Run `pnpm run ci:tracked` — **MUST PASS**
-- [ ] Refresh RAG embeddings: `pnpm run embed-docs` (with prod env overrides)
 - [ ] **Pre-merge release validation** — verify all phases produced output:
   - [ ] Version strings updated in `HomePage.tsx`
   - [ ] `WhatsNewSection` present with feature cards (or all features skipped)
@@ -216,7 +215,6 @@ All user interaction happens once in Phase 1 step 1.7:
 | ----------------------------- | ----------------------------------------------------- |
 | CI fails in Phase 6           | Fix issues, re-run CI, then commit                    |
 | service-scribe agent fails    | Log error, continue with other services               |
-| RAG embeddings fail           | Log error, continue release (re-run manually)         |
 | User skips all changes        | Proceed with version-only release                     |
 | Tool unavailable              | ABORT immediately with clear error                    |
 | Merge to main fails           | Check for conflicts, resolve manually, retry          |
