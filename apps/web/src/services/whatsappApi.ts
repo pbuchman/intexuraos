@@ -1,6 +1,7 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
+  MediaUrlResponse,
   PrivateWhatsAppAccount,
   PrivateWhatsAppChatsResponse,
   PrivateWhatsAppMessagesResponse,
@@ -317,14 +318,6 @@ export async function deleteWhatsAppMessage(accessToken: string, messageId: stri
 }
 
 /**
- * Media URL response from whatsapp-service
- */
-export interface MediaUrlResponse {
-  url: string;
-  expiresAt: string;
-}
-
-/**
  * Get signed URL for message media (original file)
  */
 export async function getMessageMediaUrl(
@@ -348,6 +341,30 @@ export async function getMessageThumbnailUrl(
   return await apiRequest<MediaUrlResponse>(
     config.whatsappServiceUrl,
     `/messages/${messageId}/thumbnail`,
+    accessToken
+  );
+}
+
+export async function getPrivateWhatsAppMessageMediaUrl(
+  accessToken: string,
+  messageId: string
+): Promise<MediaUrlResponse> {
+  const encodedMessageId = encodeURIComponent(messageId);
+  return await apiRequest<MediaUrlResponse>(
+    config.whatsappServiceUrl,
+    `/private/messages/${encodedMessageId}/media`,
+    accessToken
+  );
+}
+
+export async function getPrivateWhatsAppMessageThumbnailUrl(
+  accessToken: string,
+  messageId: string
+): Promise<MediaUrlResponse> {
+  const encodedMessageId = encodeURIComponent(messageId);
+  return await apiRequest<MediaUrlResponse>(
+    config.whatsappServiceUrl,
+    `/private/messages/${encodedMessageId}/thumbnail`,
     accessToken
   );
 }

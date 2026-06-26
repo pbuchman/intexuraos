@@ -1200,6 +1200,72 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.error.code).toBe('INVALID_REQUEST');
   });
 
+  it('projects stored private image media without leaking GCS paths to the browser', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createSparseImagePayload({
+        events: [
+          {
+            matrixRoomId: '!sparse-room:matrix.example',
+            matrixEventId: '$event-stored-image',
+            matrixSenderId: '@sparse:matrix.example',
+            eventTimestamp: '2026-06-22T11:00:00.000Z',
+            chat: { type: 'unknown' },
+            message: {
+              direction: 'incoming',
+              type: 'image',
+              media: {
+                mxcUri: 'mxc://matrix.example/stored-image',
+                mimeType: 'image/jpeg',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user/message/image.jpg',
+                thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
+                storedMimeType: 'image/jpeg',
+                storedSizeBytes: 11,
+                storedAt: '2026-06-26T10:00:00.000Z',
+              },
+            },
+            rawMatrixEvent: {},
+          },
+        ],
+      }),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(response.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id;
+    expect(chatId).toBeDefined();
+
+    const messagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${String(chatId)}/messages`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(messagesResponse.statusCode).toBe(200);
+    const body = JSON.parse(messagesResponse.body) as {
+      data: { messages: { media?: Record<string, unknown> }[] };
+    };
+    expect(body.data.messages[0]?.media).toMatchObject({
+      mxcUri: 'mxc://matrix.example/stored-image',
+      mimeType: 'image/jpeg',
+      storageStatus: 'stored',
+      hasMedia: true,
+      hasThumbnail: true,
+      storedMimeType: 'image/jpeg',
+      storedSizeBytes: 11,
+    });
+    expect(JSON.stringify(body.data.messages[0]?.media)).not.toContain('gcsPath');
+    expect(JSON.stringify(body.data.messages[0]?.media)).not.toContain('whatsapp/private');
+  });
+
   it('rejects invalid public private WhatsApp message filters after owner auth', async () => {
     const token = await createToken({ sub: 'user-123' });
 

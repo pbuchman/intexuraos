@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   disablePrivateWhatsAppAccount,
   getPrivateWhatsAppAccount,
+  getPrivateWhatsAppMessageMediaUrl,
+  getPrivateWhatsAppMessageThumbnailUrl,
   listPrivateWhatsAppChatMessages,
   listPrivateWhatsAppChats,
   listPrivateWhatsAppMessages,
@@ -162,5 +164,33 @@ describe('whatsappApi private read helpers', () => {
     const call = vi.mocked(apiRequest).mock.calls[0];
     expect(call?.[1]).toBe('/private/account');
     expect(call?.[3]).toEqual({ method: 'DELETE' });
+  });
+
+  it('gets private message media signed URLs', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      url: 'https://storage.example.com/original',
+      expiresAt: '2026-06-26T10:15:00.000Z',
+    });
+
+    await getPrivateWhatsAppMessageMediaUrl(TOKEN, 'message-123');
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[0]).toBe('https://wa.test');
+    expect(call?.[1]).toBe('/private/messages/message-123/media');
+    expect(call?.[2]).toBe(TOKEN);
+  });
+
+  it('gets private message thumbnail signed URLs', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      url: 'https://storage.example.com/thumb',
+      expiresAt: '2026-06-26T10:15:00.000Z',
+    });
+
+    await getPrivateWhatsAppMessageThumbnailUrl(TOKEN, 'message-123');
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe('/private/messages/message-123/thumbnail');
   });
 });

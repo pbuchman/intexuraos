@@ -63,8 +63,16 @@ type PublicPrivateWhatsAppChat = Omit<
 type PublicPrivateWhatsAppSender = Omit<PrivateWhatsAppSender, 'userId' | 'sourceAccountId'>;
 type PublicPrivateWhatsAppMessage = Omit<
   PrivateWhatsAppMessage,
-  'userId' | 'sourceAccountId' | 'rawMatrixEvent' | 'matrixRoomId' | 'matrixEventId' | 'matrixSenderId'
->;
+  | 'userId'
+  | 'sourceAccountId'
+  | 'rawMatrixEvent'
+  | 'matrixRoomId'
+  | 'matrixEventId'
+  | 'matrixSenderId'
+  | 'media'
+> & {
+  media?: Record<string, unknown>;
+};
 type PublicPrivateWhatsAppSenderDay = Omit<
   PrivateWhatsAppSenderDay,
   'userId' | 'sourceAccountId' | 'chatIds'
@@ -242,6 +250,25 @@ function toPublicChat(chat: PrivateWhatsAppChat): PublicPrivateWhatsAppChat {
   }) as PublicPrivateWhatsAppChat;
 }
 
+function toPublicMedia(
+  media: PrivateWhatsAppMessage['media']
+): Record<string, unknown> | undefined {
+  if (media === undefined) return undefined;
+  return omitUndefined({
+    mxcUri: media.mxcUri,
+    mimeType: media.mimeType,
+    fileName: media.fileName,
+    sizeBytes: media.sizeBytes,
+    sha256: media.sha256,
+    storageStatus: media.storageStatus,
+    hasMedia: media.gcsPath !== undefined,
+    hasThumbnail: media.thumbnailGcsPath !== undefined,
+    storedMimeType: media.storedMimeType,
+    storedSizeBytes: media.storedSizeBytes,
+    storedAt: media.storedAt,
+  });
+}
+
 function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsAppMessage {
   return omitUndefined({
     id: message.id,
@@ -253,7 +280,7 @@ function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsApp
     direction: message.direction,
     messageType: message.messageType,
     text: message.text,
-    media: message.media,
+    media: toPublicMedia(message.media),
     eventTimestamp: message.eventTimestamp,
     eventDayKey: message.eventDayKey,
     eventTimeZone: message.eventTimeZone,

@@ -175,9 +175,21 @@ export interface PrivateWhatsAppMedia {
   mimeType?: string;
   fileName?: string;
   sizeBytes?: number;
+  sha256?: string;
+  storageStatus?: 'stored';
+  hasMedia?: boolean;
+  hasThumbnail?: boolean;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
   width?: number;
   height?: number;
   durationMs?: number;
+}
+
+export interface MediaUrlResponse {
+  url: string;
+  expiresAt: string;
 }
 
 export interface PrivateWhatsAppSender {
