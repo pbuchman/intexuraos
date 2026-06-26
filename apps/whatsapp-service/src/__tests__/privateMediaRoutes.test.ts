@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { beforeEach, describe, expect, it, setupTestContext } from './testUtils.js';
+import { beforeEach, createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 import { FakeThumbnailGeneratorPort } from './fakes.js';
 import { createPrivateWhatsAppMessageId } from '../infra/firestore/privateWhatsAppRepository.js';
 import { getServices, setServices } from '../services.js';
@@ -290,5 +290,616 @@ describe('Private WhatsApp Media Routes', () => {
     });
 
     expect(response.statusCode).toBe(502);
+  });
+
+  it('returns owner-checked signed URLs for private image thumbnails', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: {
+        matrixRoomId: '!room:home-dev',
+        type: 'direct',
+        displayName: 'Alice',
+      },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        eventDayKey: '2026-06-26',
+        eventTimeZone: 'Europe/Warsaw',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image',
+          mimeType: 'image/jpeg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+          thumbnailGcsPath: 'whatsapp/private/user-123/message/image_thumb.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/thumbnail`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: { url: string; expiresAt: string };
+    };
+    expect(body.data.url).toContain('whatsapp/private/user-123/message/image_thumb.jpg');
+    expect(Date.parse(body.data.expiresAt)).toBeGreaterThan(Date.now());
+  });
+
+  it('does not return signed URLs for another user private message', async () => {
+    const token = await createToken({ sub: 'other-user' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-other-user-test',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns internal signed URLs for processing after source account validation', async () => {
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-internal',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/internal/whatsapp/private/messages/${stored.value.messageId}/media?sourceAccountId=private-source-123&variant=original`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: { url: string; media: { gcsPath: string } };
+    };
+    expect(body.data.url).toContain('whatsapp/private/user-123/message/image.jpg');
+    expect(body.data.media.gcsPath).toBe('whatsapp/private/user-123/message/image.jpg');
+  });
+
+  it('returns owner-checked signed URLs for private image originals', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-original',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-original',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image-original.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: { url: string; expiresAt: string };
+    };
+    expect(body.data.url).toContain('whatsapp/private/user-123/message/image-original.jpg');
+    expect(Date.parse(body.data.expiresAt)).toBeGreaterThan(Date.now());
+  });
+
+  it('requires bearer auth for public private original media routes', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages/message:private-source-123:missing/media',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('requires bearer auth for public private thumbnail routes', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages/message:private-source-123:missing/thumbnail',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns not found for original private media when the authenticated user has no mirror', async () => {
+    const token = await createToken({ sub: 'user-without-private-mirror' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages/message:private-source-123:missing/media',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns not found for thumbnail private media when the authenticated user has no mirror', async () => {
+    const token = await createToken({ sub: 'user-without-private-mirror' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages/message:private-source-123:missing/thumbnail',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('does not return signed URLs when an authenticated user has a different active private mirror', async () => {
+    ctx.privateWhatsAppRepository.setAccount({
+      id: 'other-user',
+      userId: 'other-user',
+      sourceAccountId: 'private-source-other',
+      phoneNumberNormalized: '48987654321',
+      displayName: '+48987654321',
+      status: 'active',
+      createdAt: '2026-06-22T00:00:00.000Z',
+      updatedAt: '2026-06-22T00:00:00.000Z',
+      schemaVersion: 1,
+    });
+    const token = await createToken({ sub: 'other-user' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-owner-mismatch',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-owner-mismatch',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image-owner-mismatch.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 404 when the owner requests original media for a message without stored media', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-no-original',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-no-original',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 404 when the owner requests a thumbnail that was never stored', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-no-thumbnail',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-no-thumbnail',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image-no-thumbnail.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/thumbnail`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 502 when signed URL generation fails for private original media', async () => {
+    ctx.mediaStorage.setFailGetSignedUrl(true);
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-signed-url-fail',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-signed-url-fail',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image-signed-url-fail.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(502);
+  });
+
+  it('returns 500 when public private media account resolution fails', async () => {
+    const services = getServices();
+    setServices({
+      ...services,
+      privateWhatsAppRepository: {
+        ...services.privateWhatsAppRepository,
+        getAccountByUserId: async () => ({
+          ok: false as const,
+          error: {
+            code: 'PERSISTENCE_ERROR' as const,
+            message: 'Simulated public account lookup failure',
+          },
+        }),
+      },
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages/message:private-source-123:missing/media',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns 500 when public private media message lookup fails', async () => {
+    const services = getServices();
+    const privateWhatsAppRepository = Object.assign(
+      Object.create(Object.getPrototypeOf(services.privateWhatsAppRepository)) as object,
+      services.privateWhatsAppRepository,
+      {
+        getMessageById: async () => ({
+          ok: false as const,
+          error: {
+            code: 'PERSISTENCE_ERROR' as const,
+            message: 'Simulated public message lookup failure',
+          },
+        }),
+      }
+    );
+    setServices({
+      ...services,
+      privateWhatsAppRepository: privateWhatsAppRepository,
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages/message:private-source-123:missing/media',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('requires internal auth for private media signed URL reads', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/messages/message:private-source-123:missing/media?sourceAccountId=private-source-123',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('validates internal private media signed URL query params', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/messages/message:private-source-123:missing/media',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 500 when internal private media message lookup fails', async () => {
+    const services = getServices();
+    setServices({
+      ...services,
+      privateWhatsAppRepository: {
+        ...services.privateWhatsAppRepository,
+        getMessageById: async () => ({
+          ok: false as const,
+          error: {
+            code: 'PERSISTENCE_ERROR' as const,
+            message: 'Simulated internal message lookup failure',
+          },
+        }),
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/internal/whatsapp/private/messages/message:private-source-123:missing/media?sourceAccountId=private-source-123',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns 404 when internal private media source account validation fails', async () => {
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-source-account-mismatch',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-source-account-mismatch',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image-source-account-mismatch.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/internal/whatsapp/private/messages/${stored.value.messageId}/media?sourceAccountId=wrong-source-account`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('defaults internal private media signed URLs to the original variant when variant is omitted', async () => {
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-default-variant',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-default-variant',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image-default-variant.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/internal/whatsapp/private/messages/${stored.value.messageId}/media?sourceAccountId=private-source-123`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: { url: string; media: { gcsPath: string } };
+    };
+    expect(body.data.url).toContain('whatsapp/private/user-123/message/image-default-variant.jpg');
+    expect(body.data.media.gcsPath).toBe(
+      'whatsapp/private/user-123/message/image-default-variant.jpg'
+    );
+  });
+
+  it('returns internal signed URLs for thumbnail variants after source account validation', async () => {
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-image-thumbnail-variant',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'image',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/image-thumbnail-variant',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image-thumbnail-variant.jpg',
+          thumbnailGcsPath: 'whatsapp/private/user-123/message/image-thumbnail-variant_thumb.jpg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/internal/whatsapp/private/messages/${stored.value.messageId}/media?sourceAccountId=private-source-123&variant=thumbnail`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: { url: string; media: { gcsPath: string } };
+    };
+    expect(body.data.url).toContain(
+      'whatsapp/private/user-123/message/image-thumbnail-variant_thumb.jpg'
+    );
+    expect(body.data.media.gcsPath).toBe(
+      'whatsapp/private/user-123/message/image-thumbnail-variant_thumb.jpg'
+    );
   });
 });

@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { FastifyPluginCallback, FastifyRequest } from 'fastify';
-import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { logIncomingRequest, requireAuth, validateInternalAuth } from '@intexuraos/common-http';
+import type { PrivateWhatsAppMessage } from '../domain/whatsapp/index.js';
 import { getExtensionFromMimeType } from '../domain/whatsapp/utils/mimeType.js';
 import { getServices } from '../services.js';
 
 type ValidatedRequest = FastifyRequest & { validationError?: unknown };
+const PRIVATE_MEDIA_SIGNED_URL_TTL_SECONDS = 900;
 
 interface PrivateMediaUploadQuerystring {
   sourceAccountId: string;
@@ -14,6 +16,28 @@ interface PrivateMediaUploadQuerystring {
   mimeType?: string;
   fileName?: string;
   sha256?: string;
+}
+
+interface PrivateMediaParams {
+  messageId: string;
+}
+
+interface InternalPrivateMediaQuerystring {
+  sourceAccountId: string;
+  variant?: 'original' | 'thumbnail';
+}
+
+function privateMediaErrorResponse(description: string): Record<string, unknown> {
+  return {
+    description,
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', const: false },
+      error: { $ref: 'ErrorBody#' },
+      diagnostics: { $ref: 'Diagnostics#' },
+    },
+    required: ['success', 'error'],
+  };
 }
 
 function sanitizeMediaId(value: string): string {
@@ -34,6 +58,81 @@ function isImageMimeType(mimeType: string): boolean {
 
 function createPrivateWhatsAppMessageId(sourceAccountId: string, matrixEventId: string): string {
   return createHash('sha256').update(`${sourceAccountId}\0${matrixEventId}`).digest('hex');
+}
+
+function getOriginalPath(message: PrivateWhatsAppMessage): string | undefined {
+  return message.media?.gcsPath;
+}
+
+function getThumbnailPath(message: PrivateWhatsAppMessage): string | undefined {
+  return message.media?.thumbnailGcsPath;
+}
+
+function toExpiresAt(ttlSeconds: number): string {
+  return new Date(Date.now() + ttlSeconds * 1000).toISOString();
+}
+
+async function getPrivateMessageForPublicUser(
+  messageId: string,
+  userId: string,
+  reply: FastifyReply
+): Promise<PrivateWhatsAppMessage | null> {
+  const services = getServices();
+  const accountResult = await services.privateWhatsAppRepository.getAccountByUserId(userId);
+  if (!accountResult.ok) {
+    await reply.fail('INTERNAL_ERROR', accountResult.error.message);
+    return null;
+  }
+  if (accountResult.value?.status !== 'active') {
+    await reply.fail('NOT_FOUND', 'Private WhatsApp mirror is not configured');
+    return null;
+  }
+
+  const messageResult = await services.privateWhatsAppRepository.getMessageById(messageId);
+  if (!messageResult.ok) {
+    await reply.fail('INTERNAL_ERROR', messageResult.error.message);
+    return null;
+  }
+  const message = messageResult.value;
+  if (
+    message?.userId !== userId ||
+    message.sourceAccountId !== accountResult.value.sourceAccountId
+  ) {
+    await reply.fail('NOT_FOUND', 'Private WhatsApp message not found');
+    return null;
+  }
+  return message;
+}
+
+async function replyWithSignedPrivateMediaUrl(
+  reply: FastifyReply,
+  message: PrivateWhatsAppMessage,
+  variant: 'original' | 'thumbnail',
+  includeInternalMedia: boolean
+): Promise<FastifyReply> {
+  const gcsPath = variant === 'thumbnail' ? getThumbnailPath(message) : getOriginalPath(message);
+  if (gcsPath === undefined) {
+    return await reply.fail('NOT_FOUND', `Private WhatsApp message has no ${variant} media`);
+  }
+  const urlResult = await getServices().mediaStorage.getSignedUrl(
+    gcsPath,
+    PRIVATE_MEDIA_SIGNED_URL_TTL_SECONDS
+  );
+  if (!urlResult.ok) {
+    return await reply.fail('DOWNSTREAM_ERROR', urlResult.error.message);
+  }
+  const data: Record<string, unknown> = {
+    url: urlResult.value,
+    expiresAt: toExpiresAt(PRIVATE_MEDIA_SIGNED_URL_TTL_SECONDS),
+  };
+  if (includeInternalMedia) {
+    data['media'] = {
+      gcsPath,
+      mimeType: message.media?.storedMimeType ?? message.media?.mimeType,
+      sizeBytes: message.media?.storedSizeBytes ?? message.media?.sizeBytes,
+    };
+  }
+  return await reply.ok(data);
 }
 
 export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -264,6 +363,237 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           storedAt: new Date().toISOString(),
         },
       });
+    }
+  );
+
+  fastify.get<{ Params: PrivateMediaParams }>(
+    '/private/messages/:messageId/media',
+    {
+      schema: {
+        operationId: 'getPrivateWhatsAppMessageMedia',
+        summary: 'Get signed URL for private WhatsApp original media',
+        tags: ['whatsapp'],
+        params: {
+          type: 'object',
+          required: ['messageId'],
+          properties: {
+            messageId: { type: 'string', description: 'Private WhatsApp message ID' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Private WhatsApp media signed URL generated successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  url: { type: 'string' },
+                  expiresAt: { type: 'string', format: 'date-time' },
+                },
+                required: ['url', 'expiresAt'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: privateMediaErrorResponse('Unauthorized - invalid or missing token'),
+          404: privateMediaErrorResponse('Private WhatsApp message not found or has no media'),
+          500: privateMediaErrorResponse('Internal error'),
+          502: privateMediaErrorResponse('Downstream error'),
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: PrivateMediaParams }>, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /whatsapp/private/messages/:messageId/media',
+        includeParams: true,
+        bodyPreviewLength: 0,
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+      const message = await getPrivateMessageForPublicUser(
+        request.params.messageId,
+        user.userId,
+        reply
+      );
+      if (message === null) {
+        return;
+      }
+      return await replyWithSignedPrivateMediaUrl(reply, message, 'original', false);
+    }
+  );
+
+  fastify.get<{ Params: PrivateMediaParams }>(
+    '/private/messages/:messageId/thumbnail',
+    {
+      schema: {
+        operationId: 'getPrivateWhatsAppMessageThumbnail',
+        summary: 'Get signed URL for private WhatsApp thumbnail media',
+        tags: ['whatsapp'],
+        params: {
+          type: 'object',
+          required: ['messageId'],
+          properties: {
+            messageId: { type: 'string', description: 'Private WhatsApp message ID' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Private WhatsApp thumbnail signed URL generated successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  url: { type: 'string' },
+                  expiresAt: { type: 'string', format: 'date-time' },
+                },
+                required: ['url', 'expiresAt'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: privateMediaErrorResponse('Unauthorized - invalid or missing token'),
+          404: privateMediaErrorResponse('Private WhatsApp message not found or has no thumbnail'),
+          500: privateMediaErrorResponse('Internal error'),
+          502: privateMediaErrorResponse('Downstream error'),
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: PrivateMediaParams }>, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /whatsapp/private/messages/:messageId/thumbnail',
+        includeParams: true,
+        bodyPreviewLength: 0,
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+      const message = await getPrivateMessageForPublicUser(
+        request.params.messageId,
+        user.userId,
+        reply
+      );
+      if (message === null) {
+        return;
+      }
+      return await replyWithSignedPrivateMediaUrl(reply, message, 'thumbnail', false);
+    }
+  );
+
+  fastify.get<{
+    Params: PrivateMediaParams;
+    Querystring: InternalPrivateMediaQuerystring;
+  }>(
+    '/internal/whatsapp/private/messages/:messageId/media',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'getInternalPrivateWhatsAppMessageMedia',
+        summary: 'Get internal signed URL for private WhatsApp media processing',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['messageId'],
+          properties: {
+            messageId: { type: 'string', description: 'Private WhatsApp message ID' },
+          },
+        },
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            sourceAccountId: { type: 'string', minLength: 1 },
+            variant: { type: 'string', enum: ['original', 'thumbnail'], default: 'original' },
+          },
+          required: ['sourceAccountId'],
+        },
+        response: {
+          200: {
+            description: 'Internal private WhatsApp media signed URL generated successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  url: { type: 'string' },
+                  expiresAt: { type: 'string', format: 'date-time' },
+                  media: {
+                    type: 'object',
+                    properties: {
+                      gcsPath: { type: 'string' },
+                      mimeType: { type: 'string' },
+                      sizeBytes: { type: 'number' },
+                    },
+                    required: ['gcsPath'],
+                  },
+                },
+                required: ['url', 'expiresAt', 'media'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          400: privateMediaErrorResponse('Invalid request'),
+          401: privateMediaErrorResponse('Unauthorized'),
+          404: privateMediaErrorResponse('Private WhatsApp message not found'),
+          500: privateMediaErrorResponse('Internal error'),
+          502: privateMediaErrorResponse('Downstream error'),
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: PrivateMediaParams;
+        Querystring: InternalPrivateMediaQuerystring;
+      }>,
+      reply
+    ) => {
+      const variant = request.query.variant === 'thumbnail' ? 'thumbnail' : 'original';
+      logIncomingRequest(request, {
+        message: 'Received request to GET /internal/whatsapp/private/messages/:messageId/media',
+        includeParams: true,
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'internal_whatsapp_private_message_media_get',
+          hasSourceAccountId: typeof request.query.sourceAccountId === 'string',
+          variant,
+        },
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        return await reply.fail(
+          'UNAUTHORIZED',
+          'Internal auth failed for private WhatsApp media access'
+        );
+      }
+      if ((request as FastifyRequest & { validationError?: unknown }).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+
+      const messageResult = await getServices().privateWhatsAppRepository.getMessageById(
+        request.params.messageId
+      );
+      if (!messageResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', messageResult.error.message);
+      }
+      if (
+        messageResult.value?.sourceAccountId !== request.query.sourceAccountId
+      ) {
+        return await reply.fail('NOT_FOUND', 'Private WhatsApp message not found');
+      }
+      return await replyWithSignedPrivateMediaUrl(
+        reply,
+        messageResult.value,
+        variant,
+        true
+      );
     }
   );
 
