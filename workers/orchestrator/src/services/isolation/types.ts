@@ -72,7 +72,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
-    model: 'MiniMax-M2.7',
+    model: 'MiniMax-M3',
     telemetryExpectation: 'optional',
   },
   'mimo-pro': {

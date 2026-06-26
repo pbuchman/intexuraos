@@ -1527,7 +1527,7 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M3');
     });
 
     it('sets ANTHROPIC_MODEL for mimo-pro worker', async () => {
