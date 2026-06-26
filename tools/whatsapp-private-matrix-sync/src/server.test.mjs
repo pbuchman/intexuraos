@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
   buildHealthPayload,
@@ -910,6 +913,147 @@ test('runSyncIteration joins WhatsApp invite rooms before processing joined time
   assert.equal(runtime.counters.postedEvents, 1);
 });
 
+test('runSyncIteration uploads new Matrix images before posting ingest events', async () => {
+  const stateFile = await createTempStateFile({
+    nextBatch: 'batch-1',
+    roomContexts: {},
+  });
+  const postedBatches = [];
+  const uploadedMedia = [];
+  const runtime = { state: 'starting', counters: {} };
+
+  await runSyncIteration(
+    {
+      ...config,
+      stateFile,
+      mediaUploadUrl: 'https://intexuraos.cloud/internal/whatsapp/private/media',
+    },
+    runtime,
+    {
+      readAccessToken: () => 'matrix-token',
+      hasNonEmptyFile: () => true,
+      fetchMatrixSync: async () => ({
+        next_batch: 'batch-2',
+        rooms: {
+          join: {
+            '!room:home-dev': {
+              state: { events: [] },
+              timeline: {
+                events: [
+                  matrixMessage({
+                    event_id: '$image',
+                    content: {
+                      msgtype: 'm.image',
+                      body: 'image.jpg',
+                      url: 'mxc://home-dev/image',
+                      info: { mimetype: 'image/jpeg', size: 11 },
+                    },
+                  }),
+                ],
+              },
+            },
+          },
+        },
+      }),
+      fetchMatrixRoomState: async () => ({}),
+      fetchMatrixMedia: async (_config, accessToken, mxcUri) => {
+        assert.equal(accessToken, 'matrix-token');
+        assert.equal(mxcUri, 'mxc://home-dev/image');
+        return {
+          buffer: Buffer.from('image-bytes'),
+          contentType: 'image/jpeg',
+        };
+      },
+      uploadPrivateMedia: async (_config, event, media, downloaded) => {
+        uploadedMedia.push({ event, media, downloaded });
+        return {
+          mxcUri: media.mxcUri,
+          mimeType: 'image/jpeg',
+          fileName: 'image.jpg',
+          sizeBytes: downloaded.buffer.length,
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user/message/image.jpg',
+          thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
+          storedMimeType: 'image/jpeg',
+          storedSizeBytes: downloaded.buffer.length,
+          storedAt: '2026-06-26T10:00:00.000Z',
+        };
+      },
+      postEventsInBatches: async (_config, events) => {
+        postedBatches.push(events);
+      },
+    }
+  );
+
+  assert.equal(uploadedMedia.length, 1);
+  assert.deepEqual(postedBatches[0]?.[0]?.message.media, {
+    mxcUri: 'mxc://home-dev/image',
+    mimeType: 'image/jpeg',
+    fileName: 'image.jpg',
+    sizeBytes: 'image-bytes'.length,
+    storageStatus: 'stored',
+    gcsPath: 'whatsapp/private/user/message/image.jpg',
+    thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
+    storedMimeType: 'image/jpeg',
+    storedSizeBytes: 'image-bytes'.length,
+    storedAt: '2026-06-26T10:00:00.000Z',
+  });
+});
+
+test('runSyncIteration does not persist Matrix state when image upload fails', async () => {
+  const stateFile = await createTempStateFile({
+    nextBatch: 'batch-1',
+    roomContexts: {},
+  });
+  const runtime = { state: 'starting', counters: {} };
+
+  await assert.rejects(
+    runSyncIteration(
+      {
+        ...config,
+        stateFile,
+        mediaUploadUrl: 'https://intexuraos.cloud/internal/whatsapp/private/media',
+      },
+      runtime,
+      {
+        readAccessToken: () => 'matrix-token',
+        hasNonEmptyFile: () => true,
+        fetchMatrixSync: async () => ({
+          next_batch: 'batch-2',
+          rooms: {
+            join: {
+              '!room:home-dev': {
+                state: { events: [] },
+                timeline: {
+                  events: [
+                    matrixMessage({
+                      event_id: '$image',
+                      content: {
+                        msgtype: 'm.image',
+                        body: 'image.jpg',
+                        url: 'mxc://home-dev/image',
+                        info: { mimetype: 'image/jpeg' },
+                      },
+                    }),
+                  ],
+                },
+              },
+            },
+          },
+        }),
+        fetchMatrixRoomState: async () => ({}),
+        fetchMatrixMedia: async () => {
+          throw new Error('matrix_media_download_failed_404');
+        },
+      }
+    ),
+    /matrix_media_download_failed_404/
+  );
+
+  const state = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
+  assert.equal(state.nextBatch, 'batch-1');
+});
+
 test('runSyncIteration surfaces Matrix sync, ingest API, and corrupted state errors', async () => {
   const runtime = { state: 'starting', counters: {} };
   const baseDeps = {
@@ -1053,3 +1197,10 @@ test('buildHealthPayload reports credential readiness without exposing secrets',
     }
   );
 });
+
+async function createTempStateFile(state) {
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'whatsapp-private-matrix-sync-'));
+  const stateFile = path.join(tempDir, 'state.json');
+  await fsp.writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  return stateFile;
+}
