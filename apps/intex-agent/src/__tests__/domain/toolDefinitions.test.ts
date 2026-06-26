@@ -87,6 +87,48 @@ describe('createIntexAgentToolDefinitions', () => {
     });
   });
 
+  it('describes code task worker types as optional explicit choices', () => {
+    const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_code_task'
+    );
+
+    expect(codeTaskTool?.parameters['required']).toEqual(['prompt']);
+    expect(codeTaskTool?.parameters['required']).not.toContain('workerType');
+    expect(codeTaskTool?.parameters['properties']).toMatchObject({
+      workerType: {
+        type: 'string',
+        enum: ['codex', 'codex-xhigh', 'minimax'],
+        description: expect.stringMatching(
+          /only when explicitly requested.*Codex.*codex.*Codex extra high.*codex-xhigh.*MiniMax.*minimax/
+        ),
+      },
+    });
+  });
+
+  it('keeps code task worker type optional while accepting supported explicit values', async () => {
+    const executor = createExecutor();
+    const codeTaskTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'create_code_task'
+    );
+
+    await expect(
+      codeTaskTool?.run({
+        prompt: 'Implement the new import flow.',
+        workerType: 'codex-xhigh',
+        linearIssueId: 'LIN-123',
+        taskMode: 'execution',
+      })
+    ).resolves.toBe('code-task-created');
+    expect(executor.codeTaskArgs).toEqual([
+      {
+        prompt: 'Implement the new import flow.',
+        workerType: 'codex-xhigh',
+        linearIssueId: 'LIN-123',
+        taskMode: 'execution',
+      },
+    ]);
+  });
+
   it('delegates note execution to the injected executor', async () => {
     const executor = createExecutor();
     const [noteTool] = createIntexAgentToolDefinitions(executor);
@@ -302,7 +344,7 @@ describe('createIntexAgentToolDefinitions', () => {
     await expect(
       codeTaskTool?.run({
         prompt: 'Implement the new import flow.',
-        workerType: 'fullstack',
+        workerType: 'codex',
         linearIssueId: 'LIN-123',
         taskMode: 'execution',
       })
@@ -310,7 +352,7 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(executor.codeTaskArgs).toEqual([
       {
         prompt: 'Implement the new import flow.',
-        workerType: 'fullstack',
+        workerType: 'codex',
         linearIssueId: 'LIN-123',
         taskMode: 'execution',
       },
