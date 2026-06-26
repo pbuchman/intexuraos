@@ -1438,7 +1438,7 @@ describe('submitToExecutionAgent', () => {
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.objectContaining({ userId, defaultExecutionWorkerType: 'opus' }),
-        'Using user default execution worker type'
+        'Using user default worker type'
       );
     });
 
