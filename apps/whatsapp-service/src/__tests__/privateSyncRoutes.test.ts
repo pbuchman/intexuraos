@@ -15,6 +15,23 @@ vi.mock('@intexuraos/common-http', async (importOriginal) => {
 
 import { beforeEach, createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 
+interface PublicPrivateWhatsAppMediaDto {
+  mxcUri: string;
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  storageStatus?: 'stored';
+  hasMedia?: boolean;
+  hasThumbnail?: boolean;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+}
+
 describe('Private WhatsApp Sync Routes', () => {
   const ctx = setupTestContext();
 
@@ -1253,7 +1270,7 @@ describe('Private WhatsApp Sync Routes', () => {
 
     expect(messagesResponse.statusCode).toBe(200);
     const body = JSON.parse(messagesResponse.body) as {
-      data: { messages: { media?: Record<string, unknown> }[] };
+      data: { messages: { media?: PublicPrivateWhatsAppMediaDto }[] };
     };
     expect(body.data.messages[0]?.media).toMatchObject({
       mxcUri: 'mxc://matrix.example/stored-image',
