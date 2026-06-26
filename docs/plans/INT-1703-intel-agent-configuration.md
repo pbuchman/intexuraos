@@ -18,7 +18,7 @@
 - Domain code in `apps/intex-agent` must not import from `@intexuraos/internal-clients`; ports are explicit.
 - Web app is hash-routed (`/#/path`); service URLs come from `apps/web/service-manifest.json` (already includes `INTEXURAOS_INTEX_AGENT_URL`).
 - All `PromptBuilder` prompts MUST carry a `version` field; bump on edit (major for behavior, minor for examples, patch for typos).
-- `INTEX_AGENT_SYSTEM_PROMPT.version` already `5.0.0`; bump to `6.0.0` because the prompt content gains a User Preferences block.
+- Before editing `INTEX_AGENT_SYSTEM_PROMPT`, read the current `version` in `apps/intex-agent/src/domain/agent/systemPrompt.ts` and bump exactly one major version because the prompt content gains a User Preferences block. Current expected path on this PR base: `5.0.0` → `6.0.0`.
 - Plans with HTTP endpoints MUST include an "Endpoint Changes" section.
 - Reference existing patterns: `apps/web/src/components/WhatsAppPreferencesCard.tsx` (preferences UI) and `apps/intex-agent/src/infra/firestore/sessionRepository.ts` (Firestore repository).
 
@@ -39,7 +39,7 @@
 
 ### Modified files (apps/intex-agent)
 
-- `apps/intex-agent/src/domain/agent/systemPrompt.ts` — bump version to `6.0.0`, export `USER_PREFERENCES_PROMPT_PREAMBLE` constant.
+- `apps/intex-agent/src/domain/agent/systemPrompt.ts` — bump the current version by one major version (expected `5.0.0` → `6.0.0`), export `USER_PREFERENCES_PROMPT_PREAMBLE` constant.
 - `apps/intex-agent/src/domain/agent/intexAgentRunner.ts` — accept `instructions: UserInstruction[]` in input, append `buildInstructionBlock` to `systemPrompt`.
 - `apps/intex-agent/src/domain/messages/handleIncomingMessage.ts` — load instructions once before `runner.run`, pass through.
 - `apps/intex-agent/src/services.ts` — add `instructionRepository` to `ServiceContainer`, wire into `incomingMessageHandler`.
@@ -201,9 +201,9 @@ export function buildInstructionBlock(instructions: UserInstruction[]): string {
 - [ ] **Step 5.1:** Add new failing assertion in the existing `intexAgentRunner.test.ts`:
   - When `instructions: [{ id, userId, text: 'When I add an event with Monika, also invite monikamaupa@gmail.com', createdAt, updatedAt }]` is supplied, the prompt contains `User Preferences:` and the numbered instruction.
   - When instructions are empty, prompt must not contain `User Preferences:`.
-  - `INTEX_AGENT_SYSTEM_PROMPT.version === '6.0.0'`.
+  - `INTEX_AGENT_SYSTEM_PROMPT.version` equals the current prompt version bumped by one major version (expected `'6.0.0'` on this PR base).
 - [ ] **Step 5.2:** Run test — fail.
-- [ ] **Step 5.3:** Bump `INTEX_AGENT_SYSTEM_PROMPT.version` to `'6.0.0'` and append a single line: `'Always honor the User Preferences block when it is present in this prompt.'`.
+- [ ] **Step 5.3:** Bump `INTEX_AGENT_SYSTEM_PROMPT.version` by one major version from its current value (expected `'5.0.0'` → `'6.0.0'` on this PR base) and append a single line: `'Always honor the User Preferences block when it is present in this prompt.'`.
 - [ ] **Step 5.4:** Update `IntexAgentRunner.run` signature to accept `instructions: UserInstruction[]`, compute `instructionBlock = buildInstructionBlock(instructions)`, and assemble `systemPrompt = instructionBlock === '' ? INTEX_AGENT_SYSTEM_PROMPT.text : `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\n${instructionBlock}\nCurrent date-time: ${currentDateTime}``.
 - [ ] **Step 5.5:** Tests pass.
 - [ ] **Step 5.6:** Commit: `feat(intex-agent): inject user preferences into system prompt`.
@@ -412,7 +412,7 @@ export function buildInstructionBlock(instructions: UserInstruction[]): string {
 - `UserInstruction` defined in Task 1, used verbatim in Tasks 3, 4, 5, 7, 8, 10.
 - `InstructionRepository` port defined in Task 1, implemented in Task 3, wired in Task 6.
 - `buildInstructionBlock` signature fixed in Task 2 and reused in Task 5.
-- `systemPrompt` version bumped once (Task 5).
+- `systemPrompt` version bumped exactly one major version from the implementation branch's current value (Task 5).
 
 **No dead code / no orphaned imports** — every new symbol has at least one consumer.
 
