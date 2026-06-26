@@ -105,11 +105,22 @@ function hasStoredImage(message: PrivateWhatsAppMessage): boolean {
 }
 
 function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element {
+  const hasText = message.text !== undefined && message.text.trim() !== '';
+
   if (hasStoredImage(message)) {
-    return <PrivateWhatsAppImagePreview message={message} />;
+    return (
+      <div className="space-y-3">
+        <PrivateWhatsAppImagePreview message={message} />
+        {hasText ? (
+          <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
+            {message.text}
+          </p>
+        ) : null}
+      </div>
+    );
   }
 
-  if (message.text !== undefined && message.text.trim() !== '') {
+  if (hasText) {
     return (
       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
         {message.text}

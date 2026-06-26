@@ -214,7 +214,7 @@ describe('PrivateWhatsAppLogPage', () => {
     expect(screen.queryByText(/utc-helper:/)).not.toBeInTheDocument();
   });
 
-  it('renders stored private images as image previews and old images as placeholders', () => {
+  it('renders stored private images with captions while old images stay placeholders', () => {
     mockUsePrivateWhatsAppLog.mockReturnValueOnce(
       createHookResult({
         messages: [
@@ -265,6 +265,7 @@ describe('PrivateWhatsAppLogPage', () => {
     );
 
     expect(screen.getByTestId('private-whatsapp-image-preview')).toHaveTextContent('stored-image');
+    expect(screen.getByText('stored image')).toBeInTheDocument();
     expect(screen.getByText('image.jpg')).toBeInTheDocument();
   });
 });
