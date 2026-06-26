@@ -112,8 +112,8 @@ INFO: Repository path exists, validating...
 INFO: Repository validation passed
 INFO: Code worker auth active { expiresInMinutes: 210, subscriptionType: 'max' }
 INFO: Codex worker auth active { authMode: 'chatgpt', expiresInMinutes: 190 }
-INFO: Completion verification configuration { completionMaxAttempts: 3, verifier: '...' }
-INFO: Agent compliance validator configuration { complianceValidatorModel: 'xiaomi/mimo-v2.5-pro' }
+INFO: Completion verification configuration (deterministic parser + resume-summary LLM) { completionMaxAttempts: 3, validationModels: [ 'or:google/gemma-4-31b-it', 'gemini-2.5-flash' ] }
+INFO: Agent compliance validator configuration { validationModels: [ 'or:google/gemma-4-31b-it', 'gemini-2.5-flash' ], hasOpenRouterApiKey: true }
 INFO: Orchestrator HTTP server started { port: 8199 }
 INFO: No interrupted tasks to recover
 INFO: Starting heartbeat manager { intervalMs: 600000 }
@@ -130,6 +130,7 @@ Expected response:
 
 ```json
 {
+  "healthContractVersion": 1,
   "status": "ready",
   "capacity": 2,
   "running": 0,
@@ -140,7 +141,14 @@ Expected response:
     "codex": { "status": "active", "authMode": "chatgpt", "refreshSupported": true, "expiresInMinutes": 190 }
   },
   "dockerHealthy": true,
-  "diskHealthy": true
+  "diskHealthy": true,
+  "providerApiKeys": {
+    "MINIMAX_API_KEY": { "configured": true },
+    "MIMO_API_KEY": { "configured": true },
+    "DASHSCOPE_API_KEY": { "configured": true },
+    "KIMI_API_KEY": { "configured": true },
+    "OPENROUTER_API_KEY": { "configured": false }
+  }
 }
 ```
 
@@ -173,7 +181,7 @@ The `workerType` field controls which runtime/model preset handles the task. Val
 
 ```bash
 BODY='{
-  "taskId": "test-task-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000001",
   "workerType": "auto",
   "prompt": "Create a hello world test file",
   "linearIssueLabels": ["code-task"],
@@ -197,7 +205,7 @@ Expected response:
 
 ```json
 {
-  "taskId": "test-task-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000001",
   "status": "accepted"
 }
 ```
@@ -208,7 +216,7 @@ To run a task through the Codex runtime instead of Claude:
 
 ```bash
 BODY='{
-  "taskId": "codex-task-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000002",
   "workerType": "codex",
   "prompt": "Implement the feature described in INT-500",
   "agentType": "execution",
@@ -228,7 +236,7 @@ To route a task through the planning agent flow:
 
 ```bash
 BODY='{
-  "taskId": "plan-task-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000003",
   "workerType": "opus",
   "prompt": "Analyze INT-500 and design the implementation approach",
   "agentType": "planning",
@@ -247,11 +255,11 @@ When retrying a task, pass the existing PR details and optionally reference the 
 
 ```bash
 BODY='{
-  "taskId": "retry-task-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000004",
   "workerType": "opus",
   "prompt": "Continue implementation for INT-500",
   "agentType": "execution",
-  "retriedFrom": "original-task-001",
+  "retriedFrom": "task_00000000-0000-4000-8000-000000000099",
   "continuationPrNumber": 42,
   "continuationPrBranch": "task_abc123",
   "linearIssueId": "INT-500",
@@ -262,15 +270,15 @@ BODY='{
 }'
 ```
 
-### Step 6: Submit a review task with test quality review
+### Step 6: Submit a review task with test quality and documentation review
 
 ```bash
 BODY='{
-  "taskId": "review-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000005",
   "workerType": "auto",
-  "prompt": "Review PR #42 — validate implementation and test quality",
+  "prompt": "Review PR #42 — validate implementation, test quality, and documentation",
   "agentType": "review",
-  "reviewTypes": ["code_quality", "test_quality", "plan_review"],
+  "reviewTypes": ["code_quality", "test_quality", "documentation"],
   "linearIssueId": "INT-500",
   "linearIssueLabels": [],
   "hasChildren": false,
@@ -279,7 +287,7 @@ BODY='{
 }'
 ```
 
-Available review types: `code_quality`, `security`, `architecture`, `plan_review`, `test_quality`.
+Available review types: `code_quality`, `security`, `architecture`, `plan_review`, `test_quality`, `documentation`. The `documentation` scope, added for PR #2130, checks docs against the implementation, repository paths, commands, APIs, configuration, terminology, and links.
 
 ### Step 7: Start an Ask Agent session
 
@@ -287,7 +295,7 @@ For interactive Q&A (no PR creation, no Linear management):
 
 ```bash
 BODY='{
-  "taskId": "ask-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000006",
   "workerType": "auto",
   "prompt": "Explain the caching strategy in user-service",
   "agentType": "ask_agent",
@@ -303,7 +311,7 @@ Follow up with messages:
 ```bash
 BODY='{"message": "How does cache invalidation work when a user updates their profile?"}'
 # (generate HMAC headers as before)
-curl -X POST http://localhost:8199/tasks/ask-001/message ...
+curl -X POST http://localhost:8199/tasks/task_00000000-0000-4000-8000-000000000006/message ...
 ```
 
 ### Step 8: Submit a task with mimo-pro
@@ -312,7 +320,7 @@ For cost-effective execution via Xiaomi MiMo Pro 2.5:
 
 ```bash
 BODY='{
-  "taskId": "mimo-task-001",
+  "taskId": "task_00000000-0000-4000-8000-000000000007",
   "workerType": "mimo-pro",
   "prompt": "Implement the feature described in INT-600",
   "agentType": "execution",
@@ -329,13 +337,13 @@ BODY='{
 Check task status:
 
 ```bash
-curl http://localhost:8199/tasks/test-task-001 | jq
+curl http://localhost:8199/tasks/task_00000000-0000-4000-8000-000000000001 | jq
 ```
 
 Watch Docker container logs:
 
 ```bash
-docker logs -f code-worker-test-task-001
+docker logs -f code-worker-task_00000000-0000-4000-8000-000000000001
 ```
 
 View orchestrator health:
@@ -359,7 +367,7 @@ BODY='{"message": "Please also add unit tests for the edge cases"}'
 
 eval $(bash sign-request.sh "$BODY")
 
-curl -X POST http://localhost:8199/tasks/test-task-001/message \
+curl -X POST http://localhost:8199/tasks/task_00000000-0000-4000-8000-000000000001/message \
   -H "Content-Type: application/json" \
   -H "X-Dispatch-Timestamp: ${TIMESTAMP}" \
   -H "X-Dispatch-Nonce: ${NONCE}" \
@@ -372,7 +380,7 @@ The message field supports up to 20,000 characters. Review and remediation tasks
 ### Step 11: Cancel a task
 
 ```bash
-curl -X DELETE http://localhost:8199/tasks/test-task-001
+curl -X DELETE http://localhost:8199/tasks/task_00000000-0000-4000-8000-000000000001
 ```
 
 ## Part 3: Running Tests
@@ -485,7 +493,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |
 | `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var              | Add to `.envrc.local` and run `direnv allow`                                                                                                      |
 | `INTEXURAOS_KIMI_APP_API_KEY not set`             | Missing required Kimi Code key        | Populate the Secret Manager version, run `./scripts/sync-secrets.sh --add-new`, then `direnv allow`                                               |
-| `TASK_COMPLETION_VERIFIER_FAILED`                 | All validation models unreachable     | Check network connectivity and API keys for configured validation models                                                                          |
+| `TASK_RUNTIME_HARD_ERROR`                         | Worker/runtime failure or verifier hard error | Inspect the terminal logs and retry only after the runtime error is understood                                                              |
 | `503 docker_unavailable`                          | Docker daemon not responding          | Check Docker Desktop is running                                                                                                                   |
 | `503 auth_unavailable`                            | Worker auth not ready                 | Check `workerAuths` in health endpoint; run `claude login` or `codex-login.sh`                                                                    |
 | Container creation timeout                        | Docker pull or create taking too long | Check network for image pull; image pull has 15-minute timeout, container create has 2-minute timeout                                             |

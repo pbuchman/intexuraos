@@ -1,6 +1,6 @@
 # Intex Agent Tutorial
 
-## Send A Supported Text Message
+## Create A Note
 
 Send a WhatsApp text message such as:
 
@@ -30,3 +30,24 @@ Create a code task to fix the login redirect on Safari
 
 The created task defaults to planning mode so the design can be reviewed before implementation.
 
+## Save A Bookmark
+
+Send a bare URL or ask to save a link:
+
+```text
+https://example.com/article
+```
+
+Intex routes the message to `create_link`. Words inside the URL do not count as commands for another tool.
+
+## Continue A Session
+
+After Intex replies, send a follow-up in the same WhatsApp conversation. The same session stays open, so clarification answers and short follow-ups are processed with the previous timeline. To force a fresh session, send:
+
+```text
+new session
+```
+
+## Unsupported Requests
+
+Messages without explicit create/save intent do not receive tool access. For example, asking what is in the calendar returns an unsupported reply because Intex Agent currently creates calendar events but does not read calendar data.

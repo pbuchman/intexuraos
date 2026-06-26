@@ -17,7 +17,7 @@ Each worker type in `workers/orchestrator/src/services/isolation/types.ts:WORKER
 In `handleTaskCompletion` the gates run in this order:
 
 1. **INT-1455 attempt classifier** (`classifyAttempt` in `task-dispatcher/classify-attempt.ts`) — infra-failed attempts short-circuit to `finalizeAttemptAsInfraFailure` and never reach the verifier.
-2. **`completionVerifier.verify(...)`** — produces a `CompletionVerifierVerdict` with `missingFields` and `telemetryMissingFields` already partitioned.
+2. **`verifyCompletion(...)`** — produces a `CompletionVerifierVerdict` with `missingRequired` and `telemetryMissing` already partitioned.
 3. **`decideCompletionOutcome(verdict, tier, exitCode, attempt, maxAttempts)`** — pure policy function that returns a discriminated-union `CompletionOutcome`.
 4. **Dispatcher dispatch on `outcome.kind`** — performs side effects (retry worker, finalize task, log).
 

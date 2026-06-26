@@ -123,13 +123,13 @@ The orchestrator runs on a single machine. State is stored in a local JSON file,
 
 ---
 
-### 5. Completion verifier has no circuit-breaker
+### 5. Agent compliance validation has no circuit-breaker
 
 **Severity:** Medium
 
-When all validation models in the chain are unavailable (network error, rate limit, API outage), all in-flight tasks fail with `TASK_COMPLETION_VERIFIER_FAILED`. There is no fallback to deterministic-only verification, no retry with backoff, and no way to temporarily disable the verifier for a task. The configurable model chain mitigates this partially — if the first model fails, the verifier tries the next — but a complete API outage across all providers still causes cascading failures.
+When all compliance validation models in the chain are unavailable (network error, rate limit, API outage), execution tasks can lose the independent transcript audit even though deterministic `verifyCompletion()` still validates the final block. The configurable model chain mitigates this partially - if the first model fails, the validator tries the next - but a complete API outage across all configured providers still removes that extra assurance layer.
 
-**Recommended fix:** Add a circuit-breaker pattern: after N consecutive failures across all models within a time window, fall back to deterministic-only verification and log a warning. Re-enable LLM verification after the circuit resets.
+**Recommended fix:** Add a circuit-breaker pattern: after N consecutive compliance validation failures across all models within a time window, skip compliance validation with an explicit warning and continue relying on deterministic completion verification. Re-enable compliance validation after the circuit resets.
 
 ---
 
@@ -173,11 +173,19 @@ Worktrees accumulate until manually cleaned or the stale threshold is exceeded. 
 
 **Severity:** Low
 
-`DockerProvider.getResourceUsage()` exists but is never called. There is no alerting when containers approach memory limits or CPU saturation. (Note: `TurnMetricsCollector` collects post-exit cgroup data, but does not provide real-time monitoring during task execution.)
+`DockerProvider.getResourceUsage()` exists but is never called. There is no alerting when containers approach high memory usage or CPU saturation. (Note: `TurnMetricsCollector` collects post-exit cgroup data, but does not provide real-time monitoring during task execution.)
 
 **Recommended fix:** Integrate resource usage into the health endpoint or log periodic snapshots during task execution.
 
 ---
+
+## Recent Improvements (current release documentation)
+
+The following release-relevant reliability changes landed since v3.7.0:
+
+- **Terminal finalization before Docker cleanup** - completed tasks persist terminal state, release capacity, commit status, and send webhooks before worker teardown; cleanup is timeout-bound so Docker hangs do not leave tasks stuck in `running`.
+- **Best-effort zombie cleanup** - late containers created after a startup timeout are destroyed on a bounded cleanup path.
+- **Handled Sentry noise reduction** - expected reliability-path warnings for route 4xx responses, webhook retries, verifier hard errors, task timers, and final worker cleanup are tagged to skip Sentry capture while remaining in logs.
 
 ## Recent Improvements (v3.6.0)
 
@@ -186,13 +194,13 @@ The following items improved quality and capability since v3.5.0:
 - **Execution memory pipeline simplification** — memory_acknowledgment downgraded to soft warning when the usage triplet is consistent, preventing memory reporting issues from stalling tasks (INT-1403)
 - **Robust memory_acknowledgment recovery** — Fixed regression stalling code-review tasks with three targeted PRs addressing the verifier stall, prompt fix, and pattern matching edge cases (INT-1411, INT-1415)
 - **Log cap raised to 8MB** — Prevents log truncation on verbose builds
-- **Task timeout extended to 5 hours** — Warning at 4h55m, kill at 5h, accommodating complex multi-step tasks
+- **Task timeout default extended to 5 hours** — Per-task `timeoutHours` overrides can set 1 to 12 hours, with warnings five minutes before the configured kill time
 - **StatusUpdateClient** — Redundant terminal status delivery via direct PATCH to code-agent alongside webhooks (INT-1413)
 - **Docker RFC3339 timestamp stripping** — Fixed log formatter to properly strip Docker-prepended RFC3339 timestamps (INT-1411)
-- **User default model for execution memory** — Configurable validation model chain replaces hardcoded Gemini (INT-1371)
+- **Validation model chain for resume summaries and compliance** — Configurable validation models replace hardcoded Gemini where LLM validation is still used (INT-1371)
 - **Gemini client usage mapping** — Validation model clients use HttpWebhookUsageSink for cost tracking (INT-1369)
 - **mimo-pro worker type** — Xiaomi MiMo Pro 2.5 as a new execution backend
-- **test_quality review scope** — Fifth review type covering test quality analysis
+- **test_quality review scope** — Review type covering test quality analysis
 - **Inactivity restart tracking** — `inactivityRestartCount` persisted for observability
 - **retriedFrom field** — Declared in CreateTaskRequestSchema for retry chain tracking
 - **LLM usage sinks migrated to HTTP** — Replaced direct pricing with HttpWebhookUsageSink (INT-1342)
@@ -207,7 +215,7 @@ The following items improved quality and capability since v3.5.0:
 | 2026-04-22 | Memory verifier regression on code-review | Fixed auto-continue prompt and pattern matching (INT-1411, INT-1415)              |
 | 2026-04-22 | Log truncation on verbose builds          | Raised log cap from 4MB to 8MB                                                    |
 | 2026-04-22 | Docker RFC3339 timestamps in logs         | Fixed stripDockerHeaders() to handle RFC3339 format (INT-1411)                    |
-| 2026-04-22 | Hardcoded Gemini for validation           | Configurable validation model chain via INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS |
+| 2026-04-22 | Hardcoded Gemini for LLM validation       | Configurable validation model chain via INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS |
 | 2026-04-07 | Deep Validator was monolithic             | Replaced with modular Agent Compliance Validator using OpenRouter                 |
 | 2026-04-07 | No Codex runtime support                  | Full Codex backend with auth, log processing, two worker presets                  |
 | 2026-04-07 | No review finding auto-remediation        | Remediation Agent autonomously addresses findings                                 |

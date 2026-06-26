@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { DollarSign, MessageSquare } from 'lucide-react';
+import { MessagesSquare, Workflow } from 'lucide-react';
 
 interface FeatureEntry {
   title: string;
@@ -15,20 +15,20 @@ interface FeatureEntry {
 export function WhatsNewSection(): React.JSX.Element {
   const features: FeatureEntry[] = [
     {
-      title: 'Fishing Assistant Chat',
+      title: 'Intex Agent Unified Actions',
       description:
-        'Chat with Fishing Assistant, keep conversation history, and get answers grounded in RAG knowledge with citation checks.',
-      icon: MessageSquare,
+        'One Intex Agent workflow now creates code tasks, research drafts, bookmarks, notes, and calendar actions.',
+      icon: Workflow,
       borderColor: 'border-emerald-200',
       bgGradient: 'bg-gradient-to-br from-emerald-50 to-white',
       iconBg: 'bg-emerald-100',
       iconColor: 'text-emerald-700',
     },
     {
-      title: 'LLM Cost Visibility',
+      title: 'Private WhatsApp Workspace',
       description:
-        'Usage, research cost, image billing, and prompt-type reports are clearer and more accurate.',
-      icon: DollarSign,
+        'Mirror and inspect private WhatsApp conversations with group context, sender/day views, Matrix sync, and read-only logs.',
+      icon: MessagesSquare,
       borderColor: 'border-cyan-200',
       bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
       iconBg: 'bg-cyan-100',
@@ -53,13 +53,13 @@ export function WhatsNewSection(): React.JSX.Element {
             </a>
           </div>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            v3.7.0 —{' '}
+            v3.8.0 —{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              assistant chat, clearer costs.
+              unified actions, private WhatsApp.
             </span>
           </h2>
           <p className="text-lg leading-relaxed text-neutral-600">
-            Fishing Assistant chat and richer LLM billing insight lead this release.
+            Intex Agent now owns the action path, and private WhatsApp has a dedicated workspace.
           </p>
         </div>
 

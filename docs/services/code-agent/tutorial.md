@@ -2,7 +2,7 @@
 
 ## Create A Planning Task
 
-Submit a task from the dashboard or Intex:
+Submit a task from the dashboard or Intex Agent:
 
 ```text
 Create a code task to fix the login redirect on Safari
@@ -26,3 +26,4 @@ Open the code task detail page to watch logs, task status, worker model, Linear 
 
 Trusted services should use the current internal task creation client from `@intexuraos/internal-clients`. Do not call removed compatibility endpoints.
 
+The current internal route is `POST /internal/code/submit`. It creates a task on behalf of a user and accepts the same planning or execution mode choice as direct task submission.

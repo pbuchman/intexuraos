@@ -37,7 +37,8 @@ interface OrchestratorTools {
     prNumber?: number;
     continuationPrNumber?: number;
     continuationPrBranch?: string;
-    reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality')[];
+    reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality' | 'documentation')[];
+    timeoutHours?: number; // integer 1..12; default 5h
     retriedFrom?: string;
     slug?: string;
     webhookUrl: string;
@@ -72,6 +73,7 @@ interface OrchestratorTools {
 
   // Check service health and capacity
   getHealth(): Promise<{
+    healthContractVersion: 1;
     status: 'ready' | 'initializing' | 'recovering' | 'degraded' | 'auth_degraded' | 'shutting_down';
     capacity: number;
     running: number;
@@ -83,6 +85,7 @@ interface OrchestratorTools {
     };
     dockerHealthy: boolean;
     diskHealthy: boolean;
+    providerApiKeys: Record<string, ProviderApiKeyHealth>;
   }>;
   // Auth: None
 
@@ -148,7 +151,7 @@ interface Task {
   prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality')[];
+  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality' | 'documentation')[];
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
@@ -158,17 +161,33 @@ interface Task {
   maxAttempts?: number;
   lastExitCode?: number;
   verificationHistory?: TaskVerificationRecord[];
+  taskInfraFailureHistory?: TaskInfraFailureRecord[];
   resumedAfterSuccess?: boolean;
   lastSuccessResult?: TaskResult;
   pendingResumeStart?: PendingResumeStart;
   inactivityRestartCount?: number;
+  timeoutMs?: number;
 }
 
 interface TaskVerificationRecord {
   attempt: number;
   passed: boolean;
   missingFields: string[];
+  telemetryMissingFields?: string[];
+  telemetryAccepted?: boolean;
   verifierFailure: boolean;
+  createdAt: string;
+}
+
+interface TaskInfraFailureRecord {
+  attempt: number;
+  subReason:
+    | 'container_exit_before_session_init'
+    | 'entrypoint_failed'
+    | 'git_worktree_lost'
+    | 'image_pull_failed'
+    | 'duration_below_threshold'
+    | 'empty_transcript';
   createdAt: string;
 }
 
@@ -228,7 +247,7 @@ interface TaskResult {
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
-  execution_outcome_label?: 'implemented' | 'already_completed';
+  execution_outcome_label?: 'implemented' | 'already_completed' | 'failed';
   execution_superpowers_subagent_driven_dev_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
   execution_memory_ids_used?: string;
@@ -290,8 +309,9 @@ Execution Agent note:
 
 - `implemented` is sent as `status='completed'`
 - `already_completed` is sent as `status='completed'` with `execution_outcome_label='already_completed'`
-- All execution outcomes require `gh_pr_url` evidence
-- Orchestrator verification uses a configurable validation model chain (Gemini and/or OpenRouter, tried in priority order)
+- `failed` is sent as `status='failed'` with `execution_outcome_label='failed'` and an error
+- `implemented` and `already_completed` require `gh_pr_url` evidence; `failed` may leave the PR field empty and must report `failure_reason`
+- Orchestrator completion verification is deterministic and parses the agent final block against agent-specific contracts
 - Orchestrator flattens execution verifier metadata into `execution_*` fields on `result`
 - Memory usage is reported via `execution_memory_ids_used`, `execution_memory_ids_rejected`, `execution_memory_usage_summary`
 - Memory acknowledgment uses soft-warning approach — consistent triplet passes even if individual ack lines are missing
@@ -303,9 +323,10 @@ Review Agent note:
 - Completed review is sent as `status='completed'`
 - Orchestrator flattens review verifier metadata into `review_*` fields on `result`
 - Review Agent does not push code changes — read-only PR review only
-- `reviewTypes` controls which review scopes are included: `code_quality`, `security`, `architecture`, `plan_review`, `test_quality`
+- `reviewTypes` controls which review scopes are included: `code_quality`, `security`, `architecture`, `plan_review`, `test_quality`, `documentation`
 - `plan_review` mode cross-references implementation against the original plan document
 - `test_quality` mode provides comprehensive test quality analysis
+- `documentation` mode checks docs against implementation, commands, APIs, configuration, terminology, and links
 - `needs_remediation` signals whether a Remediation Agent should be dispatched
 
 Remediation Agent note:
@@ -359,6 +380,10 @@ type WorkerAuthState = {
   lastRefreshAt?: string;
   subscriptionType?: string;
 };
+
+interface ProviderApiKeyHealth {
+  configured: boolean;
+}
 ```
 
 ### AgentComplianceReport (posted on PR)
@@ -490,18 +515,19 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 4. Build system prompt (agent-specific via `agentType`, with execution memory injection)
 5. Pull worker image (15-minute timeout, separated from container creation)
 6. Spawn a code-worker container for the selected runtime (2-minute creation timeout)
-7. Write system prompt to container stdin
+7. Write `system-prompt.txt` and `user-prompt.txt` into the task secrets volume; Docker exec starts with `stdin: false`
 8. Stream logs to code-agent via LogForwarder
 9. Monitor container exit (30s polling) with inactivity detection (10-minute silence kills and restarts up to 3 times)
 10. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
-11. Detect fatal exit codes (137/139) from tail of raw logs — skip validation model calls, trigger immediate retry
-12. Run completion verification (configurable model chain with agent-specific Zod schemas; memory acknowledgment uses soft-warning approach)
+11. Detect fatal exit codes (137/139) from tail of raw logs — skip completion verification, trigger immediate retry
+12. Run deterministic `verifyCompletion()` against the final block and agent-specific contracts; memory acknowledgment uses soft-warning approach
 13. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
 14. If verification **passes**: run Agent Compliance Validation for execution tasks, collect turn metrics, commit terminal status via StatusUpdateClient, send webhook
 15. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
-16. Clean up token refresher, log forwarder, and task timers
-17. If any queued messages arrived during execution: deliver them immediately as a new session
-18. For ask_agent: check pending messages and flush task logs before teardown
+16. Persist terminal status, release capacity, and deliver terminal callbacks before worker cleanup
+17. Clean up token refresher, log forwarder, task timers, and worker container; worker cleanup is bounded to 30 seconds
+18. If any queued messages arrived during execution: deliver them immediately as a new session
+19. For ask_agent: check pending messages and flush task logs before teardown
 
 ### Startup Recovery
 
@@ -520,11 +546,11 @@ On startup, the orchestrator:
 
 ### Timeout Behavior
 
-| Threshold | Action                                     |
-| --------- | ------------------------------------------ |
-| 10m idle  | Kill container, restart (up to 3 times)    |
-| 4h 55m    | Log warning                                |
-| 5h 0m     | Kill container, send `interrupted` webhook |
+| Threshold                   | Action                                     |
+| --------------------------- | ------------------------------------------ |
+| 10m idle                    | Kill container, restart (up to 3 times)    |
+| `timeoutHours - 5 minutes`  | Log warning                                |
+| `timeoutHours` or default 5h | Kill container, send `interrupted` webhook |
 
 ---
 
@@ -546,12 +572,10 @@ On startup, the orchestrator:
 | `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_KIMI_APP_API_KEY`               | Yes      | -                                  |
-| `INTEXURAOS_ZAI_APP_API_KEY`                | Yes      | -                                  |
 | `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
-| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | (Gemini default)                   |
-| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | (empty — disables compliance)      |
-| `INTEXURAOS_COMPLIANCE_MODEL`               | No       | `xiaomi/mimo-v2.5-pro`               |
+| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | `or:google/gemma-4-31b-it,gemini-2.5-flash` |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | Required unless validation models are Gemini-only |
 | `INTEXURAOS_REPOSITORY_PATH`                | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`                | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`        | No       | `3`                                |
@@ -562,6 +586,10 @@ On startup, the orchestrator:
 | `INTEXURAOS_GIT_USER_NAME`                  | No       | (host git config)                  |
 | `INTEXURAOS_GIT_USER_EMAIL`                 | No       | (host git config)                  |
 | `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`         | No       | (Secret Manager)                   |
+| `INTEXURAOS_ENVIRONMENT`                    | No       | `NODE_ENV` or `development`        |
+| `INTEXURAOS_SENTRY_DSN`                     | No       | (empty)                            |
+| `INTEXURAOS_RELEASE`                        | No       | (empty; fallback after `K_REVISION`) |
+| `K_REVISION`                                | No       | (empty; preferred release source)  |
 | `KEEP_CONTAINERS_ALIVE`                     | No       | `0`                                |
 | `PORT`                                      | No       | `8199`                             |
 | `LOG_LEVEL`                                 | No       | `info`                             |
@@ -584,7 +612,7 @@ On startup, the orchestrator:
 | `session_expired`                     | 410  | Session has expired and cannot accept messages                 |
 | `NO_PR_CREATED`                       | -    | Task completed but no PR was found                             |
 | `TASK_COMPLETION_VERIFICATION_FAILED` | -    | Max attempts reached without passing completion verification   |
-| `TASK_COMPLETION_VERIFIER_FAILED`     | -    | All validation models unreachable or returned invalid JSON     |
+| `TASK_RUNTIME_HARD_ERROR`             | -    | Worker/runtime failure or deterministic verifier hard error    |
 | `RESUME_ATTEMPT_FAILED`               | -    | Could not start a follow-up attempt container                  |
 | `SETUP_FAILED`                        | -    | Task setup failed (worktree creation, API key invalid, etc.)   |
 | `PLANNING_AGENT_UNCLEAR`              | -    | Planning agent could not produce a plan                        |
@@ -594,7 +622,7 @@ On startup, the orchestrator:
 ## Constraints
 
 - Maximum concurrent tasks: configurable (default 2, via `INTEXURAOS_WORKER_CAPACITY`)
-- Maximum task duration: 5 hours per attempt (hard timeout); multi-attempt tasks can run longer
+- Maximum task duration: default 5 hours per attempt, overridable per task with `timeoutHours` from 1 to 12; multi-attempt tasks can run longer
 - Maximum completion attempts: configurable (default 3, via `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`)
 - Maximum inactivity restarts: 3 (10-minute silence threshold per restart)
 - Maximum message length for `/tasks/:id/message`: 20,000 characters
@@ -607,10 +635,9 @@ On startup, the orchestrator:
 - Timestamp tolerance: 5 minutes
 - GitHub token refresh: 5 minutes (service), 30 minutes (per-container)
 - Heartbeat interval: 10 minutes
-- Container memory limit: 8 GB
-- Container CPU limit: 4 cores
 - Image pull timeout: 15 minutes
 - Container creation timeout: 2 minutes
+- Worker cleanup timeout after finalization: 30 seconds
 - Turn metrics: non-fatal; zero values returned when cgroup path unavailable (macOS)
 - Completion verifier: required; verifier failure marks task `failed` (no false positives)
 - Memory acknowledgment: soft-warning when usage triplet is consistent; hard failure only for unaccounted memory IDs
