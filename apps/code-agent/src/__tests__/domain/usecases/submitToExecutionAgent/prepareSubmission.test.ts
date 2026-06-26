@@ -139,6 +139,39 @@ describe('prepareSubmission', () => {
     }
   });
 
+  it('uses defaultExecutionWorkerType when request workerType is auto', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+    mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+      ok({
+        workers: [{ name: 'home-dev', url: 'x', enabled: true, cfAccessClientId: 'a', cfAccessClientSecret: 'b', dispatchSigningSecret: 'c' }],
+        defaultExecutionWorkerType: 'codex',
+      }),
+    );
+    mockLinearAgentClient.validateIssue.mockResolvedValue(
+      ok({
+        id: linearIssueId,
+        identifier: linearIssueId,
+        title: 'Feature',
+        url: `https://linear.app/x/${linearIssueId}`,
+        labels: ['code-task'],
+        childCount: 0,
+        parentId: null,
+      }),
+    );
+
+    const result = await prepareSubmission(createDeps(), {
+      originalTaskId,
+      userId,
+      workerType: 'auto',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.effectiveWorkerType).toBe('codex');
+    }
+  });
+
   it('throws with missing field names when originalTaskId is absent', async () => {
     await expect(
       prepareSubmission(createDeps(), { originalTaskId: '', userId }),

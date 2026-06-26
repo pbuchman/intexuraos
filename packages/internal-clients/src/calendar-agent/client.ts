@@ -1,5 +1,6 @@
 import type {
   CalendarCreatedEvent as ContractCalendarCreatedEvent,
+  CalendarListEvent as ContractCalendarListEvent,
   CalendarPreview as ContractCalendarPreview,
 } from '@intexuraos/http-contracts';
 import { err, ok, type Result, type ServiceFeedback } from '@intexuraos/common-core';
@@ -13,14 +14,17 @@ import type {
   CalendarAgentRequestOptions,
   CalendarAgentServiceClient,
   CalendarAgentServiceConfig,
+  CalendarEvent,
   CalendarPreview,
   CreateCalendarEventRequest,
   CreatedCalendarEvent,
   GeneratePreviewRequest,
+  ListCalendarEventsRequest,
   ProcessCalendarRequest,
 } from './types.js';
 
 const CREATE_EVENT_TIMEOUT_MS = 60_000;
+const LIST_EVENTS_TIMEOUT_MS = 30_000;
 const PROCESS_ACTION_TIMEOUT_MS = 60_000;
 const GENERATE_PREVIEW_TIMEOUT_MS = 30_000;
 
@@ -88,6 +92,17 @@ function toCreatedCalendarEvent(event: ContractCalendarCreatedEvent): CreatedCal
   };
 }
 
+function toCalendarListEvent(event: ContractCalendarListEvent): CalendarEvent {
+  return {
+    id: event.id,
+    summary: event.summary,
+    start: event.start,
+    end: event.end,
+    ...(event.location !== undefined ? { location: event.location } : {}),
+    ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
+  };
+}
+
 function mapCalendarHttpError(error: InternalHttpClientError, errorPrefix: string): Error {
   if (error.code === 'API_ERROR') {
     const responseBody = error.body as CalendarErrorEnvelope;
@@ -127,6 +142,27 @@ async function createEvent(
   }
 
   return err(mapCalendarHttpError(result.error, 'Failed to create calendar event'));
+}
+
+async function listEvents(
+  config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
+  request: ListCalendarEventsRequest,
+  options: CalendarAgentRequestOptions | undefined
+): Promise<Result<CalendarEvent[]>> {
+  const result = await httpClient.request<{ events: ContractCalendarListEvent[] }>({
+    path: '/internal/calendar/events/query',
+    method: 'POST',
+    body: request,
+    timeoutMs: resolveTimeoutMs(LIST_EVENTS_TIMEOUT_MS, config, options),
+    requestId: options?.requestId,
+  });
+
+  if (result.ok) {
+    return ok(result.value.events.map(toCalendarListEvent));
+  }
+
+  return err(mapCalendarHttpError(result.error, 'Failed to list calendar events'));
 }
 
 async function readPreviewResponse(
@@ -170,6 +206,13 @@ export function createCalendarAgentServiceClient(
       options?: CalendarAgentRequestOptions
     ): Promise<Result<CreatedCalendarEvent>> {
       return await createEvent(config, httpClient, request, options);
+    },
+
+    async listEvents(
+      request: ListCalendarEventsRequest,
+      options?: CalendarAgentRequestOptions
+    ): Promise<Result<CalendarEvent[]>> {
+      return await listEvents(config, httpClient, request, options);
     },
 
     async processAction(

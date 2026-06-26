@@ -16,6 +16,7 @@ import type { GitHubPRClient } from '../../ports/gitHubPRClient.js';
 import type { CodeTask, WorkerType } from '../../models/codeTask.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { hasCodeTaskLabel, hasComplexTaskLabel, hasUnclearLabel, getWorkerTypeFromLabels } from '../../utils/labelUtils.js';
+import { resolveDefaultWorkerType } from '../../utils/defaultWorkerTypeResolution.js';
 import { mergePlanPr } from '../../utils/mergePlanPr.js';
 import { fetchGitHubToken } from '../../utils/gitHubTokenResolver.js';
 import type { SubmitToExecutionAgentError, SubmitToExecutionAgentRequest } from './types.js';
@@ -269,11 +270,15 @@ export async function prepareSubmission(
   }
 
   // Step 9: Resolve effective worker type — label > request > user setting > 'auto'.
-  const labelWorkerType = getWorkerTypeFromLabels(freshLabels);
-  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType ?? 'auto';
-  if (effectiveWorkerType === 'auto' && settings?.defaultExecutionWorkerType !== undefined) {
-    effectiveWorkerType = settings.defaultExecutionWorkerType;
-    logger.info({ userId, defaultExecutionWorkerType: effectiveWorkerType }, 'Using user default execution worker type');
+  const workerResolution = resolveDefaultWorkerType({
+    agentType: 'execution',
+    labelWorkerType: getWorkerTypeFromLabels(freshLabels),
+    requestWorkerType: workerType,
+    settings,
+  });
+  const effectiveWorkerType = workerResolution.workerType;
+  if (workerResolution.source === 'default' && workerResolution.defaultField !== undefined) {
+    logger.info({ userId, [workerResolution.defaultField]: effectiveWorkerType }, 'Using user default worker type');
   }
 
   // Step 10: For complex tasks, fetch live direct children now — the dispatcher

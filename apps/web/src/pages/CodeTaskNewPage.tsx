@@ -9,8 +9,10 @@ import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
 import { useLinearIssueOptions, useWorkersStatus, findRecentTask, useTimeTick } from '@/hooks';
+import { useWorkerSettings } from '@/hooks/useWorkerSettings';
 import type { CodeTaskWorkerType, TaskMode, SubmitCodeTaskRequest } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
+import type { WorkerSettingsResponse } from '@/services/workerSettingsApi.types';
 import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks, submitCodeTask } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
@@ -61,10 +63,24 @@ const TASK_MODES: TaskModeOption[] = [
 /** Delay after which loading text changes to reassure users */
 const LONG_SUBMIT_DELAY_MS = 10000;
 
+function isCodeTaskWorkerType(workerType: string | undefined): workerType is CodeTaskWorkerType {
+  return workerType !== undefined && (CODE_TASK_WORKER_TYPES as readonly string[]).includes(workerType);
+}
+
+function getDefaultWorkerType(settings: WorkerSettingsResponse | null, taskMode: TaskMode): CodeTaskWorkerType {
+  const defaultWorkerType =
+    taskMode === 'execution'
+      ? settings?.defaultExecutionWorkerType
+      : settings?.defaultPlanningWorkerType;
+
+  return isCodeTaskWorkerType(defaultWorkerType) ? defaultWorkerType : 'auto';
+}
+
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { getAccessToken } = useAuth();
   const { groupedOptions, loading: linearLoading, error: linearError } = useLinearIssueOptions();
+  const { settings: workerSettings } = useWorkerSettings();
 
   const [prompt, setPrompt] = useState('');
   const [workerType, setWorkerType] = useState<CodeTaskWorkerType>('auto');
@@ -87,6 +103,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [showIssueSelectorModal, setShowIssueSelectorModal] = useState(false);
   const longSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const promptManuallyEdited = useRef(false);
+  const workerTypeManuallySelected = useRef(false);
+  const previousTaskMode = useRef<TaskMode>(taskMode);
 
   /** Clear the phased loading timer */
   const clearLongSubmitTimer = useCallback((): void => {
@@ -112,6 +130,18 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  useEffect(() => {
+    const modeChanged = previousTaskMode.current !== taskMode;
+    if (modeChanged) {
+      previousTaskMode.current = taskMode;
+      workerTypeManuallySelected.current = false;
+    }
+
+    if (!workerTypeManuallySelected.current) {
+      setWorkerType(getDefaultWorkerType(workerSettings, taskMode));
+    }
+  }, [workerSettings, taskMode]);
 
   // Compute all enabled workers sorted by priority.
   const allWorkers = useMemo(() => {
@@ -359,6 +389,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   key={type.id}
                   type="button"
                   onClick={(): void => {
+                    workerTypeManuallySelected.current = true;
                     setWorkerType(type.id);
                   }}
                   disabled={submitting}

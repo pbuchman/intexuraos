@@ -50,4 +50,4 @@ new session
 
 ## Unsupported Requests
 
-Messages without explicit create/save intent do not receive tool access. For example, asking what is in the calendar returns an unsupported reply because Intex Agent currently creates calendar events but does not read calendar data.
+Messages without explicit create/save intent or a bounded read-only calendar query do not receive tool access. For example, asking how many notes were created last month returns an unsupported reply because Intex Agent reads calendar events only.

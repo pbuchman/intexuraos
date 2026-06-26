@@ -3,7 +3,7 @@ import type { IntexAgentToolName } from '../sessions/types.js';
 export type IntexAgentIntentDecision =
   | { kind: 'tool'; allowedToolNames: IntexAgentToolName[] }
   | { kind: 'no_action'; reason: 'greeting' | 'conversation' }
-  | { kind: 'unsupported'; reason: 'read_only_personal_data' | 'multiple_resource_intents' };
+  | { kind: 'unsupported'; reason: 'multiple_resource_intents' };
 
 export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision {
   const normalized = normalizeIntentText(text);
@@ -15,6 +15,11 @@ export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision
   }
 
   const toolNames = explicitToolNames(normalizedWithoutUrls);
+  const isCalendarQuery = isReadOnlyCalendarQueryRequest(normalizedWithoutUrls);
+  if (toolNames.length > 0 && isCalendarQuery) {
+    return { kind: 'unsupported', reason: 'multiple_resource_intents' };
+  }
+
   if (toolNames.length === 1) {
     return { kind: 'tool', allowedToolNames: toolNames };
   }
@@ -23,8 +28,12 @@ export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision
     return { kind: 'unsupported', reason: 'multiple_resource_intents' };
   }
 
-  if (isReadOnlyPersonalDataRequest(normalizedWithoutUrls)) {
-    return { kind: 'unsupported', reason: 'read_only_personal_data' };
+  if (containsUrl && isCalendarQuery) {
+    return { kind: 'unsupported', reason: 'multiple_resource_intents' };
+  }
+
+  if (toolNames.length === 0 && isCalendarQuery) {
+    return { kind: 'tool', allowedToolNames: ['query_calendar_events'] };
   }
 
   if (containsUrl) {
@@ -42,6 +51,24 @@ function explicitToolNames(text: string): IntexAgentToolName[] {
   if (isExplicitLinkRequest(text)) toolNames.push('create_link');
   if (isExplicitCodeTaskRequest(text)) toolNames.push('create_code_task');
   return toolNames;
+}
+
+function isReadOnlyCalendarQueryRequest(text: string): boolean {
+  const mentionsCalendar =
+    /\b(calendar|kalendarz\w*|wydarzen\w*|event|events|appointment|appointments|meeting|meetings)\b/u.test(
+      text
+    );
+  const listIntent =
+    /\b(show|list|check|inspect|see|find|search|what|when|pokaz\w*|sprawdz\w*|zobac\w*|znajdz\w*|szukaj|co jest)\b/u.test(
+      text
+    ) || /\bco\b.*\bjest\b/u.test(text);
+  const countIntent = /\b(how many times|how many|count|ile razy|ile)\b/u.test(text);
+
+  if (mentionsCalendar && (listIntent || countIntent)) {
+    return true;
+  }
+
+  return countIntent && mentionsCalendarTimeRange(text) && !mentionsNonCalendarResource(text);
 }
 
 function isExplicitNoteRequest(text: string): boolean {
@@ -87,12 +114,16 @@ function isExplicitCodeTaskRequest(text: string): boolean {
   );
 }
 
-function isReadOnlyPersonalDataRequest(text: string): boolean {
-  const mentionsCalendar = /\b(calendar|kalendarz\w*|wydarzen\w*|events)\b/u.test(text);
-  const readIntent =
-    /\b(show|list|check|inspect|see|sprawdz\w*|pokaz\w*|zobac\w*|co jest)\b/u.test(text) ||
-    /\bco\b.*\bjest\b/u.test(text);
-  return mentionsCalendar && readIntent;
+function mentionsCalendarTimeRange(text: string): boolean {
+  return /\b(today|tomorrow|yesterday|week|month|year|dzis|jutro|wczoraj|tydzien|tygodniu|miesiac|miesiacu|rok|zeszlym|zeszly|nastepny|next|last|this)\b/u.test(
+    text
+  );
+}
+
+function mentionsNonCalendarResource(text: string): boolean {
+  return /\b(note|notes|notat\w*|bookmark|bookmarks|zakladk\w*|link|links|url|urls|research|report|reports|code task|code tasks|coding task|coding tasks|programming task|programming tasks|zadanie programistyczne|zadania programistyczne|message|messages|wiadomosc\w*)\b/u.test(
+    text
+  );
 }
 
 function isGreeting(text: string): boolean {

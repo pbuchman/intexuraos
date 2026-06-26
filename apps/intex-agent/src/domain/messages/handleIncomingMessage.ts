@@ -38,6 +38,7 @@ export interface IntexAgentRunner {
     session: IntexAgentSession;
     events: IntexAgentSessionEvent[];
     message: string;
+    currentDateTime: string;
     messageId?: string;
   }): Promise<IntexAgentRunnerResult>;
 }
@@ -125,6 +126,7 @@ export async function handleIncomingMessage(
     session,
     events,
     message: effectiveMessage,
+    currentDateTime: now,
     messageId: input.messageId,
   });
   await applyRunnerResult(input, deps, session, runnerResult);
@@ -282,7 +284,7 @@ async function publishReply(
 }
 
 function newSessionReadyText(): string {
-  return 'What would you like me to help with? I can create notes, calendar events, research drafts, bookmarks, and code tasks.';
+  return 'What would you like me to help with? I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.';
 }
 
 function stripDuplicateSessionPrefix(text: string): string {
@@ -320,7 +322,7 @@ function malformedRunnerResult(): Extract<IntexAgentRunnerResult, { outcome: 'un
   return {
     outcome: 'unsupported',
     reply:
-      'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.',
+      'I could not safely understand that request. I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.',
   };
 }
 

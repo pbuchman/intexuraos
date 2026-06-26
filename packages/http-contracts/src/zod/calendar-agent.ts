@@ -106,6 +106,40 @@ export const calendarCreateEventResponseSchema = createApiSuccessEnvelopeSchema(
   calendarCreateEventDataSchema
 );
 
+const createIsoDateTimeStringSchema = (): z.ZodString => z.string().datetime({ offset: true });
+
+export const calendarListEventsRequestSchema = z
+  .object({
+    userId: z.string(),
+    calendarId: z.string().optional(),
+    timeMin: createIsoDateTimeStringSchema(),
+    timeMax: createIsoDateTimeStringSchema(),
+    maxResults: z.number().int().min(1).max(2500).optional(),
+    q: z.string().optional(),
+  })
+  .strict();
+
+export const calendarListEventSchema = z
+  .object({
+    id: z.string(),
+    summary: z.string(),
+    location: z.string().optional(),
+    start: createCalendarEventDateTimeSchema(),
+    end: createCalendarEventDateTimeSchema(),
+    htmlLink: z.string().optional(),
+  })
+  .strict();
+
+export const calendarListEventsDataSchema = z
+  .object({
+    events: z.array(calendarListEventSchema),
+  })
+  .strict();
+
+export const calendarListEventsResponseSchema = createApiSuccessEnvelopeSchema(
+  calendarListEventsDataSchema
+);
+
 export const calendarPreviewSchema = z
   .object({
     actionId: z.string(),
@@ -154,6 +188,10 @@ export type CalendarCreateEventRequest = z.infer<typeof calendarCreateEventReque
 export type CalendarCreatedEvent = z.infer<typeof calendarCreatedEventSchema>;
 export type CalendarCreateEventData = z.infer<typeof calendarCreateEventDataSchema>;
 export type CalendarCreateEventResponse = z.infer<typeof calendarCreateEventResponseSchema>;
+export type CalendarListEventsRequest = z.infer<typeof calendarListEventsRequestSchema>;
+export type CalendarListEvent = z.infer<typeof calendarListEventSchema>;
+export type CalendarListEventsData = z.infer<typeof calendarListEventsDataSchema>;
+export type CalendarListEventsResponse = z.infer<typeof calendarListEventsResponseSchema>;
 export type CalendarPreview = z.infer<typeof calendarPreviewSchema>;
 export type CalendarPreviewData = z.infer<typeof calendarPreviewDataSchema>;
 export type CalendarPreviewResponse = z.infer<typeof calendarPreviewResponseSchema>;

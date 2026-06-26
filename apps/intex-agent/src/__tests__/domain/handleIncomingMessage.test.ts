@@ -138,6 +138,28 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe('Created the calendar event.');
   });
 
+  it('passes the deterministic clock value to the runner', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'You have one event next week.',
+        toolName: 'query_calendar_events',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ text: 'What are my events scheduled for next week?' }),
+      deps(repo, runner, replies, { now: () => '2026-06-26T17:00:00.000Z' })
+    );
+
+    expect(runner.calls[0]).toMatchObject({
+      message: 'What are my events scheduled for next week?',
+      currentDateTime: '2026-06-26T17:00:00.000Z',
+    });
+  });
+
   it('asks for clarification and keeps the session waiting when a calendar date is missing', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -330,7 +352,7 @@ describe('handleIncomingMessage', () => {
     ]);
     expect(runner.calls).toEqual([]);
     expect(replies.messages[0]?.message).toBe(
-      'What would you like me to help with? I can create notes, calendar events, research drafts, bookmarks, and code tasks.'
+      'What would you like me to help with? I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.'
     );
   });
 
@@ -507,7 +529,7 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[1]?.endReason).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
     expect(replies.messages[0]?.message).toBe(
-      'I could not safely understand that request. I can create notes, calendar events, research drafts, bookmarks, and code tasks.'
+      'I could not safely understand that request. I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.'
     );
   });
 });
@@ -631,8 +653,12 @@ class FakeSessionRepository implements SessionRepository {
 }
 
 class FakeRunner implements IntexAgentRunner {
-  readonly calls: { session: IntexAgentSession; events: IntexAgentSessionEvent[]; message: string }[] =
-    [];
+  readonly calls: {
+    session: IntexAgentSession;
+    events: IntexAgentSessionEvent[];
+    message: string;
+    currentDateTime: string;
+  }[] = [];
 
   constructor(private readonly results: IntexAgentRunnerResult[]) {}
 
@@ -640,6 +666,7 @@ class FakeRunner implements IntexAgentRunner {
     session: IntexAgentSession;
     events: IntexAgentSessionEvent[];
     message: string;
+    currentDateTime: string;
   }): Promise<IntexAgentRunnerResult> {
     this.calls.push(input);
     const next = this.results.shift();

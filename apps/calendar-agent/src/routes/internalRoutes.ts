@@ -5,15 +5,23 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { Result } from '@intexuraos/common-core';
-import type { CalendarCreateEventRequest } from '@intexuraos/http-contracts';
+import type {
+  CalendarCreateEventRequest,
+  CalendarListEvent,
+  CalendarListEventsRequest,
+} from '@intexuraos/http-contracts';
 import { getServices } from '../services.js';
 import {
   createEvent,
+  listEvents,
   processCalendarAction,
   generateCalendarPreview,
   type CalendarError,
+  type CalendarEvent,
   type CalendarPreview,
   type CreateEventRequest,
+  type ListEventsInput,
+  type ListEventsRequest,
 } from '../domain/index.js';
 import { handleCalendarError } from './calendarErrorHandler.js';
 import { buildCreateEventInput } from './calendarHelpers.js';
@@ -197,6 +205,138 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       reply.status(201);
       return await reply.ok({ event: result.value }); // @allow-result-access -- guarded by !result.ok check above
+    }
+  );
+
+  fastify.post<{ Body: CalendarListEventsRequest }>(
+    '/internal/calendar/events/query',
+    {
+      schema: {
+        operationId: 'queryInternalCalendarEvents',
+        summary: 'List calendar events for a user',
+        description: 'Internal service endpoint for bounded Google Calendar event queries',
+        tags: ['internal'],
+        body: { $ref: 'CalendarListEventsRequest#' },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: { $ref: 'CalendarListEventsData#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          400: {
+            description: 'Bad Request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          502: {
+            description: 'Bad Gateway',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: CalendarListEventsRequest }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      if (Date.parse(request.body.timeMin) >= Date.parse(request.body.timeMax)) {
+        reply.status(400);
+        return await reply.fail('INVALID_REQUEST', 'timeMax must be after timeMin');
+      }
+
+      const services = getServices();
+      const options: ListEventsInput = {
+        timeMin: request.body.timeMin,
+        timeMax: request.body.timeMax,
+      };
+      if (request.body.maxResults !== undefined) {
+        options.maxResults = request.body.maxResults;
+      }
+      if (request.body.q !== undefined) {
+        options.q = request.body.q;
+      }
+
+      const listRequest: ListEventsRequest = {
+        userId: request.body.userId,
+        options,
+      };
+      if (request.body.calendarId !== undefined) {
+        listRequest.calendarId = request.body.calendarId;
+      }
+
+      request.log.info(
+        {
+          userId: request.body.userId,
+          calendarId: request.body.calendarId ?? 'primary',
+          timeMin: request.body.timeMin,
+          timeMax: request.body.timeMax,
+          hasQuery: request.body.q !== undefined,
+        },
+        'internal/queryCalendarEvents: listing events'
+      );
+
+      const result = await listEvents(listRequest, {
+        userServiceClient: services.userServiceClient,
+        googleCalendarClient: services.googleCalendarClient,
+        logger: request.log,
+      });
+
+      if (!result.ok) {
+        return await handleCalendarError(result.error, reply);
+      }
+
+      request.log.info(
+        { userId: request.body.userId, eventCount: result.value.length }, // @allow-result-access -- guarded by !result.ok check above
+        'internal/queryCalendarEvents: complete'
+      );
+
+      return await reply.ok({ events: result.value.map(toCalendarListEvent) }); // @allow-result-access -- guarded by !result.ok check above
     }
   );
 
@@ -691,3 +831,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+
+function toCalendarListEvent(event: CalendarEvent): CalendarListEvent {
+  return {
+    id: event.id,
+    summary: event.summary,
+    start: event.start,
+    end: event.end,
+    ...(event.location !== undefined ? { location: event.location } : {}),
+    ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
+  };
+}

@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '@intexuraos/llm-contract';
+import { calendarListEventsRequestSchema } from '@intexuraos/http-contracts';
 
 export interface CreateNoteToolArgs {
   content: string;
@@ -15,6 +16,15 @@ export interface CreateCalendarEventToolArgs {
   location?: string;
   description?: string;
   attendees?: string[];
+}
+
+export interface QueryCalendarEventsToolArgs {
+  mode: 'list' | 'count';
+  timeMin: string;
+  timeMax: string;
+  query?: string;
+  calendarId?: string;
+  maxResults?: number;
 }
 
 export interface CreateResearchToolArgs {
@@ -39,9 +49,12 @@ export interface CreateCodeTaskToolArgs {
   taskMode?: 'planning' | 'execution';
 }
 
+const EXPLICIT_CODE_TASK_WORKER_TYPES = ['codex', 'codex-xhigh', 'minimax'] as const;
+
 export interface IntexAgentToolExecutor {
   createNote(args: CreateNoteToolArgs): Promise<string>;
   createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string>;
+  queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string>;
   createResearch(args: CreateResearchToolArgs): Promise<string>;
   createLink(args: CreateLinkToolArgs): Promise<string>;
   createCodeTask(args: CreateCodeTaskToolArgs): Promise<string>;
@@ -124,6 +137,47 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
         await executor.createCalendarEvent(toCreateCalendarEventArgs(args)),
     },
     {
+      name: 'query_calendar_events',
+      description:
+        'read-only calendar event query tool. Use only to list, count, or search existing calendar events within bounded timeMin/timeMax ranges. This tool never creates, updates, deletes, or schedules calendar events.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['mode', 'timeMin', 'timeMax'],
+        properties: {
+          mode: {
+            type: 'string',
+            enum: ['list', 'count'],
+            description: 'Use list to return event details; use count to return only the count.',
+          },
+          timeMin: {
+            type: 'string',
+            description: 'Inclusive lower calendar query bound as an ISO date-time.',
+          },
+          timeMax: {
+            type: 'string',
+            description: 'Exclusive upper calendar query bound as an ISO date-time.',
+          },
+          query: {
+            type: 'string',
+            description: 'Optional search text for matching event summaries or provider search.',
+          },
+          calendarId: {
+            type: 'string',
+            description: 'Optional calendar identifier. Omit to use the default calendar.',
+          },
+          maxResults: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 2500,
+            description: 'Optional positive integer maximum number of events to query.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) =>
+        await executor.queryCalendarEvents(toQueryCalendarEventsArgs(args)),
+    },
+    {
       name: 'create_research',
       description:
         'Use only when the user explicitly says research, research draft, or asks to create a research draft about an external topic. Do not use for general explanations, "how does this work" questions, or to inspect personal IntexuraOS data such as calendar, notes, bookmarks, code tasks, or WhatsApp history.',
@@ -204,7 +258,9 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
           },
           workerType: {
             type: 'string',
-            description: 'Optional worker type to request.',
+            enum: [...EXPLICIT_CODE_TASK_WORKER_TYPES],
+            description:
+              'Optional worker type. Set only when explicitly requested by the user. Available choices: Codex (codex), Codex extra high (codex-xhigh), MiniMax (minimax).',
           },
           linearIssueId: {
             type: 'string',
@@ -255,6 +311,28 @@ function toCreateCalendarEventArgs(args: Record<string, unknown>): CreateCalenda
     ...(location !== undefined ? { location } : {}),
     ...(description !== undefined ? { description } : {}),
     ...(attendees !== undefined ? { attendees } : {}),
+  };
+}
+
+function toQueryCalendarEventsArgs(args: Record<string, unknown>): QueryCalendarEventsToolArgs {
+  const mode = requiredCalendarQueryMode(args, 'mode');
+  const timeMin = requiredIsoDateTimeString(args, 'timeMin');
+  const timeMax = requiredIsoDateTimeString(args, 'timeMax');
+  const query = optionalString(args, 'query');
+  const calendarId = optionalString(args, 'calendarId');
+  const maxResults = optionalPositiveInteger(args, 'maxResults', { max: 2500 });
+
+  if (Date.parse(timeMin) >= Date.parse(timeMax)) {
+    throw new Error('Tool argument timeMax must be after timeMin');
+  }
+
+  return {
+    mode,
+    timeMin,
+    timeMax,
+    ...(query !== undefined ? { query } : {}),
+    ...(calendarId !== undefined ? { calendarId } : {}),
+    ...(maxResults !== undefined ? { maxResults } : {}),
   };
 }
 
@@ -310,6 +388,19 @@ function requiredString(args: Record<string, unknown>, key: string): string {
   return value;
 }
 
+function requiredIsoDateTimeString(args: Record<string, unknown>, key: string): string {
+  const value = requiredString(args, key);
+  const validation = calendarListEventsRequestSchema.safeParse({
+    userId: 'validator',
+    timeMin: value,
+    timeMax: value,
+  });
+  if (!validation.success) {
+    throw new Error(`Tool argument ${key} must be an ISO date-time string`);
+  }
+  return value;
+}
+
 function optionalTaskMode(
   args: Record<string, unknown>,
   key: string
@@ -324,6 +415,17 @@ function optionalTaskMode(
   return value;
 }
 
+function requiredCalendarQueryMode(
+  args: Record<string, unknown>,
+  key: string
+): QueryCalendarEventsToolArgs['mode'] {
+  const value = args[key];
+  if (value !== 'list' && value !== 'count') {
+    throw new Error(`Tool argument ${key} must be one of: list, count`);
+  }
+  return value;
+}
+
 function optionalString(args: Record<string, unknown>, key: string): string | undefined {
   const value = args[key];
   if (value === undefined) {
@@ -331,6 +433,26 @@ function optionalString(args: Record<string, unknown>, key: string): string | un
   }
   if (typeof value !== 'string') {
     throw new Error(`Tool argument ${key} must be a string`);
+  }
+  return value;
+}
+
+function optionalPositiveInteger(
+  args: Record<string, unknown>,
+  key: string,
+  options: { max?: number } = {}
+): number | undefined {
+  const value = args[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    (options.max !== undefined && value > options.max)
+  ) {
+    throw new Error(`Tool argument ${key} must be a positive integer`);
   }
   return value;
 }

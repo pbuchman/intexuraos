@@ -10,6 +10,7 @@ import {
   type CreateCodeTaskToolArgs,
   type CreateLinkToolArgs,
   type CreateNoteToolArgs,
+  type QueryCalendarEventsToolArgs,
   type CreateResearchToolArgs,
   type IntexAgentToolExecutor,
 } from './toolDefinitions.js';
@@ -17,7 +18,7 @@ import { INTEX_AGENT_SYSTEM_PROMPT } from './systemPrompt.js';
 import { classifyIntexAgentIntent } from './intentGate.js';
 
 const SUPPORTED_CAPABILITIES =
-  'notes, calendar events, research drafts, bookmarks, and code tasks';
+  'notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks';
 
 export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
@@ -31,7 +32,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (intent.kind === 'unsupported') {
         return {
           outcome: 'unsupported',
-          reply: unsupportedIntentReply(intent.reason),
+          reply: unsupportedIntentReply(),
         };
       }
 
@@ -49,8 +50,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         (tool) =>
           intent.kind === 'tool' && intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
       );
+      const systemPrompt = `${INTEX_AGENT_SYSTEM_PROMPT.text}\nCurrent date-time: ${input.currentDateTime}`;
       const result = await config.client.run({
-        systemPrompt: INTEX_AGENT_SYSTEM_PROMPT.text,
+        systemPrompt,
         messages: buildMessages(input.events, input.message),
         tools,
         toolChoice: 'auto',
@@ -207,6 +209,13 @@ function createTrackingToolExecutor(
         async () => await executor.createCalendarEvent(args)
       );
     },
+    async queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string> {
+      return await track(
+        'query_calendar_events',
+        toRecord(args),
+        async () => await executor.queryCalendarEvents(args)
+      );
+    },
     async createResearch(args: CreateResearchToolArgs): Promise<string> {
       return await track('create_research', toRecord(args), async () => await executor.createResearch(args));
     },
@@ -302,12 +311,6 @@ function malformedResult(): IntexAgentRunnerResult {
   };
 }
 
-function unsupportedIntentReply(
-  reason: 'read_only_personal_data' | 'multiple_resource_intents'
-): string {
-  if (reason === 'read_only_personal_data') {
-    return 'Nie mogę jeszcze przeglądać Twojego kalendarza ani sprawdzać zaplanowanych wydarzeń. Mogę utworzyć nowe wydarzenie, jeśli poprosisz o to wprost.';
-  }
-
+function unsupportedIntentReply(): string {
   return `I could not safely understand that request. I can create ${SUPPORTED_CAPABILITIES}.`;
 }

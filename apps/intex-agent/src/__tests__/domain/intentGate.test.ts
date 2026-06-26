@@ -55,13 +55,42 @@ describe('classifyIntexAgentIntent', () => {
   });
 
   it.each([
+    'What are my events scheduled for next week?',
+    'Show me tomorrow calendar events',
+    'How many times last month did I have Dentist?',
+    'Ile razy w zeszlym miesiacu mialem dentyste?',
     'Ciekawy jestem, co jutro jest w kalendarzu',
     'Nie możesz dla mnie sprawdzić, co jest jutro w kalendarzu?',
-    'Show me tomorrow calendar events',
-  ])('blocks read-only calendar requests before tool calling: %s', (text) => {
+  ])('allows read-only calendar queries: %s', (text) => {
     expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'tool',
+      allowedToolNames: ['query_calendar_events'],
+    });
+  });
+
+  it.each([
+    'How many notes did I create last month?',
+    'How many bookmarks did I save this week?',
+    'How many code tasks did I create last month?',
+    'Ile notatek zapisalem w zeszlym miesiacu?',
+  ])('does not route non-calendar count questions to calendar queries: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'no_action',
+      reason: 'conversation',
+    });
+  });
+
+  it('rejects mixed creation and calendar query intents', () => {
+    expect(classifyIntexAgentIntent('Create a note and show me next week calendar events')).toEqual({
       kind: 'unsupported',
-      reason: 'read_only_personal_data',
+      reason: 'multiple_resource_intents',
+    });
+  });
+
+  it('rejects mixed implicit link and calendar query intents', () => {
+    expect(classifyIntexAgentIntent('https://example.com and show me tomorrow calendar events')).toEqual({
+      kind: 'unsupported',
+      reason: 'multiple_resource_intents',
     });
   });
 });

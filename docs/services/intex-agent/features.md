@@ -6,6 +6,8 @@ Intex Agent powers WhatsApp text conversations. It keeps a per-user session open
 
 - Create notes from text messages.
 - Create Google Calendar events when the title, date, start, and end are clear.
+- List existing Google Calendar events for bounded date questions such as next week.
+- Count matching Google Calendar events for bounded date questions such as last month.
 - Create research drafts for multi-model review.
 - Save links as bookmarks.
 - Create code tasks, defaulting to planning mode.
@@ -18,7 +20,7 @@ Users can start fresh with `/new`, `new session`, `start new session`, `start ov
 
 ## Intent Gate
 
-Intex Agent exposes tools only when the message has explicit create/save intent for one supported resource. Bare `http://` and `https://` URL shares are the exception and route to bookmark creation. Read-only personal-data requests, such as asking what is in the calendar, return an unsupported reply instead of being converted into another action.
+Intex Agent exposes tools only when the message has explicit create/save intent for one supported resource. Bare `http://` and `https://` URL shares are the exception and route to bookmark creation. Read-only calendar list/count questions route only through `query_calendar_events`; other read-only personal-data requests return an unsupported reply instead of being converted into another action.
 
 ## Current Limits
 

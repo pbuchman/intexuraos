@@ -26,7 +26,8 @@ import { retryTask } from '../../domain/usecases/retryTask.js';
 import { submitToExecutionAgent } from '../../domain/usecases/submitToExecutionAgent.js';
 import { backLinkPlanningTask } from '../../domain/usecases/backLinkPlanningTask.js';
 import { deletePRTaskLock } from '../../domain/utils/prTaskLock.js';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { getWorkerTypeFromLabels, hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { resolveDefaultWorkerType } from '../../domain/utils/defaultWorkerTypeResolution.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret } from '../../domain/utils/secrets.js';
 import { loadConfig } from '../../config.js';
@@ -346,7 +347,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const processRequest: {
         userId: string;
         prompt: string;
-        workerType: WorkerType;
+        workerType?: WorkerType;
         taskMode?: 'planning' | 'execution';
         linearIssueId?: string;
         traceId?: string;
@@ -354,11 +355,13 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       } = {
         userId: body.userId,
         prompt: body.prompt,
-        workerType: body.workerType ?? 'auto',
         traceId,
         source: 'web',
       };
 
+      if (body.workerType !== undefined) {
+        processRequest.workerType = body.workerType;
+      }
       if (body.taskMode !== undefined) {
         processRequest.taskMode = body.taskMode;
       }
@@ -1376,6 +1379,22 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           scheduleNotBeforeAt = parsed;
         }
 
+        const settingsResult = await workerSettingsRepo.getSettings(userId);
+        const settingsForResolution = settingsResult.ok ? settingsResult.value : null;
+        const workerResolution = resolveDefaultWorkerType({
+          agentType,
+          labelWorkerType: getWorkerTypeFromLabels(issueResult.linearIssueLabels),
+          requestWorkerType: body.workerType,
+          settings: settingsForResolution,
+        });
+
+        if (workerResolution.source === 'default' && workerResolution.defaultField !== undefined) {
+          request.log.info(
+            { userId, [workerResolution.defaultField]: workerResolution.workerType },
+            'Using user default worker type'
+          );
+        }
+
         // Pre-generate task ID and derive deterministic webhook secret
         const config = loadConfig();
         const taskId = `task_${randomUUID()}`;
@@ -1404,7 +1423,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           prompt: body.prompt,
           sanitizedPrompt: sanitizedPromptText,
           systemPromptHash: 'default', // TODO: Use actual system prompt hash
-          workerType: body.workerType ?? 'auto',
+          workerType: workerResolution.workerType,
           workerLocation: 'pending', // Updated after dispatch with actual worker location
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
@@ -1457,7 +1476,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         await backLinkPlanningTask(codeTaskRepo, request.log, task);
 
         // Fetch user's worker settings to validate workers are configured
-        const settingsResult = await workerSettingsRepo.getSettings(userId);
         if (!settingsResult.ok) {
           request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
           const problem = dispatchFailureProblem({
