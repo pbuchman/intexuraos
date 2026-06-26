@@ -61,6 +61,22 @@ type PublicPrivateWhatsAppChat = Omit<
   'userId' | 'sourceAccountId' | 'matrixRoomId' | 'participantKeys'
 >;
 type PublicPrivateWhatsAppSender = Omit<PrivateWhatsAppSender, 'userId' | 'sourceAccountId'>;
+interface PublicPrivateWhatsAppMedia {
+  mxcUri: string;
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  storageStatus?: 'stored';
+  hasMedia?: boolean;
+  hasThumbnail?: boolean;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+}
 type PublicPrivateWhatsAppMessage = Omit<
   PrivateWhatsAppMessage,
   | 'userId'
@@ -71,7 +87,7 @@ type PublicPrivateWhatsAppMessage = Omit<
   | 'matrixSenderId'
   | 'media'
 > & {
-  media?: Record<string, unknown>;
+  media?: PublicPrivateWhatsAppMedia;
 };
 type PublicPrivateWhatsAppSenderDay = Omit<
   PrivateWhatsAppSenderDay,
@@ -82,6 +98,11 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(
     Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)
   ) as T;
+}
+
+function readOptionalFiniteNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function privateReadErrorResponse(description: string): Record<string, unknown> {
@@ -252,13 +273,17 @@ function toPublicChat(chat: PrivateWhatsAppChat): PublicPrivateWhatsAppChat {
 
 function toPublicMedia(
   media: PrivateWhatsAppMessage['media']
-): Record<string, unknown> | undefined {
+): PublicPrivateWhatsAppMedia | undefined {
   if (media === undefined) return undefined;
+  const mediaRecord = media as unknown as Record<string, unknown>;
   return omitUndefined({
     mxcUri: media.mxcUri,
     mimeType: media.mimeType,
     fileName: media.fileName,
     sizeBytes: media.sizeBytes,
+    width: readOptionalFiniteNumber(mediaRecord, 'width'),
+    height: readOptionalFiniteNumber(mediaRecord, 'height'),
+    durationMs: readOptionalFiniteNumber(mediaRecord, 'durationMs'),
     sha256: media.sha256,
     storageStatus: media.storageStatus,
     hasMedia: media.gcsPath !== undefined,
@@ -266,7 +291,7 @@ function toPublicMedia(
     storedMimeType: media.storedMimeType,
     storedSizeBytes: media.storedSizeBytes,
     storedAt: media.storedAt,
-  });
+  }) as PublicPrivateWhatsAppMedia;
 }
 
 function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsAppMessage {

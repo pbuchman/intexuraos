@@ -1202,36 +1202,38 @@ describe('Private WhatsApp Sync Routes', () => {
 
   it('projects stored private image media without leaking GCS paths to the browser', async () => {
     const token = await createToken({ sub: 'user-123' });
-    await ctx.app.inject({
-      method: 'POST',
-      url: '/internal/whatsapp/private/events',
-      headers: { 'x-internal-auth': 'test-internal-token' },
-      payload: createSparseImagePayload({
-        events: [
-          {
-            matrixRoomId: '!sparse-room:matrix.example',
-            matrixEventId: '$event-stored-image',
-            matrixSenderId: '@sparse:matrix.example',
-            eventTimestamp: '2026-06-22T11:00:00.000Z',
-            chat: { type: 'unknown' },
-            message: {
-              direction: 'incoming',
-              type: 'image',
-              media: {
-                mxcUri: 'mxc://matrix.example/stored-image',
-                mimeType: 'image/jpeg',
-                storageStatus: 'stored',
-                gcsPath: 'whatsapp/private/user/message/image.jpg',
-                thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
-                storedMimeType: 'image/jpeg',
-                storedSizeBytes: 11,
-                storedAt: '2026-06-26T10:00:00.000Z',
-              },
-            },
-            rawMatrixEvent: {},
-          },
-        ],
-      }),
+    await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: {
+        matrixRoomId: '!sparse-room:matrix.example',
+        type: 'unknown',
+      },
+      message: {
+        matrixRoomId: '!sparse-room:matrix.example',
+        matrixEventId: '$event-stored-image',
+        matrixSenderId: '@sparse:matrix.example',
+        senderKey: 'matrix:@sparse:matrix.example',
+        direction: 'incoming',
+        type: 'image',
+        media: {
+          mxcUri: 'mxc://matrix.example/stored-image',
+          mimeType: 'image/jpeg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user/message/image.jpg',
+          thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
+          storedMimeType: 'image/jpeg',
+          storedSizeBytes: 11,
+          storedAt: '2026-06-26T10:00:00.000Z',
+          width: 1280,
+          height: 720,
+          durationMs: 3456,
+        } as never,
+        eventTimestamp: '2026-06-22T11:00:00.000Z',
+        rawMatrixEvent: {},
+      },
     });
 
     const response = await ctx.app.inject({
@@ -1256,6 +1258,9 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.data.messages[0]?.media).toMatchObject({
       mxcUri: 'mxc://matrix.example/stored-image',
       mimeType: 'image/jpeg',
+      width: 1280,
+      height: 720,
+      durationMs: 3456,
       storageStatus: 'stored',
       hasMedia: true,
       hasThumbnail: true,
