@@ -8,6 +8,11 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { CodeTaskNewPage } from '../pages/CodeTaskNewPage.js';
 import type { LinearIssueOption } from '../hooks/useLinearIssueOptions.js';
 import { submitCodeTask } from '../services/codeAgentApi.js';
+import type { WorkerSettingsResponse } from '../services/workerSettingsApi.types.js';
+
+const mockWorkerSettings = vi.hoisted((): { current: WorkerSettingsResponse | null } => ({
+  current: null,
+}));
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -75,6 +80,34 @@ vi.mock('@/hooks', () => ({
   }),
   findRecentTask: vi.fn(),
   useTimeTick: (): number => 0,
+}));
+
+vi.mock('@/hooks/useWorkerSettings', () => ({
+  useWorkerSettings: (): {
+    settings: WorkerSettingsResponse | null;
+    loading: boolean;
+    refreshing: boolean;
+    error: null;
+    addWorker: () => Promise<void>;
+    updateWorker: () => Promise<void>;
+    deleteWorker: () => Promise<void>;
+    testConnectivity: () => Promise<never>;
+    reorderWorkers: () => Promise<void>;
+    updateDefaultWorkerType: () => Promise<void>;
+    refresh: () => Promise<void>;
+  } => ({
+    settings: mockWorkerSettings.current,
+    loading: false,
+    refreshing: false,
+    error: null,
+    addWorker: vi.fn().mockResolvedValue(undefined),
+    updateWorker: vi.fn().mockResolvedValue(undefined),
+    deleteWorker: vi.fn().mockResolvedValue(undefined),
+    testConnectivity: vi.fn().mockRejectedValue(new Error('not implemented')),
+    reorderWorkers: vi.fn().mockResolvedValue(undefined),
+    updateDefaultWorkerType: vi.fn().mockResolvedValue(undefined),
+    refresh: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 // Mock @uiw/react-md-editor
@@ -231,6 +264,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    mockWorkerSettings.current = null;
   });
 
   const getLinkExistingButton = (): HTMLElement =>
@@ -412,6 +446,125 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
         'Describe what you want to build. The selected worker will analyze the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.'
       );
     }
+  });
+});
+
+describe('CodeTaskNewPage - default worker selection', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mockWorkerSettings.current = null;
+  });
+
+  const configureWorkerSettings = (
+    settings: Partial<Pick<WorkerSettingsResponse, 'defaultExecutionWorkerType' | 'defaultPlanningWorkerType'>>,
+  ): void => {
+    mockWorkerSettings.current = {
+      workers: [],
+      ...settings,
+    };
+  };
+
+  it('selects the saved planning default on initial load', async () => {
+    configureWorkerSettings({ defaultPlanningWorkerType: 'opus' });
+
+    render(<CodeTaskNewPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Opus' }).className).toContain('border-blue-500');
+    });
+    expect(screen.getByRole('button', { name: 'Auto' }).className).not.toContain('border-blue-500');
+  });
+
+  it('selects the execution default when switching from planning to execution', async () => {
+    configureWorkerSettings({
+      defaultPlanningWorkerType: 'opus',
+      defaultExecutionWorkerType: 'codex',
+    });
+
+    render(<CodeTaskNewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /execution/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Codex' }).className).toContain('border-blue-500');
+    });
+    expect(screen.getByRole('button', { name: 'Opus' }).className).not.toContain('border-blue-500');
+  });
+
+  it('returns to the planning default when switching back from execution', async () => {
+    configureWorkerSettings({
+      defaultPlanningWorkerType: 'opus',
+      defaultExecutionWorkerType: 'codex',
+    });
+
+    render(<CodeTaskNewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /execution/i }));
+    fireEvent.click(screen.getByRole('button', { name: /planning/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Opus' }).className).toContain('border-blue-500');
+    });
+    expect(screen.getByRole('button', { name: 'Codex' }).className).not.toContain('border-blue-500');
+  });
+
+  it('submits the selected default worker type in the request', async () => {
+    configureWorkerSettings({ defaultPlanningWorkerType: 'opus' });
+
+    render(<CodeTaskNewPage />);
+
+    const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'default worker task' } });
+
+    const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+    fireEvent.click(submitButtons[0] as HTMLElement);
+    fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+    await waitFor(() => {
+      expect(submitCodeTask).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(submitCodeTask).mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(payload['workerType']).toBe('opus');
+  });
+
+  it('keeps a manual worker selection when worker settings refresh for the current mode', async () => {
+    configureWorkerSettings({ defaultPlanningWorkerType: 'opus' });
+
+    const { rerender } = render(<CodeTaskNewPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Opus' }).className).toContain('border-blue-500');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sonnet' }));
+    expect(screen.getByRole('button', { name: 'Sonnet' }).className).toContain('border-blue-500');
+
+    configureWorkerSettings({ defaultPlanningWorkerType: 'codex' });
+    rerender(<CodeTaskNewPage />);
+
+    expect(screen.getByRole('button', { name: 'Sonnet' }).className).toContain('border-blue-500');
+
+    const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'manual worker task' } });
+
+    const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+    fireEvent.click(submitButtons[0] as HTMLElement);
+    fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+    await waitFor(() => {
+      expect(submitCodeTask).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(submitCodeTask).mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(payload['workerType']).toBe('sonnet');
   });
 });
 
