@@ -394,6 +394,86 @@ describe('POST /code/submit', () => {
       );
     });
 
+    it('uses default planning worker type when the resolved task is planning and workerType is omitted', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-126',
+        linearIssueTitle: 'Planning issue',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const workerSettingsRepo = getServices().workerSettingsRepo;
+      await workerSettingsRepo.updateDefaultWorkerType(
+        'test-user-id',
+        'defaultPlanningWorkerType',
+        'sonnet'
+      );
+
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Plan the implementation',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'planning',
+          workerType: 'sonnet',
+        })
+      );
+    });
+
+    it('uses default execution worker type when the resolved task is execution and workerType is omitted', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-125',
+        linearIssueTitle: 'Execution-ready issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const workerSettingsRepo = getServices().workerSettingsRepo;
+      await workerSettingsRepo.updateDefaultWorkerType(
+        'test-user-id',
+        'defaultExecutionWorkerType',
+        'codex'
+      );
+
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Implement the execution-ready issue',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          workerType: 'codex',
+        })
+      );
+    });
+
     it('includes linearIssueId when provided', async () => {
       // Mock linearIssueService.ensureIssueExists to return the provided issue ID
       const linearService = getServices().linearIssueService;

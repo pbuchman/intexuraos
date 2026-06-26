@@ -440,6 +440,44 @@ describe('POST /internal/code/submit', () => {
     expect(body.data.codeTaskId).toMatch(/^task_/);
   });
 
+  it('uses default execution worker type when internal submissions set taskMode=execution without workerType', async () => {
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'test-worker',
+      url: 'https://test-worker.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
+    await services.workerSettingsRepo.updateDefaultWorkerType(
+      'test-user-id',
+      'defaultExecutionWorkerType',
+      'codex'
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/submit',
+      payload: {
+        userId: 'test-user-id',
+        prompt: 'Implement the login fix',
+        taskMode: 'execution',
+      },
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.payload) as {
+      data: { codeTaskId: string };
+    };
+    const taskResult = await codeTaskRepo.findById(body.data.codeTaskId);
+    expect(taskResult.ok).toBe(true);
+    expect(taskResult.ok ? taskResult.value?.workerType : undefined).toBe('codex');
+  });
+
   it('returns 424 when user has no workers configured', async () => {
     // No workers seeded for test-user-id — getSettings returns null (no doc),
     // which direct task submission treats the same as empty workers → worker_not_configured

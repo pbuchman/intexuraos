@@ -16,6 +16,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
+import { resolveDefaultWorkerType } from '../../domain/utils/defaultWorkerTypeResolution.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
@@ -32,7 +33,7 @@ const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'system-prompt-hash-v1';
 export interface SubmitDirectCodeTaskRequest {
   userId: string;
   prompt: string;
-  workerType: WorkerType;
+  workerType?: WorkerType;
   taskMode?: 'planning' | 'execution';
   linearIssueId?: string;
   repository?: string;
@@ -159,14 +160,20 @@ export async function submitDirectCodeTask(
     hasChildren,
   } = issueResult;
 
+  const effectiveAgentType: 'planning' | 'execution' =
+    request.taskMode ?? (hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning');
+
   // Resolution chain: Linear label > request workerType > user setting > 'auto'
   const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
-  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType;
-  if (effectiveWorkerType === 'auto') {
-    if (settings?.defaultPlanningWorkerType !== undefined) {
-      effectiveWorkerType = settings.defaultPlanningWorkerType;
-      logger.info({ userId, defaultPlanningWorkerType: effectiveWorkerType }, 'Using user default planning worker type');
-    }
+  const workerResolution = resolveDefaultWorkerType({
+    agentType: effectiveAgentType,
+    labelWorkerType,
+    requestWorkerType: workerType,
+    settings,
+  });
+  const effectiveWorkerType = workerResolution.workerType;
+  if (workerResolution.source === 'default' && workerResolution.defaultField !== undefined) {
+    logger.info({ userId, [workerResolution.defaultField]: effectiveWorkerType }, 'Using user default worker type');
   }
 
   logger.info(
@@ -180,9 +187,6 @@ export async function submitDirectCodeTask(
     },
     'Linear issue processed'
   );
-
-  const effectiveAgentType: 'planning' | 'execution' =
-    request.taskMode ?? (hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning');
 
   // Step 3b: Fan-out check (INT-962) — if parent issue has children with code-task labels,
   // create separate child tasks instead of dispatching the parent.

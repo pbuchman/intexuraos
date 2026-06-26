@@ -256,6 +256,38 @@ describe('submitDirectCodeTask', () => {
     expect(metricsClient.incrementTasksSubmitted).toHaveBeenCalledWith('glm', 'whatsapp');
   });
 
+  it('uses user default execution worker type when taskMode resolves to execution and request worker type is auto', async () => {
+    const { deps, workerSettingsRepo, codeTaskRepo } = createDeps();
+    vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+      ok({
+        userId: 'user-1',
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://worker.example.com',
+            cfAccessClientId: 'client-id',
+            cfAccessClientSecret: 'client-secret',
+            dispatchSigningSecret: 'dispatch-secret',
+            enabled: true,
+          },
+        ],
+        defaultExecutionWorkerType: 'codex',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    );
+
+    const result = await submit(deps, { taskMode: 'execution' });
+
+    expect(result.ok).toBe(true);
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentType: 'execution',
+        workerType: 'codex',
+      })
+    );
+  });
+
   it('returns internal_error when a user-provided Linear issue cannot be validated', async () => {
     const { deps, linearIssueService } = createDeps();
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
