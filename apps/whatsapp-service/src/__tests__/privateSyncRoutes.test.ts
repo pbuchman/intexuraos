@@ -1230,7 +1230,7 @@ describe('Private WhatsApp Sync Routes', () => {
           width: 1280,
           height: 720,
           durationMs: 3456,
-        } as never,
+        },
         eventTimestamp: '2026-06-22T11:00:00.000Z',
         rawMatrixEvent: {},
       },

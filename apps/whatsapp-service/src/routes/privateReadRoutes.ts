@@ -100,11 +100,6 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): T {
   ) as T;
 }
 
-function readOptionalFiniteNumber(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
 function privateReadErrorResponse(description: string): Record<string, unknown> {
   return {
     description,
@@ -275,15 +270,14 @@ function toPublicMedia(
   media: PrivateWhatsAppMessage['media']
 ): PublicPrivateWhatsAppMedia | undefined {
   if (media === undefined) return undefined;
-  const mediaRecord = media as unknown as Record<string, unknown>;
   return omitUndefined({
     mxcUri: media.mxcUri,
     mimeType: media.mimeType,
     fileName: media.fileName,
     sizeBytes: media.sizeBytes,
-    width: readOptionalFiniteNumber(mediaRecord, 'width'),
-    height: readOptionalFiniteNumber(mediaRecord, 'height'),
-    durationMs: readOptionalFiniteNumber(mediaRecord, 'durationMs'),
+    width: media.width,
+    height: media.height,
+    durationMs: media.durationMs,
     sha256: media.sha256,
     storageStatus: media.storageStatus,
     hasMedia: media.gcsPath !== undefined,

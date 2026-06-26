@@ -43,6 +43,9 @@ export interface IngestPrivateWhatsAppEventInput {
       mimeType?: string;
       fileName?: string;
       sizeBytes?: number;
+      width?: number;
+      height?: number;
+      durationMs?: number;
       sha256?: string;
       storageStatus?: 'stored';
       gcsPath?: string;
@@ -306,6 +309,18 @@ function parseMedia(
   const sizeBytes = rawMedia['sizeBytes'];
   if (typeof sizeBytes === 'number' && Number.isFinite(sizeBytes)) {
     media.sizeBytes = sizeBytes;
+  }
+  const width = rawMedia['width'];
+  if (typeof width === 'number' && Number.isFinite(width)) {
+    media.width = width;
+  }
+  const height = rawMedia['height'];
+  if (typeof height === 'number' && Number.isFinite(height)) {
+    media.height = height;
+  }
+  const durationMs = rawMedia['durationMs'];
+  if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+    media.durationMs = durationMs;
   }
   const sha256 = readOptionalString(rawMedia, 'sha256');
   if (typeof sha256 === 'string') {

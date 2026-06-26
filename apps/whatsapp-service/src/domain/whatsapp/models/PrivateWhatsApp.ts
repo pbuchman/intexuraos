@@ -24,6 +24,9 @@ export interface PrivateWhatsAppMediaInfo {
   mimeType?: string;
   fileName?: string;
   sizeBytes?: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
   sha256?: string;
   storageStatus?: PrivateWhatsAppMediaStorageStatus;
   gcsPath?: string;
