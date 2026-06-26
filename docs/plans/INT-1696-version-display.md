@@ -49,16 +49,27 @@
 
 - [ ] **Step 1: Add deterministic build metadata test env setup**
 
-Add this before the `describe('Header', () => {` block:
+Add this near the top of the file, before the `describe('Header', () => {` block:
 
 ```typescript
 const buildEnv = import.meta.env as Record<string, string>;
+const originalEnv = { ...import.meta.env };
+```
 
+Then merge the build metadata setup into the existing `beforeEach` inside `describe('Header', () => {` so it runs alongside the existing `vi.clearAllMocks()` reset:
+
+```typescript
 beforeEach(() => {
+  vi.clearAllMocks();
+
   buildEnv['INTEXURAOS_BUILD_VERSION'] = '3.8.0-test123';
   buildEnv['INTEXURAOS_COMMIT_SHA'] = 'test1234567890abcdef';
   buildEnv['INTEXURAOS_COMMIT_MESSAGE'] = 'Test build metadata';
   buildEnv['INTEXURAOS_BUILD_DATE'] = '2026-06-26T12:00:00.000Z';
+});
+
+afterEach(() => {
+  Object.assign(import.meta.env, originalEnv);
 });
 ```
 
@@ -106,7 +117,7 @@ it('opens version information above the overlay from the logo in mobile PWA mode
 
   const dialog = screen.getByRole('dialog', { name: /Version Information/i });
   expect(dialog).toBeInTheDocument();
-  expect(dialog).toHaveClass('z-60');
+  expect(dialog).toHaveClass('z-[60]');
   expect(screen.getByText('3.8.0-test123')).toBeVisible();
 });
 ```
@@ -176,7 +187,7 @@ const formattedDate = formatBuildDate(buildDate);
 Replace the current `contentClassName` prop with a class that only adds the higher stack level and mobile width constraints:
 
 ```tsx
-contentClassName="fixed left-1/2 top-1/2 z-60 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white shadow-2xl dark:bg-slate-800"
+contentClassName="fixed left-1/2 top-1/2 z-[60] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white shadow-2xl dark:bg-slate-800"
 ```
 
 This keeps the modal content above the shared overlay (`z-50`) and above the fixed header (`z-50`), avoids equal z-index ordering, and prevents mobile content from overflowing the viewport.
@@ -245,9 +256,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { VersionInfoModal } from '../VersionInfoModal.js';
 
+const originalEnv = { ...import.meta.env };
+
 describe('VersionInfoModal', () => {
   afterEach(() => {
     cleanup();
+    Object.assign(import.meta.env, originalEnv);
   });
 
   it('renders fallback metadata when build env values are missing or malformed', () => {
@@ -347,7 +361,7 @@ Use a mobile viewport such as `390x844` and verify:
 Verify the content order:
 
 ```text
-Modal content z-60 > modal overlay z-50 == header z-50 > page-level sticky bars z-30 or lower.
+Modal content z-[60] > modal overlay z-50 == header z-50 > page-level sticky bars z-30 or lower.
 ```
 
 If a page-level sticky component uses `z-50` or higher, lower it or document why it must remain above the header before committing.
