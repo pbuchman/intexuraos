@@ -133,6 +133,16 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             },
             required: ['success', 'error'],
           },
+          413: {
+            description: 'Payload too large',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
           500: {
             description: 'Internal error',
             type: 'object',
