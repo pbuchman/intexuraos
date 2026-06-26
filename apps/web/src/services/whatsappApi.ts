@@ -169,6 +169,21 @@ export interface UpsertPrivateWhatsAppAccountRequest {
   phoneNumber: string;
 }
 
+function normalizePrivateMediaAccessUrl(url: string): string {
+  if (!url.startsWith('/private/')) {
+    return url;
+  }
+
+  return `${config.whatsappServiceUrl.replace(/\/$/, '')}${url}`;
+}
+
+function normalizePrivateMediaUrlResponse(response: MediaUrlResponse): MediaUrlResponse {
+  return {
+    ...response,
+    url: normalizePrivateMediaAccessUrl(response.url),
+  };
+}
+
 function appendOptionalNumber(params: URLSearchParams, key: string, value: number | undefined): void {
   if (value !== undefined) {
     params.set(key, String(value));
@@ -350,11 +365,12 @@ export async function getPrivateWhatsAppMessageMediaUrl(
   messageId: string
 ): Promise<MediaUrlResponse> {
   const encodedMessageId = encodeURIComponent(messageId);
-  return await apiRequest<MediaUrlResponse>(
+  const response = await apiRequest<MediaUrlResponse>(
     config.whatsappServiceUrl,
     `/private/messages/${encodedMessageId}/media`,
     accessToken
   );
+  return normalizePrivateMediaUrlResponse(response);
 }
 
 export async function getPrivateWhatsAppMessageThumbnailUrl(
@@ -362,9 +378,10 @@ export async function getPrivateWhatsAppMessageThumbnailUrl(
   messageId: string
 ): Promise<MediaUrlResponse> {
   const encodedMessageId = encodeURIComponent(messageId);
-  return await apiRequest<MediaUrlResponse>(
+  const response = await apiRequest<MediaUrlResponse>(
     config.whatsappServiceUrl,
     `/private/messages/${encodedMessageId}/thumbnail`,
     accessToken
   );
+  return normalizePrivateMediaUrlResponse(response);
 }

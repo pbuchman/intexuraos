@@ -14,6 +14,7 @@ import {
   createProcessingPlan,
   ensureRoomContextsForIncomingEvents,
   extractRoomContexts,
+  fetchMatrixMedia,
   isIncomingWhatsAppMatrixEvent,
   runSyncIteration,
 } from './server.mjs';
@@ -271,6 +272,104 @@ test('collectPrivateWhatsAppEvents maps Matrix media, emote, reaction, and stick
       { direction: 'incoming', type: 'text', text: 'waves' },
     ]
   );
+});
+
+test('collectPrivateWhatsAppEvents maps finite positive Matrix image dimensions only', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!direct:home-dev': {
+            state: { events: [] },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$image-dimensions',
+                  content: {
+                    msgtype: 'm.image',
+                    body: 'photo.jpg',
+                    url: 'mxc://home-dev/image-dimensions',
+                    info: { w: 640, h: 480 },
+                  },
+                }),
+                matrixMessage({
+                  event_id: '$image-invalid-dimensions',
+                  content: {
+                    msgtype: 'm.image',
+                    body: 'broken.jpg',
+                    url: 'mxc://home-dev/image-invalid-dimensions',
+                    info: { w: Number.POSITIVE_INFINITY, h: 0 },
+                  },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.deepEqual(events[0]?.message.media, {
+    mxcUri: 'mxc://home-dev/image-dimensions',
+    fileName: 'photo.jpg',
+    width: 640,
+    height: 480,
+  });
+  assert.deepEqual(events[1]?.message.media, {
+    mxcUri: 'mxc://home-dev/image-invalid-dimensions',
+    fileName: 'broken.jpg',
+  });
+});
+
+test('fetchMatrixMedia rejects oversized responses before reading the body when content-length exceeds the adapter limit', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response('image-bytes', {
+      status: 200,
+      headers: {
+        'content-length': String(25 * 1024 * 1024 + 1),
+        'content-type': 'image/jpeg',
+      },
+    });
+
+  try {
+    await assert.rejects(
+      fetchMatrixMedia(config, 'matrix-token', 'mxc://home-dev/image-too-large'),
+      /matrix_media_too_large/
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fetchMatrixMedia rejects oversized responses while streaming when content-length is absent', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(25 * 1024 * 1024));
+          controller.enqueue(new Uint8Array([1]));
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          'content-type': 'image/jpeg',
+        },
+      }
+    );
+
+  try {
+    await assert.rejects(
+      fetchMatrixMedia(config, 'matrix-token', 'mxc://home-dev/image-stream-too-large'),
+      /matrix_media_too_large/
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('isIncomingWhatsAppMatrixEvent accepts incoming reactions and stickers', () => {
@@ -1052,6 +1151,71 @@ test('runSyncIteration does not persist Matrix state when image upload fails', a
 
   const state = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
   assert.equal(state.nextBatch, 'batch-1');
+});
+
+test('runSyncIteration does not persist Matrix state when Matrix media exceeds the adapter byte limit', async () => {
+  const stateFile = await createTempStateFile({
+    nextBatch: 'batch-1',
+    roomContexts: {},
+  });
+  const runtime = { state: 'starting', counters: {} };
+  let postedEvents = false;
+  let uploadedMedia = false;
+
+  await assert.rejects(
+    runSyncIteration(
+      {
+        ...config,
+        stateFile,
+        mediaUploadUrl: 'https://intexuraos.cloud/internal/whatsapp/private/media',
+      },
+      runtime,
+      {
+        readAccessToken: () => 'matrix-token',
+        hasNonEmptyFile: () => true,
+        fetchMatrixSync: async () => ({
+          next_batch: 'batch-2',
+          rooms: {
+            join: {
+              '!room:home-dev': {
+                state: { events: [] },
+                timeline: {
+                  events: [
+                    matrixMessage({
+                      event_id: '$image-too-large',
+                      content: {
+                        msgtype: 'm.image',
+                        body: 'image.jpg',
+                        url: 'mxc://home-dev/image-too-large',
+                        info: { mimetype: 'image/jpeg', size: 25 * 1024 * 1024 + 1 },
+                      },
+                    }),
+                  ],
+                },
+              },
+            },
+          },
+        }),
+        fetchMatrixRoomState: async () => ({}),
+        fetchMatrixMedia: async () => {
+          throw new Error('matrix_media_too_large');
+        },
+        uploadPrivateMedia: async () => {
+          uploadedMedia = true;
+          throw new Error('should_not_upload_media');
+        },
+        postEventsInBatches: async () => {
+          postedEvents = true;
+        },
+      }
+    ),
+    /matrix_media_too_large/
+  );
+
+  const state = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
+  assert.equal(state.nextBatch, 'batch-1');
+  assert.equal(uploadedMedia, false);
+  assert.equal(postedEvents, false);
 });
 
 test('runSyncIteration surfaces Matrix sync, ingest API, and corrupted state errors', async () => {

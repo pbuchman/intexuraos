@@ -9,6 +9,7 @@ const DEFAULT_POLL_TIMEOUT_MS = 30_000;
 const DEFAULT_RETRY_DELAY_MS = 10_000;
 const DEFAULT_INITIAL_SYNC_TIMEOUT_MS = 0;
 const MAX_EVENTS_PER_INGEST_REQUEST = 100;
+const MAX_PRIVATE_MEDIA_BYTES = 25 * 1024 * 1024;
 const DEFAULT_BRIDGE_BOT_USERS = ['@whatsappbot:home-dev', '@whatsapp-sync:home-dev'];
 
 const defaultBridgeBotUsers = new Set(DEFAULT_BRIDGE_BOT_USERS);
@@ -733,12 +734,27 @@ function withMediaFromContent(message, content) {
   if (typeof sizeBytes === 'number' && Number.isFinite(sizeBytes)) {
     media.sizeBytes = sizeBytes;
   }
+  const width = readFinitePositiveNumber(info.w);
+  if (width !== undefined) {
+    media.width = width;
+  }
+  const height = readFinitePositiveNumber(info.h);
+  if (height !== undefined) {
+    media.height = height;
+  }
   const fileName = readString(content, 'filename') ?? readString(content, 'body');
   if (fileName !== undefined) {
     media.fileName = fileName;
   }
 
   return { ...message, media };
+}
+
+function readFinitePositiveNumber(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return value;
 }
 
 function messageTypeFromMatrixMsgtype(msgtype) {
@@ -886,7 +902,7 @@ async function fetchMatrixRoomState(config, accessToken, roomId, stateType, stat
   return await response.json();
 }
 
-async function fetchMatrixMedia(config, accessToken, mxcUri) {
+export async function fetchMatrixMedia(config, accessToken, mxcUri) {
   const response = await fetch(buildMatrixMediaDownloadUrl(config, mxcUri), {
     headers: {
       authorization: `Bearer ${accessToken}`,
@@ -896,9 +912,41 @@ async function fetchMatrixMedia(config, accessToken, mxcUri) {
   if (!response.ok) {
     throw new Error(`matrix_media_download_failed_${response.status}`);
   }
-  const arrayBuffer = await response.arrayBuffer();
+
+  const contentLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > MAX_PRIVATE_MEDIA_BYTES) {
+    throw new Error('matrix_media_too_large');
+  }
+
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    return {
+      buffer: Buffer.alloc(0),
+      contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_PRIVATE_MEDIA_BYTES) {
+        await reader.cancel('matrix_media_too_large');
+        throw new Error('matrix_media_too_large');
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
   return {
-    buffer: Buffer.from(arrayBuffer),
+    buffer: Buffer.concat(chunks, totalBytes),
     contentType: response.headers.get('content-type') ?? 'application/octet-stream',
   };
 }
