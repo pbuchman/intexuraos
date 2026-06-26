@@ -234,14 +234,14 @@ The system can only delegate work safely because the engineering discipline is s
 ---
 
 <details>
-<summary><h2>What's New in v3.7.0</h2></summary>
+<summary><h2>What's New in v3.8.0</h2></summary>
 
 > See [CHANGELOG.md](CHANGELOG.md) for the complete history.
 
-| Improvement                        | Impact                                                                                               |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Fishing Assistant Chat and RAG** | Chat with grounded fishing knowledge, conversation history, mobile support, and validated citations. |
-| **Richer LLM Cost Visibility**     | Track LLM usage, research costs, image billing, and prompt-type reporting with more accurate detail. |
+| Improvement                     | Impact                                                                                                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Intex Agent Unified Actions** | Use one Intex Agent workflow to create code tasks, research drafts, bookmarks, notes, and calendar actions, with legacy action agents folded into one clear path. |
+| **Private WhatsApp Workspace**  | Mirror and inspect private WhatsApp conversations with preserved group context, sender/day views, Matrix sync, read-only logs, and reliable continuity.           |
 
 Earlier releases added WhatsApp group digests, centralized LLM pricing, Hellscript writing, Codex runtime support, execution memory, remediation workflows, GitHub PR triage, merge queue automation, and agent-based code task routing.
 

@@ -2,9 +2,12 @@
 
 Use Intex Agent when working on WhatsApp text conversations and direct tool calls.
 
-## Entry Point
+## Entry Points
 
 - `POST /internal/intex-agent/messages`
+- `GET /sessions`
+- `GET /sessions/:sessionId`
+- `GET /sessions/:sessionId/events`
 
 Every internal route must log incoming requests before auth validation.
 
@@ -22,4 +25,7 @@ Every internal route must log incoming requests before auth validation.
 - Tool execution lives in `apps/intex-agent/src/domain/agent/toolExecutor.ts`.
 - The system prompt lives in `apps/intex-agent/src/domain/agent/systemPrompt.ts`.
 - Unsupported requests should return an unsupported outcome and explain the currently supported jobs.
-
+- Intent gating lives in `apps/intex-agent/src/domain/agent/intentGate.ts`. Keep tools hidden unless one supported create/save intent is explicit; bare URLs route to `create_link`.
+- Session transitions live in `apps/intex-agent/src/domain/sessions/sessionController.ts`. Completed, clarification, no-action, and unsupported turns leave the session open for follow-up.
+- WhatsApp replies are published through `apps/intex-agent/src/infra/pubsub/whatsappReplyPublisher.ts` with `replyToMessageId` and session correlation.
+- Do not reintroduce retired command/action-agent compatibility behavior. Add new supported jobs as explicit Intex Agent tools.

@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.8.0
+
+### Added
+
+- Intex Agent Unified Actions: one Intex Agent workflow now creates code tasks, research drafts, bookmarks, notes, and calendar actions while replacing duplicated legacy action agents (INT-1682, INT-1683, INT-1677).
+- Private WhatsApp Workspace: private chat ingest, conversations, read-only logs, sender/day aggregation, Matrix sync, and preserved group context now work together as one private WhatsApp surface (INT-1673, INT-1674, INT-1675, INT-1676, INT-1678).
+- Intex Agent WhatsApp sessions now keep assistant conversations open with reliable reply delivery, timeline display, session routing, and explicit intent gates for action tools (INT-1679, INT-1680, INT-1681, INT-1691, INT-1692).
+
+### Changed
+
+- Obsolete command action agents were removed from the runtime so Intex Agent is the single action entry point (INT-1677).
+- README and homepage showcase content now reflect the current Intex Agent and private WhatsApp capabilities (INT-1694).
+- Dash0 Secret Manager references were removed from setup documentation (INT-1667).
+
+### Fixed
+
+- Code task documentation review dispatch now routes requested documentation reviews reliably (INT-1665).
+- Intex Agent WhatsApp replies, session routing, timeline dates, and explicit tool intent handling are more reliable (INT-1680, INT-1681, INT-1691, INT-1692).
+
+### Improved
+
+- Code task and orchestrator reliability now handles Docker hangs and completed task finalization more consistently while reducing handled Sentry noise (INT-1668).
+- Artifact Registry retention keeps deployment storage leaner and more predictable (INT-1666).
+- Retired async cleanup is guarded more safely for stale background work (INT-1693).
+- Repository composition analysis and project Superpowers automation were refreshed for maintainers (INT-1670, INT-1671).
+
 ## 3.7.0
 
 ### Added

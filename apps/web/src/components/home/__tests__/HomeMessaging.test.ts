@@ -22,7 +22,7 @@ describe('homepage showcase messaging', () => {
   it('keeps the hero product mock current and representative', () => {
     const showcase = readHomeFile('HeroShowcase.tsx');
 
-    expect(showcase).toContain('ver. 3.7.0');
+    expect(showcase).toContain('ver. 3.8.0');
     expect(showcase).toContain('Research draft ready');
     expect(showcase).toContain('Calendar event created');
     expect(showcase).toContain('Bookmark summarized');

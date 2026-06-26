@@ -8,7 +8,7 @@ export function Footer(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-cyan-600" />
           <span className="font-bold text-neutral-900">IntexuraOS</span>
-          <span className="text-xs text-neutral-400">v3.7.0</span>
+          <span className="text-xs text-neutral-400">v3.8.0</span>
         </div>
         <p className="text-sm text-neutral-500">
           &copy; {new Date().getFullYear()}{' '}

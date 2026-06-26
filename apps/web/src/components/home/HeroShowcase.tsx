@@ -153,7 +153,7 @@ export function HeroShowcase(): React.JSX.Element {
               <span className="text-[10px] font-black text-white">I</span>
             </div>
             <span className="text-[11px] font-bold text-slate-900">IntexuraOS</span>
-            <span className="text-[8px] text-slate-400">ver. 3.7.0</span>
+            <span className="text-[8px] text-slate-400">ver. 3.8.0</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">

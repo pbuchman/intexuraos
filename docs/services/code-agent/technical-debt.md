@@ -1,4 +1,4 @@
-# Code Agent — Technical Debt
+# Code Agent - Technical Debt
 
 **Last Updated:** 2026-06-12
 **Analysis Run:** [2026-06-12 release 3.7.0 Service Scribe pass]
@@ -22,7 +22,7 @@
 
 Replace static hash placeholders with computed hashes from the real system prompt template. This enables prompt A/B testing and audit compliance.
 
-**Files:** `processCodeAction.ts:26`, `routes/code/task-routes.ts:1683`
+**Files:** `domain/usecases/submitDirectCodeTask.ts:26`, `routes/code/task-routes.ts:1406`
 
 ### 2. Distributed drain queue guard
 
@@ -36,21 +36,21 @@ The execution memory graph is in alpha. Planned improvements include tuning rera
 
 ### 1. System prompt hash is a static placeholder
 
-**File:** `apps/code-agent/src/domain/usecases/processCodeAction.ts:26`
+**File:** `apps/code-agent/src/domain/usecases/submitDirectCodeTask.ts:26`
 
 ```typescript
 // TODO: Compute from actual system prompt content instead of using a static placeholder.
 ```
 
-**File:** `apps/code-agent/src/routes/code/task-routes.ts:1683`
+**File:** `apps/code-agent/src/routes/code/task-routes.ts:1406`
 
 ```typescript
 systemPromptHash: 'default', // TODO: Use actual system prompt hash
 ```
 
-The `systemPromptHash` field is designed for audit tracking — recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
+The `systemPromptHash` field is designed for audit tracking - recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
 
-**Impact:** Audit trail gap — no way to correlate task results with the system prompt version that generated them.
+**Impact:** Audit trail gap - no way to correlate task results with the system prompt version that generated them.
 
 **Remediation:** Compute SHA-256 of the actual system prompt template at startup and inject it via config.
 
@@ -82,20 +82,19 @@ Module-level mutable state for preventing concurrent drain operations. Works for
 
 Throughout the codebase, Firestore `Timestamp` objects require runtime type narrowing when serializing to JSON. The `timestampToIso()` helper handles this but requires `as` casts. This pattern appears in `routes/code/*`, `mergeQueueRoutes.ts`, and `issueGroupRoutes.ts` and could benefit from a typed wrapper.
 
-### 2. `any` type usage in Firestore queries
+### 2. Firestore adapter typing remains broad
 
-**File:** `infra/repositories/firestoreCodeTaskRepository.ts`
+**File:** `infra/firestore/firestoreCodeTaskRepository.ts`
 
-Two instances of `as any` for Firestore document mapping:
+The Firestore adapter is intentionally thin and delegates most shape work to sibling serializer and query-builder modules, but it still carries a file-level ESLint disable and broad internal casts in the `guarded()` helper:
 
 ```typescript
-const tasks = resultDocs.map((doc: any) => ...
-const tasks = snapshot.docs.map((doc: any) => ...
+return asResult ? (out as Result<T, RepositoryError>) : ok(out as T);
 ```
 
-**Impact:** Low — these are infrastructure-layer Firestore SDK type coercions, not domain logic.
+**Impact:** Low - these are infrastructure-layer Firestore SDK coercions, not domain logic.
 
-**Remediation:** Use typed Firestore converters to eliminate the `any` casts.
+**Remediation:** Use typed Firestore converters and narrower helper overloads to remove the adapter-wide lint disable and internal casts.
 
 ## Test Coverage Notes
 
@@ -113,6 +112,7 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 
 | Issue    | Description                                        | Resolution                                                                             |
 | -------- | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| PR #2134 | Handled GitHub dispatch/evaluator warnings created noisy Sentry events | Added `_skipSentry` on expected preserved-container send failures, invalid webhook signatures, fallback/LLM triage warnings, and reconcile list failures; stale PR automation comments now post replacements on `NOT_FOUND`/`UNAUTHORIZED` |
 | INT-1430 | `codeRoutes.ts` route monolith                     | Split into a 41-line composition plugin plus resource-specific route modules           |
 | INT-1468 | Code tasks could only dispatch immediately         | `scheduledDispatch` stores future eligibility; queue drain skips until `notBeforeAt`   |
 | INT-1585 | Longer automation needed per-task time budgets     | `timeoutHours` persisted on `CodeTask` and forwarded to orchestrator dispatch payload  |
@@ -125,13 +125,13 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 | PR #2126 | Issue group counts included hidden phantom groups  | `GET /issue-groups` subtracts summaries with no displayable tasks from badge counts    |
 | PR #2111 | Public API resource paths were doubled in callers  | Public code-agent resources normalized under `/api/code` without `/code` duplication   |
 | INT-1414 | Task finalization stalls on webhook timeout        | Dedicated `PATCH /internal/code-tasks/:id/status` endpoint for idempotent status write |
-| INT-1406 | PR triage blocks webhook response                  | Moved to Pub/Sub push subscription — webhook returns immediately                       |
+| INT-1406 | PR triage blocks webhook response                  | Moved to Pub/Sub push subscription - webhook returns immediately                       |
 | INT-1383 | No way to mark issue groups as high-priority       | `POST /issue-groups/:groupKey/important` endpoint with `isImportant` flag         |
 | INT-1389 | GitHub Agent uses hardcoded model                  | Replaced later by OpenRouter Gemini 3 Flash Preview with user/platform key resolution  |
-| INT-1360 | Cannot skip design phase for known-good tasks      | `taskMode` parameter on `POST /submit` — choose planning or execution explicitly  |
+| INT-1360 | Cannot skip design phase for known-good tasks      | `taskMode` parameter on `POST /submit` - choose planning or execution explicitly  |
 | INT-1345 | Code tasks triggered on draft PRs waste compute    | `DraftPRRule` blocks all code tasks when `isDraft === true`                            |
 | INT-1380 | Merge step attempted on closed/merged PRs          | Pipeline suppresses merge step for closed/merged PRs                                   |
-| INT-1375 | Failed tasks not auto-retried on different worker  | Self-healing triage with `autoRetryTask` — up to 3 retries excluding failed worker     |
+| INT-1375 | Failed tasks not auto-retried on different worker  | Self-healing triage with `autoRetryTask` - up to 3 retries excluding failed worker     |
 | INT-1361 | Inactivity restart dispatches to wrong PR          | PR URL validation + `prUrlValidationFailed` field for audit                            |
 | INT-1378 | Usage webhook gateway schema mismatch              | Migrated to v2 schema for consistency with llm-usage-service                           |
 | INT-1098 | Execution memory retrieval pipeline                | Pre-run vector retrieval with query normalization, reranking, and application tracking |
