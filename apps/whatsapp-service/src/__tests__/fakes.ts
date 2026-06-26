@@ -755,6 +755,16 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     );
   }
 
+  getMessageById(messageId: string): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>> {
+    const stored = Array.from(this.stored.values()).find(
+      (candidate) => this.toMessage(candidate).id === messageId
+    );
+    if (stored === undefined) {
+      return Promise.resolve(ok(null));
+    }
+    return Promise.resolve(ok(this.toMessage(stored)));
+  }
+
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {

@@ -44,6 +44,12 @@ export interface IngestPrivateWhatsAppEventInput {
       fileName?: string;
       sizeBytes?: number;
       sha256?: string;
+      storageStatus?: 'stored';
+      gcsPath?: string;
+      thumbnailGcsPath?: string;
+      storedMimeType?: string;
+      storedSizeBytes?: number;
+      storedAt?: string;
     };
   };
   rawMatrixEvent: unknown;
@@ -304,6 +310,30 @@ function parseMedia(
   const sha256 = readOptionalString(rawMedia, 'sha256');
   if (typeof sha256 === 'string') {
     media.sha256 = sha256;
+  }
+  const storageStatus = readOptionalString(rawMedia, 'storageStatus');
+  if (storageStatus === 'stored') {
+    media.storageStatus = storageStatus;
+  }
+  const gcsPath = readOptionalString(rawMedia, 'gcsPath');
+  if (typeof gcsPath === 'string') {
+    media.gcsPath = gcsPath;
+  }
+  const thumbnailGcsPath = readOptionalString(rawMedia, 'thumbnailGcsPath');
+  if (typeof thumbnailGcsPath === 'string') {
+    media.thumbnailGcsPath = thumbnailGcsPath;
+  }
+  const storedMimeType = readOptionalString(rawMedia, 'storedMimeType');
+  if (typeof storedMimeType === 'string') {
+    media.storedMimeType = storedMimeType;
+  }
+  const storedSizeBytes = rawMedia['storedSizeBytes'];
+  if (typeof storedSizeBytes === 'number' && Number.isFinite(storedSizeBytes)) {
+    media.storedSizeBytes = storedSizeBytes;
+  }
+  const storedAt = readOptionalString(rawMedia, 'storedAt');
+  if (typeof storedAt === 'string') {
+    media.storedAt = storedAt;
   }
   return { ok: true, media };
 }

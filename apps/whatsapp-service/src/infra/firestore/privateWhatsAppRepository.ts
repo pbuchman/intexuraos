@@ -87,6 +87,7 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
     upsertAccount,
     disableAccount,
     storeIncomingMessage,
+    getMessageById,
     findMessages,
     findChats,
     findSenders,
@@ -368,6 +369,27 @@ async function storeIncomingMessage(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to store private WhatsApp message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function getMessageById(
+  messageId: string
+): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>> {
+  try {
+    const doc = await getFirestore()
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc(messageId)
+      .get();
+    if (!doc.exists) {
+      return ok(null);
+    }
+    const data = doc.data() as Omit<PrivateWhatsAppMessage, 'id'> & { id?: string };
+    return ok({ ...data, id: data.id ?? doc.id });
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to load private WhatsApp message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
