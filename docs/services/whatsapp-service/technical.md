@@ -81,6 +81,14 @@ Private event ingest accepts `deliveryMode` values `live` and `backfill`. Messag
 
 Private day keys are generated in the `Europe/Warsaw` time zone. Sender keys prefer a normalized phone number (`phone:+...`) and fall back to the Matrix sender ID (`matrix:...`) when phone metadata is missing.
 
+## Private WhatsApp Image Storage
+
+New private WhatsApp `image` messages synchronized from Matrix are copied into the private WhatsApp media bucket before the message event is ingested. The Matrix adapter owns Matrix media downloads. `whatsapp-service` owns GCS upload, thumbnail generation, Firestore metadata, and signed URL access.
+
+Stored private media uses `whatsapp/private/{userId}/{messageId}/{mediaId}.{ext}` and `whatsapp/private/{userId}/{messageId}/{mediaId}_thumb.jpg`. Browser reads use owner-checked signed URL routes. Internal processors use the internal signed URL route with `sourceAccountId` validation.
+
+Existing image messages without stored GCS metadata intentionally remain as placeholders.
+
 ## Voice Boundary
 
 Audio/voice webhook events do not publish transcription jobs for Intex. They send the unsupported voice reply and complete the webhook without creating an Intex message event.
