@@ -168,6 +168,37 @@ describe('GcsMediaStorageAdapter', () => {
     });
   });
 
+  it('stores private WhatsApp media under the private prefix', async () => {
+    mockSave.mockResolvedValue(undefined);
+
+    const buffer = Buffer.from('private-image-bytes');
+    const original = await adapter.uploadPrivateMedia(
+      'user-123',
+      'message-456',
+      'media-789',
+      'jpg',
+      buffer,
+      'image/jpeg'
+    );
+    const thumbnail = await adapter.uploadPrivateThumbnail(
+      'user-123',
+      'message-456',
+      'media-789',
+      'jpg',
+      Buffer.from('thumbnail-bytes'),
+      'image/jpeg'
+    );
+
+    expect(original.ok).toBe(true);
+    expect(thumbnail.ok).toBe(true);
+    if (!original.ok) throw new Error(original.error.message);
+    if (!thumbnail.ok) throw new Error(thumbnail.error.message);
+    expect(original.value.gcsPath).toBe('whatsapp/private/user-123/message-456/media-789.jpg');
+    expect(thumbnail.value.gcsPath).toBe(
+      'whatsapp/private/user-123/message-456/media-789_thumb.jpg'
+    );
+  });
+
   describe('delete', () => {
     it('returns success on successful delete', async () => {
       mockDelete.mockResolvedValue([{}]);

@@ -1295,6 +1295,40 @@ export class FakeMediaStorage implements MediaStoragePort {
     return Promise.resolve(ok({ gcsPath }));
   }
 
+  uploadPrivateMedia(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>> {
+    if (this.shouldFailUpload) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated upload failure' }));
+    }
+    const gcsPath = `whatsapp/private/${userId}/${messageId}/${mediaId}.${extension}`;
+    this.files.set(gcsPath, { buffer, contentType });
+    return Promise.resolve(ok({ gcsPath }));
+  }
+
+  uploadPrivateThumbnail(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>> {
+    if (this.shouldFailThumbnailUpload) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated thumbnail upload failure' })
+      );
+    }
+    const gcsPath = `whatsapp/private/${userId}/${messageId}/${mediaId}_thumb.${extension}`;
+    this.files.set(gcsPath, { buffer, contentType });
+    return Promise.resolve(ok({ gcsPath }));
+  }
+
   delete(gcsPath: string): Promise<Result<void, WhatsAppError>> {
     if (this.shouldThrowOnDelete) {
       throw new Error('Simulated unexpected delete exception');

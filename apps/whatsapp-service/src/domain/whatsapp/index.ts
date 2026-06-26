@@ -54,6 +54,7 @@ export type {
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppIngestResult,
   PrivateWhatsAppMediaInfo,
+  PrivateWhatsAppMediaStorageStatus,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageDirection,
   PrivateWhatsAppMessageQueryInput,

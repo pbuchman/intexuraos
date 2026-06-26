@@ -59,6 +59,24 @@ export interface MediaStoragePort {
     contentType: string
   ): Promise<Result<UploadResult, WhatsAppError>>;
 
+  uploadPrivateMedia(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>>;
+
+  uploadPrivateThumbnail(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>>;
+
   /**
    * Delete a file from storage.
    *
