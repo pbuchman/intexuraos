@@ -82,7 +82,7 @@ describe('Private WhatsApp Media Routes', () => {
   it('rejects uploads for unknown private source accounts', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/internal/whatsapp/private/media?sourceAccountId=missing&matrixEventId=%24image&mediaId=image',
+      url: '/internal/whatsapp/private/media?sourceAccountId=missing&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=image%2Fjpeg&mediaId=image',
       headers: {
         'x-internal-auth': 'test-internal-token',
         'content-type': 'application/octet-stream',
@@ -93,7 +93,7 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it('returns 500 when private account lookup fails', async () => {
+  it('returns 500 when private account lookup fails for otherwise valid requests', async () => {
     ctx.privateWhatsAppRepository.failNext({
       code: 'PERSISTENCE_ERROR',
       message: 'Simulated private account lookup failure',
@@ -101,7 +101,7 @@ describe('Private WhatsApp Media Routes', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=image%2Fjpeg',
       headers: {
         'x-internal-auth': 'test-internal-token',
         'content-type': 'application/octet-stream',
@@ -112,7 +112,12 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.statusCode).toBe(500);
   });
 
-  it('validates required query params after resolving the source account', async () => {
+  it('validates required query params before repository lookup', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Repository should not be hit for malformed query input',
+    });
+
     const response = await ctx.app.inject({
       method: 'POST',
       url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image',
@@ -126,10 +131,15 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('rejects uploads with an empty media body', async () => {
+  it('rejects uploads with an empty media body before repository lookup', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Repository should not be hit for empty media bodies',
+    });
+
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=image%2Fjpeg',
       headers: {
         'x-internal-auth': 'test-internal-token',
         'content-type': 'application/octet-stream',
@@ -140,10 +150,15 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('rejects uploads when the parsed body is not a buffer', async () => {
+  it('rejects uploads when the parsed body is not a buffer before repository lookup', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Repository should not be hit for non-buffer media bodies',
+    });
+
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=image%2Fjpeg',
       headers: {
         'x-internal-auth': 'test-internal-token',
         'content-type': 'application/json',
@@ -154,7 +169,7 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('defaults the stored mime type when mimeType is omitted', async () => {
+  it('rejects uploads when mimeType is missing', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
       url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&fileName=image.bin&mediaId=image',
@@ -165,12 +180,21 @@ describe('Private WhatsApp Media Routes', () => {
       payload: Buffer.from('image-bytes'),
     });
 
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as {
-      data: { media: { storedMimeType: string; gcsPath: string } };
-    };
-    expect(body.data.media.storedMimeType).toBe('application/octet-stream');
-    expect(body.data.media.gcsPath).toContain('/image.bin');
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('rejects uploads when mimeType is not an image', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=application%2Fpdf&fileName=image.pdf&mediaId=image',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('image-bytes'),
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   it('hashes long media identifiers when the sanitized value exceeds the path budget', async () => {

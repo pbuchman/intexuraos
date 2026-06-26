@@ -28,6 +28,10 @@ function getBufferBody(request: FastifyRequest): Buffer | null {
   return Buffer.isBuffer(request.body) ? request.body : null;
 }
 
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.startsWith('image/');
+}
+
 function createPrivateWhatsAppMessageId(sourceAccountId: string, matrixEventId: string): string {
   return createHash('sha256').update(`${sourceAccountId}\0${matrixEventId}`).digest('hex');
 }
@@ -54,7 +58,7 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             fileName: { type: 'string', minLength: 1 },
             sha256: { type: 'string', minLength: 1 },
           },
-          required: ['sourceAccountId', 'matrixEventId', 'mxcUri'],
+          required: ['sourceAccountId', 'matrixEventId', 'mxcUri', 'mimeType'],
         },
         response: {
           200: {
@@ -163,6 +167,21 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         );
       }
 
+      const validatedRequest = request as ValidatedRequest;
+      if (validatedRequest.validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+
+      const buffer = getBufferBody(request);
+      if (buffer === null || buffer.length === 0) {
+        return await reply.fail('INVALID_REQUEST', 'Missing media body');
+      }
+
+      const mimeType = request.query.mimeType;
+      if (mimeType === undefined || !isImageMimeType(mimeType)) {
+        return await reply.fail('INVALID_REQUEST', 'mimeType must be an image MIME type');
+      }
+
       const services = getServices();
       const accountResult =
         await services.privateWhatsAppRepository.getActiveAccountBySourceAccountId(
@@ -174,18 +193,6 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       if (accountResult.value === null) {
         return await reply.fail('NOT_FOUND', 'Private WhatsApp source account is not active');
       }
-
-      const validatedRequest = request as ValidatedRequest;
-      if (validatedRequest.validationError !== undefined) {
-        return await reply.fail('INVALID_REQUEST', 'Validation failed');
-      }
-
-      const buffer = getBufferBody(request);
-      if (buffer === null || buffer.length === 0) {
-        return await reply.fail('INVALID_REQUEST', 'Missing media body');
-      }
-
-      const mimeType = request.query.mimeType ?? 'application/octet-stream';
       const extension = getExtensionFromMimeType(mimeType);
       const messageId = createPrivateWhatsAppMessageId(
         request.query.sourceAccountId,
