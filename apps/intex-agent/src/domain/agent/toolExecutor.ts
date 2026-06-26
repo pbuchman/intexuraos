@@ -8,6 +8,7 @@ import type {
   CreateNoteRequest,
   CreateResearchDraftRequest,
   CreatedCalendarEvent,
+  ListCalendarEventsRequest,
   SubmitTaskError,
   SubmitTaskResponse,
 } from '@intexuraos/internal-clients';
@@ -24,6 +25,24 @@ export interface NotesToolClient {
 
 export interface CalendarToolClient {
   createEvent(input: CreateCalendarEventRequest): Promise<Result<CreatedCalendarEvent>>;
+  listEvents(input: ListCalendarEventsRequest): Promise<Result<CalendarQueryEvent[]>>;
+}
+
+interface CalendarQueryEvent {
+  id: string;
+  summary: string;
+  start: {
+    dateTime?: string | undefined;
+    date?: string | undefined;
+    timeZone?: string | undefined;
+  };
+  end: {
+    dateTime?: string | undefined;
+    date?: string | undefined;
+    timeZone?: string | undefined;
+  };
+  location?: string | undefined;
+  htmlLink?: string | undefined;
 }
 
 export interface ResearchToolClient {
@@ -96,6 +115,35 @@ export function createIntexAgentToolExecutor(
         eventId: result.value.id, // @allow-result-access -- guarded by !result.ok check above
         summary: result.value.summary, // @allow-result-access -- guarded by !result.ok check above
         ...(result.value.htmlLink !== undefined ? { htmlLink: result.value.htmlLink } : {}), // @allow-result-access -- guarded by !result.ok check above
+      });
+    },
+
+    async queryCalendarEvents(args): Promise<string> {
+      const maxResults = args.maxResults ?? (args.mode === 'count' ? 2500 : 20);
+      const result = await deps.calendarClient.listEvents({
+        userId: deps.userId,
+        ...(args.calendarId !== undefined ? { calendarId: args.calendarId } : {}),
+        timeMin: args.timeMin,
+        timeMax: args.timeMax,
+        maxResults,
+        ...(args.query !== undefined ? { q: args.query } : {}),
+      });
+
+      if (!result.ok) {
+        throw new Error(`Failed to query calendar events: ${getErrorMessage(result.error)}`);
+      }
+
+      const events = result.value;
+      const truncated = args.mode === 'count' && events.length >= maxResults;
+      return JSON.stringify({
+        status: 'completed',
+        mode: args.mode,
+        count: events.length,
+        ...(truncated ? { truncated: true } : {}),
+        timeMin: args.timeMin,
+        timeMax: args.timeMax,
+        ...(args.query !== undefined ? { query: args.query } : {}),
+        ...(args.mode === 'list' ? { events: events.map(toCalendarQueryEvent) } : {}),
       });
     },
 
@@ -193,6 +241,24 @@ function toCalendarEventInput(
     ...(args.attendees !== undefined
       ? { attendees: args.attendees.map((email) => ({ email })) }
       : {}),
+  };
+}
+
+function toCalendarQueryEvent(event: CalendarQueryEvent): {
+  id: string;
+  summary: string;
+  start: CalendarQueryEvent['start'];
+  end: CalendarQueryEvent['end'];
+  location?: string;
+  htmlLink?: string;
+} {
+  return {
+    id: event.id,
+    summary: event.summary,
+    start: event.start,
+    end: event.end,
+    ...(event.location !== undefined ? { location: event.location } : {}),
+    ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
   };
 }
 

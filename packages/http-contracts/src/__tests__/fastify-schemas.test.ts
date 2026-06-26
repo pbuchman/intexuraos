@@ -77,6 +77,35 @@ describe('Fastify Schemas', () => {
       expect(contractFastifySchemas).not.toHaveProperty('CommandsCommandWithText');
       expect(contractFastifySchemas).not.toHaveProperty('CommandsGetCommandData');
     });
+
+    it('includes calendar event list schemas', () => {
+      expect(contractFastifySchemas).toHaveProperty('CalendarListEventsRequest');
+      expect(contractFastifySchemas).toHaveProperty('CalendarListEventsData');
+
+      const requestSchema = contractFastifySchemas.CalendarListEventsRequest as {
+        required?: string[];
+        properties?: {
+          maxResults?: {
+            minimum?: number;
+            maximum?: number;
+          };
+        };
+      };
+      const dataSchema = contractFastifySchemas.CalendarListEventsData as {
+        required?: string[];
+        properties?: {
+          events?: {
+            type?: string;
+          };
+        };
+      };
+
+      expect(requestSchema.required).toEqual(['userId', 'timeMin', 'timeMax']);
+      expect(requestSchema.properties?.maxResults?.minimum).toBe(1);
+      expect(requestSchema.properties?.maxResults?.maximum).toBe(2500);
+      expect(dataSchema.required).toEqual(['events']);
+      expect(dataSchema.properties?.events?.type).toBe('array');
+    });
   });
 
   describe('registerCoreSchemas', () => {
@@ -92,6 +121,8 @@ describe('Fastify Schemas', () => {
       expect(addSchema).toHaveBeenCalledWith(fastifyErrorBodySchema);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.ServiceFeedback);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarCreateEventRequest);
+      expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarListEventsRequest);
+      expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarListEventsData);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarCreatedEvent);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarPreview);
     });

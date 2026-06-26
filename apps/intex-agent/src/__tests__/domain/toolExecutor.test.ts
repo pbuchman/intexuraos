@@ -3,6 +3,7 @@ import type {
   CreateBookmarkError,
   CreateBookmarkResponse,
   CreatedCalendarEvent,
+  ListCalendarEventsRequest,
   SubmitTaskError,
   SubmitTaskResponse,
 } from '@intexuraos/internal-clients';
@@ -16,6 +17,23 @@ import type {
   NotesToolClient,
   ResearchToolClient,
 } from '../../domain/agent/toolExecutor.js';
+
+interface CalendarQueryEvent {
+  id: string;
+  summary: string;
+  start: {
+    dateTime?: string | undefined;
+    date?: string | undefined;
+    timeZone?: string | undefined;
+  };
+  end: {
+    dateTime?: string | undefined;
+    date?: string | undefined;
+    timeZone?: string | undefined;
+  };
+  location?: string | undefined;
+  htmlLink?: string | undefined;
+}
 
 describe('createIntexAgentToolExecutor', () => {
   it('creates notes through the notes client with WhatsApp source metadata', async () => {
@@ -212,6 +230,148 @@ describe('createIntexAgentToolExecutor', () => {
         end: '2026-06-25T10:00:00.000Z',
       })
     ).rejects.toThrow('Failed to create calendar event: calendar-agent unavailable');
+  });
+
+  it('counts calendar events through the calendar client', async () => {
+    const calendarClient = new FakeCalendarClient();
+    calendarClient.listResult = ok([
+      event('event-1', 'Dentist', '2026-05-03T09:00:00.000Z'),
+      event('event-2', 'Dentist follow-up', '2026-05-20T09:00:00.000Z'),
+    ]);
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({ calendarClient }));
+    const queryCalendarEvents = executor.queryCalendarEvents;
+    if (queryCalendarEvents === undefined) {
+      throw new Error('queryCalendarEvents should be configured');
+    }
+
+    const result = await queryCalendarEvents({
+      mode: 'count',
+      timeMin: '2026-05-01T00:00:00.000Z',
+      timeMax: '2026-06-01T00:00:00.000Z',
+      query: 'Dentist',
+    });
+
+    expect(calendarClient.listCalls).toEqual([
+      {
+        userId: 'user-1',
+        timeMin: '2026-05-01T00:00:00.000Z',
+        timeMax: '2026-06-01T00:00:00.000Z',
+        maxResults: 2500,
+        q: 'Dentist',
+      },
+    ]);
+    expect(JSON.parse(result)).toMatchObject({
+      status: 'completed',
+      mode: 'count',
+      count: 2,
+      timeMin: '2026-05-01T00:00:00.000Z',
+      timeMax: '2026-06-01T00:00:00.000Z',
+      query: 'Dentist',
+    });
+  });
+
+  it('marks calendar event counts as truncated when they hit the query cap', async () => {
+    const calendarClient = new FakeCalendarClient();
+    calendarClient.listResult = ok([
+      event('event-1', 'Dentist', '2026-05-03T09:00:00.000Z'),
+      event('event-2', 'Dentist follow-up', '2026-05-20T09:00:00.000Z'),
+    ]);
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({ calendarClient }));
+    const queryCalendarEvents = executor.queryCalendarEvents;
+    if (queryCalendarEvents === undefined) {
+      throw new Error('queryCalendarEvents should be configured');
+    }
+
+    const result = await queryCalendarEvents({
+      mode: 'count',
+      timeMin: '2026-05-01T00:00:00.000Z',
+      timeMax: '2026-06-01T00:00:00.000Z',
+      maxResults: 2,
+    });
+
+    expect(JSON.parse(result)).toMatchObject({
+      status: 'completed',
+      mode: 'count',
+      count: 2,
+      truncated: true,
+    });
+  });
+
+  it('lists calendar events through the calendar client with safe event fields', async () => {
+    const calendarClient = new FakeCalendarClient();
+    calendarClient.listResult = ok([
+      {
+        ...event('event-1', 'Dentist', '2026-05-03T09:00:00.000Z'),
+        location: 'Smile Clinic',
+        htmlLink: 'https://calendar.google.com/event?eid=event-1',
+        description: 'Private detail',
+        status: 'confirmed',
+      },
+      event('event-2', 'Focus time', '2026-05-04T09:00:00.000Z'),
+    ]);
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({ calendarClient }));
+    const queryCalendarEvents = executor.queryCalendarEvents;
+    if (queryCalendarEvents === undefined) {
+      throw new Error('queryCalendarEvents should be configured');
+    }
+
+    const result = await queryCalendarEvents({
+      mode: 'list',
+      timeMin: '2026-05-01T00:00:00.000Z',
+      timeMax: '2026-06-01T00:00:00.000Z',
+      calendarId: 'primary',
+    });
+
+    expect(calendarClient.listCalls).toEqual([
+      {
+        userId: 'user-1',
+        calendarId: 'primary',
+        timeMin: '2026-05-01T00:00:00.000Z',
+        timeMax: '2026-06-01T00:00:00.000Z',
+        maxResults: 20,
+      },
+    ]);
+    expect(JSON.parse(result)).toEqual({
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      timeMin: '2026-05-01T00:00:00.000Z',
+      timeMax: '2026-06-01T00:00:00.000Z',
+      events: [
+        {
+          id: 'event-1',
+          summary: 'Dentist',
+          start: { dateTime: '2026-05-03T09:00:00.000Z' },
+          end: { dateTime: '2026-05-03T10:00:00.000Z' },
+          location: 'Smile Clinic',
+          htmlLink: 'https://calendar.google.com/event?eid=event-1',
+        },
+        {
+          id: 'event-2',
+          summary: 'Focus time',
+          start: { dateTime: '2026-05-04T09:00:00.000Z' },
+          end: { dateTime: '2026-05-04T10:00:00.000Z' },
+        },
+      ],
+    });
+  });
+
+  it('throws when calendar event queries fail', async () => {
+    const calendarClient = new FakeCalendarClient();
+    calendarClient.listResult = err(new Error('calendar-agent unavailable'));
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({ calendarClient }));
+    const queryCalendarEvents = executor.queryCalendarEvents;
+    if (queryCalendarEvents === undefined) {
+      throw new Error('queryCalendarEvents should be configured');
+    }
+
+    await expect(
+      queryCalendarEvents({
+        mode: 'count',
+        timeMin: '2026-05-01T00:00:00.000Z',
+        timeMax: '2026-06-01T00:00:00.000Z',
+      })
+    ).rejects.toThrow('Failed to query calendar events: calendar-agent unavailable');
   });
 
   it('creates research drafts through the research client', async () => {
@@ -573,6 +733,7 @@ class FakeCodeTaskClient implements CodeTaskToolClient {
 
 class FakeCalendarClient implements CalendarToolClient {
   readonly calls: Parameters<CalendarToolClient['createEvent']>[0][] = [];
+  readonly listCalls: ListCalendarEventsRequest[] = [];
   result: Result<CreatedCalendarEvent> = ok({
     id: 'calendar-event-1',
     summary: 'Dentist appointment',
@@ -586,6 +747,7 @@ class FakeCalendarClient implements CalendarToolClient {
     },
     htmlLink: 'https://calendar.google.com/event?eid=calendar-event-1',
   });
+  listResult: Result<CalendarQueryEvent[]> = ok([]);
 
   createEvent(
     input: Parameters<CalendarToolClient['createEvent']>[0]
@@ -593,4 +755,20 @@ class FakeCalendarClient implements CalendarToolClient {
     this.calls.push(input);
     return Promise.resolve(this.result);
   }
+
+  listEvents(input: ListCalendarEventsRequest): Promise<Result<CalendarQueryEvent[]>> {
+    this.listCalls.push(input);
+    return Promise.resolve(this.listResult);
+  }
+}
+
+function event(id: string, summary: string, startDateTime: string): CalendarQueryEvent {
+  const endDate = new Date(startDateTime);
+  endDate.setUTCHours(endDate.getUTCHours() + 1);
+  return {
+    id,
+    summary,
+    start: { dateTime: startDateTime },
+    end: { dateTime: endDate.toISOString() },
+  };
 }

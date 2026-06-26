@@ -328,6 +328,101 @@ describe('createCalendarAgentServiceClient', () => {
     }
   });
 
+  it('lists calendar events through the internal query endpoint', async () => {
+    const scope = nock(BASE_URL)
+      .post('/internal/calendar/events/query', {
+        userId: 'user-1',
+        timeMin: '2026-06-29T00:00:00.000Z',
+        timeMax: '2026-07-06T00:00:00.000Z',
+        q: 'Dentist',
+        maxResults: 20,
+      })
+      .matchHeader('x-internal-auth', 'secret')
+      .matchHeader('x-request-id', 'req-list-123')
+      .delay(25)
+      .reply(200, {
+        success: true,
+        data: {
+          events: [
+            {
+              id: 'event-1',
+              summary: 'Dentist',
+              start: { dateTime: '2026-06-30T09:00:00.000Z' },
+              end: { dateTime: '2026-06-30T10:00:00.000Z' },
+              location: 'Dental clinic',
+              htmlLink: 'https://calendar.google.com/event?eid=event-1',
+            },
+            {
+              id: 'event-2',
+              summary: 'Focus block',
+              start: { dateTime: '2026-07-01T09:00:00.000Z' },
+              end: { dateTime: '2026-07-01T10:00:00.000Z' },
+            },
+          ],
+        },
+      });
+
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+      defaultTimeoutMs: 1,
+    });
+    const result = await client.listEvents(
+      {
+        userId: 'user-1',
+        timeMin: '2026-06-29T00:00:00.000Z',
+        timeMax: '2026-07-06T00:00:00.000Z',
+        q: 'Dentist',
+        maxResults: 20,
+      },
+      { requestId: 'req-list-123' }
+    );
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        {
+          id: 'event-1',
+          summary: 'Dentist',
+          start: { dateTime: '2026-06-30T09:00:00.000Z' },
+          end: { dateTime: '2026-06-30T10:00:00.000Z' },
+          location: 'Dental clinic',
+          htmlLink: 'https://calendar.google.com/event?eid=event-1',
+        },
+        {
+          id: 'event-2',
+          summary: 'Focus block',
+          start: { dateTime: '2026-07-01T09:00:00.000Z' },
+          end: { dateTime: '2026-07-01T10:00:00.000Z' },
+        },
+      ],
+    });
+  });
+
+  it('returns invalid response errors for malformed list envelopes', async () => {
+    nock(BASE_URL).post('/internal/calendar/events/query').reply(200, {
+      success: true,
+    });
+
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.listEvents({
+      userId: 'user-1',
+      timeMin: '2026-06-29T00:00:00.000Z',
+      timeMax: '2026-07-06T00:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: new Error('Invalid response from calendar-agent'),
+    });
+  });
+
   it('returns service feedback on process success', async () => {
     const scope = nock(BASE_URL)
       .post('/internal/calendar/process-action', {

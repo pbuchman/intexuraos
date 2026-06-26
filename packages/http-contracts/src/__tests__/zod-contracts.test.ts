@@ -3,6 +3,7 @@ import { LlmModels } from '@intexuraos/llm-contract';
 import * as contracts from '../index.js';
 import {
   bookmarksCreateBookmarkRequestSchema,
+  calendarListEventsRequestSchema,
   imageGenerateImageRequestSchema,
   imageGeneratePromptRequestSchema,
   notionPagePreviewSchema,
@@ -77,6 +78,34 @@ describe('Zod contracts', () => {
         generatedAt: '2026-05-10T12:00:00.000Z',
       }).status
     ).toBe('ready');
+  });
+
+  it('parses bounded calendar event list requests and rejects missing bounds', () => {
+    expect(
+      calendarListEventsRequestSchema.parse({
+        userId: 'user-1',
+        calendarId: 'primary',
+        timeMin: '2026-06-29T00:00:00.000Z',
+        timeMax: '2026-07-06T00:00:00.000Z',
+        maxResults: 20,
+        q: 'Dentist',
+      })
+    ).toMatchObject({ userId: 'user-1', q: 'Dentist' });
+
+    expect(() =>
+      calendarListEventsRequestSchema.parse({
+        userId: 'user-1',
+        timeMin: 'tomorrow',
+        timeMax: '2026-07-06T00:00:00.000Z',
+      })
+    ).toThrow();
+
+    expect(() =>
+      calendarListEventsRequestSchema.parse({
+        userId: 'user-1',
+        timeMin: '2026-06-29T00:00:00.000Z',
+      })
+    ).toThrow();
   });
 
   it('parses the remaining internal-client request and response payloads', () => {

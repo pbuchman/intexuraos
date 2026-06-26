@@ -164,6 +164,12 @@ describe('OpenAPI Schemas', () => {
       expect((contractComponentSchemas.CalendarCreateEventRequest as { type?: string }).type).toBe(
         'object'
       );
+      expect((contractComponentSchemas.CalendarListEventsRequest as { type?: string }).type).toBe(
+        'object'
+      );
+      expect((contractComponentSchemas.CalendarListEventsData as { type?: string }).type).toBe(
+        'object'
+      );
       expect((contractComponentSchemas.CalendarCreatedEvent as { type?: string }).type).toBe(
         'object'
       );
@@ -193,9 +199,24 @@ describe('OpenAPI Schemas', () => {
             };
           };
         };
+      const calendarListEventsRequestSchema =
+        contractComponentSchemas.CalendarListEventsRequest as {
+          additionalProperties?: boolean;
+          required?: string[];
+          properties?: {
+            maxResults?: {
+              minimum?: number;
+              maximum?: number;
+            };
+          };
+        };
 
       expect(notesSchema.additionalProperties).toBe(false);
       expect(calendarCreateEventRequestSchema.additionalProperties).toBe(false);
+      expect(calendarListEventsRequestSchema.additionalProperties).toBe(false);
+      expect(calendarListEventsRequestSchema.required).toEqual(['userId', 'timeMin', 'timeMax']);
+      expect(calendarListEventsRequestSchema.properties?.maxResults?.minimum).toBe(1);
+      expect(calendarListEventsRequestSchema.properties?.maxResults?.maximum).toBe(2500);
       expect(calendarCreateEventRequestSchema.properties?.event?.required).toEqual([
         'summary',
         'start',

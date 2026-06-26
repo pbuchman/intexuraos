@@ -89,6 +89,12 @@ export class FakeUserServiceClient implements UserServiceClient {
 }
 
 export class FakeGoogleCalendarClient implements GoogleCalendarClient {
+  readonly listEventsCalls: {
+    accessToken: string;
+    calendarId: string;
+    options: ListEventsInput;
+  }[] = [];
+
   private events: CalendarEvent[] = [];
   private listResult: Result<CalendarEvent[], CalendarError> | null = null;
   private getResult: Result<CalendarEvent, CalendarError> | null = null;
@@ -147,11 +153,12 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
   }
 
   async listEvents(
-    _accessToken: string,
-    _calendarId: string,
-    _options: ListEventsInput,
+    accessToken: string,
+    calendarId: string,
+    options: ListEventsInput,
     _logger: unknown
   ): Promise<Result<CalendarEvent[], CalendarError>> {
+    this.listEventsCalls.push({ accessToken, calendarId, options });
     if (this.listResult !== null) {
       return this.listResult;
     }

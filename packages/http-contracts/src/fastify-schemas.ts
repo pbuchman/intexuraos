@@ -16,6 +16,8 @@ import {
   calendarCreatedEventSchema,
   calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
+  calendarListEventsDataSchema,
+  calendarListEventsRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
@@ -128,6 +130,11 @@ export const contractFastifySchemas = {
     'CalendarCreateEventData',
     calendarCreateEventDataSchema
   ),
+  CalendarListEventsRequest: toFastifySchema(
+    'CalendarListEventsRequest',
+    calendarListEventsRequestSchema
+  ),
+  CalendarListEventsData: toFastifySchema('CalendarListEventsData', calendarListEventsDataSchema),
   CalendarProcessActionRequest: toFastifySchema(
     'CalendarProcessActionRequest',
     calendarProcessActionRequestSchema
