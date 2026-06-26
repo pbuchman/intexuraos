@@ -30,6 +30,7 @@
 - `POST /internal/notes`: `ServiceFeedback.resourceUrl` becomes a full public note URL.
 - `POST /internal/research/draft`: `ServiceFeedback.resourceUrl` defaults to a full public research URL even when service config has no base URL.
 - `POST /internal/bookmarks`: response adds `resourceUrl` for the bookmark object and preserves the saved target URL on `bookmark.url`.
+- `POST /internal/bookmarks/:id/force-refresh`: response adds `resourceUrl` for the bookmark object when returning bookmark link data.
 - Calendar action processing: persisted/returned resource link uses Google Calendar `htmlLink` only.
 - Intex-agent WhatsApp send path: outgoing Pub/Sub send events may include `ctaUrl` for object creation confirmations.
 
@@ -101,6 +102,7 @@ export interface CreateBookmarkResponse {
 
 - `url` is the saved target URL.
 - `resourceUrl` is the IntexuraOS bookmark object URL.
+- Bookmarks-agent route responses keep top-level `url` as the compatibility object URL while adding `resourceUrl`; the internal client maps its output `url` from `bookmark.url` so callers receive the saved external target URL.
 
 - [ ] **Step 1: Write failing common-core helper tests**
 
@@ -125,6 +127,7 @@ describe('public URL helpers', () => {
   it('defaults to the production web app URL', () => {
     expect(resolveWebAppUrl()).toBe('https://intexuraos.cloud');
     expect(resolveWebAppUrl('')).toBe('https://intexuraos.cloud');
+    expect(resolveWebAppUrl('   ')).toBe('https://intexuraos.cloud');
   });
 
   it('builds hash route URLs from default and explicit bases', () => {
@@ -133,6 +136,12 @@ describe('public URL helpers', () => {
     );
     expect(buildWebAppHashUrl('#/notes/note-1', 'https://dev.intexuraos.cloud/')).toBe(
       'https://dev.intexuraos.cloud/#/notes/note-1'
+    );
+    expect(buildWebAppHashUrl('/notes/note-1')).toBe(
+      'https://intexuraos.cloud/#/notes/note-1'
+    );
+    expect(buildWebAppHashUrl('notes/note-1')).toBe(
+      'https://intexuraos.cloud/#/notes/note-1'
     );
   });
 });
@@ -208,6 +217,16 @@ bookmarksCreateBookmarkDataSchema.parse({
 
 Expected: FAIL before adding `resourceUrl` to the schema.
 
+Add an internal-client mapping assertion that proves callers receive the saved external target URL:
+
+```typescript
+expect(result.value).toMatchObject({
+  id: 'bookmark-1',
+  url: 'https://example.com',
+  resourceUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+});
+```
+
 - [ ] **Step 4: Update bookmark schemas and internal client mapping**
 
 Schema change:
@@ -217,11 +236,13 @@ export const bookmarksCreateBookmarkDataSchema = z
   .object({
     id: z.string(),
     url: z.string(),
-    resourceUrl: z.string().url(),
+    resourceUrl: z.string().url().optional(),
     bookmark: bookmarksBookmarkSchema,
   })
   .strict();
 ```
+
+`resourceUrl` is optional in the schema only for client compatibility with older service responses. Bookmarks-agent must always return it after this change; the fallback below is a transition path for historical responses that pass through the internal client.
 
 Client legacy-compatible mapping:
 
@@ -295,6 +316,7 @@ git commit -m "feat: add public object URL contracts"
 
 - Consumes: `buildWebAppHashUrl('/#/code-tasks/<id>', webAppUrl?)`.
 - Produces: all code-task `resourceUrl` responses are absolute.
+- Existing `apps/code-agent/src/domain/utils/taskUrls.ts` is the migration point: keep the wrapper API only if needed by callers, but replace its URL construction by delegating to `@intexuraos/common-core` helpers. Do not duplicate `DEFAULT_WEB_APP_URL`, trailing-slash normalization, or hash-route assembly in code-agent.
 
 - [ ] **Step 1: Write failing assertions for absolute resource URLs**
 
@@ -341,6 +363,8 @@ export function buildCodeTaskUrl(
   return buildWebAppHashUrl(`/#/code-tasks/${taskId}`, webAppUrl);
 }
 ```
+
+Delete any local `DEFAULT_WEB_APP_URL` or hash-route assembly that remains in `taskUrls.ts`; the wrapper delegates to the shared helper so code-agent does not retain a second implementation.
 
 - [ ] **Step 3: Replace relative resource URL construction**
 
@@ -437,6 +461,7 @@ git commit -m "fix: return absolute note resource URLs"
 
 - Consumes: `buildWebAppHashUrl('/#/research/<researchId>', webAppUrl)`.
 - Produces: `ServiceFeedback.resourceUrl` with an absolute research URL even when `webAppUrl` is empty.
+- Existing local helper `buildWebAppResourceUrl(webAppUrl, path)` in `apps/research-agent/src/routes/internalRoutes.ts` must be removed, not reimplemented as a wrapper, and the draft creation call site should call `buildWebAppHashUrl` directly.
 
 - [ ] **Step 1: Change failing empty-base test expectation**
 
@@ -459,14 +484,15 @@ Run: `pnpm --filter @intexuraos/research-agent exec vitest run src/__tests__/rou
 
 Expected: FAIL before helper replacement.
 
-- [ ] **Step 2: Replace local helper implementation**
+- [ ] **Step 2: Delete the local helper and call the shared helper directly**
 
 ```typescript
 import { buildWebAppHashUrl } from '@intexuraos/common-core';
 
-function buildWebAppResourceUrl(webAppUrl: string, path: string): string {
-  return buildWebAppHashUrl(path, webAppUrl);
-}
+const resourceUrl = buildWebAppHashUrl(
+  `/#/research/${research.id}`,
+  getServices().webAppUrl
+);
 ```
 
 - [ ] **Step 3: Verify research-agent**
@@ -510,6 +536,7 @@ git commit -m "fix: return absolute research resource URLs"
 
 - `url` and `resourceUrl` are the bookmark object URL during compatibility.
 - `bookmark.url` remains the saved external target URL.
+- Apply the same object URL field shape to `POST /internal/bookmarks/:id/force-refresh` when it returns bookmark link data, so bookmark responses do not diverge.
 
 - [ ] **Step 1: Write failing route assertions**
 
@@ -540,6 +567,8 @@ return await reply.ok({
   bookmark: formatBookmark(result.value),
 });
 ```
+
+For force-refresh responses that include bookmark link data, add the same `resourceUrl` field and keep top-level `url` aligned with the object URL. Do not rewrite `bookmark.url`; it remains the saved external target URL.
 
 - [ ] **Step 3: Verify bookmarks-agent**
 
@@ -580,6 +609,9 @@ Update the current fallback test so it expects no internal URL:
 expect(result.value.status).toBe('completed');
 expect(result.value.resourceUrl).toBeUndefined();
 expect(savedAction?.resourceUrl).toBeUndefined();
+expect(Object.prototype.hasOwnProperty.call(savedAction ?? {}, 'resourceUrl')).toBe(
+  false
+);
 ```
 
 For the success case:
@@ -799,6 +831,18 @@ const result = await deps.sendPublisher.publishSendMessage({
   important: true,
   ...(input.ctaUrl !== undefined ? { ctaUrl: input.ctaUrl } : {}),
 });
+```
+
+Add publisher tests in `apps/intex-agent/src/__tests__/infra/pubsub/whatsappReplyPublisher.test.ts` for both paths:
+
+```typescript
+expect(sentMessage).toMatchObject({
+  ctaUrl: {
+    displayText: 'Open Note',
+    url: 'https://intexuraos.cloud/#/notes/note-1',
+  },
+});
+expect(sentMessageWithoutCta).not.toHaveProperty('ctaUrl');
 ```
 
 - [ ] **Step 5: Verify Intex-agent**
