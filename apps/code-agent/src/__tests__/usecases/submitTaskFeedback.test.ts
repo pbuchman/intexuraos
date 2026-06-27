@@ -68,6 +68,7 @@ describe('submitTaskFeedback use case', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
 
     // Mock logger
     mockLogger = {
@@ -682,10 +683,27 @@ describe('submitTaskFeedback use case', () => {
       if (result.ok) {
         expect(result.value).toEqual({
           codeTaskId: 'feedback-task-123',
-          resourceUrl: '/#/code-tasks/feedback-task-123',
+          resourceUrl: 'https://intexuraos.cloud/#/code-tasks/feedback-task-123',
           workerLocation: 'queued',
           followUpFor: originalTaskId,
         });
+      }
+    });
+
+    it('should use configured web app URL in returned follow-up task details', async () => {
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.resourceUrl).toBe(
+          'https://dev.intexuraos.cloud/#/code-tasks/feedback-task-123'
+        );
       }
     });
 
