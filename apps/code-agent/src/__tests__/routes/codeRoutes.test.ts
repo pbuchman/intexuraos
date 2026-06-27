@@ -85,8 +85,11 @@ describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
   let server: Awaited<ReturnType<typeof buildServer>>;
+  let originalWebAppUrl: string | undefined;
 
   beforeEach(async () => {
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
 
     // Mock linear-agent HTTP calls
     nock('http://linear-agent:8086')
@@ -278,6 +281,11 @@ describe('codeRoutes', () => {
   });
 
   afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
     resetServices();
     resetFirestore();
     nock.cleanAll();
@@ -3595,7 +3603,9 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toBe(newTaskId);
       expect(body.data.retriedFrom).toBe(taskId);
-      expect(body.data.resourceUrl).toContain('/code-tasks/');
+      expect(body.data.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${newTaskId}`
+      );
     });
 
     it('should include additional context in retry prompt', async () => {
@@ -4078,7 +4088,9 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
-      expect(body.data.resourceUrl).toContain('/#/code-tasks/');
+      expect(body.data.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${body.data.codeTaskId}`
+      );
       expect(body.data.workerLocation).toBe('queued');
     });
 

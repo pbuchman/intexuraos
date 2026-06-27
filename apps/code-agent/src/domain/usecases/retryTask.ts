@@ -20,6 +20,7 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
+import { buildCodeTaskUrl } from '../../domain/utils/taskUrls.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import {
   bootstrapContinuationPrTaskComment,
@@ -404,7 +405,7 @@ ${additionalContext.trim()}
 
   return ok({
     codeTaskId: retryTask.id,
-    resourceUrl: `/#/code-tasks/${retryTask.id}`,
+    resourceUrl: buildCodeTaskUrl(retryTask.id),
     workerLocation: 'queued' as WorkerLocation,
     retriedFrom: originalTaskId,
   });

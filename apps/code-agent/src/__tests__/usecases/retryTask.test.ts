@@ -12,7 +12,7 @@
  * 8. Appends additional context to prompt when provided
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTask } from '../../domain/models/codeTask.js';
@@ -54,6 +54,7 @@ describe('retryTask use case', () => {
   let mockMetricsClient: {
     incrementTasksSubmitted: ReturnType<typeof vi.fn>;
   };
+  let originalWebAppUrl: string | undefined;
   const userId = 'test-user-123';
   const originalTaskId = 'task_abc123';
   const linearIssueId = 'INT-520';
@@ -101,6 +102,8 @@ describe('retryTask use case', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
 
     // Mock logger
     mockLogger = {
@@ -164,6 +167,14 @@ describe('retryTask use case', () => {
       incrementTasksSubmitted: vi.fn().mockResolvedValue(undefined),
     };
 
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   function createDeps(): RetryTaskDeps {
@@ -560,7 +571,9 @@ describe('retryTask use case', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.codeTaskId).toBe(retryTaskId);
-        expect(result.value.resourceUrl).toContain('/code-tasks/');
+        expect(result.value.resourceUrl).toBe(
+          `https://intexuraos.cloud/#/code-tasks/${retryTaskId}`
+        );
         expect(result.value.retriedFrom).toBe(originalTaskId);
       }
 
