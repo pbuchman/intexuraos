@@ -12,6 +12,7 @@ export interface ServiceConfig {
   researchAgentUrl: string;
   bookmarksAgentUrl: string;
   codeAgentUrl: string;
+  webAppUrl: string;
   llmUsageServiceUrl: string;
   openRouterAppApiKey: string;
   whatsappSendTopic: string;
@@ -30,6 +31,7 @@ export function loadConfig(): ServiceConfig {
     researchAgentUrl: process.env['INTEXURAOS_RESEARCH_AGENT_URL'] ?? '',
     bookmarksAgentUrl: process.env['INTEXURAOS_BOOKMARKS_AGENT_URL'] ?? '',
     codeAgentUrl: process.env['INTEXURAOS_CODE_AGENT_URL'] ?? '',
+    webAppUrl: process.env['INTEXURAOS_WEB_APP_URL'] ?? 'https://intexuraos.cloud',
     llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '',
     openRouterAppApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
     whatsappSendTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '',

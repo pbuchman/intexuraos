@@ -37,10 +37,14 @@ describe('handleIncomingMessage', () => {
     const runner = new FakeRunner([
       {
         outcome: 'completed',
-        reply: 'Saved that note.',
+        reply: 'Zapisałem notatkę.',
         summary: 'Saved door code note.',
         toolName: 'create_note',
         toolResult: { status: 'completed', id: 'note-1' },
+        ctaUrl: {
+          displayText: 'Open Note',
+          url: 'https://intexuraos.cloud/#/notes/note-1',
+        },
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -68,9 +72,13 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages).toEqual([
       {
         userId: 'user-1',
-        message: 'Saved that note.',
+        message: 'Zapisałem notatkę.',
         replyToMessageId: 'wamid-1',
         correlationId: 'session-1',
+        ctaUrl: {
+          displayText: 'Open Note',
+          url: 'https://intexuraos.cloud/#/notes/note-1',
+        },
       },
     ]);
   });
@@ -683,6 +691,10 @@ class FakeReplyPublisher implements WhatsAppReplyPublisher {
     message: string;
     replyToMessageId: string;
     correlationId: string;
+    ctaUrl?: {
+      displayText: string;
+      url: string;
+    };
   }[] = [];
 
   publishReply(input: {
@@ -690,6 +702,10 @@ class FakeReplyPublisher implements WhatsAppReplyPublisher {
     message: string;
     replyToMessageId: string;
     correlationId: string;
+    ctaUrl?: {
+      displayText: string;
+      url: string;
+    };
   }): Promise<void> {
     this.messages.push(input);
     return Promise.resolve();

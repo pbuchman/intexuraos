@@ -108,6 +108,7 @@ export function initServices(config: ServiceConfig): void {
       return await createIntexAgentRunner({
         client: toolCallingClient,
         toolExecutor,
+        webAppUrl: config.webAppUrl,
       }).run(input);
     },
   };

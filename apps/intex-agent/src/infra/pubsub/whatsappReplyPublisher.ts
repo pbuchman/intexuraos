@@ -15,6 +15,7 @@ export function createWhatsAppReplyPublisher(
         message: input.message,
         replyToMessageId: input.replyToMessageId,
         correlationId: input.correlationId,
+        ...(input.ctaUrl !== undefined ? { ctaUrl: input.ctaUrl } : {}),
         important: true,
       });
 

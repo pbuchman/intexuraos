@@ -500,6 +500,7 @@ describe('createIntexAgentToolExecutor', () => {
     expect(JSON.parse(result)).toEqual({
       status: 'completed',
       bookmarkId: 'bookmark-1',
+      resourceUrl: '/#/bookmarks/bookmark-1',
       url: 'https://example.com/post',
       title: 'Example post',
     });
@@ -533,6 +534,7 @@ describe('createIntexAgentToolExecutor', () => {
     expect(JSON.parse(result)).toEqual({
       status: 'completed',
       bookmarkId: 'bookmark-2',
+      resourceUrl: '/#/bookmarks/bookmark-2',
       url: 'https://example.com/minimal',
     });
   });

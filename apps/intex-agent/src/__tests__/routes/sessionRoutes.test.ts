@@ -126,6 +126,7 @@ describe('intex-agent routes', () => {
         researchAgentUrl: 'http://research-agent.test',
         bookmarksAgentUrl: 'http://bookmarks-agent.test',
         codeAgentUrl: 'http://code-agent.test',
+        webAppUrl: 'https://intexuraos.cloud',
         llmUsageServiceUrl: 'http://llm-usage.test',
         openRouterAppApiKey: 'openrouter-key',
         whatsappSendTopic: 'whatsapp-send',
