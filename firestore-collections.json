@@ -94,6 +94,10 @@
       "owner": "intex-agent",
       "description": "Chronological timeline events for intex-agent WhatsApp Assistant sessions, including user messages, assistant replies, clarifications, tool calls, and close events."
     },
+    "intex_agent_user_preferences": {
+      "owner": "intex-agent",
+      "description": "Per-user INTEX Agent preferences (instructions) injected into the agent system prompt. Document id == userId."
+    },
     "generated_images": {
       "owner": "image-service",
       "description": "Generated thumbnail images and their metadata"

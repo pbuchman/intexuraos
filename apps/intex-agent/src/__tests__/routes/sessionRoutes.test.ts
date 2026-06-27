@@ -133,6 +133,17 @@ describe('intex-agent routes', () => {
         model: INTEX_AGENT_MODEL,
       },
       sessionRepository,
+      preferencesRepository: {
+        async getPreferences(): Promise<null> {
+          return null;
+        },
+        async savePreferences(): Promise<never> {
+          throw new Error('not used in session route tests');
+        },
+        async deletePreferences(): Promise<void> {
+          /* noop */
+        },
+      },
       incomingMessageHandler,
     } satisfies ServiceContainer);
 

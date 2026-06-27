@@ -96,6 +96,9 @@ const HomePage = React.lazy(() =>
 const IntexAgentSessionsPage = React.lazy(() =>
   import('@/pages/IntexAgentSessionsPage').then((m) => ({ default: m.IntexAgentSessionsPage })),
 );
+const IntexAgentConfigPage = React.lazy(() =>
+  import('@/pages/IntexAgentConfigPage').then((m) => ({ default: m.IntexAgentConfigPage })),
+);
 const LlmUsagePage = React.lazy(() =>
   import('@/pages/LlmUsagePage').then((m) => ({ default: m.LlmUsagePage })),
 );
@@ -316,6 +319,8 @@ function AppRoutes(): React.JSX.Element {
             element={<NotificationDigestViewPage />}
           />
           <Route path="/notifications/digests" element={<NotificationDigestsPage />} />
+          {/* INTEX Agent routes */}
+          <Route path="/intex-agent/config" element={<IntexAgentConfigPage />} />
           {/* Fishing Assistant routes */}
           <Route
             path="/fishing-assistant/digests/:groupKey/:date"

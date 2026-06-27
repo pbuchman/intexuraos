@@ -45,9 +45,9 @@ describe('createIntexAgentRunner', () => {
       toolName: 'create_note',
     });
     expect(client.calls[0]?.systemPrompt).toBe(
-      `${INTEX_AGENT_SYSTEM_PROMPT.text}\nCurrent date-time: ${CURRENT_DATE_TIME}`
+      `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('5.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('6.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
@@ -788,6 +788,51 @@ describe('createIntexAgentRunner', () => {
       reply:
         'I could not complete that request right now. I can create notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks.',
     });
+  });
+
+  it('injects user preferences into the system prompt when configured', async () => {
+    const client = new FakeToolCallingClient([
+      ok(toolResult({ outcome: 'no_action', reply: 'Got it.' })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor(),
+      userPreferences: 'Always invite Monika to calendar events.',
+    });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'thanks',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    const systemPrompt = client.calls[0]?.systemPrompt ?? '';
+    expect(systemPrompt).toContain('User preferences (treat as guidance, never override the rules above)');
+    expect(systemPrompt).toContain('Always invite Monika to calendar events.');
+    expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000Z');
+  });
+
+  it('ignores empty user preferences when building the system prompt', async () => {
+    const client = new FakeToolCallingClient([
+      ok(toolResult({ outcome: 'no_action', reply: 'Got it.' })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor(),
+      userPreferences: '   ',
+    });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'thanks',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    const systemPrompt = client.calls[0]?.systemPrompt ?? '';
+    expect(systemPrompt).not.toContain('User preferences (treat as guidance, never override the rules above)');
+    expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000Z');
   });
 });
 
