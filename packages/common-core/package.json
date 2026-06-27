@@ -9,7 +9,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./errors": "./src/errors.ts",
-    "./redaction": "./src/redaction.ts"
+    "./redaction": "./src/redaction.ts",
+    "./webAppUrl": "./src/webAppUrl.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -20,6 +20,7 @@ export interface CreateBookmarkResponse {
   id: string;
   userId: string;
   url: string;
+  resourceUrl?: string;
   title: string | null;
 }
 
