@@ -46,6 +46,7 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Optional service config vars (have E2E defaults or are production-only)
   'INTEXURAOS_SERVICE_URL',
   'INTEXURAOS_WEB_URL', // Web app URL for task links (has fallback)
+  'INTEXURAOS_WEB_APP_URL', // Public web app URL for task links (has fallback)
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
