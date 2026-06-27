@@ -8,6 +8,7 @@ import type {
   PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppChatQueryResult,
   PrivateWhatsAppIngestOutcome,
+  PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
   PrivateWhatsAppSenderQueryInput,
@@ -34,6 +35,9 @@ export interface PrivateWhatsAppRepository {
   storeIncomingMessage(
     input: StorePrivateWhatsAppMessageInput
   ): Promise<Result<PrivateWhatsAppIngestOutcome, WhatsAppError>>;
+  getMessageById(
+    messageId: string
+  ): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>>;
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>>;

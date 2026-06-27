@@ -9,6 +9,7 @@ coverage/
 *eslint*cache*
 scripts/test-results/
 .tsconfig.tests-workspace.json
+.superpowers/
 
 # IDE - exclude user-specific files but keep project configuration
 .idea/workspace.xml

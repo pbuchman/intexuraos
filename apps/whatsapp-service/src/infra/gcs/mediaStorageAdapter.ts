@@ -34,6 +34,53 @@ function buildThumbnailPath(
   return `whatsapp/${userId}/${messageId}/${mediaId}_thumb.${extension}`;
 }
 
+function buildPrivateMediaPath(
+  userId: string,
+  messageId: string,
+  mediaId: string,
+  extension: string
+): string {
+  return `whatsapp/private/${userId}/${messageId}/${mediaId}.${extension}`;
+}
+
+function buildPrivateThumbnailPath(
+  userId: string,
+  messageId: string,
+  mediaId: string,
+  extension: string
+): string {
+  return `whatsapp/private/${userId}/${messageId}/${mediaId}_thumb.${extension}`;
+}
+
+async function saveObject(
+  storage: Storage,
+  bucketName: string,
+  gcsPath: string,
+  buffer: Buffer,
+  contentType: string,
+  errorLabel: string
+): Promise<Result<UploadResult, WhatsAppError>> {
+  try {
+    const bucket = storage.bucket(bucketName);
+    const file = bucket.file(gcsPath);
+
+    await file.save(buffer, {
+      contentType,
+      resumable: false,
+      metadata: {
+        cacheControl: 'private, max-age=31536000',
+      },
+    });
+
+    return ok({ gcsPath });
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `${errorLabel}: ${getErrorMessage(error, 'Unknown GCS error')}`,
+    });
+  }
+}
+
 /**
  * GCS implementation of MediaStoragePort.
  */
@@ -54,27 +101,14 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
     buffer: Buffer,
     contentType: string
   ): Promise<Result<UploadResult, WhatsAppError>> {
-    const gcsPath = buildMediaPath(userId, messageId, mediaId, extension);
-
-    try {
-      const bucket = this.storage.bucket(this.bucketName);
-      const file = bucket.file(gcsPath);
-
-      await file.save(buffer, {
-        contentType,
-        resumable: false,
-        metadata: {
-          cacheControl: 'private, max-age=31536000',
-        },
-      });
-
-      return ok({ gcsPath });
-    } catch (error) {
-      return err({
-        code: 'PERSISTENCE_ERROR',
-        message: `Failed to upload media: ${getErrorMessage(error, 'Unknown GCS error')}`,
-      });
-    }
+    return await saveObject(
+      this.storage,
+      this.bucketName,
+      buildMediaPath(userId, messageId, mediaId, extension),
+      buffer,
+      contentType,
+      'Failed to upload media'
+    );
   }
 
   async uploadThumbnail(
@@ -85,27 +119,50 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
     buffer: Buffer,
     contentType: string
   ): Promise<Result<UploadResult, WhatsAppError>> {
-    const gcsPath = buildThumbnailPath(userId, messageId, mediaId, extension);
+    return await saveObject(
+      this.storage,
+      this.bucketName,
+      buildThumbnailPath(userId, messageId, mediaId, extension),
+      buffer,
+      contentType,
+      'Failed to upload thumbnail'
+    );
+  }
 
-    try {
-      const bucket = this.storage.bucket(this.bucketName);
-      const file = bucket.file(gcsPath);
+  async uploadPrivateMedia(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>> {
+    return await saveObject(
+      this.storage,
+      this.bucketName,
+      buildPrivateMediaPath(userId, messageId, mediaId, extension),
+      buffer,
+      contentType,
+      'Failed to upload private media'
+    );
+  }
 
-      await file.save(buffer, {
-        contentType,
-        resumable: false,
-        metadata: {
-          cacheControl: 'private, max-age=31536000',
-        },
-      });
-
-      return ok({ gcsPath });
-    } catch (error) {
-      return err({
-        code: 'PERSISTENCE_ERROR',
-        message: `Failed to upload thumbnail: ${getErrorMessage(error, 'Unknown GCS error')}`,
-      });
-    }
+  async uploadPrivateThumbnail(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>> {
+    return await saveObject(
+      this.storage,
+      this.bucketName,
+      buildPrivateThumbnailPath(userId, messageId, mediaId, extension),
+      buffer,
+      contentType,
+      'Failed to upload private thumbnail'
+    );
   }
 
   async delete(gcsPath: string): Promise<Result<void, WhatsAppError>> {

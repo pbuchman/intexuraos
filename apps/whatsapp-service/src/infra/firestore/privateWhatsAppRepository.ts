@@ -2,6 +2,12 @@ import { createHash } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { FieldPath, getFirestore, type Query } from '@intexuraos/infra-firestore';
 import type { WhatsAppError } from '../../domain/whatsapp/index.js';
+import {
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+} from '../../domain/whatsapp/utils/privateWhatsAppIds.js';
 import type {
   DisablePrivateWhatsAppAccountInput,
   PrivateWhatsAppAccount,
@@ -45,35 +51,12 @@ const PRIVATE_WHATSAPP_MESSAGE_TYPES = new Set<PrivateWhatsAppMessage['messageTy
   'unknown',
 ]);
 
-export function createPrivateWhatsAppChatId(
-  sourceAccountId: string,
-  matrixRoomId: string
-): string {
-  return createPrivateWhatsAppId(sourceAccountId, matrixRoomId);
-}
-
-export function createPrivateWhatsAppMessageId(
-  sourceAccountId: string,
-  matrixEventId: string
-): string {
-  return createPrivateWhatsAppId(sourceAccountId, matrixEventId);
-}
-
-export function createPrivateWhatsAppSenderId(sourceAccountId: string, senderKey: string): string {
-  return createPrivateWhatsAppId(sourceAccountId, senderKey);
-}
-
-export function createPrivateWhatsAppSenderDayId(
-  sourceAccountId: string,
-  senderKey: string,
-  eventDayKey: string
-): string {
-  return createPrivateWhatsAppId(sourceAccountId, `${senderKey}\0${eventDayKey}`);
-}
-
-function createPrivateWhatsAppId(sourceAccountId: string, matrixId: string): string {
-  return createHash('sha256').update(`${sourceAccountId}\0${matrixId}`).digest('hex');
-}
+export {
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+} from '../../domain/whatsapp/utils/privateWhatsAppIds.js';
 
 function createPrivateWhatsAppSourceAccountId(userId: string): string {
   const hash = createHash('sha256').update(`private-whatsapp\0${userId}`).digest('hex');
@@ -87,6 +70,7 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
     upsertAccount,
     disableAccount,
     storeIncomingMessage,
+    getMessageById,
     findMessages,
     findChats,
     findSenders,
@@ -368,6 +352,27 @@ async function storeIncomingMessage(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to store private WhatsApp message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function getMessageById(
+  messageId: string
+): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>> {
+  try {
+    const doc = await getFirestore()
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc(messageId)
+      .get();
+    if (!doc.exists) {
+      return ok(null);
+    }
+    const data = doc.data() as Omit<PrivateWhatsAppMessage, 'id'> & { id?: string };
+    return ok({ ...data, id: data.id ?? doc.id });
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to load private WhatsApp message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
