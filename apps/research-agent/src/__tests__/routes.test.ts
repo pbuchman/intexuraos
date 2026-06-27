@@ -3468,6 +3468,8 @@ describe('Internal Routes', () => {
 
   describe('POST /internal/research/draft', () => {
     it('creates draft research with valid internal auth', async () => {
+      getServices().webAppUrl = 'https://app.example.com/';
+
       const response = await app.inject({
         method: 'POST',
         url: '/internal/research/draft',
@@ -3491,7 +3493,7 @@ describe('Internal Routes', () => {
       expect(body.data.resourceUrl).toBe('https://app.example.com/#/research/generated-id-123');
     });
 
-    it('keeps draft research resource URLs relative when webAppUrl is empty', async () => {
+    it('falls back to the public research URL when webAppUrl is empty', async () => {
       getServices().webAppUrl = '';
 
       const response = await app.inject({
@@ -3512,7 +3514,7 @@ describe('Internal Routes', () => {
         data: { status: string; message: string; resourceUrl?: string };
       };
       expect(body.success).toBe(true);
-      expect(body.data.resourceUrl).toBe('/#/research/generated-id-123');
+      expect(body.data.resourceUrl).toBe('https://intexuraos.cloud/#/research/generated-id-123');
     });
 
     it('creates draft research with sourceActionId', async () => {
