@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { deflateRawSync } from 'node:zlib';
 import { beforeEach, createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 import { FakeThumbnailGeneratorPort } from './fakes.js';
-import { createPrivateWhatsAppMessageId } from '../infra/firestore/privateWhatsAppRepository.js';
+import { createPrivateWhatsAppMessageId } from '../domain/whatsapp/index.js';
 import { getServices, setServices } from '../services.js';
 
 function createOpaqueAccessTokenForTest(input: {
@@ -89,7 +89,7 @@ describe('Private WhatsApp Media Routes', () => {
       };
     };
     const messageId = createPrivateWhatsAppMessageId('private-source-123', '$image');
-    expect(body.data.media).toMatchObject({
+    expect(body.data.media).toStrictEqual({
       mxcUri: 'mxc://home-dev/image',
       mimeType: 'image/jpeg',
       fileName: 'image.jpg',
@@ -99,6 +99,7 @@ describe('Private WhatsApp Media Routes', () => {
       thumbnailGcsPath: `whatsapp/private/user-123/${messageId}/home-dev-image_thumb.jpg`,
       storedMimeType: 'image/jpeg',
       storedSizeBytes: 'image-bytes'.length,
+      storedAt: expect.any(String),
     });
     expect(ctx.mediaStorage.getFile(body.data.media.gcsPath)?.buffer.toString()).toBe(
       'image-bytes'

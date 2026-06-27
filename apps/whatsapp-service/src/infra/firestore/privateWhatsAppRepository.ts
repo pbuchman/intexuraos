@@ -2,6 +2,12 @@ import { createHash } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { FieldPath, getFirestore, type Query } from '@intexuraos/infra-firestore';
 import type { WhatsAppError } from '../../domain/whatsapp/index.js';
+import {
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+} from '../../domain/whatsapp/utils/privateWhatsAppIds.js';
 import type {
   DisablePrivateWhatsAppAccountInput,
   PrivateWhatsAppAccount,
@@ -45,35 +51,12 @@ const PRIVATE_WHATSAPP_MESSAGE_TYPES = new Set<PrivateWhatsAppMessage['messageTy
   'unknown',
 ]);
 
-export function createPrivateWhatsAppChatId(
-  sourceAccountId: string,
-  matrixRoomId: string
-): string {
-  return createPrivateWhatsAppId(sourceAccountId, matrixRoomId);
-}
-
-export function createPrivateWhatsAppMessageId(
-  sourceAccountId: string,
-  matrixEventId: string
-): string {
-  return createPrivateWhatsAppId(sourceAccountId, matrixEventId);
-}
-
-export function createPrivateWhatsAppSenderId(sourceAccountId: string, senderKey: string): string {
-  return createPrivateWhatsAppId(sourceAccountId, senderKey);
-}
-
-export function createPrivateWhatsAppSenderDayId(
-  sourceAccountId: string,
-  senderKey: string,
-  eventDayKey: string
-): string {
-  return createPrivateWhatsAppId(sourceAccountId, `${senderKey}\0${eventDayKey}`);
-}
-
-function createPrivateWhatsAppId(sourceAccountId: string, matrixId: string): string {
-  return createHash('sha256').update(`${sourceAccountId}\0${matrixId}`).digest('hex');
-}
+export {
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+} from '../../domain/whatsapp/utils/privateWhatsAppIds.js';
 
 function createPrivateWhatsAppSourceAccountId(userId: string): string {
   const hash = createHash('sha256').update(`private-whatsapp\0${userId}`).digest('hex');

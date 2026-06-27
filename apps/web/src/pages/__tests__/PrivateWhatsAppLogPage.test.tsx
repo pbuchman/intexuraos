@@ -254,6 +254,25 @@ describe('PrivateWhatsAppLogPage', () => {
             ingestedAt: '2026-06-22T09:01:03.000Z',
             deliveryMode: 'live',
           },
+          {
+            id: 'stored-original-without-thumbnail',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'image',
+            media: {
+              mxcUri: 'mxc://home-dev/original-only',
+              mimeType: 'image/jpeg',
+              fileName: 'original-only.jpg',
+              storageStatus: 'stored',
+              hasMedia: true,
+              hasThumbnail: false,
+            },
+            eventTimestamp: '2026-06-22T09:02:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:02:02.000Z',
+            ingestedAt: '2026-06-22T09:02:03.000Z',
+            deliveryMode: 'live',
+          },
         ],
       })
     );
@@ -267,5 +286,6 @@ describe('PrivateWhatsAppLogPage', () => {
     expect(screen.getByTestId('private-whatsapp-image-preview')).toHaveTextContent('stored-image');
     expect(screen.getByText('stored image')).toBeInTheDocument();
     expect(screen.getByText('image.jpg')).toBeInTheDocument();
+    expect(screen.getByText('original-only.jpg')).toBeInTheDocument();
   });
 });

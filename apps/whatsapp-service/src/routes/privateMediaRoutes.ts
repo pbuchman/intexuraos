@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, requireAuth, validateInternalAuth } from '@intexuraos/common-http';
-import type { PrivateWhatsAppMessage } from '../domain/whatsapp/index.js';
+import { createPrivateWhatsAppMessageId, type PrivateWhatsAppMessage } from '../domain/whatsapp/index.js';
 import { getExtensionFromMimeType } from '../domain/whatsapp/utils/mimeType.js';
 import { getServices } from '../services.js';
 
@@ -71,10 +71,6 @@ function isImageMimeType(mimeType: string): boolean {
 
 function isPrivateImageMessage(message: PrivateWhatsAppMessage): boolean {
   return message.messageType === 'image';
-}
-
-function createPrivateWhatsAppMessageId(sourceAccountId: string, matrixEventId: string): string {
-  return createHash('sha256').update(`${sourceAccountId}\0${matrixEventId}`).digest('hex');
 }
 
 function getOriginalPath(message: PrivateWhatsAppMessage): string | undefined {

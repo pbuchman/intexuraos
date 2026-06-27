@@ -112,6 +112,13 @@ export type { NotificationPreferencesRepository } from './ports/notificationPref
 
 export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepository.js';
 
+export {
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+} from './utils/privateWhatsAppIds.js';
+
 // Events
 export type {
   ExtractLinkPreviewsEvent,
