@@ -8,12 +8,17 @@ describe('createWhatsAppReplyPublisher', () => {
   it('publishes WhatsApp replies through the shared send-message publisher', async () => {
     const sendPublisher = new FakeWhatsAppSendPublisher();
     const publisher = createWhatsAppReplyPublisher({ sendPublisher });
+    const ctaUrl = {
+      displayText: 'Open Note',
+      url: 'https://intexuraos.cloud/#/notes/note-1',
+    };
 
     await publisher.publishReply({
       userId: 'user-1',
       message: 'New session started.',
       replyToMessageId: 'wamid-1',
       correlationId: 'session-1',
+      ctaUrl,
     });
 
     expect(sendPublisher.calls).toEqual([
@@ -22,6 +27,7 @@ describe('createWhatsAppReplyPublisher', () => {
         message: 'New session started.',
         replyToMessageId: 'wamid-1',
         correlationId: 'session-1',
+        ctaUrl,
         important: true,
       },
     ]);

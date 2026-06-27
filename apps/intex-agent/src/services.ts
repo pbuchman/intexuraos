@@ -114,6 +114,7 @@ export function initServices(config: ServiceConfig): void {
       return await createIntexAgentRunner({
         client: toolCallingClient,
         toolExecutor,
+        webAppUrl: config.webAppUrl,
         userPreferences: preferences?.instructions ?? null,
       }).run(input);
     },

@@ -182,6 +182,7 @@ export function createIntexAgentToolExecutor(
       return JSON.stringify({
         status: 'completed',
         bookmarkId: bookmark.id,
+        resourceUrl: `/#/bookmarks/${bookmark.id}`,
         url: bookmark.url,
         ...(bookmark.title !== null ? { title: bookmark.title } : {}),
       });

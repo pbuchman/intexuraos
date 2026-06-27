@@ -548,9 +548,13 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'completed',
       reply:
-        'Utworzyłem szkic researchu: https://intexuraos.cloud/#/research/research-1',
+        'Utworzyłem szkic researchu.',
       summary: 'Calendar events tomorrow',
       toolName: 'create_research',
+      ctaUrl: {
+        displayText: 'Open Research',
+        url: 'https://intexuraos.cloud/#/research/research-1',
+      },
       toolResult: {
         status: 'completed',
         message: 'Research created',
@@ -572,7 +576,11 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply:
-        'Utworzyłem zadanie programistyczne: https://intexuraos.cloud/#/code-tasks/task-1',
+        'Utworzyłem zadanie programistyczne.',
+      expectedCtaUrl: {
+        displayText: 'View Progress',
+        url: 'https://intexuraos.cloud/#/code-tasks/task-1',
+      },
     },
     {
       toolName: 'create_calendar_event' as const,
@@ -590,7 +598,11 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply:
-        'Utworzyłem wydarzenie w kalendarzu: https://calendar.google.com/event?eid=event-1',
+        'Utworzyłem wydarzenie w kalendarzu.',
+      expectedCtaUrl: {
+        displayText: 'Open Calendar',
+        url: 'https://calendar.google.com/event?eid=event-1',
+      },
     },
     {
       toolName: 'create_link' as const,
@@ -600,10 +612,14 @@ describe('createIntexAgentRunner', () => {
         createLink: async (): Promise<string> =>
           JSON.stringify({
             status: 'completed',
-            url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+            resourceUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
           }),
       },
-      expectedReply: 'Zapisałem link: https://intexuraos.cloud/#/bookmarks/bookmark-1',
+      expectedReply: 'Zapisałem bookmark.',
+      expectedCtaUrl: {
+        displayText: 'Open Bookmark',
+        url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+      },
     },
     {
       toolName: 'create_note' as const,
@@ -618,6 +634,7 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply: 'Zapisałem notatkę.',
+      expectedCtaUrl: undefined,
     },
     {
       toolName: 'create_note' as const,
@@ -630,8 +647,11 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: 'https://intexuraos.cloud/#/notes/note-1',
           }),
       },
-      expectedReply:
-        'The model reply should not be the source of truth. https://intexuraos.cloud/#/notes/note-1',
+      expectedReply: 'Zapisałem notatkę.',
+      expectedCtaUrl: {
+        displayText: 'Open Note',
+        url: 'https://intexuraos.cloud/#/notes/note-1',
+      },
     },
     {
       toolName: 'create_note' as const,
@@ -644,6 +664,212 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply: 'The model reply should not be the source of truth.',
+      expectedCtaUrl: undefined,
+    },
+    {
+      toolName: 'create_note' as const,
+      message: 'Create a note: desk drawer key is blue',
+      args: { content: 'Desk drawer key is blue.' },
+      executorOverride: {
+        createNote: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: '/#/notes/note-1',
+          }),
+      },
+      expectedReply: 'Zapisałem notatkę.',
+      expectedCtaUrl: {
+        displayText: 'Open Note',
+        url: 'https://intexuraos.cloud/#/notes/note-1',
+      },
+    },
+    {
+      toolName: 'create_calendar_event' as const,
+      message: 'Add calendar event for dentist tomorrow 9-10',
+      args: {
+        summary: 'Dentist',
+        start: '2026-06-25T09:00:00+02:00',
+        end: '2026-06-25T10:00:00+02:00',
+      },
+      executorOverride: {
+        createCalendarEvent: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: 'https://intexuraos.cloud/#/calendar/events/event-1',
+          }),
+      },
+      expectedReply:
+        'The model reply should not be the source of truth. https://intexuraos.cloud/#/calendar/events/event-1',
+      expectedCtaUrl: undefined,
+    },
+    {
+      toolName: 'create_research' as const,
+      message: 'Create research draft: office move checklist',
+      args: {
+        title: 'Office move checklist',
+        prompt: 'Prepare a research draft about moving the office.',
+      },
+      executorOverride: {
+        createResearch: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: 'https://intexuraos.cloud/#/research/research-1',
+          }),
+      },
+      expectedReply: 'Utworzyłem szkic researchu.',
+      expectedCtaUrl: {
+        displayText: 'Open Research',
+        url: 'https://intexuraos.cloud/#/research/research-1',
+      },
+    },
+    {
+      toolName: 'create_research' as const,
+      message: 'Create research draft: office move checklist',
+      args: {
+        title: 'Office move checklist',
+        prompt: 'Prepare a research draft about moving the office.',
+      },
+      executorOverride: {
+        createResearch: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: 'ftp://intexuraos.cloud/research/research-1',
+          }),
+      },
+      expectedReply: 'Utworzyłem szkic researchu: ftp://intexuraos.cloud/research/research-1',
+      expectedCtaUrl: undefined,
+    },
+    {
+      toolName: 'create_research' as const,
+      message: 'Create research draft: office move checklist',
+      args: {
+        title: 'Notes with relative link',
+        prompt: 'Prepare a research draft about relative links.',
+      },
+      executorOverride: {
+        createResearch: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: '/#/research/research-1',
+          }),
+      },
+      expectedReply: 'Utworzyłem szkic researchu.',
+      expectedCtaUrl: {
+        displayText: 'Open Research',
+        url: 'https://intexuraos.cloud/#/research/research-1',
+      },
+    },
+    {
+      toolName: 'create_code_task' as const,
+      message: 'Create code task with relative progress link',
+      args: { prompt: 'Investigate relative code task links.' },
+      executorOverride: {
+        createCodeTask: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: '/#/code-tasks/task-1',
+          }),
+      },
+      expectedReply: 'Utworzyłem zadanie programistyczne.',
+      expectedCtaUrl: {
+        displayText: 'View Progress',
+        url: 'https://intexuraos.cloud/#/code-tasks/task-1',
+      },
+    },
+    {
+      toolName: 'create_code_task' as const,
+      message: 'Create code task to investigate webhook retries',
+      args: { prompt: 'Investigate webhook retries.' },
+      executorOverride: {
+        createCodeTask: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: 'ftp://intexuraos.cloud/code-tasks/task-1',
+          }),
+      },
+      expectedReply: 'Utworzyłem zadanie programistyczne: ftp://intexuraos.cloud/code-tasks/task-1',
+      expectedCtaUrl: undefined,
+    },
+    {
+      toolName: 'create_code_task' as const,
+      message: 'Create code task to investigate webhook retries',
+      args: { prompt: 'Investigate webhook retries.' },
+      executorOverride: {
+        createCodeTask: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: '/#/code-tasks/task-2',
+          }),
+      },
+      runnerWebAppUrl: 'https://dev.intexuraos.cloud/',
+      expectedReply: 'Utworzyłem zadanie programistyczne.',
+      expectedCtaUrl: {
+        displayText: 'View Progress',
+        url: 'https://dev.intexuraos.cloud/#/code-tasks/task-2',
+      },
+    },
+    {
+      toolName: 'create_calendar_event' as const,
+      message: 'Add calendar event for dentist tomorrow 9-10',
+      args: {
+        summary: 'Dentist',
+        start: '2026-06-25T09:00:00+02:00',
+        end: '2026-06-25T10:00:00+02:00',
+      },
+      executorOverride: {
+        createCalendarEvent: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            htmlLink: '/calendar/events/event-1',
+          }),
+      },
+      expectedReply: 'Utworzyłem wydarzenie w kalendarzu: /calendar/events/event-1',
+      expectedCtaUrl: undefined,
+    },
+    {
+      toolName: 'create_link' as const,
+      message: 'Save link https://example.com/post with target URL only',
+      args: { url: 'https://example.com/post', title: 'Example' },
+      executorOverride: {
+        createLink: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            url: 'https://example.com/post',
+          }),
+      },
+      expectedReply: 'Zapisałem link.',
+      expectedCtaUrl: {
+        displayText: 'Open Link',
+        url: 'https://example.com/post',
+      },
+    },
+    {
+      toolName: 'create_link' as const,
+      message: 'Save link /relative-target',
+      args: { url: '/relative-target', title: 'Relative' },
+      executorOverride: {
+        createLink: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            url: '/relative-target',
+          }),
+      },
+      expectedReply: 'Zapisałem link: /relative-target',
+      expectedCtaUrl: undefined,
+    },
+    {
+      toolName: 'create_link' as const,
+      message: 'Save link mailto:person@example.com',
+      args: { url: 'mailto:person@example.com', title: 'Email' },
+      executorOverride: {
+        createLink: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            url: 'mailto:person@example.com',
+          }),
+      },
+      expectedReply: 'Zapisałem link: mailto:person@example.com',
+      expectedCtaUrl: undefined,
     },
   ])('builds deterministic confirmations from %s tool results', async (testCase) => {
     const client = new ToolExecutingFakeToolCallingClient({
@@ -661,6 +887,7 @@ describe('createIntexAgentRunner', () => {
     const runner = createIntexAgentRunner({
       client,
       toolExecutor: fakeToolExecutor(testCase.executorOverride),
+      ...(testCase.runnerWebAppUrl !== undefined ? { webAppUrl: testCase.runnerWebAppUrl } : {}),
     });
 
     const result = await runner.run({
@@ -675,6 +902,10 @@ describe('createIntexAgentRunner', () => {
       reply: testCase.expectedReply,
       toolName: testCase.toolName,
     });
+    if (result.outcome !== 'completed') {
+      throw new Error(`Expected completed outcome, received ${result.outcome}`);
+    }
+    expect(result.ctaUrl).toEqual(testCase.expectedCtaUrl);
   });
 
   it('rejects completed responses when no tool actually ran and no supported toolName is present', async () => {

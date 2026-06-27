@@ -268,6 +268,7 @@ locals {
 
   hetzner_runtime_env_vars = {
     INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = "${local.public_origin}/api/code"
+    INTEXURAOS_WEB_APP_URL                 = local.public_origin
   }
 
   hetzner_runtime_secret_names = toset([

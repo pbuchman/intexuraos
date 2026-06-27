@@ -19,10 +19,12 @@ import { classifyIntexAgentIntent } from './intentGate.js';
 
 const SUPPORTED_CAPABILITIES =
   'notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks';
+const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
 
 export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
   toolExecutor: IntexAgentToolExecutor;
+  webAppUrl?: string;
   userPreferences?: string | null;
 }
 
@@ -71,7 +73,11 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
-      return parseRunnerContent(result.value.content, toolExecutions);
+      return parseRunnerContent(
+        result.value.content,
+        toolExecutions,
+        config.webAppUrl ?? DEFAULT_WEB_APP_URL
+      );
     },
   };
 }
@@ -80,6 +86,14 @@ interface IntexAgentToolExecution {
   toolName: IntexAgentToolName;
   args: Record<string, unknown>;
   result?: Record<string, unknown>;
+}
+
+interface CompletedReply {
+  reply: string;
+  ctaUrl?: {
+    displayText: string;
+    url: string;
+  };
 }
 
 function buildMessages(events: IntexAgentSessionEvent[], currentMessage: string): ToolCallingMessage[] {
@@ -137,7 +151,8 @@ function messageFromEvent(event: IntexAgentSessionEvent): ToolCallingMessage | n
 
 function parseRunnerContent(
   content: string,
-  toolExecutions: IntexAgentToolExecution[]
+  toolExecutions: IntexAgentToolExecution[],
+  webAppUrl: string
 ): IntexAgentRunnerResult {
   const parsed = parseJsonObject(content);
   if (parsed === null) {
@@ -168,15 +183,22 @@ function parseRunnerContent(
     if (completedToolExecution === undefined) {
       return malformedResult();
     }
+    const completedReply = buildCompletedReply(
+      completedToolExecution.toolName,
+      completedToolExecution.result,
+      reply,
+      webAppUrl
+    );
 
     return {
       outcome,
-      reply: buildCompletedReply(completedToolExecution.toolName, completedToolExecution.result, reply),
+      reply: completedReply.reply,
       ...(typeof summary === 'string' ? { summary } : {}),
       toolName: completedToolExecution.toolName,
       ...(completedToolExecution.result !== undefined
         ? { toolResult: completedToolExecution.result }
         : {}),
+      ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
     };
   }
 
@@ -260,40 +282,112 @@ function parseToolResult(rawResult: string): Record<string, unknown> | undefined
 function buildCompletedReply(
   toolName: IntexAgentToolName,
   result: Record<string, unknown> | undefined,
-  fallbackReply: string
-): string {
+  fallbackReply: string,
+  webAppUrl: string
+): CompletedReply {
   if (result === undefined) {
-    return fallbackReply;
+    return { reply: fallbackReply };
   }
 
   const resourceUrl = readString(result, 'resourceUrl');
-  if (resourceUrl !== undefined) {
+  const absoluteResourceUrl = toObjectCtaUrl(resourceUrl, webAppUrl);
+  if (absoluteResourceUrl !== undefined) {
+    if (toolName === 'create_note') {
+      return {
+        reply: 'Zapisałem notatkę.',
+        ctaUrl: { displayText: 'Open Note', url: absoluteResourceUrl },
+      };
+    }
     if (toolName === 'create_research') {
-      return `Utworzyłem szkic researchu: ${resourceUrl}`;
+      return {
+        reply: 'Utworzyłem szkic researchu.',
+        ctaUrl: { displayText: 'Open Research', url: absoluteResourceUrl },
+      };
     }
     if (toolName === 'create_code_task') {
-      return `Utworzyłem zadanie programistyczne: ${resourceUrl}`;
+      return {
+        reply: 'Utworzyłem zadanie programistyczne.',
+        ctaUrl: { displayText: 'View Progress', url: absoluteResourceUrl },
+      };
     }
-    return `${fallbackReply.trim()} ${resourceUrl}`.trim();
+    if (toolName === 'create_link') {
+      return {
+        reply: 'Zapisałem bookmark.',
+        ctaUrl: { displayText: 'Open Bookmark', url: absoluteResourceUrl },
+      };
+    }
+  }
+  if (resourceUrl !== undefined) {
+    if (toolName === 'create_research') {
+      return { reply: `Utworzyłem szkic researchu: ${resourceUrl}` };
+    }
+    if (toolName === 'create_code_task') {
+      return { reply: `Utworzyłem zadanie programistyczne: ${resourceUrl}` };
+    }
+    return { reply: `${fallbackReply.trim()} ${resourceUrl}`.trim() };
   }
 
   const htmlLink = readString(result, 'htmlLink');
+  const absoluteHtmlLink = toAbsoluteUrl(htmlLink);
+  if (toolName === 'create_calendar_event' && absoluteHtmlLink !== undefined) {
+    return {
+      reply: 'Utworzyłem wydarzenie w kalendarzu.',
+      ctaUrl: { displayText: 'Open Calendar', url: absoluteHtmlLink },
+    };
+  }
   if (htmlLink !== undefined && toolName === 'create_calendar_event') {
-    return `Utworzyłem wydarzenie w kalendarzu: ${htmlLink}`;
+    return { reply: `Utworzyłem wydarzenie w kalendarzu: ${htmlLink}` };
   }
 
   const url = readString(result, 'url');
+  const absoluteUrl = toAbsoluteUrl(url);
+  if (toolName === 'create_link' && absoluteUrl !== undefined) {
+    return {
+      reply: 'Zapisałem link.',
+      ctaUrl: { displayText: 'Open Link', url: absoluteUrl },
+    };
+  }
   if (url !== undefined && toolName === 'create_link') {
-    return `Zapisałem link: ${url}`;
+    return { reply: `Zapisałem link: ${url}` };
   }
 
   const message = readString(result, 'message');
-  return message ?? fallbackReply;
+  return { reply: message ?? fallbackReply };
 }
 
 function readString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+function toObjectCtaUrl(value: string | undefined, baseUrl: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(value, normalizeBaseUrl(baseUrl));
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function toAbsoluteUrl(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 }
 
 function parseJsonObject(content: string): Record<string, unknown> | null {

@@ -13,12 +13,16 @@ import type {
 import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
 
 export type IntexAgentRunnerResult =
-    | {
+  | {
       outcome: 'completed';
       reply: string;
       summary?: string;
       toolName?: IntexAgentToolName;
       toolResult?: Record<string, unknown>;
+      ctaUrl?: {
+        displayText: string;
+        url: string;
+      };
     }
   | {
       outcome: 'needs_clarification';
@@ -49,6 +53,10 @@ export interface WhatsAppReplyPublisher {
     message: string;
     replyToMessageId: string;
     correlationId: string;
+    ctaUrl?: {
+      displayText: string;
+      url: string;
+    };
   }): Promise<void>;
 }
 
@@ -240,7 +248,7 @@ async function applyRunnerResult(
     activeTool: runnerResult.toolName,
     ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
   });
-  await publishReply(input, deps, session.id, reply);
+  await publishReply(input, deps, session.id, reply, runnerResult.ctaUrl);
 }
 
 async function appendAssistantMessage(
@@ -273,13 +281,18 @@ async function publishReply(
   input: IntexIncomingMessage,
   deps: HandleIncomingMessageDeps,
   sessionId: string,
-  message: string
+  message: string,
+  ctaUrl?: {
+    displayText: string;
+    url: string;
+  }
 ): Promise<void> {
   await deps.replyPublisher.publishReply({
     userId: input.userId,
     message,
     replyToMessageId: input.messageId,
     correlationId: sessionId,
+    ...(ctaUrl !== undefined ? { ctaUrl } : {}),
   });
 }
 
