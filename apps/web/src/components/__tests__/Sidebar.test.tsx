@@ -154,4 +154,22 @@ describe('Sidebar', () => {
     );
     expect(screen.queryByRole('link', { name: /^whatsapp$/i })).not.toBeInTheDocument();
   });
+
+  it('renders the INTEX Agent section with Configuration and Sessions entries', () => {
+    render(
+      <MemoryRouter initialEntries={['/intex-agent/config']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('button', { name: /intex agent/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /configuration/i })).toHaveAttribute(
+      'href',
+      '/intex-agent/config'
+    );
+    expect(screen.getByRole('link', { name: /^sessions$/i })).toHaveAttribute(
+      'href',
+      '/whatsapp/sessions'
+    );
+  });
 });

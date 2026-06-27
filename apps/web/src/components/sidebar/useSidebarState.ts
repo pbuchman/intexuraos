@@ -27,6 +27,8 @@ export interface SidebarState {
   setIsFishingAssistantOpen: (next: boolean) => void;
   isWhatsAppOpen: boolean;
   setIsWhatsAppOpen: (next: boolean) => void;
+  isIntexAgentOpen: boolean;
+  setIsIntexAgentOpen: (next: boolean) => void;
   savedFilters: SavedNotificationFilter[];
   navRef: React.RefObject<HTMLElement | null>;
 }
@@ -59,6 +61,9 @@ export function useSidebarState(): SidebarState {
   );
   const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(() =>
     window.location.hash.includes('/whatsapp') || window.location.hash.includes('/notes')
+  );
+  const [isIntexAgentOpen, setIsIntexAgentOpen] = useState(() =>
+    window.location.hash.includes('/intex-agent')
   );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
@@ -144,6 +149,12 @@ export function useSidebarState(): SidebarState {
     }
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (location.pathname.startsWith('/intex-agent')) {
+      setIsIntexAgentOpen(true);
+    }
+  }, [location.pathname]);
+
   // Fetch saved filters from mobile-notifications-service
   const fetchFilters = useCallback(async (): Promise<void> => {
     try {
@@ -223,6 +234,8 @@ export function useSidebarState(): SidebarState {
     setIsFishingAssistantOpen,
     isWhatsAppOpen,
     setIsWhatsAppOpen,
+    isIntexAgentOpen,
+    setIsIntexAgentOpen,
     savedFilters,
     navRef,
   };

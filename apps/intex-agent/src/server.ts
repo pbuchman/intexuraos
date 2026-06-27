@@ -12,6 +12,7 @@ import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { internalRoutes } from './routes/internalRoutes.js';
+import { preferencesRoutes } from './routes/preferencesRoutes.js';
 import { sessionRoutes } from './routes/sessionRoutes.js';
 
 const SERVICE_NAME = 'intex-agent';
@@ -101,6 +102,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   await app.register(sessionRoutes);
+  await app.register(preferencesRoutes);
   await app.register(internalRoutes);
 
   app.get(
