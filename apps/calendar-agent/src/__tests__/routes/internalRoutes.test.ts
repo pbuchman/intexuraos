@@ -121,6 +121,50 @@ describe('Internal Routes', () => {
       });
     });
 
+    it('omits htmlLink from direct create response when Google Calendar does not return it', async () => {
+      fakeCalendarClient.setCreateResult(ok({
+        id: 'calendar-event-no-link',
+        summary: 'Dentist appointment',
+        description: 'Annual checkup',
+        location: 'Dental clinic',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          event: {
+            id: string;
+            summary: string;
+            htmlLink?: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.event).toMatchObject({
+        id: 'calendar-event-no-link',
+        summary: 'Dentist appointment',
+      });
+      expect(body.data.event.htmlLink).toBeUndefined();
+    });
+
     it('creates an event with the primary calendar when calendarId is omitted', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -465,6 +509,78 @@ describe('Internal Routes', () => {
       // Verify the extraction service received the full text, not the short title
       expect(fakeCalendarActionExtractionService.extractEventCalls).toHaveLength(1);
       expect(fakeCalendarActionExtractionService.extractEventCalls[0]?.text).toBe(fullPrompt);
+    });
+
+    it('returns Google Calendar htmlLink as resourceUrl', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Team Meeting',
+          start: '2025-01-15T14:00:00',
+          end: '2025-01-15T15:00:00',
+          location: 'Conference Room A',
+          description: 'Weekly sync',
+          valid: true,
+          error: null,
+          reasoning: 'Clear meeting request',
+        },
+      };
+      fakeCalendarClient.setCreateResult(ok({
+        id: 'calendar-event-with-link',
+        summary: 'Team Meeting',
+        start: { dateTime: '2025-01-15T14:00:00' },
+        end: { dateTime: '2025-01-15T15:00:00' },
+        htmlLink: 'https://calendar.google.com/event?eid=calendar-event-with-link',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resourceUrl).toBe('https://calendar.google.com/event?eid=calendar-event-with-link');
+    });
+
+    it('omits resourceUrl when Google Calendar does not return htmlLink', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Team Meeting',
+          start: '2025-01-15T14:00:00',
+          end: '2025-01-15T15:00:00',
+          location: 'Conference Room A',
+          description: 'Weekly sync',
+          valid: true,
+          error: null,
+          reasoning: 'Clear meeting request',
+        },
+      };
+      fakeCalendarClient.setCreateResult(ok({
+        id: 'calendar-event-without-link',
+        summary: 'Team Meeting',
+        start: { dateTime: '2025-01-15T14:00:00' },
+        end: { dateTime: '2025-01-15T15:00:00' },
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resourceUrl).toBeUndefined();
+      expect(JSON.stringify(body)).not.toContain('/#/calendar');
     });
 
     it('falls back to action.title when text field is not provided', async () => {

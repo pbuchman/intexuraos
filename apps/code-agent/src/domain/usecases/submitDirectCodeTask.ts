@@ -20,6 +20,7 @@ import { resolveDefaultWorkerType } from '../../domain/utils/defaultWorkerTypeRe
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
+import { buildCodeTaskUrl } from '../utils/taskUrls.js';
 import { backLinkPlanningTask } from './backLinkPlanningTask.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -320,7 +321,7 @@ export async function submitDirectCodeTask(
 
       return ok({
         codeTaskId: fanOutResult.value.primaryChildTaskId,
-        resourceUrl: `/#/code-tasks/${fanOutResult.value.primaryChildTaskId}`,
+        resourceUrl: buildCodeTaskUrl(fanOutResult.value.primaryChildTaskId),
         workerLocation: 'queued' as WorkerLocation,
       });
     }
@@ -328,7 +329,7 @@ export async function submitDirectCodeTask(
     // Fan-out succeeded or fell back to normal enqueue — return the parent task ID
     return ok({
       codeTaskId: parentTask.id,
-      resourceUrl: `/#/code-tasks/${parentTask.id}`,
+      resourceUrl: buildCodeTaskUrl(parentTask.id),
       workerLocation: 'queued' as WorkerLocation,
     });
   }
@@ -427,7 +428,7 @@ export async function submitDirectCodeTask(
   // Step 8: Return success — task is in queue, drainTaskQueue will dispatch it
   return ok({
     codeTaskId: task.id,
-    resourceUrl: `/#/code-tasks/${task.id}`,
+    resourceUrl: buildCodeTaskUrl(task.id),
     workerLocation: 'queued' as WorkerLocation,
   });
 }

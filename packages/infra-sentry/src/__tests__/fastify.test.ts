@@ -161,7 +161,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles FST_ERR_CTP_EMPTY_JSON_BODY error', async () => {
@@ -181,7 +181,36 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('handles unsupported media type errors without capturing to Sentry', async () => {
+    setupSentryErrorHandler(app);
+
+    app.post(
+      '/test',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            properties: {
+              value: { type: 'string' },
+            },
+          },
+        },
+      },
+      async () => ({ ok: true })
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/test',
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: '{}',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with non-array validation property', async () => {
@@ -238,7 +267,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with undefined message', async () => {
@@ -258,7 +287,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with empty instancePath triggering required property regex', async () => {
@@ -278,7 +307,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with empty instancePath and undefined message', async () => {
@@ -298,7 +327,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with both instancePath and message undefined', async () => {
@@ -318,7 +347,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });
 

@@ -26,6 +26,14 @@ export { getLogLevel } from './logging.js';
 // Typed env reader
 export { loadEnv } from './loadEnv.js';
 
+// Public web app URL helpers
+export {
+  DEFAULT_WEB_APP_URL,
+  buildWebAppHashUrl,
+  normalizeWebAppUrl,
+  resolveWebAppUrl,
+} from './webAppUrl.js';
+
 // Generic service container factory (DI lifecycle)
 export { createServiceContainer, type ServiceContainerHandle } from './serviceContainer.js';
 

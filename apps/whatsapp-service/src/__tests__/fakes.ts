@@ -755,6 +755,16 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     );
   }
 
+  getMessageById(messageId: string): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>> {
+    const stored = Array.from(this.stored.values()).find(
+      (candidate) => this.toMessage(candidate).id === messageId
+    );
+    if (stored === undefined) {
+      return Promise.resolve(ok(null));
+    }
+    return Promise.resolve(ok(this.toMessage(stored)));
+  }
+
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
@@ -1291,6 +1301,40 @@ export class FakeMediaStorage implements MediaStoragePort {
       );
     }
     const gcsPath = `whatsapp/${userId}/${messageId}/${mediaId}_thumb.${extension}`;
+    this.files.set(gcsPath, { buffer, contentType });
+    return Promise.resolve(ok({ gcsPath }));
+  }
+
+  uploadPrivateMedia(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>> {
+    if (this.shouldFailUpload) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated upload failure' }));
+    }
+    const gcsPath = `whatsapp/private/${userId}/${messageId}/${mediaId}.${extension}`;
+    this.files.set(gcsPath, { buffer, contentType });
+    return Promise.resolve(ok({ gcsPath }));
+  }
+
+  uploadPrivateThumbnail(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>> {
+    if (this.shouldFailThumbnailUpload) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated thumbnail upload failure' })
+      );
+    }
+    const gcsPath = `whatsapp/private/${userId}/${messageId}/${mediaId}_thumb.${extension}`;
     this.files.set(gcsPath, { buffer, contentType });
     return Promise.resolve(ok({ gcsPath }));
   }

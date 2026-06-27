@@ -136,4 +136,18 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(postWebhook).toBeDefined();
     // Signature is documented in headers schema
   });
+
+  it('documents the 500 response for private media upload repository failures', () => {
+    const paths = openapiSpec.paths;
+    const uploadPrivateMedia = paths?.['/internal/whatsapp/private/media']?.['post'];
+    expect(uploadPrivateMedia).toBeDefined();
+    expect(uploadPrivateMedia?.responses?.['500']).toBeDefined();
+  });
+
+  it('documents the 413 response for private media upload body limit failures', () => {
+    const paths = openapiSpec.paths;
+    const uploadPrivateMedia = paths?.['/internal/whatsapp/private/media']?.['post'];
+    expect(uploadPrivateMedia).toBeDefined();
+    expect(uploadPrivateMedia?.responses?.['413']).toBeDefined();
+  });
 });

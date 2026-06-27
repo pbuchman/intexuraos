@@ -1,6 +1,6 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { err, ok, type Logger } from '@intexuraos/common-core';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
@@ -158,8 +158,20 @@ async function submit(
 }
 
 describe('submitDirectCodeTask', () => {
+  let originalWebAppUrl: string | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   it('returns internal_error when worker settings cannot be fetched', async () => {
@@ -189,6 +201,11 @@ describe('submitDirectCodeTask', () => {
     const result = await submit(deps);
 
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
+    }
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',
@@ -206,6 +223,20 @@ describe('submitDirectCodeTask', () => {
       userId: 'user-1',
     });
     expect(metricsClient.incrementTasksSubmitted).toHaveBeenCalledWith('auto', 'web');
+  });
+
+  it('uses a configured web app URL with trailing slash normalization in the returned resourceUrl', async () => {
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+    const { deps } = createDeps();
+
+    const result = await submit(deps);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.resourceUrl).toBe(
+        `https://dev.intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
+    }
   });
 
   it('uses code-task labels to submit execution tasks when taskMode is omitted', async () => {
@@ -447,6 +478,11 @@ describe('submitDirectCodeTask', () => {
     const result = await submit(deps, { taskMode: 'execution', linearIssueId: 'INT-1' });
 
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
+    }
     expect(codeTaskRepo.update).toHaveBeenCalledWith(expect.stringMatching(/^task_/), { status: 'queued' });
     expect(taskEnqueueService.enqueue).toHaveBeenCalledWith({
       taskId: expect.stringMatching(/^task_/),
@@ -659,6 +695,9 @@ describe('submitDirectCodeTask', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.codeTaskId).toMatch(/^task_/);
+      expect(result.value.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
       expect(result.value.workerLocation).toBe('queued');
     }
     expect(logger.warn).not.toHaveBeenCalledWith(

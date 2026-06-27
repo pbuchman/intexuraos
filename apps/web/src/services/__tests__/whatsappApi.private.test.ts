@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   disablePrivateWhatsAppAccount,
   getPrivateWhatsAppAccount,
+  getPrivateWhatsAppMessageMediaUrl,
+  getPrivateWhatsAppMessageThumbnailUrl,
   listPrivateWhatsAppChatMessages,
   listPrivateWhatsAppChats,
   listPrivateWhatsAppMessages,
@@ -20,7 +22,7 @@ vi.mock('../apiClient.js', () => ({
 
 vi.mock('../../config', () => ({
   config: {
-    whatsappServiceUrl: 'https://wa.test',
+    whatsappServiceUrl: '/api/whatsapp',
   },
 }));
 
@@ -42,7 +44,7 @@ describe('whatsappApi private read helpers', () => {
 
     expect(result.nextCursor).toBe('next-senders');
     const call = vi.mocked(apiRequest).mock.calls[0];
-    expect(call?.[0]).toBe('https://wa.test');
+    expect(call?.[0]).toBe('/api/whatsapp');
     expect(call?.[1]).toBe('/private/senders?limit=25&cursor=cursor-1');
     expect(call?.[1]).not.toContain('sourceAccountId');
     expect(call?.[2]).toBe(TOKEN);
@@ -59,7 +61,7 @@ describe('whatsappApi private read helpers', () => {
 
     expect(result.nextCursor).toBe('next-chats');
     const call = vi.mocked(apiRequest).mock.calls[0];
-    expect(call?.[0]).toBe('https://wa.test');
+    expect(call?.[0]).toBe('/api/whatsapp');
     expect(call?.[1]).toBe('/private/chats?limit=25&cursor=chat-cursor');
     expect(call?.[1]).not.toContain('sourceAccountId');
     expect(call?.[2]).toBe(TOKEN);
@@ -126,7 +128,7 @@ describe('whatsappApi private read helpers', () => {
     await getPrivateWhatsAppAccount(TOKEN);
 
     const call = vi.mocked(apiRequest).mock.calls[0];
-    expect(call?.[0]).toBe('https://wa.test');
+    expect(call?.[0]).toBe('/api/whatsapp');
     expect(call?.[1]).toBe('/private/account');
     expect(call?.[1]).not.toContain('sourceAccountId');
     expect(call?.[2]).toBe(TOKEN);
@@ -162,5 +164,35 @@ describe('whatsappApi private read helpers', () => {
     const call = vi.mocked(apiRequest).mock.calls[0];
     expect(call?.[1]).toBe('/private/account');
     expect(call?.[3]).toEqual({ method: 'DELETE' });
+  });
+
+  it('prefixes service-relative private media access URLs with the configured web API base', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      url: '/private/media-access?token=media-token',
+      expiresAt: '2026-06-26T10:15:00.000Z',
+    });
+
+    const result = await getPrivateWhatsAppMessageMediaUrl(TOKEN, 'message-123');
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[0]).toBe('/api/whatsapp');
+    expect(call?.[1]).toBe('/private/messages/message-123/media');
+    expect(call?.[2]).toBe(TOKEN);
+    expect(result.url).toBe('/api/whatsapp/private/media-access?token=media-token');
+  });
+
+  it('leaves absolute private media access URLs unchanged', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      url: 'https://storage.example.com/thumb',
+      expiresAt: '2026-06-26T10:15:00.000Z',
+    });
+
+    const result = await getPrivateWhatsAppMessageThumbnailUrl(TOKEN, 'message-123');
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe('/private/messages/message-123/thumbnail');
+    expect(result.url).toBe('https://storage.example.com/thumb');
   });
 });

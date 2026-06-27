@@ -92,6 +92,7 @@ describe('dispatchSubmission', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
     mockLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
     mockCodeTaskRepo = {
       create: vi.fn(),
@@ -125,6 +126,9 @@ describe('dispatchSubmission', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.codeTaskId).toMatch(/^task_/);
+      expect(result.value.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
       expect(result.value.implementationOf).toBe('task_planning');
       expect(result.value.workerLocation).toBe('queued');
     }
@@ -218,6 +222,7 @@ describe('dispatchSubmission', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.codeTaskId).toBe('task_child_a');
+        expect(result.value.resourceUrl).toBe('https://intexuraos.cloud/#/code-tasks/task_child_a');
         expect(result.value.childTaskIds).toEqual(['task_child_a', 'task_child_b']);
         expect(result.value.workerLocation).toBe('queued');
       }

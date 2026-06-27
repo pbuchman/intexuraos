@@ -48,35 +48,22 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
       return;
     }
 
-    // Log to Pino FIRST - this is our reliable error log
-    request.log.error({ err: error }, 'Unhandled error');
-
-    // Try to send to Sentry, but don't let it break error handling
-    try {
-      Sentry.withScope((scope) => {
-        scope.setTag('url', request.url);
-        scope.setTag('method', request.method);
-        scope.setContext('request', {
-          url: request.url,
-          method: request.method,
-          headers: sanitizeHeaders(request.headers),
-        });
-        Sentry.captureException(error);
-      });
-    } catch (sentryError) {
-      // Log that Sentry failed but don't crash the error handler
-      request.log.warn({ err: sentryError }, 'Failed to send error to Sentry');
-    }
-
-    // Handle Fastify-specific errors
-    // Defense-in-depth: the custom JSON parser in intexuraFastifyPlugin handles empty bodies,
-    // but if the parser is not registered, this catches the error as a 400 instead of 500.
+    // Fastify request parsing and schema validation errors are client/input
+    // failures. Return a structured 4xx without promoting them to Sentry issues.
     if (
       fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
       fastifyError.code === 'FST_ERR_CTP_EMPTY_JSON_BODY'
     ) {
+      request.log.info({ err: error }, 'Invalid JSON request body');
       reply.status(400);
       await fastifyReply.fail('INVALID_REQUEST', 'Invalid JSON body');
+      return;
+    }
+
+    if (fastifyError.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') {
+      request.log.info({ err: error }, 'Unsupported request media type');
+      reply.status(400);
+      await fastifyReply.fail('INVALID_REQUEST', error.message);
       return;
     }
 
@@ -102,10 +89,31 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
           };
         });
 
+        request.log.info({ err: error }, 'Request validation failed');
         reply.status(400);
         await fastifyReply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
         return;
       }
+    }
+
+    // Log to Pino FIRST - this is our reliable error log
+    request.log.error({ err: error }, 'Unhandled error');
+
+    // Try to send to Sentry, but don't let it break error handling
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTag('url', request.url);
+        scope.setTag('method', request.method);
+        scope.setContext('request', {
+          url: request.url,
+          method: request.method,
+          headers: sanitizeHeaders(request.headers),
+        });
+        Sentry.captureException(error);
+      });
+    } catch (sentryError) {
+      // Log that Sentry failed but don't crash the error handler
+      request.log.warn({ err: sentryError }, 'Failed to send error to Sentry');
     }
 
     // Return error response

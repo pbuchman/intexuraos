@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { buildCoverageShardCommand, mergeShardOutputs } from '../lib/coverage-sharding.mjs'; // @allow-missing-js -- .mjs import
 
 describe('coverage sharding helpers', () => {
@@ -25,5 +26,12 @@ describe('coverage sharding helpers', () => {
     ]);
 
     expect(output).toBe('first\nsecond\n');
+  });
+
+  it('excludes local hook test copies from root coverage discovery', () => {
+    const rootVitestConfig = readFileSync('vitest.config.ts', 'utf-8');
+
+    expect(rootVitestConfig).toContain("'.claude/hooks/__tests__/**'");
+    expect(rootVitestConfig).toContain("'.codex/hooks/__tests__/**'");
   });
 });

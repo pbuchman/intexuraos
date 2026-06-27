@@ -61,10 +61,34 @@ type PublicPrivateWhatsAppChat = Omit<
   'userId' | 'sourceAccountId' | 'matrixRoomId' | 'participantKeys'
 >;
 type PublicPrivateWhatsAppSender = Omit<PrivateWhatsAppSender, 'userId' | 'sourceAccountId'>;
+interface PublicPrivateWhatsAppMedia {
+  mxcUri: string;
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  storageStatus?: 'stored';
+  hasMedia?: boolean;
+  hasThumbnail?: boolean;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+}
 type PublicPrivateWhatsAppMessage = Omit<
   PrivateWhatsAppMessage,
-  'userId' | 'sourceAccountId' | 'rawMatrixEvent' | 'matrixRoomId' | 'matrixEventId' | 'matrixSenderId'
->;
+  | 'userId'
+  | 'sourceAccountId'
+  | 'rawMatrixEvent'
+  | 'matrixRoomId'
+  | 'matrixEventId'
+  | 'matrixSenderId'
+  | 'media'
+> & {
+  media?: PublicPrivateWhatsAppMedia;
+};
 type PublicPrivateWhatsAppSenderDay = Omit<
   PrivateWhatsAppSenderDay,
   'userId' | 'sourceAccountId' | 'chatIds'
@@ -242,6 +266,28 @@ function toPublicChat(chat: PrivateWhatsAppChat): PublicPrivateWhatsAppChat {
   }) as PublicPrivateWhatsAppChat;
 }
 
+function toPublicMedia(
+  media: PrivateWhatsAppMessage['media']
+): PublicPrivateWhatsAppMedia | undefined {
+  if (media === undefined) return undefined;
+  return omitUndefined({
+    mxcUri: media.mxcUri,
+    mimeType: media.mimeType,
+    fileName: media.fileName,
+    sizeBytes: media.sizeBytes,
+    width: media.width,
+    height: media.height,
+    durationMs: media.durationMs,
+    sha256: media.sha256,
+    storageStatus: media.storageStatus,
+    hasMedia: media.gcsPath !== undefined,
+    hasThumbnail: media.thumbnailGcsPath !== undefined,
+    storedMimeType: media.storedMimeType,
+    storedSizeBytes: media.storedSizeBytes,
+    storedAt: media.storedAt,
+  }) as PublicPrivateWhatsAppMedia;
+}
+
 function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsAppMessage {
   return omitUndefined({
     id: message.id,
@@ -253,7 +299,7 @@ function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsApp
     direction: message.direction,
     messageType: message.messageType,
     text: message.text,
-    media: message.media,
+    media: toPublicMedia(message.media),
     eventTimestamp: message.eventTimestamp,
     eventDayKey: message.eventDayKey,
     eventTimeZone: message.eventTimeZone,

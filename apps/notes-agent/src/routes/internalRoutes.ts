@@ -110,7 +110,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const note = result.value;
       const noteId = note.id;
-      const resourceUrl = `/#/notes/${noteId}`;
+      const resourceUrl = `https://intexuraos.cloud/#/notes/${noteId}`;
 
       const feedback: ServiceFeedback = {
         status: 'completed',

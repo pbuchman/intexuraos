@@ -126,7 +126,7 @@ export interface ProcessedAction {
   actionId: string;
   userId: string;
   eventId: string;
-  resourceUrl: string;
+  resourceUrl?: string;
   createdAt: string;
 }
 

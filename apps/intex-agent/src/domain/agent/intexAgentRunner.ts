@@ -14,7 +14,7 @@ import {
   type CreateResearchToolArgs,
   type IntexAgentToolExecutor,
 } from './toolDefinitions.js';
-import { INTEX_AGENT_SYSTEM_PROMPT } from './systemPrompt.js';
+import { buildIntexAgentSystemPrompt } from './systemPrompt.js';
 import { classifyIntexAgentIntent } from './intentGate.js';
 
 const SUPPORTED_CAPABILITIES =
@@ -25,6 +25,7 @@ export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
   toolExecutor: IntexAgentToolExecutor;
   webAppUrl?: string;
+  userPreferences?: string | null;
 }
 
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
@@ -52,7 +53,10 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         (tool) =>
           intent.kind === 'tool' && intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
       );
-      const systemPrompt = `${INTEX_AGENT_SYSTEM_PROMPT.text}\nCurrent date-time: ${input.currentDateTime}`;
+      const systemPrompt = buildIntexAgentSystemPrompt.build({
+        currentDateTime: input.currentDateTime,
+        userPreferences: config.userPreferences ?? null,
+      });
       const result = await config.client.run({
         systemPrompt,
         messages: buildMessages(input.events, input.message),

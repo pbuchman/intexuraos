@@ -38,6 +38,7 @@ interface GetBookmarkQuery {
 
 const ogFetchStatusEnum = ['pending', 'processed', 'failed'];
 const bookmarkStatusEnum = ['draft', 'active'];
+const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
 
 const createBookmarkBodySchema = {
   type: 'object',
@@ -171,6 +172,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 properties: {
                   id: { type: 'string' },
                   url: { type: 'string' },
+                  resourceUrl: { type: 'string' },
                   bookmark: bookmarkResponseSchema,
                 },
               },
@@ -215,12 +217,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const bookmarkId = result.value.id;
-      const bookmarkUrl = `/#/bookmarks/${bookmarkId}`;
+      const bookmarkUrl = `${DEFAULT_WEB_APP_URL}/#/bookmarks/${bookmarkId}`;
 
       void reply.status(201);
       return await reply.ok({
         id: bookmarkId,
         url: bookmarkUrl,
+        resourceUrl: bookmarkUrl,
         bookmark: formatBookmark(result.value),
       });
     }

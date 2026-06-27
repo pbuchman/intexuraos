@@ -7,6 +7,7 @@ export type PrivateWhatsAppChatType = 'direct' | 'group' | 'unknown';
 export type PrivateWhatsAppMessageDirection = 'incoming' | 'outgoing';
 export type PrivateWhatsAppSummaryStatus = 'not_started' | 'completed' | 'failed';
 export type PrivateWhatsAppAccountStatus = 'active' | 'disabled';
+export type PrivateWhatsAppMediaStorageStatus = 'stored';
 export type PrivateWhatsAppMessageType =
   | 'text'
   | 'image'
@@ -23,7 +24,16 @@ export interface PrivateWhatsAppMediaInfo {
   mimeType?: string;
   fileName?: string;
   sizeBytes?: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
   sha256?: string;
+  storageStatus?: PrivateWhatsAppMediaStorageStatus;
+  gcsPath?: string;
+  thumbnailGcsPath?: string;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
 }
 
 export interface PrivateWhatsAppChatInput {

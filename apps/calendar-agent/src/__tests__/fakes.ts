@@ -466,7 +466,7 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
     actionId: string;
     userId: string;
     eventId: string;
-    resourceUrl: string;
+    resourceUrl?: string;
   }): Promise<Result<ProcessedAction, CalendarError>> {
     if (this.createResult !== null) {
       return this.createResult;
@@ -475,7 +475,7 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
       actionId: input.actionId,
       userId: input.userId,
       eventId: input.eventId,
-      resourceUrl: input.resourceUrl,
+      ...(input.resourceUrl !== undefined ? { resourceUrl: input.resourceUrl } : {}),
       createdAt: new Date().toISOString(),
     };
     this.processedActions.set(input.actionId, processedAction);

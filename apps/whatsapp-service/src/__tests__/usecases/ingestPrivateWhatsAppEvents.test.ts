@@ -127,6 +127,10 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     return Promise.resolve(ok(outcome));
   }
 
+  getMessageById(_messageId: string): Promise<Result<null, WhatsAppError>> {
+    return Promise.resolve(ok(null));
+  }
+
   findMessages(
     _input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
@@ -227,6 +231,59 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored[0]?.message.direction).toBe('outgoing');
     expect(repository.stored[0]?.message.senderDisplayName).toBe('You');
     expect(repository.stored[0]?.message.senderKey).toBe('matrix:@pbuchman:home-dev');
+  });
+
+  it('preserves stored private image media fields from the Matrix adapter', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$stored-image',
+            message: {
+              direction: 'incoming',
+              type: 'image',
+              text: 'image.jpg',
+              media: {
+                mxcUri: 'mxc://home-dev/image',
+                mimeType: 'image/jpeg',
+                fileName: 'image.jpg',
+                sizeBytes: 11,
+                width: 1280,
+                height: 720,
+                durationMs: 3456,
+                sha256: 'sha256-value',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+                thumbnailGcsPath: 'whatsapp/private/user-123/message/image_thumb.jpg',
+                storedMimeType: 'image/jpeg',
+                storedSizeBytes: 11,
+                storedAt: '2026-06-26T10:00:00.000Z',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(repository.stored[0]?.message.media).toEqual({
+      mxcUri: 'mxc://home-dev/image',
+      mimeType: 'image/jpeg',
+      fileName: 'image.jpg',
+      sizeBytes: 11,
+      width: 1280,
+      height: 720,
+      durationMs: 3456,
+      sha256: 'sha256-value',
+      storageStatus: 'stored',
+      gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+      thumbnailGcsPath: 'whatsapp/private/user-123/message/image_thumb.jpg',
+      storedMimeType: 'image/jpeg',
+      storedSizeBytes: 11,
+      storedAt: '2026-06-26T10:00:00.000Z',
+    });
   });
 
   it('derives sender identity and Europe/Warsaw day metadata before persistence', async () => {

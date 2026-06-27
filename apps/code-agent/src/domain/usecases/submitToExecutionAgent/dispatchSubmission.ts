@@ -134,7 +134,7 @@ ${childTaskLines}`,
 
   return ok({
     codeTaskId: fanOutResult.value.primaryChildTaskId,
-    resourceUrl: `/#/code-tasks/${fanOutResult.value.primaryChildTaskId}`,
+    resourceUrl: buildCodeTaskUrl(fanOutResult.value.primaryChildTaskId),
     workerLocation: 'queued' as WorkerLocation,
     implementationOf: planningTask.id,
     childTaskIds: fanOutResult.value.childTaskIds,
@@ -229,7 +229,7 @@ async function dispatchSingle(
 
   return ok({
     codeTaskId: executionTaskId,
-    resourceUrl: `/#/code-tasks/${executionTaskId}`,
+    resourceUrl: buildCodeTaskUrl(executionTaskId),
     workerLocation: 'queued' as WorkerLocation,
     implementationOf: planningTask.id,
   });

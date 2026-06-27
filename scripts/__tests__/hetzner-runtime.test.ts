@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -675,6 +676,15 @@ describe('Hetzner async edge cutover', () => {
     expect(script).toContain('PUBLIC_ORIGIN must be exactly https://intexuraos.cloud');
     expect(script).toContain('gcloud pubsub subscriptions update');
     expect(script).toContain('gcloud scheduler jobs update http');
+    expect(script).toContain('--update-headers=Content-Type=application/json');
+    expect(script).toContain('args+=(--message-body="${message_body}")');
+    const cutoverDryRun = execFileSync('bash', [cutoverEdgePath], { encoding: 'utf8' });
+    expect(cutoverDryRun).toContain(
+      'intexuraos-code-tasks-zombie-sweep-dev --project=intexuraos-dev-pbuchman'
+    );
+    expect(cutoverDryRun).toContain(
+      '--update-headers=Content-Type=application/json --message-body=\\{\\}'
+    );
     expect(script).toContain('--push-auth-token-audience="${PUBLIC_ORIGIN}"');
     expect(script).toContain('--oidc-token-audience="${PUBLIC_ORIGIN}"');
     expect(script).toContain('/internal/linear/sync-all');

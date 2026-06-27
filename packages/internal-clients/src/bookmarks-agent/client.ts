@@ -166,6 +166,7 @@ export function createBookmarksAgentServiceClient(
           id: data.id,
           userId: data.bookmark.userId,
           url: data.bookmark.url,
+          ...(data.resourceUrl !== undefined ? { resourceUrl: data.resourceUrl } : {}),
           title: data.bookmark.title,
         });
       }

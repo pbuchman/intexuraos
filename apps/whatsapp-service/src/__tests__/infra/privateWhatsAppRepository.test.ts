@@ -108,6 +108,14 @@ describe('privateWhatsAppRepository', () => {
     expect(result.value).toBeNull();
   });
 
+  it('returns null when a private WhatsApp message does not exist', async () => {
+    const result = await repository.getMessageById('missing-message');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toBeNull();
+  });
+
   it('projects sparse and legacy private WhatsApp account documents safely', async () => {
     await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('legacy-user').set({});
     await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('disabled-user').set({
@@ -250,6 +258,76 @@ describe('privateWhatsAppRepository', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not found');
     expect(result.error.code).toBe('NOT_FOUND');
+  });
+
+  it('loads private WhatsApp messages by id for signed media access', async () => {
+    const input = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        type: 'image',
+        media: {
+          mxcUri: 'mxc://home-dev/image',
+          mimeType: 'image/jpeg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+          thumbnailGcsPath: 'whatsapp/private/user-123/message/image_thumb.jpg',
+        },
+      },
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const result = await repository.getMessageById(stored.value.messageId);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value?.id).toBe(stored.value.messageId);
+    expect(result.value?.media?.gcsPath).toBe('whatsapp/private/user-123/message/image.jpg');
+    expect(result.value?.media?.thumbnailGcsPath).toBe(
+      'whatsapp/private/user-123/message/image_thumb.jpg'
+    );
+  });
+
+  it('projects legacy private WhatsApp messages by document id when embedded id is absent', async () => {
+    const messageId = deterministicId('pbuchman-private-whatsapp', '$legacy-event');
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId).set({
+      chatId: deterministicId('pbuchman-private-whatsapp', '!room:matrix.example'),
+      userId: 'user-123',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$legacy-event',
+      matrixSenderId: '@alice:matrix.example',
+      direction: 'incoming',
+      messageType: 'image',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      receivedAt: '2026-06-22T10:00:02.000Z',
+      ingestedAt: '2026-06-22T10:00:03.000Z',
+      deliveryMode: 'live',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$legacy-event',
+      },
+      media: {
+        mxcUri: 'mxc://home-dev/image',
+        mimeType: 'image/jpeg',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/legacy-image.jpg',
+        thumbnailGcsPath: 'whatsapp/private/user-123/message/legacy-image_thumb.jpg',
+      },
+      schemaVersion: 2,
+    });
+
+    const result = await repository.getMessageById(messageId);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value?.id).toBe(messageId);
+    expect(result.value?.media?.gcsPath).toBe(
+      'whatsapp/private/user-123/message/legacy-image.jpg'
+    );
   });
 
   it('updates private WhatsApp account ingest stats only for first-write messages', async () => {

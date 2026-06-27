@@ -54,6 +54,7 @@ export type {
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppIngestResult,
   PrivateWhatsAppMediaInfo,
+  PrivateWhatsAppMediaStorageStatus,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageDirection,
   PrivateWhatsAppMessageQueryInput,
@@ -110,6 +111,13 @@ export type {
 export type { NotificationPreferencesRepository } from './ports/notificationPreferencesRepository.js';
 
 export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepository.js';
+
+export {
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+} from './utils/privateWhatsAppIds.js';
 
 // Events
 export type {

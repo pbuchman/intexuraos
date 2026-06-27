@@ -18,6 +18,7 @@ import {
   RadioTower,
   Scissors,
   Server,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import type { SavedNotificationFilter } from '@/types';
 
@@ -78,6 +79,11 @@ export const fishingAssistantItems: NavItem[] = [
   { to: '/fishing-assistant/digests', label: 'Current Digests', icon: FileText },
   { to: '/fishing-assistant/knowledge', label: 'Knowledge Base', icon: Library },
   { to: '/fishing-assistant/chat', label: 'Chat', icon: MessageCircle },
+];
+
+export const intexAgentItems: NavItem[] = [
+  { to: '/intex-agent/config', label: 'Configuration', icon: SettingsIcon },
+  { to: '/whatsapp/sessions', label: 'Sessions', icon: List },
 ];
 
 /**

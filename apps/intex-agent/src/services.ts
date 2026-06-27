@@ -13,6 +13,7 @@ import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createWhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { ServiceConfig } from './config.js';
 import type { IncomingMessageHandler } from './domain/ports/incomingMessageHandler.js';
+import type { PreferencesRepository } from './domain/ports/preferencesRepository.js';
 import type { SessionRepository } from './domain/ports/sessionRepository.js';
 import { createIntexAgentRunner } from './domain/agent/intexAgentRunner.js';
 import { createIntexAgentToolExecutor } from './domain/agent/toolExecutor.js';
@@ -21,12 +22,14 @@ import {
   type IntexAgentRunner,
   type IntexAgentRunnerResult,
 } from './domain/messages/handleIncomingMessage.js';
+import { FirestorePreferencesRepository } from './infra/firestore/preferencesRepository.js';
 import { FirestoreSessionRepository } from './infra/firestore/sessionRepository.js';
 import { createWhatsAppReplyPublisher } from './infra/pubsub/whatsappReplyPublisher.js';
 
 export interface ServiceContainer {
   config: ServiceConfig;
   sessionRepository: SessionRepository;
+  preferencesRepository: PreferencesRepository;
   incomingMessageHandler: IncomingMessageHandler;
 }
 
@@ -36,6 +39,7 @@ export function initServices(config: ServiceConfig): void {
   const logger = createAppLogger({ name: 'intex-agent' });
   const firestore = getFirestore();
   const sessionRepository = new FirestoreSessionRepository({ firestore });
+  const preferencesRepository = new FirestorePreferencesRepository({ firestore });
 
   const notesClient = createNotesAgentServiceClient({
     baseUrl: config.notesAgentUrl,
@@ -105,10 +109,13 @@ export function initServices(config: ServiceConfig): void {
         codeClient,
       });
 
+      const preferences = await preferencesRepository.getPreferences(input.session.userId);
+
       return await createIntexAgentRunner({
         client: toolCallingClient,
         toolExecutor,
         webAppUrl: config.webAppUrl,
+        userPreferences: preferences?.instructions ?? null,
       }).run(input);
     },
   };
@@ -134,6 +141,7 @@ export function initServices(config: ServiceConfig): void {
   container = {
     config,
     sessionRepository,
+    preferencesRepository,
     incomingMessageHandler,
   };
 }

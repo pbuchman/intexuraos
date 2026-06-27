@@ -9,9 +9,15 @@ const DEFAULT_POLL_TIMEOUT_MS = 30_000;
 const DEFAULT_RETRY_DELAY_MS = 10_000;
 const DEFAULT_INITIAL_SYNC_TIMEOUT_MS = 0;
 const MAX_EVENTS_PER_INGEST_REQUEST = 100;
+const MAX_PRIVATE_MEDIA_BYTES = 25 * 1024 * 1024;
 const DEFAULT_BRIDGE_BOT_USERS = ['@whatsappbot:home-dev', '@whatsapp-sync:home-dev'];
 
 const defaultBridgeBotUsers = new Set(DEFAULT_BRIDGE_BOT_USERS);
+
+export function defaultMediaUploadUrl(ingestUrl) {
+  if (typeof ingestUrl !== 'string' || ingestUrl === '') return '';
+  return ingestUrl.replace(/\/events$/, '/media');
+}
 
 export function createConfig(env = process.env) {
   return {
@@ -20,6 +26,9 @@ export function createConfig(env = process.env) {
     matrixUserId: env.MATRIX_USER_ID ?? '',
     matrixAccessTokenFile: env.MATRIX_ACCESS_TOKEN_FILE ?? '',
     ingestUrl: env.INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL ?? '',
+    mediaUploadUrl:
+      env.INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_URL ??
+      defaultMediaUploadUrl(env.INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL ?? ''),
     googleApplicationCredentialsFile:
       env.INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE ??
       env.GOOGLE_APPLICATION_CREDENTIALS ??
@@ -357,8 +366,10 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   const readSyncStateFn = deps.readSyncState ?? readSyncState;
   const fetchMatrixSyncFn = deps.fetchMatrixSync ?? fetchMatrixSync;
   const fetchMatrixRoomStateFn = deps.fetchMatrixRoomState ?? fetchMatrixRoomState;
+  const fetchMatrixMediaFn = deps.fetchMatrixMedia ?? fetchMatrixMedia;
   const joinMatrixRoomFn = deps.joinMatrixRoom ?? joinMatrixRoom;
   const postEventsInBatchesFn = deps.postEventsInBatches ?? postEventsInBatches;
+  const uploadPrivateMediaFn = deps.uploadPrivateMedia ?? uploadPrivateMedia;
   const writeSyncStateFn = deps.writeSyncState ?? writeSyncState;
   const nowISOString = deps.nowISOString ?? (() => new Date().toISOString());
 
@@ -413,8 +424,12 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   runtime.counters.syncResponses = (runtime.counters.syncResponses ?? 0) + syncResponseCount;
 
   if (plan.events.length > 0) {
-    await postEventsInBatchesFn(config, plan.events);
-    runtime.counters.postedEvents = (runtime.counters.postedEvents ?? 0) + plan.events.length;
+    const preparedEvents = await prepareEventsForIngest(config, matrixAccessToken, plan.events, {
+      fetchMatrixMedia: fetchMatrixMediaFn,
+      uploadPrivateMedia: uploadPrivateMediaFn,
+    });
+    await postEventsInBatchesFn(config, preparedEvents);
+    runtime.counters.postedEvents = (runtime.counters.postedEvents ?? 0) + preparedEvents.length;
   }
 
   if (plan.shouldPersistNextBatch) {
@@ -427,6 +442,43 @@ export async function runSyncIteration(config, runtime, deps = {}) {
 
   runtime.state = 'running';
   delete runtime.lastError;
+}
+
+export async function prepareEventsForIngest(config, matrixAccessToken, events, deps) {
+  const prepared = [];
+  for (const event of events) {
+    if (event?.message?.type !== 'image' || event.message.media?.mxcUri === undefined) {
+      prepared.push(event);
+      continue;
+    }
+    if (event.message.media.gcsPath !== undefined) {
+      prepared.push(event);
+      continue;
+    }
+
+    const downloaded = await deps.fetchMatrixMedia(
+      config,
+      matrixAccessToken,
+      event.message.media.mxcUri
+    );
+    const storedMedia = await deps.uploadPrivateMedia(
+      config,
+      event,
+      event.message.media,
+      downloaded
+    );
+    prepared.push({
+      ...event,
+      message: {
+        ...event.message,
+        media: {
+          ...event.message.media,
+          ...storedMedia,
+        },
+      },
+    });
+  }
+  return prepared;
 }
 
 export function createHealthServer(config, runtime) {
@@ -682,12 +734,27 @@ function withMediaFromContent(message, content) {
   if (typeof sizeBytes === 'number' && Number.isFinite(sizeBytes)) {
     media.sizeBytes = sizeBytes;
   }
+  const width = readFinitePositiveNumber(info.w);
+  if (width !== undefined) {
+    media.width = width;
+  }
+  const height = readFinitePositiveNumber(info.h);
+  if (height !== undefined) {
+    media.height = height;
+  }
   const fileName = readString(content, 'filename') ?? readString(content, 'body');
   if (fileName !== undefined) {
     media.fileName = fileName;
   }
 
   return { ...message, media };
+}
+
+function readFinitePositiveNumber(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return value;
 }
 
 function messageTypeFromMatrixMsgtype(msgtype) {
@@ -765,6 +832,34 @@ function readMatrixTimestamp(event) {
   return undefined;
 }
 
+export function parseMxcUri(mxcUri) {
+  if (typeof mxcUri !== 'string' || !mxcUri.startsWith('mxc://')) {
+    throw new Error('invalid_mxc_uri');
+  }
+  const withoutScheme = mxcUri.slice('mxc://'.length);
+  const slashIndex = withoutScheme.indexOf('/');
+  if (slashIndex <= 0 || slashIndex === withoutScheme.length - 1) {
+    throw new Error('invalid_mxc_uri');
+  }
+  return {
+    serverName: withoutScheme.slice(0, slashIndex),
+    mediaId: withoutScheme.slice(slashIndex + 1),
+  };
+}
+
+function mediaIdFromMxcUri(mxcUri) {
+  const parsed = parseMxcUri(mxcUri);
+  return `${parsed.serverName}-${parsed.mediaId}`;
+}
+
+export function buildMatrixMediaDownloadUrl(config, mxcUri) {
+  const { serverName, mediaId } = parseMxcUri(mxcUri);
+  return new URL(
+    `/_matrix/client/v1/media/download/${encodeURIComponent(serverName)}/${encodeURIComponent(mediaId)}`,
+    config.homeserverUrl
+  ).toString();
+}
+
 async function fetchMatrixSync(config, accessToken, since, timeoutMs) {
   const url = new URL('/_matrix/client/v3/sync', config.homeserverUrl);
   url.searchParams.set('timeout', String(timeoutMs));
@@ -805,6 +900,55 @@ async function fetchMatrixRoomState(config, accessToken, roomId, stateType, stat
     throw new Error(`matrix_room_state_failed_${response.status}`);
   }
   return await response.json();
+}
+
+export async function fetchMatrixMedia(config, accessToken, mxcUri) {
+  const response = await fetch(buildMatrixMediaDownloadUrl(config, mxcUri), {
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'user-agent': 'home-dev-whatsapp-sync/1.0',
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`matrix_media_download_failed_${response.status}`);
+  }
+
+  const contentLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > MAX_PRIVATE_MEDIA_BYTES) {
+    throw new Error('matrix_media_too_large');
+  }
+
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    return {
+      buffer: Buffer.alloc(0),
+      contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_PRIVATE_MEDIA_BYTES) {
+        await reader.cancel('matrix_media_too_large');
+        throw new Error('matrix_media_too_large');
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return {
+    buffer: Buffer.concat(chunks, totalBytes),
+    contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+  };
 }
 
 async function joinMatrixRoom(config, accessToken, roomId) {
@@ -850,6 +994,49 @@ async function postEvents(config, events) {
   if (!response.ok) {
     throw new Error(`intexuraos_ingest_failed_${response.status}`);
   }
+}
+
+async function uploadPrivateMedia(config, event, media, downloaded) {
+  if (config.mediaUploadUrl === '') {
+    throw new Error('missing_private_media_upload_url');
+  }
+  const authorization = await createGoogleIdentityAuthorizationHeader(config);
+  const params = new URLSearchParams({
+    sourceAccountId: config.sourceAccountId,
+    matrixEventId: event.matrixEventId,
+    mxcUri: media.mxcUri,
+    mimeType: media.mimeType ?? downloaded.contentType,
+    mediaId: mediaIdFromMxcUri(media.mxcUri),
+  });
+  if (typeof media.fileName === 'string' && media.fileName !== '') {
+    params.set('fileName', media.fileName);
+  }
+  if (typeof media.sha256 === 'string' && media.sha256 !== '') {
+    params.set('sha256', media.sha256);
+  }
+
+  const response = await fetch(`${config.mediaUploadUrl}?${params.toString()}`, {
+    method: 'POST',
+    headers: {
+      authorization,
+      'content-type': 'application/octet-stream',
+      'user-agent': 'home-dev-whatsapp-sync/1.0',
+    },
+    body: downloaded.buffer,
+  });
+  if (!response.ok) {
+    throw new Error(`intexuraos_private_media_upload_failed_${response.status}`);
+  }
+  const body = await response.json();
+  if (
+    !isRecord(body) ||
+    body.success !== true ||
+    !isRecord(body.data) ||
+    !isRecord(body.data.media)
+  ) {
+    throw new Error('intexuraos_private_media_upload_invalid_response');
+  }
+  return body.data.media;
 }
 
 async function createGoogleIdentityAuthorizationHeader(config) {

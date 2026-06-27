@@ -54,6 +54,7 @@ export const bookmarksCreateBookmarkDataSchema = z
   .object({
     id: z.string(),
     url: z.string(),
+    resourceUrl: z.string().optional(),
     bookmark: bookmarksBookmarkSchema,
   })
   .strict();
