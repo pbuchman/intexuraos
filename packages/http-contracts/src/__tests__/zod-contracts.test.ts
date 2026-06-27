@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
 import * as contracts from '../index.js';
 import {
+  bookmarksCreateBookmarkDataSchema,
   bookmarksCreateBookmarkRequestSchema,
   calendarListEventsRequestSchema,
   imageGenerateImageRequestSchema,
@@ -169,5 +170,37 @@ describe('Zod contracts', () => {
         url: 'https://www.notion.so/page',
       }).title
     ).toBe('Design Notes');
+  });
+
+  it('distinguishes bookmark object resource URLs from saved target URLs', () => {
+    expect(
+      bookmarksCreateBookmarkDataSchema.parse({
+        id: 'bookmark-1',
+        url: 'https://example.com/article',
+        resourceUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+        bookmark: {
+          id: 'bookmark-1',
+          userId: 'user-1',
+          status: 'active',
+          url: 'https://example.com/article',
+          title: 'Saved article',
+          description: null,
+          tags: [],
+          ogPreview: null,
+          ogFetchedAt: null,
+          ogFetchStatus: 'processed',
+          aiSummary: null,
+          aiSummarizedAt: null,
+          source: 'intex-agent',
+          sourceId: 'action-1',
+          archived: false,
+          createdAt: '2026-05-10T00:00:00.000Z',
+          updatedAt: '2026-05-10T00:00:00.000Z',
+        },
+      })
+    ).toMatchObject({
+      url: 'https://example.com/article',
+      resourceUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+    });
   });
 });
