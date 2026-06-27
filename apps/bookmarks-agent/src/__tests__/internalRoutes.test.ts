@@ -29,7 +29,8 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.id).toBeDefined();
-      expect(body.data.url).toMatch(/^\/#\/bookmarks\//);
+      expect(body.data.resourceUrl).toBe(`https://intexuraos.cloud/#/bookmarks/${body.data.id}`);
+      expect(body.data.url).toBe(body.data.resourceUrl);
       expect(body.data.bookmark.url).toBe('https://example.com');
       expect(body.data.bookmark.userId).toBe('user-1');
       expect(body.data.bookmark.source).toBe('intex-agent');
