@@ -59,7 +59,7 @@ function isReadOnlyCalendarQueryRequest(text: string): boolean {
       text
     );
   const listIntent =
-    /\b(show|list|check|inspect|see|find|search|what|when|pokaz\w*|sprawdz\w*|zobac\w*|znajdz\w*|szukaj|co jest)\b/u.test(
+    /\b(show|list|check|inspect|see|find|search|what|when|pokaz\w*|podaj\w*|sprawdz\w*|zobac\w*|znajdz\w*|szukaj|wypisz\w*|wyswietl\w*|lista|liste|listy|co jest)\b/u.test(
       text
     ) || /\bco\b.*\bjest\b/u.test(text);
   const countIntent = /\b(how many times|how many|count|ile razy|ile)\b/u.test(text);

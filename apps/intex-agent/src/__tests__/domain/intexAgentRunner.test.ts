@@ -12,7 +12,23 @@ import type { IntexAgentSession, IntexAgentSessionEvent } from '../../domain/ses
 
 const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
 const SUPPORTED_CAPABILITIES_REPLY =
-  'I could not safely understand that request. I can create notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks.';
+  [
+    'I could not safely handle that request. I can help with:',
+    '- create notes',
+    '- create and look up calendar events',
+    '- create research drafts',
+    '- save bookmarks',
+    '- create code tasks for planning or execution',
+  ].join('\n');
+const COMPLETION_FAILURE_CAPABILITIES_REPLY =
+  [
+    'I could not complete that request right now. I can help with:',
+    '- create notes',
+    '- create and look up calendar events',
+    '- create research drafts',
+    '- save bookmarks',
+    '- create code tasks for planning or execution',
+  ].join('\n');
 
 describe('createIntexAgentRunner', () => {
   it('uses the versioned prompt, transcript messages, and supported tools', async () => {
@@ -89,13 +105,13 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({ outcome: 'needs_clarification', reply: 'Which day?' });
   });
 
-  it('normalizes unsupported responses', async () => {
+  it('normalizes unsupported responses to the complete capability list', async () => {
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
           outcome: 'unsupported',
           reply:
-            'I do not support that yet. I can create notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks.',
+            'Przepraszam, ale obecnie nie mam możliwości przeglądania ani wyświetlania istniejących wydarzeń w Twoim kalendarzu. Mogę jedynie tworzyć nowe notatki, wydarzenia w kalendarzu, szkice badań, zakładki oraz zadania programistyczne.',
         })
       ),
     ]);
@@ -110,9 +126,11 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply:
-        'I do not support that yet. I can create notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks.',
+      reply: SUPPORTED_CAPABILITIES_REPLY,
     });
+
+    expect(SUPPORTED_CAPABILITIES_REPLY).toContain('- create and look up calendar events');
+    expect(SUPPORTED_CAPABILITIES_REPLY).toContain('- create code tasks for planning or execution');
   });
 
   it('normalizes no-action responses for greetings without closing the session', async () => {
@@ -198,6 +216,61 @@ describe('createIntexAgentRunner', () => {
       currentDateTime: CURRENT_DATE_TIME,
     });
 
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
+  });
+
+  it('executes the calendar query tool for Polish podaj liste event requests', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'query_calendar_events',
+      args: {
+        mode: 'list',
+        timeMin: '2026-06-25T00:00:00.000Z',
+        timeMax: '2026-06-26T00:00:00.000Z',
+        maxResults: 20,
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Jutro masz jedno wydarzenie: Dentist o 09:00.',
+          toolName: 'query_calendar_events',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 1,
+            timeMin: '2026-06-25T00:00:00.000Z',
+            timeMax: '2026-06-26T00:00:00.000Z',
+            events: [
+              {
+                id: 'event-1',
+                summary: 'Dentist',
+                start: { dateTime: '2026-06-25T09:00:00.000Z' },
+                end: { dateTime: '2026-06-25T10:00:00.000Z' },
+              },
+            ],
+          }),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Podaj listę wszystkich wydarzeń, które mam jutro w kalendarzu',
+      currentDateTime: '2026-06-24T17:00:00.000Z',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'completed',
+      reply: 'Jutro masz jedno wydarzenie: Dentist o 09:00.',
+      toolName: 'query_calendar_events',
+    });
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
   });
 
@@ -1016,8 +1089,7 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply:
-        'I could not complete that request right now. I can create notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks.',
+      reply: COMPLETION_FAILURE_CAPABILITIES_REPLY,
     });
   });
 

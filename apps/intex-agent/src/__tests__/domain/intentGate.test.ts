@@ -44,6 +44,18 @@ describe('classifyIntexAgentIntent', () => {
   });
 
   it.each([
+    'Podaj mi numer telefonu do dentysty',
+    'Podaj listę rzeczy do spakowania',
+    'Wypisz moje zadania na dziś',
+    'Wyświetl ostatnie wiadomości',
+  ])('does not route non-calendar Polish list wording to tools: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'no_action',
+      reason: 'conversation',
+    });
+  });
+
+  it.each([
     'https://research-world.com',
     'https://todo-app.io/notes',
     'https://calendar-task.example/research-notes',
@@ -61,6 +73,10 @@ describe('classifyIntexAgentIntent', () => {
     'Ile razy w zeszlym miesiacu mialem dentyste?',
     'Ciekawy jestem, co jutro jest w kalendarzu',
     'Nie możesz dla mnie sprawdzić, co jest jutro w kalendarzu?',
+    'Podaj listę wszystkich wydarzeń, które mam jutro w kalendarzu',
+    'Podaj mi liste wydarzen z kalendarza na jutro',
+    'Wypisz wszystkie wydarzenia w kalendarzu na jutro',
+    'Wyświetl moje wydarzenia w kalendarzu na jutro',
   ])('allows read-only calendar queries: %s', (text) => {
     expect(classifyIntexAgentIntent(text)).toEqual({
       kind: 'tool',

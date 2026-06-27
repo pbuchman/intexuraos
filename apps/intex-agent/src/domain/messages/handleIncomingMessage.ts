@@ -11,6 +11,10 @@ import type {
   IntexAgentToolName,
 } from '../sessions/types.js';
 import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
+import {
+  buildNewSessionReadyText,
+  buildUnsupportedCapabilitiesReply,
+} from '../agent/capabilities.js';
 
 export type IntexAgentRunnerResult =
   | {
@@ -297,7 +301,7 @@ async function publishReply(
 }
 
 function newSessionReadyText(): string {
-  return 'What would you like me to help with? I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.';
+  return buildNewSessionReadyText();
 }
 
 function stripDuplicateSessionPrefix(text: string): string {
@@ -334,8 +338,7 @@ function summarizeUserMessage(message: string): string {
 function malformedRunnerResult(): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
   return {
     outcome: 'unsupported',
-    reply:
-      'I could not safely understand that request. I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.',
+    reply: buildUnsupportedCapabilitiesReply(),
   };
 }
 

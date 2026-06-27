@@ -16,9 +16,11 @@ import {
 } from './toolDefinitions.js';
 import { buildIntexAgentSystemPrompt } from './systemPrompt.js';
 import { classifyIntexAgentIntent } from './intentGate.js';
+import {
+  buildCompletionFailureCapabilitiesReply,
+  buildUnsupportedCapabilitiesReply,
+} from './capabilities.js';
 
-const SUPPORTED_CAPABILITIES =
-  'notes, calendar event creation and lookup/counting, research drafts, bookmarks, and code tasks';
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
 
 export interface IntexAgentRunnerConfig {
@@ -69,7 +71,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (!result.ok) {
         return {
           outcome: 'unsupported',
-          reply: `I could not complete that request right now. I can create ${SUPPORTED_CAPABILITIES}.`,
+          reply: buildCompletionFailureCapabilitiesReply(),
         };
       }
 
@@ -174,7 +176,7 @@ function parseRunnerContent(
   }
 
   if (outcome === 'unsupported') {
-    return { outcome, reply };
+    return { outcome, reply: buildUnsupportedCapabilitiesReply() };
   }
 
   if (outcome === 'completed') {
@@ -405,10 +407,10 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
 function malformedResult(): IntexAgentRunnerResult {
   return {
     outcome: 'unsupported',
-    reply: `I could not safely understand that request. I can create ${SUPPORTED_CAPABILITIES}.`,
+    reply: buildUnsupportedCapabilitiesReply(),
   };
 }
 
 function unsupportedIntentReply(): string {
-  return `I could not safely understand that request. I can create ${SUPPORTED_CAPABILITIES}.`;
+  return buildUnsupportedCapabilitiesReply();
 }

@@ -18,6 +18,22 @@ import {
 } from '../../domain/messages/handleIncomingMessage.js';
 
 const NOW = '2026-06-24T10:00:00.000Z';
+const UNSUPPORTED_CAPABILITIES_REPLY = [
+  'I could not safely handle that request. I can help with:',
+  '- create notes',
+  '- create and look up calendar events',
+  '- create research drafts',
+  '- save bookmarks',
+  '- create code tasks for planning or execution',
+].join('\n');
+const NEW_SESSION_READY_REPLY = [
+  'What would you like me to help with? I can help with:',
+  '- create notes',
+  '- create and look up calendar events',
+  '- create research drafts',
+  '- save bookmarks',
+  '- create code tasks for planning or execution',
+].join('\n');
 
 function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMessage {
   return {
@@ -359,9 +375,7 @@ describe('handleIncomingMessage', () => {
       'assistant_message',
     ]);
     expect(runner.calls).toEqual([]);
-    expect(replies.messages[0]?.message).toBe(
-      'What would you like me to help with? I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.'
-    );
+    expect(replies.messages[0]?.message).toBe(NEW_SESSION_READY_REPLY);
   });
 
   it('continues the same session after a completed tool turn', async () => {
@@ -536,9 +550,7 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[1]?.status).toBe('waiting_for_user');
     expect(repo.sessions[1]?.endReason).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
-    expect(replies.messages[0]?.message).toBe(
-      'I could not safely understand that request. I can create notes, create or look up calendar events, count calendar events, create research drafts, save bookmarks, and create code tasks.'
-    );
+    expect(replies.messages[0]?.message).toBe(UNSUPPORTED_CAPABILITIES_REPLY);
   });
 });
 
