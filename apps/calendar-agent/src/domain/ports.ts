@@ -118,7 +118,7 @@ export interface ProcessedActionRepository {
     actionId: string;
     userId: string;
     eventId: string;
-    resourceUrl: string;
+    resourceUrl?: string;
   }): Promise<Result<ProcessedAction, CalendarError>>;
 }
 

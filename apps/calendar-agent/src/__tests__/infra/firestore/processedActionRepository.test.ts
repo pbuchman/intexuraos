@@ -58,6 +58,24 @@ describe('ProcessedActionRepository', () => {
       }
     });
 
+    it('returns processed action without resourceUrl when stored document has no link', async () => {
+      mockDocSnapshot.data.mockReturnValue({
+        actionId: 'action-no-link',
+        userId: 'user-456',
+        eventId: 'event-no-link',
+        createdAt: '2025-01-15T10:00:00Z',
+      });
+
+      const result = await getProcessedActionByActionId('action-no-link');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).not.toBeNull();
+        expect(result.value?.actionId).toBe('action-no-link');
+        expect(result.value).not.toHaveProperty('resourceUrl');
+      }
+    });
+
     it('returns null when action not found', async () => {
       mockDocSnapshot.exists = false;
 
@@ -126,6 +144,32 @@ describe('ProcessedActionRepository', () => {
           userId: 'user-456',
           eventId: 'event-789',
           resourceUrl: 'https://calendar.google.com/event/event-789',
+        })
+      );
+    });
+
+    it('creates processed action without resourceUrl when no link is provided', async () => {
+      const mockSet = vi.fn().mockResolvedValue(undefined);
+      mockDb.collection.mockReturnValue({
+        doc: vi.fn(() => ({ set: mockSet, get: vi.fn() })),
+      } as unknown as ReturnType<typeof mockDb.collection>);
+
+      const input = {
+        actionId: 'action-no-link',
+        userId: 'user-456',
+        eventId: 'event-no-link',
+      };
+
+      const result = await createProcessedAction(input);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.actionId).toBe('action-no-link');
+        expect(result.value).not.toHaveProperty('resourceUrl');
+      }
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          resourceUrl: expect.any(String),
         })
       );
     });
