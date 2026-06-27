@@ -28,6 +28,8 @@ import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
 
+const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
+
 interface CreateDraftResearchBody {
   userId: string;
   title: string;
@@ -1047,6 +1049,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 };
 
 function buildWebAppResourceUrl(webAppUrl: string, path: string): string {
-  const normalizedBase = webAppUrl.replace(/\/+$/, '');
-  return normalizedBase === '' ? path : `${normalizedBase}${path}`;
+  const baseUrl = webAppUrl.length > 0 ? webAppUrl : DEFAULT_WEB_APP_URL;
+  const normalizedBase = baseUrl.replace(/\/+$/, '');
+  return `${normalizedBase}${path}`;
 }
