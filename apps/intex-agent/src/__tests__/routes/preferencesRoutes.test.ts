@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../../services.js';
 import type { PreferencesRepository } from '../../domain/ports/preferencesRepository.js';
+import {
+  emptyPromptPreferences,
+  type IntexAgentPromptPreferenceVersion,
+  type IntexAgentPromptPreferenceVersionSummary,
+  type IntexAgentPromptPreferences,
+} from '../../domain/preferences/promptPreferences.js';
 import { INTEX_AGENT_MODEL } from '../../domain/agent/systemPrompt.js';
 import type {
   ExternalSaveConnectionTestPort,
@@ -105,6 +111,29 @@ class FakeIncomingMessageHandler {
   }
 }
 
+function createUnusedPromptPreferencesRepository(): ServiceContainer['promptPreferencesRepository'] {
+  return {
+    async getCurrent(userId: string): Promise<IntexAgentPromptPreferences> {
+      return emptyPromptPreferences(userId);
+    },
+    async listVersions(): Promise<IntexAgentPromptPreferenceVersionSummary[]> {
+      return [];
+    },
+    async getVersion(): Promise<IntexAgentPromptPreferenceVersion | null> {
+      return null;
+    },
+    async addItem(): Promise<IntexAgentPromptPreferences> {
+      throw new Error('not used in preferences route tests');
+    },
+    async updateItem(): Promise<IntexAgentPromptPreferences> {
+      throw new Error('not used in preferences route tests');
+    },
+    async deleteItem(): Promise<IntexAgentPromptPreferences> {
+      throw new Error('not used in preferences route tests');
+    },
+  };
+}
+
 describe('preferences routes', () => {
   let app: FastifyInstance;
   let preferencesRepository: FakePreferencesRepository;
@@ -136,6 +165,7 @@ describe('preferences routes', () => {
       },
       sessionRepository: new FakeSessionRepository(),
       preferencesRepository,
+      promptPreferencesRepository: createUnusedPromptPreferencesRepository(),
       externalSaveTester,
       incomingMessageHandler: new FakeIncomingMessageHandler(),
     } satisfies ServiceContainer);
@@ -174,7 +204,7 @@ describe('preferences routes', () => {
     });
   });
 
-  it('saves and reads back instructions', async () => {
+  it('rejects instruction-only saves because prompt preferences have moved to itemized routes', async () => {
     const putResponse = await app.inject({
       method: 'PUT',
       url: '/preferences',
@@ -182,35 +212,34 @@ describe('preferences routes', () => {
       payload: { instructions: 'Always invite Monika.' },
     });
 
-    expect(putResponse.statusCode).toBe(200);
-    const putBody = JSON.parse(putResponse.body) as { data: { instructions: string; updatedAt: string } };
-    expect(putBody.data.instructions).toBe('Always invite Monika.');
-    expect(typeof putBody.data.updatedAt).toBe('string');
+    expect(putResponse.statusCode).toBe(400);
+    expect(JSON.parse(putResponse.body)).toMatchObject({
+      success: false,
+      error: { code: 'INVALID_REQUEST' },
+    });
+    expect(preferencesRepository.saveCalls).toHaveLength(0);
+  });
 
-    const getResponse = await app.inject({
+  it('does not expose legacy stored instructions as prompt preferences', async () => {
+    preferencesRepository.storage.set('user-1', {
+      instructions: 'legacy prompt text that should be ignored',
+      updatedAt: '2026-06-27T10:00:00.000Z',
+    });
+
+    const response = await app.inject({
       method: 'GET',
       url: '/preferences',
       headers: { authorization: 'Bearer test-token' },
     });
-    expect(JSON.parse(getResponse.body)).toMatchObject({
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({
       success: true,
-      data: { instructions: 'Always invite Monika.' },
+      data: {
+        instructions: '',
+        updatedAt: '2026-06-27T10:00:00.000Z',
+      },
     });
-  });
-
-  it('rejects empty instructions on PUT', async () => {
-    const response = await app.inject({
-      method: 'PUT',
-      url: '/preferences',
-      headers: { authorization: 'Bearer test-token' },
-      payload: { instructions: '   ' },
-    });
-
-    expect(response.statusCode).toBe(400);
-    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
-    expect(body.success).toBe(false);
-    expect(body.error.code).toBe('INVALID_REQUEST');
-    expect(preferencesRepository.saveCalls).toHaveLength(0);
   });
 
   it('saves external save configuration without personal instructions', async () => {
@@ -467,12 +496,17 @@ describe('preferences routes', () => {
     });
   });
 
-  it('deletes preferences via DELETE', async () => {
-    await app.inject({
-      method: 'PUT',
-      url: '/preferences',
-      headers: { authorization: 'Bearer test-token' },
-      payload: { instructions: 'something' },
+  it('deletes legacy External Save preferences via DELETE', async () => {
+    preferencesRepository.storage.set('user-1', {
+      instructions: '',
+      externalSave: {
+        enabled: true,
+        endpointUrl: 'https://external-save.example.com/intex',
+        cfAccessClientId: 'cf-client-id',
+        cfAccessClientSecret: 'cf-client-secret',
+        source: 'ios-shortcuts',
+      },
+      updatedAt: '2026-06-27T10:00:00.000Z',
     });
 
     const deleteResponse = await app.inject({

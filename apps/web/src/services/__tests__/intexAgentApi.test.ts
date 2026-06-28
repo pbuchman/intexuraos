@@ -5,11 +5,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getIntexAgentPreferences,
+  getIntexAgentPromptPreferences,
+  getIntexAgentPromptPreferenceVersion,
   getIntexAgentSession,
+  addIntexAgentPromptPreference,
+  deleteIntexAgentPromptPreference,
+  listIntexAgentPromptPreferenceVersions,
   listIntexAgentSessionEvents,
   listIntexAgentSessions,
   saveIntexAgentPreferences,
   testIntexAgentExternalSave,
+  updateIntexAgentPromptPreference,
 } from '../intexAgentApi.js';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '../../types/index.js';
 
@@ -179,5 +185,81 @@ describe('intexAgentApi', () => {
       status: 'success',
       message: 'Connection successful',
     });
+  });
+
+  it('calls prompt preference endpoints', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    const current = {
+      userId: 'user-1',
+      schemaVersion: 1,
+      currentVersion: 1,
+      items: [
+        {
+          id: 'pref_1',
+          text: 'When I invite Jakub, use jakub@gmail.com.',
+          createdAt: '2026-06-28T10:00:00.000Z',
+          updatedAt: '2026-06-28T10:00:00.000Z',
+        },
+      ],
+      renderedPromptBlock:
+        'User Preferences v1:\n1. (id: pref_1) "When I invite Jakub, use jakub@gmail.com."',
+      createdAt: '2026-06-28T10:00:00.000Z',
+      updatedAt: '2026-06-28T10:00:00.000Z',
+      updatedBy: { actor: 'web_ui', userId: 'user-1' },
+    };
+    vi.mocked(apiRequest)
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce({ ...current, currentVersion: 2 })
+      .mockResolvedValueOnce({ ...current, currentVersion: 3, items: [], renderedPromptBlock: '' })
+      .mockResolvedValueOnce([
+        {
+          version: 3,
+          changeType: 'delete',
+          changedItemId: 'pref_1',
+          previousText: 'When I invite Jakub, use jakub@gmail.com.',
+          itemCount: 0,
+          createdAt: '2026-06-28T10:02:00.000Z',
+          createdBy: { actor: 'web_ui', userId: 'user-1' },
+        },
+      ])
+      .mockResolvedValueOnce({
+        id: 'user-1_1',
+        userId: 'user-1',
+        version: 1,
+        items: current.items,
+        renderedPromptBlock: current.renderedPromptBlock,
+        changeType: 'add',
+        changedItemId: 'pref_1',
+        nextText: 'When I invite Jakub, use jakub@gmail.com.',
+        itemCount: 1,
+        createdAt: '2026-06-28T10:00:00.000Z',
+        createdBy: { actor: 'web_ui', userId: 'user-1' },
+      });
+
+    await expect(getIntexAgentPromptPreferences(TOKEN)).resolves.toEqual(current);
+    await addIntexAgentPromptPreference(TOKEN, {
+      text: 'When I invite Jakub, use jakub@gmail.com.',
+      expectedVersion: 0,
+    });
+    await updateIntexAgentPromptPreference(TOKEN, 'pref_1', {
+      text: 'When I invite Jakub, use jakub.nowak@gmail.com.',
+      expectedVersion: 1,
+    });
+    await deleteIntexAgentPromptPreference(TOKEN, 'pref_1', { expectedVersion: 2 });
+    await listIntexAgentPromptPreferenceVersions(TOKEN);
+    await getIntexAgentPromptPreferenceVersion(TOKEN, 1);
+
+    expect(vi.mocked(apiRequest).mock.calls.map((call) => call[1])).toEqual([
+      '/preferences/prompt',
+      '/preferences/prompt/items',
+      '/preferences/prompt/items/pref_1',
+      '/preferences/prompt/items/pref_1',
+      '/preferences/prompt/versions',
+      '/preferences/prompt/versions/1',
+    ]);
+    expect(vi.mocked(apiRequest).mock.calls[1]?.[3]).toMatchObject({ method: 'POST' });
+    expect(vi.mocked(apiRequest).mock.calls[2]?.[3]).toMatchObject({ method: 'PATCH' });
+    expect(vi.mocked(apiRequest).mock.calls[3]?.[3]).toMatchObject({ method: 'DELETE' });
   });
 });

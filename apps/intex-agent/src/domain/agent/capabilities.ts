@@ -4,6 +4,7 @@ export const INTEX_AGENT_CAPABILITIES = [
   'create research drafts',
   'save bookmarks',
   'create code tasks for planning or execution',
+  'manage INTEX Agent prompt preferences',
 ] as const;
 
 export function buildCapabilitiesReply(intro: string): string {

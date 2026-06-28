@@ -14,8 +14,24 @@ export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision
     return { kind: 'no_action', reason: 'greeting' };
   }
 
+  const isPreferenceRequest = isExplicitPreferenceManagementRequest(normalizedWithoutUrls);
   const toolNames = explicitToolNames(normalizedWithoutUrls);
   const isCalendarQuery = isReadOnlyCalendarQueryRequest(normalizedWithoutUrls);
+  if (isPreferenceRequest && (toolNames.length > 0 || isCalendarQuery || containsUrl)) {
+    return { kind: 'unsupported', reason: 'multiple_resource_intents' };
+  }
+  if (isPreferenceRequest) {
+    return {
+      kind: 'tool',
+      allowedToolNames: [
+        'get_user_preferences',
+        'add_user_preference',
+        'update_user_preference',
+        'delete_user_preference',
+      ],
+    };
+  }
+
   if (toolNames.length > 0 && isCalendarQuery) {
     return { kind: 'unsupported', reason: 'multiple_resource_intents' };
   }
@@ -58,6 +74,26 @@ function isExplicitExternalSaveRequest(text: string): boolean {
   return (
     /\b(save externally|upload externally|save for processing)\b/u.test(text) ||
     /\b(zapisz zewnetrznie|przeslij zewnetrznie|zapisz do przetworzenia)\b/u.test(text)
+  );
+}
+
+function isExplicitPreferenceManagementRequest(text: string): boolean {
+  const mentionsPreferences =
+    /\b(preference|preferences|instruction|instructions|prompt preference|prompt preferences)\b/u.test(
+      text
+    ) || /\b(row|wiersz)\b.*\b(preference|preferences|instruction|instructions)\b/u.test(text);
+  const managementIntent =
+    /\b(tell|show|list|what|defined|add|create|update|change|remove|delete)\b/u.test(text) ||
+    /\b(pokaz\w*|wypisz\w*|dodaj|utworz|stworz|zmien|usun)\b/u.test(text);
+
+  if (mentionsPreferences && managementIntent) {
+    return true;
+  }
+
+  return (
+    /\b(delete|remove)\s+preference\s+\d+\b/u.test(text) ||
+    /\b(add|update|change|remove|delete)\s+(an?\s+)?preference\b/u.test(text) ||
+    /\b(show|tell|list)\b.*\b(intex instructions|user preferences)\b/u.test(text)
   );
 }
 

@@ -33,6 +33,10 @@ describe('Error utilities', () => {
       expect(ERROR_HTTP_STATUS.CONFLICT).toBe(409);
     });
 
+    it('maps VERSION_CONFLICT to 409', () => {
+      expect(ERROR_HTTP_STATUS.VERSION_CONFLICT).toBe(409);
+    });
+
     it('maps DOWNSTREAM_ERROR to 502', () => {
       expect(ERROR_HTTP_STATUS.DOWNSTREAM_ERROR).toBe(502);
     });
@@ -52,6 +56,7 @@ describe('Error utilities', () => {
         'FORBIDDEN',
         'NOT_FOUND',
         'CONFLICT',
+        'VERSION_CONFLICT',
         'GONE',
         'PRECONDITION_FAILED',
         'UNPROCESSABLE_ENTITY',
@@ -106,6 +111,7 @@ describe('Error utilities', () => {
         { code: 'FORBIDDEN', expectedStatus: 403 },
         { code: 'NOT_FOUND', expectedStatus: 404 },
         { code: 'CONFLICT', expectedStatus: 409 },
+        { code: 'VERSION_CONFLICT', expectedStatus: 409 },
         { code: 'DOWNSTREAM_ERROR', expectedStatus: 502 },
         { code: 'INTERNAL_ERROR', expectedStatus: 500 },
         { code: 'MISCONFIGURED', expectedStatus: 503 },

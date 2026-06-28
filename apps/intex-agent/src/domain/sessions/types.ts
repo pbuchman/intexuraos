@@ -32,7 +32,11 @@ export type IntexAgentToolName =
   | 'create_research'
   | 'create_link'
   | 'create_code_task'
-  | 'save_external';
+  | 'save_external'
+  | 'get_user_preferences'
+  | 'add_user_preference'
+  | 'update_user_preference'
+  | 'delete_user_preference';
 
 export interface IntexAgentSession {
   id: string;

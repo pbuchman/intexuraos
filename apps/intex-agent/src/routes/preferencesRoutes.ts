@@ -29,10 +29,6 @@ const putPreferencesBodySchema = {
   },
 } as const;
 
-function normalizeInstructions(value: string): string {
-  return value.trim();
-}
-
 interface ExternalSaveRequestBody {
   enabled: boolean;
   endpointUrl: string;
@@ -53,7 +49,8 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       schema: {
         operationId: 'getIntexAgentPreferences',
         summary: 'Get INTEX Agent preferences',
-        description: 'Get per-user instructions/preferences injected into the INTEX Agent prompt.',
+        description:
+          'Get legacy INTEX Agent configuration. Prompt preferences are exposed by /preferences/prompt.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
       },
@@ -78,7 +75,7 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         operationId: 'saveIntexAgentPreferences',
         summary: 'Save INTEX Agent preferences',
         description:
-          'Save per-user instructions/preferences injected into the INTEX Agent prompt. Overwrites existing preferences for the authenticated user.',
+          'Save legacy INTEX Agent External Save configuration. Prompt preferences are exposed by /preferences/prompt.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
         body: putPreferencesBodySchema,
@@ -91,7 +88,6 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         return;
       }
 
-      const instructions = normalizeInstructions(request.body.instructions);
       const { preferencesRepository } = getServices();
       const existing = await preferencesRepository.getPreferences(user.userId);
       const externalSaveResult = normalizeExternalSave(request.body.externalSave, existing);
@@ -99,18 +95,16 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         return await reply.fail('INVALID_REQUEST', externalSaveResult.message);
       }
 
-      if (instructions === '' && externalSaveResult.value === undefined) {
+      if (externalSaveResult.value === undefined) {
         return await reply.fail(
           'INVALID_REQUEST',
-          'instructions cannot be empty. Send DELETE /preferences to clear preferences.'
+          'Plain INTEX Agent instructions are no longer supported. Use /preferences/prompt/items for prompt preferences or include externalSave configuration.'
         );
       }
 
       const saved = await preferencesRepository.savePreferences(user.userId, {
-        instructions,
-        ...(externalSaveResult.value !== undefined
-          ? { externalSave: externalSaveResult.value }
-          : {}),
+        instructions: '',
+        externalSave: externalSaveResult.value,
       });
       return await reply.ok(toPreferencesResponse(saved));
     }
@@ -172,7 +166,7 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         operationId: 'clearIntexAgentPreferences',
         summary: 'Clear INTEX Agent preferences',
         description:
-          'Clear per-user instructions/preferences for the INTEX Agent prompt.',
+          'Clear legacy INTEX Agent External Save configuration. Prompt preferences are exposed by /preferences/prompt.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
       },
@@ -203,7 +197,7 @@ function toPreferencesResponse(preferences: IntexAgentPreferences | null): {
   updatedAt: string | null;
 } {
   return {
-    instructions: preferences?.instructions ?? '',
+    instructions: '',
     externalSave: maskExternalSave(preferences?.externalSave),
     updatedAt: preferences?.updatedAt ?? null,
   };

@@ -100,7 +100,6 @@ describe('IntexAgentConfigPage', () => {
     render(<IntexAgentConfigPage />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('Always invite Monika')).toBeInTheDocument();
       expect(screen.getByDisplayValue('https://external-save.example.com/intex')).toBeInTheDocument();
       expect(screen.getByDisplayValue('cf-client-id')).toBeInTheDocument();
       expect(screen.getByDisplayValue('************')).toBeInTheDocument();
@@ -109,7 +108,7 @@ describe('IntexAgentConfigPage', () => {
     expect(mockGetIntexAgentPreferences).toHaveBeenCalledWith('test-token');
   });
 
-  it('disables the Save button when instructions are empty or unchanged', async () => {
+  it('disables the Save button when external save is unchanged', async () => {
     const { IntexAgentConfigPage } = await import('../IntexAgentConfigPage');
     render(<IntexAgentConfigPage />);
 
@@ -119,38 +118,6 @@ describe('IntexAgentConfigPage', () => {
 
     const saveButton = screen.getByRole('button', { name: /save/i });
     expect(saveButton).toBeDisabled();
-  });
-
-  it('saves preferences when Save is clicked after typing', async () => {
-    const { IntexAgentConfigPage } = await import('../IntexAgentConfigPage');
-    render(<IntexAgentConfigPage />);
-
-    await waitFor(() => {
-      expect(mockGetIntexAgentPreferences).toHaveBeenCalled();
-    });
-
-    const textarea = screen.getByLabelText(/personal instructions/i);
-    fireEvent.change(textarea, { target: { value: 'hello world' } });
-
-    const saveButton = screen.getByRole('button', { name: /save/i });
-    await waitFor(() => {
-      expect(saveButton).not.toBeDisabled();
-    });
-
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(mockSaveIntexAgentPreferences).toHaveBeenCalledWith('test-token', {
-        instructions: 'hello world',
-        externalSave: {
-          enabled: false,
-          endpointUrl: '',
-          cfAccessClientId: '',
-          cfAccessClientSecret: '',
-          source: 'ios-shortcuts',
-        },
-      });
-    });
   });
 
   it('saves external save configuration without instructions', async () => {
@@ -247,8 +214,9 @@ describe('IntexAgentConfigPage', () => {
       expect(mockGetIntexAgentPreferences).toHaveBeenCalled();
     });
 
-    const textarea = screen.getByLabelText(/personal instructions/i);
-    fireEvent.change(textarea, { target: { value: 'something new' } });
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), {
+      target: { value: 'https://external-save.example.com/intex' },
+    });
 
     const saveButton = screen.getByRole('button', { name: /save/i });
     await waitFor(() => {
@@ -280,7 +248,7 @@ describe('IntexAgentConfigPage', () => {
     render(<IntexAgentConfigPage />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('existing pref')).toBeInTheDocument();
+      expect(screen.getByText(/Last updated:/i)).toBeInTheDocument();
     });
 
     const clearButton = screen.getByRole('button', { name: /clear/i });
@@ -311,7 +279,7 @@ describe('IntexAgentConfigPage', () => {
     render(<IntexAgentConfigPage />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('existing pref')).toBeInTheDocument();
+      expect(screen.getByText(/Last updated:/i)).toBeInTheDocument();
     });
 
     const clearButton = screen.getByRole('button', { name: /clear/i });

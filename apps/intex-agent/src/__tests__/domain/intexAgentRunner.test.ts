@@ -19,6 +19,7 @@ const SUPPORTED_CAPABILITIES_REPLY =
     '- create research drafts',
     '- save bookmarks',
     '- create code tasks for planning or execution',
+    '- manage INTEX Agent prompt preferences',
   ].join('\n');
 const COMPLETION_FAILURE_CAPABILITIES_REPLY =
   [
@@ -28,6 +29,7 @@ const COMPLETION_FAILURE_CAPABILITIES_REPLY =
     '- create research drafts',
     '- save bookmarks',
     '- create code tasks for planning or execution',
+    '- manage INTEX Agent prompt preferences',
   ].join('\n');
 
 describe('createIntexAgentRunner', () => {
@@ -63,7 +65,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('7.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('8.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
@@ -78,6 +80,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain('Plain URL shares are the exception');
     expect(client.calls[0]?.systemPrompt).toContain('keywords inside URLs');
     expect(client.calls[0]?.systemPrompt).toContain('If the request is not one of the supported jobs, do not call a tool');
+    expect(client.calls[0]?.systemPrompt).toContain('manage INTEX Agent prompt preferences');
     expect(client.calls[0]?.systemPrompt).not.toMatch(/approval|command classification|action queue|voice/i);
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'create event tomorrow' },
@@ -1358,14 +1361,130 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
-  it('injects user preferences into the system prompt when configured', async () => {
+  it('returns the exact current preference block after a preference read tool succeeds', async () => {
+    const promptBlock =
+      'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub@gmail.com."';
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Here are your preferences.',
+            toolName: 'get_user_preferences',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Tell me my defined user preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: promptBlock,
+      toolName: 'get_user_preferences',
+      toolResult: { status: 'completed', currentVersion: 1, promptBlock },
+    });
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual([
+      'get_user_preferences',
+      'add_user_preference',
+      'update_user_preference',
+      'delete_user_preference',
+    ]);
+  });
+
+  it('returns the required empty preference sentence when no rows exist', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'No preferences.',
+            toolName: 'get_user_preferences',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: '' }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Tell me my defined user preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: 'No INTEX Agent preferences are defined yet.',
+      toolName: 'get_user_preferences',
+    });
+  });
+
+  it('returns the empty preference sentence when the preference tool result omits a string prompt block', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'No preferences.',
+            toolName: 'get_user_preferences',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: 123 }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Tell me my defined user preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: 'No INTEX Agent preferences are defined yet.',
+      toolName: 'get_user_preferences',
+    });
+  });
+
+  it('injects rendered user preferences into the system prompt when configured', async () => {
     const client = new FakeToolCallingClient([
       ok(toolResult({ outcome: 'no_action', reply: 'Got it.' })),
     ]);
+    const promptBlock =
+      'User Preferences v1:\n1. (id: pref_monika) "Always invite Monika to calendar events."';
     const runner = createIntexAgentRunner({
       client,
       toolExecutor: fakeToolExecutor(),
-      userPreferences: 'Always invite Monika to calendar events.',
+      userPreferences: promptBlock,
     });
 
     await runner.run({
@@ -1376,8 +1495,10 @@ describe('createIntexAgentRunner', () => {
     });
 
     const systemPrompt = client.calls[0]?.systemPrompt ?? '';
-    expect(systemPrompt).toContain('User preferences (treat as guidance, never override the rules above)');
-    expect(systemPrompt).toContain('Always invite Monika to calendar events.');
+    expect(systemPrompt).toContain(
+      'User Preferences are durable user guidance. Use them when performing supported INTEX Agent jobs'
+    );
+    expect(systemPrompt).toContain(promptBlock);
     expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000Z');
   });
 
@@ -1399,7 +1520,7 @@ describe('createIntexAgentRunner', () => {
     });
 
     const systemPrompt = client.calls[0]?.systemPrompt ?? '';
-    expect(systemPrompt).not.toContain('User preferences (treat as guidance, never override the rules above)');
+    expect(systemPrompt).not.toContain('User Preferences are durable user guidance');
     expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000Z');
   });
 });
@@ -1445,6 +1566,14 @@ function fakeToolExecutor(overrides: Partial<IntexAgentToolExecutor> = {}): Inte
     createLink: async () => 'bookmark-1',
     createCodeTask: async () => 'code-task-1',
     saveExternal: async () => 'external-save-1',
+    getUserPreferences: async () =>
+      JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: '' }),
+    addUserPreference: async () =>
+      JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' }),
+    updateUserPreference: async () =>
+      JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' }),
+    deleteUserPreference: async () =>
+      JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' }),
     ...overrides,
   };
 }

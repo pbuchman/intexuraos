@@ -4,6 +4,12 @@ import { requireAuth } from '@intexuraos/common-http';
 import { buildServer } from '../../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../../services.js';
 import { INTEX_AGENT_MODEL } from '../../domain/agent/systemPrompt.js';
+import {
+  emptyPromptPreferences,
+  type IntexAgentPromptPreferenceVersion,
+  type IntexAgentPromptPreferenceVersionSummary,
+  type IntexAgentPromptPreferences,
+} from '../../domain/preferences/promptPreferences.js';
 import type {
   IntexAgentSession,
   IntexAgentSessionEvent,
@@ -104,6 +110,29 @@ class FakeIncomingMessageHandler {
   }
 }
 
+function createUnusedPromptPreferencesRepository(): ServiceContainer['promptPreferencesRepository'] {
+  return {
+    async getCurrent(userId: string): Promise<IntexAgentPromptPreferences> {
+      return emptyPromptPreferences(userId);
+    },
+    async listVersions(): Promise<IntexAgentPromptPreferenceVersionSummary[]> {
+      return [];
+    },
+    async getVersion(): Promise<IntexAgentPromptPreferenceVersion | null> {
+      return null;
+    },
+    async addItem(): Promise<IntexAgentPromptPreferences> {
+      throw new Error('not used in session route tests');
+    },
+    async updateItem(): Promise<IntexAgentPromptPreferences> {
+      throw new Error('not used in session route tests');
+    },
+    async deleteItem(): Promise<IntexAgentPromptPreferences> {
+      throw new Error('not used in session route tests');
+    },
+  };
+}
+
 describe('intex-agent routes', () => {
   let app: FastifyInstance;
   let sessionRepository: FakeSessionRepository;
@@ -145,6 +174,7 @@ describe('intex-agent routes', () => {
           /* noop */
         },
       },
+      promptPreferencesRepository: createUnusedPromptPreferencesRepository(),
       externalSaveTester: {
         async testConnection(): Promise<{ ok: true; status: 'success'; message: string }> {
           return { ok: true, status: 'success', message: 'Connection successful' } as const;
