@@ -13,6 +13,8 @@ import { generateWebhookSecret } from '../utils/secrets.js';
 import { resolveDefaultWorkerType } from '../utils/defaultWorkerTypeResolution.js';
 
 const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'sentry-agent-system-prompt-v1';
+const ACTIONABLE_ISSUE_ACTIONS = new Set(['created', 'regressed', 'unresolved', 'reopened']);
+const TERMINAL_ISSUE_STATUSES = new Set(['resolved', 'ignored', 'muted', 'archived', 'deleted']);
 
 export type VerifySentrySignature = (payload: Buffer, signature: string, secret: string) => boolean;
 export type ParseSentryIssueEvent = (
@@ -73,6 +75,58 @@ function toTaskContext(event: NormalizedSentryIssueEvent, receivedAt: Date): Sen
   };
 }
 
+function normalizeToken(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === '' ? undefined : normalized;
+}
+
+function isTerminalIssueStatus(event: NormalizedSentryIssueEvent): boolean {
+  const status = normalizeToken(event.status);
+  return status !== undefined && TERMINAL_ISSUE_STATUSES.has(status);
+}
+
+function isSentrySampleEventAlert(event: NormalizedSentryIssueEvent): boolean {
+  const title = event.issueTitle.trim().toLowerCase();
+  return title.startsWith('this is an example ')
+    || title.includes('sentry sample')
+    || title.includes('sample event')
+    || title.includes('test event');
+}
+
+function classifySentryIssueEvent(event: NormalizedSentryIssueEvent):
+  | { actionable: true }
+  | { actionable: false; message: string } {
+  const action = normalizeToken(event.action) ?? 'unknown';
+  if (event.resource === 'issue') {
+    if (ACTIONABLE_ISSUE_ACTIONS.has(action)) {
+      return { actionable: true };
+    }
+    return {
+      actionable: false,
+      message: `Ignored non-actionable Sentry issue event: issue.${action}`,
+    };
+  }
+
+  if (action !== 'triggered' || isTerminalIssueStatus(event)) {
+    return {
+      actionable: false,
+      message: `Ignored non-actionable Sentry issue event: event_alert.${action}`,
+    };
+  }
+
+  if (isSentrySampleEventAlert(event)) {
+    return {
+      actionable: false,
+      message: 'Ignored Sentry sample event_alert delivery',
+    };
+  }
+
+  return { actionable: true };
+}
+
 export async function processSentryWebhook(
   input: ProcessSentryWebhookInput
 ): Promise<ProcessSentryWebhookResult> {
@@ -110,6 +164,11 @@ export async function processSentryWebhook(
       return { ok: true, outcome: 'ignored', message: parsed.error.message };
     }
     return { ok: false, reason: 'invalid_payload', message: parsed.error.message };
+  }
+
+  const classification = classifySentryIssueEvent(parsed.value);
+  if (!classification.actionable) {
+    return { ok: true, outcome: 'ignored', message: classification.message };
   }
 
   const { sentryIssueEventRepo, workerSettingsRepo, linearIssueService, codeTaskRepo, taskEnqueueService } =

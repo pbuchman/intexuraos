@@ -40,6 +40,7 @@ function sign(rawBody: string): string {
 describe('POST /webhooks/sentry', () => {
   let app: FastifyInstance;
   let codeTaskCreate: ReturnType<typeof vi.fn>;
+  let sentryIssueEventReserve: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_SENTRY_WEBHOOK_SECRET'] = WEBHOOK_SECRET;
@@ -50,16 +51,17 @@ describe('POST /webhooks/sentry', () => {
       id: input['id'],
       ...input,
     }));
+    sentryIssueEventReserve = vi.fn().mockResolvedValue(ok({
+      created: true,
+      record: {
+        dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+        duplicateCount: 0,
+      },
+    }));
     setServices({
       logger: pino({ level: 'silent' }),
       sentryIssueEventRepo: {
-        reserve: vi.fn().mockResolvedValue(ok({
-          created: true,
-          record: {
-            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
-            duplicateCount: 0,
-          },
-        })),
+        reserve: sentryIssueEventReserve,
         markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
       },
       workerSettingsRepo: {
@@ -179,6 +181,33 @@ describe('POST /webhooks/sentry', () => {
         message: 'Sentry webhook payload did not include an issue id or issue URL',
       },
     }));
+    expect(codeTaskCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 ignored for signed Sentry lifecycle cleanup events without reserving dedupe state', async () => {
+    const body = buildIssueBody();
+    body['action'] = 'resolved';
+    const rawBody = JSON.stringify(body);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/sentry',
+      headers: {
+        'content-type': 'application/json',
+        'sentry-hook-resource': 'issue',
+        'sentry-hook-signature': sign(rawBody),
+      },
+      payload: rawBody,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      success: true,
+      data: {
+        message: 'Ignored non-actionable Sentry issue event: issue.resolved',
+      },
+    });
+    expect(sentryIssueEventReserve).not.toHaveBeenCalled();
     expect(codeTaskCreate).not.toHaveBeenCalled();
   });
 

@@ -43,7 +43,13 @@ describe('createFirestoreSentryIssueEventRepository', () => {
 
   it('creates a deterministic dedupe key for a Sentry issue', () => {
     expect(createSentryIssueDedupeKey(buildEvent())).toBe(
-      'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001'
+      'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created'
+    );
+  });
+
+  it('uses unknown for blank action dedupe key segments', () => {
+    expect(createSentryIssueDedupeKey(buildEvent({ action: '   ' }))).toBe(
+      'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:unknown'
     );
   });
 
@@ -65,7 +71,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       expect(result.value).toEqual({
         created: true,
         record: expect.objectContaining({
-          dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+          dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
           organizationSlug: 'intexuraos-dev-pbuchman',
           projectSlug: 'intexuraos-development',
           projectId: '100',
@@ -132,13 +138,13 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     expect(first.ok && first.value.created).toBe(true);
 
     await repo.markCodeTaskCreated({
-      dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+      dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
       codeTaskId: 'task_sentry',
       linearIssueId: 'INT-200',
     });
 
     const second = await repo.reserve({
-      event: buildEvent({ action: 'triggered', resource: 'event_alert', eventId: 'event-1' }),
+      event: buildEvent({ issueTitle: 'Updated title' }),
       receivedAt: secondReceivedAt,
       payload: { delivery: 2 },
     });
@@ -148,16 +154,53 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       expect(second.value).toEqual({
         created: false,
         record: expect.objectContaining({
-          dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+          dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
           codeTaskId: 'task_sentry',
           linearIssueId: 'INT-200',
-          action: 'triggered',
-          resource: 'event_alert',
-          eventId: 'event-1',
+          action: 'created',
+          resource: 'issue',
+          eventId: undefined,
           receivedAt: firstReceivedAt,
           latestReceivedAt: secondReceivedAt,
           duplicateCount: 1,
           payload: { delivery: 2 },
+        }),
+      });
+    }
+  });
+
+  it('reserves regressed Sentry issues separately from the prior created occurrence', async () => {
+    const repo = createFirestoreSentryIssueEventRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger: pino({ level: 'silent' }),
+    });
+    const firstReceivedAt = new Date('2026-06-28T10:00:00.000Z');
+    const secondReceivedAt = new Date('2026-06-28T11:00:00.000Z');
+
+    const created = await repo.reserve({
+      event: buildEvent({ action: 'created' }),
+      receivedAt: firstReceivedAt,
+      payload: { delivery: 1 },
+    });
+    expect(created.ok && created.value.created).toBe(true);
+
+    const regressed = await repo.reserve({
+      event: buildEvent({ action: 'regressed', status: 'regressed' }),
+      receivedAt: secondReceivedAt,
+      payload: { delivery: 2 },
+    });
+
+    expect(regressed.ok).toBe(true);
+    if (regressed.ok) {
+      expect(regressed.value).toEqual({
+        created: true,
+        record: expect.objectContaining({
+          dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:regressed',
+          action: 'regressed',
+          status: 'regressed',
+          duplicateCount: 0,
+          receivedAt: secondReceivedAt,
+          latestReceivedAt: secondReceivedAt,
         }),
       });
     }
@@ -231,7 +274,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     expect(reserved.ok).toBe(true);
 
     const result = await repo.markCodeTaskCreated({
-      dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+      dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
       codeTaskId: 'task_sentry',
     });
 

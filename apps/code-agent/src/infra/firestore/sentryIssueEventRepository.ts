@@ -105,7 +105,8 @@ function toFirestoreDoc(input: {
 }
 
 export function createSentryIssueDedupeKey(event: NormalizedSentryIssueEvent): string {
-  return `sentry:${event.organizationSlug}:${event.projectSlug}:${event.issueId}`;
+  const action = event.action.trim().toLowerCase() || 'unknown';
+  return `sentry:${event.organizationSlug}:${event.projectSlug}:${event.issueId}:${event.resource}:${action}`;
 }
 
 function firestoreError(error: unknown): SentryIssueEventRepositoryError {

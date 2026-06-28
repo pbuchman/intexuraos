@@ -49,6 +49,43 @@ function buildEventAlertBody(): Record<string, unknown> {
   };
 }
 
+function buildResolvedEventAlertBody(): Record<string, unknown> {
+  return {
+    action: 'triggered',
+    data: {
+      event: {
+        event_id: 'event-resolved',
+        title: 'Resolved issue',
+        issue: {
+          id: '4509003',
+          title: 'Resolved issue',
+          status: 'resolved',
+          url: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509003/',
+          project: {
+            slug: 'intexuraos-web-development',
+          },
+        },
+      },
+    },
+  };
+}
+
+function buildSampleEventAlertBody(): Record<string, unknown> {
+  return {
+    action: 'triggered',
+    data: {
+      event: {
+        event_id: 'sample-event',
+        project: 4510702691024976,
+        title: 'This is an example node-fastify exception',
+        web_url: 'https://sentry.io/organizations/intexuraos/issues/1117540176/events/sample-event/',
+        issue_url: 'https://sentry.io/api/0/issues/1117540176/',
+        issue_id: '1117540176',
+      },
+    },
+  };
+}
+
 function signBody(body: unknown): { rawBody: Buffer; signatureHeader: string } {
   const rawBody = Buffer.from(JSON.stringify(body), 'utf-8');
   const signatureHeader = createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
@@ -71,7 +108,7 @@ function installMocks(overrides: Partial<MocksShape> = {}): MocksShape {
     reserve: vi.fn().mockResolvedValue(ok({
       created: true,
       record: {
-        dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+        dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
         organizationSlug: 'intexuraos-dev-pbuchman',
         projectSlug: 'intexuraos-development',
         issueId: '4509001',
@@ -229,7 +266,7 @@ describe('processSentryWebhook', () => {
       userId: AUTOMATION_USER_ID,
     });
     expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).toHaveBeenCalledWith({
-      dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+      dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
       codeTaskId: expect.stringMatching(/^task_/),
       linearIssueId: 'INT-200',
     });
@@ -242,7 +279,7 @@ describe('processSentryWebhook', () => {
         reserve: vi.fn().mockResolvedValue(ok({
           created: false,
           record: {
-            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
             codeTaskId: 'task_existing',
             linearIssueId: 'INT-200',
           },
@@ -264,6 +301,77 @@ describe('processSentryWebhook', () => {
     expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['resolved'],
+    ['ignored'],
+    ['muted'],
+    ['assigned'],
+    ['unassigned'],
+    ['archived'],
+    ['deleted'],
+    ['unknown'],
+  ])('ignores non-actionable issue.%s deliveries without reserving dedupe state', async (action) => {
+    const body = buildIssueBody();
+    body['action'] = action;
+
+    const result = await processSentryWebhook(buildInput({ body }));
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'ignored',
+      message: `Ignored non-actionable Sentry issue event: issue.${action}`,
+    });
+    expect(mocks.sentryIssueEventRepo.reserve).not.toHaveBeenCalled();
+    expect(mocks.linearIssueService.ensureIssueExists).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores normalized issue deliveries with blank actions as unknown without reserving dedupe state', async () => {
+    const result = await processSentryWebhook(buildInput({
+      parseIssueEvent: () => ok({
+        resource: 'issue',
+        action: '   ',
+        organizationSlug: 'intexuraos-dev-pbuchman',
+        projectSlug: 'intexuraos-development',
+        projectId: '100',
+        issueId: '4509001',
+        issueShortId: 'INTEXURAOS-DEVELOPMENT-7',
+        issueTitle: 'TypeError: Cannot read properties of undefined',
+        issueUrl: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509001/',
+        status: 'unresolved',
+        eventId: undefined,
+      }),
+    }));
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'ignored',
+      message: 'Ignored non-actionable Sentry issue event: issue.unknown',
+    });
+    expect(mocks.sentryIssueEventRepo.reserve).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a task for issue.unresolved as Sentry reopen semantics', async () => {
+    const body = buildIssueBody();
+    body['action'] = 'unresolved';
+
+    const result = await processSentryWebhook(buildInput({ body }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome !== 'processed') {
+      throw new Error('Expected Sentry issue.unresolved webhook to be processed');
+    }
+    expect(mocks.sentryIssueEventRepo.reserve).toHaveBeenCalledWith(expect.objectContaining({
+      event: expect.objectContaining({
+        resource: 'issue',
+        action: 'unresolved',
+        issueId: '4509001',
+      }),
+    }));
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+  });
+
   it('creates a queued task for event_alert webhooks and carries the event id', async () => {
     const result = await processSentryWebhook(buildInput({
       body: buildEventAlertBody(),
@@ -282,6 +390,54 @@ describe('processSentryWebhook', () => {
         eventId: 'event-4509002',
       }),
     }));
+  });
+
+  it('ignores event_alert.triggered deliveries for terminal Sentry issues before reservation', async () => {
+    const result = await processSentryWebhook(buildInput({
+      body: buildResolvedEventAlertBody(),
+      resourceHeader: 'event_alert',
+    }));
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'ignored',
+      message: 'Ignored non-actionable Sentry issue event: event_alert.triggered',
+    });
+    expect(mocks.sentryIssueEventRepo.reserve).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores event_alert deliveries that are not triggered actions before reservation', async () => {
+    const body = buildEventAlertBody();
+    body['action'] = 'resolved';
+
+    const result = await processSentryWebhook(buildInput({
+      body,
+      resourceHeader: 'event_alert',
+    }));
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'ignored',
+      message: 'Ignored non-actionable Sentry issue event: event_alert.resolved',
+    });
+    expect(mocks.sentryIssueEventRepo.reserve).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores Sentry event_alert sample deliveries before reservation', async () => {
+    const result = await processSentryWebhook(buildInput({
+      body: buildSampleEventAlertBody(),
+      resourceHeader: 'event_alert',
+    }));
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'ignored',
+      message: 'Ignored Sentry sample event_alert delivery',
+    });
+    expect(mocks.sentryIssueEventRepo.reserve).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
   });
 
   it('ignores unsupported Sentry webhook resources without reserving an event', async () => {
@@ -331,7 +487,7 @@ describe('processSentryWebhook', () => {
         reserve: vi.fn().mockResolvedValue(ok({
           created: false,
           record: {
-            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
           },
         })),
         markCodeTaskCreated: vi.fn(),
@@ -498,7 +654,7 @@ describe('processSentryWebhook', () => {
         reserve: vi.fn().mockResolvedValue(ok({
           created: true,
           record: {
-            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
             duplicateCount: 0,
           },
         })),

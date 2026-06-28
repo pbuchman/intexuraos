@@ -92,16 +92,24 @@ unset and the normal worker resolution fallback is desired for development.
 2. Code-agent verifies `Sentry-Hook-Signature`.
 3. Code-agent parses the Sentry org, project, issue ID, issue URL, title,
    action, event ID when present, and received time.
-4. Code-agent persists an audit/dedupe record in `sentry-issue-events`.
-5. Duplicate deliveries for the same Sentry issue return success without
-   creating another task.
-6. Code-agent creates or links the Linear issue for the Sentry issue.
-7. Code-agent queues a CodeTask with `agentType: "sentry"` and the configured
+4. Code-agent classifies the parsed delivery before reserving dedupe state.
+   `issue.created`, `issue.regressed`, `issue.unresolved`, `issue.reopened`,
+   and active `event_alert.triggered` deliveries are actionable. Lifecycle
+   cleanup, assignment, terminal, unknown, and Sentry sample/test deliveries
+   return `200` with an ignored message.
+5. Code-agent persists an audit/dedupe record in `sentry-issue-events` only for
+   actionable deliveries. Ignored deliveries do not reserve task dedupe state.
+6. Duplicate deliveries for the same Sentry issue transition return success
+   without creating another task. Later regressed or reopened transitions use a
+   separate dedupe key so a resolved issue can create a new task when it becomes
+   active again.
+7. Code-agent creates or links the Linear issue for the Sentry issue.
+8. Code-agent queues a CodeTask with `agentType: "sentry"` and the configured
    Sentry worker type.
-8. The orchestrator dispatches the worker with Linear and Sentry access.
-9. The worker fetches current Sentry issue details and recent events, attempts
+9. The orchestrator dispatches the worker with Linear and Sentry access.
+10. The worker fetches current Sentry issue details and recent events, attempts
    reproduction when feasible, and opens a PR.
-10. Completion is rejected unless the worker reports a PR URL and the outcome is
+11. Completion is rejected unless the worker reports a PR URL and the outcome is
     `fixed` or `suppressed`.
 
 The task final result records the PR URL, Sentry issue URL, Linear issue ID,
@@ -119,14 +127,16 @@ For a live smoke test:
 
 1. Use Sentry's test delivery or trigger an issue alert for a low-risk project.
 2. Confirm the Sentry integration delivery log shows a 2xx response.
-3. Confirm code-agent stores one `sentry-issue-events` record for the Sentry
-   issue.
-4. Confirm one Linear issue is created or linked.
-5. Confirm one queued CodeTask exists with `agentType: "sentry"`.
-6. Confirm the task worker type matches the automation user's
+3. Confirm Sentry test/sample deliveries return ignored and do not create a
+   `sentry-issue-events` record.
+4. Trigger an actionable delivery and confirm code-agent stores one
+   `sentry-issue-events` record for the Sentry issue transition.
+5. Confirm one Linear issue is created or linked.
+6. Confirm one queued CodeTask exists with `agentType: "sentry"`.
+7. Confirm the task worker type matches the automation user's
    `defaultSentryWorkerType`.
-7. Confirm the worker can fetch Sentry details using `SENTRY_AUTH_TOKEN`.
-8. Confirm successful completion includes a PR URL and a final outcome of
+8. Confirm the worker can fetch Sentry details using `SENTRY_AUTH_TOKEN`.
+9. Confirm successful completion includes a PR URL and a final outcome of
    `fixed` or `suppressed`.
 
 To test signature rejection locally, send the same payload with a bogus
