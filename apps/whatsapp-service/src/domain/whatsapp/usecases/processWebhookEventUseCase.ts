@@ -331,7 +331,16 @@ export class ProcessWebhookEventUseCase {
       }
 
       if ((messageType === 'button' || messageType === 'interactive') && buttonResponse !== null) {
-        await this.handleButtonMessage(payload, savedEvent, userId, buttonResponse, logger);
+        await this.handleButtonMessage(
+          payload,
+          savedEvent,
+          userId,
+          waMessageId,
+          fromNumber,
+          timestamp,
+          buttonResponse,
+          logger
+        );
         return;
       }
 
@@ -545,10 +554,13 @@ export class ProcessWebhookEventUseCase {
     payload: WebhookPayload,
     savedEvent: { id: string },
     userId: string,
+    waMessageId: string,
+    fromNumber: string,
+    timestamp: string,
     buttonResponse: { buttonId: string; buttonTitle: string; replyToWamid: string },
     logger: Logger
   ): Promise<void> {
-    const { webhookEventRepository, whatsappCloudApi } = this.deps;
+    const { webhookEventRepository, whatsappCloudApi, eventPublisher } = this.deps;
 
     // Fire-and-forget: mark as read + show typing indicator
     const originalMessageId = extractMessageId(payload);
@@ -567,6 +579,46 @@ export class ProcessWebhookEventUseCase {
           logger.error({ error }, 'markAsReadWithTyping threw unexpectedly');
         }
       );
+    }
+
+    if (buttonResponse.buttonId.startsWith('intex_confirm:')) {
+      logger.info(
+        {
+          eventId: savedEvent.id,
+          userId,
+          buttonId: buttonResponse.buttonId,
+          buttonTitle: buttonResponse.buttonTitle,
+          replyToWamid: buttonResponse.replyToWamid,
+        },
+        'Publishing Intex confirmation button response'
+      );
+
+      const ingestPublishResult = await eventPublisher.publishIntexMessageIngest({
+        type: 'intex.message.ingest',
+        userId,
+        messageId: waMessageId,
+        sourceType: 'whatsapp_button',
+        text: '',
+        whatsappSender: fromNumber,
+        buttonResponse,
+        timestamp,
+      });
+
+      if (!ingestPublishResult.ok) {
+        const failureDetails = `Failed to publish intex message ingest: ${ingestPublishResult.error.message}`;
+        logger.error(
+          { eventId: savedEvent.id, error: ingestPublishResult.error },
+          'Failed to publish intex.message.ingest button event'
+        );
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+          failureDetails,
+          retryable: true,
+        });
+        throw new RetryableWebhookProcessingError(failureDetails);
+      }
+
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
+      return;
     }
 
     logger.info(

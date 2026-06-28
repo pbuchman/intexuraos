@@ -9,6 +9,7 @@ import type {
   IntexAgentSession,
   IntexAgentSessionEvent,
   IntexAgentSessionEventType,
+  IntexAgentToolName,
 } from '../../domain/sessions/types.js';
 import {
   handleIncomingMessage,
@@ -50,19 +51,15 @@ function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMe
 }
 
 describe('handleIncomingMessage', () => {
-  it('creates a new session, executes a note request, replies, and keeps the session open', async () => {
+  it('creates a confirmation request for a note mutation and sends Tak/Nie buttons', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
       {
-        outcome: 'completed',
-        reply: 'Zapisałem notatkę.',
+        outcome: 'needs_confirmation',
+        reply: 'Czy dodać notatkę?\n\nTytuł: Door code\nTreść: The door code is 1234.',
         summary: 'Saved door code note.',
         toolName: 'create_note',
-        toolResult: { status: 'completed', id: 'note-1' },
-        ctaUrl: {
-          displayText: 'Open Note',
-          url: 'https://intexuraos.cloud/#/notes/note-1',
-        },
+        toolArgs: { title: 'Door code', content: 'The door code is 1234.' },
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -74,15 +71,138 @@ describe('handleIncomingMessage', () => {
       id: 'session-1',
       status: 'waiting_for_user',
       summary: 'Saved door code note.',
+      activeTool: 'create_note',
     });
     expect(repo.sessions[0]?.endedAt).toBeUndefined();
     expect(repo.sessions[0]?.endReason).toBeUndefined();
     expect(eventTypes(repo)).toEqual([
       'session_started',
       'user_message',
-      'tool_call_completed',
+      'confirmation_requested',
       'assistant_message',
     ]);
+    expect(eventPayloads(repo, 'confirmation_requested')[0]).toEqual({
+      confirmationId: 'confirmation-3',
+      toolName: 'create_note',
+      toolArgs: { title: 'Door code', content: 'The door code is 1234.' },
+      message: 'Czy dodać notatkę?\n\nTytuł: Door code\nTreść: The door code is 1234.',
+      sourceMessageId: 'wamid-1',
+      summary: 'Saved door code note.',
+    });
+    expect(replies.messages).toEqual([
+      {
+        userId: 'user-1',
+        message: 'Czy dodać notatkę?\n\nTytuł: Door code\nTreść: The door code is 1234.',
+        replyToMessageId: 'wamid-1',
+        correlationId: 'session-1',
+        buttons: [
+          {
+            type: 'reply',
+            reply: {
+              id: 'intex_confirm:confirmation-3:yes',
+              title: 'Tak',
+            },
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'intex_confirm:confirmation-3:no',
+              title: 'Nie',
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('stores confirmation requests without optional summaries when the runner omits one', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_confirmation',
+        reply: 'Czy dodać notatkę?\nTreść: The door code is 1234.',
+        toolName: 'create_note',
+        toolArgs: { content: 'The door code is 1234.' },
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(message(), deps(repo, runner, replies));
+
+    expect(repo.sessions[0]).toMatchObject({
+      id: 'session-1',
+      status: 'waiting_for_user',
+      activeTool: 'create_note',
+    });
+    expect(repo.sessions[0]?.summary).toBeUndefined();
+    expect(eventPayloads(repo, 'confirmation_requested')[0]).toEqual({
+      confirmationId: 'confirmation-3',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+      message: 'Czy dodać notatkę?\nTreść: The door code is 1234.',
+      sourceMessageId: 'wamid-1',
+    });
+  });
+
+  it('executes exactly stored confirmation args after a matching Tak button', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      lastAssistantMessageAt: '2026-06-24T09:51:00.000Z',
+      startReason: 'no_active_session',
+      activeTool: 'create_note',
+    });
+    repo.seedEvent('session-existing', 'confirmation_requested', {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { title: 'Door code', content: 'The door code is 1234.' },
+      message: 'Czy dodać notatkę?',
+      sourceMessageId: 'wamid-original',
+    });
+    const runner = new FakeRunner([], [
+      {
+        outcome: 'completed',
+        reply: 'Zapisałem notatkę.',
+        toolName: 'create_note',
+        toolResult: { status: 'completed', id: 'note-1' },
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    const result = await handleIncomingMessage(
+      message({
+        messageId: 'wamid-button',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-1:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(result).toEqual({ sessionId: 'session-existing' });
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toHaveLength(1);
+    expect(runner.executeConfirmedCalls[0]).toMatchObject({
+      session: { id: 'session-existing' },
+      toolName: 'create_note',
+      toolArgs: { title: 'Door code', content: 'The door code is 1234.' },
+      currentDateTime: NOW,
+      messageId: 'wamid-button',
+    });
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toMatchObject({
+      confirmationId: 'confirm-1',
+      resolution: 'accepted',
+      buttonId: 'intex_confirm:confirm-1:yes',
+    });
     expect(eventPayloads(repo, 'tool_call_completed')[0]).toEqual({
       toolName: 'create_note',
       result: { status: 'completed', id: 'note-1' },
@@ -91,14 +211,336 @@ describe('handleIncomingMessage', () => {
       {
         userId: 'user-1',
         message: 'Zapisałem notatkę.',
-        replyToMessageId: 'wamid-1',
-        correlationId: 'session-1',
-        ctaUrl: {
-          displayText: 'Open Note',
-          url: 'https://intexuraos.cloud/#/notes/note-1',
-        },
+        replyToMessageId: 'wamid-button',
+        correlationId: 'session-existing',
       },
     ]);
+  });
+
+  it('records a failed confirmed execution and does not reinterpret the request', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([], [
+      {
+        outcome: 'tool_failed',
+        reply: 'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.',
+        toolName: 'create_note',
+        error: 'downstream denied it',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-button-failed',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-1:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toHaveLength(1);
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toMatchObject({
+      confirmationId: 'confirm-1',
+      resolution: 'accepted',
+    });
+    expect(eventPayloads(repo, 'tool_call_failed')[0]).toEqual({
+      toolName: 'create_note',
+      error: 'downstream denied it',
+    });
+    expect(replies.messages[0]?.message).toBe(
+      'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.'
+    );
+  });
+
+  it('rejects a pending confirmation after a matching Nie button', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-button-no',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-1:no',
+          buttonTitle: 'Nie',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toMatchObject({
+      confirmationId: 'confirm-1',
+      resolution: 'rejected',
+    });
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe('Okej, nie wykonuję tej akcji.');
+  });
+
+  it('rejects confirmation buttons when no active session exists', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    const result = await handleIncomingMessage(
+      message({
+        messageId: 'wamid-button-without-session',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-1:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(result).toEqual({ sessionId: 'wamid-button-without-session' });
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(repo.events).toEqual([]);
+    expect(replies.messages).toEqual([
+      {
+        userId: 'user-1',
+        message: 'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.',
+        replyToMessageId: 'wamid-button-without-session',
+        correlationId: 'wamid-button-without-session',
+      },
+    ]);
+  });
+
+  it('does not execute stale or mismatched confirmation buttons', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-current',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-stale-button',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-old:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'confirmation_resolved')).toEqual([]);
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(
+      'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.'
+    );
+  });
+
+  it('does not execute malformed structured button messages', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-current',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-button-missing-payload',
+        text: '',
+        sourceType: 'whatsapp_button',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'user_message').at(-1)).toEqual({
+      messageId: 'wamid-button-missing-payload',
+      text: '',
+      sourceType: 'whatsapp_button',
+    });
+    expect(replies.messages[0]?.message).toBe(
+      'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.'
+    );
+  });
+
+  it('does not execute structured button messages with malformed confirmation IDs', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-current',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-button-malformed-id',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-current:maybe',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(
+      'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.'
+    );
+  });
+
+  it('does not execute already resolved or malformed pending confirmation events', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-current',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    repo.seedEvent('session-existing', 'confirmation_resolved', {
+      confirmationId: 123,
+      resolution: 'ignored-malformed-id',
+    });
+    repo.seedEvent('session-existing', 'confirmation_requested', {
+      confirmationId: 'confirm-invalid-tool',
+      toolName: 'query_calendar_events',
+      toolArgs: { mode: 'list' },
+      message: 'Invalid read-only pending confirmation.',
+      sourceMessageId: 'wamid-invalid-tool',
+    });
+    repo.seedEvent('session-existing', 'confirmation_requested', {
+      confirmationId: 'confirm-invalid-args',
+      toolName: 'create_note',
+      toolArgs: [],
+      message: 'Invalid args pending confirmation.',
+      sourceMessageId: 'wamid-invalid-args',
+    });
+    repo.seedEvent('session-existing', 'confirmation_resolved', {
+      confirmationId: 'confirm-current',
+      resolution: 'rejected',
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-resolved-button',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-current:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(
+      'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.'
+    );
+  });
+
+  it('treats plain text tak as a new message instead of executing a pending confirmation', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'no_action',
+        reply: 'Nie wykonuję żadnej akcji bez przycisku potwierdzenia.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-text-tak', text: 'tak', sourceType: 'whatsapp_text' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toEqual({
+      confirmationId: 'confirm-1',
+      resolution: 'superseded',
+    });
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+  });
+
+  it('supersedes a pending confirmation when a new text request arrives', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Masz jedno wydarzenie jutro.',
+        toolName: 'query_calendar_events',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-new-text',
+        text: 'Jakie wydarzenia mam zaplanowane na jutro?',
+        sourceType: 'whatsapp_text',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toEqual({
+      confirmationId: 'confirm-1',
+      resolution: 'superseded',
+    });
+    expect(eventPayloads(repo, 'tool_call_completed')[0]).toEqual({
+      toolName: 'query_calendar_events',
+    });
+    expect(replies.messages[0]?.message).toBe('Masz jedno wydarzenie jutro.');
   });
 
   it('passes only prior events to the runner after storing the current user message', async () => {
@@ -192,6 +634,53 @@ describe('handleIncomingMessage', () => {
     expect(call.events.some((event) => event.payload['messageId'] === 'wamid-current')).toBe(false);
   });
 
+  it('stores unexpected button metadata on non-button messages without treating it as approval', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'no_action',
+        reply: 'Nie wykonuję żadnej akcji bez przycisku potwierdzenia.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-text-with-button-payload',
+        text: 'tak',
+        sourceType: 'whatsapp_text',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-1:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'user_message').at(-1)).toEqual({
+      messageId: 'wamid-text-with-button-payload',
+      text: 'tak',
+      sourceType: 'whatsapp_text',
+      buttonResponse: {
+        buttonId: 'intex_confirm:confirm-1:yes',
+        buttonTitle: 'Tak',
+        replyToWamid: 'wamid-confirmation-message',
+      },
+    });
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toEqual({
+      confirmationId: 'confirm-1',
+      resolution: 'superseded',
+    });
+  });
+
   it('passes source URLs to the runner without storing the full URL in session events', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -263,6 +752,36 @@ describe('handleIncomingMessage', () => {
         correlationId: 'session-1',
       },
     ]);
+  });
+
+  it('publishes completed runner CTA URLs when the tool result includes one', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Zapisałem notatkę.',
+        toolName: 'create_note',
+        toolResult: { status: 'completed', id: 'note-1' },
+        ctaUrl: {
+          displayText: 'Open Note',
+          url: 'https://intexuraos.cloud/#/notes/note-1',
+        },
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ text: 'remember that the door code is 1234' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(replies.messages[0]).toMatchObject({
+      message: 'Zapisałem notatkę.',
+      ctaUrl: {
+        displayText: 'Open Note',
+        url: 'https://intexuraos.cloud/#/notes/note-1',
+      },
+    });
   });
 
   it('creates a calendar event in one message when the request has complete date and time details', async () => {
@@ -696,6 +1215,7 @@ function deps(
     ids: {
       sessionId: () => `session-${String(sessionRepository.createdSessions.length + 1)}`,
       eventId: () => `event-${String(sessionRepository.events.length + 1)}`,
+      confirmationId: () => `confirmation-${String(sessionRepository.events.length + 1)}`,
     },
     sessionTimeoutMs: 30 * 60 * 1000,
   };
@@ -725,6 +1245,34 @@ function eventPayloads(
   type: IntexAgentSessionEventType
 ): Record<string, unknown>[] {
   return repo.events.filter((event) => event.type === type).map((event) => event.payload);
+}
+
+function seedPendingConfirmation(
+  repo: FakeSessionRepository,
+  pending: {
+    confirmationId: string;
+    toolName: IntexAgentToolName;
+    toolArgs: Record<string, unknown>;
+  }
+): void {
+  repo.seedSession({
+    id: 'session-existing',
+    userId: 'user-1',
+    channel: 'whatsapp',
+    status: 'waiting_for_user',
+    startedAt: '2026-06-24T09:50:00.000Z',
+    lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+    lastAssistantMessageAt: '2026-06-24T09:51:00.000Z',
+    startReason: 'no_active_session',
+    activeTool: pending.toolName,
+  });
+  repo.seedEvent('session-existing', 'confirmation_requested', {
+    confirmationId: pending.confirmationId,
+    toolName: pending.toolName,
+    toolArgs: pending.toolArgs,
+    message: 'Czy wykonać tę akcję?',
+    sourceMessageId: 'wamid-original',
+  });
 }
 
 class FakeSessionRepository implements SessionRepository {
@@ -810,8 +1358,27 @@ class FakeRunner implements IntexAgentRunner {
     sourceUrl?: string;
     currentDateTime: string;
   }[] = [];
+  readonly executeConfirmedCalls: {
+    session: IntexAgentSession;
+    toolName: IntexAgentToolName;
+    toolArgs: Record<string, unknown>;
+    currentDateTime: string;
+    messageId?: string;
+  }[] = [];
 
-  constructor(private readonly results: IntexAgentRunnerResult[]) {}
+  constructor(
+    private readonly results: IntexAgentRunnerResult[],
+    private readonly confirmedResults: IntexAgentRunnerResult[] = []
+  ) {}
+
+  executeConfirmed(input: Parameters<IntexAgentRunner['executeConfirmed']>[0]): Promise<IntexAgentRunnerResult> {
+    this.executeConfirmedCalls.push(input);
+    const next = this.confirmedResults.shift();
+    if (next === undefined) {
+      throw new Error('No fake confirmed runner result configured');
+    }
+    return Promise.resolve(next);
+  }
 
   run(input: {
     session: IntexAgentSession;
@@ -841,6 +1408,7 @@ class FakeReplyPublisher implements WhatsAppReplyPublisher {
       displayText: string;
       url: string;
     };
+    buttons?: Parameters<WhatsAppReplyPublisher['publishReply']>[0]['buttons'];
   }[] = [];
 
   publishReply(input: {
@@ -852,6 +1420,7 @@ class FakeReplyPublisher implements WhatsAppReplyPublisher {
       displayText: string;
       url: string;
     };
+    buttons?: Parameters<WhatsAppReplyPublisher['publishReply']>[0]['buttons'];
   }): Promise<void> {
     this.messages.push(input);
     return Promise.resolve();

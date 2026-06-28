@@ -25,6 +25,8 @@ const OPEN_STATUSES = new Set(['active', 'waiting_for_user', 'executing_tool']);
 const EVENT_TYPE_ORDER: Record<IntexAgentSessionEventType, number> = {
   session_started: 0,
   user_message: 10,
+  confirmation_requested: 20,
+  confirmation_resolved: 20,
   tool_call_started: 20,
   tool_call_completed: 30,
   tool_call_failed: 30,

@@ -1,5 +1,6 @@
 import type {
   IntexIncomingMessage,
+  IntexIncomingMessageButtonResponse,
   IntexIncomingMessageReplyContext,
 } from '../../domain/ports/incomingMessageHandler.js';
 
@@ -53,12 +54,13 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
   const type = requiredString(event, 'type');
   const userId = requiredString(event, 'userId');
   const messageId = requiredString(event, 'messageId');
-  const text = requiredString(event, 'text');
+  const text = requiredStringAllowingEmpty(event, 'text');
   const sourceType = requiredString(event, 'sourceType');
   const sourceUrl = optionalString(event, 'sourceUrl');
   const timestamp = requiredString(event, 'timestamp');
   const whatsappSender = optionalString(event, 'whatsappSender');
   const replyContext = optionalReplyContext(event);
+  const buttonResponse = optionalButtonResponse(event);
 
   return {
     type: type as IntexIncomingMessage['type'],
@@ -70,6 +72,7 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
     timestamp,
     ...(whatsappSender !== undefined ? { whatsappSender } : {}),
     ...(replyContext !== undefined ? { replyContext } : {}),
+    ...(buttonResponse !== undefined ? { buttonResponse } : {}),
   };
 }
 
@@ -85,6 +88,14 @@ function extractEventType(value: unknown): string | null {
 function requiredString(event: Record<string, unknown>, key: string): string {
   const value = event[key];
   if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Invalid intex.message.ingest event: ${key} must be a string`);
+  }
+  return value;
+}
+
+function requiredStringAllowingEmpty(event: Record<string, unknown>, key: string): string {
+  const value = event[key];
+  if (typeof value !== 'string') {
     throw new Error(`Invalid intex.message.ingest event: ${key} must be a string`);
   }
   return value;
@@ -123,6 +134,25 @@ function optionalReplyContext(
     source,
     text,
     truncated,
+  };
+}
+
+function optionalButtonResponse(
+  event: Record<string, unknown>
+): IntexIncomingMessageButtonResponse | undefined {
+  const value = event['buttonResponse'];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid intex.message.ingest event: buttonResponse must be an object');
+  }
+
+  const button = value as Record<string, unknown>;
+  return {
+    buttonId: requiredString(button, 'buttonId'),
+    buttonTitle: requiredString(button, 'buttonTitle'),
+    replyToWamid: requiredString(button, 'replyToWamid'),
   };
 }
 

@@ -110,6 +110,39 @@ export function initServices(config: ServiceConfig): void {
   };
 
   const runner: IntexAgentRunner = {
+    async executeConfirmed(
+      input: Parameters<ReturnType<typeof createIntexAgentRunner>['executeConfirmed']>[0]
+    ): Promise<IntexAgentRunnerResult> {
+      const [preferences, promptPreferences] = await Promise.all([
+        preferencesRepository.getPreferences(input.session.userId),
+        promptPreferencesRepository.getCurrent(input.session.userId),
+      ]);
+      const toolExecutor = createIntexAgentToolExecutor({
+        userId: input.session.userId,
+        sessionId: input.session.id,
+        messageId: input.messageId ?? input.session.id,
+        notesClient,
+        calendarClient,
+        researchClient,
+        bookmarksClient,
+        codeClient,
+        externalSaveClient: createExternalSaveToolClient(preferences?.externalSave),
+        promptPreferencesRepository,
+      });
+
+      return await createIntexAgentRunner({
+        client: {
+          run() {
+            return Promise.reject(
+              new Error('Confirmed INTEX Agent execution must not invoke the LLM')
+            );
+          },
+        },
+        toolExecutor,
+        webAppUrl: config.webAppUrl,
+        userPreferences: promptPreferences.renderedPromptBlock,
+      }).executeConfirmed(input);
+    },
     async run(
       input: Parameters<ReturnType<typeof createIntexAgentRunner>['run']>[0]
     ): Promise<IntexAgentRunnerResult> {
@@ -160,6 +193,7 @@ export function initServices(config: ServiceConfig): void {
         ids: {
           sessionId: () => `intex_session_${randomUUID()}`,
           eventId: () => `intex_event_${randomUUID()}`,
+          confirmationId: () => `intex_confirmation_${randomUUID()}`,
         },
         sessionTimeoutMs: config.sessionTimeoutMs,
       });

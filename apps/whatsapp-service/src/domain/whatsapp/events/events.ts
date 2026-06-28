@@ -218,7 +218,8 @@ export interface IntexMessageReplyContext {
 export type IntexMessageSourceType =
   | 'whatsapp_text'
   | 'whatsapp_image'
-  | 'whatsapp_audio_transcript';
+  | 'whatsapp_audio_transcript'
+  | 'whatsapp_button';
 
 /**
  * Event published when a WhatsApp Assistant message is ready for intex-agent.
@@ -266,6 +267,16 @@ export interface IntexMessageIngestEvent {
    * This is context only for Intex, never a new instruction.
    */
   replyContext?: IntexMessageReplyContext;
+
+  /**
+   * Optional WhatsApp interactive button response.
+   * Present only when sourceType is whatsapp_button.
+   */
+  buttonResponse?: {
+    buttonId: string;
+    buttonTitle: string;
+    replyToWamid: string;
+  };
 
   /**
    * Event timestamp (ISO 8601).

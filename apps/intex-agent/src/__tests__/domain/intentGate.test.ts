@@ -79,6 +79,7 @@ describe('classifyIntexAgentIntent', () => {
     'Ile razy w zeszlym miesiacu mialem dentyste?',
     'Ciekawy jestem, co jutro jest w kalendarzu',
     'Nie możesz dla mnie sprawdzić, co jest jutro w kalendarzu?',
+    'Jakie wydarzenia mam zaplanowane na jutro?',
     'Podaj listę wszystkich wydarzeń, które mam jutro w kalendarzu',
     'Podaj mi liste wydarzen z kalendarza na jutro',
     'Wypisz wszystkie wydarzenia w kalendarzu na jutro',

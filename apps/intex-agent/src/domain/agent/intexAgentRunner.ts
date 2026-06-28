@@ -28,6 +28,22 @@ import {
 } from './capabilities.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
+type MutatingIntexAgentToolName = Exclude<
+  IntexAgentToolName,
+  'query_calendar_events' | 'get_user_preferences'
+>;
+
+const MUTATING_TOOL_NAMES = new Set<MutatingIntexAgentToolName>([
+  'create_note',
+  'create_calendar_event',
+  'create_research',
+  'create_link',
+  'create_code_task',
+  'save_external',
+  'add_user_preference',
+  'update_user_preference',
+  'delete_user_preference',
+]);
 
 export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
@@ -38,9 +54,67 @@ export interface IntexAgentRunnerConfig {
 
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
   return {
+    async executeConfirmed(input): Promise<IntexAgentRunnerResult> {
+      if (!isMutatingToolName(input.toolName)) {
+        return malformedResult();
+      }
+
+      const toolExecutions: IntexAgentToolExecution[] = [];
+      const tools = createIntexAgentToolDefinitions(
+        createTrackingToolExecutor(config.toolExecutor, toolExecutions)
+      );
+      const tool = tools.find((candidate) => candidate.name === input.toolName);
+      /* v8 ignore start -- schema: mutating tool registry and tool definitions cannot diverge without breaking startup tests @preserve */
+      if (tool === undefined) {
+        return malformedResult();
+      }
+      /* v8 ignore stop @preserve */
+
+      try {
+        const rawResult = await tool.run(input.toolArgs);
+        const toolExecution = getCompletedToolExecution(toolExecutions);
+        /* v8 ignore start -- schema: every mutating tool definition executes through the tracking executor after argument validation @preserve */
+        if (toolExecution === undefined) {
+          return malformedResult();
+        }
+        /* v8 ignore stop @preserve */
+        const parsedResult = parseToolResult(rawResult);
+        const completedReply = buildCompletedReply(
+          input.toolName,
+          parsedResult,
+          defaultCompletedReply(input.toolName),
+          config.webAppUrl ?? DEFAULT_WEB_APP_URL
+        );
+
+        return {
+          outcome: 'completed',
+          reply: completedReply.reply,
+          toolName: input.toolName,
+          ...(parsedResult !== undefined ? { toolResult: parsedResult } : {}),
+          ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
+        };
+      } catch (error) {
+        const errorMessage = getErrorMessage(error, 'Unknown tool execution error');
+        return {
+          outcome: 'tool_failed',
+          reply: buildConfirmedExecutionFailureReply(input.toolName, errorMessage),
+          toolName: input.toolName,
+          error: errorMessage,
+        };
+      }
+    },
     async run(input): Promise<IntexAgentRunnerResult> {
       if (input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined) {
-        return await saveWhatsAppImageExternally(input.message, input.sourceUrl, config.toolExecutor);
+        const args = {
+          message: input.message.trim() === '' ? 'Image shared via WhatsApp.' : input.message.trim(),
+          sourceUrl: input.sourceUrl,
+        };
+        return {
+          outcome: 'needs_confirmation',
+          reply: buildConfirmationReply('save_external', args, config.userPreferences ?? null),
+          toolName: 'save_external',
+          toolArgs: args,
+        };
       }
 
       const intent = classifyIntexAgentIntent(input.message);
@@ -60,7 +134,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
 
       const toolExecutions: IntexAgentToolExecution[] = [];
       const tools = createIntexAgentToolDefinitions(
-        createTrackingToolExecutor(config.toolExecutor, toolExecutions)
+        createTrackingToolExecutor(createConfirmationPreviewExecutor(config.toolExecutor), toolExecutions)
       ).filter(
         (tool) =>
           intent.kind === 'tool' && intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
@@ -78,14 +152,6 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         maxIterations: 5,
       });
 
-      const externalSaveFailure = getExternalSaveFailure(toolExecutions);
-      if (externalSaveFailure !== undefined) {
-        return {
-          outcome: 'unsupported',
-          reply: buildExternalSaveFailureReply(externalSaveFailure),
-        };
-      }
-
       if (!result.ok) {
         return {
           outcome: 'unsupported',
@@ -96,7 +162,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       return parseRunnerContent(
         result.value.content,
         toolExecutions,
-        config.webAppUrl ?? DEFAULT_WEB_APP_URL
+        config.webAppUrl ?? DEFAULT_WEB_APP_URL,
+        config.userPreferences ?? null
       );
     },
   };
@@ -220,7 +287,8 @@ function parseReplyContext(value: unknown): IntexIncomingMessageReplyContext | u
 function parseRunnerContent(
   content: string,
   toolExecutions: IntexAgentToolExecution[],
-  webAppUrl: string
+  webAppUrl: string,
+  userPreferences: string | null
 ): IntexAgentRunnerResult {
   const parsed = parseJsonObject(content);
   if (parsed === null) {
@@ -231,6 +299,18 @@ function parseRunnerContent(
   const reply = parsed['reply'];
   if (typeof outcome !== 'string' || typeof reply !== 'string') {
     return malformedResult();
+  }
+
+  const toolExecution = getCompletedToolExecution(toolExecutions);
+  if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
+    const summary = parsed['summary'];
+    return {
+      outcome: 'needs_confirmation',
+      reply: buildConfirmationReply(toolExecution.toolName, toolExecution.args, userPreferences),
+      toolName: toolExecution.toolName,
+      toolArgs: toolExecution.args,
+      ...(typeof summary === 'string' ? { summary } : {}),
+    };
   }
 
   if (outcome === 'needs_clarification') {
@@ -247,13 +327,12 @@ function parseRunnerContent(
 
   if (outcome === 'completed') {
     const summary = parsed['summary'];
-    const completedToolExecution = getCompletedToolExecution(toolExecutions);
-    if (completedToolExecution === undefined) {
+    if (toolExecution === undefined) {
       return malformedResult();
     }
     const completedReply = buildCompletedReply(
-      completedToolExecution.toolName,
-      completedToolExecution.result,
+      toolExecution.toolName,
+      toolExecution.result,
       reply,
       webAppUrl
     );
@@ -262,15 +341,63 @@ function parseRunnerContent(
       outcome,
       reply: completedReply.reply,
       ...(typeof summary === 'string' ? { summary } : {}),
-      toolName: completedToolExecution.toolName,
-      ...(completedToolExecution.result !== undefined
-        ? { toolResult: completedToolExecution.result }
+      toolName: toolExecution.toolName,
+      ...(toolExecution.result !== undefined
+        ? { toolResult: toolExecution.result }
         : {}),
+      /* v8 ignore start -- schema: normal completed turns cannot produce CTA URLs because mutating tools are confirmation-gated and read-only tools have no CTA results @preserve */
       ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
+      /* v8 ignore stop @preserve */
     };
   }
 
   return malformedResult();
+}
+
+function createConfirmationPreviewExecutor(executor: IntexAgentToolExecutor): IntexAgentToolExecutor {
+  return {
+    createNote(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    createCalendarEvent(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    async queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string> {
+      return await executor.queryCalendarEvents(args);
+    },
+    createResearch(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    createLink(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    createCodeTask(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    saveExternal(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    async getUserPreferences(): Promise<string> {
+      return await executor.getUserPreferences();
+    },
+    addUserPreference(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    updateUserPreference(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+    deleteUserPreference(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
+  };
+}
+
+function previewToolResult(): string {
+  return JSON.stringify({ status: 'needs_confirmation' });
+}
+
+function isMutatingToolName(toolName: IntexAgentToolName): toolName is MutatingIntexAgentToolName {
+  return MUTATING_TOOL_NAMES.has(toolName as MutatingIntexAgentToolName);
 }
 
 function createTrackingToolExecutor(
@@ -358,40 +485,6 @@ function createTrackingToolExecutor(
   };
 }
 
-async function saveWhatsAppImageExternally(
-  message: string,
-  sourceUrl: string,
-  executor: IntexAgentToolExecutor
-): Promise<IntexAgentRunnerResult> {
-  try {
-    const rawResult = await executor.saveExternal({
-      message: message.trim() === '' ? 'Image shared via WhatsApp.' : message.trim(),
-      sourceUrl,
-    });
-    const result = parseToolResult(rawResult);
-    const reply = result !== undefined ? readString(result, 'message') : undefined;
-    return {
-      outcome: 'completed',
-      reply: reply ?? 'Saved externally',
-      toolName: 'save_external',
-      ...(result !== undefined ? { toolResult: result } : {}),
-    };
-  } catch (error) {
-    return {
-      outcome: 'unsupported',
-      reply: buildExternalSaveFailureReply(getErrorMessage(error, 'Unknown external save error')),
-    };
-  }
-}
-
-function getExternalSaveFailure(
-  toolExecutions: IntexAgentToolExecution[]
-): string | undefined {
-  return toolExecutions.find(
-    (execution) => execution.toolName === 'save_external' && execution.error !== undefined
-  )?.error;
-}
-
 function buildExternalSaveFailureReply(errorMessage: string): string {
   if (isExternalSaveNotConfiguredError(errorMessage)) {
     return 'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.';
@@ -399,6 +492,18 @@ function buildExternalSaveFailureReply(errorMessage: string): string {
 
   const detail = normalizeExternalSaveFailureDetail(errorMessage);
   return `I could not deliver this to the external system. The external save request failed: ${detail}. Please check the external system configuration and try again.`;
+}
+
+function buildConfirmedExecutionFailureReply(
+  toolName: IntexAgentToolName,
+  errorMessage: string
+): string {
+  if (toolName === 'save_external') {
+    return buildExternalSaveFailureReply(errorMessage);
+  }
+
+  const detail = normalizeExternalSaveFailureDetail(errorMessage);
+  return `Nie udało się wykonać tej akcji: ${detail}. Spróbuj ponownie później.`;
 }
 
 function isExternalSaveNotConfiguredError(errorMessage: string): boolean {
@@ -434,6 +539,130 @@ function getCompletedToolExecution(
 
 function parseToolResult(rawResult: string): Record<string, unknown> | undefined {
   return parseJsonObject(rawResult) ?? undefined;
+}
+
+function buildConfirmationReply(
+  toolName: MutatingIntexAgentToolName,
+  args: Record<string, unknown>,
+  userPreferences: string | null
+): string {
+  if (toolName === 'create_note') {
+    const lines = ['Czy dodać notatkę?'];
+    const title = readRawString(args, 'title');
+    const content = readRawString(args, 'content');
+    if (title !== undefined) lines.push('', `Tytuł: ${title}`);
+    /* v8 ignore start -- schema: create_note preview args cannot omit content because validation runs before confirmation text is built @preserve */
+    if (content !== undefined) lines.push(`Treść: ${content}`);
+    /* v8 ignore stop @preserve */
+    return lines.join('\n');
+  }
+
+  if (toolName === 'create_calendar_event') {
+    const lines = ['Czy dodać wydarzenie w kalendarzu?'];
+    appendConfirmationLine(lines, 'Tytuł', readRawString(args, 'summary'));
+    appendConfirmationLine(lines, 'Start', readRawString(args, 'start'));
+    appendConfirmationLine(lines, 'Koniec', readRawString(args, 'end'));
+    appendConfirmationLine(lines, 'Miejsce', readRawString(args, 'location'));
+    appendConfirmationListLine(lines, 'Uczestnicy', readStringArray(args, 'attendees'));
+    return lines.join('\n');
+  }
+
+  if (toolName === 'create_research') {
+    const lines = ['Czy utworzyć szkic researchu?'];
+    appendConfirmationLine(lines, 'Tytuł', readRawString(args, 'title'));
+    appendConfirmationLine(lines, 'Prompt', readRawString(args, 'prompt'));
+    return lines.join('\n');
+  }
+
+  if (toolName === 'create_link') {
+    const lines = ['Czy zapisać bookmark?'];
+    appendConfirmationLine(lines, 'URL', readRawString(args, 'url'));
+    appendConfirmationLine(lines, 'Tytuł', readRawString(args, 'title'));
+    return lines.join('\n');
+  }
+
+  if (toolName === 'create_code_task') {
+    const lines = ['Czy utworzyć zadanie programistyczne?'];
+    appendConfirmationLine(lines, 'Prompt', readRawString(args, 'prompt'));
+    appendConfirmationLine(lines, 'Tryb', readRawString(args, 'taskMode') ?? 'planning');
+    appendConfirmationLine(lines, 'Worker', readRawString(args, 'workerType'));
+    appendConfirmationLine(lines, 'Linear', readRawString(args, 'linearIssueId'));
+    return lines.join('\n');
+  }
+
+  if (toolName === 'save_external') {
+    const lines = ['Czy wysłać tę treść do zewnętrznego systemu?'];
+    appendConfirmationLine(lines, 'Treść', readRawString(args, 'message'));
+    appendConfirmationLine(lines, 'Źródło', readRawString(args, 'sourceUrl'));
+    return lines.join('\n');
+  }
+
+  if (toolName === 'add_user_preference') {
+    const lines = ['Czy dodać wpis w pamięci instrukcji?'];
+    appendConfirmationLine(lines, 'Nowy wpis', readRawString(args, 'text'));
+    return lines.join('\n');
+  }
+
+  if (toolName === 'update_user_preference') {
+    const lines = ['Czy zmodyfikować wpis w pamięci instrukcji?'];
+    const itemId = readRawString(args, 'itemId');
+    appendConfirmationLine(lines, 'Wpis', itemId);
+    appendConfirmationLine(lines, 'Wcześniej', findPreferenceText(userPreferences, itemId));
+    appendConfirmationLine(lines, 'Po zmianie', readRawString(args, 'text'));
+    return lines.join('\n');
+  }
+
+  const lines = ['Czy usunąć wpis z pamięci instrukcji?'];
+  const itemId = readRawString(args, 'itemId');
+  appendConfirmationLine(lines, 'Wpis', itemId);
+  appendConfirmationLine(lines, 'Treść', findPreferenceText(userPreferences, itemId));
+  return lines.join('\n');
+}
+
+function appendConfirmationLine(lines: string[], label: string, value: string | undefined): void {
+  if (value === undefined || value.trim() === '') {
+    return;
+  }
+  if (lines.length === 1) {
+    lines.push('');
+  }
+  lines.push(`${label}: ${value}`);
+}
+
+function appendConfirmationListLine(
+  lines: string[],
+  label: string,
+  value: string[] | undefined
+): void {
+  if (value === undefined || value.length === 0) {
+    return;
+  }
+  appendConfirmationLine(lines, label, value.join(', '));
+}
+
+function readStringArray(record: Record<string, unknown>, key: string): string[] | undefined {
+  const value = record[key];
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+    return undefined;
+  }
+  return value;
+}
+
+function findPreferenceText(userPreferences: string | null, itemId: string | undefined): string | undefined {
+  if (userPreferences === null || itemId === undefined) {
+    return undefined;
+  }
+  const line = userPreferences.split('\n').find((candidate) => candidate.includes(`(id: ${itemId}) `));
+  if (line === undefined) {
+    return undefined;
+  }
+  const quotedText = line.slice(line.indexOf(') ') + 2).trim();
+  try {
+    const parsed: unknown = JSON.parse(quotedText);
+    return typeof parsed === 'string' ? parsed : undefined;
+  } catch {
+    return quotedText;
+  }
 }
 
 function buildCompletedReply(
@@ -523,6 +752,28 @@ function buildCompletedReply(
     return { reply: message };
   }
   return { reply: message ?? fallbackReply };
+}
+
+function defaultCompletedReply(toolName: MutatingIntexAgentToolName): string {
+  if (toolName === 'create_note') {
+    return 'Zapisałem notatkę.';
+  }
+  if (toolName === 'create_calendar_event') {
+    return 'Utworzyłem wydarzenie w kalendarzu.';
+  }
+  if (toolName === 'create_research') {
+    return 'Utworzyłem szkic researchu.';
+  }
+  if (toolName === 'create_link') {
+    return 'Zapisałem bookmark.';
+  }
+  if (toolName === 'create_code_task') {
+    return 'Utworzyłem zadanie programistyczne.';
+  }
+  if (toolName === 'save_external') {
+    return 'Saved externally';
+  }
+  return 'Zaktualizowałem pamięć instrukcji.';
 }
 
 function isPreferenceToolName(toolName: IntexAgentToolName): boolean {
