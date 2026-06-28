@@ -1,6 +1,13 @@
-# Expected Sentry Warnings
+# Expected Sentry Reports And Code Suppression
 
-This file documents Sentry issues that represent **expected behavior** and should be marked as "Ignored" in Sentry. These are informational warnings that provide observability into operational states without indicating code defects.
+This file documents Sentry reports that represent **expected behavior** and are
+candidates for code-level suppression. They are informational warnings that
+provide observability into operational states without indicating code defects.
+
+For code-agent Sentry automation, suppression is never a hidden Sentry-side
+ignore. The worker must open a PR that changes code to suppress the specific
+non-error report, and the PR must include evidence that the report is safe to
+suppress. If the evidence is not clear, fix the bug instead.
 
 ## Format
 
@@ -10,7 +17,9 @@ For each expected warning, use this format:
 
 - **Sentry Issue**: [ISSUE-ID](URL)
 - **Code Location**: `path/to/file.ts:line`
-- _Reason:_ Why this is expected behavior
+- **Suppression**: The code-level guard, filter, logger downgrade, or Sentry
+  `beforeSend` rule that suppresses only this expected report.
+- _Reason:_ Why this is expected behavior and not an application error.
 
 ---
 
@@ -43,11 +52,14 @@ The application handles partial failures correctly by:
 
 ## Summary
 
-These warnings are **intentional observability signals** that:
+These reports are **intentional observability signals** that:
 
 1. Provide operational visibility into external service dependencies
 2. Allow monitoring of partial/complete LLM failures
 3. Enable user intervention when needed
 4. Do not indicate code defects
 
-**Action**: Mark similar Sentry issues with these warning patterns as **"Ignored"** unless they indicate a sudden spike in frequency or new failure modes.
+**Action**: handle similar Sentry issues through a PR. Either fix the bug, or
+add a narrowly scoped code-level suppression with evidence. Do not use a
+Sentry-side ignore as the only resolution for the automated Sentry code-task
+path.
