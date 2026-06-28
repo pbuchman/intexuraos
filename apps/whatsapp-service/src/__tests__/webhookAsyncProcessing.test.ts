@@ -1737,6 +1737,49 @@ describe('Webhook async processing', () => {
     const senderPhone = '15551234567';
     const testUserId = 'user-buttons-test';
 
+    it('publishes Intex confirmation buttons as structured Intex messages', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.confirmation.message',
+        buttonId: 'intex_confirm:confirm-1:yes',
+        buttonTitle: 'Tak',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toEqual([
+        expect.objectContaining({
+          type: 'intex.message.ingest',
+          userId: testUserId,
+          text: '',
+          sourceType: 'whatsapp_button',
+          whatsappSender: senderPhone,
+          buttonResponse: {
+            buttonId: 'intex_confirm:confirm-1:yes',
+            buttonTitle: 'Tak',
+            replyToWamid: 'wamid.confirmation.message',
+          },
+        }),
+      ]);
+    });
+
     it('ignores interactive buttons without publishing Intex messages', async () => {
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 

@@ -222,6 +222,70 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     );
   });
 
+  it('publishes Intex confirmation button messages to the ingest topic', async () => {
+    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, eventPublisher } =
+      await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+
+    await useCase.execute(
+      createButtonWebhookPayload({
+        buttonId: 'intex_confirm:confirm-1:yes',
+        buttonTitle: 'Tak',
+        replyToWamid: 'wamid.confirmation',
+      }) as WebhookPayload,
+      savedEvent,
+      logger()
+    );
+
+    const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
+    expect(eventResult.ok && eventResult.value?.status).toBe('completed');
+    expect(eventPublisher.getIntexMessageIngestEvents()).toEqual([
+      {
+        type: 'intex.message.ingest',
+        userId: 'user-1',
+        messageId: expect.stringMatching(/^wamid\.button/),
+        sourceType: 'whatsapp_button',
+        text: '',
+        whatsappSender: '15551234567',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-1:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid.confirmation',
+        },
+        timestamp: '1234567890',
+      },
+    ]);
+  });
+
+  it('marks Intex confirmation button publishing failures as retryable', async () => {
+    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, eventPublisher } =
+      await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    eventPublisher.setIntexMessageIngestFailure('pubsub unavailable');
+
+    const result = await useCase.execute(
+      createButtonWebhookPayload({
+        buttonId: 'intex_confirm:confirm-1:yes',
+        buttonTitle: 'Tak',
+        replyToWamid: 'wamid.confirmation',
+      }) as WebhookPayload,
+      savedEvent,
+      logger()
+    );
+
+    const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
+    expect(result).toEqual({
+      ok: false,
+      retryable: true,
+      failureDetails: 'Failed to publish intex message ingest: pubsub unavailable',
+    });
+    expect(eventResult.ok && eventResult.value?.status).toBe('failed');
+    expect(eventResult.ok && eventResult.value?.failureDetails).toBe(
+      'Failed to publish intex message ingest: pubsub unavailable'
+    );
+    expect(eventPublisher.getIntexMessageIngestEvents()).toEqual([]);
+  });
+
   it('ignores button messages without attempting read receipts when phoneNumberId is missing', async () => {
     const { savedEvent, useCase, userMappingRepository, webhookEventRepository, whatsappCloudApi } =
       await createHarness();

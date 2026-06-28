@@ -9,6 +9,12 @@ export interface IntexIncomingMessageReplyContext {
   truncated: boolean;
 }
 
+export interface IntexIncomingMessageButtonResponse {
+  buttonId: string;
+  buttonTitle: string;
+  replyToWamid: string;
+}
+
 export interface IntexIncomingMessage {
   type: 'intex.message.ingest';
   userId: string;
@@ -18,6 +24,7 @@ export interface IntexIncomingMessage {
   sourceUrl?: string;
   whatsappSender?: string;
   replyContext?: IntexIncomingMessageReplyContext;
+  buttonResponse?: IntexIncomingMessageButtonResponse;
   timestamp: string;
 }
 

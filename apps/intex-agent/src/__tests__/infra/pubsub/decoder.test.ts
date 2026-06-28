@@ -63,6 +63,24 @@ describe('decodeIntexMessageIngestPush', () => {
     expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
   });
 
+  it('decodes optional WhatsApp button responses', () => {
+    const event = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-button',
+      text: '',
+      sourceType: 'whatsapp_button',
+      timestamp: '2026-06-24T10:00:00.000Z',
+      buttonResponse: {
+        buttonId: 'intex_confirm:confirm-1:yes',
+        buttonTitle: 'Tak',
+        replyToWamid: 'wamid-confirmation',
+      },
+    };
+
+    expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
+  });
+
   it('decodes inbound replied-message context', () => {
     const event = {
       type: 'intex.message.ingest',
@@ -124,6 +142,52 @@ describe('decodeIntexMessageIngestPush', () => {
         })
       )
     ).toThrow('Invalid intex.message.ingest event: truncated must be a boolean');
+  });
+
+  it('rejects malformed WhatsApp button responses', () => {
+    const baseEvent = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-button',
+      text: '',
+      sourceType: 'whatsapp_button',
+      timestamp: '2026-06-24T10:00:00.000Z',
+    };
+
+    expect(() =>
+      decodeIntexMessageIngestPush(push({ ...baseEvent, buttonResponse: null }))
+    ).toThrow('Invalid intex.message.ingest event: buttonResponse must be an object');
+    expect(() =>
+      decodeIntexMessageIngestPush(
+        push({
+          ...baseEvent,
+          buttonResponse: {
+            buttonId: 'intex_confirm:confirm-1:yes',
+            buttonTitle: 'Tak',
+          },
+        })
+      )
+    ).toThrow('Invalid intex.message.ingest event: replyToWamid must be a string');
+  });
+
+  it('rejects button messages when the empty text placeholder is not a string', () => {
+    const event = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-button',
+      text: null,
+      sourceType: 'whatsapp_button',
+      timestamp: '2026-06-24T10:00:00.000Z',
+      buttonResponse: {
+        buttonId: 'intex_confirm:confirm-1:yes',
+        buttonTitle: 'Tak',
+        replyToWamid: 'wamid-confirmation',
+      },
+    };
+
+    expect(() => decodeIntexMessageIngestPush(push(event))).toThrow(
+      'Invalid intex.message.ingest event: text must be a string'
+    );
   });
 
   it('rejects messages with another event type', () => {

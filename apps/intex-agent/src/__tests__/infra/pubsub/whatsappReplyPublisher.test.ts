@@ -33,6 +33,34 @@ describe('createWhatsAppReplyPublisher', () => {
     ]);
   });
 
+  it('forwards WhatsApp reply buttons through the shared send-message publisher', async () => {
+    const sendPublisher = new FakeWhatsAppSendPublisher();
+    const publisher = createWhatsAppReplyPublisher({ sendPublisher });
+    const buttons = [
+      { type: 'reply' as const, reply: { id: 'intex_confirm:confirm-1:yes', title: 'Tak' } },
+      { type: 'reply' as const, reply: { id: 'intex_confirm:confirm-1:no', title: 'Nie' } },
+    ];
+
+    await publisher.publishReply({
+      userId: 'user-1',
+      message: 'Czy dodać notatkę?',
+      replyToMessageId: 'wamid-1',
+      correlationId: 'session-1',
+      buttons,
+    });
+
+    expect(sendPublisher.calls).toEqual([
+      {
+        userId: 'user-1',
+        message: 'Czy dodać notatkę?',
+        replyToMessageId: 'wamid-1',
+        correlationId: 'session-1',
+        buttons,
+        important: true,
+      },
+    ]);
+  });
+
   it('throws when the shared send-message publisher fails', async () => {
     const sendPublisher = new FakeWhatsAppSendPublisher();
     sendPublisher.result = err({ code: 'PUBLISH_FAILED', message: 'Pub/Sub unavailable' });

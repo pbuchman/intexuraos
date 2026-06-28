@@ -59,6 +59,8 @@ export type IntexAgentSessionEventType =
   | 'user_message'
   | 'assistant_message'
   | 'clarification_requested'
+  | 'confirmation_requested'
+  | 'confirmation_resolved'
   | 'tool_call_started'
   | 'tool_call_completed'
   | 'tool_call_failed'
