@@ -69,6 +69,14 @@ function isImageMimeType(mimeType: string): boolean {
   return mimeType.startsWith('image/');
 }
 
+function isAudioMimeType(mimeType: string): boolean {
+  return mimeType.startsWith('audio/');
+}
+
+function isSupportedUploadMimeType(mimeType: string): boolean {
+  return isImageMimeType(mimeType) || isAudioMimeType(mimeType);
+}
+
 function isPrivateImageMessage(message: PrivateWhatsAppMessage): boolean {
   return message.messageType === 'image';
 }
@@ -316,7 +324,6 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
                         'sizeBytes',
                         'storageStatus',
                         'gcsPath',
-                        'thumbnailGcsPath',
                         'storedMimeType',
                         'storedSizeBytes',
                         'storedAt',
@@ -370,8 +377,8 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         }
 
         const mimeType = request.query.mimeType;
-        if (mimeType === undefined || !isImageMimeType(mimeType)) {
-          return await reply.fail('INVALID_REQUEST', 'mimeType must be an image MIME type');
+        if (mimeType === undefined || !isSupportedUploadMimeType(mimeType)) {
+          return await reply.fail('INVALID_REQUEST', 'mimeType must be an image or audio MIME type');
         }
 
         const services = getServices();
@@ -404,21 +411,25 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           return await reply.fail('DOWNSTREAM_ERROR', uploadResult.error.message);
         }
 
-        const thumbnailResult = await services.thumbnailGenerator.generate(buffer);
-        if (!thumbnailResult.ok) {
-          return await reply.fail('DOWNSTREAM_ERROR', thumbnailResult.error.message);
-        }
+        let thumbnailGcsPath: string | undefined;
+        if (isImageMimeType(mimeType)) {
+          const thumbnailResult = await services.thumbnailGenerator.generate(buffer);
+          if (!thumbnailResult.ok) {
+            return await reply.fail('DOWNSTREAM_ERROR', thumbnailResult.error.message);
+          }
 
-        const thumbnailUploadResult = await services.mediaStorage.uploadPrivateThumbnail(
-          accountResult.value.userId,
-          messageId,
-          mediaId,
-          'jpg',
-          thumbnailResult.value.buffer,
-          thumbnailResult.value.mimeType
-        );
-        if (!thumbnailUploadResult.ok) {
-          return await reply.fail('DOWNSTREAM_ERROR', thumbnailUploadResult.error.message);
+          const thumbnailUploadResult = await services.mediaStorage.uploadPrivateThumbnail(
+            accountResult.value.userId,
+            messageId,
+            mediaId,
+            'jpg',
+            thumbnailResult.value.buffer,
+            thumbnailResult.value.mimeType
+          );
+          if (!thumbnailUploadResult.ok) {
+            return await reply.fail('DOWNSTREAM_ERROR', thumbnailUploadResult.error.message);
+          }
+          thumbnailGcsPath = thumbnailUploadResult.value.gcsPath;
         }
 
         return await reply.ok({
@@ -430,7 +441,7 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             sha256: request.query.sha256,
             storageStatus: 'stored',
             gcsPath: uploadResult.value.gcsPath,
-            thumbnailGcsPath: thumbnailUploadResult.value.gcsPath,
+            ...(thumbnailGcsPath !== undefined ? { thumbnailGcsPath } : {}),
             storedMimeType: mimeType,
             storedSizeBytes: buffer.length,
             storedAt: new Date().toISOString(),

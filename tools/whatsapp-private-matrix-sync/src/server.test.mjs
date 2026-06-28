@@ -16,6 +16,7 @@ import {
   extractRoomContexts,
   fetchMatrixMedia,
   isIncomingWhatsAppMatrixEvent,
+  prepareEventsForIngest,
   runSyncIteration,
 } from './server.mjs';
 
@@ -1095,6 +1096,71 @@ test('runSyncIteration uploads new Matrix images before posting ingest events', 
     thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
     storedMimeType: 'image/jpeg',
     storedSizeBytes: 'image-bytes'.length,
+    storedAt: '2026-06-26T10:00:00.000Z',
+  });
+});
+
+test('prepareEventsForIngest uploads new Matrix audio before posting ingest events', async () => {
+  const prepared = await prepareEventsForIngest(
+    config,
+    'matrix-token',
+    [
+      {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$audio',
+        matrixSenderId: '@whatsapp_48536911713:home-dev',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        chat: { type: 'direct' },
+        message: {
+          direction: 'incoming',
+          type: 'audio',
+          text: 'voice.ogg',
+          media: {
+            mxcUri: 'mxc://home-dev/audio',
+            mimeType: 'audio/ogg',
+            fileName: 'voice.ogg',
+          },
+        },
+        rawMatrixEvent: {},
+      },
+    ],
+    {
+      fetchMatrixMedia: async (_config, accessToken, mxcUri) => {
+        assert.equal(accessToken, 'matrix-token');
+        assert.equal(mxcUri, 'mxc://home-dev/audio');
+        return {
+          buffer: Buffer.from('audio-bytes'),
+          contentType: 'audio/ogg',
+        };
+      },
+      uploadPrivateMedia: async (_config, event, media, downloaded) => {
+        assert.equal(event.matrixEventId, '$audio');
+        assert.equal(media.mxcUri, 'mxc://home-dev/audio');
+        assert.equal(downloaded.contentType, 'audio/ogg');
+        return {
+          mxcUri: media.mxcUri,
+          mimeType: 'audio/ogg',
+          fileName: 'voice.ogg',
+          sizeBytes: downloaded.buffer.length,
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user/message/audio.ogg',
+          storedMimeType: 'audio/ogg',
+          storedSizeBytes: downloaded.buffer.length,
+          storedAt: '2026-06-26T10:00:00.000Z',
+        };
+      },
+    }
+  );
+
+  assert.deepEqual(prepared[0]?.message.media, {
+    mxcUri: 'mxc://home-dev/audio',
+    mimeType: 'audio/ogg',
+    fileName: 'voice.ogg',
+    sizeBytes: 'audio-bytes'.length,
+    storageStatus: 'stored',
+    gcsPath: 'whatsapp/private/user/message/audio.ogg',
+    storedMimeType: 'audio/ogg',
+    storedSizeBytes: 'audio-bytes'.length,
     storedAt: '2026-06-26T10:00:00.000Z',
   });
 });

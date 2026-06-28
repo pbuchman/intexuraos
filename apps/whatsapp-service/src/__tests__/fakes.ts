@@ -48,12 +48,15 @@ import type {
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
+  PrivateWhatsAppTranscriptionState,
   SendMessageResult,
   StorePrivateWhatsAppMessageInput,
   TextMessageSendResult,
   ThumbnailGeneratorPort,
   ThumbnailResult,
   TranscriptionState,
+  UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionInput,
   UploadResult,
   WebhookProcessEvent,
   WebhookProcessingStatus,
@@ -618,12 +621,25 @@ interface FakeDisablePrivateWhatsAppAccountInput {
   now: string;
 }
 
+interface FakePrivateWhatsAppChatTranscriptionSetting {
+  transcriptionEnabled: boolean;
+  transcriptionUpdatedAt: string;
+  transcriptionEnabledAt?: string;
+}
+
 export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   private readonly stored = new Map<string, StorePrivateWhatsAppMessageInput>();
   private readonly accounts = new Map<string, FakePrivateWhatsAppAccount>();
+  private readonly chatTranscriptionSettings = new Map<
+    string,
+    FakePrivateWhatsAppChatTranscriptionSetting
+  >();
+  private readonly messageTranscriptions = new Map<string, PrivateWhatsAppTranscriptionState>();
   private failNextError: WhatsAppError | null = null;
   private failNextStoreError: WhatsAppError | null = null;
   private failNextDataQueryError: WhatsAppError | null = null;
+  private failNextMessageLookupError: WhatsAppError | null = null;
+  private failNextChatTranscriptionUpdateError: WhatsAppError | null = null;
 
   failNext(error: WhatsAppError): void {
     this.failNextError = error;
@@ -635,6 +651,14 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   failNextDataQuery(error: WhatsAppError): void {
     this.failNextDataQueryError = error;
+  }
+
+  failNextMessageLookup(error: WhatsAppError): void {
+    this.failNextMessageLookupError = error;
+  }
+
+  failNextChatTranscriptionUpdate(error: WhatsAppError): void {
+    this.failNextChatTranscriptionUpdateError = error;
   }
 
   setAccount(account: FakePrivateWhatsAppAccount): void {
@@ -733,6 +757,8 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     const existing = this.stored.get(input.message.matrixEventId);
     const chatId = `chat:${input.sourceAccountId}:${input.chat.matrixRoomId}`;
     const messageId = `message:${input.sourceAccountId}:${input.message.matrixEventId}`;
+    const chatTranscriptionEnabled =
+      this.chatTranscriptionSettings.get(chatId)?.transcriptionEnabled === true;
 
     if (existing !== undefined) {
       return Promise.resolve(
@@ -752,11 +778,17 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         chatId,
         messageId,
         matrixEventId: input.message.matrixEventId,
+        ...(chatTranscriptionEnabled ? { chatTranscriptionEnabled: true } : {}),
       })
     );
   }
 
   getMessageById(messageId: string): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>> {
+    const lookupFailure = this.consumeMessageLookupFailure();
+    if (lookupFailure !== null) {
+      return Promise.resolve(err(lookupFailure));
+    }
+
     const stored = Array.from(this.stored.values()).find(
       (candidate) => this.toMessage(candidate).id === messageId
     );
@@ -764,6 +796,66 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       return Promise.resolve(ok(null));
     }
     return Promise.resolve(ok(this.toMessage(stored)));
+  }
+
+  updateChatTranscriptionSetting(
+    input: UpdatePrivateWhatsAppChatTranscriptionInput
+  ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
+    const updateFailure = this.consumeChatTranscriptionUpdateFailure();
+    if (updateFailure !== null) {
+      return Promise.resolve(err(updateFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const existing = this.buildChats().get(input.chatId);
+    if (existing === undefined || existing.sourceAccountId !== input.sourceAccountId) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' }));
+    }
+
+    const updated: PrivateWhatsAppChat = {
+      ...existing,
+      transcriptionEnabled: input.enabled,
+      transcriptionUpdatedAt: input.now,
+      updatedAt: input.now,
+    };
+    if (input.enabled && existing.transcriptionEnabledAt === undefined) {
+      updated.transcriptionEnabledAt = input.now;
+    } else if (existing.transcriptionEnabledAt !== undefined) {
+      updated.transcriptionEnabledAt = existing.transcriptionEnabledAt;
+    }
+    this.chatTranscriptionSettings.set(input.chatId, {
+      transcriptionEnabled: input.enabled,
+      transcriptionUpdatedAt: input.now,
+      ...(updated.transcriptionEnabledAt !== undefined
+        ? { transcriptionEnabledAt: updated.transcriptionEnabledAt }
+        : {}),
+    });
+    return Promise.resolve(ok(updated));
+  }
+
+  updateMessageTranscription(
+    input: UpdatePrivateWhatsAppMessageTranscriptionInput
+  ): Promise<Result<void, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const stored = Array.from(this.stored.values()).find(
+      (candidate) => this.toMessage(candidate).id === input.messageId
+    );
+    if (stored === undefined || stored.userId !== input.userId) {
+      return Promise.resolve(
+        err({ code: 'NOT_FOUND', message: 'Private WhatsApp message not found' })
+      );
+    }
+
+    this.messageTranscriptions.set(input.messageId, input.transcription);
+    return Promise.resolve(ok(undefined));
   }
 
   findMessages(
@@ -964,9 +1056,13 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   clear(): void {
     this.stored.clear();
     this.accounts.clear();
+    this.chatTranscriptionSettings.clear();
+    this.messageTranscriptions.clear();
     this.failNextError = null;
     this.failNextStoreError = null;
     this.failNextDataQueryError = null;
+    this.failNextMessageLookupError = null;
+    this.failNextChatTranscriptionUpdateError = null;
   }
 
   private consumeFailure(): WhatsAppError | null {
@@ -993,6 +1089,24 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     const error = this.failNextDataQueryError;
     this.failNextDataQueryError = null;
+    return error;
+  }
+
+  private consumeMessageLookupFailure(): WhatsAppError | null {
+    if (this.failNextMessageLookupError === null) {
+      return null;
+    }
+    const error = this.failNextMessageLookupError;
+    this.failNextMessageLookupError = null;
+    return error;
+  }
+
+  private consumeChatTranscriptionUpdateFailure(): WhatsAppError | null {
+    if (this.failNextChatTranscriptionUpdateError === null) {
+      return null;
+    }
+    const error = this.failNextChatTranscriptionUpdateError;
+    this.failNextChatTranscriptionUpdateError = null;
     return error;
   }
 
@@ -1041,6 +1155,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     if (input.message.media !== undefined) {
       message.media = input.message.media;
+    }
+    const transcription = this.messageTranscriptions.get(message.id);
+    if (transcription !== undefined) {
+      message.transcription = transcription;
     }
     return message;
   }
@@ -1200,6 +1318,16 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       }
       if (message.chatType !== undefined && message.chatType !== 'unknown') {
         existing.chatType = message.chatType;
+      }
+    }
+    for (const chat of chats.values()) {
+      const setting = this.chatTranscriptionSettings.get(chat.id);
+      if (setting !== undefined) {
+        chat.transcriptionEnabled = setting.transcriptionEnabled;
+        chat.transcriptionUpdatedAt = setting.transcriptionUpdatedAt;
+        if (setting.transcriptionEnabledAt !== undefined) {
+          chat.transcriptionEnabledAt = setting.transcriptionEnabledAt;
+        }
       }
     }
     return chats;

@@ -27,6 +27,8 @@ import type {
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
   StorePrivateWhatsAppMessageInput,
+  UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from '../../domain/whatsapp/index.js';
 import type { PrivateWhatsAppRepository } from '../../domain/whatsapp/index.js';
@@ -71,6 +73,8 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
     disableAccount,
     storeIncomingMessage,
     getMessageById,
+    updateChatTranscriptionSetting,
+    updateMessageTranscription,
     findMessages,
     findChats,
     findSenders,
@@ -344,6 +348,7 @@ async function storeIncomingMessage(
         chatId,
         messageId,
         matrixEventId: input.message.matrixEventId,
+        ...(chat.transcriptionEnabled === true ? { chatTranscriptionEnabled: true } : {}),
       };
     });
 
@@ -373,6 +378,93 @@ async function getMessageById(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to load private WhatsApp message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function updateChatTranscriptionSetting(
+  input: UpdatePrivateWhatsAppChatTranscriptionInput
+): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    const chatRef = db.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(input.chatId);
+    const outcome = await db.runTransaction(
+      async (
+        transaction
+      ): Promise<{ status: 'not_found' } | { status: 'ok'; chat: PrivateWhatsAppChat }> => {
+        const chatDoc = await transaction.get(chatRef);
+        if (!chatDoc.exists) {
+          return { status: 'not_found' };
+        }
+
+        const existingChat = normalizeChat(chatDoc.id, chatDoc.data());
+        if (existingChat.sourceAccountId !== input.sourceAccountId) {
+          return { status: 'not_found' };
+        }
+
+        const chat: PrivateWhatsAppChat = {
+          ...existingChat,
+          transcriptionEnabled: input.enabled,
+          transcriptionUpdatedAt: input.now,
+          updatedAt: input.now,
+          schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
+        };
+        if (input.enabled && existingChat.transcriptionEnabledAt === undefined) {
+          chat.transcriptionEnabledAt = input.now;
+        } else if (existingChat.transcriptionEnabledAt !== undefined) {
+          chat.transcriptionEnabledAt = existingChat.transcriptionEnabledAt;
+        }
+
+        transaction.set(chatRef, chat, { merge: true });
+        return { status: 'ok', chat };
+      }
+    );
+
+    if (outcome.status === 'not_found') {
+      return err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' });
+    }
+    return ok(outcome.chat);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to update private WhatsApp chat transcription setting: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function updateMessageTranscription(
+  input: UpdatePrivateWhatsAppMessageTranscriptionInput
+): Promise<Result<void, WhatsAppError>> {
+  try {
+    const db = getFirestore();
+    const messageRef = db.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(input.messageId);
+    const outcome = await db.runTransaction(async (transaction): Promise<'not_found' | 'ok'> => {
+      const messageDoc = await transaction.get(messageRef);
+      if (!messageDoc.exists) {
+        return 'not_found';
+      }
+
+      const rawMessage = messageDoc.data() as Omit<PrivateWhatsAppMessage, 'id'> & { id?: string };
+      const message: PrivateWhatsAppMessage = { ...rawMessage, id: rawMessage.id ?? messageDoc.id };
+      if (message.userId !== input.userId) {
+        return 'not_found';
+      }
+
+      transaction.update(messageRef, {
+        transcription: input.transcription,
+        schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
+      });
+      return 'ok';
+    });
+
+    if (outcome === 'not_found') {
+      return err({ code: 'NOT_FOUND', message: 'Private WhatsApp message not found' });
+    }
+    return ok(undefined);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to update private WhatsApp message transcription: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
@@ -690,6 +782,15 @@ function buildChat(
   } else if (existingChat?.avatarMxcUri !== undefined) {
     chat.avatarMxcUri = existingChat.avatarMxcUri;
   }
+  if (existingChat?.transcriptionEnabled !== undefined) {
+    chat.transcriptionEnabled = existingChat.transcriptionEnabled;
+  }
+  if (existingChat?.transcriptionEnabledAt !== undefined) {
+    chat.transcriptionEnabledAt = existingChat.transcriptionEnabledAt;
+  }
+  if (existingChat?.transcriptionUpdatedAt !== undefined) {
+    chat.transcriptionUpdatedAt = existingChat.transcriptionUpdatedAt;
+  }
 
   return chat;
 }
@@ -929,6 +1030,15 @@ function normalizeChat(id: string, data: Record<string, unknown> | undefined): P
       (participantKey): participantKey is string => typeof participantKey === 'string'
     );
     projected.participantCount = projected.participantCount ?? projected.participantKeys.length;
+  }
+  if (typeof chat?.transcriptionEnabled === 'boolean') {
+    projected.transcriptionEnabled = chat.transcriptionEnabled;
+  }
+  if (typeof chat?.transcriptionEnabledAt === 'string') {
+    projected.transcriptionEnabledAt = chat.transcriptionEnabledAt;
+  }
+  if (typeof chat?.transcriptionUpdatedAt === 'string') {
+    projected.transcriptionUpdatedAt = chat.transcriptionUpdatedAt;
   }
   return projected;
 }

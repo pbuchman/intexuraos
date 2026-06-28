@@ -5,10 +5,12 @@ import type {
   PrivateWhatsAppDeliveryMode,
   PrivateWhatsAppIngestEventResult,
   PrivateWhatsAppIngestResult,
+  PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessageDirection,
   PrivateWhatsAppMessageType,
   StorePrivateWhatsAppMessageInput,
 } from '../models/PrivateWhatsApp.js';
+import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { PrivateWhatsAppRepository } from '../ports/privateWhatsAppRepository.js';
 import type { Logger } from '../utils/logger.js';
 
@@ -60,6 +62,7 @@ export interface IngestPrivateWhatsAppEventInput {
 
 export interface IngestPrivateWhatsAppEventsDeps {
   privateWhatsAppRepository: PrivateWhatsAppRepository;
+  eventPublisher: EventPublisherPort;
 }
 
 type ParseEventResult =
@@ -137,6 +140,17 @@ export class IngestPrivateWhatsAppEventsUseCase {
         messageId: outcome.messageId,
       };
       messages.push(result);
+
+      const publishResult = await publishPrivateAudioStoredIfNeeded({
+        event,
+        outcome,
+        storeInput,
+        eventPublisher: this.deps.eventPublisher,
+        logger,
+      });
+      if (!publishResult.ok) {
+        return err(publishResult.error);
+      }
     }
 
     const summary = summarize(messages);
@@ -152,6 +166,56 @@ export class IngestPrivateWhatsAppEventsUseCase {
     );
     return ok(summary);
   }
+}
+
+interface PublishPrivateAudioStoredInput {
+  event: IngestPrivateWhatsAppEventInput;
+  outcome: PrivateWhatsAppIngestOutcome;
+  storeInput: StorePrivateWhatsAppMessageInput;
+  eventPublisher: EventPublisherPort;
+  logger: Logger;
+}
+
+async function publishPrivateAudioStoredIfNeeded(
+  input: PublishPrivateAudioStoredInput
+): Promise<Result<void, WhatsAppError>> {
+  const { event, outcome, storeInput, eventPublisher, logger } = input;
+  if (outcome.outcome !== 'created' || outcome.chatTranscriptionEnabled !== true) {
+    return ok(undefined);
+  }
+  if (storeInput.message.type !== 'audio') {
+    return ok(undefined);
+  }
+  const media = storeInput.message.media;
+  const gcsPath = media?.gcsPath;
+  const mimeType = media?.storedMimeType ?? media?.mimeType;
+  if (media?.storageStatus !== 'stored' || gcsPath === undefined || mimeType === undefined) {
+    return ok(undefined);
+  }
+
+  const publishResult = await eventPublisher.publishAudioStored({
+    type: 'whatsapp.audio.stored',
+    messageSource: 'private_whatsapp',
+    userId: storeInput.userId,
+    messageId: outcome.messageId,
+    mediaId: media.mxcUri,
+    gcsPath,
+    mimeType,
+    timestamp: new Date().toISOString(),
+  });
+  if (!publishResult.ok) {
+    logger.error(
+      {
+        matrixEventId: event.matrixEventId,
+        sourceAccountId: storeInput.sourceAccountId,
+        messageId: outcome.messageId,
+        error: publishResult.error,
+      },
+      'Failed to publish private WhatsApp audio transcription event'
+    );
+    return err(publishResult.error);
+  }
+  return ok(undefined);
 }
 
 function parseEvent(rawEvent: unknown): ParseEventResult {

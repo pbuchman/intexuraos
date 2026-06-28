@@ -6,6 +6,7 @@ import {
   listPrivateWhatsAppChatMessages,
   listPrivateWhatsAppChats,
   type ListPrivateWhatsAppChatMessagesOptions,
+  updatePrivateWhatsAppChatTranscription,
 } from '@/services/whatsappApi';
 import type { PrivateWhatsAppChat, PrivateWhatsAppMessage } from '@/types';
 
@@ -28,11 +29,13 @@ export interface UsePrivateWhatsAppLogResult {
   loadingMoreChats: boolean;
   loadingMoreMessages: boolean;
   refreshing: boolean;
+  transcriptionToggleChatId: string | undefined;
   error: string | null;
   setChatSearch: (value: string) => void;
   selectChat: (chatId: string) => void;
   selectDay: (dayKey: string) => void;
   clearDay: () => void;
+  setChatTranscriptionEnabled: (chatId: string, enabled: boolean) => Promise<void>;
   refresh: () => Promise<void>;
   loadMoreChats: () => Promise<void>;
   loadMoreMessages: () => Promise<void>;
@@ -56,6 +59,9 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
   const [loadingMoreChats, setLoadingMoreChats] = useState(false);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [transcriptionToggleChatId, setTranscriptionToggleChatId] = useState<string | undefined>(
+    undefined
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -229,6 +235,25 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
     }
   }, [setSelectionParams]);
 
+  const setChatTranscriptionEnabled = useCallback(
+    async (chatId: string, enabled: boolean): Promise<void> => {
+      setTranscriptionToggleChatId(chatId);
+      setError(null);
+      try {
+        const token = await getAccessToken();
+        const updatedChat = await updatePrivateWhatsAppChatTranscription(token, chatId, {
+          enabled,
+        });
+        setChats((prev) => prev.map((chat) => (chat.id === chatId ? updatedChat : chat)));
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to update private WhatsApp transcription setting'));
+      } finally {
+        setTranscriptionToggleChatId(undefined);
+      }
+    },
+    [getAccessToken]
+  );
+
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId),
     [chats, selectedChatId]
@@ -267,11 +292,13 @@ export function usePrivateWhatsAppLog(): UsePrivateWhatsAppLogResult {
     loadingMoreChats,
     loadingMoreMessages,
     refreshing,
+    transcriptionToggleChatId,
     error,
     setChatSearch,
     selectChat,
     selectDay,
     clearDay,
+    setChatTranscriptionEnabled,
     refresh,
     loadMoreChats,
     loadMoreMessages,

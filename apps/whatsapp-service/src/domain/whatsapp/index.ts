@@ -61,6 +61,9 @@ export type {
   PrivateWhatsAppMessageQueryResult,
   PrivateWhatsAppMessageInput,
   PrivateWhatsAppMessageType,
+  PrivateWhatsAppTranscriptionError,
+  PrivateWhatsAppTranscriptionState,
+  PrivateWhatsAppTranscriptionStatus,
   PrivateWhatsAppSender,
   PrivateWhatsAppSenderQueryInput,
   PrivateWhatsAppSenderQueryResult,
@@ -69,6 +72,8 @@ export type {
   PrivateWhatsAppSenderDayQueryResult,
   PrivateWhatsAppSummaryStatus,
   StorePrivateWhatsAppMessageInput,
+  UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from './models/PrivateWhatsApp.js';
 

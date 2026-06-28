@@ -77,6 +77,7 @@ describe('Pub/Sub Routes', () => {
   let prefs: FakeNotificationPreferencesRepository;
   let eventPublisher: FakeEventPublisher;
   let whatsappCloudApi: FakeWhatsAppCloudApiPort;
+  let privateWhatsAppRepository: FakePrivateWhatsAppRepository;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
@@ -88,6 +89,7 @@ describe('Pub/Sub Routes', () => {
     prefs = new FakeNotificationPreferencesRepository();
     eventPublisher = new FakeEventPublisher();
     whatsappCloudApi = new FakeWhatsAppCloudApiPort();
+    privateWhatsAppRepository = new FakePrivateWhatsAppRepository();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
@@ -102,7 +104,7 @@ describe('Pub/Sub Routes', () => {
       outboundMessageRepository,
       phoneVerificationRepository: new FakePhoneVerificationRepository(),
       notificationPreferencesRepository: prefs,
-      privateWhatsAppRepository: new FakePrivateWhatsAppRepository(),
+      privateWhatsAppRepository,
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -1438,6 +1440,52 @@ describe('Pub/Sub Routes', () => {
       });
     };
 
+    const storePrivateAudioMessage = async (
+      overrides: {
+        matrixEventId?: string;
+        userId?: string;
+        sourceAccountId?: string;
+      } = {}
+    ): Promise<string> => {
+      const matrixEventId = overrides.matrixEventId ?? '$private-audio';
+      const userId = overrides.userId ?? 'user-private';
+      const stored = await privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: overrides.sourceAccountId ?? 'private-source-123',
+        userId,
+        deliveryMode: 'live',
+        receivedAt: '2026-06-28T09:59:30.000Z',
+        chat: {
+          matrixRoomId: '!private-room:matrix.example',
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message: {
+          matrixRoomId: '!private-room:matrix.example',
+          matrixEventId,
+          matrixSenderId: '@alice:matrix.example',
+          senderKey: 'matrix:@alice:matrix.example',
+          direction: 'incoming',
+          type: 'audio',
+          eventTimestamp: '2026-06-28T09:59:00.000Z',
+          eventDayKey: '2026-06-28',
+          eventTimeZone: 'Europe/Warsaw',
+          media: {
+            mxcUri: `mxc://home-dev/${matrixEventId.replace('$', '')}`,
+            mimeType: 'audio/ogg',
+            storageStatus: 'stored',
+            gcsPath: `whatsapp/private/${userId}/${matrixEventId.replace('$', '')}/audio.ogg`,
+          },
+          rawMatrixEvent: {
+            type: 'm.room.message',
+            event_id: matrixEventId,
+          },
+        },
+      });
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) throw new Error(stored.error.message);
+      return stored.value.messageId;
+    };
+
     it('returns 401 when auth is missing', async () => {
       const body = createPubSubBody({
         type: 'srt.transcription.completed',
@@ -1521,6 +1569,33 @@ describe('Pub/Sub Routes', () => {
         error: { code: string; message: string };
       };
       expect(responseBody.error.message).toBe('Unexpected event type');
+    });
+
+    it('returns 400 when the transcription message source is unexpected', async () => {
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'email',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Unexpected transcription message source');
     });
 
     it('returns 500 when the stored audio lookup fails', async () => {
@@ -1771,6 +1846,341 @@ describe('Pub/Sub Routes', () => {
           expiresAt: expect.any(Number),
         },
       ]);
+    });
+
+    it('stores a completed private WhatsApp transcription without Intex ingest or WhatsApp replies', async () => {
+      const stored = await privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'private-source-123',
+        userId: 'user-private',
+        deliveryMode: 'live',
+        receivedAt: '2026-06-28T09:59:30.000Z',
+        chat: {
+          matrixRoomId: '!private-room:matrix.example',
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message: {
+          matrixRoomId: '!private-room:matrix.example',
+          matrixEventId: '$private-audio',
+          matrixSenderId: '@alice:matrix.example',
+          senderKey: 'matrix:@alice:matrix.example',
+          direction: 'incoming',
+          type: 'audio',
+          eventTimestamp: '2026-06-28T09:59:00.000Z',
+          eventDayKey: '2026-06-28',
+          eventTimeZone: 'Europe/Warsaw',
+          media: {
+            mxcUri: 'mxc://home-dev/private-audio',
+            mimeType: 'audio/ogg',
+            storageStatus: 'stored',
+            gcsPath: 'whatsapp/private/user-private/private-audio/audio.ogg',
+          },
+          rawMatrixEvent: {
+            type: 'm.room.message',
+            event_id: '$private-audio',
+          },
+        },
+      });
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) throw new Error(stored.error.message);
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId: stored.value.messageId,
+        jobId: 'job-private-123',
+        status: 'completed',
+        transcript: 'Private voice note.',
+        summary: 'Voice note summary.',
+        detectedLanguage: 'en',
+        timestamp: '2026-06-28T10:04:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const privateMessage = await privateWhatsAppRepository.getMessageById(stored.value.messageId);
+      expect(privateMessage.ok).toBe(true);
+      if (!privateMessage.ok) throw new Error(privateMessage.error.message);
+      expect(privateMessage.value?.transcription).toEqual({
+        status: 'completed',
+        jobId: 'job-private-123',
+        text: 'Private voice note.',
+        summary: 'Voice note summary.',
+        detectedLanguage: 'en',
+        completedAt: '2026-06-28T10:04:00.000Z',
+      });
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    });
+
+    it('stores a completed private WhatsApp transcription without optional metadata', async () => {
+      const messageId = await storePrivateAudioMessage({
+        matrixEventId: '$private-audio-minimal',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId,
+        jobId: 'job-private-minimal',
+        status: 'completed',
+        transcript: 'Private voice note without metadata.',
+        timestamp: '2026-06-28T10:04:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const privateMessage = await privateWhatsAppRepository.getMessageById(messageId);
+      expect(privateMessage.ok).toBe(true);
+      if (!privateMessage.ok) throw new Error(privateMessage.error.message);
+      expect(privateMessage.value?.transcription).toEqual({
+        status: 'completed',
+        jobId: 'job-private-minimal',
+        text: 'Private voice note without metadata.',
+        completedAt: '2026-06-28T10:04:00.000Z',
+      });
+    });
+
+    it('returns 400 when a completed private WhatsApp transcription has no transcript text', async () => {
+      const messageId = await storePrivateAudioMessage({
+        matrixEventId: '$private-audio-blank-transcript',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId,
+        jobId: 'job-private-blank-transcript',
+        status: 'completed',
+        transcript: '   ',
+        timestamp: '2026-06-28T10:04:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const privateMessage = await privateWhatsAppRepository.getMessageById(messageId);
+      expect(privateMessage.ok).toBe(true);
+      if (!privateMessage.ok) throw new Error(privateMessage.error.message);
+      expect(privateMessage.value?.transcription).toBeUndefined();
+    });
+
+    it('returns 500 when private WhatsApp transcription lookup fails', async () => {
+      privateWhatsAppRepository.failNextMessageLookup({
+        code: 'PERSISTENCE_ERROR',
+        message: 'Simulated private lookup failure',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId: 'missing-private-message',
+        jobId: 'job-private-lookup-failure',
+        status: 'completed',
+        transcript: 'Private voice note.',
+        timestamp: '2026-06-28T10:04:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Failed to load private audio message');
+    });
+
+    it('acks private WhatsApp transcription completions when the message is missing', async () => {
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId: 'missing-private-message',
+        jobId: 'job-private-missing',
+        status: 'completed',
+        transcript: 'Private voice note.',
+        timestamp: '2026-06-28T10:04:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    });
+
+    it('stores a failed private WhatsApp transcription without Intex ingest or WhatsApp replies', async () => {
+      const stored = await privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'private-source-123',
+        userId: 'user-private',
+        deliveryMode: 'live',
+        receivedAt: '2026-06-28T09:59:30.000Z',
+        chat: {
+          matrixRoomId: '!private-room:matrix.example',
+          type: 'direct',
+        },
+        message: {
+          matrixRoomId: '!private-room:matrix.example',
+          matrixEventId: '$private-audio-failed',
+          matrixSenderId: '@alice:matrix.example',
+          senderKey: 'matrix:@alice:matrix.example',
+          direction: 'incoming',
+          type: 'audio',
+          eventTimestamp: '2026-06-28T09:59:00.000Z',
+          eventDayKey: '2026-06-28',
+          eventTimeZone: 'Europe/Warsaw',
+          media: {
+            mxcUri: 'mxc://home-dev/private-audio-failed',
+            mimeType: 'audio/ogg',
+            storageStatus: 'stored',
+            gcsPath: 'whatsapp/private/user-private/private-audio-failed/audio.ogg',
+          },
+          rawMatrixEvent: {
+            type: 'm.room.message',
+            event_id: '$private-audio-failed',
+          },
+        },
+      });
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) throw new Error(stored.error.message);
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId: stored.value.messageId,
+        jobId: 'job-private-456',
+        status: 'failed',
+        error: 'Audio format was not supported',
+        timestamp: '2026-06-28T10:05:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const privateMessage = await privateWhatsAppRepository.getMessageById(stored.value.messageId);
+      expect(privateMessage.ok).toBe(true);
+      if (!privateMessage.ok) throw new Error(privateMessage.error.message);
+      expect(privateMessage.value?.transcription).toEqual({
+        status: 'failed',
+        jobId: 'job-private-456',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Audio format was not supported',
+        },
+        completedAt: '2026-06-28T10:05:00.000Z',
+      });
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    });
+
+    it('uses a default private WhatsApp transcription error when a failed event has no error text', async () => {
+      const messageId = await storePrivateAudioMessage({
+        matrixEventId: '$private-audio-default-error',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId,
+        jobId: 'job-private-default-error',
+        status: 'failed',
+        timestamp: '2026-06-28T10:05:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const privateMessage = await privateWhatsAppRepository.getMessageById(messageId);
+      expect(privateMessage.ok).toBe(true);
+      if (!privateMessage.ok) throw new Error(privateMessage.error.message);
+      expect(privateMessage.value?.transcription).toEqual({
+        status: 'failed',
+        jobId: 'job-private-default-error',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Transcription failed',
+        },
+        completedAt: '2026-06-28T10:05:00.000Z',
+      });
+    });
+
+    it('returns 500 when storing a private WhatsApp transcription fails', async () => {
+      const messageId = await storePrivateAudioMessage({
+        matrixEventId: '$private-audio-update-failure',
+      });
+      privateWhatsAppRepository.failNext({
+        code: 'PERSISTENCE_ERROR',
+        message: 'Simulated private transcription update failure',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId,
+        jobId: 'job-private-update-failure',
+        status: 'completed',
+        transcript: 'Private voice note.',
+        timestamp: '2026-06-28T10:04:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Failed to update private transcription');
     });
 
     it('stores a failed transcription and replies with the failure without sending to Intex', async () => {

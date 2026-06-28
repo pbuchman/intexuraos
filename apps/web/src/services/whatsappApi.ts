@@ -169,6 +169,10 @@ export interface UpsertPrivateWhatsAppAccountRequest {
   phoneNumber: string;
 }
 
+export interface UpdatePrivateWhatsAppChatTranscriptionRequest {
+  enabled: boolean;
+}
+
 function normalizePrivateMediaAccessUrl(url: string): string {
   if (!url.startsWith('/private/')) {
     return url;
@@ -320,6 +324,23 @@ export async function disablePrivateWhatsAppAccount(
     '/private/account',
     accessToken,
     { method: 'DELETE' }
+  );
+}
+
+export async function updatePrivateWhatsAppChatTranscription(
+  accessToken: string,
+  chatId: string,
+  request: UpdatePrivateWhatsAppChatTranscriptionRequest
+): Promise<PrivateWhatsAppChatsResponse['chats'][number]> {
+  const encodedChatId = encodeURIComponent(chatId);
+  return await apiRequest<PrivateWhatsAppChatsResponse['chats'][number]>(
+    config.whatsappServiceUrl,
+    `/private/chats/${encodedChatId}/transcription`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: request,
+    }
   );
 }
 
