@@ -167,6 +167,37 @@ describe('MessageItem', () => {
     expect(onNoteClick).not.toHaveBeenCalled();
   });
 
+  it('opens the image preview when clicking an image row with media', () => {
+    const onImageClick = vi.fn();
+    const onNoteClick = vi.fn();
+
+    render(
+      <MessageItem
+        message={createMessage({
+          id: 'image-1',
+          mediaType: 'image',
+          hasMedia: true,
+          text: '',
+          caption: 'Reference image caption',
+        })}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={onImageClick}
+        onNoteClick={onNoteClick}
+        onTranscriptionClick={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    const row = screen.getByTestId('message-item-row');
+    expect(row).toHaveClass('cursor-pointer');
+
+    fireEvent.click(row);
+
+    expect(onImageClick).toHaveBeenCalledWith('image-1');
+    expect(onNoteClick).not.toHaveBeenCalled();
+  });
+
   it('shows a transcription action for completed audio messages and hides it for processing audio messages', () => {
     const { rerender } = render(
       <MessageItem
@@ -262,14 +293,15 @@ describe('MessageItem', () => {
     ).toBeInTheDocument();
   });
 
-  it('calls onNoteClick when clicking a text message row', () => {
+  it('does not open a modal when clicking a text message row', () => {
+    const onImageClick = vi.fn();
     const onNoteClick = vi.fn();
     render(
       <MessageItem
         message={createMessage()}
         accessToken="token"
         onDelete={vi.fn()}
-        onImageClick={vi.fn()}
+        onImageClick={onImageClick}
         onNoteClick={onNoteClick}
         onTranscriptionClick={vi.fn()}
         isDeleting={false}
@@ -277,13 +309,45 @@ describe('MessageItem', () => {
     );
 
     const row = screen.getByTestId('message-item-row');
+    expect(row).not.toHaveClass('cursor-pointer');
+
     fireEvent.click(row);
-    expect(onNoteClick).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'message-1', mediaType: 'text' })
-    );
+    expect(onImageClick).not.toHaveBeenCalled();
+    expect(onNoteClick).not.toHaveBeenCalled();
   });
 
-  it('does not call onNoteClick when clicking an audio message row', () => {
+  it('does not open the image preview when clicking an image row without media', () => {
+    const onImageClick = vi.fn();
+    const onNoteClick = vi.fn();
+    render(
+      <MessageItem
+        message={createMessage({
+          id: 'image-without-media',
+          mediaType: 'image',
+          hasMedia: false,
+          text: '',
+          caption: 'Image metadata without stored media',
+        })}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={onImageClick}
+        onNoteClick={onNoteClick}
+        onTranscriptionClick={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    const row = screen.getByTestId('message-item-row');
+    expect(row).not.toHaveClass('cursor-pointer');
+
+    fireEvent.click(row);
+
+    expect(onImageClick).not.toHaveBeenCalled();
+    expect(onNoteClick).not.toHaveBeenCalled();
+  });
+
+  it('does not open a modal when clicking an audio message row', () => {
+    const onImageClick = vi.fn();
     const onNoteClick = vi.fn();
     render(
       <MessageItem
@@ -297,7 +361,7 @@ describe('MessageItem', () => {
         })}
         accessToken="token"
         onDelete={vi.fn()}
-        onImageClick={vi.fn()}
+        onImageClick={onImageClick}
         onNoteClick={onNoteClick}
         onTranscriptionClick={vi.fn()}
         isDeleting={false}
@@ -305,7 +369,10 @@ describe('MessageItem', () => {
     );
 
     const row = screen.getByTestId('message-item-row');
+    expect(row).not.toHaveClass('cursor-pointer');
+
     fireEvent.click(row);
+    expect(onImageClick).not.toHaveBeenCalled();
     expect(onNoteClick).not.toHaveBeenCalled();
   });
 });
