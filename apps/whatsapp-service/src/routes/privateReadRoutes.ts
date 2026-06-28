@@ -43,6 +43,14 @@ interface PrivateChatMessagesParams {
   chatId: string;
 }
 
+interface PrivateChatTranscriptionParams {
+  chatId: string;
+}
+
+interface PrivateChatTranscriptionBody {
+  enabled: boolean;
+}
+
 interface PrivateSenderDaysQuerystring {
   senderKey: string;
   fromDay?: string;
@@ -163,6 +171,17 @@ function getPublicChatMessagesLogMetadata(
   };
 }
 
+function getPrivateChatTranscriptionLogMetadata(
+  params: Partial<PrivateChatTranscriptionParams>,
+  body: Partial<PrivateChatTranscriptionBody>
+): Record<string, unknown> {
+  return {
+    route: 'whatsapp_private_chat_transcription_update',
+    hasChatId: typeof params.chatId === 'string',
+    enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+  };
+}
+
 function getPublicMessagesLogMetadata(
   query: Partial<PrivateMessagesQuerystring>
 ): Record<string, unknown> {
@@ -259,6 +278,9 @@ function toPublicChat(chat: PrivateWhatsAppChat): PublicPrivateWhatsAppChat {
     avatarMxcUri: chat.avatarMxcUri,
     messageCount: chat.messageCount,
     participantCount: chat.participantCount,
+    transcriptionEnabled: chat.transcriptionEnabled,
+    transcriptionEnabledAt: chat.transcriptionEnabledAt,
+    transcriptionUpdatedAt: chat.transcriptionUpdatedAt,
     firstSeenAt: chat.firstSeenAt,
     lastEventAt: chat.lastEventAt,
     updatedAt: chat.updatedAt,
@@ -308,6 +330,7 @@ function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsApp
     receivedAt: message.receivedAt,
     ingestedAt: message.ingestedAt,
     deliveryMode: message.deliveryMode,
+    transcription: message.transcription,
     schemaVersion: message.schemaVersion,
   }) as PublicPrivateWhatsAppMessage;
 }
@@ -582,6 +605,99 @@ export function createPrivateReadRoutes(): FastifyPluginCallback {
           response.nextCursor = result.value.nextCursor;
         }
         return await reply.ok(response);
+      }
+    );
+
+    fastify.patch<{
+      Params: PrivateChatTranscriptionParams;
+      Body: PrivateChatTranscriptionBody;
+    }>(
+      '/private/chats/:chatId/transcription',
+      {
+        attachValidation: true,
+        schema: {
+          operationId: 'updatePrivateWhatsAppChatTranscription',
+          summary: 'Update private WhatsApp chat transcription settings',
+          tags: ['whatsapp'],
+          params: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              chatId: { type: 'string', minLength: 1 },
+            },
+            required: ['chatId'],
+          },
+          body: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              enabled: { type: 'boolean' },
+            },
+            required: ['enabled'],
+          },
+          response: {
+            200: {
+              description: 'Private WhatsApp chat transcription settings updated successfully',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: true },
+                data: { type: 'object', additionalProperties: true },
+              },
+              required: ['success', 'data'],
+            },
+            ...privateReadErrorResponses(),
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{
+          Params: PrivateChatTranscriptionParams;
+          Body: PrivateChatTranscriptionBody;
+        }>,
+        reply: FastifyReply
+      ) => {
+        logIncomingRequest(request, {
+          message: 'Received request to PATCH /whatsapp/private/chats/:chatId/transcription',
+          bodyPreviewLength: 0,
+          additionalFields: getPrivateChatTranscriptionLogMetadata(
+            request.params,
+            request.body
+          ),
+        });
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
+          return;
+        }
+        const validatedRequest = request as ValidatedRequest;
+        if (validatedRequest.validationError !== undefined) {
+          return await reply.fail('INVALID_REQUEST', 'Validation failed');
+        }
+        const account = await resolveActivePrivateAccount(user, reply);
+        if (account === null) {
+          return;
+        }
+
+        const result = await getServices().privateWhatsAppRepository.updateChatTranscriptionSetting({
+          sourceAccountId: account.sourceAccountId,
+          chatId: request.params.chatId,
+          enabled: request.body.enabled,
+          now: new Date().toISOString(),
+        });
+        if (!result.ok) {
+          if (result.error.code === 'NOT_FOUND') {
+            return await reply.fail('NOT_FOUND', result.error.message);
+          }
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+        request.log.info(
+          {
+            route: 'whatsapp_private_chat_transcription_update',
+            chatId: result.value.id,
+            transcriptionEnabled: result.value.transcriptionEnabled,
+          },
+          'Private WhatsApp chat transcription settings updated'
+        );
+        return await reply.ok(toPublicChat(result.value));
       }
     );
 

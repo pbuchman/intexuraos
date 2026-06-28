@@ -5,6 +5,7 @@ import type {
   PrivateWhatsAppAccount,
   PrivateWhatsAppAggregateRebuildInput,
   PrivateWhatsAppAggregateRebuildResult,
+  PrivateWhatsAppChat,
   PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppChatQueryResult,
   PrivateWhatsAppIngestOutcome,
@@ -16,6 +17,8 @@ import type {
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
   StorePrivateWhatsAppMessageInput,
+  UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from '../models/PrivateWhatsApp.js';
 
@@ -38,6 +41,12 @@ export interface PrivateWhatsAppRepository {
   getMessageById(
     messageId: string
   ): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>>;
+  updateChatTranscriptionSetting(
+    input: UpdatePrivateWhatsAppChatTranscriptionInput
+  ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>>;
+  updateMessageTranscription(
+    input: UpdatePrivateWhatsAppMessageTranscriptionInput
+  ): Promise<Result<void, WhatsAppError>>;
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>>;

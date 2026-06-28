@@ -116,6 +116,290 @@ describe('privateWhatsAppRepository', () => {
     expect(result.value).toBeNull();
   });
 
+  it('updates a private WhatsApp chat transcription setting and preserves it across later messages', async () => {
+    const input = createStoreInput();
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const chatId = deterministicId(input.sourceAccountId, input.chat.matrixRoomId);
+    const enabled = await repository.updateChatTranscriptionSetting({
+      sourceAccountId: input.sourceAccountId,
+      chatId,
+      enabled: true,
+      now: '2026-06-22T10:05:00.000Z',
+    });
+    expect(enabled.ok).toBe(true);
+    if (!enabled.ok) throw new Error(enabled.error.message);
+    expect(enabled.value).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: true,
+      transcriptionEnabledAt: '2026-06-22T10:05:00.000Z',
+      transcriptionUpdatedAt: '2026-06-22T10:05:00.000Z',
+    });
+
+    const later = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...input.message,
+          matrixEventId: '$event-2',
+          text: 'later message',
+          eventTimestamp: '2026-06-22T10:06:00.000Z',
+        },
+      })
+    );
+    expect(later.ok).toBe(true);
+    if (!later.ok) throw new Error(later.error.message);
+
+    const chats = await repository.findChats({
+      sourceAccountId: input.sourceAccountId,
+      limit: 10,
+    });
+    expect(chats.ok).toBe(true);
+    if (!chats.ok) throw new Error(chats.error.message);
+    expect(chats.value.chats[0]).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: true,
+      transcriptionEnabledAt: '2026-06-22T10:05:00.000Z',
+      transcriptionUpdatedAt: '2026-06-22T10:05:00.000Z',
+      messageCount: 2,
+    });
+  });
+
+  it('keeps the original private WhatsApp chat transcription enabled timestamp when disabling', async () => {
+    const input = createStoreInput();
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const chatId = deterministicId(input.sourceAccountId, input.chat.matrixRoomId);
+    const enabled = await repository.updateChatTranscriptionSetting({
+      sourceAccountId: input.sourceAccountId,
+      chatId,
+      enabled: true,
+      now: '2026-06-22T10:05:00.000Z',
+    });
+    expect(enabled.ok).toBe(true);
+    if (!enabled.ok) throw new Error(enabled.error.message);
+
+    const disabled = await repository.updateChatTranscriptionSetting({
+      sourceAccountId: input.sourceAccountId,
+      chatId,
+      enabled: false,
+      now: '2026-06-22T10:08:00.000Z',
+    });
+
+    expect(disabled.ok).toBe(true);
+    if (!disabled.ok) throw new Error(disabled.error.message);
+    expect(disabled.value).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: false,
+      transcriptionEnabledAt: '2026-06-22T10:05:00.000Z',
+      transcriptionUpdatedAt: '2026-06-22T10:08:00.000Z',
+    });
+  });
+
+  it('leaves private WhatsApp chat transcription enabled timestamp unset when disabling before first enable', async () => {
+    const input = createStoreInput();
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const chatId = deterministicId(input.sourceAccountId, input.chat.matrixRoomId);
+    const disabled = await repository.updateChatTranscriptionSetting({
+      sourceAccountId: input.sourceAccountId,
+      chatId,
+      enabled: false,
+      now: '2026-06-22T10:08:00.000Z',
+    });
+
+    expect(disabled.ok).toBe(true);
+    if (!disabled.ok) throw new Error(disabled.error.message);
+    expect(disabled.value).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: false,
+      transcriptionUpdatedAt: '2026-06-22T10:08:00.000Z',
+    });
+    expect(disabled.value.transcriptionEnabledAt).toBeUndefined();
+  });
+
+  it('returns not found for missing or cross-account private WhatsApp chat transcription updates', async () => {
+    const missing = await repository.updateChatTranscriptionSetting({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: 'missing-chat',
+      enabled: true,
+      now: '2026-06-22T10:05:00.000Z',
+    });
+    expect(missing.ok).toBe(false);
+    if (missing.ok) throw new Error('Expected missing chat to be rejected');
+    expect(missing.error.code).toBe('NOT_FOUND');
+
+    const input = createStoreInput();
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const chatId = deterministicId(input.sourceAccountId, input.chat.matrixRoomId);
+    const wrongSource = await repository.updateChatTranscriptionSetting({
+      sourceAccountId: 'other-private-source',
+      chatId,
+      enabled: true,
+      now: '2026-06-22T10:05:00.000Z',
+    });
+
+    expect(wrongSource.ok).toBe(false);
+    if (wrongSource.ok) throw new Error('Expected cross-account chat update to be rejected');
+    expect(wrongSource.error.code).toBe('NOT_FOUND');
+  });
+
+  it('stores private WhatsApp message transcription success and failure states', async () => {
+    const input = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        type: 'audio',
+        media: {
+          mxcUri: 'mxc://matrix.example/audio',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/audio-message/audio.ogg',
+        },
+      },
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const completed = await repository.updateMessageTranscription({
+      userId: 'user-123',
+      messageId: stored.value.messageId,
+      transcription: {
+        status: 'completed',
+        jobId: 'job-private-1',
+        text: 'Pick up milk.',
+        summary: 'Errand reminder.',
+        detectedLanguage: 'en',
+        completedAt: '2026-06-22T10:10:00.000Z',
+      },
+    });
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) throw new Error(completed.error.message);
+
+    const completedMessage = await repository.getMessageById(stored.value.messageId);
+    expect(completedMessage.ok).toBe(true);
+    if (!completedMessage.ok) throw new Error(completedMessage.error.message);
+    expect(completedMessage.value?.transcription).toEqual({
+      status: 'completed',
+      jobId: 'job-private-1',
+      text: 'Pick up milk.',
+      summary: 'Errand reminder.',
+      detectedLanguage: 'en',
+      completedAt: '2026-06-22T10:10:00.000Z',
+    });
+
+    const failed = await repository.updateMessageTranscription({
+      userId: 'user-123',
+      messageId: stored.value.messageId,
+      transcription: {
+        status: 'failed',
+        jobId: 'job-private-2',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Audio format was not supported',
+        },
+        completedAt: '2026-06-22T10:11:00.000Z',
+      },
+    });
+    expect(failed.ok).toBe(true);
+    if (!failed.ok) throw new Error(failed.error.message);
+
+    const failedMessage = await repository.getMessageById(stored.value.messageId);
+    expect(failedMessage.ok).toBe(true);
+    if (!failedMessage.ok) throw new Error(failedMessage.error.message);
+    expect(failedMessage.value?.transcription).toEqual({
+      status: 'failed',
+      jobId: 'job-private-2',
+      error: {
+        code: 'TRANSCRIPTION_FAILED',
+        message: 'Audio format was not supported',
+      },
+      completedAt: '2026-06-22T10:11:00.000Z',
+    });
+  });
+
+  it('returns not found for missing or cross-user private WhatsApp message transcription updates', async () => {
+    const missing = await repository.updateMessageTranscription({
+      userId: 'user-123',
+      messageId: 'missing-message',
+      transcription: {
+        status: 'failed',
+        jobId: 'job-missing',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Missing message',
+        },
+        completedAt: '2026-06-22T10:11:00.000Z',
+      },
+    });
+    expect(missing.ok).toBe(false);
+    if (missing.ok) throw new Error('Expected missing message update to be rejected');
+    expect(missing.error.code).toBe('NOT_FOUND');
+
+    const stored = await repository.storeIncomingMessage(createStoreInput());
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const wrongUser = await repository.updateMessageTranscription({
+      userId: 'other-user',
+      messageId: stored.value.messageId,
+      transcription: {
+        status: 'failed',
+        jobId: 'job-wrong-user',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Wrong user',
+        },
+        completedAt: '2026-06-22T10:12:00.000Z',
+      },
+    });
+
+    expect(wrongUser.ok).toBe(false);
+    if (wrongUser.ok) throw new Error('Expected cross-user message update to be rejected');
+    expect(wrongUser.error.code).toBe('NOT_FOUND');
+  });
+
+  it('updates transcription on legacy private WhatsApp message documents that do not store their id', async () => {
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('legacy-private-message')
+      .set({
+        userId: 'user-123',
+      });
+
+    const result = await repository.updateMessageTranscription({
+      userId: 'user-123',
+      messageId: 'legacy-private-message',
+      transcription: {
+        status: 'completed',
+        jobId: 'job-legacy',
+        text: 'Legacy transcript.',
+        completedAt: '2026-06-22T10:11:00.000Z',
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const doc = await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('legacy-private-message')
+      .get();
+    expect(doc.data()?.['transcription']).toEqual({
+      status: 'completed',
+      jobId: 'job-legacy',
+      text: 'Legacy transcript.',
+      completedAt: '2026-06-22T10:11:00.000Z',
+    });
+  });
+
   it('projects sparse and legacy private WhatsApp account documents safely', async () => {
     await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('legacy-user').set({});
     await fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('disabled-user').set({
