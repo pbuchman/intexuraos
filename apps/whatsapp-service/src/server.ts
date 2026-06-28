@@ -109,6 +109,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
+    audioStoredTopic: config.audioStoredTopic,
     intexMessageIngestTopic: config.intexMessageIngestTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',

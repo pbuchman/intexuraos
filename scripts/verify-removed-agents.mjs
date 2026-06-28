@@ -79,7 +79,6 @@ const REMOVED_PATTERNS = [
   /\/internal\/actions/g,
   /\/internal\/retry-pending/g,
   /\/internal\/code\/process/g,
-  /\/internal\/whatsapp\/pubsub\/transcription-completed/g,
   /command\.ingest/g,
   /approval\.reply/g,
   /commands-ingest/g,

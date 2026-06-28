@@ -85,13 +85,15 @@ const EVENTS = {
     },
   },
   transcription: {
-    topic: 'whatsapp-transcription',
+    topic: 'whatsapp-audio-stored',
     data: {
-      type: 'whatsapp.audio.transcribe',
+      type: 'whatsapp.audio.stored',
       messageId: 'msg-' + Date.now(),
       userId: 'test-user-456',
-      gcsPaths: 'whatsapp/test-user-456/audio-' + Date.now() + '.ogg',
+      mediaId: 'media-' + Date.now(),
+      gcsPath: 'whatsapp/test-user-456/audio-' + Date.now() + '.ogg',
       mimeType: 'audio/ogg',
+      timestamp: new Date().toISOString(),
     },
   },
   'intex-message-ingest': {

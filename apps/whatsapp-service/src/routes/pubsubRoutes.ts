@@ -9,6 +9,9 @@ import type {
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
   SendMessageEvent,
+  TranscriptionCompletedEvent,
+  TranscriptionState,
+  WhatsAppMessage,
   WebhookProcessEvent,
 } from '../domain/whatsapp/index.js';
 import {
@@ -33,6 +36,75 @@ function maskPhoneNumber(phone: string): string {
     return phone;
   }
   return phone.slice(0, -4) + '****';
+}
+
+const TRANSCRIPTION_FAILURE_REPLY =
+  'I could not transcribe this voice message. Please try again or send text.';
+
+function formatTranscriptionReply(transcript: string): string {
+  return `Transcription:\n${transcript}`;
+}
+
+async function sendTranscriptionReplyIfPossible(
+  message: WhatsAppMessage,
+  text: string,
+  correlationId: string,
+  request: FastifyRequest
+): Promise<void> {
+  const phoneNumberId = message.metadata?.phoneNumberId;
+  if (phoneNumberId === undefined || phoneNumberId.trim() === '') {
+    request.log.info(
+      { userId: message.userId, messageId: message.id },
+      'Skipping transcription reply because phoneNumberId metadata is missing'
+    );
+    return;
+  }
+
+  const { whatsappCloudApi, outboundMessageRepository } = getServices();
+  const sendResult = await whatsappCloudApi.sendMessage(
+    phoneNumberId,
+    message.fromNumber,
+    text,
+    message.waMessageId
+  );
+
+  if (!sendResult.ok) {
+    request.log.error(
+      {
+        userId: message.userId,
+        messageId: message.id,
+        waMessageId: message.waMessageId,
+        error: sendResult.error.message,
+      },
+      'Failed to send transcription reply'
+    );
+    return;
+  }
+
+  const now = new Date();
+  const ttlDays = 7;
+  const expiresAt = Math.floor((now.getTime() + ttlDays * 24 * 60 * 60 * 1000) / 1000);
+  const saveResult = await outboundMessageRepository.save({
+    wamid: sendResult.value.messageId,
+    correlationId,
+    userId: message.userId,
+    messageText: text,
+    sentAt: now.toISOString(),
+    expiresAt,
+  });
+
+  if (!saveResult.ok) {
+    request.log.warn(
+      {
+        userId: message.userId,
+        messageId: message.id,
+        waMessageId: message.waMessageId,
+        outboundWamid: sendResult.value.messageId,
+        error: saveResult.error.message,
+      },
+      'Failed to save transcription reply for reply correlation'
+    );
+  }
 }
 
 /**
@@ -517,6 +589,217 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           );
           return await reply.fail('INTERNAL_ERROR', 'Cleanup failed');
         }
+      }
+    );
+
+    fastify.post(
+      '/internal/whatsapp/pubsub/transcription-completed',
+      {
+        schema: {
+          operationId: 'processTranscriptionCompleted',
+          summary: 'Process completed transcription event from PubSub',
+          description:
+            'Internal endpoint for PubSub push. Receives transcription completion events, stores transcript state, replies on WhatsApp, and forwards completed transcripts to Intex.',
+          tags: ['internal'],
+          body: {
+            type: 'object',
+            properties: {
+              message: {
+                type: 'object',
+                properties: {
+                  data: { type: 'string', description: 'Base64 encoded message data' },
+                  messageId: { type: 'string' },
+                  publishTime: { type: 'string' },
+                },
+                required: ['data', 'messageId'],
+              },
+              subscription: { type: 'string' },
+            },
+            required: ['message'],
+          },
+          response: {
+            200: {
+              description: 'Transcription completion acknowledged',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+              },
+              required: ['success'],
+            },
+          },
+        },
+      },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to /internal/whatsapp/pubsub/transcription-completed',
+          bodyPreviewLength: 200,
+        });
+
+        const fromHeader = request.headers.from;
+        const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+
+        if (isPubSubPush) {
+          request.log.info(
+            { from: fromHeader, userAgent: request.headers['user-agent'] },
+            'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
+          );
+        } else {
+          const authResult = validateInternalAuth(request);
+
+          if (!authResult.valid) {
+            request.log.warn(
+              { reason: authResult.reason },
+              'Internal auth failed for pubsub/transcription-completed endpoint'
+            );
+            return await reply.fail(
+              'UNAUTHORIZED',
+              'Internal auth failed for pubsub/transcription-completed endpoint'
+            );
+          }
+        }
+
+        const body = request.body as PubSubPushMessage;
+
+        let eventData: TranscriptionCompletedEvent;
+        try {
+          const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
+          eventData = JSON.parse(decoded) as TranscriptionCompletedEvent;
+        } catch {
+          request.log.error(
+            { messageId: body.message.messageId },
+            'Failed to decode PubSub message'
+          );
+          return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
+        }
+
+        const parsedType = eventData.type as string;
+        if (parsedType !== 'srt.transcription.completed') {
+          request.log.warn({ type: parsedType }, 'Unexpected event type');
+          return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
+        }
+
+        const { messageRepository, eventPublisher } = getServices();
+        const messageResult = await messageRepository.findById(
+          eventData.userId,
+          eventData.messageId
+        );
+
+        if (!messageResult.ok) {
+          request.log.error(
+            {
+              userId: eventData.userId,
+              messageId: eventData.messageId,
+              error: messageResult.error.message,
+            },
+            'Failed to load audio message for transcription completion'
+          );
+          return await reply.fail('INTERNAL_ERROR', 'Failed to load audio message');
+        }
+
+        const message = messageResult.value;
+        if (message === null) {
+          request.log.warn(
+            { userId: eventData.userId, messageId: eventData.messageId },
+            'Audio message not found for transcription completion'
+          );
+          return await reply.ok({});
+        }
+
+        const completedTranscript =
+          eventData.status === 'completed' ? eventData.transcript?.trim() : undefined;
+        if (
+          eventData.status === 'completed' &&
+          (completedTranscript === undefined || completedTranscript === '')
+        ) {
+          return await reply.fail('INVALID_REQUEST', 'Completed transcription is missing transcript');
+        }
+        const completedTranscriptText = completedTranscript ?? '';
+
+        const transcription: TranscriptionState =
+          eventData.status === 'completed'
+            ? {
+                status: 'completed',
+                jobId: eventData.jobId,
+                text: completedTranscriptText,
+                ...(eventData.summary !== undefined ? { summary: eventData.summary } : {}),
+                completedAt: eventData.timestamp,
+              }
+            : {
+                status: 'failed',
+                jobId: eventData.jobId,
+                error: {
+                  code: 'TRANSCRIPTION_FAILED',
+                  message: eventData.error ?? 'Transcription failed',
+                },
+                completedAt: eventData.timestamp,
+              };
+
+        const updateResult = await messageRepository.updateTranscription(
+          eventData.userId,
+          eventData.messageId,
+          transcription
+        );
+
+        if (!updateResult.ok) {
+          request.log.error(
+            {
+              userId: eventData.userId,
+              messageId: eventData.messageId,
+              error: updateResult.error.message,
+            },
+            'Failed to update audio message transcription'
+          );
+          return await reply.fail('INTERNAL_ERROR', 'Failed to update transcription');
+        }
+
+        if (eventData.status === 'completed') {
+          const ingestPublishResult = await eventPublisher.publishIntexMessageIngest({
+            type: 'intex.message.ingest',
+            userId: eventData.userId,
+            messageId: message.waMessageId,
+            sourceType: 'whatsapp_audio_transcript',
+            text: completedTranscriptText,
+            whatsappSender: message.fromNumber,
+            timestamp: eventData.timestamp,
+          });
+
+          if (!ingestPublishResult.ok) {
+            request.log.error(
+              {
+                userId: eventData.userId,
+                messageId: eventData.messageId,
+                waMessageId: message.waMessageId,
+                error: ingestPublishResult.error.message,
+              },
+              'Failed to publish completed audio transcript to Intex'
+            );
+            return await reply.fail('INTERNAL_ERROR', 'Failed to publish transcript to Intex');
+          }
+
+          await sendTranscriptionReplyIfPossible(
+            message,
+            formatTranscriptionReply(completedTranscriptText),
+            `transcription:${eventData.messageId}:${eventData.jobId}`,
+            request
+          );
+        } else {
+          await sendTranscriptionReplyIfPossible(
+            message,
+            TRANSCRIPTION_FAILURE_REPLY,
+            `transcription:${eventData.messageId}:${eventData.jobId}`,
+            request
+          );
+        }
+
+        request.log.info(
+          {
+            userId: eventData.userId,
+            messageId: eventData.messageId,
+            status: eventData.status,
+          },
+          'Processed transcription completion event'
+        );
+        return await reply.ok({});
       }
     );
 

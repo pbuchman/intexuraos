@@ -77,6 +77,12 @@ const configSchema = z.object({
     .min(1, 'INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC is required'),
 
   /**
+   * Pub/Sub topic for stored audio events.
+   * Required: voice messages must reach the transcription worker.
+   */
+  audioStoredTopic: z.string().min(1, 'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC is required'),
+
+  /**
    * Pub/Sub topic for send message events.
    * Other services publish to this topic to request outbound WhatsApp messages.
    * Note: Subscription is configured in Terraform as push to /internal/whatsapp/pubsub/send-message
@@ -135,6 +141,7 @@ export function loadConfig(): Config {
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     intexMessageIngestTopic: process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'],
+    audioStoredTopic: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'],
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
     webhookProcessTopic: process.env['INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC'],
     port: process.env['PORT'],
@@ -157,6 +164,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
     'INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC',
+    'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC',
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',

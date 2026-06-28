@@ -117,6 +117,7 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
       messageRepository,
       mediaStorage,
       whatsappCloudApi,
+      eventPublisher,
     } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     prepareAudioMedia(whatsappCloudApi, 'media-audio-1');
@@ -132,9 +133,10 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     expect(messageRepository.getAll()[0]?.mediaType).toBe('audio');
     expect(mediaStorage.getAllFiles().size).toBe(1);
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    expect(eventPublisher.getAudioStoredEvents()).toHaveLength(1);
   });
 
-  it('marks audio events failed when the unsupported voice response cannot be sent', async () => {
+  it('does not send the old unsupported voice response after audio storage', async () => {
     const {
       savedEvent,
       useCase,
@@ -143,6 +145,7 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
       messageRepository,
       mediaStorage,
       whatsappCloudApi,
+      eventPublisher,
     } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     prepareAudioMedia(whatsappCloudApi, 'media-audio-1');
@@ -155,14 +158,13 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     );
 
     const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
-    expect(eventResult.ok && eventResult.value?.status).toBe('failed');
-    expect(eventResult.ok && eventResult.value?.retryable).toBe(true);
-    expect(eventResult.ok && eventResult.value?.failureDetails).toContain(
-      'Failed to send unsupported voice response'
-    );
+    expect(eventResult.ok && eventResult.value?.status).toBe('completed');
     expect(messageRepository.getAll()).toHaveLength(1);
     expect(messageRepository.getAll()[0]?.mediaType).toBe('audio');
     expect(mediaStorage.getAllFiles().size).toBe(1);
+    expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
+    expect(eventPublisher.getAudioStoredEvents()).toHaveLength(1);
   });
 
   it('returns after audio storage fails without sending an unsupported response', async () => {
@@ -297,6 +299,100 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     });
   });
 
+  it('publishes replied-to completed audio transcription as safe Intex context', async () => {
+    const { savedEvent, useCase, userMappingRepository, messageRepository, eventPublisher } =
+      await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    messageRepository.setMessage({
+      id: 'stored-audio-message-1',
+      userId: 'user-1',
+      waMessageId: 'wamid.original-audio-message',
+      fromNumber: '15551234567',
+      toNumber: '15551234567',
+      text: '',
+      mediaType: 'audio',
+      media: {
+        id: 'media-audio-1',
+        mimeType: 'audio/ogg',
+        fileSize: 42,
+      },
+      gcsPath: 'whatsapp/user-1/wamid.original-audio-message/media-audio-1.ogg',
+      transcription: {
+        status: 'completed',
+        jobId: 'job-audio-1',
+        text: 'Forwarded audio transcript with the details to act on.',
+        completedAt: '2026-06-28T10:00:00.000Z',
+      },
+      timestamp: '1234567800',
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+    });
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.original-audio-message',
+          messageText: 'summarize this and make it actionable',
+        })
+      ),
+      savedEvent,
+      logger()
+    );
+
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]?.replyContext).toEqual({
+      replyToWamid: 'wamid.original-audio-message',
+      source: 'inbound_user_message',
+      text: 'Forwarded audio transcript with the details to act on.',
+      truncated: false,
+    });
+  });
+
+  it('does not publish reply context for replied-to audio without a completed transcript', async () => {
+    const { savedEvent, useCase, userMappingRepository, messageRepository, eventPublisher } =
+      await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    messageRepository.setMessage({
+      id: 'stored-audio-message-2',
+      userId: 'user-1',
+      waMessageId: 'wamid.pending-audio-message',
+      fromNumber: '15551234567',
+      toNumber: '15551234567',
+      text: '',
+      mediaType: 'audio',
+      media: {
+        id: 'media-audio-2',
+        mimeType: 'audio/ogg',
+        fileSize: 42,
+      },
+      gcsPath: 'whatsapp/user-1/wamid.pending-audio-message/media-audio-2.ogg',
+      transcription: {
+        status: 'failed',
+        jobId: 'job-audio-2',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Could not transcribe',
+        },
+        completedAt: '2026-06-28T10:00:00.000Z',
+      },
+      timestamp: '1234567800',
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+    });
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.pending-audio-message',
+          messageText: 'try this again',
+        })
+      ),
+      savedEvent,
+      logger()
+    );
+
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]?.replyContext).toBeUndefined();
+  });
+
   it('publishes replied-to outbound assistant message text as safe Intex context', async () => {
     const {
       savedEvent,
@@ -332,6 +428,46 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
       source: 'outbound_assistant_message',
       text: 'What would you like me to help with?',
       truncated: false,
+    });
+  });
+
+  it('publishes comments on a transcription reply as instructions with transcript context', async () => {
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      outboundMessageRepository,
+      eventPublisher,
+    } = await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    await outboundMessageRepository.save({
+      wamid: 'wamid.transcription-reply',
+      correlationId: 'transcription:stored-audio-message-1:job-audio-1',
+      userId: 'user-1',
+      messageText: 'Transcription:\nForwarded audio transcript with the details to act on.',
+      sentAt: new Date().toISOString(),
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.transcription-reply',
+          messageText: 'summarize action items and make a note',
+        })
+      ),
+      savedEvent,
+      logger()
+    );
+
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]).toMatchObject({
+      text: 'summarize action items and make a note',
+      replyContext: {
+        replyToWamid: 'wamid.transcription-reply',
+        source: 'outbound_assistant_message',
+        text: 'Transcription: Forwarded audio transcript with the details to act on.',
+        truncated: false,
+      },
     });
   });
 

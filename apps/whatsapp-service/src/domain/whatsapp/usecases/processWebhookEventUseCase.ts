@@ -20,6 +20,7 @@ import type { ThumbnailGeneratorPort } from '../ports/thumbnailGenerator.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { OutboundMessageRepository } from '../ports/outboundMessageRepository.js';
 import type { IntexMessageReplyContext } from '../events/index.js';
+import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import { ProcessImageMessageUseCase } from './processImageMessage.js';
 import { ProcessAudioMessageUseCase } from './processAudioMessage.js';
 import type { WebhookPayload } from '../../../routes/schemas.js';
@@ -39,8 +40,6 @@ import {
   extractSenderPhoneNumber,
 } from '../../../routes/shared.js';
 
-const VOICE_UNSUPPORTED_MESSAGE =
-  'Voice messages are not supported by Intex yet. Please send text for now.';
 const MAX_REPLY_CONTEXT_TEXT_LENGTH = 1200;
 
 /**
@@ -479,7 +478,7 @@ export class ProcessWebhookEventUseCase {
   }
 
   /**
-   * Handle audio/voice messages while Intex is text-only.
+   * Handle audio/voice messages by storing media and handing it to transcription.
    */
   private async handleAudioMessage(
     payload: WebhookPayload,
@@ -494,13 +493,20 @@ export class ProcessWebhookEventUseCase {
     audioMedia: { id: string; mimeType: string; sha256?: string },
     logger: Logger
   ): Promise<void> {
-    const { webhookEventRepository, messageRepository, mediaStorage, whatsappCloudApi } = this.deps;
+    const {
+      webhookEventRepository,
+      messageRepository,
+      mediaStorage,
+      whatsappCloudApi,
+      eventPublisher,
+    } = this.deps;
 
     const usecase = new ProcessAudioMessageUseCase({
       webhookEventRepository,
       messageRepository,
       mediaStorage,
       whatsappCloudApi,
+      eventPublisher,
     });
 
     const processResult = await usecase.execute(
@@ -524,27 +530,10 @@ export class ProcessWebhookEventUseCase {
 
     if (phoneNumberId !== null) {
       await this.markAudioAsReadWithTyping(payload, savedEvent, whatsappCloudApi, logger);
-
-      const sendResult = await whatsappCloudApi.sendMessage(
-        phoneNumberId,
-        fromNumber,
-        VOICE_UNSUPPORTED_MESSAGE,
-        waMessageId
-      );
-
-      if (!sendResult.ok) {
-        const failureDetails = `Failed to send unsupported voice response: ${sendResult.error.message}`;
-        logger.error({ eventId: savedEvent.id, error: sendResult.error }, failureDetails);
-        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-          failureDetails,
-          retryable: true,
-        });
-        return;
-      }
     } else {
       logger.info(
         { eventId: savedEvent.id },
-        'Cannot send unsupported voice response because phoneNumberId is missing'
+        'Cannot mark audio message as read with typing because phoneNumberId is missing'
       );
     }
   }
@@ -759,11 +748,13 @@ export class ProcessWebhookEventUseCase {
     const { messageRepository, outboundMessageRepository } = this.deps;
     const inboundResult = await messageRepository.findByWaMessageId(userId, context.replyToWamid);
     if (inboundResult.ok) {
-      if (inboundResult.value !== null && inboundResult.value.text.trim() !== '') {
+      const inboundContextText =
+        inboundResult.value === null ? undefined : getInboundReplyContextText(inboundResult.value);
+      if (inboundContextText !== undefined) {
         return buildReplyContext(
           context.replyToWamid,
           'inbound_user_message',
-          inboundResult.value.text
+          inboundContextText
         );
       }
     } else {
@@ -861,6 +852,22 @@ export class ProcessWebhookEventUseCase {
       }
     }
   }
+}
+
+function getInboundReplyContextText(message: WhatsAppMessage): string | undefined {
+  if (message.text.trim() !== '') {
+    return message.text;
+  }
+
+  if (
+    message.mediaType === 'audio' &&
+    message.transcription?.status === 'completed' &&
+    message.transcription.text?.trim() !== ''
+  ) {
+    return message.transcription.text;
+  }
+
+  return undefined;
 }
 
 function buildReplyContext(

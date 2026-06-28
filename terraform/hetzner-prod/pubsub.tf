@@ -30,6 +30,16 @@ locals {
       retry_maximum_backoff = "600s"
       max_delivery_attempts = 5
     }
+    whatsapp_transcription_completed = {
+      subscription_name     = "intexuraos-transcription-completed-prod-hetzner"
+      topic_name            = local.pubsub_topics.transcription_completed
+      push_path             = "/internal/whatsapp/pubsub/transcription-completed"
+      service_account_key   = "whatsapp_service"
+      ack_deadline_seconds  = 120
+      retry_minimum_backoff = "10s"
+      retry_maximum_backoff = "600s"
+      max_delivery_attempts = 5
+    }
     intex_message_ingest = {
       subscription_name     = "intexuraos-intex-message-ingest-prod-hetzner"
       topic_name            = local.pubsub_topics.intex_message_ingest

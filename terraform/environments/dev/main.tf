@@ -1375,6 +1375,35 @@ resource "google_pubsub_topic" "transcription_completed" {
   depends_on = [google_project_service.apis]
 }
 
+resource "google_pubsub_topic" "transcription_completed_dlq" {
+  name    = "intexuraos-transcription-completed-${var.environment}-dlq"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_pubsub_topic_iam_member" "pubsub_publishes_transcription_completed_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.transcription_completed_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+resource "google_pubsub_subscription" "transcription_completed_dlq" {
+  name    = "intexuraos-transcription-completed-${var.environment}-dlq-sub"
+  topic   = google_pubsub_topic.transcription_completed_dlq.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600
+  message_retention_duration = "604800s"
+
+  expiration_policy {
+    ttl = ""
+  }
+}
+
 resource "google_pubsub_topic_iam_member" "transcription_publishes_completed" {
   project = var.project_id
   topic   = google_pubsub_topic.transcription_completed.name

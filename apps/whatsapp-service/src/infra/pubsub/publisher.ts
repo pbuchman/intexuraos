@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type {
+  AudioStoredEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
@@ -17,6 +18,10 @@ import type {
 export interface GcpPubSubPublisherConfig {
   projectId: string;
   mediaCleanupTopic: string;
+  /**
+   * Required: transcription worker consumes stored WhatsApp audio.
+   */
+  audioStoredTopic: string;
   /**
    * Required: intex-agent handles realtime WhatsApp Assistant conversations.
    */
@@ -31,6 +36,7 @@ export interface GcpPubSubPublisherConfig {
  */
 export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPublisherPort {
   private readonly mediaCleanupTopic: string;
+  private readonly audioStoredTopic: string;
   private readonly intexMessageIngestTopic: string;
   private readonly webhookProcessTopic: string | null;
 
@@ -40,7 +46,12 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     if (config.intexMessageIngestTopic === undefined || config.intexMessageIngestTopic === '') {
       throw new Error('intexMessageIngestTopic is required');
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- belt-and-suspenders runtime guard for callers that bypass the type system
+    if (config.audioStoredTopic === undefined || config.audioStoredTopic === '') {
+      throw new Error('audioStoredTopic is required');
+    }
     this.mediaCleanupTopic = config.mediaCleanupTopic;
+    this.audioStoredTopic = config.audioStoredTopic;
     this.intexMessageIngestTopic = config.intexMessageIngestTopic;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;
   }
@@ -51,6 +62,16 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { messageId: event.messageId },
       'media cleanup'
+    );
+    return this.mapToWhatsAppError(result);
+  }
+
+  async publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
+    const result = await this.publishToTopic(
+      this.audioStoredTopic,
+      event,
+      { messageId: event.messageId },
+      'audio stored'
     );
     return this.mapToWhatsAppError(result);
   }

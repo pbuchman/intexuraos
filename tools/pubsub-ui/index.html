@@ -488,7 +488,10 @@
               <option value="whatsapp-send-message">whatsapp-send-message</option>
               <option value="whatsapp-media-cleanup">whatsapp-media-cleanup</option>
               <option value="whatsapp-webhook-process">whatsapp-webhook-process</option>
-              <option value="whatsapp-transcription">whatsapp-transcription</option>
+              <option value="whatsapp-audio-stored">whatsapp-audio-stored</option>
+              <option value="whatsapp-transcription-completed">
+                whatsapp-transcription-completed
+              </option>
               <option value="intex-message-ingest">intex-message-ingest</option>
               <option value="research-process">research-process</option>
               <option value="llm-analytics">llm-analytics</option>
@@ -544,12 +547,23 @@
           phoneNumberId: '1234567890',
           receivedAt: '{timestamp}',
         },
-        'whatsapp-transcription': {
-          type: 'whatsapp.audio.transcribe',
+        'whatsapp-audio-stored': {
+          type: 'whatsapp.audio.stored',
           messageId: 'msg-{timestamp}',
           userId: '{userId}',
+          mediaId: 'media-{timestamp}',
           gcsPath: 'whatsapp/{userId}/audio-{timestamp}.ogg',
           mimeType: 'audio/ogg',
+          timestamp: '{timestamp}',
+        },
+        'whatsapp-transcription-completed': {
+          type: 'srt.transcription.completed',
+          userId: '{userId}',
+          messageId: 'msg-{timestamp}',
+          jobId: 'job-{timestamp}',
+          status: 'completed',
+          transcript: 'This is a test voice message transcript.',
+          timestamp: '{timestamp}',
         },
         'intex-message-ingest': {
           type: 'intex.message.ingest',

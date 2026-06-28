@@ -11,6 +11,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
+  AudioStoredEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
@@ -1384,16 +1385,32 @@ export class FakeMediaStorage implements MediaStoragePort {
  */
 export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
+  private audioStoredEvents: AudioStoredEvent[] = [];
   private intexMessageIngestEvents: IntexMessageIngestEvent[] = [];
   private webhookProcessEvents: WebhookProcessEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
   private extractLinkPreviewsFailureMessage: string | null = null;
+  private audioStoredFailureMessage: string | null = null;
   private intexMessageIngestFailureMessage: string | null = null;
   private webhookProcessFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.audioStoredFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.audioStoredFailureMessage })
+      );
+    }
+    this.audioStoredEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  setAudioStoredFailure(message: string): void {
+    this.audioStoredFailureMessage = message;
   }
 
   publishIntexMessageIngest(event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>> {
@@ -1444,6 +1461,10 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.mediaCleanupEvents];
   }
 
+  getAudioStoredEvents(): AudioStoredEvent[] {
+    return [...this.audioStoredEvents];
+  }
+
   getIntexMessageIngestEvents(): IntexMessageIngestEvent[] {
     return [...this.intexMessageIngestEvents];
   }
@@ -1458,10 +1479,12 @@ export class FakeEventPublisher implements EventPublisherPort {
 
   clear(): void {
     this.mediaCleanupEvents = [];
+    this.audioStoredEvents = [];
     this.intexMessageIngestEvents = [];
     this.webhookProcessEvents = [];
     this.extractLinkPreviewsEvents = [];
     this.extractLinkPreviewsFailureMessage = null;
+    this.audioStoredFailureMessage = null;
     this.intexMessageIngestFailureMessage = null;
     this.webhookProcessFailureMessage = null;
   }
