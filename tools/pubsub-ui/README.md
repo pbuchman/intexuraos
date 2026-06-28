@@ -44,18 +44,19 @@ node scripts/pubsub-publish-test.mjs bookmark-summarize
 
 ## Monitored Topics
 
-| Topic                      | Color        | Event Type                  |
-| -------------------------- | ------------ | --------------------------- |
-| `whatsapp-media-cleanup`   | Purple       | Media file deletion         |
-| `whatsapp-send-message`    | Green        | Outbound WhatsApp messages  |
-| `whatsapp-webhook-process` | Light Purple | WhatsApp webhook processing |
-| `whatsapp-transcription`   | Light Green  | Audio transcription         |
-| `intex-message-ingest`     | Blue         | Intex Agent message routing |
-| `research-process`         | Blue         | Research task processing    |
-| `llm-analytics`            | Indigo       | LLM usage analytics         |
-| `llm-call`                 | Purple       | LLM API calls               |
-| `bookmark-enrich`          | Orange       | Bookmark metadata enriching |
-| `bookmark-summarize`       | Teal         | Bookmark AI summarization   |
+| Topic                              | Color        | Event Type                  |
+| ---------------------------------- | ------------ | --------------------------- |
+| `whatsapp-media-cleanup`           | Purple       | Media file deletion         |
+| `whatsapp-send-message`            | Green        | Outbound WhatsApp messages  |
+| `whatsapp-webhook-process`         | Light Purple | WhatsApp webhook processing |
+| `whatsapp-audio-stored`            | Light Green  | Audio transcription input   |
+| `whatsapp-transcription-completed` | Light Green  | Audio transcription result  |
+| `intex-message-ingest`             | Blue         | Intex Agent message routing |
+| `research-process`                 | Blue         | Research task processing    |
+| `llm-analytics`                    | Indigo       | LLM usage analytics         |
+| `llm-call`                         | Purple       | LLM API calls               |
+| `bookmark-enrich`                  | Orange       | Bookmark metadata enriching |
+| `bookmark-summarize`               | Teal         | Bookmark AI summarization   |
 
 ## Architecture
 
@@ -98,7 +99,7 @@ node scripts/pubsub-publish-test.mjs bookmark-summarize
 - `whatsapp-send-message` → `POST /internal/whatsapp/pubsub/send-message` (:8113)
 - `whatsapp-media-cleanup` → `POST /internal/whatsapp/pubsub/media-cleanup` (:8113)
 - `whatsapp-webhook-process` → `POST /internal/whatsapp/pubsub/process-webhook` (:8113)
-- `whatsapp-transcription` → `POST /internal/whatsapp/pubsub/transcribe-audio` (:8113)
+- `whatsapp-transcription-completed` → `POST /internal/whatsapp/pubsub/transcription-completed` (:8113)
 - `intex-message-ingest` → `POST /internal/intex-agent/messages` (:8134)
 - `research-process` → `POST /internal/llm/pubsub/process-research` (:8116)
 - `llm-analytics` → `POST /internal/llm/pubsub/report-analytics` (:8116)
@@ -137,7 +138,8 @@ const TOPICS = [
   'whatsapp-media-cleanup',
   'whatsapp-send-message',
   'whatsapp-webhook-process',
-  'whatsapp-transcription',
+  'whatsapp-audio-stored',
+  'whatsapp-transcription-completed',
   'intex-message-ingest',
   'research-process',
   'llm-analytics',

@@ -5,6 +5,7 @@
 import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from './repositories.js';
 import type {
+  AudioStoredEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   MediaCleanupEvent,
@@ -20,6 +21,12 @@ export interface EventPublisherPort {
    * Triggers async media deletion.
    */
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>>;
+
+  /**
+   * Publish an audio stored event.
+   * Triggers async transcription.
+   */
+  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a WhatsApp Assistant message ingest event.

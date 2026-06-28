@@ -10,6 +10,7 @@ describe('config validation', () => {
   let savedWaba: string | undefined;
   let savedPhone: string | undefined;
   let savedIntexMessageIngestTopic: string | undefined;
+  let savedAudioStoredTopic: string | undefined;
 
   beforeEach(() => {
     savedVerify = process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
@@ -19,6 +20,7 @@ describe('config validation', () => {
     savedPhone = process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
     savedIntexMessageIngestTopic =
       process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'];
+    savedAudioStoredTopic = process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
   });
 
   afterEach(() => {
@@ -54,6 +56,11 @@ describe('config validation', () => {
     } else {
       delete process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'];
     }
+    if (savedAudioStoredTopic !== undefined) {
+      process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = savedAudioStoredTopic;
+    } else {
+      delete process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
+    }
   });
 
   it('validates required env vars', async () => {
@@ -83,6 +90,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
     process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
@@ -103,6 +111,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
     process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
@@ -122,6 +131,7 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'];
     delete process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'];
     delete process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'];
+    delete process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
 
     expect(() => loadConfig()).toThrow();
@@ -139,6 +149,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test-cleanup';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test-cleanup-sub';
     process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'] = 'test-intex-message-ingest';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test-audio-stored';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';

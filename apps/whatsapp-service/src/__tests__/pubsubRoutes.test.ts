@@ -35,6 +35,7 @@ const testConfig: Config = {
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
   intexMessageIngestTopic: 'test-intex-message-ingest',
+  audioStoredTopic: 'test-audio-stored',
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: INTERNAL_AUTH_TOKEN,
@@ -74,6 +75,8 @@ describe('Pub/Sub Routes', () => {
   let userMappingRepository: FakeWhatsAppUserMappingRepository;
   let outboundMessageRepository: FakeOutboundMessageRepository;
   let prefs: FakeNotificationPreferencesRepository;
+  let eventPublisher: FakeEventPublisher;
+  let whatsappCloudApi: FakeWhatsAppCloudApiPort;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
@@ -83,15 +86,17 @@ describe('Pub/Sub Routes', () => {
 
     outboundMessageRepository = new FakeOutboundMessageRepository();
     prefs = new FakeNotificationPreferencesRepository();
+    eventPublisher = new FakeEventPublisher();
+    whatsappCloudApi = new FakeWhatsAppCloudApiPort();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
       userMappingRepository,
       messageRepository,
       mediaStorage,
-      eventPublisher: new FakeEventPublisher(),
+      eventPublisher,
       messageSender,
-      whatsappCloudApi: new FakeWhatsAppCloudApiPort(),
+      whatsappCloudApi,
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
       outboundMessageRepository,
@@ -1401,6 +1406,457 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(200);
       const responseBody = JSON.parse(response.body) as { success: boolean };
       expect(responseBody.success).toBe(true);
+    });
+  });
+
+  describe('POST /internal/whatsapp/pubsub/transcription-completed', () => {
+    const setStoredAudioMessage = (
+      overrides: Partial<Parameters<FakeWhatsAppMessageRepository['setMessage']>[0]> = {}
+    ): void => {
+      messageRepository.setMessage({
+        id: 'stored-audio-1',
+        userId: 'user-audio',
+        waMessageId: 'wamid.voice.1',
+        fromNumber: '15551234567',
+        toNumber: '15557654321',
+        text: '',
+        mediaType: 'audio',
+        media: {
+          id: 'media-audio-1',
+          mimeType: 'audio/ogg',
+          fileSize: 1234,
+        },
+        gcsPath: 'whatsapp/user-audio/wamid.voice.1/media-audio-1.ogg',
+        metadata: {
+          senderName: 'Test User',
+          phoneNumberId: '123456789012345',
+        },
+        timestamp: '1782669600',
+        receivedAt: '2026-06-28T09:59:00.000Z',
+        webhookEventId: 'event-audio-1',
+        ...overrides,
+      });
+    };
+
+    it('returns 401 when auth is missing', async () => {
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk and call Joanna.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('accepts Pub/Sub push auth and skips the reply when phone metadata is missing', async () => {
+      setStoredAudioMessage({
+        id: 'stored-audio-push',
+        metadata: {
+          senderName: 'Test User',
+        },
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-push',
+        jobId: 'job-push',
+        status: 'completed',
+        transcript: 'Walk the dog.',
+        timestamp: '2026-06-28T10:02:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: {
+          'content-type': 'application/json',
+          from: 'noreply@google.com',
+        },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageRepository.getMessageSync('stored-audio-push')?.transcription).toEqual({
+        status: 'completed',
+        jobId: 'job-push',
+        text: 'Walk the dog.',
+        completedAt: '2026-06-28T10:02:00.000Z',
+      });
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    });
+
+    it('returns 400 when the transcription event type is unexpected', async () => {
+      const body = createPubSubBody({
+        type: 'unknown.event.type',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Unexpected event type');
+    });
+
+    it('returns 500 when the stored audio lookup fails', async () => {
+      messageRepository.setFailFindById(true);
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Failed to load audio message');
+    });
+
+    it('acks when the stored audio message is no longer present', async () => {
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'missing-audio-message',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    });
+
+    it('returns 400 when a completed transcription has no transcript text', async () => {
+      setStoredAudioMessage();
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: '   ',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(messageRepository.getMessageSync('stored-audio-1')?.transcription).toBeUndefined();
+    });
+
+    it('returns 500 when updating the transcription fails', async () => {
+      setStoredAudioMessage();
+      messageRepository.setFailUpdateTranscription(true);
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Failed to update transcription');
+    });
+
+    it('returns 500 when publishing the transcript to Intex fails', async () => {
+      setStoredAudioMessage();
+      eventPublisher.setIntexMessageIngestFailure('Pub/Sub unavailable');
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Failed to publish transcript to Intex');
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    });
+
+    it('acks the transcription when sending the reply fails after Intex ingest', async () => {
+      setStoredAudioMessage();
+      whatsappCloudApi.setFailSendMessage(true);
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    });
+
+    it('acks the transcription when saving reply correlation fails after sending the reply', async () => {
+      setStoredAudioMessage();
+      outboundMessageRepository.setFail(true);
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(1);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(0);
+    });
+
+    it('stores a completed transcription, replies with it, and sends it to Intex', async () => {
+      setStoredAudioMessage();
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk and call Joanna.',
+        summary: 'Errands and a call.',
+        detectedLanguage: 'en',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageRepository.getMessageSync('stored-audio-1')?.transcription).toEqual({
+        status: 'completed',
+        jobId: 'job-123',
+        text: 'Buy milk and call Joanna.',
+        summary: 'Errands and a call.',
+        completedAt: '2026-06-28T10:00:00.000Z',
+      });
+      expect(whatsappCloudApi.getSentMessages()).toEqual([
+        {
+          phoneNumberId: '123456789012345',
+          recipientPhone: '15551234567',
+          message: 'Transcription:\nBuy milk and call Joanna.',
+          replyToMessageId: 'wamid.voice.1',
+          messageId: expect.any(String),
+        },
+      ]);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toEqual([
+        {
+          type: 'intex.message.ingest',
+          userId: 'user-audio',
+          messageId: 'wamid.voice.1',
+          sourceType: 'whatsapp_audio_transcript',
+          text: 'Buy milk and call Joanna.',
+          whatsappSender: '15551234567',
+          timestamp: '2026-06-28T10:00:00.000Z',
+        },
+      ]);
+      const transcriptionReplyWamid = whatsappCloudApi.getSentMessages()[0]?.messageId;
+      expect(outboundMessageRepository.getMessages()).toEqual([
+        {
+          wamid: transcriptionReplyWamid,
+          correlationId: 'transcription:stored-audio-1:job-123',
+          userId: 'user-audio',
+          messageText: 'Transcription:\nBuy milk and call Joanna.',
+          sentAt: expect.any(String),
+          expiresAt: expect.any(Number),
+        },
+      ]);
+    });
+
+    it('stores a failed transcription and replies with the failure without sending to Intex', async () => {
+      setStoredAudioMessage({
+        id: 'stored-audio-2',
+        waMessageId: 'wamid.voice.2',
+        media: {
+          id: 'media-audio-2',
+          mimeType: 'audio/ogg',
+          fileSize: 1234,
+        },
+        gcsPath: 'whatsapp/user-audio/wamid.voice.2/media-audio-2.ogg',
+        webhookEventId: 'event-audio-2',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-2',
+        jobId: 'job-456',
+        status: 'failed',
+        error: 'Audio format was not supported',
+        timestamp: '2026-06-28T10:01:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageRepository.getMessageSync('stored-audio-2')?.transcription).toEqual({
+        status: 'failed',
+        jobId: 'job-456',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Audio format was not supported',
+        },
+        completedAt: '2026-06-28T10:01:00.000Z',
+      });
+      expect(whatsappCloudApi.getSentMessages()).toEqual([
+        {
+          phoneNumberId: '123456789012345',
+          recipientPhone: '15551234567',
+          message: 'I could not transcribe this voice message. Please try again or send text.',
+          replyToMessageId: 'wamid.voice.2',
+          messageId: expect.any(String),
+        },
+      ]);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    });
+
+    it('uses a default transcription error when a failed event has no error text', async () => {
+      setStoredAudioMessage({
+        id: 'stored-audio-3',
+        waMessageId: 'wamid.voice.3',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-3',
+        jobId: 'job-789',
+        status: 'failed',
+        timestamp: '2026-06-28T10:03:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageRepository.getMessageSync('stored-audio-3')?.transcription).toMatchObject({
+        status: 'failed',
+        jobId: 'job-789',
+        error: {
+          code: 'TRANSCRIPTION_FAILED',
+          message: 'Transcription failed',
+        },
+      });
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
     });
   });
 

@@ -6,9 +6,8 @@
  * 2. Download audio
  * 3. Upload to GCS
  * 4. Save message to Firestore
- * 5. Update webhook event status
- *
- * Note: The WhatsApp webhook no longer accepts voice for Intex ingestion.
+ * 5. Publish audio-stored event for transcription
+ * 6. Update webhook event status
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from '../models/error.js';
@@ -19,6 +18,7 @@ import type {
 } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
+import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { Logger } from '../utils/logger.js';
 import { getExtensionFromMimeType } from '../utils/mimeType.js';
 
@@ -69,6 +69,7 @@ export interface ProcessAudioMessageDeps {
   messageRepository: WhatsAppMessageRepository;
   mediaStorage: MediaStoragePort;
   whatsappCloudApi: WhatsAppCloudApiPort;
+  eventPublisher: EventPublisherPort;
 }
 
 /**
@@ -88,7 +89,13 @@ export class ProcessAudioMessageUseCase {
     input: ProcessAudioMessageInput,
     logger: ProcessAudioMessageLogger
   ): Promise<Result<ProcessAudioMessageResult, WhatsAppError>> {
-    const { webhookEventRepository, messageRepository, mediaStorage, whatsappCloudApi } = this.deps;
+    const {
+      webhookEventRepository,
+      messageRepository,
+      mediaStorage,
+      whatsappCloudApi,
+      eventPublisher,
+    } = this.deps;
 
     const {
       eventId,
@@ -225,6 +232,29 @@ export class ProcessAudioMessageUseCase {
       );
       await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(saveResult.error);
+    }
+
+    const audioStoredPublishResult = await eventPublisher.publishAudioStored({
+      type: 'whatsapp.audio.stored',
+      userId,
+      messageId: saveResult.value.id,
+      mediaId: audioMedia.id,
+      gcsPath: uploadResult.value.gcsPath,
+      mimeType: audioMedia.mimeType,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!audioStoredPublishResult.ok) {
+      const failureDetails = `Failed to publish audio stored event: ${audioStoredPublishResult.error.message}`;
+      logger.error(
+        { event: 'audio_stored_publish_failed', error: audioStoredPublishResult.error, eventId },
+        failureDetails
+      );
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', {
+        failureDetails,
+        retryable: true,
+      });
+      return err(audioStoredPublishResult.error);
     }
 
     // Update webhook event status to PROCESSED

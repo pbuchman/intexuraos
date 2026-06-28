@@ -52,6 +52,7 @@ describe('GcpPubSubPublisher', () => {
     publisher = new GcpPubSubPublisher({
       projectId: 'test-project',
       mediaCleanupTopic: 'media-cleanup-topic',
+      audioStoredTopic: 'audio-stored-topic',
       intexMessageIngestTopic: 'intex-message-ingest-topic',
       logger: pino({ name: 'test', level: 'silent' }),
     });
@@ -68,10 +69,24 @@ describe('GcpPubSubPublisher', () => {
           new GcpPubSubPublisher({
             projectId: 'test-project',
             mediaCleanupTopic: 'media-cleanup-topic',
+            audioStoredTopic: 'audio-stored-topic',
             logger: pino({ name: 'test', level: 'silent' }),
             // Cast: testing the runtime guard for callers that bypass the type system
           } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
       ).toThrow('intexMessageIngestTopic is required');
+    });
+
+    it('throws when audioStoredTopic is missing', () => {
+      expect(
+        () =>
+          new GcpPubSubPublisher({
+            projectId: 'test-project',
+            mediaCleanupTopic: 'media-cleanup-topic',
+            intexMessageIngestTopic: 'intex-message-ingest-topic',
+            logger: pino({ name: 'test', level: 'silent' }),
+            // Cast: testing the runtime guard for callers that bypass the type system
+          } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
+      ).toThrow('audioStoredTopic is required');
     });
   });
 
@@ -112,6 +127,27 @@ describe('GcpPubSubPublisher', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('Pub/Sub unavailable');
       }
+    });
+  });
+
+  describe('publishAudioStored', () => {
+    it('publishes to the required audio stored topic', async () => {
+      const event = {
+        type: 'whatsapp.audio.stored' as const,
+        messageId: 'stored-audio-1',
+        userId: 'user-456',
+        mediaId: 'media-audio-1',
+        gcsPath: 'whatsapp/user-456/wamid.voice/media-audio-1.ogg',
+        mimeType: 'audio/ogg',
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await publisher.publishAudioStored(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishToTopic).toHaveBeenCalledWith('audio-stored-topic', event, {
+        messageId: 'stored-audio-1',
+      });
     });
   });
 
@@ -159,6 +195,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
         intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
@@ -184,6 +221,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
         intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
@@ -230,6 +268,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
         intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
@@ -254,6 +293,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
         intexMessageIngestTopic: 'intex-message-ingest-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),

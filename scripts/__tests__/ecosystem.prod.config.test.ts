@@ -339,6 +339,9 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC).toBe(
       'intexuraos-intex-message-ingest-dev'
     );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC).toBe(
+      'intexuraos-audio-stored-dev'
+    );
     expect(byName.get('intex-agent')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'
     );

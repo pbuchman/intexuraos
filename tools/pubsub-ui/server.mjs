@@ -15,7 +15,8 @@ const TOPICS = [
   'whatsapp-media-cleanup',
   'whatsapp-send-message',
   'whatsapp-webhook-process',
-  'whatsapp-transcription',
+  'whatsapp-audio-stored',
+  'whatsapp-transcription-completed',
   'intex-message-ingest',
   'research-process',
   'llm-analytics',
@@ -30,8 +31,8 @@ const TOPIC_ENDPOINTS = {
     'http://host.docker.internal:8113/internal/whatsapp/pubsub/media-cleanup',
   'whatsapp-webhook-process':
     'http://host.docker.internal:8113/internal/whatsapp/pubsub/process-webhook',
-  'whatsapp-transcription':
-    'http://host.docker.internal:8113/internal/whatsapp/pubsub/transcribe-audio',
+  'whatsapp-transcription-completed':
+    'http://host.docker.internal:8113/internal/whatsapp/pubsub/transcription-completed',
   'intex-message-ingest': 'http://host.docker.internal:8134/internal/intex-agent/messages',
   'research-process': 'http://host.docker.internal:8116/internal/llm/pubsub/process-research',
   'llm-analytics': 'http://host.docker.internal:8116/internal/llm/pubsub/report-analytics',

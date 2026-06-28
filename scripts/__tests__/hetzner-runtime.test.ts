@@ -810,6 +810,10 @@ describe('Hetzner async edge cutover', () => {
       'resource "google_pubsub_subscription" "audio_stored_push" {\n  count'
     );
     expect(devTerraform).toContain('resource "google_pubsub_topic" "transcription_completed"');
+    expect(devTerraform).toContain('resource "google_pubsub_topic" "transcription_completed_dlq"');
+    expect(devTerraform).toContain(
+      'name    = "intexuraos-transcription-completed-${var.environment}-dlq"'
+    );
     expect(devTerraform).not.toContain(
       ['internal', 'whatsapp', 'pubsub', 'transcription-completed'].join('/')
     );

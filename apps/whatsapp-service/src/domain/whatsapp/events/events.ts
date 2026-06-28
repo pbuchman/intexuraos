@@ -33,6 +33,102 @@ export interface MediaCleanupEvent {
 }
 
 /**
+ * Event published after an inbound WhatsApp audio message has been stored.
+ * Triggers the transcription worker.
+ */
+export interface AudioStoredEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'whatsapp.audio.stored';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * Stored WhatsApp message document ID.
+   */
+  messageId: string;
+
+  /**
+   * WhatsApp media ID.
+   */
+  mediaId: string;
+
+  /**
+   * GCS path to the original audio file.
+   */
+  gcsPath: string;
+
+  /**
+   * MIME type of the audio file.
+   */
+  mimeType: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
+ * Event received after the transcription worker completes an audio job.
+ */
+export interface TranscriptionCompletedEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'srt.transcription.completed';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * Stored WhatsApp message document ID.
+   */
+  messageId: string;
+
+  /**
+   * Transcription provider job ID.
+   */
+  jobId: string;
+
+  /**
+   * Transcription result status.
+   */
+  status: 'completed' | 'failed';
+
+  /**
+   * Transcribed text when status is completed.
+   */
+  transcript?: string;
+
+  /**
+   * Optional transcription summary.
+   */
+  summary?: string;
+
+  /**
+   * Optional detected language code from the provider.
+   */
+  detectedLanguage?: string;
+
+  /**
+   * Failure detail when status is failed.
+   */
+  error?: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
  * Event received to send an outbound WhatsApp message.
  * Published by other services (e.g., research-agent) to request message sending.
  * The phone number is looked up internally using userId.
@@ -109,6 +205,11 @@ export interface IntexMessageReplyContext {
   truncated: boolean;
 }
 
+export type IntexMessageSourceType =
+  | 'whatsapp_text'
+  | 'whatsapp_image'
+  | 'whatsapp_audio_transcript';
+
 /**
  * Event published when a WhatsApp Assistant message is ready for intex-agent.
  * Triggers realtime session handling and tool execution.
@@ -137,7 +238,7 @@ export interface IntexMessageIngestEvent {
   /**
    * Source type identifier.
    */
-  sourceType: 'whatsapp_text' | 'whatsapp_image';
+  sourceType: IntexMessageSourceType;
 
   /**
    * Optional original or media URL for external-save processing.
@@ -189,6 +290,8 @@ export interface ExtractLinkPreviewsEvent {
  */
 export type WhatsAppEvent =
   | MediaCleanupEvent
+  | AudioStoredEvent
+  | TranscriptionCompletedEvent
   | IntexMessageIngestEvent
   | SendMessageEvent
   | WebhookProcessEvent

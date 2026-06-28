@@ -103,6 +103,7 @@ export const testConfig: Config = {
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
   intexMessageIngestTopic: 'test-intex-message-ingest',
+  audioStoredTopic: 'test-audio-stored',
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: 'test-internal-auth-token',

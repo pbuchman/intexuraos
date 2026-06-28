@@ -121,10 +121,12 @@ export {
 
 // Events
 export type {
+  AudioStoredEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   MediaCleanupEvent,
   SendMessageEvent,
+  TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
   WhatsAppInteractiveButton,

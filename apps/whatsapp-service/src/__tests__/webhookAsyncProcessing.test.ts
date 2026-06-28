@@ -667,7 +667,7 @@ describe('Webhook async processing', () => {
   });
 
   describe('audio message processing', () => {
-    it('stores voice media, replies unsupported, and does not publish Intex events', async () => {
+    it('stores voice media, publishes audio stored, and waits for transcription before Intex ingest', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
       const mediaId = 'test-audio-id-12345';
@@ -721,10 +721,18 @@ describe('Webhook async processing', () => {
       });
       expect(ctx.mediaStorage.getAllFiles().size).toBe(1);
       expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(ctx.eventPublisher.getAudioStoredEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getAudioStoredEvents()[0]).toMatchObject({
+        type: 'whatsapp.audio.stored',
+        userId,
+        messageId: messages[0]?.id,
+        mediaId,
+        gcsPath: messages[0]?.gcsPath,
+        mimeType: 'audio/ogg',
+      });
 
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
-      expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0]?.message).toBe('Voice messages are not supported by Intex yet. Please send text for now.');
+      expect(sentMessages).toHaveLength(0);
     });
   });
 
