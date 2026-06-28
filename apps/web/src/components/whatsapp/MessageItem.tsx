@@ -141,6 +141,7 @@ export function MessageItem({
 
   const hasTextContent =
     message.text !== '' || (message.caption !== null && message.caption !== '');
+  const isImageWithMedia = message.mediaType === 'image' && message.hasMedia;
 
   const contentPreview = getContentPreviewForMessage(message);
   const truncatedPreview =
@@ -247,15 +248,16 @@ export function MessageItem({
   return (
     <div
       data-testid="message-item-row"
-      className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${
+      className={`group relative rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${
+        isImageWithMedia ? 'cursor-pointer' : ''
+      } ${
         isDeleting ? 'scale-95 opacity-50' : ''
       }`}
       onClick={(): void => {
-        if (message.mediaType === 'audio') {
-          // Audio rows don't open note modal on row click
+        if (!isImageWithMedia) {
           return;
         }
-        onNoteClick(message);
+        onImageClick(message.id);
       }}
     >
       <div data-testid="message-item-mobile" className="sm:hidden">
