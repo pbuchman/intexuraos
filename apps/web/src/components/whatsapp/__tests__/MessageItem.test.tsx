@@ -17,12 +17,14 @@ vi.mock('@/components', () => ({
   ImageThumbnail: ({
     messageId,
     onClick,
+    size,
   }: {
     messageId: string;
     accessToken: string;
     onClick: () => void;
+    size?: 'compact' | 'preview';
   }): React.JSX.Element => (
-    <button type="button" onClick={onClick}>
+    <button type="button" onClick={onClick} data-size={size}>
       {`Image thumbnail ${messageId}`}
     </button>
   ),
@@ -133,7 +135,36 @@ describe('MessageItem', () => {
     expect(within(mobileShell).getByText('https://example.com/reference-image-caption')).toHaveClass('line-clamp-2');
     expect(within(mobileShell).getByTitle('View note')).toBeInTheDocument();
     expect(within(mobileShell).getByLabelText('Copy message')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Image thumbnail image-1' })).toHaveAttribute('data-size', 'compact');
     expect(screen.getByTitle('Open full size in new tab')).toBeInTheDocument();
+  });
+
+  it('opens image previews without also opening the note modal from the row click', () => {
+    const onImageClick = vi.fn();
+    const onNoteClick = vi.fn();
+
+    render(
+      <MessageItem
+        message={createMessage({
+          id: 'image-1',
+          mediaType: 'image',
+          hasMedia: true,
+          text: '',
+          caption: 'Reference image caption',
+        })}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={onImageClick}
+        onNoteClick={onNoteClick}
+        onTranscriptionClick={vi.fn()}
+        isDeleting={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Image thumbnail image-1' }));
+
+    expect(onImageClick).toHaveBeenCalledWith('image-1');
+    expect(onNoteClick).not.toHaveBeenCalled();
   });
 
   it('shows a transcription action for completed audio messages and hides it for processing audio messages', () => {

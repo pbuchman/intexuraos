@@ -25,13 +25,20 @@ function getDesktopMediaIndicator(
 ): React.JSX.Element {
   if (message.mediaType === 'image' && message.hasMedia) {
     return (
-      <ImageThumbnail
-        messageId={message.id}
-        accessToken={accessToken}
-        onClick={(): void => {
-          onImageClick(message.id);
+      <div
+        onClick={(event): void => {
+          event.stopPropagation();
         }}
-      />
+      >
+        <ImageThumbnail
+          messageId={message.id}
+          accessToken={accessToken}
+          size="compact"
+          onClick={(): void => {
+            onImageClick(message.id);
+          }}
+        />
+      </div>
     );
   }
   if (message.mediaType === 'audio') {
