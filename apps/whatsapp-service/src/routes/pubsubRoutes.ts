@@ -311,6 +311,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           wamid,
           correlationId: eventData.correlationId,
           userId: eventData.userId,
+          messageText: eventData.message,
           sentAt: now.toISOString(),
           expiresAt,
         });

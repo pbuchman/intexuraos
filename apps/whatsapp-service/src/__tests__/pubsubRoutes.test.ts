@@ -775,6 +775,7 @@ describe('Pub/Sub Routes', () => {
       expect(saved).toHaveLength(1);
       expect(saved[0]?.correlationId).toBe('corr-save-ok');
       expect(saved[0]?.userId).toBe('user-save-ok');
+      expect(saved[0]?.messageText).toBe('Save success');
     });
 
     describe('important filtering', () => {

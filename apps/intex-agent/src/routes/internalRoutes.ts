@@ -15,6 +15,19 @@ const incomingMessageBodySchema = {
     text: { type: 'string' },
     sourceType: { type: 'string', minLength: 1 },
     whatsappSender: { type: 'string' },
+    replyContext: {
+      type: 'object',
+      required: ['replyToWamid', 'source', 'text', 'truncated'],
+      properties: {
+        replyToWamid: { type: 'string', minLength: 1 },
+        source: {
+          type: 'string',
+          enum: ['inbound_user_message', 'outbound_assistant_message'],
+        },
+        text: { type: 'string', minLength: 1 },
+        truncated: { type: 'boolean' },
+      },
+    },
     timestamp: { type: 'string', minLength: 1 },
   },
 } as const;

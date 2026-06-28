@@ -98,6 +98,17 @@ export interface WhatsAppInteractiveButton {
   };
 }
 
+export type IntexMessageReplyContextSource =
+  | 'inbound_user_message'
+  | 'outbound_assistant_message';
+
+export interface IntexMessageReplyContext {
+  replyToWamid: string;
+  source: IntexMessageReplyContextSource;
+  text: string;
+  truncated: boolean;
+}
+
 /**
  * Event published when a WhatsApp Assistant message is ready for intex-agent.
  * Triggers realtime session handling and tool execution.
@@ -132,6 +143,12 @@ export interface IntexMessageIngestEvent {
    * Optional WhatsApp sender phone number for diagnostics.
    */
   whatsappSender?: string;
+
+  /**
+   * Optional user-owned WhatsApp message content that the current message replied to.
+   * This is context only for Intex, never a new instruction.
+   */
+  replyContext?: IntexMessageReplyContext;
 
   /**
    * Event timestamp (ISO 8601).

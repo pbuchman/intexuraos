@@ -19,6 +19,7 @@ import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { ThumbnailGeneratorPort } from '../ports/thumbnailGenerator.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { OutboundMessageRepository } from '../ports/outboundMessageRepository.js';
+import type { IntexMessageReplyContext } from '../events/index.js';
 import { ProcessImageMessageUseCase } from './processImageMessage.js';
 import { ProcessAudioMessageUseCase } from './processAudioMessage.js';
 import type { WebhookPayload } from '../../../routes/schemas.js';
@@ -33,12 +34,14 @@ import {
   extractMessageType,
   extractPhoneNumberId,
   extractReactionData,
+  extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
 } from '../../../routes/shared.js';
 
 const VOICE_UNSUPPORTED_MESSAGE =
   'Voice messages are not supported by Intex yet. Please send text for now.';
+const MAX_REPLY_CONTEXT_TEXT_LENGTH = 1200;
 
 /**
  * Dependencies for ProcessWebhookEventUseCase.
@@ -646,6 +649,7 @@ export class ProcessWebhookEventUseCase {
       'Publishing intex.message.ingest event'
     );
 
+    const replyContext = await this.resolveReplyContext(payload, savedEvent.id, userId, logger);
     const ingestPublishResult = await eventPublisher.publishIntexMessageIngest({
       type: 'intex.message.ingest',
       userId,
@@ -653,6 +657,7 @@ export class ProcessWebhookEventUseCase {
       sourceType: 'whatsapp_text',
       text: messageText,
       whatsappSender: fromNumber,
+      ...(replyContext !== undefined ? { replyContext } : {}),
       timestamp,
     });
 
@@ -691,6 +696,59 @@ export class ProcessWebhookEventUseCase {
 
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
     await this.markMessageAsRead(payload, savedEvent, logger);
+  }
+
+  private async resolveReplyContext(
+    payload: WebhookPayload,
+    eventId: string,
+    userId: string,
+    logger: Logger
+  ): Promise<IntexMessageReplyContext | undefined> {
+    const context = extractReplyContext(payload);
+    if (context === null) {
+      return undefined;
+    }
+
+    const { messageRepository, outboundMessageRepository } = this.deps;
+    const inboundResult = await messageRepository.findByWaMessageId(userId, context.replyToWamid);
+    if (inboundResult.ok) {
+      if (inboundResult.value !== null && inboundResult.value.text.trim() !== '') {
+        return buildReplyContext(
+          context.replyToWamid,
+          'inbound_user_message',
+          inboundResult.value.text
+        );
+      }
+    } else {
+      logger.info(
+        { eventId, error: inboundResult.error, replyToWamid: context.replyToWamid },
+        'Failed to resolve inbound WhatsApp reply context'
+      );
+    }
+
+    const outboundResult = await outboundMessageRepository.findByWamid(context.replyToWamid);
+    if (outboundResult.ok) {
+      const outbound = outboundResult.value;
+      const outboundMessageText = outbound?.messageText;
+      if (
+        outbound?.userId === userId &&
+        typeof outboundMessageText === 'string' &&
+        outboundMessageText.trim() !== ''
+      ) {
+        return buildReplyContext(
+          context.replyToWamid,
+          'outbound_assistant_message',
+          outboundMessageText
+        );
+      }
+    } else {
+      logger.info(
+        { eventId, error: outboundResult.error, replyToWamid: context.replyToWamid },
+        'Failed to resolve outbound WhatsApp reply context'
+      );
+    }
+
+    return undefined;
   }
 
   /**
@@ -756,4 +814,22 @@ export class ProcessWebhookEventUseCase {
       }
     }
   }
+}
+
+function buildReplyContext(
+  replyToWamid: string,
+  source: IntexMessageReplyContext['source'],
+  text: string
+): IntexMessageReplyContext {
+  const normalized = text.trim().replace(/\s+/g, ' ');
+  if (normalized.length <= MAX_REPLY_CONTEXT_TEXT_LENGTH) {
+    return { replyToWamid, source, text: normalized, truncated: false };
+  }
+
+  return {
+    replyToWamid,
+    source,
+    text: `${normalized.slice(0, MAX_REPLY_CONTEXT_TEXT_LENGTH - 3)}...`,
+    truncated: true,
+  };
 }

@@ -57,7 +57,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Cross-Linking:** PR titles contain `INT-XXX`. PR body: `Fixes INT-XXX`. NEVER fabricate issue IDs — ask the user if none provided. Reference: `.claude/reference/cross-linking.md`
 
-**Infrastructure:** ALL via Terraform. GCP project: `--project=intexuraos-dev-pbuchman`. SA key: `$HOME/.config/gcloud/sa-key.json`. Reference: `.claude/reference/infrastructure.md`
+**Infrastructure:** ALL via Terraform. GCP project: `--project=intexuraos-dev-pbuchman`. SA key: `$HOME/.config/gcloud/sa-key.json`. Firestore investigations MUST use explicit service-account credentials. Reference: `.claude/reference/infrastructure.md`, `.claude/reference/firestore-access.md`
 
 **Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Hetzner PM2/nginx + retained GCP data plane). No "local". Both environments use the SAME retained GCP project `intexuraos-dev-pbuchman` (the `-dev-pbuchman` suffix is legacy — there is no separate prod project). `terraform/environments/dev/` owns retained GCP resources; `terraform/hetzner-prod/` owns the production Hetzner host and Hetzner-targeted async/control-plane resources. Firestore shared. Reference: `.claude/reference/environments.md`
 
