@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@intexuraos/common-core';
 import type { ToolCallingClient, ToolCallingMessage } from '@intexuraos/llm-contract';
 import type {
   IntexAgentRunner,
@@ -74,6 +75,14 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         maxIterations: 5,
       });
 
+      const externalSaveFailure = getExternalSaveFailure(toolExecutions);
+      if (externalSaveFailure !== undefined) {
+        return {
+          outcome: 'unsupported',
+          reply: buildExternalSaveFailureReply(externalSaveFailure),
+        };
+      }
+
       if (!result.ok) {
         return {
           outcome: 'unsupported',
@@ -94,6 +103,7 @@ interface IntexAgentToolExecution {
   toolName: IntexAgentToolName;
   args: Record<string, unknown>;
   result?: Record<string, unknown>;
+  error?: string;
 }
 
 interface CompletedReply {
@@ -269,14 +279,23 @@ function createTrackingToolExecutor(
     args: Record<string, unknown>,
     run: () => Promise<string>
   ): Promise<string> {
-    const rawResult = await run();
-    const parsedResult = parseToolResult(rawResult);
-    toolExecutions.push({
-      toolName,
-      args,
-      ...(parsedResult !== undefined ? { result: parsedResult } : {}),
-    });
-    return rawResult;
+    try {
+      const rawResult = await run();
+      const parsedResult = parseToolResult(rawResult);
+      toolExecutions.push({
+        toolName,
+        args,
+        ...(parsedResult !== undefined ? { result: parsedResult } : {}),
+      });
+      return rawResult;
+    } catch (error) {
+      toolExecutions.push({
+        toolName,
+        args,
+        error: getErrorMessage(error, 'Unknown external save error'),
+      });
+      throw error;
+    }
   }
 
   return {
@@ -330,12 +349,39 @@ async function saveWhatsAppImageExternally(
       toolName: 'save_external',
       ...(result !== undefined ? { toolResult: result } : {}),
     };
-  } catch {
+  } catch (error) {
     return {
       outcome: 'unsupported',
-      reply: buildCompletionFailureCapabilitiesReply(),
+      reply: buildExternalSaveFailureReply(getErrorMessage(error, 'Unknown external save error')),
     };
   }
+}
+
+function getExternalSaveFailure(
+  toolExecutions: IntexAgentToolExecution[]
+): string | undefined {
+  return toolExecutions.find(
+    (execution) => execution.toolName === 'save_external' && execution.error !== undefined
+  )?.error;
+}
+
+function buildExternalSaveFailureReply(errorMessage: string): string {
+  if (isExternalSaveNotConfiguredError(errorMessage)) {
+    return 'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.';
+  }
+
+  const detail = normalizeExternalSaveFailureDetail(errorMessage);
+  return `I could not deliver this to the external system. The external save request failed: ${detail}. Please check the external system configuration and try again.`;
+}
+
+function isExternalSaveNotConfiguredError(errorMessage: string): boolean {
+  return errorMessage.trim() === 'External save is not configured';
+}
+
+function normalizeExternalSaveFailureDetail(errorMessage: string): string {
+  const normalized = errorMessage.trim().replace(/^Failed to save externally:\s*/i, '');
+  const withoutTrailingPeriod = normalized.replace(/\.+$/u, '').trim();
+  return withoutTrailingPeriod === '' ? 'Unknown external save error' : withoutTrailingPeriod;
 }
 
 function toRecord(args: object): Record<string, unknown> {
