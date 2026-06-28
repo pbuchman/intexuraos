@@ -24,6 +24,22 @@
 
 **Firestore is SHARED between both environments.** Same database, same collections.
 
+## Sentry Routing
+
+Sentry routing is DSN-based; environment labels are still only `dev` and `prod`.
+
+| Runtime | Backend project       | Web project               | `INTEXURAOS_ENVIRONMENT` |
+| ------- | --------------------- | ------------------------- | ------------------------ |
+| dev     | `intexuraos-home-dev` | `intexuraos-web-home-dev` | `dev`                    |
+| prod    | `intexuraos-hetzner`  | `intexuraos-web-hetzner`  | `prod`                   |
+
+Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports
+older values such as `development`. The home-dev orchestrator systemd env file
+at `~/.code-orchestrator/env` must also set `INTEXURAOS_ENVIRONMENT=dev` and
+`INTEXURAOS_RUNTIME=dev`. Production receives the Hetzner DSNs from Secret
+Manager via `scripts/hetzner/load-secrets.sh`; the web DSN is baked into the
+static bundle by `scripts/hetzner/deploy-web.sh`.
+
 **Credentials source of truth:** GCP Secret Manager
 
 - **prod:** Uses secrets directly from Secret Manager

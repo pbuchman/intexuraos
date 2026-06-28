@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 interface WhatsAppPubSubEnv {
@@ -27,7 +28,7 @@ const REMOVED_AGENT_ENV_KEYS = ['TODOS', 'CHAT', 'CRON'].flatMap((name) => [
 ]);
 const REMOVED_TOPIC_ENV_KEY = ['INTEXURAOS', 'TODOS', 'PROCESSING', 'TOPIC'].join('_');
 
-function loadDevConfig(): DevConfigSummary {
+function loadDevConfig(extraEnv: Record<string, string> = {}): DevConfigSummary {
   const stdout = execFileSync(
     process.execPath,
     [
@@ -47,6 +48,7 @@ function loadDevConfig(): DevConfigSummary {
       env: {
         HOME: process.env.HOME ?? '/tmp',
         PATH: process.env.PATH ?? '',
+        ...extraEnv,
       },
     }
   );
@@ -190,5 +192,32 @@ describe('ecosystem.config.cjs', () => {
 
   it('does not inherit NODE_OPTIONS into PM2 service environments', () => {
     expect(loadInheritedNodeOptions()).toEqual({});
+  });
+
+  it('forces home-dev runtime environment tags even when the shell exports stale values', () => {
+    const config = loadDevConfig({
+      INTEXURAOS_ENVIRONMENT: 'development',
+      INTEXURAOS_RUNTIME: 'development',
+    });
+
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_ENVIRONMENT, app.name).toBe('dev');
+      expect(app.env.INTEXURAOS_RUNTIME, app.name).toBe('dev');
+    }
+  });
+
+  it('documents home-dev Sentry DSNs with the canonical dev environment label', () => {
+    const envExample = readFileSync('.envrc.local.example', 'utf8');
+
+    expect(envExample).toContain('export INTEXURAOS_ENVIRONMENT=dev');
+    expect(envExample).not.toContain('export INTEXURAOS_ENVIRONMENT=development');
+    expect(envExample).toMatch(/INTEXURAOS_SENTRY_DSN=.*\/4510703655321680"/);
+    expect(envExample).toMatch(/INTEXURAOS_SENTRY_DSN_WEB=.*\/4510703657812048"/);
+    expect(envExample).toContain('export INTEXURAOS_SENTRY_WEBHOOK_SECRET=');
+    expect(envExample).toContain('export INTEXURAOS_SENTRY_AUTOMATION_USER_ID=');
+    expect(envExample).toContain(
+      'export INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY=pbuchman/intexuraos'
+    );
+    expect(envExample).toContain('export INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH=development');
   });
 });

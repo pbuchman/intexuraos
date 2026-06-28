@@ -142,13 +142,18 @@ export INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8110/oauth/connecti
 # =============================================================================
 # SENTRY ERROR MONITORING
 # =============================================================================
-# Sentry DSN for error tracking in local development
-# Default DSN for backend services
+# Sentry DSN for home-dev error tracking (Sentry project: intexuraos-home-dev)
 export INTEXURAOS_SENTRY_DSN="https://5e5f5df6749b5153e6692c7995ec3ff9@o4510702688337920.ingest.de.sentry.io/4510703655321680"
-# Web app specific DSN
+# Web app DSN for home-dev error tracking (Sentry project: intexuraos-web-home-dev)
 export INTEXURAOS_SENTRY_DSN_WEB="https://e80fca02a2e9ae3a49aeafcac1cf59fa@o4510702688337920.ingest.de.sentry.io/4510703657812048"
-# Environment name for Sentry
-export INTEXURAOS_ENVIRONMENT=development
+# Environment tag for Sentry and runtime logs. The project environment model is dev/prod only.
+export INTEXURAOS_ENVIRONMENT=dev
+# Code-agent Sentry automation settings for home-dev issue webhooks.
+# The secret/user values are loaded from Secret Manager by sync-secrets.sh when available.
+export INTEXURAOS_SENTRY_WEBHOOK_SECRET=${INTEXURAOS_SENTRY_WEBHOOK_SECRET:-}
+export INTEXURAOS_SENTRY_AUTOMATION_USER_ID=${INTEXURAOS_SENTRY_AUTOMATION_USER_ID:-}
+export INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY=pbuchman/intexuraos
+export INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH=development
 
 # =============================================================================
 # CODE-AGENT WORKER SETTINGS (for testing task dispatch)
