@@ -17,6 +17,7 @@ interface OutboundMessageDoc {
   wamid: string;
   correlationId: string;
   userId: string;
+  messageText?: string;
   sentAt: string;
   expiresAt: number;
 }
@@ -26,6 +27,7 @@ function toDoc(message: OutboundMessage): OutboundMessageDoc {
     wamid: message.wamid,
     correlationId: message.correlationId,
     userId: message.userId,
+    ...(message.messageText !== undefined ? { messageText: message.messageText } : {}),
     sentAt: message.sentAt,
     expiresAt: message.expiresAt,
   };
@@ -36,6 +38,7 @@ function toOutboundMessage(doc: OutboundMessageDoc): OutboundMessage {
     wamid: doc.wamid,
     correlationId: doc.correlationId,
     userId: doc.userId,
+    ...(doc.messageText !== undefined ? { messageText: doc.messageText } : {}),
     sentAt: doc.sentAt,
     expiresAt: doc.expiresAt,
   };

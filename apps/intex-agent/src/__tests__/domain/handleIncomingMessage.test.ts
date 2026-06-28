@@ -99,6 +99,97 @@ describe('handleIncomingMessage', () => {
     ]);
   });
 
+  it('passes only prior events to the runner after storing the current user message', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:55:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:55:00.000Z',
+      startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-previous',
+      text: 'create event tomorrow',
+      sourceType: 'whatsapp_text',
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'no_action',
+        reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-current', text: 'remember that the door code is 1234' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'user_message')).toEqual([
+      {
+        messageId: 'wamid-previous',
+        text: 'create event tomorrow',
+        sourceType: 'whatsapp_text',
+      },
+      {
+        messageId: 'wamid-current',
+        text: 'remember that the door code is 1234',
+        sourceType: 'whatsapp_text',
+      },
+    ]);
+    expect(runner.calls).toHaveLength(1);
+    const call = runner.calls[0];
+    if (call === undefined) {
+      throw new Error('Expected runner call');
+    }
+    expect(call.message).toBe('remember that the door code is 1234');
+    expect(call.events.map((event) => event.payload['messageId'])).toEqual(['wamid-previous']);
+  });
+
+  it('stores and passes replied-message context for the current user message', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'no_action',
+        reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+    const replyContext = {
+      replyToWamid: 'wamid-original',
+      source: 'outbound_assistant_message' as const,
+      text: 'What would you like me to help with?',
+      truncated: false,
+    };
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-current',
+        text: 'show tomorrow calendar events',
+        replyContext,
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'user_message')[0]).toEqual({
+      messageId: 'wamid-current',
+      text: 'show tomorrow calendar events',
+      sourceType: 'whatsapp_text',
+      replyContext,
+    });
+    expect(runner.calls).toHaveLength(1);
+    const call = runner.calls[0];
+    if (call === undefined) {
+      throw new Error('Expected runner call');
+    }
+    expect(call.message).toBe('show tomorrow calendar events');
+    expect(call.replyContext).toEqual(replyContext);
+    expect(call.events.some((event) => event.payload['messageId'] === 'wamid-current')).toBe(false);
+  });
+
   it('keeps greeting sessions open without publishing lifecycle text', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -677,6 +768,7 @@ class FakeRunner implements IntexAgentRunner {
     session: IntexAgentSession;
     events: IntexAgentSessionEvent[];
     message: string;
+    replyContext?: IntexIncomingMessage['replyContext'];
     currentDateTime: string;
   }[] = [];
 
@@ -686,6 +778,7 @@ class FakeRunner implements IntexAgentRunner {
     session: IntexAgentSession;
     events: IntexAgentSessionEvent[];
     message: string;
+    replyContext?: IntexIncomingMessage['replyContext'];
     currentDateTime: string;
   }): Promise<IntexAgentRunnerResult> {
     this.calls.push(input);

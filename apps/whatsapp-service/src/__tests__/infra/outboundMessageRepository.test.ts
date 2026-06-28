@@ -106,6 +106,21 @@ describe('outboundMessageRepository', () => {
       }
     });
 
+    it('roundtrips optional assistant message text', async () => {
+      const message = createTestOutboundMessage({
+        wamid: 'wamid.with-text',
+        messageText: 'What would you like me to help with?',
+      });
+      await repository.save(message);
+
+      const result = await repository.findByWamid('wamid.with-text');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.messageText).toBe('What would you like me to help with?');
+      }
+    });
+
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Read error') });
 

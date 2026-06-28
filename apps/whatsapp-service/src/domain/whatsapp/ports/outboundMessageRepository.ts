@@ -15,6 +15,8 @@ export interface OutboundMessage {
   correlationId: string;
   /** User ID who received the message */
   userId: string;
+  /** Text sent to the user, retained briefly for reply context */
+  messageText?: string;
   /** Timestamp when the message was sent */
   sentAt: string;
   /** TTL for auto-cleanup (Unix timestamp) */

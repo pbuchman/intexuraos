@@ -46,6 +46,7 @@ export interface IntexAgentRunner {
     session: IntexAgentSession;
     events: IntexAgentSessionEvent[];
     message: string;
+    replyContext?: IntexIncomingMessage['replyContext'];
     currentDateTime: string;
     messageId?: string;
   }): Promise<IntexAgentRunnerResult>;
@@ -116,6 +117,7 @@ export async function handleIncomingMessage(
     messageId: input.messageId,
     text: effectiveMessage,
     sourceType: input.sourceType,
+    ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
   });
   await deps.sessionRepository.updateSession(session.id, {
     status: 'active',
@@ -136,8 +138,9 @@ export async function handleIncomingMessage(
 
   const runnerResult = await deps.runner.run({
     session,
-    events,
+    events: excludeCurrentUserMessage(events, input.messageId),
     message: effectiveMessage,
+    ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
     currentDateTime: now,
     messageId: input.messageId,
   });
@@ -389,4 +392,13 @@ function findLastToolResourceUrl(events: IntexAgentSessionEvent[]): string | nul
   }
 
   return null;
+}
+
+function excludeCurrentUserMessage(
+  events: IntexAgentSessionEvent[],
+  messageId: string
+): IntexAgentSessionEvent[] {
+  return events.filter(
+    (event) => event.type !== 'user_message' || event.payload['messageId'] !== messageId
+  );
 }

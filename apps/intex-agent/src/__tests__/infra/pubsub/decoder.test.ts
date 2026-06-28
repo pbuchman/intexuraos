@@ -29,6 +29,88 @@ describe('decodeIntexMessageIngestPush', () => {
     expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
   });
 
+  it('decodes optional replied-message context', () => {
+    const event = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-1',
+      text: 'show tomorrow calendar events',
+      sourceType: 'whatsapp_text',
+      timestamp: '2026-06-24T10:00:00.000Z',
+      replyContext: {
+        replyToWamid: 'wamid-original',
+        source: 'outbound_assistant_message',
+        text: 'What would you like me to help with?',
+        truncated: false,
+      },
+    };
+
+    expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
+  });
+
+  it('decodes inbound replied-message context', () => {
+    const event = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-1',
+      text: 'yes, that one',
+      sourceType: 'whatsapp_text',
+      timestamp: '2026-06-24T10:00:00.000Z',
+      replyContext: {
+        replyToWamid: 'wamid-original',
+        source: 'inbound_user_message',
+        text: 'Tomorrow morning please list my calendar events',
+        truncated: true,
+      },
+    };
+
+    expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
+  });
+
+  it('rejects malformed replied-message context', () => {
+    const baseEvent = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-1',
+      text: 'show tomorrow calendar events',
+      sourceType: 'whatsapp_text',
+      timestamp: '2026-06-24T10:00:00.000Z',
+    };
+
+    expect(() =>
+      decodeIntexMessageIngestPush(push({ ...baseEvent, replyContext: null }))
+    ).toThrow('Invalid intex.message.ingest event: replyContext must be an object');
+    expect(() =>
+      decodeIntexMessageIngestPush(push({ ...baseEvent, replyContext: [] }))
+    ).toThrow('Invalid intex.message.ingest event: replyContext must be an object');
+    expect(() =>
+      decodeIntexMessageIngestPush(
+        push({
+          ...baseEvent,
+          replyContext: {
+            replyToWamid: 'wamid-original',
+            source: 'assistant_message',
+            text: 'What would you like me to help with?',
+            truncated: false,
+          },
+        })
+      )
+    ).toThrow('Invalid intex.message.ingest event: replyContext.source is invalid');
+    expect(() =>
+      decodeIntexMessageIngestPush(
+        push({
+          ...baseEvent,
+          replyContext: {
+            replyToWamid: 'wamid-original',
+            source: 'outbound_assistant_message',
+            text: 'What would you like me to help with?',
+            truncated: 'false',
+          },
+        })
+      )
+    ).toThrow('Invalid intex.message.ingest event: truncated must be a boolean');
+  });
+
   it('rejects messages with another event type', () => {
     expect(() =>
       decodeIntexMessageIngestPush(push({ type: 'legacy.ingest', text: 'remember this' }))

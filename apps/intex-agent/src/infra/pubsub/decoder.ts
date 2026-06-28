@@ -1,4 +1,7 @@
-import type { IntexIncomingMessage } from '../../domain/ports/incomingMessageHandler.js';
+import type {
+  IntexIncomingMessage,
+  IntexIncomingMessageReplyContext,
+} from '../../domain/ports/incomingMessageHandler.js';
 
 interface PubSubPushBody {
   message?: {
@@ -54,6 +57,7 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
   const sourceType = requiredString(event, 'sourceType');
   const timestamp = requiredString(event, 'timestamp');
   const whatsappSender = optionalString(event, 'whatsappSender');
+  const replyContext = optionalReplyContext(event);
 
   return {
     type: type as IntexIncomingMessage['type'],
@@ -63,6 +67,7 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
     sourceType,
     timestamp,
     ...(whatsappSender !== undefined ? { whatsappSender } : {}),
+    ...(replyContext !== undefined ? { replyContext } : {}),
   };
 }
 
@@ -90,6 +95,48 @@ function optionalString(event: Record<string, unknown>, key: string): string | u
   }
   if (typeof value !== 'string') {
     throw new Error(`Invalid intex.message.ingest event: ${key} must be a string`);
+  }
+  return value;
+}
+
+function optionalReplyContext(
+  event: Record<string, unknown>
+): IntexIncomingMessageReplyContext | undefined {
+  const value = event['replyContext'];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid intex.message.ingest event: replyContext must be an object');
+  }
+
+  const context = value as Record<string, unknown>;
+  const replyToWamid = requiredString(context, 'replyToWamid');
+  const source = requiredReplyContextSource(context['source']);
+  const text = requiredString(context, 'text');
+  const truncated = requiredBoolean(context, 'truncated');
+
+  return {
+    replyToWamid,
+    source,
+    text,
+    truncated,
+  };
+}
+
+function requiredReplyContextSource(
+  value: unknown
+): IntexIncomingMessageReplyContext['source'] {
+  if (value === 'inbound_user_message' || value === 'outbound_assistant_message') {
+    return value;
+  }
+  throw new Error('Invalid intex.message.ingest event: replyContext.source is invalid');
+}
+
+function requiredBoolean(event: Record<string, unknown>, key: string): boolean {
+  const value = event[key];
+  if (typeof value !== 'boolean') {
+    throw new Error(`Invalid intex.message.ingest event: ${key} must be a boolean`);
   }
   return value;
 }

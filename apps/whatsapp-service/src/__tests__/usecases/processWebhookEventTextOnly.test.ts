@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Logger } from '@intexuraos/common-core';
+import { err, ok, type Logger } from '@intexuraos/common-core';
 import {
   FakeEventPublisher,
   FakeMediaStorage,
@@ -13,11 +13,13 @@ import {
 import {
   createAudioWebhookPayload,
   createButtonWebhookPayload,
+  createReplyWebhookPayload,
   createWebhookPayload,
 } from '../testUtils.js';
 import { ProcessWebhookEventUseCase } from '../../domain/whatsapp/usecases/processWebhookEventUseCase.js';
 import type { WhatsAppWebhookEvent } from '../../domain/whatsapp/ports/repositories.js';
 import type { WebhookPayload } from '../../routes/schemas.js';
+import type { OutboundMessage } from '../../domain/whatsapp/index.js';
 
 interface MutablePhoneMetadataPayload {
   object: 'whatsapp_business_account';
@@ -33,6 +35,7 @@ interface Harness {
   mediaStorage: FakeMediaStorage;
   whatsappCloudApi: FakeWhatsAppCloudApiPort;
   eventPublisher: FakeEventPublisher;
+  outboundMessageRepository: FakeOutboundMessageRepository;
 }
 
 function asWebhookPayload(payload: object): WebhookPayload {
@@ -55,6 +58,7 @@ async function createHarness(): Promise<Harness> {
   const mediaStorage = new FakeMediaStorage();
   const whatsappCloudApi = new FakeWhatsAppCloudApiPort();
   const eventPublisher = new FakeEventPublisher();
+  const outboundMessageRepository = new FakeOutboundMessageRepository();
 
   const savedEventResult = await webhookEventRepository.saveEvent({
     payload: {},
@@ -71,7 +75,7 @@ async function createHarness(): Promise<Harness> {
     webhookEventRepository,
     userMappingRepository,
     messageRepository,
-    outboundMessageRepository: new FakeOutboundMessageRepository(),
+    outboundMessageRepository,
     mediaStorage,
     whatsappCloudApi,
     thumbnailGenerator: new FakeThumbnailGeneratorPort(),
@@ -87,6 +91,7 @@ async function createHarness(): Promise<Harness> {
     mediaStorage,
     whatsappCloudApi,
     eventPublisher,
+    outboundMessageRepository,
   };
 }
 
@@ -255,5 +260,192 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
 
     expect(messageRepository.getAll()).toHaveLength(1);
     expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
+  });
+
+  it('publishes replied-to inbound user message text as safe Intex context', async () => {
+    const { savedEvent, useCase, userMappingRepository, messageRepository, eventPublisher } =
+      await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    await messageRepository.saveMessage({
+      userId: 'user-1',
+      waMessageId: 'wamid.original-user-message',
+      fromNumber: '15551234567',
+      toNumber: '15551234567',
+      text: 'Tomorrow morning please list my calendar events',
+      mediaType: 'text',
+      timestamp: '1234567800',
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+    });
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.original-user-message',
+          messageText: 'yes, that one',
+        })
+      ),
+      savedEvent,
+      logger()
+    );
+
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]?.replyContext).toEqual({
+      replyToWamid: 'wamid.original-user-message',
+      source: 'inbound_user_message',
+      text: 'Tomorrow morning please list my calendar events',
+      truncated: false,
+    });
+  });
+
+  it('publishes replied-to outbound assistant message text as safe Intex context', async () => {
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      outboundMessageRepository,
+      eventPublisher,
+    } = await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    const outboundMessage = {
+      wamid: 'wamid.original-assistant-message',
+      correlationId: 'session-1',
+      userId: 'user-1',
+      sentAt: new Date().toISOString(),
+      expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+      messageText: 'What would you like me to help with?',
+    } satisfies OutboundMessage & { messageText: string };
+    await outboundMessageRepository.save(outboundMessage);
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.original-assistant-message',
+          messageText: 'show tomorrow calendar events',
+        })
+      ),
+      savedEvent,
+      logger()
+    );
+
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]?.replyContext).toEqual({
+      replyToWamid: 'wamid.original-assistant-message',
+      source: 'outbound_assistant_message',
+      text: 'What would you like me to help with?',
+      truncated: false,
+    });
+  });
+
+  it('falls back to outbound reply context when inbound lookup fails', async () => {
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      messageRepository,
+      outboundMessageRepository,
+      eventPublisher,
+    } = await createHarness();
+    const log = logger();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    vi.spyOn(messageRepository, 'findByWaMessageId')
+      .mockResolvedValueOnce(ok(null))
+      .mockResolvedValueOnce(err({ code: 'INTERNAL_ERROR', message: 'Simulated lookup failure' }));
+    await outboundMessageRepository.save({
+      wamid: 'wamid.original-assistant-message',
+      correlationId: 'session-1',
+      userId: 'user-1',
+      sentAt: new Date().toISOString(),
+      expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+      messageText: 'What would you like me to help with?',
+    });
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.original-assistant-message',
+          messageText: 'show tomorrow calendar events',
+        })
+      ),
+      savedEvent,
+      log
+    );
+
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]?.replyContext).toEqual({
+      replyToWamid: 'wamid.original-assistant-message',
+      source: 'outbound_assistant_message',
+      text: 'What would you like me to help with?',
+      truncated: false,
+    });
+    expect(log.info).toHaveBeenCalledWith(
+      expect.objectContaining({ replyToWamid: 'wamid.original-assistant-message' }),
+      'Failed to resolve inbound WhatsApp reply context'
+    );
+  });
+
+  it('publishes no reply context when outbound lookup fails', async () => {
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      outboundMessageRepository,
+      eventPublisher,
+    } = await createHarness();
+    const log = logger();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    outboundMessageRepository.setFail(true);
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.original-assistant-message',
+          messageText: 'show tomorrow calendar events',
+        })
+      ),
+      savedEvent,
+      log
+    );
+
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]?.replyContext).toBeUndefined();
+    expect(log.info).toHaveBeenCalledWith(
+      expect.objectContaining({ replyToWamid: 'wamid.original-assistant-message' }),
+      'Failed to resolve outbound WhatsApp reply context'
+    );
+  });
+
+  it('truncates long replied-to message text before publishing Intex context', async () => {
+    const { savedEvent, useCase, userMappingRepository, messageRepository, eventPublisher } =
+      await createHarness();
+    const longText = 'x'.repeat(1300);
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    await messageRepository.saveMessage({
+      userId: 'user-1',
+      waMessageId: 'wamid.long-user-message',
+      fromNumber: '15551234567',
+      toNumber: '15551234567',
+      text: longText,
+      mediaType: 'text',
+      timestamp: '1234567800',
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+    });
+
+    await useCase.execute(
+      asWebhookPayload(
+        createReplyWebhookPayload({
+          replyToWamid: 'wamid.long-user-message',
+          messageText: 'yes, that one',
+        })
+      ),
+      savedEvent,
+      logger()
+    );
+
+    const replyContext = eventPublisher.getIntexMessageIngestEvents()[0]?.replyContext;
+    expect(replyContext).toEqual({
+      replyToWamid: 'wamid.long-user-message',
+      source: 'inbound_user_message',
+      text: expect.stringMatching(/\.\.\.$/),
+      truncated: true,
+    });
+    expect(replyContext?.text).toHaveLength(1200);
   });
 });
