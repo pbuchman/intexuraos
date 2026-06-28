@@ -59,7 +59,7 @@ Every internal route must call `logIncomingRequest()` before auth validation.
 
 | Event | Purpose |
 | --- | --- |
-| `intex.message.ingest` | Text message payload for Intex Agent |
+| `intex.message.ingest` | Text or stored-image payload for Intex Agent |
 | `whatsapp.message.send` | Outbound message request |
 | `whatsapp.media.cleanup` | Media cleanup request |
 | `whatsapp.webhook.process` | Async processing request for persisted webhook events |
@@ -94,3 +94,9 @@ Existing image messages without stored GCS metadata intentionally remain as plac
 Audio/voice webhook events do not publish transcription jobs for Intex. They send the unsupported voice reply and complete the webhook without creating an Intex message event.
 
 Button and interactive replies from retired workflows are ignored and are not routed into Intex Agent.
+
+## Intex Image Forwarding
+
+Assistant WhatsApp image messages are downloaded, thumbnailed, stored in GCS, and then published to `intex.message.ingest` with `sourceType: whatsapp_image`. The event text is the WhatsApp caption or an empty string. `sourceUrl` is a signed URL for the stored original image.
+
+If the signed URL or Intex ingest publish fails, webhook processing is marked failed and retryable so External Save does not silently miss the image.

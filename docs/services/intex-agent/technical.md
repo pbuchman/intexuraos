@@ -7,6 +7,10 @@ Intex Agent is the WhatsApp text conversation runtime. It accepts `intex.message
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/internal/intex-agent/messages` | internal auth or Pub/Sub push OIDC header | Accept a direct or Pub/Sub-wrapped `intex.message.ingest` payload and return `202` with the session ID. |
+| `GET` | `/preferences` | bearer auth | Return prompt instructions and External Save configuration with the Cloudflare secret masked. |
+| `PUT` | `/preferences` | bearer auth | Save prompt instructions and External Save configuration. |
+| `DELETE` | `/preferences` | bearer auth | Clear prompt instructions and External Save configuration. |
+| `POST` | `/preferences/external-save/test` | bearer auth | Test the saved or submitted External Save configuration. |
 | `GET` | `/sessions` | bearer auth | List the authenticated user's Intex Agent sessions. |
 | `GET` | `/sessions/:sessionId` | bearer auth | Return one authenticated-user session. |
 | `GET` | `/sessions/:sessionId/events` | bearer auth | Return ordered timeline events for one authenticated-user session. |
@@ -21,10 +25,13 @@ The current tools are defined in `apps/intex-agent/src/domain/agent/toolDefiniti
 - `create_research`
 - `create_link`
 - `create_code_task`
+- `save_external`
 
 The system prompt in `apps/intex-agent/src/domain/agent/systemPrompt.ts` is the runtime contract. Requests outside those jobs must return `unsupported` rather than being routed through a fallback action system.
 
-`classifyIntexAgentIntent` gates tool exposure before the LLM call. It exposes only the single matched tool for explicit create/save intent, exposes `create_link` for bare URL shares, routes read-only calendar list/count questions only through `query_calendar_events`, and rejects messages that contain multiple supported resource intents. Other read-only personal-data requests remain unsupported.
+`classifyIntexAgentIntent` gates tool exposure before the LLM call. It exposes only the single matched tool for explicit create/save intent, exposes `create_link` for bare URL shares, exposes `save_external` for English and Polish external-save phrases, routes read-only calendar list/count questions only through `query_calendar_events`, and rejects messages that contain multiple supported resource intents. Other read-only personal-data requests remain unsupported.
+
+WhatsApp image messages skip the LLM and call `save_external` directly when External Save is enabled. The signed stored-image URL is passed as `sourceUrl` for the current turn only; the long-lived Intex session event stores `hasSourceUrl: true` instead of the full signed URL.
 
 ## Downstream Services
 
@@ -36,8 +43,38 @@ The system prompt in `apps/intex-agent/src/domain/agent/systemPrompt.ts` is the 
 | `create_research` | research-agent |
 | `create_link` | bookmarks-agent |
 | `create_code_task` | code-agent |
+| `save_external` | User-configured External Save endpoint |
 
 Code tasks default to planning mode unless the user explicitly asks for execution mode.
+
+## External Save Endpoint
+
+The external endpoint is protected by Cloudflare Access Service Auth. Intex sends:
+
+```http
+CF-Access-Client-Id: <client-id>
+CF-Access-Client-Secret: <client-secret>
+content-type: application/json
+```
+
+Request body:
+
+```json
+{
+  "source": "ios-shortcuts",
+  "message": "User caption or pasted text",
+  "source_url": "https://optional-image-or-shared-url"
+}
+```
+
+`source_url` is omitted when no URL is available. Intex does not fetch or inspect `source_url`.
+
+The web client in `apps/web/src/services/intexAgentApi.ts` exposes:
+
+- `getIntexAgentPreferences(token)`
+- `saveIntexAgentPreferences(token, { instructions, externalSave })`
+- `testIntexAgentExternalSave(token, externalSave)`
+- `clearIntexAgentPreferences(token)`
 
 ## Sessions And Replies
 

@@ -14,6 +14,7 @@ const incomingMessageBodySchema = {
     messageId: { type: 'string', minLength: 1 },
     text: { type: 'string' },
     sourceType: { type: 'string', minLength: 1 },
+    sourceUrl: { type: 'string' },
     whatsappSender: { type: 'string' },
     replyContext: {
       type: 'object',

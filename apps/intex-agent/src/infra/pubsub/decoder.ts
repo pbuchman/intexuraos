@@ -55,6 +55,7 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
   const messageId = requiredString(event, 'messageId');
   const text = requiredString(event, 'text');
   const sourceType = requiredString(event, 'sourceType');
+  const sourceUrl = optionalString(event, 'sourceUrl');
   const timestamp = requiredString(event, 'timestamp');
   const whatsappSender = optionalString(event, 'whatsappSender');
   const replyContext = optionalReplyContext(event);
@@ -65,6 +66,7 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
     messageId,
     text,
     sourceType,
+    ...(sourceUrl !== undefined ? { sourceUrl } : {}),
     timestamp,
     ...(whatsappSender !== undefined ? { whatsappSender } : {}),
     ...(replyContext !== undefined ? { replyContext } : {}),

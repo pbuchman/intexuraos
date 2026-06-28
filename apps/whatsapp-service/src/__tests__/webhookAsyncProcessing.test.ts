@@ -403,6 +403,20 @@ describe('Webhook async processing', () => {
       // Files should be stored in GCS
       const files = ctx.mediaStorage.getAllFiles();
       expect(files.size).toBe(2); // Original + thumbnail
+
+      const ingestEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
+      expect(ingestEvents).toEqual([
+        expect.objectContaining({
+          type: 'intex.message.ingest',
+          userId,
+          messageId: 'wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+          text: 'Test image caption',
+          sourceType: 'whatsapp_image',
+          whatsappSender: senderPhone,
+          sourceUrl:
+            'https://storage.example.com/signed/whatsapp/test-user-id/wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA/test-media-id-12345.jpg',
+        }),
+      ]);
     });
 
     it('handles image message without caption', async () => {
@@ -444,6 +458,98 @@ describe('Webhook async processing', () => {
       expect(messages.length).toBe(1);
       expect(messages[0]?.text).toBe('');
       expect(messages[0]?.caption).toBeUndefined();
+
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toEqual([
+        expect.objectContaining({
+          type: 'intex.message.ingest',
+          userId,
+          text: '',
+          sourceType: 'whatsapp_image',
+          sourceUrl:
+            'https://storage.example.com/signed/whatsapp/test-user-id/wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA/test-media-id-12345.jpg',
+        }),
+      ]);
+    });
+
+    it('marks image processing retryable when publishing the Intex ingest event fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+      ctx.eventPublisher.setIntexMessageIngestFailure('Simulated intex image ingest failure');
+
+      const payload = createImageWebhookPayload({ caption: 'Receipt' });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.retryable).toBe(true);
+      expect(events[0]?.failureDetails).toContain('Failed to publish intex image ingest');
+    });
+
+    it('marks image processing retryable when creating the source URL fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+      ctx.mediaStorage.setFailGetSignedUrl(true);
+
+      const payload = createImageWebhookPayload({ caption: 'Receipt' });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.retryable).toBe(true);
+      expect(events[0]?.failureDetails).toContain('Failed to create image source URL');
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
     });
 
     it('handles getMediaUrl failure gracefully', async () => {

@@ -15,6 +15,7 @@ describe('createIntexAgentToolDefinitions', () => {
       'create_research',
       'create_link',
       'create_code_task',
+      'save_external',
     ]);
   });
 
@@ -121,6 +122,20 @@ describe('createIntexAgentToolDefinitions', () => {
           /only when explicitly requested.*Codex.*codex.*Codex extra high.*codex-xhigh.*MiniMax.*minimax/
         ),
       },
+    });
+  });
+
+  it('describes external save forwarding without inspecting URLs', () => {
+    const externalSaveTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'save_external'
+    );
+
+    expect(externalSaveTool?.description).toContain('external');
+    expect(externalSaveTool?.description).toContain('Do not fetch');
+    expect(externalSaveTool?.parameters['required']).toEqual(['message']);
+    expect(externalSaveTool?.parameters['properties']).toMatchObject({
+      message: { type: 'string' },
+      sourceUrl: { type: 'string' },
     });
   });
 
@@ -418,6 +433,44 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(executor.codeTaskArgs).toEqual([{ prompt: 'Plan the new import flow.' }]);
   });
 
+  it('delegates external save execution to the injected executor', async () => {
+    const executor = createExecutor();
+    const externalSaveTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'save_external'
+    );
+
+    await expect(
+      externalSaveTool?.run({
+        message: 'Save externally this LinkedIn note',
+        sourceUrl: 'https://example.com/post',
+      })
+    ).resolves.toBe('external-saved');
+    expect(executor.externalSaveArgs).toEqual([
+      {
+        message: 'Save externally this LinkedIn note',
+        sourceUrl: 'https://example.com/post',
+      },
+    ]);
+  });
+
+  it('delegates external save execution without optional source URL', async () => {
+    const executor = createExecutor();
+    const externalSaveTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'save_external'
+    );
+
+    await expect(
+      externalSaveTool?.run({
+        message: 'Save externally this copied note',
+      })
+    ).resolves.toBe('external-saved');
+    expect(executor.externalSaveArgs).toEqual([
+      {
+        message: 'Save externally this copied note',
+      },
+    ]);
+  });
+
   it('rejects invalid required and optional tool arguments', async () => {
     const [noteTool, calendarTool] = createIntexAgentToolDefinitions(createExecutor());
     const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
@@ -441,6 +494,16 @@ describe('createIntexAgentToolDefinitions', () => {
     await expect(
       codeTaskTool?.run({ prompt: 'Implement this', taskMode: 'fast' })
     ).rejects.toThrow('Tool argument taskMode must be one of: planning, execution');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'save_external')
+        ?.run({ message: 123 })
+    ).rejects.toThrow('Tool argument message must be a string');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'save_external')
+        ?.run({ message: 'ok', sourceUrl: 123 })
+    ).rejects.toThrow('Tool argument sourceUrl must be a string');
     await expect(
       createIntexAgentToolDefinitions(createExecutor())
         .find((tool) => tool.name === 'query_calendar_events')
@@ -525,6 +588,7 @@ function createExecutor(): IntexAgentToolExecutor & {
   researchArgs: unknown[];
   linkArgs: unknown[];
   codeTaskArgs: unknown[];
+  externalSaveArgs: unknown[];
 } {
   return {
     noteArgs: [],
@@ -533,6 +597,7 @@ function createExecutor(): IntexAgentToolExecutor & {
     researchArgs: [],
     linkArgs: [],
     codeTaskArgs: [],
+    externalSaveArgs: [],
     createNote(args): Promise<string> {
       this.noteArgs.push(args);
       return Promise.resolve('note-created');
@@ -556,6 +621,10 @@ function createExecutor(): IntexAgentToolExecutor & {
     createCodeTask(args): Promise<string> {
       this.codeTaskArgs.push(args);
       return Promise.resolve('code-task-created');
+    },
+    saveExternal(args): Promise<string> {
+      this.externalSaveArgs.push(args);
+      return Promise.resolve('external-saved');
     },
   };
 }

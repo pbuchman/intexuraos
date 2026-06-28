@@ -145,6 +145,11 @@ describe('intex-agent routes', () => {
           /* noop */
         },
       },
+      externalSaveTester: {
+        async testConnection(): Promise<{ ok: true; status: 'success'; message: string }> {
+          return { ok: true, status: 'success', message: 'Connection successful' } as const;
+        },
+      },
       incomingMessageHandler,
     } satisfies ServiceContainer);
 

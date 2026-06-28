@@ -137,7 +137,13 @@ export interface IntexMessageIngestEvent {
   /**
    * Source type identifier.
    */
-  sourceType: 'whatsapp_text';
+  sourceType: 'whatsapp_text' | 'whatsapp_image';
+
+  /**
+   * Optional original or media URL for external-save processing.
+   * Consumers must pass this through without fetching unless they own that behavior.
+   */
+  sourceUrl?: string;
 
   /**
    * Optional WhatsApp sender phone number for diagnostics.

@@ -45,12 +45,20 @@ export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision
 
 function explicitToolNames(text: string): IntexAgentToolName[] {
   const toolNames: IntexAgentToolName[] = [];
+  if (isExplicitExternalSaveRequest(text)) toolNames.push('save_external');
   if (isExplicitNoteRequest(text)) toolNames.push('create_note');
   if (isExplicitCalendarCreateRequest(text)) toolNames.push('create_calendar_event');
   if (isExplicitResearchRequest(text)) toolNames.push('create_research');
   if (isExplicitLinkRequest(text)) toolNames.push('create_link');
   if (isExplicitCodeTaskRequest(text)) toolNames.push('create_code_task');
   return toolNames;
+}
+
+function isExplicitExternalSaveRequest(text: string): boolean {
+  return (
+    /\b(save externally|upload externally|save for processing)\b/u.test(text) ||
+    /\b(zapisz zewnetrznie|przeslij zewnetrznie|zapisz do przetworzenia)\b/u.test(text)
+  );
 }
 
 function isReadOnlyCalendarQueryRequest(text: string): boolean {

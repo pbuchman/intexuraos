@@ -401,7 +401,14 @@ export class ProcessWebhookEventUseCase {
     imageMedia: { id: string; mimeType: string; sha256?: string; caption?: string },
     logger: Logger
   ): Promise<void> {
-    const { webhookEventRepository, messageRepository, mediaStorage, whatsappCloudApi, thumbnailGenerator } = this.deps;
+    const {
+      webhookEventRepository,
+      messageRepository,
+      mediaStorage,
+      whatsappCloudApi,
+      thumbnailGenerator,
+      eventPublisher,
+    } = this.deps;
 
     const usecase = new ProcessImageMessageUseCase({
       webhookEventRepository,
@@ -426,9 +433,49 @@ export class ProcessWebhookEventUseCase {
       logger
     );
 
-    if (result.ok) {
-      await this.markMessageAsRead(payload, savedEvent, logger);
+    if (!result.ok) {
+      return;
     }
+
+    const sourceUrlResult = await mediaStorage.getSignedUrl(result.value.gcsPath);
+    if (!sourceUrlResult.ok) {
+      const failureDetails = `Failed to create image source URL for intex ingest: ${sourceUrlResult.error.message}`;
+      logger.error(
+        { eventId: savedEvent.id, error: sourceUrlResult.error },
+        'Failed to create image source URL for intex ingest'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+        failureDetails,
+        retryable: true,
+      });
+      throw new RetryableWebhookProcessingError(failureDetails);
+    }
+
+    const ingestPublishResult = await eventPublisher.publishIntexMessageIngest({
+      type: 'intex.message.ingest',
+      userId,
+      messageId: waMessageId,
+      sourceType: 'whatsapp_image',
+      text: imageMedia.caption ?? '',
+      whatsappSender: fromNumber,
+      sourceUrl: sourceUrlResult.value,
+      timestamp,
+    });
+
+    if (!ingestPublishResult.ok) {
+      const failureDetails = `Failed to publish intex image ingest: ${ingestPublishResult.error.message}`;
+      logger.error(
+        { eventId: savedEvent.id, error: ingestPublishResult.error },
+        'Failed to publish intex.message.ingest image event'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+        failureDetails,
+        retryable: true,
+      });
+      throw new RetryableWebhookProcessingError(failureDetails);
+    }
+
+    await this.markMessageAsRead(payload, savedEvent, logger);
   }
 
   /**

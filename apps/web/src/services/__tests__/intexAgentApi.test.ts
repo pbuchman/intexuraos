@@ -4,9 +4,12 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getIntexAgentPreferences,
   getIntexAgentSession,
   listIntexAgentSessionEvents,
   listIntexAgentSessions,
+  saveIntexAgentPreferences,
+  testIntexAgentExternalSave,
 } from '../intexAgentApi.js';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '../../types/index.js';
 
@@ -81,5 +84,100 @@ describe('intexAgentApi', () => {
     const call = vi.mocked(apiRequest).mock.calls[0];
     expect(call?.[1]).toBe('/sessions/session%201/events');
     expect(result).toEqual([sampleEvent]);
+  });
+
+  it('GETs /preferences from intex-agent', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    const preferences = {
+      instructions: '',
+      externalSave: {
+        enabled: false,
+        endpointUrl: '',
+        cfAccessClientId: '',
+        cfAccessClientSecret: '',
+        source: 'ios-shortcuts',
+      },
+      updatedAt: null,
+    };
+    vi.mocked(apiRequest).mockResolvedValue(preferences);
+
+    const result = await getIntexAgentPreferences(TOKEN);
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe('/preferences');
+    expect(result).toEqual(preferences);
+  });
+
+  it('PUTs full preferences including external save config', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      instructions: '',
+      externalSave: {
+        enabled: true,
+        endpointUrl: 'https://external-save.example.com/intex',
+        cfAccessClientId: 'cf-client-id',
+        cfAccessClientSecret: '************',
+        source: 'ios-shortcuts',
+      },
+      updatedAt: '2026-06-27T10:00:00.000Z',
+    });
+
+    await saveIntexAgentPreferences(TOKEN, {
+      instructions: '',
+      externalSave: {
+        enabled: true,
+        endpointUrl: 'https://external-save.example.com/intex',
+        cfAccessClientId: 'cf-client-id',
+        cfAccessClientSecret: 'cf-client-secret',
+        source: 'ios-shortcuts',
+      },
+    });
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe('/preferences');
+    expect(call?.[3]).toMatchObject({ method: 'PUT' });
+    expect(JSON.parse(String(call?.[3]?.body))).toEqual({
+      instructions: '',
+      externalSave: {
+        enabled: true,
+        endpointUrl: 'https://external-save.example.com/intex',
+        cfAccessClientId: 'cf-client-id',
+        cfAccessClientSecret: 'cf-client-secret',
+        source: 'ios-shortcuts',
+      },
+    });
+  });
+
+  it('POSTs /preferences/external-save/test', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      status: 'success',
+      message: 'Connection successful',
+    });
+
+    const result = await testIntexAgentExternalSave(TOKEN, {
+      enabled: true,
+      endpointUrl: 'https://external-save.example.com/intex',
+      cfAccessClientId: 'cf-client-id',
+      cfAccessClientSecret: 'cf-client-secret',
+      source: 'ios-shortcuts',
+    });
+
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[1]).toBe('/preferences/external-save/test');
+    expect(call?.[3]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(call?.[3]?.body))).toEqual({
+      externalSave: {
+        enabled: true,
+        endpointUrl: 'https://external-save.example.com/intex',
+        cfAccessClientId: 'cf-client-id',
+        cfAccessClientSecret: 'cf-client-secret',
+        source: 'ios-shortcuts',
+      },
+    });
+    expect(result).toEqual({
+      status: 'success',
+      message: 'Connection successful',
+    });
   });
 });

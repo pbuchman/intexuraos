@@ -29,6 +29,21 @@ describe('decodeIntexMessageIngestPush', () => {
     expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
   });
 
+  it('decodes optional source URLs for external-save image and link forwarding', () => {
+    const event = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-image',
+      text: 'Receipt from lunch',
+      sourceType: 'whatsapp_image',
+      sourceUrl: 'https://storage.example.com/signed/whatsapp/user-1/wamid-image/media.jpg',
+      whatsappSender: '+48123456789',
+      timestamp: '2026-06-24T10:00:00.000Z',
+    };
+
+    expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
+  });
+
   it('decodes optional replied-message context', () => {
     const event = {
       type: 'intex.message.ingest',
@@ -172,6 +187,19 @@ describe('decodeIntexMessageIngestPush', () => {
         })
       )
     ).toThrow('Invalid intex.message.ingest event: whatsappSender must be a string');
+    expect(() =>
+      decodeIntexMessageIngestPush(
+        push({
+          type: 'intex.message.ingest',
+          userId: 'user-1',
+          messageId: 'wamid-1',
+          text: 'image',
+          sourceType: 'whatsapp_image',
+          sourceUrl: 123,
+          timestamp: '2026-06-24T10:00:00.000Z',
+        })
+      )
+    ).toThrow('Invalid intex.message.ingest event: sourceUrl must be a string');
   });
 });
 

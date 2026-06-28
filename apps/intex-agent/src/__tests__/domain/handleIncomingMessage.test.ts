@@ -190,6 +190,41 @@ describe('handleIncomingMessage', () => {
     expect(call.events.some((event) => event.payload['messageId'] === 'wamid-current')).toBe(false);
   });
 
+  it('passes source URLs to the runner without storing the full URL in session events', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Saved externally',
+        toolName: 'save_external',
+        toolResult: { status: 'completed', message: 'Saved externally' },
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-image',
+        text: '',
+        sourceType: 'whatsapp_image',
+        sourceUrl: 'https://storage.example.com/signed/whatsapp/user-1/wamid-image/media.jpg',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'user_message')[0]).toEqual({
+      messageId: 'wamid-image',
+      text: '',
+      sourceType: 'whatsapp_image',
+      hasSourceUrl: true,
+    });
+    expect(runner.calls[0]).toMatchObject({
+      message: '',
+      sourceType: 'whatsapp_image',
+      sourceUrl: 'https://storage.example.com/signed/whatsapp/user-1/wamid-image/media.jpg',
+    });
+  });
+
   it('keeps greeting sessions open without publishing lifecycle text', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -769,6 +804,8 @@ class FakeRunner implements IntexAgentRunner {
     events: IntexAgentSessionEvent[];
     message: string;
     replyContext?: IntexIncomingMessage['replyContext'];
+    sourceType?: string;
+    sourceUrl?: string;
     currentDateTime: string;
   }[] = [];
 
@@ -779,6 +816,8 @@ class FakeRunner implements IntexAgentRunner {
     events: IntexAgentSessionEvent[];
     message: string;
     replyContext?: IntexIncomingMessage['replyContext'];
+    sourceType?: string;
+    sourceUrl?: string;
     currentDateTime: string;
   }): Promise<IntexAgentRunnerResult> {
     this.calls.push(input);

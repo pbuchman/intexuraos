@@ -1,10 +1,13 @@
-import type { IntexAgentPreferences } from '../preferences/types.js';
+import type {
+  IntexAgentPreferences,
+  IntexAgentPreferencesUpdate,
+} from '../preferences/types.js';
 
 export interface PreferencesRepository {
   getPreferences(userId: string): Promise<IntexAgentPreferences | null>;
   savePreferences(
     userId: string,
-    update: { instructions: string }
+    update: IntexAgentPreferencesUpdate
   ): Promise<IntexAgentPreferences>;
   deletePreferences(userId: string): Promise<void>;
 }
