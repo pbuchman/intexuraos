@@ -1211,6 +1211,30 @@ describe('createCodeAgentServiceClient', () => {
     }
   });
 
+  it('marks recompute transport warnings to skip Sentry capture', async () => {
+    nock(BASE_URL).post('/internal/code/group-summary/recompute').replyWithError('offline');
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    await client.notifyGroupSummaryRecompute({
+      userId: 'user-1',
+      linearIssueId: 'INT-1',
+      labels: [{ id: 'label-1', name: 'feature' }],
+      sourceTimestamp: '2026-01-01T12:00:00.000Z',
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _skipSentry: true,
+        url: `${BASE_URL}/internal/code/group-summary/recompute`,
+      }),
+      'internal-client network error'
+    );
+  });
+
   it('maps recompute server failures to UNAVAILABLE', async () => {
     nock(BASE_URL)
       .post('/internal/code/group-summary/recompute')

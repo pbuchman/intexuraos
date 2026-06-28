@@ -18,6 +18,7 @@ export interface InternalRequestConfig {
   jsonBody?: unknown;
   timeoutMs?: number | undefined;
   requestId?: string | undefined;
+  skipSentry?: boolean | undefined;
 }
 
 export type InternalTransportError =
@@ -110,7 +111,14 @@ export async function sendInternalRequest(
       };
     }
 
-    cfg.logger.warn({ url, err }, 'internal-client network error');
+    cfg.logger.warn(
+      {
+        url,
+        err,
+        ...(cfg.skipSentry === true ? { _skipSentry: true } : {}),
+      },
+      'internal-client network error'
+    );
     return {
       ok: false,
       error: {
