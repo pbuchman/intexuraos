@@ -573,6 +573,18 @@ describe('Hetzner web asset deployment', () => {
 });
 
 describe('Code-task automation monitoring', () => {
+  it('grants code-agent permission to write Cloud Monitoring custom metrics when prod metrics are enabled', () => {
+    const prodEcosystem = readRequired(resolve(repoRoot, 'ecosystem.config.prod.cjs'));
+    const iamMain = readRequired(terraformIamMainPath);
+
+    expect(prodEcosystem).toContain(
+      "INTEXURAOS_ENABLE_METRICS: envValue('INTEXURAOS_ENABLE_METRICS') ?? 'true'"
+    );
+    expect(iamMain).toMatch(
+      /resource "google_project_iam_member" "code_agent_monitoring_metric_writer" \{[\s\S]*?project = var\.project_id[\s\S]*?role\s+=\s+"roles\/monitoring\.metricWriter"[\s\S]*?member\s+=\s+"serviceAccount:\$\{google_service_account\.code_agent\.email\}"[\s\S]*?\}/
+    );
+  });
+
   it('alerts specifically when Hetzner PR-triage Pub/Sub push delivery fails', () => {
     const alerts = readRequired(terraformMonitoringCodeTaskAlertsPath);
     const outputs = readRequired(terraformMonitoringOutputsPath);

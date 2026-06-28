@@ -489,6 +489,13 @@ resource "google_project_iam_member" "code_agent_logging" {
   member  = "serviceAccount:${google_service_account.code_agent.email}"
 }
 
+# Code Agent: Cloud Monitoring custom metrics
+resource "google_project_iam_member" "code_agent_monitoring_metric_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.code_agent.email}"
+}
+
 # Hellscript Agent
 resource "google_service_account" "hellscript_agent" {
   account_id   = "intexuraos-hellscript-${var.environment}"
