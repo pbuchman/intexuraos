@@ -13,6 +13,7 @@ import {
   listPrivateWhatsAppMessages,
   listPrivateWhatsAppSenderDays,
   listPrivateWhatsAppSenders,
+  updatePrivateWhatsAppChatTranscription,
   upsertPrivateWhatsAppAccount,
 } from '../whatsappApi.js';
 
@@ -164,6 +165,26 @@ describe('whatsappApi private read helpers', () => {
     const call = vi.mocked(apiRequest).mock.calls[0];
     expect(call?.[1]).toBe('/private/account');
     expect(call?.[3]).toEqual({ method: 'DELETE' });
+  });
+
+  it('updates private chat transcription settings without sourceAccountId', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({ id: 'chat-a', transcriptionEnabled: true });
+
+    const result = await updatePrivateWhatsAppChatTranscription(TOKEN, 'chat-a', {
+      enabled: true,
+    });
+
+    expect(result.transcriptionEnabled).toBe(true);
+    const call = vi.mocked(apiRequest).mock.calls[0];
+    expect(call?.[0]).toBe('/api/whatsapp');
+    expect(call?.[1]).toBe('/private/chats/chat-a/transcription');
+    expect(call?.[1]).not.toContain('sourceAccountId');
+    expect(call?.[2]).toBe(TOKEN);
+    expect(call?.[3]).toEqual({
+      method: 'PATCH',
+      body: { enabled: true },
+    });
   });
 
   it('prefixes service-relative private media access URLs with the configured web API base', async () => {

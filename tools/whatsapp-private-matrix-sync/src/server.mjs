@@ -447,7 +447,10 @@ export async function runSyncIteration(config, runtime, deps = {}) {
 export async function prepareEventsForIngest(config, matrixAccessToken, events, deps) {
   const prepared = [];
   for (const event of events) {
-    if (event?.message?.type !== 'image' || event.message.media?.mxcUri === undefined) {
+    if (
+      !isPrivateMediaUploadMessageType(event?.message?.type) ||
+      event.message.media?.mxcUri === undefined
+    ) {
       prepared.push(event);
       continue;
     }
@@ -479,6 +482,10 @@ export async function prepareEventsForIngest(config, matrixAccessToken, events, 
     });
   }
   return prepared;
+}
+
+function isPrivateMediaUploadMessageType(messageType) {
+  return messageType === 'image' || messageType === 'audio';
 }
 
 export function createHealthServer(config, runtime) {

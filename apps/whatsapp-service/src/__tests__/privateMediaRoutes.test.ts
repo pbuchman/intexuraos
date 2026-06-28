@@ -107,6 +107,53 @@ describe('Private WhatsApp Media Routes', () => {
     expect(ctx.mediaStorage.getFile(body.data.media.thumbnailGcsPath)).toBeDefined();
   });
 
+  it('uploads private audio originals without generating thumbnails', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24audio&mxcUri=mxc%3A%2F%2Fhome-dev%2Faudio&mimeType=audio%2Fogg&fileName=voice.ogg&mediaId=home-dev-audio',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('audio-bytes'),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: {
+        media: {
+          mxcUri: string;
+          mimeType: string;
+          fileName: string;
+          sizeBytes: number;
+          storageStatus: string;
+          gcsPath: string;
+          thumbnailGcsPath?: string;
+          storedMimeType: string;
+          storedSizeBytes: number;
+          storedAt: string;
+        };
+      };
+    };
+    const messageId = createPrivateWhatsAppMessageId('private-source-123', '$audio');
+    expect(body.data.media).toStrictEqual({
+      mxcUri: 'mxc://home-dev/audio',
+      mimeType: 'audio/ogg',
+      fileName: 'voice.ogg',
+      sizeBytes: 'audio-bytes'.length,
+      storageStatus: 'stored',
+      gcsPath: `whatsapp/private/user-123/${messageId}/home-dev-audio.ogg`,
+      storedMimeType: 'audio/ogg',
+      storedSizeBytes: 'audio-bytes'.length,
+      storedAt: expect.any(String),
+    });
+    expect(ctx.mediaStorage.getFile(body.data.media.gcsPath)?.buffer.toString()).toBe(
+      'audio-bytes'
+    );
+    expect(body.data.media.thumbnailGcsPath).toBeUndefined();
+  });
+
   it('rejects uploads for unknown private source accounts', async () => {
     const response = await ctx.app.inject({
       method: 'POST',

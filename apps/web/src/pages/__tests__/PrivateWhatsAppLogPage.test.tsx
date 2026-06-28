@@ -130,11 +130,13 @@ function createHookResult(
     loadingMoreChats: false,
     loadingMoreMessages: false,
     refreshing: false,
+    transcriptionToggleChatId: undefined,
     error: null,
     setChatSearch: vi.fn(),
     selectChat: vi.fn(),
     selectDay: vi.fn(),
     clearDay: vi.fn(),
+    setChatTranscriptionEnabled: vi.fn(),
     refresh: vi.fn(),
     loadMoreChats: vi.fn(),
     loadMoreMessages: vi.fn(),
@@ -287,5 +289,90 @@ describe('PrivateWhatsAppLogPage', () => {
     expect(screen.getByText('stored image')).toBeInTheDocument();
     expect(screen.getByText('image.jpg')).toBeInTheDocument();
     expect(screen.getByText('original-only.jpg')).toBeInTheDocument();
+  });
+
+  it('toggles chat transcripts and renders private audio transcription state', async () => {
+    const user = userEvent.setup();
+    const setChatTranscriptionEnabled = vi.fn();
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        selectedChat: {
+          id: 'chat-group',
+          displayName: 'Fishing Crew (WA)',
+          chatType: 'group',
+          firstEventAt: '2026-06-22T08:00:00.000Z',
+          lastEventAt: '2026-06-22T09:00:00.000Z',
+          messageCount: 3,
+          participantCount: 2,
+          transcriptionEnabled: false,
+          updatedAt: '2026-06-22T09:01:00.000Z',
+          schemaVersion: 2,
+        },
+        setChatTranscriptionEnabled,
+        messages: [
+          {
+            id: 'audio-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/audio-completed',
+              mimeType: 'audio/ogg',
+              fileName: 'voice.ogg',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-completed',
+              text: 'Bring the documents tomorrow.',
+              completedAt: '2026-06-22T09:03:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:02:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:02:02.000Z',
+            ingestedAt: '2026-06-22T09:02:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'audio-failed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/audio-failed',
+              mimeType: 'audio/ogg',
+              fileName: 'broken.ogg',
+            },
+            transcription: {
+              status: 'failed',
+              jobId: 'job-failed',
+              error: {
+                code: 'TRANSCRIPTION_FAILED',
+                message: 'Audio format was not supported',
+              },
+              completedAt: '2026-06-22T09:04:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:04:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:04:02.000Z',
+            ingestedAt: '2026-06-22T09:04:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole('switch', { name: /transcripts/i }));
+
+    expect(setChatTranscriptionEnabled).toHaveBeenCalledWith('chat-group', true);
+    expect(screen.getByText('Bring the documents tomorrow.')).toBeInTheDocument();
+    expect(screen.getByText('Audio format was not supported')).toBeInTheDocument();
   });
 });

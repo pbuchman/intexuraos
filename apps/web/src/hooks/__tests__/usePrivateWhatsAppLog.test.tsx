@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getAccessToken: vi.fn(),
   listPrivateWhatsAppChats: vi.fn(),
   listPrivateWhatsAppChatMessages: vi.fn(),
+  updatePrivateWhatsAppChatTranscription: vi.fn(),
 }));
 
 vi.mock('@/context', () => ({
@@ -23,6 +24,7 @@ vi.mock('@/context', () => ({
 vi.mock('@/services/whatsappApi', () => ({
   listPrivateWhatsAppChats: mocks.listPrivateWhatsAppChats,
   listPrivateWhatsAppChatMessages: mocks.listPrivateWhatsAppChatMessages,
+  updatePrivateWhatsAppChatTranscription: mocks.updatePrivateWhatsAppChatTranscription,
 }));
 
 import { usePrivateWhatsAppLog } from '../usePrivateWhatsAppLog.js';
@@ -139,6 +141,12 @@ describe('usePrivateWhatsAppLog', () => {
       messages: [groupIncomingMessage, groupOutgoingMessage],
       nextCursor: 'messages-next',
     });
+    mocks.updatePrivateWhatsAppChatTranscription.mockResolvedValue({
+      ...groupChat,
+      transcriptionEnabled: true,
+      transcriptionEnabledAt: '2026-06-22T10:00:00.000Z',
+      transcriptionUpdatedAt: '2026-06-22T10:00:00.000Z',
+    });
   });
 
   it('loads chats, auto-selects the first chat, and loads the whole conversation', async () => {
@@ -213,5 +221,23 @@ describe('usePrivateWhatsAppLog', () => {
 
     expect(result.current.selectedChatId).toBe(directChat.id);
     expect(result.current.messages).toEqual([directMessage]);
+  });
+
+  it('updates a selected chat transcription setting through the API', async () => {
+    const { result } = renderHook(() => usePrivateWhatsAppLog(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.selectedChat?.id).toBe(groupChat.id);
+    });
+
+    await act(async () => {
+      await result.current.setChatTranscriptionEnabled(groupChat.id, true);
+    });
+
+    expect(mocks.updatePrivateWhatsAppChatTranscription).toHaveBeenCalledWith('tok', groupChat.id, {
+      enabled: true,
+    });
+    expect(result.current.selectedChat?.transcriptionEnabled).toBe(true);
+    expect(result.current.chats[0]?.transcriptionUpdatedAt).toBe('2026-06-22T10:00:00.000Z');
   });
 });

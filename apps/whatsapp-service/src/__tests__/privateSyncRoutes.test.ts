@@ -960,6 +960,300 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(invalidLimit.statusCode).toBe(400);
   });
 
+  it('updates private WhatsApp chat transcription settings for the authenticated account', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as {
+      data: { chats: { id: string; transcriptionEnabled?: boolean }[] };
+    };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    expect(chatsBody.data.chats[0]?.transcriptionEnabled).toBeUndefined();
+
+    const updateResponse = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    const updateBody = JSON.parse(updateResponse.body) as {
+      success: boolean;
+      data: {
+        id: string;
+        transcriptionEnabled?: boolean;
+        transcriptionEnabledAt?: string;
+        transcriptionUpdatedAt?: string;
+      };
+    };
+    expect(updateBody.success).toBe(true);
+    expect(updateBody.data).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: true,
+    });
+    expect(updateBody.data.transcriptionEnabledAt).toEqual(expect.any(String));
+    expect(updateBody.data.transcriptionUpdatedAt).toEqual(expect.any(String));
+
+    const updatedChatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const updatedChatsBody = JSON.parse(updatedChatsResponse.body) as {
+      data: {
+        chats: {
+          id: string;
+          transcriptionEnabled?: boolean;
+          transcriptionEnabledAt?: string;
+          transcriptionUpdatedAt?: string;
+        }[];
+      };
+    };
+    expect(updatedChatsBody.data.chats[0]).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: true,
+      transcriptionEnabledAt: updateBody.data.transcriptionEnabledAt,
+      transcriptionUpdatedAt: updateBody.data.transcriptionUpdatedAt,
+    });
+  });
+
+  it('requires auth before updating private WhatsApp chat transcription settings', async () => {
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('validates private WhatsApp chat transcription update bodies', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: 'yes' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('returns not found when updating transcription for a user without a private WhatsApp account', async () => {
+    const token = await createToken({ sub: 'user-without-private-whatsapp' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns not found when updating transcription for a missing private WhatsApp chat', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns internal error when updating private WhatsApp chat transcription settings fails', async () => {
+    ctx.privateWhatsAppRepository.failNextChatTranscriptionUpdate({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated transcription setting update failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('publishes one private audio transcription job after chat transcription is enabled', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    const updateResponse = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+
+    const audioPayload = createPayload({
+      events: [
+        {
+          ...(createPayload()['events'] as Record<string, unknown>[])[0],
+          matrixEventId: '$event-private-audio',
+          message: {
+            direction: 'incoming',
+            type: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/private-audio',
+              mimeType: 'audio/ogg',
+              storageStatus: 'stored',
+              gcsPath: 'whatsapp/private/user-123/private-audio/audio.ogg',
+              storedMimeType: 'audio/ogg',
+              storedSizeBytes: 2048,
+            },
+          },
+        },
+      ],
+    });
+
+    const firstIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: audioPayload,
+    });
+    const duplicateIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: audioPayload,
+    });
+
+    expect(firstIngest.statusCode).toBe(200);
+    expect(duplicateIngest.statusCode).toBe(200);
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([
+      {
+        type: 'whatsapp.audio.stored',
+        messageSource: 'private_whatsapp',
+        userId: 'user-123',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio',
+        mediaId: 'mxc://home-dev/private-audio',
+        gcsPath: 'whatsapp/private/user-123/private-audio/audio.ogg',
+        mimeType: 'audio/ogg',
+        timestamp: expect.any(String),
+      },
+    ]);
+  });
+
+  it('returns stored private WhatsApp message transcription state in chat messages', async () => {
+    const ingestResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-transcribed-audio',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/transcribed-audio',
+                mimeType: 'audio/ogg',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/transcribed-audio/audio.ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+    const ingestBody = JSON.parse(ingestResponse.body) as {
+      data: { messages: { chatId?: string; messageId?: string }[] };
+    };
+    const chatId = ingestBody.data.messages[0]?.chatId ?? '';
+    const messageId = ingestBody.data.messages[0]?.messageId ?? '';
+    const updateResult = await ctx.privateWhatsAppRepository.updateMessageTranscription({
+      userId: 'user-123',
+      messageId,
+      transcription: {
+        status: 'completed',
+        jobId: 'job-private-api',
+        text: 'Timeline transcript.',
+        detectedLanguage: 'en',
+        completedAt: '2026-06-28T10:10:00.000Z',
+      },
+    });
+    expect(updateResult.ok).toBe(true);
+    if (!updateResult.ok) throw new Error(updateResult.error.message);
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=10`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          id: string;
+          transcription?: {
+            status: string;
+            jobId?: string;
+            text?: string;
+            detectedLanguage?: string;
+            completedAt?: string;
+          };
+        }[];
+      };
+    };
+    expect(body.data.messages[0]).toMatchObject({
+      id: messageId,
+      transcription: {
+        status: 'completed',
+        jobId: 'job-private-api',
+        text: 'Timeline transcript.',
+        detectedLanguage: 'en',
+        completedAt: '2026-06-28T10:10:00.000Z',
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('sourceAccountId');
+    expect(JSON.stringify(body)).not.toContain('rawMatrixEvent');
+  });
+
   it('returns standard errors when private WhatsApp chat data queries fail', async () => {
     const token = await createToken({ sub: 'user-123' });
     ctx.privateWhatsAppRepository.failNextDataQuery({

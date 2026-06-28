@@ -8,6 +8,7 @@ import { getServices } from '../services.js';
 import type {
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
+  PrivateWhatsAppTranscriptionState,
   SendMessageEvent,
   TranscriptionCompletedEvent,
   TranscriptionState,
@@ -663,7 +664,20 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         let eventData: TranscriptionCompletedEvent;
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-          eventData = JSON.parse(decoded) as TranscriptionCompletedEvent;
+          const parsedEventData = JSON.parse(decoded) as Omit<
+            TranscriptionCompletedEvent,
+            'messageSource'
+          > & {
+            messageSource?: unknown;
+          };
+          if (
+            parsedEventData.messageSource !== undefined &&
+            parsedEventData.messageSource !== 'public_whatsapp' &&
+            parsedEventData.messageSource !== 'private_whatsapp'
+          ) {
+            return await reply.fail('INVALID_REQUEST', 'Unexpected transcription message source');
+          }
+          eventData = parsedEventData as TranscriptionCompletedEvent;
         } catch {
           request.log.error(
             { messageId: body.message.messageId },
@@ -678,7 +692,97 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
         }
 
-        const { messageRepository, eventPublisher } = getServices();
+        const services = getServices();
+        const { messageRepository, eventPublisher } = services;
+
+        if (eventData.messageSource === 'private_whatsapp') {
+          const privateMessageResult =
+            await services.privateWhatsAppRepository.getMessageById(eventData.messageId);
+          if (!privateMessageResult.ok) {
+            request.log.error(
+              {
+                userId: eventData.userId,
+                messageId: eventData.messageId,
+                error: privateMessageResult.error.message,
+              },
+              'Failed to load private WhatsApp audio message for transcription completion'
+            );
+            return await reply.fail('INTERNAL_ERROR', 'Failed to load private audio message');
+          }
+
+          const privateMessage = privateMessageResult.value;
+          if (privateMessage?.userId !== eventData.userId) {
+            request.log.warn(
+              { userId: eventData.userId, messageId: eventData.messageId },
+              'Private WhatsApp audio message not found for transcription completion'
+            );
+            return await reply.ok({});
+          }
+
+          const completedTranscript =
+            eventData.status === 'completed' ? eventData.transcript?.trim() : undefined;
+          if (
+            eventData.status === 'completed' &&
+            (completedTranscript === undefined || completedTranscript === '')
+          ) {
+            return await reply.fail(
+              'INVALID_REQUEST',
+              'Completed transcription is missing transcript'
+            );
+          }
+          const completedTranscriptText = completedTranscript ?? '';
+
+          const transcription: PrivateWhatsAppTranscriptionState =
+            eventData.status === 'completed'
+              ? {
+                  status: 'completed',
+                  jobId: eventData.jobId,
+                  text: completedTranscriptText,
+                  ...(eventData.summary !== undefined ? { summary: eventData.summary } : {}),
+                  ...(eventData.detectedLanguage !== undefined
+                    ? { detectedLanguage: eventData.detectedLanguage }
+                    : {}),
+                  completedAt: eventData.timestamp,
+                }
+              : {
+                  status: 'failed',
+                  jobId: eventData.jobId,
+                  error: {
+                    code: 'TRANSCRIPTION_FAILED',
+                    message: eventData.error ?? 'Transcription failed',
+                  },
+                  completedAt: eventData.timestamp,
+                };
+
+          const updateResult = await services.privateWhatsAppRepository.updateMessageTranscription({
+            userId: eventData.userId,
+            messageId: eventData.messageId,
+            transcription,
+          });
+          if (!updateResult.ok) {
+            request.log.error(
+              {
+                userId: eventData.userId,
+                messageId: eventData.messageId,
+                error: updateResult.error.message,
+              },
+              'Failed to update private WhatsApp audio message transcription'
+            );
+            return await reply.fail('INTERNAL_ERROR', 'Failed to update private transcription');
+          }
+
+          request.log.info(
+            {
+              userId: eventData.userId,
+              messageId: eventData.messageId,
+              status: eventData.status,
+              messageSource: eventData.messageSource,
+            },
+            'Processed private WhatsApp transcription completion event'
+          );
+          return await reply.ok({});
+        }
+
         const messageResult = await messageRepository.findById(
           eventData.userId,
           eventData.messageId

@@ -247,6 +247,7 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       }
       const useCase = new IngestPrivateWhatsAppEventsUseCase({
         privateWhatsAppRepository: services.privateWhatsAppRepository,
+        eventPublisher: services.eventPublisher,
       });
       const result = await useCase.execute(
         {

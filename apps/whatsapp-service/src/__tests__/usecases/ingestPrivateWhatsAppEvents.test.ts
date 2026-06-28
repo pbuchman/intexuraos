@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import {
+  type AudioStoredEvent,
+  type EventPublisherPort,
+  type ExtractLinkPreviewsEvent,
   IngestPrivateWhatsAppEventsUseCase,
   type DisablePrivateWhatsAppAccountInput,
+  type IntexMessageIngestEvent,
   type IngestPrivateWhatsAppEventInput,
   type IngestPrivateWhatsAppEventsInput,
+  type MediaCleanupEvent,
   type PrivateWhatsAppAccount,
   type PrivateWhatsAppAggregateRebuildInput,
   type PrivateWhatsAppAggregateRebuildResult,
+  type PrivateWhatsAppChat,
   type PrivateWhatsAppChatQueryInput,
   type PrivateWhatsAppChatQueryResult,
   type PrivateWhatsAppIngestOutcome,
@@ -18,8 +24,12 @@ import {
   type PrivateWhatsAppSenderQueryResult,
   type PrivateWhatsAppSenderDayQueryInput,
   type PrivateWhatsAppSenderDayQueryResult,
+  type PrivateWhatsAppTranscriptionState,
   type StorePrivateWhatsAppMessageInput,
+  type UpdatePrivateWhatsAppChatTranscriptionInput,
+  type UpdatePrivateWhatsAppMessageTranscriptionInput,
   type UpsertPrivateWhatsAppAccountInput,
+  type WebhookProcessEvent,
   type WhatsAppError,
 } from '../../domain/whatsapp/index.js';
 import type { Logger } from '../../domain/whatsapp/utils/logger.js';
@@ -70,8 +80,10 @@ function createInput(
 
 class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   readonly stored: StorePrivateWhatsAppMessageInput[] = [];
+  readonly transcriptions: { messageId: string; transcription: PrivateWhatsAppTranscriptionState }[] = [];
   private readonly seenEventIds = new Map<string, PrivateWhatsAppIngestOutcome>();
   failNextStore = false;
+  chatTranscriptionEnabled = false;
 
   getAccountByUserId(
     _userId: string
@@ -121,6 +133,7 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
       chatId: `chat-${String(this.stored.length + 1)}`,
       messageId: `message-${String(this.stored.length + 1)}`,
       matrixEventId: input.message.matrixEventId,
+      chatTranscriptionEnabled: this.chatTranscriptionEnabled,
     };
     this.stored.push(input);
     this.seenEventIds.set(input.message.matrixEventId, outcome);
@@ -129,6 +142,24 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
 
   getMessageById(_messageId: string): Promise<Result<null, WhatsAppError>> {
     return Promise.resolve(ok(null));
+  }
+
+  updateChatTranscriptionSetting(
+    _input: UpdatePrivateWhatsAppChatTranscriptionInput
+  ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
+    return Promise.resolve(
+      err({ code: 'NOT_FOUND', message: 'Chat writes are not used by this fake' })
+    );
+  }
+
+  updateMessageTranscription(
+    input: UpdatePrivateWhatsAppMessageTranscriptionInput
+  ): Promise<Result<void, WhatsAppError>> {
+    this.transcriptions.push({
+      messageId: input.messageId,
+      transcription: input.transcription,
+    });
+    return Promise.resolve(ok(undefined));
   }
 
   findMessages(
@@ -164,14 +195,47 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   }
 }
 
+class TestEventPublisher implements EventPublisherPort {
+  readonly audioStoredEvents: AudioStoredEvent[] = [];
+  failNextAudioStored = false;
+
+  publishMediaCleanup(_event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.failNextAudioStored) {
+      this.failNextAudioStored = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Audio publish failed' }));
+    }
+    this.audioStoredEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishIntexMessageIngest(_event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishWebhookProcess(_event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishExtractLinkPreviews(_event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+}
+
 describe('IngestPrivateWhatsAppEventsUseCase', () => {
   let repository: TestPrivateWhatsAppRepository;
+  let eventPublisher: TestEventPublisher;
   let useCase: IngestPrivateWhatsAppEventsUseCase;
 
   beforeEach(() => {
     repository = new TestPrivateWhatsAppRepository();
+    eventPublisher = new TestEventPublisher();
     useCase = new IngestPrivateWhatsAppEventsUseCase({
       privateWhatsAppRepository: repository,
+      eventPublisher,
     });
   });
 
@@ -369,6 +433,132 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
       messages: [{ matrixEventId: '$event-1', outcome: 'duplicate' }],
     });
     expect(repository.stored).toHaveLength(1);
+  });
+
+  it('publishes private audio transcription jobs only for enabled chats and created events', async () => {
+    repository.chatTranscriptionEnabled = true;
+    const audioEvent = createEvent({
+      matrixEventId: '$audio-event-1',
+      message: {
+        direction: 'incoming',
+        type: 'audio',
+        media: {
+          mxcUri: 'mxc://home-dev/audio-event-1',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message-1/audio.ogg',
+          storedMimeType: 'audio/ogg',
+          storedSizeBytes: 1234,
+        },
+      },
+    });
+
+    const firstResult = await useCase.execute(createInput({ events: [audioEvent] }), logger);
+    const duplicateResult = await useCase.execute(createInput({ events: [audioEvent] }), logger);
+
+    expect(firstResult.ok).toBe(true);
+    expect(duplicateResult.ok).toBe(true);
+    expect(eventPublisher.audioStoredEvents).toEqual([
+      {
+        type: 'whatsapp.audio.stored',
+        messageSource: 'private_whatsapp',
+        userId: 'user-123',
+        messageId: 'message-1',
+        mediaId: 'mxc://home-dev/audio-event-1',
+        gcsPath: 'whatsapp/private/user-123/message-1/audio.ogg',
+        mimeType: 'audio/ogg',
+        timestamp: expect.any(String),
+      },
+    ]);
+  });
+
+  it('skips private audio transcription jobs when the chat is disabled or audio is not stored', async () => {
+    const disabledResult = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$disabled-audio',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/disabled-audio',
+                mimeType: 'audio/ogg',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/message-1/audio.ogg',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+    repository.chatTranscriptionEnabled = true;
+    const missingStorageResult = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$unstored-audio',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/unstored-audio',
+                mimeType: 'audio/ogg',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(disabledResult.ok).toBe(true);
+    expect(missingStorageResult.ok).toBe(true);
+    expect(eventPublisher.audioStoredEvents).toEqual([]);
+  });
+
+  it('skips private audio transcription jobs for non-audio messages even when chat transcription is enabled', async () => {
+    repository.chatTranscriptionEnabled = true;
+
+    const result = await useCase.execute(createInput(), logger);
+
+    expect(result.ok).toBe(true);
+    expect(eventPublisher.audioStoredEvents).toEqual([]);
+  });
+
+  it('returns a persistence error when publishing a private audio transcription job fails', async () => {
+    repository.chatTranscriptionEnabled = true;
+    eventPublisher.failNextAudioStored = true;
+
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$audio-publish-failure',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/audio-publish-failure',
+                mimeType: 'audio/ogg',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/audio-publish-failure/audio.ogg',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected publish failure');
+    expect(result.error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Audio publish failed',
+    });
+    expect(eventPublisher.audioStoredEvents).toEqual([]);
   });
 
   it('rejects unsupported directions without writing them', async () => {

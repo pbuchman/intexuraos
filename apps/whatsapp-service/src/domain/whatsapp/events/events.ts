@@ -43,6 +43,11 @@ export interface AudioStoredEvent {
   type: 'whatsapp.audio.stored';
 
   /**
+   * Source collection where the message is stored.
+   */
+  messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /**
    * IntexuraOS user ID.
    */
   userId: string;
@@ -81,6 +86,11 @@ export interface TranscriptionCompletedEvent {
    * Event type identifier.
    */
   type: 'srt.transcription.completed';
+
+  /**
+   * Source collection where the message is stored.
+   */
+  messageSource?: 'public_whatsapp' | 'private_whatsapp';
 
   /**
    * IntexuraOS user ID.

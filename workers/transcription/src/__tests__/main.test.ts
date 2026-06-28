@@ -103,6 +103,16 @@ describe('transcribeAudio', () => {
       expect(event?.transcript).toBe('Hello world');
     });
 
+    it('preserves private WhatsApp source on completed events', async () => {
+      await transcribeAudio(
+        { ...sampleEvent, messageSource: 'private_whatsapp' },
+        deps,
+        mockLogger
+      );
+
+      expect(publishedEvents[0]?.messageSource).toBe('private_whatsapp');
+    });
+
     it('includes summary in completed event when provider returns one', async () => {
       const provider = makeProvider(
         ok({ jobId: 'job-123', apiCall: { timestamp: '', operation: 'submit', success: true } }),
@@ -165,6 +175,18 @@ describe('transcribeAudio', () => {
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.status).toBe('failed');
       expect(publishedEvents[0]?.error).toContain('GCS access denied');
+    });
+
+    it('preserves private WhatsApp source on failed events', async () => {
+      deps.generateSignedUrl = vi.fn().mockResolvedValue(err({ message: 'GCS access denied' }));
+
+      await transcribeAudio(
+        { ...sampleEvent, messageSource: 'private_whatsapp' },
+        deps,
+        mockLogger
+      );
+
+      expect(publishedEvents[0]?.messageSource).toBe('private_whatsapp');
     });
 
     it('publishes failed event when job submission fails', async () => {

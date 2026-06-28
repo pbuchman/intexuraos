@@ -169,6 +169,11 @@ export type PrivateWhatsAppMessageType =
   | 'unknown';
 
 export type PrivateWhatsAppDeliveryMode = 'live' | 'backfill';
+export type PrivateWhatsAppTranscriptionStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed';
 
 export interface PrivateWhatsAppMedia {
   mxcUri?: string;
@@ -185,6 +190,22 @@ export interface PrivateWhatsAppMedia {
   width?: number;
   height?: number;
   durationMs?: number;
+}
+
+export interface PrivateWhatsAppTranscriptionError {
+  code: string;
+  message: string;
+}
+
+export interface PrivateWhatsAppTranscriptionState {
+  status: PrivateWhatsAppTranscriptionStatus;
+  jobId?: string;
+  text?: string;
+  summary?: string;
+  detectedLanguage?: string;
+  error?: PrivateWhatsAppTranscriptionError;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface MediaUrlResponse {
@@ -213,6 +234,9 @@ export interface PrivateWhatsAppChat {
   avatarMxcUri?: string;
   messageCount: number;
   participantCount: number;
+  transcriptionEnabled?: boolean;
+  transcriptionEnabledAt?: string;
+  transcriptionUpdatedAt?: string;
   firstSeenAt: string;
   lastEventAt: string;
   updatedAt: string;
@@ -238,6 +262,7 @@ export interface PrivateWhatsAppMessage {
   receivedAt: string;
   ingestedAt: string;
   deliveryMode: PrivateWhatsAppDeliveryMode;
+  transcription?: PrivateWhatsAppTranscriptionState;
   schemaVersion?: number;
 }
 
