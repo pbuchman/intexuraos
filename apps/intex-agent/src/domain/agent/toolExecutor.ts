@@ -16,6 +16,7 @@ import type {
   CreateCalendarEventToolArgs,
   CreateCodeTaskToolArgs,
   CreateLinkToolArgs,
+  SaveExternalToolArgs,
   IntexAgentToolExecutor,
 } from './toolDefinitions.js';
 
@@ -61,6 +62,25 @@ export interface CodeTaskToolClient {
   ): Promise<Result<SubmitTaskResponse, SubmitTaskError>>;
 }
 
+export interface ExternalSaveToolInput {
+  message: string;
+  sourceUrl?: string;
+}
+
+export interface ExternalSaveToolResult {
+  status: 'completed';
+  message: string;
+}
+
+export interface ExternalSaveToolError {
+  code: string;
+  message: string;
+}
+
+export interface ExternalSaveToolClient {
+  save(input: ExternalSaveToolInput): Promise<Result<ExternalSaveToolResult, ExternalSaveToolError>>;
+}
+
 export interface CreateIntexAgentToolExecutorDeps {
   userId: string;
   messageId: string;
@@ -69,6 +89,7 @@ export interface CreateIntexAgentToolExecutorDeps {
   researchClient: ResearchToolClient;
   bookmarksClient: BookmarksToolClient;
   codeClient: CodeTaskToolClient;
+  externalSaveClient: ExternalSaveToolClient | null;
 }
 
 export function createIntexAgentToolExecutor(
@@ -200,6 +221,26 @@ export function createIntexAgentToolExecutor(
         status: 'completed',
         codeTaskId: task.codeTaskId,
         resourceUrl: task.resourceUrl,
+      });
+    },
+
+    async saveExternal(args: SaveExternalToolArgs): Promise<string> {
+      if (deps.externalSaveClient === null) {
+        throw new Error('External save is not configured');
+      }
+
+      const result = await deps.externalSaveClient.save({
+        message: args.message,
+        ...(args.sourceUrl !== undefined ? { sourceUrl: args.sourceUrl } : {}),
+      });
+
+      if (!result.ok) {
+        throw new Error(`Failed to save externally: ${result.error.message}`);
+      }
+
+      return JSON.stringify({
+        status: result.value.status, // @allow-result-access -- guarded by !result.ok check above
+        message: result.value.message, // @allow-result-access -- guarded by !result.ok check above
       });
     },
   };

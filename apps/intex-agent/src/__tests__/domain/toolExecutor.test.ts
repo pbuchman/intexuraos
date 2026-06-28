@@ -14,6 +14,7 @@ import type {
   CalendarToolClient,
   CodeTaskToolClient,
   CreateIntexAgentToolExecutorDeps,
+  ExternalSaveToolClient,
   NotesToolClient,
   ResearchToolClient,
 } from '../../domain/agent/toolExecutor.js';
@@ -643,6 +644,71 @@ describe('createIntexAgentToolExecutor', () => {
     ).rejects.toThrow('Failed to create code task: Worker is not configured');
   });
 
+  it('saves external content through the configured external save client', async () => {
+    const externalSaveClient = new FakeExternalSaveClient();
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({
+      externalSaveClient,
+    }));
+
+    const result = await executor.saveExternal({
+      message: 'Save externally this LinkedIn note',
+      sourceUrl: 'https://example.com/post',
+    });
+
+    expect(externalSaveClient.calls).toEqual([
+      {
+        message: 'Save externally this LinkedIn note',
+        sourceUrl: 'https://example.com/post',
+      },
+    ]);
+    expect(JSON.parse(result)).toEqual({
+      status: 'completed',
+      message: 'Saved externally',
+    });
+  });
+
+  it('saves external content without a source URL when only text is provided', async () => {
+    const externalSaveClient = new FakeExternalSaveClient();
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({
+      externalSaveClient,
+    }));
+
+    await executor.saveExternal({
+      message: 'Upload externally the onboarding detail',
+    });
+
+    expect(externalSaveClient.calls).toEqual([
+      {
+        message: 'Upload externally the onboarding detail',
+      },
+    ]);
+  });
+
+  it('throws when external save is not configured', async () => {
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({
+      externalSaveClient: null,
+    }));
+
+    await expect(
+      executor.saveExternal({ message: 'Save externally this note' })
+    ).rejects.toThrow('External save is not configured');
+  });
+
+  it('throws when the external save client fails', async () => {
+    const externalSaveClient = new FakeExternalSaveClient();
+    externalSaveClient.result = err({
+      code: 'HTTP_ERROR',
+      message: 'HTTP 403: Forbidden',
+    });
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({
+      externalSaveClient,
+    }));
+
+    await expect(
+      executor.saveExternal({ message: 'Save externally this note' })
+    ).rejects.toThrow('Failed to save externally: HTTP 403: Forbidden');
+  });
+
   it('throws when an internal tool client returns a failure', async () => {
     const notesClient = new FakeNotesClient();
     notesClient.result = err(new Error('notes-agent unavailable'));
@@ -667,6 +733,7 @@ function createExecutorDeps(
     researchClient: new FakeResearchClient(),
     bookmarksClient: new FakeBookmarksClient(),
     codeClient: new FakeCodeTaskClient(),
+    externalSaveClient: new FakeExternalSaveClient(),
     ...overrides,
   };
 }
@@ -761,6 +828,19 @@ class FakeCalendarClient implements CalendarToolClient {
   listEvents(input: ListCalendarEventsRequest): Promise<Result<CalendarQueryEvent[]>> {
     this.listCalls.push(input);
     return Promise.resolve(this.listResult);
+  }
+}
+
+class FakeExternalSaveClient implements ExternalSaveToolClient {
+  readonly calls: Parameters<ExternalSaveToolClient['save']>[0][] = [];
+  result: Result<{ status: 'completed'; message: string }, { code: string; message: string }> = ok({
+    status: 'completed',
+    message: 'Saved externally',
+  });
+
+  save(input: Parameters<ExternalSaveToolClient['save']>[0]): Promise<Result<{ status: 'completed'; message: string }, { code: string; message: string }>> {
+    this.calls.push(input);
+    return Promise.resolve(this.result);
   }
 }
 

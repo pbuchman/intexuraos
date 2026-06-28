@@ -314,6 +314,48 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_link']);
   });
 
+  it('exposes only the external save tool for English external-save text intent', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply: 'Ready to save externally.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'Save externally this copied LinkedIn detail',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['save_external']);
+  });
+
+  it('exposes only the external save tool for Polish external-save link intent', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply: 'Ready to save externally.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'Zapisz do przetworzenia https://example.com/post',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['save_external']);
+  });
+
   it('exposes only the calendar query tool for read-only calendar questions', async () => {
     const client = new FakeToolCallingClient([
       ok(
@@ -1060,6 +1102,23 @@ describe('createIntexAgentRunner', () => {
       expectedReply: 'Zapisałem link: mailto:person@example.com',
       expectedCtaUrl: undefined,
     },
+    {
+      toolName: 'save_external' as const,
+      message: 'Save externally https://example.com/post',
+      args: {
+        message: 'Save externally https://example.com/post',
+        sourceUrl: 'https://example.com/post',
+      },
+      executorOverride: {
+        saveExternal: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            message: 'Saved externally',
+          }),
+      },
+      expectedReply: 'Saved externally',
+      expectedCtaUrl: undefined,
+    },
   ])('builds deterministic confirmations from %s tool results', async (testCase) => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: testCase.toolName,
@@ -1095,6 +1154,96 @@ describe('createIntexAgentRunner', () => {
       throw new Error(`Expected completed outcome, received ${result.outcome}`);
     }
     expect(result.ctaUrl).toEqual(testCase.expectedCtaUrl);
+  });
+
+  it('automatically saves WhatsApp images externally without calling the LLM', async () => {
+    const client = new FakeToolCallingClient([]);
+    const saveCalls: { message: string; sourceUrl?: string }[] = [];
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (args): Promise<string> => {
+          saveCalls.push(args);
+          return JSON.stringify({ status: 'completed', message: 'Saved externally' });
+        },
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Lunch receipt',
+      sourceType: 'whatsapp_image',
+      sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(client.calls).toEqual([]);
+    expect(saveCalls).toEqual([
+      {
+        message: 'Lunch receipt',
+        sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+      },
+    ]);
+    expect(result).toEqual({
+      outcome: 'completed',
+      reply: 'Saved externally',
+      toolName: 'save_external',
+      toolResult: { status: 'completed', message: 'Saved externally' },
+    });
+  });
+
+  it('uses a neutral fallback message for captionless WhatsApp images', async () => {
+    const saveCalls: { message: string; sourceUrl?: string }[] = [];
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (args): Promise<string> => {
+          saveCalls.push(args);
+          return JSON.stringify({ status: 'completed', message: 'Saved externally' });
+        },
+      }),
+    });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: '   ',
+      sourceType: 'whatsapp_image',
+      sourceUrl: 'https://storage.example.com/signed/no-caption.jpg',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(saveCalls).toEqual([
+      {
+        message: 'Image shared via WhatsApp.',
+        sourceUrl: 'https://storage.example.com/signed/no-caption.jpg',
+      },
+    ]);
+  });
+
+  it('uses a fallback reply when WhatsApp image external save returns no JSON message payload', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => 'external-save-1',
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Lunch receipt',
+        sourceType: 'whatsapp_image',
+        sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Saved externally',
+      toolName: 'save_external',
+    });
   });
 
   it('rejects completed responses when no tool actually ran and no supported toolName is present', async () => {
@@ -1295,6 +1444,7 @@ function fakeToolExecutor(overrides: Partial<IntexAgentToolExecutor> = {}): Inte
     createResearch: async () => 'research-1',
     createLink: async () => 'bookmark-1',
     createCodeTask: async () => 'code-task-1',
+    saveExternal: async () => 'external-save-1',
     ...overrides,
   };
 }

@@ -47,6 +47,8 @@ export interface IntexAgentRunner {
     events: IntexAgentSessionEvent[];
     message: string;
     replyContext?: IntexIncomingMessage['replyContext'];
+    sourceType?: string;
+    sourceUrl?: string;
     currentDateTime: string;
     messageId?: string;
   }): Promise<IntexAgentRunnerResult>;
@@ -117,6 +119,7 @@ export async function handleIncomingMessage(
     messageId: input.messageId,
     text: effectiveMessage,
     sourceType: input.sourceType,
+    ...(input.sourceUrl !== undefined ? { hasSourceUrl: true } : {}),
     ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
   });
   await deps.sessionRepository.updateSession(session.id, {
@@ -141,6 +144,8 @@ export async function handleIncomingMessage(
     events: excludeCurrentUserMessage(events, input.messageId),
     message: effectiveMessage,
     ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
+    sourceType: input.sourceType,
+    ...(input.sourceUrl !== undefined ? { sourceUrl: input.sourceUrl } : {}),
     currentDateTime: now,
     messageId: input.messageId,
   });

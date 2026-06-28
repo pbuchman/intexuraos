@@ -23,6 +23,12 @@ describe('classifyIntexAgentIntent', () => {
     ['Dodaj zakladke https://example.com', ['create_link']],
     ['Create code task to implement explicit intent gating', ['create_code_task']],
     ['Stworz zadanie programistyczne dla intent gating', ['create_code_task']],
+    ['Save externally https://example.com/article', ['save_external']],
+    ['Upload externally this note from LinkedIn', ['save_external']],
+    ['Save for processing this copied conversation detail', ['save_external']],
+    ['Zapisz zewnętrznie ten paragon', ['save_external']],
+    ['Prześlij zewnętrznie https://example.com/post', ['save_external']],
+    ['Zapisz do przetworzenia: ważna informacja z LinkedIn', ['save_external']],
   ] as const)('allows explicit creation intent: %s', (text, expectedToolNames) => {
     expect(classifyIntexAgentIntent(text)).toEqual({
       kind: 'tool',

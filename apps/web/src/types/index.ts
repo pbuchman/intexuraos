@@ -326,7 +326,8 @@ export type IntexAgentToolName =
   | 'create_calendar_event'
   | 'create_research'
   | 'create_link'
-  | 'create_code_task';
+  | 'create_code_task'
+  | 'save_external';
 
 export interface IntexAgentSession {
   id: string;

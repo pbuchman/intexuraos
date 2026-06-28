@@ -49,6 +49,11 @@ export interface CreateCodeTaskToolArgs {
   taskMode?: 'planning' | 'execution';
 }
 
+export interface SaveExternalToolArgs {
+  message: string;
+  sourceUrl?: string;
+}
+
 const EXPLICIT_CODE_TASK_WORKER_TYPES = ['codex', 'codex-xhigh', 'minimax'] as const;
 
 export interface IntexAgentToolExecutor {
@@ -58,6 +63,7 @@ export interface IntexAgentToolExecutor {
   createResearch(args: CreateResearchToolArgs): Promise<string>;
   createLink(args: CreateLinkToolArgs): Promise<string>;
   createCodeTask(args: CreateCodeTaskToolArgs): Promise<string>;
+  saveExternal(args: SaveExternalToolArgs): Promise<string>;
 }
 
 export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor): ToolDefinition[] {
@@ -277,6 +283,28 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
       run: async (args: Record<string, unknown>) =>
         await executor.createCodeTask(toCreateCodeTaskArgs(args)),
     },
+    {
+      name: 'save_external',
+      description:
+        'Use only when the user explicitly asks to save externally, upload externally, save for processing, zapisz zewnetrznie, przeslij zewnetrznie, or zapisz do przetworzenia. Forward the raw user message to an external processing/storage system. If the user included a URL, put that URL in sourceUrl. Do not fetch, inspect, summarize, or open sourceUrl.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['message'],
+        properties: {
+          message: {
+            type: 'string',
+            description: 'Raw user caption or pasted text to send to the external system.',
+          },
+          sourceUrl: {
+            type: 'string',
+            description:
+              'Optional original shared URL or image URL. Pass it through without fetching or inspecting it.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) => await executor.saveExternal(toSaveExternalArgs(args)),
+    },
   ];
 }
 
@@ -377,6 +405,16 @@ function toCreateCodeTaskArgs(args: Record<string, unknown>): CreateCodeTaskTool
     ...(workerType !== undefined ? { workerType } : {}),
     ...(linearIssueId !== undefined ? { linearIssueId } : {}),
     ...(taskMode !== undefined ? { taskMode } : {}),
+  };
+}
+
+function toSaveExternalArgs(args: Record<string, unknown>): SaveExternalToolArgs {
+  const message = requiredString(args, 'message');
+  const sourceUrl = optionalString(args, 'sourceUrl');
+
+  return {
+    message,
+    ...(sourceUrl !== undefined ? { sourceUrl } : {}),
   };
 }
 

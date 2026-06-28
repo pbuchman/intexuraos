@@ -15,8 +15,15 @@ import type { ServiceConfig } from './config.js';
 import type { IncomingMessageHandler } from './domain/ports/incomingMessageHandler.js';
 import type { PreferencesRepository } from './domain/ports/preferencesRepository.js';
 import type { SessionRepository } from './domain/ports/sessionRepository.js';
+import type {
+  ExternalSaveConnectionTestPort,
+  IntexAgentExternalSavePreferences,
+} from './domain/preferences/types.js';
 import { createIntexAgentRunner } from './domain/agent/intexAgentRunner.js';
-import { createIntexAgentToolExecutor } from './domain/agent/toolExecutor.js';
+import {
+  createIntexAgentToolExecutor,
+  type ExternalSaveToolClient,
+} from './domain/agent/toolExecutor.js';
 import {
   handleIncomingMessage,
   type IntexAgentRunner,
@@ -24,12 +31,14 @@ import {
 } from './domain/messages/handleIncomingMessage.js';
 import { FirestorePreferencesRepository } from './infra/firestore/preferencesRepository.js';
 import { FirestoreSessionRepository } from './infra/firestore/sessionRepository.js';
+import { createExternalSaveClient } from './infra/http/externalSaveClient.js';
 import { createWhatsAppReplyPublisher } from './infra/pubsub/whatsappReplyPublisher.js';
 
 export interface ServiceContainer {
   config: ServiceConfig;
   sessionRepository: SessionRepository;
   preferencesRepository: PreferencesRepository;
+  externalSaveTester: ExternalSaveConnectionTestPort;
   incomingMessageHandler: IncomingMessageHandler;
 }
 
@@ -85,6 +94,16 @@ export function initServices(config: ServiceConfig): void {
     logger: createAppLogger({ name: 'intex-agent-whatsapp-send-publisher' }),
   });
   const replyPublisher = createWhatsAppReplyPublisher({ sendPublisher });
+  const externalSaveTester: ExternalSaveConnectionTestPort = {
+    async testConnection(externalSave) {
+      const result = await createExternalSaveClient(toExternalSaveClientConfig(externalSave)).save({
+        message: 'INTEX Agent external save connection test.',
+      });
+      return result.ok
+        ? { ok: true, status: 'success', message: 'Connection successful' }
+        : { ok: false, status: 'failure', message: result.error.message };
+    },
+  };
 
   const runner: IntexAgentRunner = {
     async run(
@@ -99,6 +118,7 @@ export function initServices(config: ServiceConfig): void {
         ownerType: 'user',
       });
 
+      const preferences = await preferencesRepository.getPreferences(input.session.userId);
       const toolExecutor = createIntexAgentToolExecutor({
         userId: input.session.userId,
         messageId: input.messageId ?? input.session.id,
@@ -107,9 +127,8 @@ export function initServices(config: ServiceConfig): void {
         researchClient,
         bookmarksClient,
         codeClient,
+        externalSaveClient: createExternalSaveToolClient(preferences?.externalSave),
       });
-
-      const preferences = await preferencesRepository.getPreferences(input.session.userId);
 
       return await createIntexAgentRunner({
         client: toolCallingClient,
@@ -142,6 +161,7 @@ export function initServices(config: ServiceConfig): void {
     config,
     sessionRepository,
     preferencesRepository,
+    externalSaveTester,
     incomingMessageHandler,
   };
 }
@@ -159,4 +179,35 @@ export function setServices(services: ServiceContainer): void {
 
 export function resetServices(): void {
   container = null;
+}
+
+function createExternalSaveToolClient(
+  externalSave: IntexAgentExternalSavePreferences | undefined
+): ExternalSaveToolClient | null {
+  if (externalSave?.enabled !== true) {
+    return null;
+  }
+  if (
+    externalSave.endpointUrl.trim() === '' ||
+    externalSave.cfAccessClientId.trim() === '' ||
+    externalSave.cfAccessClientSecret.trim() === '' ||
+    externalSave.source.trim() === ''
+  ) {
+    return null;
+  }
+  return createExternalSaveClient(toExternalSaveClientConfig(externalSave));
+}
+
+function toExternalSaveClientConfig(externalSave: IntexAgentExternalSavePreferences): {
+  endpointUrl: string;
+  cfAccessClientId: string;
+  cfAccessClientSecret: string;
+  source: string;
+} {
+  return {
+    endpointUrl: externalSave.endpointUrl,
+    cfAccessClientId: externalSave.cfAccessClientId,
+    cfAccessClientSecret: externalSave.cfAccessClientSecret,
+    source: externalSave.source,
+  };
 }

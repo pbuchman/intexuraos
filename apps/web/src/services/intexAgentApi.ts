@@ -4,7 +4,26 @@ import type { IntexAgentSession, IntexAgentSessionEvent } from '@/types';
 
 export interface IntexAgentPreferencesResponse {
   instructions: string;
+  externalSave: IntexAgentExternalSaveConfig;
   updatedAt: string | null;
+}
+
+export interface IntexAgentExternalSaveConfig {
+  enabled: boolean;
+  endpointUrl: string;
+  cfAccessClientId: string;
+  cfAccessClientSecret: string;
+  source: string;
+}
+
+export interface SaveIntexAgentPreferencesRequest {
+  instructions: string;
+  externalSave: IntexAgentExternalSaveConfig;
+}
+
+export interface IntexAgentExternalSaveTestResponse {
+  status: 'success' | 'failure';
+  message: string;
 }
 
 export async function listIntexAgentSessions(accessToken: string): Promise<IntexAgentSession[]> {
@@ -45,7 +64,7 @@ export async function getIntexAgentPreferences(
 
 export async function saveIntexAgentPreferences(
   accessToken: string,
-  instructions: string
+  request: SaveIntexAgentPreferencesRequest
 ): Promise<IntexAgentPreferencesResponse> {
   return await apiRequest<IntexAgentPreferencesResponse>(
     config.intexAgentUrl,
@@ -53,7 +72,22 @@ export async function saveIntexAgentPreferences(
     accessToken,
     {
       method: 'PUT',
-      body: JSON.stringify({ instructions }),
+      body: JSON.stringify(request),
+    }
+  );
+}
+
+export async function testIntexAgentExternalSave(
+  accessToken: string,
+  externalSave: IntexAgentExternalSaveConfig
+): Promise<IntexAgentExternalSaveTestResponse> {
+  return await apiRequest<IntexAgentExternalSaveTestResponse>(
+    config.intexAgentUrl,
+    '/preferences/external-save/test',
+    accessToken,
+    {
+      method: 'POST',
+      body: JSON.stringify({ externalSave }),
     }
   );
 }

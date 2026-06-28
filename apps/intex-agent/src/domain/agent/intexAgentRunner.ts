@@ -13,6 +13,7 @@ import {
   type CreateNoteToolArgs,
   type QueryCalendarEventsToolArgs,
   type CreateResearchToolArgs,
+  type SaveExternalToolArgs,
   type IntexAgentToolExecutor,
 } from './toolDefinitions.js';
 import { buildIntexAgentSystemPrompt } from './systemPrompt.js';
@@ -34,6 +35,10 @@ export interface IntexAgentRunnerConfig {
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
   return {
     async run(input): Promise<IntexAgentRunnerResult> {
+      if (input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined) {
+        return await saveWhatsAppImageExternally(input.message, input.sourceUrl, config.toolExecutor);
+      }
+
       const intent = classifyIntexAgentIntent(input.message);
       if (intent.kind === 'unsupported') {
         return {
@@ -301,7 +306,36 @@ function createTrackingToolExecutor(
     async createCodeTask(args: CreateCodeTaskToolArgs): Promise<string> {
       return await track('create_code_task', toRecord(args), async () => await executor.createCodeTask(args));
     },
+    async saveExternal(args: SaveExternalToolArgs): Promise<string> {
+      return await track('save_external', toRecord(args), async () => await executor.saveExternal(args));
+    },
   };
+}
+
+async function saveWhatsAppImageExternally(
+  message: string,
+  sourceUrl: string,
+  executor: IntexAgentToolExecutor
+): Promise<IntexAgentRunnerResult> {
+  try {
+    const rawResult = await executor.saveExternal({
+      message: message.trim() === '' ? 'Image shared via WhatsApp.' : message.trim(),
+      sourceUrl,
+    });
+    const result = parseToolResult(rawResult);
+    const reply = result !== undefined ? readString(result, 'message') : undefined;
+    return {
+      outcome: 'completed',
+      reply: reply ?? 'Saved externally',
+      toolName: 'save_external',
+      ...(result !== undefined ? { toolResult: result } : {}),
+    };
+  } catch {
+    return {
+      outcome: 'unsupported',
+      reply: buildCompletionFailureCapabilitiesReply(),
+    };
+  }
 }
 
 function toRecord(args: object): Record<string, unknown> {
@@ -402,6 +436,9 @@ function buildCompletedReply(
   }
 
   const message = readString(result, 'message');
+  if (toolName === 'save_external' && message !== undefined) {
+    return { reply: message };
+  }
   return { reply: message ?? fallbackReply };
 }
 

@@ -15,6 +15,7 @@ export interface IntexIncomingMessage {
   messageId: string;
   text: string;
   sourceType: string;
+  sourceUrl?: string;
   whatsappSender?: string;
   replyContext?: IntexIncomingMessageReplyContext;
   timestamp: string;
