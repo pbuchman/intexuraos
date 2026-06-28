@@ -359,6 +359,7 @@ export function createCodeAgentServiceClient(
         body: request,
         timeoutMs: resolveTimeoutMs(30_000, config, options),
         requestId: options?.requestId,
+        skipSentry: true,
       });
 
       if (result.ok) {

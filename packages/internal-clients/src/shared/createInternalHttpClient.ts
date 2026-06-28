@@ -41,6 +41,7 @@ export interface InternalHttpClientRequest {
   requestId?: string | undefined;
   extraHeaders?: Record<string, string> | undefined;
   allowRawSuccess?: boolean | undefined;
+  skipSentry?: boolean | undefined;
 }
 
 export type InternalHttpClientError =
@@ -83,6 +84,7 @@ export function createInternalHttpClient(cfg: InternalHttpClientConfig): Interna
         ...(args.body !== undefined ? { jsonBody: args.body } : {}),
         timeoutMs,
         requestId: args.requestId,
+        skipSentry: args.skipSentry,
       });
 
       if (!transport.ok) {
