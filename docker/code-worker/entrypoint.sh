@@ -400,7 +400,7 @@ verify_network_restrictions &
 # ------------------------------------------------------------------------------
 # Create required directories (tmpfs on /home/claude wipes image dirs)
 # ------------------------------------------------------------------------------
-mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.agents/skills
+mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.codex /home/claude/.agents/skills
 
 # ------------------------------------------------------------------------------
 # Restore Claude config defaults (skips onboarding on fresh tmpfs)
@@ -436,6 +436,11 @@ if [ -d "/opt/codex-home/.agents/skills" ]; then
     cp -a /opt/codex-home/.agents/. /home/claude/.agents/
     BOOTSTRAP_CODEX_SKILLS="restored"
     echo "[entrypoint] Codex skill discovery restored"
+fi
+
+if [ -d "/opt/codex-home/.codex" ]; then
+    cp -a /opt/codex-home/.codex/. /home/claude/.codex/
+    echo "[entrypoint] Codex MCP config restored"
 fi
 
 # ------------------------------------------------------------------------------

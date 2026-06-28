@@ -904,6 +904,7 @@ export async function drainTaskQueue(
       linearIssueLabels: dispatchLabels,
       hasChildren,
       agentType,
+      ...(task.sentryIssue !== undefined && { sentryIssue: task.sentryIssue }),
       ...(task.prNumber !== undefined && task.prBranch !== undefined && {
         continuationPrNumber: task.prNumber,
         continuationPrBranch: task.prBranch,

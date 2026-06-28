@@ -100,7 +100,8 @@ type BuildResultAgentType =
   | 'pull_request'
   | 'review'
   | 'remediation'
-  | 'ask_agent';
+  | 'ask_agent'
+  | 'sentry';
 
 export function buildResultFromVerification(
   task: Task,
@@ -149,11 +150,13 @@ export function buildResultFromVerification(
       ? 'planning'
       : 'tracking_comment_id' in data
         ? 'pull_request'
-        : 'review_id' in data
-          ? 'review'
-          : 'requires_re_review' in data
-            ? 'remediation'
-            : 'execution');
+        : 'sentry_issue' in data
+          ? 'sentry'
+          : 'review_id' in data
+            ? 'review'
+            : 'requires_re_review' in data
+              ? 'remediation'
+              : 'execution');
 
   if (inferredType === 'planning') {
     const outcome = toStringOr(data['outcome']);
@@ -229,6 +232,18 @@ export function buildResultFromVerification(
     }
     const commentReplied = toStringOr(data['comment_replied']);
     base.comment_replied = commentReplied === 'yes';
+  } else if (inferredType === 'sentry') {
+    const prUrl = toStringOr(data['pr']);
+    if (prUrl !== '') {
+      base.prUrl = prUrl;
+    }
+    const outcome = toStringOr(data['outcome']);
+    if (outcome === 'fixed' || outcome === 'suppressed') {
+      base.sentry_outcome = outcome;
+    }
+    base.sentry_issue_url = toStringOr(data['sentry_issue']);
+    base.sentry_linear_issue = toStringOr(data['linear_issue']);
+    base.sentry_verification = toStringOr(data['verification']);
   }
 
   return base;

@@ -20,7 +20,8 @@ export type DefaultWorkerTypeField =
   | 'defaultRemediationWorkerType'
   | 'defaultExecutionWorkerType'
   | 'defaultPlanningWorkerType'
-  | 'defaultPullRequestWorkerType';
+  | 'defaultPullRequestWorkerType'
+  | 'defaultSentryWorkerType';
 
 export interface WorkerSettingsError {
   code: 'not_found' | 'already_exists' | 'max_workers_exceeded' | 'internal_error';

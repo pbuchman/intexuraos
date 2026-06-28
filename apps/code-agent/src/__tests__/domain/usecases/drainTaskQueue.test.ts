@@ -1486,6 +1486,40 @@ describe('drainTaskQueue', () => {
     );
   });
 
+  it('forwards Sentry issue context in dispatch request for Sentry tasks', async () => {
+    const sentryIssue = {
+      organizationSlug: 'intexura',
+      projectSlug: 'code-agent',
+      projectId: '42',
+      issueId: '123456',
+      issueShortId: 'CODE-AGENT-1',
+      issueUrl: 'https://intexura.sentry.io/issues/123456/',
+      title: 'TypeError: Cannot read properties of undefined',
+      action: 'created',
+      receivedAt: '2026-06-28T12:00:00.000Z',
+      eventId: 'event-1',
+    };
+    const task = createMockTask({
+      agentType: 'sentry',
+      sentryIssue,
+    });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentType: 'sentry',
+        sentryIssue,
+      })
+    );
+  });
+
   it('fails task with dispatch status when review task has prNumber but no prBranch', async () => {
     const task = createMockTask({ prNumber: 42, agentType: 'review' });
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));

@@ -101,6 +101,10 @@ export type TaskCompleteWebhookBody = {
     gh_actions_status?: string;
     needs_remediation?: string;
     requires_re_review?: string;
+    sentry_issue_url?: string;
+    sentry_linear_issue?: string;
+    sentry_outcome?: 'fixed' | 'suppressed';
+    sentry_verification?: string;
   };
   error?: {
     code: string;
@@ -869,6 +873,69 @@ export async function handleTaskCompletion(
         return { ok: true };
       };
 
+      const enforceSentryOutcome = (
+        sentryResult: NonNullable<typeof result>
+      ): { ok: true } | { ok: false; message: string; code: string } => {
+        if (task.sentryIssue === undefined) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires task.sentryIssue context',
+          };
+        }
+        if (task.linearIssueId === undefined) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires routed linearIssueId',
+          };
+        }
+        if (!sentryResult.prUrl) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.prUrl',
+          };
+        }
+        if (sentryResult.sentry_outcome !== 'fixed' && sentryResult.sentry_outcome !== 'suppressed') {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_outcome fixed or suppressed',
+          };
+        }
+        if (!sentryResult.sentry_issue_url) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_issue_url',
+          };
+        }
+        if (sentryResult.sentry_issue_url !== task.sentryIssue.issueUrl) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_issue_url to match the task Sentry issue',
+          };
+        }
+        if (!sentryResult.sentry_linear_issue) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_linear_issue',
+          };
+        }
+        if (sentryResult.sentry_verification === undefined || sentryResult.sentry_verification.trim() === '') {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_verification',
+          };
+        }
+
+        return { ok: true };
+      };
+
       // Helper: clean up PR task lock for PR-originated tasks reaching terminal state.
       // Only the original lock-owning task (parentTaskId === undefined) should delete the lock.
       // Follow-up tasks copy prNumber but don't own the lock — deleting here could remove
@@ -1242,6 +1309,75 @@ export async function handleTaskCompletion(
               task, taskId, completedAt,
               error: 'Remediation enforcement requires result.prUrl for implemented outcome',
               errorCode: 'REMEDIATION_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return { kind: 'received' as const };
+          }
+        }
+
+        if (task.agentType === 'sentry') {
+          if (result === undefined) {
+            requestLog.error(
+              { taskId, routedIssueId: task.linearIssueId, sentryIssue: task.sentryIssue },
+              'Sentry completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+                message: 'Sentry completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return { kind: 'fail' as const, code: 'INTERNAL_ERROR', message: failResult.error.message };
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Sentry completion missing result payload',
+              errorCode: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return { kind: 'received' as const };
+          }
+
+          const sentryEnforcement = enforceSentryOutcome(result);
+          if (!sentryEnforcement.ok) {
+            requestLog.error(
+              {
+                taskId,
+                routedIssueId: task.linearIssueId,
+                sentryIssueUrl: task.sentryIssue?.issueUrl,
+                prUrl: result.prUrl,
+                errorCode: sentryEnforcement.code,
+                error: sentryEnforcement.message,
+              },
+              'Sentry deterministic enforcement failed'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: sentryEnforcement.code,
+                message: sentryEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return { kind: 'fail' as const, code: 'INTERNAL_ERROR', message: failResult.error.message };
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: sentryEnforcement.message,
+              errorCode: sentryEnforcement.code,
             });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }

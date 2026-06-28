@@ -335,6 +335,55 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
     expect(result.comment_replied).toBe(true);
   });
 
+  it('overlays Sentry fields including PR, issue URLs, outcome, and verification evidence', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Fixed a Sentry issue',
+        outcome: 'fixed',
+        pr: 'https://github.com/pbuchman/intexuraos/pull/123',
+        sentry_issue: 'https://intexura.sentry.io/issues/123456/',
+        linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        verification: 'pnpm --dir apps/code-agent test sentry',
+      }),
+      'sentry'
+    );
+
+    expect(result.prUrl).toBe('https://github.com/pbuchman/intexuraos/pull/123');
+    expect(result.sentry_issue_url).toBe('https://intexura.sentry.io/issues/123456/');
+    expect(result.sentry_linear_issue).toBe(
+      'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror'
+    );
+    expect(result.sentry_outcome).toBe('fixed');
+    expect(result.sentry_verification).toBe('pnpm --dir apps/code-agent test sentry');
+  });
+
+  it('infers Sentry result fields and omits empty PR or invalid successful outcome', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Sentry task failed before code changes',
+        outcome: 'failed',
+        pr: '',
+        sentry_issue: 'https://intexura.sentry.io/issues/123456/',
+        linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        verification: 'not run',
+      })
+    );
+
+    expect(result.prUrl).toBeUndefined();
+    expect(result.sentry_outcome).toBeUndefined();
+    expect(result.sentry_issue_url).toBe('https://intexura.sentry.io/issues/123456/');
+    expect(result.sentry_linear_issue).toBe(
+      'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror'
+    );
+    expect(result.sentry_verification).toBe('not run');
+  });
+
   it('pull_request: treats non-yes comment_replied as false', () => {
     const task = makeTask();
     const result = buildResultFromVerification(

@@ -326,6 +326,294 @@ describe('handleTaskCompletion', () => {
     });
   });
 
+  describe('completed path — Sentry agent', () => {
+    const sentryIssue = {
+      organizationSlug: 'intexura',
+      projectSlug: 'code-agent',
+      issueId: '123456',
+      issueUrl: 'https://intexura.sentry.io/issues/123456/',
+      title: 'TypeError',
+      action: 'created',
+      receivedAt: '2026-06-28T12:00:00.000Z',
+    };
+
+    const sentryTask = {
+      userId: 'u1',
+      repository: 'a/b',
+      workerType: 'codex-xhigh',
+      status: 'running',
+      agentType: 'sentry',
+      linearIssueId: 'INT-123',
+      sentryIssue,
+    };
+
+    const sentryResult = {
+      prUrl: 'https://github.com/a/b/pull/77',
+      sentry_issue_url: 'https://intexura.sentry.io/issues/123456/',
+      sentry_linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+      sentry_outcome: 'fixed' as const,
+      sentry_verification: 'pnpm test',
+    };
+
+    function installSentryCompletion(overrides: {
+      task?: Record<string, unknown>;
+      update?: ReturnType<typeof vi.fn>;
+    } = {}): ReturnType<typeof vi.fn> {
+      const update = overrides.update ?? vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            ...sentryTask,
+            ...overrides.task,
+          })),
+          update,
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+      return update;
+    }
+
+    it('rejects a successful Sentry completion without a PR URL', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'codex-xhigh',
+            status: 'running',
+            agentType: 'sentry',
+            linearIssueId: 'INT-123',
+            sentryIssue: {
+              organizationSlug: 'intexura',
+              projectSlug: 'code-agent',
+              issueId: '123456',
+              issueUrl: 'https://intexura.sentry.io/issues/123456/',
+              title: 'TypeError',
+              action: 'created',
+              receivedAt: '2026-06-28T12:00:00.000Z',
+            },
+          })),
+          update,
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-no-pr',
+        status: 'completed',
+        result: {
+          sentry_issue_url: 'https://intexura.sentry.io/issues/123456/',
+          sentry_linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+          sentry_outcome: 'fixed',
+          sentry_verification: 'pnpm test',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-no-pr',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.prUrl',
+          }),
+          callbackReceived: true,
+        }),
+      );
+    });
+
+    it('rejects a completed Sentry callback without a result payload', async () => {
+      const update = installSentryCompletion();
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-no-result',
+        status: 'completed',
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-no-result',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry completion missing result payload',
+          }),
+          callbackReceived: true,
+        }),
+      );
+    });
+
+    it('returns fail when persisting a missing-result Sentry rejection fails', async () => {
+      installSentryCompletion({
+        update: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' })),
+      });
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-no-result-write-fails',
+        status: 'completed',
+      }));
+
+      expect(result).toEqual({ kind: 'fail', code: 'INTERNAL_ERROR', message: 'write failed' });
+    });
+
+    it.each([
+      {
+        name: 'missing Sentry issue context',
+        task: { sentryIssue: undefined },
+        result: sentryResult,
+        message: 'Sentry enforcement requires task.sentryIssue context',
+      },
+      {
+        name: 'missing routed Linear issue',
+        task: { linearIssueId: undefined },
+        result: sentryResult,
+        message: 'Sentry enforcement requires routed linearIssueId',
+      },
+      {
+        name: 'invalid outcome',
+        task: {},
+        result: { ...sentryResult, sentry_outcome: 'ignored' },
+        message: 'Sentry enforcement requires result.sentry_outcome fixed or suppressed',
+      },
+      {
+        name: 'missing Sentry URL',
+        task: {},
+        result: { ...sentryResult, sentry_issue_url: '' },
+        message: 'Sentry enforcement requires result.sentry_issue_url',
+      },
+      {
+        name: 'mismatched Sentry URL',
+        task: {},
+        result: { ...sentryResult, sentry_issue_url: 'https://intexura.sentry.io/issues/999999/' },
+        message: 'Sentry enforcement requires result.sentry_issue_url to match the task Sentry issue',
+      },
+      {
+        name: 'missing Linear issue URL',
+        task: {},
+        result: { ...sentryResult, sentry_linear_issue: '' },
+        message: 'Sentry enforcement requires result.sentry_linear_issue',
+      },
+      {
+        name: 'missing verification evidence',
+        task: {},
+        result: { ...sentryResult, sentry_verification: undefined },
+        message: 'Sentry enforcement requires result.sentry_verification',
+      },
+      {
+        name: 'blank verification evidence',
+        task: {},
+        result: { ...sentryResult, sentry_verification: '   ' },
+        message: 'Sentry enforcement requires result.sentry_verification',
+      },
+    ])('rejects Sentry completion with $name', async ({ task, result: resultPayload, message }) => {
+      const update = installSentryCompletion({ task });
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-invariant',
+        status: 'completed',
+        result: resultPayload as NonNullable<TaskCompleteWebhookBody['result']>,
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-invariant',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message,
+          }),
+          callbackReceived: true,
+        }),
+      );
+    });
+
+    it('returns fail when persisting a Sentry enforcement rejection fails', async () => {
+      installSentryCompletion({
+        update: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' })),
+      });
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-invariant-write-fails',
+        status: 'completed',
+        result: {
+          ...sentryResult,
+          sentry_outcome: 'ignored' as never,
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'fail', code: 'INTERNAL_ERROR', message: 'write failed' });
+    });
+
+    it('stores Sentry completion evidence when a Sentry task opens a PR', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const resultPayload = {
+        prUrl: 'https://github.com/a/b/pull/77',
+        branch: 'task_sentry_123456',
+        summary: 'Fixed the Sentry issue.',
+        sentry_issue_url: 'https://intexura.sentry.io/issues/123456/',
+        sentry_linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        sentry_outcome: 'fixed' as const,
+        sentry_verification: 'pnpm --dir apps/code-agent test -- sentry',
+      };
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'codex-xhigh',
+            status: 'running',
+            agentType: 'sentry',
+            linearIssueId: 'INT-123',
+            sentryIssue: {
+              organizationSlug: 'intexura',
+              projectSlug: 'code-agent',
+              issueId: '123456',
+              issueUrl: 'https://intexura.sentry.io/issues/123456/',
+              title: 'TypeError',
+              action: 'created',
+              receivedAt: '2026-06-28T12:00:00.000Z',
+            },
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-fixed',
+        status: 'completed',
+        result: resultPayload,
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-fixed',
+        expect.objectContaining({
+          status: 'implemented',
+          prNumber: 77,
+          prBranch: 'task_sentry_123456',
+          result: expect.objectContaining(resultPayload),
+          error: null,
+          callbackReceived: true,
+        }),
+      );
+      expect(incrementTasksCompleted).toHaveBeenCalledWith('codex-xhigh', 'implemented');
+      expect(notifyTaskComplete).toHaveBeenCalled();
+    });
+  });
+
   describe('failed path', () => {
     it('returns received for a failed status with permanent_failure triage', async () => {
       const update = vi.fn().mockResolvedValue(ok(undefined));

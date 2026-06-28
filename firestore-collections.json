@@ -180,6 +180,11 @@
       "owner": "code-agent",
       "description": "Auth-passed GitHub webhook deliveries persisted before normalization so every saved delivery can be linked to a decision"
     },
+    "sentry-issue-events": {
+      "owner": "code-agent",
+      "description": "Sentry issue webhook reservations and audit records used to create exactly one code task per actionable Sentry issue",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
+    },
     "github-event-log-entries": {
       "owner": "code-agent",
       "description": "Lightweight live projection for the GitHub event decision log UI, used as the Firestore change feed for row hydration"

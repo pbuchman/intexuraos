@@ -45,6 +45,10 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_SENTRY_WEBHOOK_SECRET', // For Sentry webhook signature verification
+  'INTEXURAOS_SENTRY_AUTOMATION_USER_ID', // User that owns automatic Sentry code tasks
+  'INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY', // Repository targeted by automatic Sentry code tasks
+  'INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH', // Base branch targeted by automatic Sentry code tasks
   'INTEXURAOS_OPENROUTER_APP_API_KEY',
   'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
   'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation

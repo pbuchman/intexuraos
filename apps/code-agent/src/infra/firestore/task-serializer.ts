@@ -263,6 +263,9 @@ export function toFirestoreDoc(
   if (input.timeoutHours !== undefined) {
     taskData.timeoutHours = input.timeoutHours;
   }
+  if (input.sentryIssue !== undefined) {
+    taskData.sentryIssue = input.sentryIssue;
+  }
 
   return withSchemaVersion(taskData, 1, taskTimestamp);
 }

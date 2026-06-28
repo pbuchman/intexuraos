@@ -78,6 +78,8 @@ export interface UserWorkerSettings {
   defaultPlanningWorkerType?: CodeTaskWorkerType;
   /** Default worker type for pull request tasks (when not explicitly specified) */
   defaultPullRequestWorkerType?: CodeTaskWorkerType;
+  /** Default worker type for Sentry issue automation tasks (when not explicitly specified) */
+  defaultSentryWorkerType?: CodeTaskWorkerType;
   /** Cached health statuses for workers (name -> status) */
   workerHealthStatuses?: Record<string, WorkerHealthStatus>;
 }
@@ -132,6 +134,7 @@ export interface UserWorkerSettingsResponse {
   defaultExecutionWorkerType?: CodeTaskWorkerType;
   defaultPlanningWorkerType?: CodeTaskWorkerType;
   defaultPullRequestWorkerType?: CodeTaskWorkerType;
+  defaultSentryWorkerType?: CodeTaskWorkerType;
 }
 
 /**

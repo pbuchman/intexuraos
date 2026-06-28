@@ -124,6 +124,15 @@ export function WorkerSettingsPage(): React.JSX.Element {
           onUpdate={(wt): Promise<void> => updateDefaultWorkerType('pull-request', wt)}
         />
       </div>
+      <div className="mb-6">
+        <DefaultWorkerTypeCard
+          title="Default Sentry Model"
+          description="Model used for automatic Sentry issue fixes."
+          successMessage="Default Sentry model saved"
+          currentType={settings?.defaultSentryWorkerType ?? 'auto'}
+          onUpdate={(wt): Promise<void> => updateDefaultWorkerType('sentry', wt)}
+        />
+      </div>
 
       <div className="mb-6">
         <TimezoneCard

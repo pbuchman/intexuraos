@@ -11,6 +11,7 @@ import {
   reviewPrompt,
   remediationPrompt,
   pullRequestPrompt,
+  sentryPrompt,
 } from '../../../services/system-prompt.js';
 import type { SystemPromptParams } from '../../../services/prompts/prompt-shared.js';
 
@@ -21,6 +22,7 @@ describe('contracts — canonical field table', () => {
     'review',
     'remediation',
     'pull_request',
+    'sentry',
   ];
 
   it('has a contract for every verifiable agent type', () => {
@@ -56,6 +58,13 @@ describe('contracts — canonical field table', () => {
       } else if (agent === 'review') {
         expect(requiredNames).toContain('pr');
         expect(requiredNames).toContain('review_id');
+      } else if (agent === 'sentry') {
+        expect(requiredNames).toContain('outcome');
+        expect(requiredNames).toContain('pr');
+        expect(requiredNames).toContain('sentry_issue');
+        expect(requiredNames).toContain('linear_issue');
+        expect(requiredNames).toContain('verification');
+        expect(requiredNames).toContain('reproduction');
       } else {
         expect(requiredNames).toContain('outcome');
         expect(requiredNames).toContain('pr');
@@ -144,6 +153,7 @@ describe('contracts — round-trip with every agent prompt', () => {
     { agent: 'review', build: () => reviewPrompt.build(baseParams) },
     { agent: 'remediation', build: () => remediationPrompt.build(baseParams) },
     { agent: 'pull_request', build: () => pullRequestPrompt.build(baseParams) },
+    { agent: 'sentry', build: () => sentryPrompt.build(baseParams) },
   ];
 
   it.each(cases)(

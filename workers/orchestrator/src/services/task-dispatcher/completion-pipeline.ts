@@ -78,6 +78,12 @@ export interface VerifierOverrideForTests {
   extractResumeSummary?: (taskId: string, rawLogs: string) => Promise<string | undefined>;
 }
 
+export function failedOutcomeAgentLabel(
+  agentType: Task['agentType']
+): 'Sentry agent' | 'Execution agent' {
+  return agentType === 'sentry' ? 'Sentry agent' : 'Execution agent';
+}
+
 // Re-export helper type imports for the public surface; used by the
 // CompletionControlConfig type that lives on the dispatcher class.
 export type { ResumeSummaryExtractor };
@@ -596,13 +602,14 @@ export class CompletionPipeline {
     // and the hard-error branch above already finalized any terminal verifier failures.
 
     if (outcome.kind === 'accept') {
-      // Execution agent explicitly reported a failed outcome — treat as terminal runtime
+      // Execution/Sentry agents explicitly reported a failed outcome — treat as terminal runtime
       // failure. The verifier successfully parsed the transcript; the agent itself
       // declared the task failed (e.g., rate-limited mid-work). Surface the runtime
       // reason instead of finalizing as success.
       const parsedOutcome =
         typeof verification.data['outcome'] === 'string' ? verification.data['outcome'] : undefined;
-      if (task.agentType === 'execution' && parsedOutcome === 'failed') {
+      const isFailedOutcomeAgent = task.agentType === 'execution' || task.agentType === 'sentry';
+      if (isFailedOutcomeAgent && parsedOutcome === 'failed') {
         const runtimeName = ctx.getRuntimeDisplayName(task);
         const claudeError = ctx.claudeErrors.get(task.taskId);
         /* v8 ignore start -- ts-type: verification.data['failure_reason'] is typed as unknown under noUncheckedIndexedAccess; the `: ''` arm fires only when a test emits a non-string failure_reason, which current INT-1457 accept-case fixtures never do — they always thread failure_reason as a string @preserve */
@@ -616,11 +623,12 @@ export class CompletionPipeline {
           claudeError,
           runtimeName,
         });
+        const failureAgentLabel = failedOutcomeAgentLabel(task.agentType);
         /* v8 ignore start -- upstream: accept branch runs only when exitCode is 0 or undefined, so buildRuntimeHardErrorMessage always returns '' here — the prefix-present arm is unreachable via the accept case and is exercised instead by fail-exit-override (INT-1457 combined-message test) @preserve */
         const baseMessage =
           runtimePrefix !== ''
-            ? `${runtimePrefix}; Execution agent reported task failed`
-            : 'Execution agent reported task failed';
+            ? `${runtimePrefix}; ${failureAgentLabel} reported task failed`
+            : `${failureAgentLabel} reported task failed`;
         /* v8 ignore stop @preserve */
         /* v8 ignore start -- upstream: task-dispatcher fixtures that set execution outcome='failed' in the accept case always populate failure_reason (see INT-1457 accept-case test); the execution-agent prompt ensures failure_reason is non-empty when outcome='failed', so the empty-failure_reason arm is unreachable in this code path @preserve */
         const message =
@@ -633,7 +641,7 @@ export class CompletionPipeline {
         };
         ctx.appendOrchestratorTaskLog(
           task.taskId,
-          `Execution agent reported failed outcome: ${error.message}`
+          `${failureAgentLabel} reported failed outcome: ${error.message}`
         );
         await ctx.flushTaskLogs(task.taskId);
         await this.collectTurnMetrics(task, attempt);
@@ -790,8 +798,8 @@ export class CompletionPipeline {
 
     if (outcome.kind === 'fail-exit-override') {
       // A non-zero worker exit overrides any verifier decision. When the verifier also
-      // parsed an execution agent reporting outcome='failed', surface the combined
-      // runtime-plus-execution message (preserves INT-1457 behavior). When the runtime
+      // parsed an execution or Sentry agent reporting outcome='failed', surface the combined
+      // runtime-plus-agent message (preserves INT-1457 behavior). When the runtime
       // emitted only a concrete hard-failure message (e.g. rate limit), surface that.
       // Otherwise report the generic exit-code override.
       const claudeErrorForHardFailure = ctx.claudeErrors.get(task.taskId);
@@ -799,12 +807,12 @@ export class CompletionPipeline {
         claudeErrorForHardFailure !== undefined && claudeErrorForHardFailure !== '';
       const parsedOutcomeForOverride =
         typeof verification.data['outcome'] === 'string' ? verification.data['outcome'] : undefined;
-      const isExecutionFailedOutcome =
+      const isAgentFailedOutcome =
         verification.missingRequired.length === 0 &&
-        task.agentType === 'execution' &&
+        (task.agentType === 'execution' || task.agentType === 'sentry') &&
         parsedOutcomeForOverride === 'failed';
       let exitCodeOverrideError: TaskError;
-      if (isExecutionFailedOutcome) {
+      if (isAgentFailedOutcome) {
         const runtimeName = ctx.getRuntimeDisplayName(task);
         /* v8 ignore start -- ts-type: verification.data['failure_reason'] is typed as unknown under noUncheckedIndexedAccess; the `: undefined` arm fires only when a test emits a non-string failure_reason, which current fail-exit-override fixtures never do @preserve */
         const failureReason =
@@ -817,11 +825,12 @@ export class CompletionPipeline {
           claudeError: claudeErrorForHardFailure,
           runtimeName,
         });
+        const failureAgentLabel = failedOutcomeAgentLabel(task.agentType);
         /* v8 ignore start -- upstream: fail-exit-override + execution-failed combo is reached only via INT-1457 test which always sets exit=1 + claudeError (so runtimePrefix is always non-empty) and always sets failure_reason='' — the empty-runtimePrefix arm and the populated-failureReason arm are unreachable with these fakes @preserve */
         const baseMessage =
           runtimePrefix !== ''
-            ? `${runtimePrefix}; Execution agent reported task failed`
-            : 'Execution agent reported task failed';
+            ? `${runtimePrefix}; ${failureAgentLabel} reported task failed`
+            : `${failureAgentLabel} reported task failed`;
         const message =
           failureReason !== undefined && failureReason !== ''
             ? `${baseMessage} (reason: ${failureReason})`
@@ -1284,6 +1293,7 @@ export class CompletionPipeline {
         remediation: 'implemented',
         review: 'reviewed',
         planning: 'planned',
+        sentry: 'implemented',
       };
       /* v8 ignore start -- ts-type: conditional spread branches for optional result/error fields; FakeWebhookClient records payloads but branch tracking for spread operators inside object literals is misattributed by v8 @preserve */
       const taskEventPayload: Record<string, unknown> = {

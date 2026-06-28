@@ -1,0 +1,7 @@
+[mcp_servers.linear]
+url = "https://mcp.linear.app/mcp"
+bearer_token_env_var = "LINEAR_API_KEY"
+
+[mcp_servers.sentry]
+command = "sh"
+args = ["-lc", 'exec npx @sentry/mcp-server@latest --access-token "$SENTRY_AUTH_TOKEN"']

@@ -891,6 +891,8 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain('Refusing to load secrets unless INTEXURAOS_ENVIRONMENT=prod');
     expect(script).toContain('gcloud secrets versions access');
     expect(script).toContain('HETZNER_RUNTIME_SECRETS=(');
+    expect(script).toContain('INTEXURAOS_SENTRY_WEBHOOK_SECRET');
+    expect(script).toContain('INTEXURAOS_SENTRY_AUTOMATION_USER_ID');
     expect(script).toContain('PROVISIONER_SA_KEY_FILE');
     expect(script).toContain('RUNTIME_SA_KEY_FILE');
     expect(script).toContain('TEMP_ENV_FILE=');
@@ -926,8 +928,16 @@ describe('Hetzner secret loader', () => {
       'write_env_line "${output_path}" "INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL" "${PUBLIC_ORIGIN}/api/code"'
     );
     expect(terraform).toContain(
-      'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = "${local.public_origin}/api/code"'
+      'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL  = "${local.public_origin}/api/code"'
     );
+    expect(script).toContain(
+      'write_env_line "${output_path}" "INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY" "pbuchman/intexuraos"'
+    );
+    expect(script).toContain(
+      'write_env_line "${output_path}" "INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH" "development"'
+    );
+    expect(terraform).toContain('INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY  = "pbuchman/intexuraos"');
+    expect(terraform).toContain('INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH = "development"');
   });
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {

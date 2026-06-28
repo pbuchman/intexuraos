@@ -7,6 +7,7 @@
 import type { Result, Logger } from '@intexuraos/common-core';
 import type { AgentType, WorkerType } from '../models/codeTask.js';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
+import type { SentryIssueTaskContext } from '../models/sentryIssueEvent.js';
 import type { WorkerLocation } from '../models/worker.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
 import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
@@ -68,6 +69,8 @@ export interface DispatchRequest {
   retriedFrom?: string;
   /** Agent type for orchestrator agent-based routing. */
   agentType?: AgentType;
+  /** Sentry issue context for automatic Sentry remediation tasks. */
+  sentryIssue?: SentryIssueTaskContext;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse for pull_request tasks. */

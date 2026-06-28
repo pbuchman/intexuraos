@@ -162,6 +162,7 @@ export function registerRoutes(
       ...(parsed.slug !== undefined && { slug: parsed.slug }),
       ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
       ...(parsed.agentType !== undefined && { agentType: parsed.agentType }),
+      ...(parsed.sentryIssue !== undefined && { sentryIssue: parsed.sentryIssue }),
       ...(parsed.continuationPrNumber !== undefined && {
         continuationPrNumber: parsed.continuationPrNumber,
       }),

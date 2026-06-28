@@ -7,7 +7,7 @@ const DispatchMetadataSchema = z.object({
   repository: z.string().min(1),
   baseBranch: z.string().min(1),
   agentType: z
-    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'])
+    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry'])
     .nullable(),
   workerType: WorkerTypeSchema,
   linearIssueId: z.string().min(1).nullable(),

@@ -9,6 +9,7 @@ import {
   prReviewOverlayPrompt,
   reviewPrompt,
   askAgentPrompt,
+  sentryPrompt,
 } from '../system-prompt.js';
 
 const EXPECTED_WORKER_TYPE_FALLBACK = `\`<${CODE_TASK_WORKER_TYPES.join('|')}>\``;
@@ -25,6 +26,7 @@ describe('system-prompt', () => {
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
       { name: 'askAgentPrompt', prompt: askAgentPrompt },
+      { name: 'sentryPrompt', prompt: sentryPrompt },
     ])('$name has valid semver version', ({ prompt }) => {
       expect(prompt.version).toMatch(SEMVER_REGEX);
     });
@@ -37,6 +39,7 @@ describe('system-prompt', () => {
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
       { name: 'reviewPrompt', prompt: reviewPrompt },
       { name: 'askAgentPrompt', prompt: askAgentPrompt },
+      { name: 'sentryPrompt', prompt: sentryPrompt },
     ])('$name has required metadata fields', ({ prompt }) => {
       expect(prompt.name).toBeTruthy();
       expect(prompt.description).toBeTruthy();

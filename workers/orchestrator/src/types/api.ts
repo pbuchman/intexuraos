@@ -1,5 +1,6 @@
 import type { OrchestratorStatus } from './state.js';
 import type { ExecutionMemoryPromptContext } from './execution-memory.js';
+import type { SentryIssueTaskContext } from './task.js';
 import type { WorkerType } from '../services/isolation/types.js';
 import type { WorkerAuthProvider, WorkerAuthState } from '../services/worker-auth/index.js';
 
@@ -24,7 +25,16 @@ export interface CreateTaskRequest {
    */
   retriedFrom?: string;
   /** Agent type determined by code-agent routing analysis. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  agentType?:
+    | 'planning'
+    | 'execution'
+    | 'pull_request'
+    | 'review'
+    | 'remediation'
+    | 'ask_agent'
+    | 'sentry';
+  /** Sentry issue context for Sentry-triggered code tasks. */
+  sentryIssue?: SentryIssueTaskContext;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */

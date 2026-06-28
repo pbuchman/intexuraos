@@ -36,6 +36,7 @@ export function pickCompletionAgentType(task: Task): CompletionAgentType {
   if (task.agentType === 'execution') return 'execution';
   if (task.agentType === 'planning') return 'planning';
   if (task.agentType === 'ask_agent') return 'ask_agent';
+  if (task.agentType === 'sentry') return 'sentry';
   return hasCodeTaskLabel(task.linearIssueLabels) ? 'execution' : 'planning';
 }
 
@@ -60,9 +61,11 @@ export function pickAgentLabel(task: Task): string {
             ? 'Planning Agent'
             : task.agentType === 'ask_agent'
               ? 'Ask Agent'
-              : hasCodeTaskLabel(task.linearIssueLabels)
-                ? 'Execution Agent'
-                : 'Planning Agent';
+              : task.agentType === 'sentry'
+                ? 'Sentry Agent'
+                : hasCodeTaskLabel(task.linearIssueLabels)
+                  ? 'Execution Agent'
+                  : 'Planning Agent';
 }
 
 /**
@@ -79,9 +82,11 @@ export function describeAgent(agentLabel: string): string {
         ? 'Remediation Agent — address review findings on the existing PR branch and decide if re-review is needed'
         : agentLabel === 'Ask Agent'
           ? 'Ask Agent — interactive code assistant, respond to user questions'
-          : agentLabel === 'Execution Agent'
-            ? 'Execution Agent — implement autonomously, run CI, create PR'
-            : 'Planning Agent — create planning artifacts only, no implementation coding';
+          : agentLabel === 'Sentry Agent'
+            ? 'Sentry Agent — fix or code-suppress a Sentry issue and create a PR'
+            : agentLabel === 'Execution Agent'
+              ? 'Execution Agent — implement autonomously, run CI, create PR'
+              : 'Planning Agent — create planning artifacts only, no implementation coding';
   /* v8 ignore stop @preserve */
 }
 
@@ -118,6 +123,7 @@ export function pickAgentStatusLabel(agentType: string | undefined): string | un
     remediation: 'implemented',
     review: 'reviewed',
     planning: 'planned',
+    sentry: 'implemented',
   };
   if (agentType === undefined) return undefined;
   return agentStatusMap[agentType];

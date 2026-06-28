@@ -639,6 +639,40 @@ describe('TaskDispatcher', () => {
       expect('jsonSchema' in (config ?? {})).toBe(false);
     });
 
+    it('should store Sentry issue context and include it in the worker system prompt', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'sentry-task',
+        workerType: 'codex-xhigh',
+        prompt: 'Fix the Sentry issue',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue: {
+          organizationSlug: 'intexura',
+          projectSlug: 'code-agent',
+          issueId: '123456',
+          issueUrl: 'https://intexura.sentry.io/issues/123456/',
+          title: 'TypeError: cannot read property',
+          action: 'created',
+          receivedAt: '2026-06-28T12:00:00.000Z',
+        },
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      const task = await dispatcher.getTask('sentry-task');
+      expect(task?.sentryIssue?.issueUrl).toBe('https://intexura.sentry.io/issues/123456/');
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
+      const config = createWorkerCall?.[0];
+      expect(config?.systemPrompt).toContain('[AGENT:SENTRY]');
+      expect(config?.systemPrompt).toContain('https://intexura.sentry.io/issues/123456/');
+    });
+
     it('should use provided repository and baseBranch when given', async () => {
       const request: CreateTaskRequest = {
         taskId: 'test-task-with-repo',
@@ -2858,6 +2892,79 @@ describe('TaskDispatcher', () => {
               code: 'TASK_RUNTIME_HARD_ERROR',
               message: expect.stringContaining('reason: rate_limited'),
               remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('sentry outcome=failed finalizes the task as failed instead of completed', async () => {
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '{"type":"thread.started","thread_id":"test-session"}\n' +
+          '{"type":"turn.started"}\n' +
+          JSON.stringify({
+            type: 'item.completed',
+            item: {
+              type: 'agent_message',
+              text: 'SENTRY_AGENT_FINAL:\n- outcome: failed\n',
+            },
+          }) +
+          '\n'
+      );
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'sentry',
+          outcome: 'failed',
+          pr: '',
+          sentry_issue: 'https://intexura.sentry.io/issues/123456/',
+          linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+          verification: 'not run',
+          reproduction: 'not feasible before authentication failed',
+          failure_reason: 'sentry_auth_failed',
+          summary: 'Could not fetch Sentry issue details.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'sentry-failed-outcome-test',
+        workerType: 'codex-xhigh',
+        prompt: 'Sentry task with failed verdict',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue: {
+          organizationSlug: 'intexura',
+          projectSlug: 'code-agent',
+          issueId: '123456',
+          issueUrl: 'https://intexura.sentry.io/issues/123456/',
+          title: 'TypeError: cannot read property',
+          action: 'created',
+          receivedAt: '2026-06-28T12:00:00.000Z',
+        },
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('sentry-failed-outcome-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('reason: sentry_auth_failed'),
             }),
           }),
         })

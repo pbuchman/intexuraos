@@ -1143,6 +1143,21 @@ describe('workerSettingsRepository', () => {
       }
     });
 
+    it('should round-trip defaultSentryWorkerType via getSettings', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateDefaultWorkerType('user-sentry-roundtrip', 'defaultSentryWorkerType', 'codex-xhigh');
+
+      const settingsResult = await repo.getSettings('user-sentry-roundtrip');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultSentryWorkerType).toBe('codex-xhigh');
+      }
+    });
+
     it('should not include unset fields in getSettings', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1158,6 +1173,7 @@ describe('workerSettingsRepository', () => {
         expect(settingsResult.value.defaultExecutionWorkerType).toBeUndefined();
         expect(settingsResult.value.defaultPlanningWorkerType).toBeUndefined();
         expect(settingsResult.value.defaultPullRequestWorkerType).toBeUndefined();
+        expect(settingsResult.value.defaultSentryWorkerType).toBeUndefined();
       }
     });
   });

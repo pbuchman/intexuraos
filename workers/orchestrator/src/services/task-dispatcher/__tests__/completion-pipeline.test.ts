@@ -4,6 +4,7 @@ import {
   runVerification,
   adaptLegacyVerdictIfNeeded,
   computeTaskDurationMs,
+  failedOutcomeAgentLabel,
   type LegacyVerdict,
 } from '../completion-pipeline.js';
 import type { CompletionVerifierVerdict } from '../../completion-verifier.js';
@@ -154,6 +155,14 @@ describe('CompletionPipeline', () => {
         completedAt: 'invalid',
       });
       expect(computeTaskDurationMs(task)).toBe(0);
+    });
+  });
+
+  describe('failedOutcomeAgentLabel', () => {
+    it('labels Sentry failed outcomes separately from execution failed outcomes', () => {
+      expect(failedOutcomeAgentLabel('sentry')).toBe('Sentry agent');
+      expect(failedOutcomeAgentLabel('execution')).toBe('Execution agent');
+      expect(failedOutcomeAgentLabel(undefined)).toBe('Execution agent');
     });
   });
 

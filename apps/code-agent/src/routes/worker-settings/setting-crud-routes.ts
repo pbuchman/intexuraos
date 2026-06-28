@@ -74,6 +74,7 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
                   defaultExecutionWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
                   defaultPlanningWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
                   defaultPullRequestWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+                  defaultSentryWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
                 },
                 required: ['workers'],
               },
@@ -151,6 +152,9 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
         }),
         ...(settings?.defaultPullRequestWorkerType !== undefined && {
           defaultPullRequestWorkerType: settings.defaultPullRequestWorkerType,
+        }),
+        ...(settings?.defaultSentryWorkerType !== undefined && {
+          defaultSentryWorkerType: settings.defaultSentryWorkerType,
         }),
       };
 

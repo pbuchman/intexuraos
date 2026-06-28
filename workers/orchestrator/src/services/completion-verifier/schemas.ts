@@ -7,7 +7,8 @@ export type CompletionAgentType =
   | 'pull_request'
   | 'review'
   | 'remediation'
-  | 'ask_agent';
+  | 'ask_agent'
+  | 'sentry';
 
 export const RESUME_SUMMARY_SCHEMA = z.object({
   summary: z.string(),
