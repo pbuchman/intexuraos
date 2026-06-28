@@ -155,17 +155,17 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: /^whatsapp$/i })).not.toBeInTheDocument();
   });
 
-  it('renders the INTEX Agent section with Configuration and Sessions entries', () => {
+  it('renders the INTEX Agent section with Preferences and Sessions entries', () => {
     render(
-      <MemoryRouter initialEntries={['/intex-agent/config']}>
+      <MemoryRouter initialEntries={['/intex-agent/preferences']}>
         <Sidebar />
       </MemoryRouter>
     );
 
     expect(screen.getByRole('button', { name: /intex agent/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /configuration/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /preferences/i })).toHaveAttribute(
       'href',
-      '/intex-agent/config'
+      '/intex-agent/preferences'
     );
     expect(screen.getByRole('link', { name: /^sessions$/i })).toHaveAttribute(
       'href',

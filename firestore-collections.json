@@ -96,7 +96,15 @@
     },
     "intex_agent_user_preferences": {
       "owner": "intex-agent",
-      "description": "Per-user INTEX Agent preferences (instructions) injected into the agent system prompt. Document id == userId."
+      "description": "Legacy INTEX Agent per-user configuration used for External Save settings. Prompt instructions are stored in dedicated prompt-preference collections. Document id == userId."
+    },
+    "intex_agent_prompt_preferences": {
+      "owner": "intex-agent",
+      "description": "Current itemized INTEX Agent prompt preferences per user with rendered prompt block and current version. Document id == userId."
+    },
+    "intex_agent_prompt_preference_versions": {
+      "owner": "intex-agent",
+      "description": "Immutable INTEX Agent prompt preference version snapshots. Document id format: {userId}_{version}."
     },
     "generated_images": {
       "owner": "image-service",

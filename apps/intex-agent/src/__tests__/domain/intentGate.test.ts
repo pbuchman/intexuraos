@@ -91,6 +91,35 @@ describe('classifyIntexAgentIntent', () => {
   });
 
   it.each([
+    'Tell me my defined user preferences.',
+    'Show my INTEX instructions.',
+    'Add a preference: when I invite Jakub, use jakub@gmail.com.',
+    'Update the Jakub invitation preference to use jakub.nowak@gmail.com.',
+    'Remove the row about mood preferences.',
+    'Delete preference 2.',
+  ])('allows preference management intent: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'tool',
+      allowedToolNames: [
+        'get_user_preferences',
+        'add_user_preference',
+        'update_user_preference',
+        'delete_user_preference',
+      ],
+    });
+  });
+
+  it.each([
+    'Show my preferences and calendar events tomorrow',
+    'Add a preference and create a note about it',
+  ])('rejects mixed preference and resource intents: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'unsupported',
+      reason: 'multiple_resource_intents',
+    });
+  });
+
+  it.each([
     'How many notes did I create last month?',
     'How many bookmarks did I save this week?',
     'How many code tasks did I create last month?',

@@ -9,6 +9,15 @@ import type {
 } from '@intexuraos/internal-clients';
 import { describe, expect, it } from 'vitest';
 import { createIntexAgentToolExecutor } from '../../domain/agent/toolExecutor.js';
+import type { PromptPreferencesRepository } from '../../domain/ports/promptPreferencesRepository.js';
+import {
+  addPromptPreferenceItem,
+  deletePromptPreferenceItem,
+  emptyPromptPreferences,
+  updatePromptPreferenceItem,
+  type IntexAgentPromptPreferenceVersion,
+  type IntexAgentPromptPreferences,
+} from '../../domain/preferences/promptPreferences.js';
 import type {
   BookmarksToolClient,
   CalendarToolClient,
@@ -709,6 +718,97 @@ describe('createIntexAgentToolExecutor', () => {
     ).rejects.toThrow('Failed to save externally: HTTP 403: Forbidden');
   });
 
+  it('reads current prompt preferences through the prompt preferences repository', async () => {
+    const promptPreferencesRepository = new FakePromptPreferencesRepository();
+    promptPreferencesRepository.seed('user-1', {
+      text: 'When I ask to invite Jakub, invite jakub@gmail.com.',
+      id: 'pref_jakub',
+    });
+    const executor = createIntexAgentToolExecutor(
+      createExecutorDeps({ promptPreferencesRepository })
+    );
+
+    const result = await executor.getUserPreferences();
+
+    expect(promptPreferencesRepository.calls[0]).toEqual({ method: 'getCurrent', userId: 'user-1' });
+    expect(JSON.parse(result)).toEqual({
+      status: 'completed',
+      currentVersion: 1,
+      promptBlock:
+        'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub@gmail.com."',
+    });
+  });
+
+  it('mutates prompt preferences with authenticated session metadata', async () => {
+    const promptPreferencesRepository = new FakePromptPreferencesRepository();
+    const executor = createIntexAgentToolExecutor(
+      createExecutorDeps({ promptPreferencesRepository, sessionId: 'session-1' })
+    );
+
+    const addResult = await executor.addUserPreference({
+      text: 'When I ask to invite Jakub, invite jakub@gmail.com.',
+      expectedVersion: 0,
+    });
+    const updateResult = await executor.updateUserPreference({
+      itemId: 'pref_1',
+      text: 'When I ask to invite Jakub, invite jakub.nowak@gmail.com.',
+      expectedVersion: 1,
+    });
+    const deleteResult = await executor.deleteUserPreference({
+      itemId: 'pref_1',
+      expectedVersion: 2,
+    });
+
+    expect(promptPreferencesRepository.calls).toMatchObject([
+      {
+        method: 'addItem',
+        input: {
+          userId: 'user-1',
+          expectedVersion: 0,
+          updatedBy: { actor: 'agent_tool', userId: 'user-1', sessionId: 'session-1', messageId: 'wamid-1' },
+        },
+      },
+      {
+        method: 'updateItem',
+        input: {
+          userId: 'user-1',
+          itemId: 'pref_1',
+          expectedVersion: 1,
+          updatedBy: { actor: 'agent_tool', userId: 'user-1', sessionId: 'session-1', messageId: 'wamid-1' },
+        },
+      },
+      {
+        method: 'deleteItem',
+        input: {
+          userId: 'user-1',
+          itemId: 'pref_1',
+          expectedVersion: 2,
+          updatedBy: { actor: 'agent_tool', userId: 'user-1', sessionId: 'session-1', messageId: 'wamid-1' },
+        },
+      },
+    ]);
+    expect(JSON.parse(addResult)).toMatchObject({
+      status: 'completed',
+      currentVersion: 1,
+      changedItemId: 'pref_1',
+      promptBlock:
+        'User Preferences v1:\n1. (id: pref_1) "When I ask to invite Jakub, invite jakub@gmail.com."',
+    });
+    expect(JSON.parse(updateResult)).toMatchObject({
+      status: 'completed',
+      currentVersion: 2,
+      changedItemId: 'pref_1',
+      promptBlock:
+        'User Preferences v2:\n1. (id: pref_1) "When I ask to invite Jakub, invite jakub.nowak@gmail.com."',
+    });
+    expect(JSON.parse(deleteResult)).toMatchObject({
+      status: 'completed',
+      currentVersion: 3,
+      changedItemId: 'pref_1',
+      promptBlock: '',
+    });
+  });
+
   it('throws when an internal tool client returns a failure', async () => {
     const notesClient = new FakeNotesClient();
     notesClient.result = err(new Error('notes-agent unavailable'));
@@ -727,6 +827,7 @@ function createExecutorDeps(
 ): CreateIntexAgentToolExecutorDeps {
   return {
     userId: 'user-1',
+    sessionId: 'session-1',
     messageId: 'wamid-1',
     notesClient: new FakeNotesClient(),
     calendarClient: new FakeCalendarClient(),
@@ -734,6 +835,7 @@ function createExecutorDeps(
     bookmarksClient: new FakeBookmarksClient(),
     codeClient: new FakeCodeTaskClient(),
     externalSaveClient: new FakeExternalSaveClient(),
+    promptPreferencesRepository: new FakePromptPreferencesRepository(),
     ...overrides,
   };
 }
@@ -841,6 +943,87 @@ class FakeExternalSaveClient implements ExternalSaveToolClient {
   save(input: Parameters<ExternalSaveToolClient['save']>[0]): Promise<Result<{ status: 'completed'; message: string }, { code: string; message: string }>> {
     this.calls.push(input);
     return Promise.resolve(this.result);
+  }
+}
+
+class FakePromptPreferencesRepository implements PromptPreferencesRepository {
+  readonly calls: unknown[] = [];
+  private current = emptyPromptPreferences('user-1');
+  private versions: IntexAgentPromptPreferenceVersion[] = [];
+  private idCounter = 0;
+  private timeCounter = 0;
+
+  seed(userId: string, input: { id: string; text: string }): void {
+    const result = addPromptPreferenceItem(emptyPromptPreferences(userId), {
+      id: input.id,
+      text: input.text,
+      now: '2026-06-28T10:00:00.000Z',
+      updatedBy: { actor: 'web_ui', userId },
+    });
+    this.current = result.current;
+    this.versions = [result.version];
+  }
+
+  async getCurrent(userId: string): Promise<IntexAgentPromptPreferences> {
+    this.calls.push({ method: 'getCurrent', userId });
+    return this.current.userId === userId ? this.current : emptyPromptPreferences(userId);
+  }
+
+  async listVersions(): Promise<never[]> {
+    return [];
+  }
+
+  async getVersion(): Promise<null> {
+    return null;
+  }
+
+  async addItem(
+    input: Parameters<PromptPreferencesRepository['addItem']>[0]
+  ): Promise<IntexAgentPromptPreferences> {
+    this.calls.push({ method: 'addItem', input });
+    const result = addPromptPreferenceItem(this.current, {
+      id: `pref_${String(++this.idCounter)}`,
+      text: input.text,
+      now: this.nextTime(),
+      updatedBy: input.updatedBy,
+    });
+    this.current = result.current;
+    this.versions.push(result.version);
+    return result.current;
+  }
+
+  async updateItem(
+    input: Parameters<PromptPreferencesRepository['updateItem']>[0]
+  ): Promise<IntexAgentPromptPreferences> {
+    this.calls.push({ method: 'updateItem', input });
+    const result = updatePromptPreferenceItem(this.current, {
+      itemId: input.itemId,
+      text: input.text,
+      now: this.nextTime(),
+      updatedBy: input.updatedBy,
+    });
+    this.current = result.current;
+    this.versions.push(result.version);
+    return result.current;
+  }
+
+  async deleteItem(
+    input: Parameters<PromptPreferencesRepository['deleteItem']>[0]
+  ): Promise<IntexAgentPromptPreferences> {
+    this.calls.push({ method: 'deleteItem', input });
+    const result = deletePromptPreferenceItem(this.current, {
+      itemId: input.itemId,
+      now: this.nextTime(),
+      updatedBy: input.updatedBy,
+    });
+    this.current = result.current;
+    this.versions.push(result.version);
+    return result.current;
+  }
+
+  private nextTime(): string {
+    this.timeCounter += 1;
+    return `2026-06-28T10:0${String(this.timeCounter)}:00.000Z`;
   }
 }
 

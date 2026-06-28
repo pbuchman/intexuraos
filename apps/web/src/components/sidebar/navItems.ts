@@ -82,7 +82,7 @@ export const fishingAssistantItems: NavItem[] = [
 ];
 
 export const intexAgentItems: NavItem[] = [
-  { to: '/intex-agent/config', label: 'Configuration', icon: SettingsIcon },
+  { to: '/intex-agent/preferences', label: 'Preferences', icon: SettingsIcon },
   { to: '/whatsapp/sessions', label: 'Sessions', icon: List },
 ];
 

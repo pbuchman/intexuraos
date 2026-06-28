@@ -14,6 +14,7 @@ import { createWhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client'
 import type { ServiceConfig } from './config.js';
 import type { IncomingMessageHandler } from './domain/ports/incomingMessageHandler.js';
 import type { PreferencesRepository } from './domain/ports/preferencesRepository.js';
+import type { PromptPreferencesRepository } from './domain/ports/promptPreferencesRepository.js';
 import type { SessionRepository } from './domain/ports/sessionRepository.js';
 import type {
   ExternalSaveConnectionTestPort,
@@ -30,6 +31,7 @@ import {
   type IntexAgentRunnerResult,
 } from './domain/messages/handleIncomingMessage.js';
 import { FirestorePreferencesRepository } from './infra/firestore/preferencesRepository.js';
+import { FirestorePromptPreferencesRepository } from './infra/firestore/promptPreferencesRepository.js';
 import { FirestoreSessionRepository } from './infra/firestore/sessionRepository.js';
 import { createExternalSaveClient } from './infra/http/externalSaveClient.js';
 import { createWhatsAppReplyPublisher } from './infra/pubsub/whatsappReplyPublisher.js';
@@ -38,6 +40,7 @@ export interface ServiceContainer {
   config: ServiceConfig;
   sessionRepository: SessionRepository;
   preferencesRepository: PreferencesRepository;
+  promptPreferencesRepository: PromptPreferencesRepository;
   externalSaveTester: ExternalSaveConnectionTestPort;
   incomingMessageHandler: IncomingMessageHandler;
 }
@@ -49,6 +52,7 @@ export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
   const sessionRepository = new FirestoreSessionRepository({ firestore });
   const preferencesRepository = new FirestorePreferencesRepository({ firestore });
+  const promptPreferencesRepository = new FirestorePromptPreferencesRepository({ firestore });
 
   const notesClient = createNotesAgentServiceClient({
     baseUrl: config.notesAgentUrl,
@@ -118,9 +122,13 @@ export function initServices(config: ServiceConfig): void {
         ownerType: 'user',
       });
 
-      const preferences = await preferencesRepository.getPreferences(input.session.userId);
+      const [preferences, promptPreferences] = await Promise.all([
+        preferencesRepository.getPreferences(input.session.userId),
+        promptPreferencesRepository.getCurrent(input.session.userId),
+      ]);
       const toolExecutor = createIntexAgentToolExecutor({
         userId: input.session.userId,
+        sessionId: input.session.id,
         messageId: input.messageId ?? input.session.id,
         notesClient,
         calendarClient,
@@ -128,13 +136,14 @@ export function initServices(config: ServiceConfig): void {
         bookmarksClient,
         codeClient,
         externalSaveClient: createExternalSaveToolClient(preferences?.externalSave),
+        promptPreferencesRepository,
       });
 
       return await createIntexAgentRunner({
         client: toolCallingClient,
         toolExecutor,
         webAppUrl: config.webAppUrl,
-        userPreferences: preferences?.instructions ?? null,
+        userPreferences: promptPreferences.renderedPromptBlock,
       }).run(input);
     },
   };
@@ -161,6 +170,7 @@ export function initServices(config: ServiceConfig): void {
     config,
     sessionRepository,
     preferencesRepository,
+    promptPreferencesRepository,
     externalSaveTester,
     incomingMessageHandler,
   };

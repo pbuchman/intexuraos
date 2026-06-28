@@ -16,9 +16,14 @@ import type {
   CreateCalendarEventToolArgs,
   CreateCodeTaskToolArgs,
   CreateLinkToolArgs,
+  AddUserPreferenceToolArgs,
+  DeleteUserPreferenceToolArgs,
   SaveExternalToolArgs,
+  UpdateUserPreferenceToolArgs,
   IntexAgentToolExecutor,
 } from './toolDefinitions.js';
+import type { PromptPreferencesRepository } from '../ports/promptPreferencesRepository.js';
+import type { IntexAgentPromptPreferences } from '../preferences/promptPreferences.js';
 
 export interface NotesToolClient {
   createNote(input: CreateNoteRequest): Promise<Result<ServiceFeedback>>;
@@ -83,6 +88,7 @@ export interface ExternalSaveToolClient {
 
 export interface CreateIntexAgentToolExecutorDeps {
   userId: string;
+  sessionId: string;
   messageId: string;
   notesClient: NotesToolClient;
   calendarClient: CalendarToolClient;
@@ -90,6 +96,7 @@ export interface CreateIntexAgentToolExecutorDeps {
   bookmarksClient: BookmarksToolClient;
   codeClient: CodeTaskToolClient;
   externalSaveClient: ExternalSaveToolClient | null;
+  promptPreferencesRepository: PromptPreferencesRepository;
 }
 
 export function createIntexAgentToolExecutor(
@@ -243,6 +250,72 @@ export function createIntexAgentToolExecutor(
         message: result.value.message, // @allow-result-access -- guarded by !result.ok check above
       });
     },
+
+    async getUserPreferences(): Promise<string> {
+      const preferences = await deps.promptPreferencesRepository.getCurrent(deps.userId);
+      return JSON.stringify(toPromptPreferenceToolResult(preferences));
+    },
+
+    async addUserPreference(args: AddUserPreferenceToolArgs): Promise<string> {
+      const preferences = await deps.promptPreferencesRepository.addItem({
+        userId: deps.userId,
+        text: args.text,
+        expectedVersion: args.expectedVersion,
+        updatedBy: preferenceToolActor(deps),
+      });
+      return JSON.stringify(
+        toPromptPreferenceToolResult(preferences, preferences.items.at(-1)?.id)
+      );
+    },
+
+    async updateUserPreference(args: UpdateUserPreferenceToolArgs): Promise<string> {
+      const preferences = await deps.promptPreferencesRepository.updateItem({
+        userId: deps.userId,
+        itemId: args.itemId,
+        text: args.text,
+        expectedVersion: args.expectedVersion,
+        updatedBy: preferenceToolActor(deps),
+      });
+      return JSON.stringify(toPromptPreferenceToolResult(preferences, args.itemId));
+    },
+
+    async deleteUserPreference(args: DeleteUserPreferenceToolArgs): Promise<string> {
+      const preferences = await deps.promptPreferencesRepository.deleteItem({
+        userId: deps.userId,
+        itemId: args.itemId,
+        expectedVersion: args.expectedVersion,
+        updatedBy: preferenceToolActor(deps),
+      });
+      return JSON.stringify(toPromptPreferenceToolResult(preferences, args.itemId));
+    },
+  };
+}
+
+function preferenceToolActor(
+  deps: Pick<CreateIntexAgentToolExecutorDeps, 'userId' | 'sessionId' | 'messageId'>
+): { actor: 'agent_tool'; userId: string; sessionId: string; messageId: string } {
+  return {
+    actor: 'agent_tool',
+    userId: deps.userId,
+    sessionId: deps.sessionId,
+    messageId: deps.messageId,
+  };
+}
+
+function toPromptPreferenceToolResult(
+  preferences: IntexAgentPromptPreferences,
+  changedItemId?: string
+): {
+  status: 'completed';
+  currentVersion: number;
+  promptBlock: string;
+  changedItemId?: string;
+} {
+  return {
+    status: 'completed',
+    currentVersion: preferences.currentVersion,
+    promptBlock: preferences.renderedPromptBlock,
+    ...(changedItemId !== undefined ? { changedItemId } : {}),
   };
 }
 

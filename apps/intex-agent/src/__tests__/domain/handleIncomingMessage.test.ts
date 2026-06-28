@@ -25,6 +25,7 @@ const UNSUPPORTED_CAPABILITIES_REPLY = [
   '- create research drafts',
   '- save bookmarks',
   '- create code tasks for planning or execution',
+  '- manage INTEX Agent prompt preferences',
 ].join('\n');
 const NEW_SESSION_READY_REPLY = [
   'What would you like me to help with? I can help with:',
@@ -33,6 +34,7 @@ const NEW_SESSION_READY_REPLY = [
   '- create research drafts',
   '- save bookmarks',
   '- create code tasks for planning or execution',
+  '- manage INTEX Agent prompt preferences',
 ].join('\n');
 
 function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMessage {

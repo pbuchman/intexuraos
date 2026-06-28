@@ -10,7 +10,6 @@ import {
   type IntexAgentExternalSaveConfig,
 } from '@/services/intexAgentApi';
 
-const MAX_INSTRUCTIONS_LENGTH = 5000;
 const DEFAULT_EXTERNAL_SAVE: IntexAgentExternalSaveConfig = {
   enabled: false,
   endpointUrl: '',
@@ -32,8 +31,6 @@ function formatUpdatedAt(updatedAt: string | null): string {
 
 export function IntexAgentConfigPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
-  const [instructions, setInstructions] = useState('');
-  const [originalInstructions, setOriginalInstructions] = useState('');
   const [externalSave, setExternalSave] = useState<IntexAgentExternalSaveConfig>(DEFAULT_EXTERNAL_SAVE);
   const [originalExternalSave, setOriginalExternalSave] =
     useState<IntexAgentExternalSaveConfig>(DEFAULT_EXTERNAL_SAVE);
@@ -52,8 +49,6 @@ export function IntexAgentConfigPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       const data = await getIntexAgentPreferences(token);
-      setInstructions(data.instructions);
-      setOriginalInstructions(data.instructions);
       setExternalSave(data.externalSave);
       setOriginalExternalSave(data.externalSave);
       setUpdatedAt(data.updatedAt);
@@ -68,10 +63,7 @@ export function IntexAgentConfigPage(): React.JSX.Element {
     void refresh();
   }, [refresh]);
 
-  const trimmedInstructions = instructions.trim();
-  const isDirty =
-    trimmedInstructions !== originalInstructions ||
-    JSON.stringify(externalSave) !== JSON.stringify(originalExternalSave);
+  const isDirty = JSON.stringify(externalSave) !== JSON.stringify(originalExternalSave);
   const externalSaveReady =
     !externalSave.enabled ||
     (
@@ -91,11 +83,9 @@ export function IntexAgentConfigPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       const result = await saveIntexAgentPreferences(token, {
-        instructions: trimmedInstructions,
+        instructions: '',
         externalSave: normalizeExternalSave(externalSave),
       });
-      setInstructions(result.instructions);
-      setOriginalInstructions(result.instructions);
       setExternalSave(result.externalSave);
       setOriginalExternalSave(result.externalSave);
       setUpdatedAt(result.updatedAt);
@@ -105,16 +95,14 @@ export function IntexAgentConfigPage(): React.JSX.Element {
     } finally {
       setSaving(false);
     }
-  }, [canSave, externalSave, getAccessToken, trimmedInstructions]);
+  }, [canSave, externalSave, getAccessToken]);
 
   const handleClear = useCallback(async (): Promise<void> => {
     if (clearing) {
       return;
     }
     if (
-      !window.confirm(
-        'Clear INTEX Agent instructions? The agent will no longer use your personal preferences.'
-      )
+      !window.confirm('Clear INTEX Agent External Save configuration?')
     ) {
       return;
     }
@@ -123,8 +111,6 @@ export function IntexAgentConfigPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       const result = await clearIntexAgentPreferences(token);
-      setInstructions(result.instructions);
-      setOriginalInstructions(result.instructions);
       setExternalSave(result.externalSave);
       setOriginalExternalSave(result.externalSave);
       setUpdatedAt(result.updatedAt);
@@ -169,12 +155,11 @@ export function IntexAgentConfigPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          INTEX Agent Configuration
+          INTEX Agent External Save
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Personal instructions for the INTEX Agent. These are injected into every prompt the agent
-          runs, so the agent can adapt to your preferences (e.g. always invite Monika to calendar
-          events).
+          Configure the protected endpoint used for explicit external-save requests and WhatsApp
+          images. Prompt preferences are managed from INTEX Agent Preferences.
         </p>
       </div>
 
@@ -190,37 +175,11 @@ export function IntexAgentConfigPage(): React.JSX.Element {
         </div>
       ) : (
         <div className="rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-          <label
-            htmlFor="intex-agent-instructions"
-            className="mb-2 block text-sm font-semibold text-slate-900 dark:text-slate-100"
-          >
-            Personal instructions
-          </label>
-          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-            Plain-text preferences. The agent follows them as guidance — they never override the
-            agent&apos;s built-in rules.
-          </p>
-          <textarea
-            id="intex-agent-instructions"
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
-            rows={8}
-            maxLength={MAX_INSTRUCTIONS_LENGTH}
-            placeholder="When I add an event to the calendar with Monika, also invite monikamaupa@gmail.com."
-            value={instructions}
-            onChange={(e): void => {
-              setInstructions(e.target.value);
-            }}
-          />
-          <div className="mt-1 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-            <span>
-              Last updated: <span className="font-medium">{formatUpdatedAt(updatedAt)}</span>
-            </span>
-            <span>
-              {String(instructions.length)}/{String(MAX_INSTRUCTIONS_LENGTH)}
-            </span>
+          <div className="mb-4 text-xs text-slate-400 dark:text-slate-500">
+            Last updated: <span className="font-medium">{formatUpdatedAt(updatedAt)}</span>
           </div>
 
-          <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">
+          <div>
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -328,7 +287,7 @@ export function IntexAgentConfigPage(): React.JSX.Element {
             <button
               type="button"
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-              disabled={clearing || originalInstructions === ''}
+              disabled={clearing || updatedAt === null}
               onClick={(): void => {
                 void handleClear();
               }}

@@ -8,13 +8,16 @@ import type { IntexIncomingMessageReplyContext } from '../ports/incomingMessageH
 import type { IntexAgentSessionEvent, IntexAgentToolName } from '../sessions/types.js';
 import {
   createIntexAgentToolDefinitions,
+  type AddUserPreferenceToolArgs,
   type CreateCalendarEventToolArgs,
   type CreateCodeTaskToolArgs,
   type CreateLinkToolArgs,
   type CreateNoteToolArgs,
+  type DeleteUserPreferenceToolArgs,
   type QueryCalendarEventsToolArgs,
   type CreateResearchToolArgs,
   type SaveExternalToolArgs,
+  type UpdateUserPreferenceToolArgs,
   type IntexAgentToolExecutor,
 } from './toolDefinitions.js';
 import { buildIntexAgentSystemPrompt } from './systemPrompt.js';
@@ -328,6 +331,30 @@ function createTrackingToolExecutor(
     async saveExternal(args: SaveExternalToolArgs): Promise<string> {
       return await track('save_external', toRecord(args), async () => await executor.saveExternal(args));
     },
+    async getUserPreferences(): Promise<string> {
+      return await track('get_user_preferences', {}, async () => await executor.getUserPreferences());
+    },
+    async addUserPreference(args: AddUserPreferenceToolArgs): Promise<string> {
+      return await track(
+        'add_user_preference',
+        toRecord(args),
+        async () => await executor.addUserPreference(args)
+      );
+    },
+    async updateUserPreference(args: UpdateUserPreferenceToolArgs): Promise<string> {
+      return await track(
+        'update_user_preference',
+        toRecord(args),
+        async () => await executor.updateUserPreference(args)
+      );
+    },
+    async deleteUserPreference(args: DeleteUserPreferenceToolArgs): Promise<string> {
+      return await track(
+        'delete_user_preference',
+        toRecord(args),
+        async () => await executor.deleteUserPreference(args)
+      );
+    },
   };
 }
 
@@ -419,6 +446,16 @@ function buildCompletedReply(
     return { reply: fallbackReply };
   }
 
+  if (isPreferenceToolName(toolName)) {
+    const promptBlock = readRawString(result, 'promptBlock');
+    return {
+      reply:
+        promptBlock !== undefined && promptBlock.trim() !== ''
+          ? promptBlock
+          : 'No INTEX Agent preferences are defined yet.',
+    };
+  }
+
   const resourceUrl = readString(result, 'resourceUrl');
   const absoluteResourceUrl = toObjectCtaUrl(resourceUrl, webAppUrl);
   if (absoluteResourceUrl !== undefined) {
@@ -486,6 +523,20 @@ function buildCompletedReply(
     return { reply: message };
   }
   return { reply: message ?? fallbackReply };
+}
+
+function isPreferenceToolName(toolName: IntexAgentToolName): boolean {
+  return (
+    toolName === 'get_user_preferences' ||
+    toolName === 'add_user_preference' ||
+    toolName === 'update_user_preference' ||
+    toolName === 'delete_user_preference'
+  );
+}
+
+function readRawString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function readString(record: Record<string, unknown>, key: string): string | undefined {

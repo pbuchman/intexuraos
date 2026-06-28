@@ -54,6 +54,22 @@ export interface SaveExternalToolArgs {
   sourceUrl?: string;
 }
 
+export interface AddUserPreferenceToolArgs {
+  text: string;
+  expectedVersion: number;
+}
+
+export interface UpdateUserPreferenceToolArgs {
+  itemId: string;
+  text: string;
+  expectedVersion: number;
+}
+
+export interface DeleteUserPreferenceToolArgs {
+  itemId: string;
+  expectedVersion: number;
+}
+
 const EXPLICIT_CODE_TASK_WORKER_TYPES = ['codex', 'codex-xhigh', 'minimax'] as const;
 
 export interface IntexAgentToolExecutor {
@@ -64,6 +80,10 @@ export interface IntexAgentToolExecutor {
   createLink(args: CreateLinkToolArgs): Promise<string>;
   createCodeTask(args: CreateCodeTaskToolArgs): Promise<string>;
   saveExternal(args: SaveExternalToolArgs): Promise<string>;
+  getUserPreferences(): Promise<string>;
+  addUserPreference(args: AddUserPreferenceToolArgs): Promise<string>;
+  updateUserPreference(args: UpdateUserPreferenceToolArgs): Promise<string>;
+  deleteUserPreference(args: DeleteUserPreferenceToolArgs): Promise<string>;
 }
 
 export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor): ToolDefinition[] {
@@ -305,6 +325,90 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
       },
       run: async (args: Record<string, unknown>) => await executor.saveExternal(toSaveExternalArgs(args)),
     },
+    {
+      name: 'get_user_preferences',
+      description:
+        'Use when the user asks what INTEX Agent preferences, prompt preferences, or instructions are currently defined. Return only the current preference block or the empty-preferences sentence.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {},
+      },
+      run: async () => await executor.getUserPreferences(),
+    },
+    {
+      name: 'add_user_preference',
+      description:
+        'Use when the user explicitly asks to add one durable INTEX Agent preference row. The text must be the exact normalized row to store. Ask for confirmation first if the row text requires interpretation.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['text', 'expectedVersion'],
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Exact single preference row text to store.',
+          },
+          expectedVersion: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Current preference version from the prompt block, or 0 when no block exists.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) =>
+        await executor.addUserPreference(toAddUserPreferenceArgs(args)),
+    },
+    {
+      name: 'update_user_preference',
+      description:
+        'Use when the user explicitly asks to update one existing INTEX Agent preference row. Fetch current preferences first unless the user supplied an exact current item id. Confirm ambiguous targets before mutating.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['itemId', 'text', 'expectedVersion'],
+        properties: {
+          itemId: {
+            type: 'string',
+            description: 'Stable current preference item id such as pref_abc123.',
+          },
+          text: {
+            type: 'string',
+            description: 'Replacement single preference row text.',
+          },
+          expectedVersion: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Current preference version from the latest prompt block.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) =>
+        await executor.updateUserPreference(toUpdateUserPreferenceArgs(args)),
+    },
+    {
+      name: 'delete_user_preference',
+      description:
+        'Use when the user explicitly asks to remove one current INTEX Agent preference row. Fetch current preferences first unless the user supplied an exact current item id. Confirm row id and text before deletion for ambiguous targets.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['itemId', 'expectedVersion'],
+        properties: {
+          itemId: {
+            type: 'string',
+            description: 'Stable current preference item id such as pref_abc123.',
+          },
+          expectedVersion: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Current preference version from the latest prompt block.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) =>
+        await executor.deleteUserPreference(toDeleteUserPreferenceArgs(args)),
+    },
   ];
 }
 
@@ -418,10 +522,40 @@ function toSaveExternalArgs(args: Record<string, unknown>): SaveExternalToolArgs
   };
 }
 
+function toAddUserPreferenceArgs(args: Record<string, unknown>): AddUserPreferenceToolArgs {
+  return {
+    text: requiredString(args, 'text'),
+    expectedVersion: requiredNonNegativeInteger(args, 'expectedVersion'),
+  };
+}
+
+function toUpdateUserPreferenceArgs(args: Record<string, unknown>): UpdateUserPreferenceToolArgs {
+  return {
+    itemId: requiredString(args, 'itemId'),
+    text: requiredString(args, 'text'),
+    expectedVersion: requiredNonNegativeInteger(args, 'expectedVersion'),
+  };
+}
+
+function toDeleteUserPreferenceArgs(args: Record<string, unknown>): DeleteUserPreferenceToolArgs {
+  return {
+    itemId: requiredString(args, 'itemId'),
+    expectedVersion: requiredNonNegativeInteger(args, 'expectedVersion'),
+  };
+}
+
 function requiredString(args: Record<string, unknown>, key: string): string {
   const value = args[key];
   if (typeof value !== 'string') {
     throw new Error(`Tool argument ${key} must be a string`);
+  }
+  return value;
+}
+
+function requiredNonNegativeInteger(args: Record<string, unknown>, key: string): number {
+  const value = args[key];
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Tool argument ${key} must be a non-negative integer`);
   }
   return value;
 }

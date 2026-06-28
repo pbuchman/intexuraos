@@ -16,6 +16,10 @@ describe('createIntexAgentToolDefinitions', () => {
       'create_link',
       'create_code_task',
       'save_external',
+      'get_user_preferences',
+      'add_user_preference',
+      'update_user_preference',
+      'delete_user_preference',
     ]);
   });
 
@@ -137,6 +141,19 @@ describe('createIntexAgentToolDefinitions', () => {
       message: { type: 'string' },
       sourceUrl: { type: 'string' },
     });
+  });
+
+  it('describes itemized prompt preference management tools', () => {
+    const tools = createIntexAgentToolDefinitions(createExecutor());
+    const getTool = tools.find((tool) => tool.name === 'get_user_preferences');
+    const addTool = tools.find((tool) => tool.name === 'add_user_preference');
+    const updateTool = tools.find((tool) => tool.name === 'update_user_preference');
+    const deleteTool = tools.find((tool) => tool.name === 'delete_user_preference');
+
+    expect(getTool?.description).toContain('defined');
+    expect(addTool?.parameters['required']).toEqual(['text', 'expectedVersion']);
+    expect(updateTool?.parameters['required']).toEqual(['itemId', 'text', 'expectedVersion']);
+    expect(deleteTool?.parameters['required']).toEqual(['itemId', 'expectedVersion']);
   });
 
   it('keeps code task worker type optional while accepting supported explicit values', async () => {
@@ -471,6 +488,55 @@ describe('createIntexAgentToolDefinitions', () => {
     ]);
   });
 
+  it('delegates preference tools to the injected executor', async () => {
+    const executor = createExecutor();
+    const tools = createIntexAgentToolDefinitions(executor);
+
+    await expect(tools.find((tool) => tool.name === 'get_user_preferences')?.run({})).resolves.toBe(
+      'preferences-read'
+    );
+    await expect(
+      tools.find((tool) => tool.name === 'add_user_preference')?.run({
+        text: 'When I invite Jakub, use jakub@gmail.com.',
+        expectedVersion: 3,
+      })
+    ).resolves.toBe('preference-added');
+    await expect(
+      tools.find((tool) => tool.name === 'update_user_preference')?.run({
+        itemId: 'pref_1',
+        text: 'When I invite Jakub, use jakub.nowak@gmail.com.',
+        expectedVersion: 4,
+      })
+    ).resolves.toBe('preference-updated');
+    await expect(
+      tools.find((tool) => tool.name === 'delete_user_preference')?.run({
+        itemId: 'pref_1',
+        expectedVersion: 5,
+      })
+    ).resolves.toBe('preference-deleted');
+
+    expect(executor.preferenceReadCalls).toBe(1);
+    expect(executor.preferenceAddArgs).toEqual([
+      {
+        text: 'When I invite Jakub, use jakub@gmail.com.',
+        expectedVersion: 3,
+      },
+    ]);
+    expect(executor.preferenceUpdateArgs).toEqual([
+      {
+        itemId: 'pref_1',
+        text: 'When I invite Jakub, use jakub.nowak@gmail.com.',
+        expectedVersion: 4,
+      },
+    ]);
+    expect(executor.preferenceDeleteArgs).toEqual([
+      {
+        itemId: 'pref_1',
+        expectedVersion: 5,
+      },
+    ]);
+  });
+
   it('rejects invalid required and optional tool arguments', async () => {
     const [noteTool, calendarTool] = createIntexAgentToolDefinitions(createExecutor());
     const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
@@ -504,6 +570,16 @@ describe('createIntexAgentToolDefinitions', () => {
         .find((tool) => tool.name === 'save_external')
         ?.run({ message: 'ok', sourceUrl: 123 })
     ).rejects.toThrow('Tool argument sourceUrl must be a string');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'add_user_preference')
+        ?.run({ text: 'ok', expectedVersion: -1 })
+    ).rejects.toThrow('Tool argument expectedVersion must be a non-negative integer');
+    await expect(
+      createIntexAgentToolDefinitions(createExecutor())
+        .find((tool) => tool.name === 'update_user_preference')
+        ?.run({ itemId: 123, text: 'ok', expectedVersion: 0 })
+    ).rejects.toThrow('Tool argument itemId must be a string');
     await expect(
       createIntexAgentToolDefinitions(createExecutor())
         .find((tool) => tool.name === 'query_calendar_events')
@@ -589,6 +665,10 @@ function createExecutor(): IntexAgentToolExecutor & {
   linkArgs: unknown[];
   codeTaskArgs: unknown[];
   externalSaveArgs: unknown[];
+  preferenceReadCalls: number;
+  preferenceAddArgs: unknown[];
+  preferenceUpdateArgs: unknown[];
+  preferenceDeleteArgs: unknown[];
 } {
   return {
     noteArgs: [],
@@ -598,6 +678,10 @@ function createExecutor(): IntexAgentToolExecutor & {
     linkArgs: [],
     codeTaskArgs: [],
     externalSaveArgs: [],
+    preferenceReadCalls: 0,
+    preferenceAddArgs: [],
+    preferenceUpdateArgs: [],
+    preferenceDeleteArgs: [],
     createNote(args): Promise<string> {
       this.noteArgs.push(args);
       return Promise.resolve('note-created');
@@ -625,6 +709,22 @@ function createExecutor(): IntexAgentToolExecutor & {
     saveExternal(args): Promise<string> {
       this.externalSaveArgs.push(args);
       return Promise.resolve('external-saved');
+    },
+    getUserPreferences(): Promise<string> {
+      this.preferenceReadCalls += 1;
+      return Promise.resolve('preferences-read');
+    },
+    addUserPreference(args): Promise<string> {
+      this.preferenceAddArgs.push(args);
+      return Promise.resolve('preference-added');
+    },
+    updateUserPreference(args): Promise<string> {
+      this.preferenceUpdateArgs.push(args);
+      return Promise.resolve('preference-updated');
+    },
+    deleteUserPreference(args): Promise<string> {
+      this.preferenceDeleteArgs.push(args);
+      return Promise.resolve('preference-deleted');
     },
   };
 }
