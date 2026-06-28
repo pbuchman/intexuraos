@@ -155,6 +155,39 @@ describe('parseSentryIssueEvent', () => {
     }
   });
 
+  it('normalizes official event_alert issue fields with numeric project IDs', () => {
+    const result = parseSentryIssueEvent('event_alert', {
+      action: 'triggered',
+      data: {
+        event: {
+          event_id: '58839a7c3e2c4205a1a847c1ad3839c6',
+          project: 4510702691024976,
+          title: 'This is an example node-fastify exception',
+          web_url: 'https://sentry.io/organizations/intexuraos/issues/1117540176/events/58839a7c3e2c4205a1a847c1ad3839c6/',
+          issue_url: 'https://sentry.io/api/0/issues/1117540176/',
+          issue_id: '1117540176',
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        resource: 'event_alert',
+        action: 'triggered',
+        organizationSlug: 'intexuraos',
+        projectSlug: '4510702691024976',
+        projectId: '4510702691024976',
+        issueId: '1117540176',
+        issueShortId: undefined,
+        issueTitle: 'This is an example node-fastify exception',
+        issueUrl: 'https://sentry.io/organizations/intexuraos/issues/1117540176/',
+        status: undefined,
+        eventId: '58839a7c3e2c4205a1a847c1ad3839c6',
+      });
+    }
+  });
+
   it('normalizes event_alert webhooks from nested issue objects', () => {
     const result = parseSentryIssueEvent('event_alert', {
       action: 'resolved',

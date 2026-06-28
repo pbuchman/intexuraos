@@ -44,7 +44,9 @@ function extractUrlParts(url: string): {
     const issueId = issueMatch?.[1];
     const issueUrl = issueId === undefined
       ? undefined
-      : `${parsed.origin}/issues/${issueId}/`;
+      : organizationMatch?.[1] === undefined
+        ? `${parsed.origin}/issues/${issueId}/`
+        : `${parsed.origin}/organizations/${organizationMatch[1]}/issues/${issueId}/`;
 
     return {
       organizationSlug: organizationMatch?.[1] ?? hostOrg,
@@ -63,6 +65,9 @@ function extractUrlParts(url: string): {
 function readProject(value: unknown): { projectSlug: string | undefined; projectId: string | undefined } {
   if (typeof value === 'string' && value.trim() !== '') {
     return { projectSlug: value, projectId: undefined };
+  }
+  if (typeof value === 'number') {
+    return { projectSlug: undefined, projectId: String(value) };
   }
   if (isRecord(value)) {
     return {
@@ -137,25 +142,39 @@ function parseEventAlertWebhook(payload: unknown): Result<NormalizedSentryIssueE
 
   const issueValue = event['issue'];
   const issueObject = isRecord(issueValue) ? issueValue : null;
-  const issueUrlRaw =
+  const eventWebUrlRaw = readString(event, 'web_url');
+  const eventIssueUrlRaw = readString(event, 'issue_url');
+  const issueLinkRaw =
     typeof issueValue === 'string'
       ? issueValue
       : issueObject !== null
         ? readString(issueObject, 'permalink') ?? readString(issueObject, 'web_url') ?? readString(issueObject, 'url')
         : undefined;
-  const fallbackUrlParts = readString(event, 'web_url') !== undefined
-    ? extractUrlParts(readString(event, 'web_url') as string)
-    : undefined;
-  const urlParts = issueUrlRaw !== undefined ? extractUrlParts(issueUrlRaw) : fallbackUrlParts;
-  const issueId = issueObject !== null ? readString(issueObject, 'id') ?? urlParts?.issueId : urlParts?.issueId;
-  const issueUrl = issueUrlRaw ?? urlParts?.issueUrl;
+  const issueLinkUrlParts = issueLinkRaw !== undefined ? extractUrlParts(issueLinkRaw) : undefined;
+  const eventWebUrlParts = eventWebUrlRaw !== undefined ? extractUrlParts(eventWebUrlRaw) : undefined;
+  const eventIssueUrlParts = eventIssueUrlRaw !== undefined ? extractUrlParts(eventIssueUrlRaw) : undefined;
+  const urlParts = issueLinkUrlParts ?? eventWebUrlParts ?? eventIssueUrlParts;
+  const issueId = issueObject !== null
+    ? readString(issueObject, 'id') ?? readString(event, 'issue_id') ?? urlParts?.issueId
+    : readString(event, 'issue_id') ?? urlParts?.issueId;
+  const issueUrl =
+    issueLinkUrlParts?.issueUrl
+    ?? eventWebUrlParts?.issueUrl
+    ?? eventIssueUrlParts?.issueUrl
+    ?? issueLinkRaw
+    ?? eventIssueUrlRaw;
   if (issueId === undefined || issueUrl === undefined) {
     return invalidMissingIssue();
   }
 
   const project = readProject(event['project'] ?? issueObject?.['project']);
+  const projectSlug =
+    project.projectSlug
+    ?? readString(event, 'project_slug')
+    ?? readString(event, 'project_name')
+    ?? project.projectId;
   const organizationSlug = urlParts?.organizationSlug;
-  if (organizationSlug === undefined || project.projectSlug === undefined) {
+  if (organizationSlug === undefined || projectSlug === undefined) {
     return err({
       code: 'INVALID_PAYLOAD',
       message: 'Sentry webhook payload did not include organization or project identity',
@@ -166,7 +185,7 @@ function parseEventAlertWebhook(payload: unknown): Result<NormalizedSentryIssueE
     resource: 'event_alert',
     action: readAction(payload),
     organizationSlug,
-    projectSlug: project.projectSlug,
+    projectSlug,
     projectId: project.projectId,
     issueId,
     issueShortId: issueObject !== null
