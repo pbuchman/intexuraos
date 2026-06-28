@@ -231,8 +231,11 @@ describe('Hetzner nginx runtime config', () => {
   it('requires edge OIDC verification for internal routes and injects trusted internal auth', () => {
     const config = readRequired(nginxConfigPath);
     const verifier = readRequired(jwtVerifierPath);
+    const hetznerMain = readRequired(terraformHetznerMainPath);
+    const runbook = readRequired(runbookPath);
 
     expect(config).toContain('access_by_lua_file /etc/nginx/lua/jwt-verify.lua;');
+    expect(config).toContain('client_max_body_size 25m;');
     expect(verifier).toContain('EXPECTED_AUD = "https://intexuraos.cloud"');
     expect(verifier).toContain('GLOBAL_ALLOWED_SERVICE_ACCOUNTS');
     expect(verifier).toContain('ROUTE_ALLOWED_SERVICE_ACCOUNTS');
@@ -283,9 +286,14 @@ describe('Hetzner nginx runtime config', () => {
       'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
     expect(routeAllowlist).toContain('["/internal/whatsapp/private/events"]');
+    expect(routeAllowlist).toContain('["/internal/whatsapp/private/media"]');
     expect(routeAllowlist).toContain(
       'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
+    expect(hetznerMain).toContain('"/internal/whatsapp/private/events"');
+    expect(hetznerMain).toContain('"/internal/whatsapp/private/media"');
+    expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/events');
+    expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/media');
 
     const allowFunction = verifier.slice(
       verifier.indexOf('local function is_service_account_allowed'),

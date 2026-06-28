@@ -71,6 +71,7 @@ locals {
     "/internal/merge-queue/tick"                        = "code-agent"
     "/internal/notifications/digest/run-yesterday"      = "mobile-notifications-service"
     "/internal/whatsapp/private/events"                 = "whatsapp-service"
+    "/internal/whatsapp/private/media"                  = "whatsapp-service"
     "/internal/whatsapp/pubsub/media-cleanup"           = "whatsapp-service"
     "/internal/whatsapp/pubsub/process-webhook"         = "whatsapp-service"
     "/internal/whatsapp/pubsub/send-message"            = "whatsapp-service"
