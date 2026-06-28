@@ -1,5 +1,6 @@
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
+import type { SentryIssueTaskContext } from '../../types/task.js';
 import type { WorkerType } from '../isolation/types.js';
 
 export const WORKER_TYPE_FALLBACK = `<${CODE_TASK_WORKER_TYPES.join('|')}>`;
@@ -56,7 +57,15 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   modelName?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  agentType?:
+    | 'planning'
+    | 'execution'
+    | 'pull_request'
+    | 'review'
+    | 'remediation'
+    | 'ask_agent'
+    | 'sentry';
+  sentryIssue?: SentryIssueTaskContext;
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;

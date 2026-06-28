@@ -11,6 +11,9 @@ const dockerfileTestPath = fileURLToPath(
 const entrypointPath = fileURLToPath(
   new URL('../../../../../../docker/code-worker/entrypoint.sh', import.meta.url)
 );
+const codexConfigPath = fileURLToPath(
+  new URL('../../../../../../docker/code-worker/config-defaults/codex-config.toml', import.meta.url)
+);
 
 describe('code-worker image Codex skill bootstrap', () => {
   it('stages Superpowers for Codex native skill discovery at build time', () => {
@@ -29,10 +32,29 @@ describe('code-worker image Codex skill bootstrap', () => {
     const entrypoint = readFileSync(entrypointPath, 'utf8');
 
     expect(entrypoint).toContain(
-      'mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.agents/skills'
+      'mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.codex /home/claude/.agents/skills'
     );
     expect(entrypoint).toContain('cp -a /opt/codex-home/.agents/. /home/claude/.agents/');
     expect(entrypoint).toContain('Codex skill discovery restored');
+  });
+
+  it('bakes and restores Codex MCP config with Linear and Sentry access', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf8');
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+    const codexConfig = readFileSync(codexConfigPath, 'utf8');
+
+    expect(dockerfile).toContain(
+      'COPY --chown=claude:claude docker/code-worker/config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml'
+    );
+    expect(entrypoint).toContain('/home/claude/.codex');
+    expect(entrypoint).toContain('cp -a /opt/codex-home/.codex/. /home/claude/.codex/');
+    expect(codexConfig).toContain('[mcp_servers.linear]');
+    expect(codexConfig).toContain('bearer_token_env_var = "LINEAR_API_KEY"');
+    expect(codexConfig).toContain('[mcp_servers.sentry]');
+    expect(codexConfig).toContain('command = "sh"');
+    expect(codexConfig).toContain(
+      'exec npx @sentry/mcp-server@latest --access-token "$SENTRY_AUTH_TOKEN"'
+    );
   });
 
   it('emits explicit bootstrap and runtime evidence lines for Codex runs', () => {

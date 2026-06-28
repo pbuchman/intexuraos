@@ -8,6 +8,7 @@ import type { SystemPromptParams } from './prompts/prompt-shared.js';
 import { pullRequestPrompt } from './prompts/pull-request-prompt.js';
 import { remediationPrompt } from './prompts/remediation-prompt.js';
 import { reviewPrompt } from './prompts/review-prompt.js';
+import { sentryPrompt } from './prompts/sentry-prompt.js';
 
 export type { SystemPromptParams } from './prompts/prompt-shared.js';
 export { askAgentPrompt } from './prompts/ask-agent-prompt.js';
@@ -17,6 +18,7 @@ export { prReviewOverlayPrompt } from './prompts/pr-review-overlay-prompt.js';
 export { pullRequestPrompt } from './prompts/pull-request-prompt.js';
 export { remediationPrompt } from './prompts/remediation-prompt.js';
 export { reviewPrompt } from './prompts/review-prompt.js';
+export { sentryPrompt } from './prompts/sentry-prompt.js';
 
 type AgentType = NonNullable<SystemPromptParams['agentType']>;
 
@@ -27,6 +29,7 @@ const PROMPT_REGISTRY: Record<AgentType, PromptBuilder<SystemPromptParams>> = {
   review: reviewPrompt,
   remediation: remediationPrompt,
   ask_agent: askAgentPrompt,
+  sentry: sentryPrompt,
 };
 
 export function getPromptForAgent(agentType: AgentType): PromptBuilder<SystemPromptParams> {
@@ -37,7 +40,7 @@ export const systemPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-system-prompt',
   description:
     'Routes a code-task system-prompt build to the right agent-specific PromptBuilder based on agentType and labels',
-  version: '1.0.0',
+  version: '2.0.0',
 
   build(params: SystemPromptParams): string {
     const isPullRequestTask =
@@ -49,6 +52,10 @@ export const systemPrompt: PromptBuilder<SystemPromptParams> = {
 
     if (params.agentType === 'ask_agent') {
       return askAgentPrompt.build(params);
+    }
+
+    if (params.agentType === 'sentry') {
+      return sentryPrompt.build(params);
     }
 
     const resolvedAgentType =

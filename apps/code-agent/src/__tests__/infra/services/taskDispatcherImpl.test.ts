@@ -456,6 +456,73 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
+  describe('dispatch includes Sentry issue context when provided', () => {
+    it('sends sentryIssue in the dispatch request body', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+      const sentryIssue = {
+        organizationSlug: 'intexura',
+        projectSlug: 'code-agent',
+        projectId: '42',
+        issueId: '123456',
+        issueShortId: 'CODE-AGENT-1',
+        issueUrl: 'https://intexura.sentry.io/issues/123456/',
+        title: 'TypeError: Cannot read properties of undefined',
+        action: 'created',
+        receivedAt: '2026-06-28T12:00:00.000Z',
+        eventId: 'event-1',
+      };
+
+      let capturedBody: Record<string, unknown> | undefined;
+      nock(WORKER_URL)
+        .post('/tasks', (body: Record<string, unknown>) => {
+          capturedBody = body;
+          return true;
+        })
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        taskId: 'task-sentry-context',
+        prompt: 'Fix Sentry issue',
+        systemPromptHash: 'hash-123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'codex-xhigh',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue,
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody?.['sentryIssue']).toEqual(sentryIssue);
+    });
+  });
+
   describe('dispatch non-OK response handling', () => {
     it('returns dispatch_failed with worker error message for non-retryable status 400', async () => {
       const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;

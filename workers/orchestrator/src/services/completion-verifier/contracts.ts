@@ -232,6 +232,64 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
       { name: 'summary', alias: ['Summary'], kind: 'string', required: true },
     ],
   },
+  sentry: {
+    marker: 'SENTRY_AGENT_FINAL:',
+    fields: [
+      {
+        name: 'outcome',
+        alias: ['Outcome'],
+        kind: 'enum',
+        required: true,
+        enumValues: ['fixed', 'suppressed', 'failed'],
+      },
+      {
+        name: 'pr',
+        alias: ['PR', 'gh_pr_url'],
+        kind: 'url',
+        required: true,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
+      {
+        name: 'sentry_issue',
+        alias: ['Sentry issue'],
+        kind: 'url',
+        required: true,
+      },
+      {
+        name: 'linear_issue',
+        alias: ['Linear issue'],
+        kind: 'url',
+        required: true,
+      },
+      {
+        name: 'verification',
+        alias: ['Verification'],
+        kind: 'string',
+        required: true,
+      },
+      {
+        name: 'reproduction',
+        alias: ['Reproduction'],
+        kind: 'string',
+        required: true,
+      },
+      {
+        name: 'suppression_rationale',
+        alias: ['Suppression rationale'],
+        kind: 'string',
+        required: false,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
+      {
+        name: 'failure_reason',
+        alias: ['Failure reason'],
+        kind: 'string',
+        required: false,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
+      { name: 'summary', alias: ['Summary'], kind: 'string', required: true },
+    ],
+  },
   pull_request: {
     marker: 'PULL_REQUEST_AGENT_FINAL:',
     fields: [

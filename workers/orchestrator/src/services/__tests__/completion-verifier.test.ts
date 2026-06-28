@@ -139,6 +139,55 @@ describe('verifyCompletion (thin smoke — full matrix lives in __tests__/comple
     expect(verdict.missingRequired).toEqual([]);
     expect(verdict.data['outcome']).toBe('implemented');
   });
+
+  it('rejects successful Sentry outcomes when the final block has no PR URL', () => {
+    const verdict = verifyCompletion({
+      transcript: [
+        'SENTRY_AGENT_FINAL:',
+        '- outcome: fixed',
+        '- pr: ',
+        '- sentry_issue: https://intexura.sentry.io/issues/123456/',
+        '- linear_issue: https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        '- verification: pnpm run test:sentry',
+        '- reproduction: reproduced with webhook fixture',
+        '- summary: Fixed issue',
+      ].join('\n'),
+      agentType: 'sentry',
+      workerType: 'codex-xhigh',
+      executionMemoryContext: undefined,
+      lastExitCode: 0,
+    });
+
+    expect(verdict.kind).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toContain('pr');
+  });
+
+  it('accepts suppressed Sentry outcomes with PR and evidence fields', () => {
+    const verdict = verifyCompletion({
+      transcript: [
+        'SENTRY_AGENT_FINAL:',
+        '- outcome: suppressed',
+        '- pr: https://github.com/pbuchman/intexuraos/pull/123',
+        '- sentry_issue: https://intexura.sentry.io/issues/123456/',
+        '- linear_issue: https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        '- verification: pnpm run test:sentry',
+        '- reproduction: not feasible because payload needs production-only provider data',
+        '- suppression_rationale: Report is a documented third-party cancellation path.',
+        '- summary: Suppressed non-error report in code',
+      ].join('\n'),
+      agentType: 'sentry',
+      workerType: 'codex-xhigh',
+      executionMemoryContext: undefined,
+      lastExitCode: 0,
+    });
+
+    expect(verdict.kind).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toEqual([]);
+    expect(verdict.data['outcome']).toBe('suppressed');
+    expect(verdict.data['pr']).toBe('https://github.com/pbuchman/intexuraos/pull/123');
+  });
 });
 
 describe('ResumeSummaryExtractor', () => {

@@ -247,6 +247,40 @@ export async function routes(fastify) {
     expect(result.stderr).toMatch(/\/github\/webhooks/);
   });
 
+  it('allows canonical code-agent Sentry webhook route', () => {
+    writeFixture(
+      rootDir,
+      'apps/code-agent/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/webhooks/sentry', async () => ({}));
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it('fails changed code-agent Sentry webhook route', () => {
+    writeFixture(
+      rootDir,
+      'apps/code-agent/src/routes.ts',
+      `
+export async function routes(fastify) {
+  fastify.post('/sentry/webhooks', async () => ({}));
+}
+`
+    );
+
+    const result = runScript(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/code-agent/);
+    expect(result.stderr).toMatch(/\/sentry\/webhooks/);
+  });
+
   it('fails known alias route prefixes for services with historical mounts', () => {
     writeFixture(
       rootDir,

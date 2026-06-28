@@ -68,7 +68,7 @@ export const maskedWorkerConfigSchema = {
   required: ['name', 'url', 'cfAccessClientId', 'cfAccessClientSecret', 'dispatchSigningSecret', 'enabled'],
 } as const;
 
-/** Body schema for the 5 PATCH default-*-worker-type endpoints. */
+/** Body schema for the 6 PATCH default-*-worker-type endpoints. */
 export const defaultWorkerTypeBody = {
   type: 'object',
   properties: {
@@ -77,7 +77,7 @@ export const defaultWorkerTypeBody = {
   required: ['workerType'],
 } as const;
 
-/** Shared response schema for the 5 PATCH default-*-worker-type endpoints. */
+/** Shared response schema for the 6 PATCH default-*-worker-type endpoints. */
 export const defaultWorkerTypeResponse = {
   200: {
     description: 'Default worker type updated',

@@ -409,6 +409,7 @@ function agentTypeLabel(agentType: AgentType): string {
     case 'planning': return 'Plan';
     case 'pull_request': return 'PR';
     case 'ask_agent': return 'Ask Agent';
+    case 'sentry': return 'Sentry';
   }
 }
 

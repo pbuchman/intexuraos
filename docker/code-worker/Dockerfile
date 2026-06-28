@@ -83,7 +83,7 @@ RUN npm install -g @openai/codex
 # home fragment and copy it into the runtime tmpfs during container startup.
 RUN git clone --depth 1 https://github.com/obra/superpowers.git /opt/codex-superpowers \
     && rm -rf /opt/codex-superpowers/.git \
-    && mkdir -p /opt/codex-home/.agents/skills \
+    && mkdir -p /opt/codex-home/.agents/skills /opt/codex-home/.codex \
     && ln -s /opt/codex-superpowers/skills /opt/codex-home/.agents/skills/superpowers
 
 # Pre-install MCP server packages globally.
@@ -122,6 +122,7 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gclou
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
 # NOTE: Build context is workspace root (.), so paths are root-relative
 COPY --chown=claude:claude docker/code-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude docker/code-worker/config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml
 
 # Bake forced pnpm/npm defaults so lifecycle scripts cannot run from a tampered
 # lockfile. /opt/claude-defaults is copied into /home/claude at entrypoint

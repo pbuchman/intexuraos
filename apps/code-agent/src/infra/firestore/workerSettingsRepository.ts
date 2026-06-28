@@ -51,6 +51,7 @@ interface WorkerSettingsDoc {
   defaultExecutionWorkerType?: string;
   defaultPlanningWorkerType?: string;
   defaultPullRequestWorkerType?: string;
+  defaultSentryWorkerType?: string;
   workerHealthStatuses?: Record<string, {
     state: unknown;
     checkedAt: string;
@@ -144,6 +145,7 @@ export function createWorkerSettingsRepository(
           ...(data.defaultExecutionWorkerType !== undefined && { defaultExecutionWorkerType: data.defaultExecutionWorkerType as CodeTaskWorkerType }),
           ...(data.defaultPlanningWorkerType !== undefined && { defaultPlanningWorkerType: data.defaultPlanningWorkerType as CodeTaskWorkerType }),
           ...(data.defaultPullRequestWorkerType !== undefined && { defaultPullRequestWorkerType: data.defaultPullRequestWorkerType as CodeTaskWorkerType }),
+          ...(data.defaultSentryWorkerType !== undefined && { defaultSentryWorkerType: data.defaultSentryWorkerType as CodeTaskWorkerType }),
         };
 
         return ok(settings);

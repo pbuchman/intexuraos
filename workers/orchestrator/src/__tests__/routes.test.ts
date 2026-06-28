@@ -604,6 +604,38 @@ describe('Routes', () => {
       );
     });
 
+    it('forwards sentryIssue to dispatcher.submitTask for Sentry agent tasks', async () => {
+      const sentryIssue = {
+        organizationSlug: 'intexura',
+        projectSlug: 'code-agent',
+        issueId: '123456',
+        issueUrl: 'https://intexura.sentry.io/issues/123456/',
+        title: 'TypeError: cannot read property',
+        action: 'created',
+        receivedAt: '2026-06-28T12:00:00.000Z',
+      };
+      const payload = {
+        taskId: 'task_00000000-0000-0000-0000-00000000cafe',
+        workerType: 'codex-xhigh',
+        prompt: 'Fix Sentry issue',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue,
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'sentry',
+          sentryIssue,
+        })
+      );
+    });
+
     it('omits timeoutHours when not present in body — backward compat (INT-1585)', async () => {
       const payload = {
         taskId: 'task_00000000-0000-0000-0000-00000000bbbb',

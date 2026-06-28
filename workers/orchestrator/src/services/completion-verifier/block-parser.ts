@@ -326,7 +326,8 @@ export function coerceFields(
         // defensive comparison against the empty string that yields `false`.
         if (
           field.name === 'pr' &&
-          contract.marker === 'EXECUTION_AGENT_FINAL:' &&
+          (contract.marker === 'EXECUTION_AGENT_FINAL:' ||
+            contract.marker === 'SENTRY_AGENT_FINAL:') &&
           (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'failed'
         ) {
           continue;

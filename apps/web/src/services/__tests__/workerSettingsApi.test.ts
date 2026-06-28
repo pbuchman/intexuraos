@@ -140,6 +140,7 @@ describe('workerSettingsApi', () => {
       ['execution' as const, '/worker-settings/default-execution-worker-type'],
       ['planning' as const, '/worker-settings/default-planning-worker-type'],
       ['pull-request' as const, '/worker-settings/default-pull-request-worker-type'],
+      ['sentry' as const, '/worker-settings/default-sentry-worker-type'],
     ])('PATCHes the right path for category %s', async (category, expectedPath) => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue({ updated: true });

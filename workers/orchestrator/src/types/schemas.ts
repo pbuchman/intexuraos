@@ -53,6 +53,19 @@ const ExecutionMemoryPromptContextSchema = z.object({
   matchedMemories: z.array(ExecutionMemoryPromptMemorySchema),
 });
 
+const SentryIssueTaskContextSchema = z.object({
+  organizationSlug: z.string().min(1),
+  projectSlug: z.string().min(1),
+  projectId: z.string().min(1).optional(),
+  issueId: z.string().min(1),
+  issueShortId: z.string().min(1).optional(),
+  issueUrl: z.string().url(),
+  title: z.string().min(1),
+  action: z.string().min(1),
+  eventId: z.string().min(1).optional(),
+  receivedAt: z.string().datetime(),
+});
+
 // POST /tasks request schema
 export const CreateTaskRequestSchema = z.object({
   taskId: z
@@ -75,8 +88,9 @@ export const CreateTaskRequestSchema = z.object({
   actionId: z.string().optional(),
   retriedFrom: z.string().min(1).optional(),
   agentType: z
-    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'])
+    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry'])
     .optional(),
+  sentryIssue: SentryIssueTaskContextSchema.optional(),
   executionMemoryContext: ExecutionMemoryPromptContextSchema.optional(),
   trackingCommentId: z.string().min(1).optional(),
   prNumber: z.number().int().positive().optional(),

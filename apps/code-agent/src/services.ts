@@ -180,6 +180,7 @@ export function initServices(config: ServiceConfig): void {
     unifiedEvaluator, prTriagePublisher, mergeConflictDetector, automationLog, taskEnqueueService,
     codeTaskDispatchNotificationRepo: repos.codeTaskDispatchNotificationRepo,
     mergeQueueWatchRepo: repos.mergeQueueWatchRepo, executionMemoryRepo: repos.executionMemoryRepo,
+    sentryIssueEventRepo: repos.sentryIssueEventRepo,
     executionMemoryApplicationRepo: repos.executionMemoryApplicationRepo,
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
     ...(usageServiceClient !== undefined && { usageServiceClient }),

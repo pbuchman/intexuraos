@@ -35,7 +35,7 @@ const CANONICAL_PROVIDER_WEBHOOK_ROUTES = new Map([
   ['linear-agent', new Set(['/webhooks'])],
   ['whatsapp-service', new Set(['/webhooks'])],
   ['notion-service', new Set(['/webhooks'])],
-  ['code-agent', new Set(['/webhooks/github'])],
+  ['code-agent', new Set(['/webhooks/github', '/webhooks/sentry'])],
 ]);
 
 function parseArgs(argv) {

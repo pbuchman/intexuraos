@@ -41,6 +41,10 @@ export interface Config {
   codeTaskCallbackBaseUrl: string;
   webAppUrl: string;
   githubWebhookSecret: string;
+  sentryWebhookSecret: string;
+  sentryAutomationUserId: string;
+  sentryCodeTaskRepository: string;
+  sentryCodeTaskBaseBranch: string;
   userServiceUrl: string;
   // Auth0 JWT validation
   auth0Audience: string;
@@ -79,6 +83,10 @@ export function loadConfig(): Config {
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
+  const sentryWebhookSecret = process.env['INTEXURAOS_SENTRY_WEBHOOK_SECRET'] ?? '';
+  const sentryAutomationUserId = process.env['INTEXURAOS_SENTRY_AUTOMATION_USER_ID'] ?? '';
+  const sentryCodeTaskRepository = process.env['INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY'] ?? 'pbuchman/intexuraos';
+  const sentryCodeTaskBaseBranch = process.env['INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH'] ?? 'development';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
   const openRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
   const executionMemoryEnabled =
@@ -102,6 +110,10 @@ export function loadConfig(): Config {
     webAppUrl,
     tokenEncryptionKey,
     githubWebhookSecret,
+    sentryWebhookSecret,
+    sentryAutomationUserId,
+    sentryCodeTaskRepository,
+    sentryCodeTaskBaseBranch,
     userServiceUrl,
     auth0Audience,
     auth0Issuer,

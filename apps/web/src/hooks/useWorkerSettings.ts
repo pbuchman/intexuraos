@@ -30,7 +30,7 @@ interface UseWorkerSettingsResult {
   deleteWorker: (workerName: string) => Promise<void>;
   testConnectivity: (workerName: string) => Promise<TestWorkerConnectivityResponse>;
   reorderWorkers: (workerNames: string[]) => Promise<void>;
-  updateDefaultWorkerType: (category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request', workerType: string) => Promise<void>;
+  updateDefaultWorkerType: (category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request' | 'sentry', workerType: string) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -164,7 +164,7 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
   );
 
   const handleUpdateDefaultWorkerType = useCallback(
-    async (category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request', workerType: string): Promise<void> => {
+    async (category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request' | 'sentry', workerType: string): Promise<void> => {
       if (user?.sub === undefined) return;
       try {
         const token = await getAccessToken();

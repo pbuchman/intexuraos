@@ -2,6 +2,7 @@ import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { Timestamp } from '@google-cloud/firestore';
 import type { ExecutionMemoryType } from './executionMemory.js';
 import type { ExecutionMemoryApplicationCandidate } from './executionMemoryApplication.js';
+import type { SentryIssueTaskContext } from './sentryIssueEvent.js';
 
 /**
  * Worker type determines which model Claude uses.
@@ -16,7 +17,7 @@ export type WorkerType = CodeTaskWorkerType;
  */
 export type WorkerLocation = string;
 
-export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent' | 'sentry';
 
 /** System prompt hash for auto-triggered merge-conflict resolution tasks. */
 export const MERGE_CONFLICT_SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
@@ -93,6 +94,10 @@ export interface TaskResult {
   gh_actions_status?: string;
   needs_remediation?: string;
   requires_re_review?: string;
+  sentry_issue_url?: string;
+  sentry_linear_issue?: string;
+  sentry_outcome?: 'fixed' | 'suppressed';
+  sentry_verification?: string;
 }
 
 export interface ExecutionMemoryContextMemory {
@@ -362,6 +367,9 @@ export interface CodeTask {
 
   // Remediation task metadata
   requiresReReview?: boolean;    // Set by remediation tasks before pushing code
+
+  // Sentry issue metadata
+  sentryIssue?: SentryIssueTaskContext;
 
   // Auto-retry metadata (INT-1375)
   failedWorkerLocation?: string;   // Worker location that failed, to exclude on retry dispatch

@@ -208,6 +208,7 @@ export class AttemptLifecycle {
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
         ...(request.agentType !== undefined && { agentType: request.agentType }),
+        ...(request.sentryIssue !== undefined && { sentryIssue: request.sentryIssue }),
         ...(request.executionMemoryContext !== undefined && {
           executionMemoryContext: request.executionMemoryContext,
         }),

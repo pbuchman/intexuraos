@@ -1325,12 +1325,13 @@ describe('Worker Settings Routes', () => {
       expect(body.error.message).toContain('Firestore write failed');
     });
 
-    it('should save and return all 4 new default worker type fields via GET', async () => {
+    it('should save and return all 5 newer default worker type fields via GET', async () => {
       const fields = [
         { endpoint: 'default-remediation-worker-type', field: 'defaultRemediationWorkerType', value: 'opus' },
         { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'glm' },
         { endpoint: 'default-planning-worker-type', field: 'defaultPlanningWorkerType', value: 'sonnet' },
         { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'codex' },
+        { endpoint: 'default-sentry-worker-type', field: 'defaultSentryWorkerType', value: 'codex-xhigh' },
       ] as const;
 
       for (const { endpoint, value } of fields) {
@@ -1411,6 +1412,7 @@ describe('Worker Settings Routes', () => {
         { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'glm' },
         { endpoint: 'default-planning-worker-type', field: 'defaultPlanningWorkerType', value: 'sonnet' },
         { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'codex' },
+        { endpoint: 'default-sentry-worker-type', field: 'defaultSentryWorkerType', value: 'codex-xhigh' },
       ] as const;
 
       // Set all fields
@@ -1444,12 +1446,14 @@ describe('Worker Settings Routes', () => {
           defaultExecutionWorkerType?: string;
           defaultPlanningWorkerType?: string;
           defaultPullRequestWorkerType?: string;
+          defaultSentryWorkerType?: string;
         };
       };
       expect(body.data.defaultRemediationWorkerType).toBeUndefined();
       expect(body.data.defaultExecutionWorkerType).toBe('glm');
       expect(body.data.defaultPlanningWorkerType).toBe('sonnet');
       expect(body.data.defaultPullRequestWorkerType).toBe('codex');
+      expect(body.data.defaultSentryWorkerType).toBe('codex-xhigh');
     });
 
     it('should return 500 when clearDefaultWorkerType fails', async () => {

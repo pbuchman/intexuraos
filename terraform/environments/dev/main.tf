@@ -267,8 +267,10 @@ locals {
   retired_cloud_run_push_audience = local.retired_cloud_run_push_endpoint
 
   hetzner_runtime_env_vars = {
-    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = "${local.public_origin}/api/code"
-    INTEXURAOS_WEB_APP_URL                 = local.public_origin
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL  = "${local.public_origin}/api/code"
+    INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH = "development"
+    INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY  = "pbuchman/intexuraos"
+    INTEXURAOS_WEB_APP_URL                  = local.public_origin
   }
 
   hetzner_runtime_secret_names = toset([
@@ -300,6 +302,8 @@ locals {
     "INTEXURAOS_ORCHESTRATOR_SECRET",
     "INTEXURAOS_SENTRY_DSN",
     "INTEXURAOS_SENTRY_DSN_WEB",
+    "INTEXURAOS_SENTRY_WEBHOOK_SECRET",
+    "INTEXURAOS_SENTRY_AUTOMATION_USER_ID",
     "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
     "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
@@ -500,8 +504,10 @@ module "secret_manager" {
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"     = "GitHub OAuth App Client ID"
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET" = "GitHub OAuth App Client Secret"
     # Sentry error monitoring
-    "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
-    "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
+    "INTEXURAOS_SENTRY_DSN"                = "Sentry Data Source Name for error tracking (backend services)"
+    "INTEXURAOS_SENTRY_DSN_WEB"            = "Sentry Data Source Name for error tracking (web app)"
+    "INTEXURAOS_SENTRY_WEBHOOK_SECRET"     = "Sentry webhook secret for code-agent issue automation"
+    "INTEXURAOS_SENTRY_AUTOMATION_USER_ID" = "Code-agent user ID that owns automatic Sentry code tasks"
     # Cloudflare Browser Rendering API
     "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID" = "Cloudflare account ID for Browser Rendering API"
     "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"

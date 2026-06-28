@@ -1,7 +1,7 @@
 /**
  * Focused smoke tests for the `configRoutes` sub-plugin.
  *
- * Exercises each of the five PATCH `default-*-worker-type` endpoints,
+ * Exercises each of the six PATCH `default-*-worker-type` endpoints,
  * verifies the value is persisted, and covers the `"auto"` clear
  * sentinel. Exhaustive error-branch coverage lives in
  * `../workerSettingsRoutes.test.ts`.
@@ -28,6 +28,7 @@ const CONFIG_ROUTE_FIELDS = [
   { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'sonnet' },
   { endpoint: 'default-planning-worker-type', field: 'defaultPlanningWorkerType', value: 'codex' },
   { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'kimi' },
+  { endpoint: 'default-sentry-worker-type', field: 'defaultSentryWorkerType', value: 'codex-xhigh' },
 ] as const;
 
 describe('configRoutes (sub-plugin)', () => {

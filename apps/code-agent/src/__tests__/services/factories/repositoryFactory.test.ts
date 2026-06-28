@@ -48,6 +48,7 @@ describe('createRepositoryServices', () => {
     expect(repos.executionMemoryRepo).toBeDefined();
     expect(repos.executionMemoryApplicationRepo).toBeDefined();
     expect(repos.prAutomationCommentRepo).toBeDefined();
+    expect(repos.sentryIssueEventRepo).toBeDefined();
   });
 
   it('wraps codeTaskRepo so it exposes the full CodeTaskRepository API', () => {

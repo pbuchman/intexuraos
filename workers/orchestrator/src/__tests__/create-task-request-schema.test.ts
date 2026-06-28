@@ -2,6 +2,36 @@ import { describe, expect, it } from 'vitest';
 import { CreateTaskRequestSchema } from '../types/schemas.js';
 
 describe('CreateTaskRequestSchema', () => {
+  it('accepts Sentry agent tasks with issue context', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      taskId: 'task_00000000-0000-0000-0000-0000000000a4',
+      workerType: 'codex-xhigh',
+      prompt: 'Fix Sentry issue',
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret',
+      linearIssueLabels: ['sentry', 'code-task'],
+      hasChildren: false,
+      agentType: 'sentry',
+      sentryIssue: {
+        organizationSlug: 'intexura',
+        projectSlug: 'code-agent',
+        issueId: '123456',
+        issueUrl: 'https://intexura.sentry.io/issues/123456/',
+        title: 'TypeError: cannot read property',
+        action: 'created',
+        receivedAt: '2026-06-28T12:00:00.000Z',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.agentType).toBe('sentry');
+    if (result.data.sentryIssue === undefined) {
+      throw new Error('Expected parsed Sentry issue context');
+    }
+    expect(result.data.sentryIssue.issueUrl).toBe('https://intexura.sentry.io/issues/123456/');
+  });
+
   it('accepts executionMemoryContext for execution tasks', () => {
     const executionMemoryContext = {
       applicationId: 'app_123',

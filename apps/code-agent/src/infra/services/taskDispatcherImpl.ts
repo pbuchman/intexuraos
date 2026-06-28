@@ -7,6 +7,7 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { performHttpFetch } from '@intexuraos/common-http';
 import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
+import type { SentryIssueTaskContext } from '../../domain/models/sentryIssueEvent.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
@@ -67,6 +68,7 @@ interface WorkerTaskRequest {
   linearIssueId?: string;
   traceId?: string;
   agentType?: AgentType;
+  sentryIssue?: SentryIssueTaskContext;
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   prNumber?: number;
@@ -139,6 +141,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.agentType !== undefined) {
       taskRequest.agentType = request.agentType;
+    }
+    if (request.sentryIssue !== undefined) {
+      taskRequest.sentryIssue = request.sentryIssue;
     }
     if (request.executionMemoryContext !== undefined) {
       taskRequest.executionMemoryContext = request.executionMemoryContext;

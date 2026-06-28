@@ -46,6 +46,19 @@ export interface PendingResumeStart {
   acceptedAt: string;
 }
 
+export interface SentryIssueTaskContext {
+  organizationSlug: string;
+  projectSlug: string;
+  projectId?: string | undefined;
+  issueId: string;
+  issueShortId?: string | undefined;
+  issueUrl: string;
+  title: string;
+  action: string;
+  eventId?: string | undefined;
+  receivedAt: string;
+}
+
 export interface Task {
   taskId: string;
   workerType: WorkerType;
@@ -73,7 +86,16 @@ export interface Task {
    */
   retriedFrom?: string;
   /** Agent type from code-agent. When set, used instead of recalculating from labels. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  agentType?:
+    | 'planning'
+    | 'execution'
+    | 'pull_request'
+    | 'review'
+    | 'remediation'
+    | 'ask_agent'
+    | 'sentry';
+  /** Sentry issue context provided by code-agent for Sentry-triggered code tasks. */
+  sentryIssue?: SentryIssueTaskContext;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
@@ -172,6 +194,10 @@ export interface TaskResult {
   review_body?: string;
   review_inline_comments?: string;
   requires_re_review?: string; // '0' or '1'
+  sentry_issue_url?: string;
+  sentry_linear_issue?: string;
+  sentry_outcome?: 'fixed' | 'suppressed';
+  sentry_verification?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;

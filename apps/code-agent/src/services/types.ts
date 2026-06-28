@@ -53,6 +53,7 @@ import type { TaskEnqueueService } from '../domain/services/taskEnqueueService.j
 import type { MergeQueueWatchRepository } from '../domain/repositories/mergeQueueWatchRepository.js';
 import type { TaskGroupSummaryRepository } from '../domain/ports/taskGroupSummaryRepository.js';
 import type { CodeTaskDispatchNotificationRepository } from '../domain/repositories/codeTaskDispatchNotificationRepository.js';
+import type { SentryIssueEventRepository } from '../domain/repositories/sentryIssueEventRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -109,6 +110,7 @@ export interface ServiceContainer {
     logger: Logger,
     request: CreateRemediationTaskRequest,
   ) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+  sentryIssueEventRepo?: SentryIssueEventRepository;
 }
 
 // Configuration required to initialize services

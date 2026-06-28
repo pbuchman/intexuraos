@@ -9,6 +9,7 @@ describe('resolveDefaultWorkerType', () => {
       defaultPullRequestWorkerType: 'qwen' as const,
       defaultReviewWorkerType: 'glm' as const,
       defaultRemediationWorkerType: 'kimi' as const,
+      defaultSentryWorkerType: 'codex-xhigh' as const,
     };
 
     expect(
@@ -50,6 +51,14 @@ describe('resolveDefaultWorkerType', () => {
         settings,
       })
     ).toMatchObject({ workerType: 'kimi', source: 'default' });
+
+    expect(
+      resolveDefaultWorkerType({
+        agentType: 'sentry',
+        requestWorkerType: 'auto',
+        settings,
+      })
+    ).toMatchObject({ workerType: 'codex-xhigh', source: 'default' });
   });
 
   it('uses linear label override before explicit request, default, and auto fallback', () => {

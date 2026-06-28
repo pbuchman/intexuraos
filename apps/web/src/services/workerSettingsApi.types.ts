@@ -27,6 +27,7 @@ export interface WorkerSettingsResponse {
   defaultExecutionWorkerType?: string;
   defaultPlanningWorkerType?: string;
   defaultPullRequestWorkerType?: string;
+  defaultSentryWorkerType?: string;
 }
 
 /**
@@ -101,4 +102,3 @@ export interface TestWorkerConnectivityResponse {
   testMessage: string;
   lastTestedAt: string;
 }
-

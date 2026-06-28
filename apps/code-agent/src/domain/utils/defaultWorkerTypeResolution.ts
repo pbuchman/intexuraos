@@ -10,6 +10,7 @@ const DEFAULT_WORKER_TYPE_FIELD_BY_AGENT_TYPE: Partial<Record<AgentType, Default
   pull_request: 'defaultPullRequestWorkerType',
   review: 'defaultReviewWorkerType',
   remediation: 'defaultRemediationWorkerType',
+  sentry: 'defaultSentryWorkerType',
 };
 
 interface ResolveDefaultWorkerTypeInput {

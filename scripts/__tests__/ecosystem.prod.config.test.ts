@@ -283,6 +283,8 @@ describe('ecosystem.config.prod.cjs', () => {
       INTEXURAOS_OPENAI_APP_API_KEY: 'openai-key',
       INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-key',
       INTEXURAOS_ORCHESTRATOR_SECRET: 'orchestrator-secret',
+      INTEXURAOS_SENTRY_WEBHOOK_SECRET: 'sentry-webhook-secret',
+      INTEXURAOS_SENTRY_AUTOMATION_USER_ID: 'sentry-automation-user',
       INTEXURAOS_WHATSAPP_ACCESS_TOKEN: 'whatsapp-token',
     });
     const byName = new Map(config.apps.map((app) => [app.name, app]));
@@ -294,6 +296,13 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('notion-service')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('notion-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
     expect(byName.get('code-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_WEBHOOK_SECRET).toBe(
+      'sentry-webhook-secret'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_AUTOMATION_USER_ID).toBe(
+      'sentry-automation-user'
+    );
+    expect(byName.get('user-service')?.env.INTEXURAOS_SENTRY_WEBHOOK_SECRET).toBeUndefined();
     expect(byName.get('intex-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
     expect(byName.get('intex-agent')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
@@ -332,6 +341,12 @@ describe('ecosystem.config.prod.cjs', () => {
     );
     expect(byName.get('code-agent')?.env.INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL).toBe(
       'https://intexuraos.cloud/api/code'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY).toBe(
+      'pbuchman/intexuraos'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH).toBe(
+      'development'
     );
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'

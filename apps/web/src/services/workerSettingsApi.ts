@@ -114,7 +114,7 @@ export async function testWorkerConnectivity(
  */
 export async function updateDefaultWorkerType(
   accessToken: string,
-  category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request',
+  category: 'review' | 'remediation' | 'execution' | 'planning' | 'pull-request' | 'sentry',
   workerType: string,
 ): Promise<UpdateDefaultWorkerTypeResponse> {
   return await apiRequest<UpdateDefaultWorkerTypeResponse>(

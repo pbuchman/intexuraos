@@ -13,8 +13,9 @@ describe('CompletionAgentType (post-INT-1470)', () => {
       'review',
       'remediation',
       'ask_agent',
+      'sentry',
     ];
-    expect(agents.length).toBe(6);
+    expect(agents.length).toBe(7);
   });
 });
 

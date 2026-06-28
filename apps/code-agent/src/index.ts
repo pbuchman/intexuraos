@@ -18,6 +18,10 @@ const REQUIRED_ENV = [
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
+  'INTEXURAOS_SENTRY_WEBHOOK_SECRET', // For Sentry webhook signature verification
+  'INTEXURAOS_SENTRY_AUTOMATION_USER_ID', // User that owns automatic Sentry code tasks
+  'INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY', // Repository targeted by automatic Sentry code tasks
+  'INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH', // Base branch targeted by automatic Sentry code tasks
   'INTEXURAOS_SERVICE_URL', // Public code-agent API URL
   'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL', // Worker callback URL base for internal code-task callbacks
 ];

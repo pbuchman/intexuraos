@@ -17,6 +17,7 @@ import type {
   TaskStatus,
   WorkerType,
 } from '../models/codeTask.js';
+import type { SentryIssueTaskContext } from '../models/sentryIssueEvent.js';
 
 /**
  * Create/update input shapes: accept raw `Date` for timestamp fields as a
@@ -104,6 +105,9 @@ export interface CreateTaskInput {
 
   /** Custom per-task timeout in hours (1–12). INT-1585. */
   timeoutHours?: number;
+
+  /** Sentry issue metadata for tasks created from Sentry webhooks. */
+  sentryIssue?: SentryIssueTaskContext;
 }
 
 export interface UpdateTaskInput {

@@ -257,6 +257,15 @@ describe('toFirestoreDoc', () => {
           source: 'user_scheduled',
           derivedBy: 'user_input',
         },
+        sentryIssue: {
+          organizationSlug: 'intexura',
+          projectSlug: 'code-agent',
+          issueId: '123456',
+          issueUrl: 'https://intexura.sentry.io/issues/123456/',
+          title: 'TypeError',
+          action: 'created',
+          receivedAt: '2026-06-28T12:00:00.000Z',
+        },
       },
       opts
     );
@@ -278,6 +287,15 @@ describe('toFirestoreDoc', () => {
     expect(doc.autoRetryAttempt).toBe(2);
     expect(doc.dispatchSchedule?.notBeforeAt).toBeInstanceOf(Timestamp);
     expect(doc.dispatchSchedule?.source).toBe('user_scheduled');
+    expect(doc.sentryIssue).toEqual({
+      organizationSlug: 'intexura',
+      projectSlug: 'code-agent',
+      issueId: '123456',
+      issueUrl: 'https://intexura.sentry.io/issues/123456/',
+      title: 'TypeError',
+      action: 'created',
+      receivedAt: '2026-06-28T12:00:00.000Z',
+    });
   });
 
   it('persists timeoutHours when provided (INT-1585)', () => {
@@ -310,6 +328,7 @@ describe('toFirestoreDoc', () => {
     expect(doc.autoRetryAttempt).toBeUndefined();
     expect(doc.dispatchSchedule).toBeUndefined();
     expect(doc.timeoutHours).toBeUndefined();
+    expect(doc.sentryIssue).toBeUndefined();
   });
 });
 
