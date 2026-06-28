@@ -47,6 +47,12 @@ Ingest URL:
 https://intexuraos.cloud/internal/whatsapp/private/events
 ```
 
+Media upload URL:
+
+```text
+https://intexuraos.cloud/internal/whatsapp/private/media
+```
+
 OIDC audience:
 
 ```text
@@ -64,6 +70,11 @@ The request body must include:
 - `sourceAccountId`
 - `deliveryMode`
 - `events`
+
+Image and audio events upload media bytes to
+`POST /internal/whatsapp/private/media` before the adapter posts the event batch
+to `POST /internal/whatsapp/private/events`. Both endpoints require the same
+private-sync service account OIDC identity.
 
 `sourceAccountId` is generated per user in `Settings > WhatsApp > Private WhatsApp Mirror`. The adapter may still send a legacy `userId` field, but IntexuraOS ignores it and resolves ownership from `whatsapp_private_accounts`.
 
