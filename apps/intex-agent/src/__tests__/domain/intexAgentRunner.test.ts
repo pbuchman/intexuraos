@@ -29,6 +29,12 @@ const COMPLETION_FAILURE_CAPABILITIES_REPLY =
     '- save bookmarks',
     '- create code tasks for planning or execution',
   ].join('\n');
+const EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
+  'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.';
+const EXTERNAL_SAVE_FAILED_REPLY =
+  'I could not deliver this to the external system. The external save request failed: HTTP 403: Forbidden. Please check the external system configuration and try again.';
+const EXTERNAL_SAVE_UNKNOWN_FAILURE_REPLY =
+  'I could not deliver this to the external system. The external save request failed: Unknown external save error. Please check the external system configuration and try again.';
 
 describe('createIntexAgentRunner', () => {
   it('uses the versioned prompt, transcript messages, and supported tools', async () => {
@@ -1246,6 +1252,110 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('explains that WhatsApp images cannot be processed when external save is not configured', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => {
+          throw new Error('External save is not configured');
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Lunch receipt',
+        sourceType: 'whatsapp_image',
+        sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: EXTERNAL_SAVE_NOT_CONFIGURED_REPLY,
+    });
+  });
+
+  it('notifies the user when WhatsApp image external save processing fails', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => {
+          throw new Error('Failed to save externally: HTTP 403: Forbidden');
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Lunch receipt',
+        sourceType: 'whatsapp_image',
+        sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: EXTERNAL_SAVE_FAILED_REPLY,
+    });
+  });
+
+  it('uses a fallback detail when WhatsApp image external save fails without details', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => {
+          throw new Error('Failed to save externally:   ');
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Lunch receipt',
+        sourceType: 'whatsapp_image',
+        sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: EXTERNAL_SAVE_UNKNOWN_FAILURE_REPLY,
+    });
+  });
+
+  it('overrides model text when external save tool delivery fails', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'save_external',
+      args: { message: 'Save externally this copied LinkedIn detail' },
+    }, [
+      ok(toolResult({ outcome: 'no_action', reply: 'The model should not hide this failure.' })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => {
+          throw new Error('External save is not configured');
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Save externally this copied LinkedIn detail',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: EXTERNAL_SAVE_NOT_CONFIGURED_REPLY,
+    });
+  });
+
   it('rejects completed responses when no tool actually ran and no supported toolName is present', async () => {
     const client = new FakeToolCallingClient([
       ok(
@@ -1501,7 +1611,12 @@ class ToolExecutingFakeToolCallingClient extends FakeToolCallingClient {
       if (tool === undefined) {
         throw new Error(`Missing fake tool ${toolCall.toolName}`);
       }
-      await tool.run(toolCall.args);
+      try {
+        await tool.run(toolCall.args);
+      } catch {
+        // Match the real OpenRouter tool client: callback errors are returned
+        // as tool messages and the model still gets a final response chance.
+      }
     }
     return await super.run(params);
   }
