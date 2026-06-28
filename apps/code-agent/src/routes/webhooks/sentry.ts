@@ -5,6 +5,7 @@
  * automation to `processSentryWebhook`.
  */
 
+import { PassThrough } from 'node:stream';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
@@ -46,15 +47,41 @@ const sentryWebhookResponseSchema = {
   },
 } as const;
 
-function readRawBody(request: FastifyRequest): Buffer {
+export function readRawBody(request: FastifyRequest): Buffer {
   const attachedRaw = (request as unknown as { rawBody?: unknown }).rawBody;
+  if (Buffer.isBuffer(attachedRaw)) {
+    return attachedRaw;
+  }
   if (typeof attachedRaw === 'string') {
     return Buffer.from(attachedRaw, 'utf-8');
   }
-  return Buffer.from(JSON.stringify(request.body), 'utf-8');
+  return Buffer.alloc(0);
+}
+
+export function normalizeRawBodyChunk(chunk: unknown): Buffer {
+  if (Buffer.isBuffer(chunk)) {
+    return chunk;
+  }
+  if (chunk instanceof Uint8Array) {
+    return Buffer.from(chunk);
+  }
+  return Buffer.from(String(chunk), 'utf-8');
 }
 
 export const sentryWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.addHook('preParsing', async (request, _reply, payload) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of payload) {
+      chunks.push(normalizeRawBodyChunk(chunk));
+    }
+    const rawBody = Buffer.concat(chunks);
+    (request as unknown as { rawBody: Buffer }).rawBody = rawBody;
+    const replay = new PassThrough() as PassThrough & { receivedEncodedLength?: number };
+    replay.receivedEncodedLength = rawBody.length;
+    replay.end(rawBody);
+    return replay;
+  });
+
   fastify.post<{ Headers: SentryWebhookHeaders; Body: unknown }>(
     '/webhooks/sentry',
     { schema: sentryWebhookResponseSchema },

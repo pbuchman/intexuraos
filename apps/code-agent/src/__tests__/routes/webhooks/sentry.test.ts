@@ -9,7 +9,11 @@ import { intexuraFastifyPlugin } from '@intexuraos/common-http';
 import { err, ok } from '@intexuraos/common-core';
 import pino from 'pino';
 import { resetServices, setServices, type ServiceContainer } from '../../../services.js';
-import { sentryWebhookRoute } from '../../../routes/webhooks/sentry.js';
+import {
+  normalizeRawBodyChunk,
+  readRawBody,
+  sentryWebhookRoute,
+} from '../../../routes/webhooks/sentry.js';
 
 const WEBHOOK_SECRET = 'sentry-webhook-secret';
 
@@ -240,17 +244,14 @@ describe('POST /webhooks/sentry', () => {
     }
   });
 
-  it('falls back to JSON stringifying the parsed body when attached rawBody is not a string', async () => {
+  it('uses the original request bytes for signature verification when attached rawBody is not a string', async () => {
     const fallbackApp = fastify({ logger: false });
     await fallbackApp.register(intexuraFastifyPlugin);
-    fallbackApp.addHook('preHandler', async (request) => {
-      (request as unknown as { rawBody: Buffer }).rawBody = Buffer.from('not-used', 'utf-8');
-    });
     await fallbackApp.register(sentryWebhookRoute);
     await fallbackApp.ready();
 
     try {
-      const rawBody = JSON.stringify(buildIssueBody());
+      const rawBody = JSON.stringify(buildIssueBody(), null, 2);
       const response = await fallbackApp.inject({
         method: 'POST',
         url: '/webhooks/sentry',
@@ -269,5 +270,21 @@ describe('POST /webhooks/sentry', () => {
     } finally {
       await fallbackApp.close();
     }
+  });
+});
+
+describe('Sentry webhook raw body helpers', () => {
+  it('reads Buffer, string, and missing raw body attachments', () => {
+    const bufferBody = Buffer.from('{"ok":true}', 'utf-8');
+    expect(readRawBody({ rawBody: bufferBody } as never)).toBe(bufferBody);
+    expect(readRawBody({ rawBody: '{"ok":true}' } as never).toString('utf-8')).toBe('{"ok":true}');
+    expect(readRawBody({} as never).length).toBe(0);
+  });
+
+  it('normalizes stream chunks without changing byte content', () => {
+    const bufferChunk = Buffer.from('buffer', 'utf-8');
+    expect(normalizeRawBodyChunk(bufferChunk)).toBe(bufferChunk);
+    expect(normalizeRawBodyChunk(new Uint8Array([117, 56])).toString('utf-8')).toBe('u8');
+    expect(normalizeRawBodyChunk('string').toString('utf-8')).toBe('string');
   });
 });
