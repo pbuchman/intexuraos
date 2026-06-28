@@ -18,10 +18,11 @@ import { buildServer } from '../../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../../services.js';
 import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import pino from 'pino';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { ok, err } from '@intexuraos/common-core';
 import type { AutomationLog, AutomationEvent } from '../../../domain/ports/automationLog.js';
 import { generateWebhookSecret } from '../../../domain/utils/secrets.js';
+import { createMockLogger } from '../../helpers/mockLogger.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,6 +50,7 @@ const TASK_ID = 'task-abc';
 describe('POST /internal/webhooks/task-event', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let mockAutomationLog: { record: ReturnType<typeof vi.fn> };
+  let mockLogger: ReturnType<typeof createMockLogger>;
   let mockCodeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
@@ -100,11 +102,11 @@ describe('POST /internal/webhooks/task-event', () => {
       findByLinearIssueId: vi.fn(),
     };
 
-    const logger = pino({ level: 'silent' });
+    mockLogger = createMockLogger();
 
     setServices({
       firestore: fakeFirestore,
-      logger,
+      logger: mockLogger,
       codeTaskRepo: mockCodeTaskRepo as never,
       automationLog: mockAutomationLog as AutomationLog,
       // Remaining services are not used by the task-event route
@@ -328,7 +330,7 @@ describe('POST /internal/webhooks/task-event', () => {
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
   });
 
-  it('returns 200 and logs warning when task has no prNumber', async () => {
+  it('returns 200 and marks the expected no-prNumber skip as non-Sentry warning', async () => {
     mockCodeTaskRepo.findById.mockResolvedValue(ok({
       id: TASK_ID,
       repository: 'pbuchman/intexuraos',
@@ -343,6 +345,10 @@ describe('POST /internal/webhooks/task-event', () => {
 
     expect(response.statusCode).toBe(200);
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: TASK_ID, [SKIP_SENTRY_KEY]: true }),
+      'Task-event webhook: task has no prNumber, skipping automation log',
+    );
   });
 
   // -----------------------------------------------------------------------
