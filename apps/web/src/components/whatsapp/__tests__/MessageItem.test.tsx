@@ -189,7 +189,10 @@ describe('MessageItem', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('message-item-row'));
+    const row = screen.getByTestId('message-item-row');
+    expect(row).toHaveClass('cursor-pointer');
+
+    fireEvent.click(row);
 
     expect(onImageClick).toHaveBeenCalledWith('image-1');
     expect(onNoteClick).not.toHaveBeenCalled();
@@ -306,6 +309,8 @@ describe('MessageItem', () => {
     );
 
     const row = screen.getByTestId('message-item-row');
+    expect(row).not.toHaveClass('cursor-pointer');
+
     fireEvent.click(row);
     expect(onImageClick).not.toHaveBeenCalled();
     expect(onNoteClick).not.toHaveBeenCalled();
@@ -332,13 +337,17 @@ describe('MessageItem', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('message-item-row'));
+    const row = screen.getByTestId('message-item-row');
+    expect(row).not.toHaveClass('cursor-pointer');
+
+    fireEvent.click(row);
 
     expect(onImageClick).not.toHaveBeenCalled();
     expect(onNoteClick).not.toHaveBeenCalled();
   });
 
-  it('does not call onNoteClick when clicking an audio message row', () => {
+  it('does not open a modal when clicking an audio message row', () => {
+    const onImageClick = vi.fn();
     const onNoteClick = vi.fn();
     render(
       <MessageItem
@@ -352,7 +361,7 @@ describe('MessageItem', () => {
         })}
         accessToken="token"
         onDelete={vi.fn()}
-        onImageClick={vi.fn()}
+        onImageClick={onImageClick}
         onNoteClick={onNoteClick}
         onTranscriptionClick={vi.fn()}
         isDeleting={false}
@@ -360,7 +369,10 @@ describe('MessageItem', () => {
     );
 
     const row = screen.getByTestId('message-item-row');
+    expect(row).not.toHaveClass('cursor-pointer');
+
     fireEvent.click(row);
+    expect(onImageClick).not.toHaveBeenCalled();
     expect(onNoteClick).not.toHaveBeenCalled();
   });
 });
