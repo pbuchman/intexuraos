@@ -211,7 +211,10 @@ export function createLinearApiClient(): LinearApiClient {
         // logs and Sentry — they self-recover on the next sync tick. Log at
         // warn level so they remain visible without generating exceptions.
         if (isTransientLinearError(error)) {
-          logger.warn({ teamId }, 'Linear API transiently unavailable while listing issues');
+          logger.warn(
+            { teamId, _skipSentry: true },
+            'Linear API transiently unavailable while listing issues'
+          );
           return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' });
         }
         logger.error({ error, teamId }, 'Failed to list Linear issues');
