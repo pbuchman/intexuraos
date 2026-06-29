@@ -1041,8 +1041,15 @@ describe('DockerProvider', () => {
         const ctx = call[0] as { event?: string } | undefined;
         return ctx?.event === 'lockfile-drift';
       });
-      expect(driftWarnCall).toBeDefined();
-      expect(driftWarnCall?.[0]).toMatchObject({ [SKIP_SENTRY_KEY]: true });
+      expect(driftWarnCall?.[0]).toEqual(
+        expect.objectContaining({
+          event: 'lockfile-drift',
+          taskId: 'resume-drift-task',
+          before: expect.any(String),
+          after: expect.any(String),
+          [SKIP_SENTRY_KEY]: true,
+        })
+      );
     });
 
     it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
@@ -3832,6 +3839,9 @@ describe('DockerProvider', () => {
       expect(driftWarnCall?.[0]).toEqual(
         expect.objectContaining({
           event: 'lockfile-drift',
+          taskId: 'test-task-123',
+          before: expect.any(String),
+          after: expect.any(String),
           [SKIP_SENTRY_KEY]: true,
         })
       );
@@ -3907,7 +3917,15 @@ describe('DockerProvider', () => {
         const ctx = call[0] as { event?: string } | undefined;
         return ctx?.event === 'lockfile-drift';
       });
-      expect(driftWarnCall).toBeDefined();
+      expect(driftWarnCall?.[0]).toEqual(
+        expect.objectContaining({
+          event: 'lockfile-drift',
+          taskId: 'test-task-123',
+          before: expect.any(String),
+          after: expect.any(String),
+          [SKIP_SENTRY_KEY]: true,
+        })
+      );
 
       const writeFileCalls = (fsModule.promises.writeFile as Mock).mock.calls;
       const driftWrite = writeFileCalls.find(

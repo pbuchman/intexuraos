@@ -12,25 +12,58 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parseShardArg, selectShardItems } from './lib/sharding.mjs';
 
 const rootDir = resolve(import.meta.dirname, '..');
 
 // Run 4 workspaces at a time to balance speed vs memory in normal CI.
 // ESLint strictTypeChecked mode builds full TS AST for each file.
-const CONCURRENT_LIMIT = 4;
+const DEFAULT_CONCURRENCY = 4;
 
-// Check for --sequential flag
-const args = process.argv.slice(2).filter((arg) => arg !== '--');
-const SEQUENTIAL_MODE = args.includes('--sequential');
-const shardArg = args.find((arg) => arg.startsWith('--shard='));
-const shard = shardArg ? parseShardArg(shardArg.slice('--shard='.length)) : null;
-const targetPaths = args.filter((arg) => arg !== '--sequential' && !arg.startsWith('--shard='));
-const envConcurrency = Number.parseInt(process.env.LINT_CONCURRENCY ?? '', 10);
-const defaultConcurrency = process.env.CODE_WORKER_MODE === '1' ? 1 : CONCURRENT_LIMIT;
-const configuredConcurrency =
-  Number.isInteger(envConcurrency) && envConcurrency > 0 ? envConcurrency : defaultConcurrency;
-const concurrency = SEQUENTIAL_MODE ? 1 : configuredConcurrency;
+export function parseLintArgs(rawArgs) {
+  const targetPaths = [];
+  let sequentialMode = false;
+  let shard = null;
+  let pathsOnly = false;
+
+  for (const [index, arg] of rawArgs.entries()) {
+    if (arg === '--') {
+      if (index === 0) {
+        continue;
+      }
+      pathsOnly = true;
+      continue;
+    }
+
+    if (!pathsOnly && arg === '--sequential') {
+      sequentialMode = true;
+      continue;
+    }
+
+    if (!pathsOnly && arg.startsWith('--shard=')) {
+      shard = parseShardArg(arg.slice('--shard='.length));
+      continue;
+    }
+
+    if (!pathsOnly && arg.startsWith('--')) {
+      throw new Error(`Unknown lint flag "${arg}". Pass file paths after --.`);
+    }
+
+    targetPaths.push(arg);
+  }
+
+  return { sequentialMode, shard, targetPaths };
+}
+
+function getConcurrency({ sequentialMode }) {
+  const envConcurrency = Number.parseInt(process.env.LINT_CONCURRENCY ?? '', 10);
+  const defaultConcurrency = process.env.CODE_WORKER_MODE === '1' ? 1 : DEFAULT_CONCURRENCY;
+  const configuredConcurrency =
+    Number.isInteger(envConcurrency) && envConcurrency > 0 ? envConcurrency : defaultConcurrency;
+
+  return sequentialMode ? 1 : configuredConcurrency;
+}
 
 // Workspace patterns from pnpm-workspace.yaml
 const WORKSPACE_PATTERNS = ['apps/*', 'packages/*', 'workers/*'];
@@ -120,8 +153,10 @@ async function runInBatches(workspaces, batchSize, activeProcesses) {
 }
 
 // Main execution
-(async () => {
+async function main() {
   try {
+    const { sequentialMode, shard, targetPaths } = parseLintArgs(process.argv.slice(2));
+    const concurrency = getConcurrency({ sequentialMode });
     const allWorkspaces = getWorkspaces();
     const workspaces = shard ? selectShardItems(allWorkspaces, shard) : allWorkspaces;
     const activeProcesses = [];
@@ -133,7 +168,7 @@ async function runInBatches(workspaces, batchSize, activeProcesses) {
       process.exit(0);
     }
 
-    const modeText = SEQUENTIAL_MODE ? 'sequentially' : `in batches of ${concurrency}`;
+    const modeText = sequentialMode ? 'sequentially' : `in batches of ${concurrency}`;
     const shardText = shard ? ` (shard ${shard.index}/${shard.count})` : '';
     console.log(`Running lint for ${workspaces.length} workspaces${shardText} ${modeText}...\n`);
 
@@ -143,7 +178,7 @@ async function runInBatches(workspaces, batchSize, activeProcesses) {
     }
 
     try {
-      if (SEQUENTIAL_MODE || concurrency === 1) {
+      if (sequentialMode || concurrency === 1) {
         // Sequential mode - run one at a time
         for (const ws of workspaces) {
           console.log(`\n🔍 Linting ${ws.replace('@intexuraos/', '')}...\n`);
@@ -167,4 +202,8 @@ async function runInBatches(workspaces, batchSize, activeProcesses) {
     console.error(`\n❌ Lint failed: ${error.message}\n`);
     process.exit(1);
   }
-})();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main();
+}
