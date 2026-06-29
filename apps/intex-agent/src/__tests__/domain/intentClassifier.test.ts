@@ -28,6 +28,23 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('keeps deterministic greetings local without calling the LLM classifier', async () => {
+    const client = new FakeStructuredClient([]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Hello',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      kind: 'no_action',
+      reason: 'greeting',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
   it('uses the structured LLM classifier with literal-guarded session context when static intent is unclear', async () => {
     const client = new FakeStructuredClient([
       ok(
@@ -420,6 +437,33 @@ describe('createLlmIntexAgentIntentClassifier', () => {
       },
     ]);
   });
+
+  it('retries transient classifier provider errors before falling back', async () => {
+    const client = new FakeStructuredClient([
+      err({ code: 'RATE_LIMITED', message: 'slow down', retryAfterMs: 0 } as LLMError & {
+        retryAfterMs: number;
+      }),
+      ok(
+        generateResult({
+          outcome: 'tool',
+          allowedToolNames: ['create_note'],
+          confidence: 0.9,
+        })
+      ),
+    ]);
+    const logger = new FakeLogger();
+
+    await expect(
+      createLlmIntexAgentIntentClassifier({ client, logger }).classify({
+        message: 'make it happen',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({ kind: 'tool', allowedToolNames: ['create_note'] });
+
+    expect(client.calls).toHaveLength(2);
+    expect(logger.warnCalls).toEqual([]);
+  });
 });
 
 function event(type: IntexAgentSessionEvent['type'], payload: Record<string, unknown>): IntexAgentSessionEvent {
@@ -455,7 +499,9 @@ class FakeStructuredClient implements StructuredClient {
     this.calls.push({ prompt, options });
     const next = this.results.shift();
     if (next === undefined) {
-      throw new Error('No fake generate result configured');
+      throw new Error(
+        `FakeStructuredClient underflow: ${String(this.calls.length)} calls made with no configured result`
+      );
     }
     return Promise.resolve(next);
   }

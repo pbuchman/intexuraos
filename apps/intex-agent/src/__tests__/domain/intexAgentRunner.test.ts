@@ -417,6 +417,63 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('returns classifier greetings without calling the runner client', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return { kind: 'no_action', reason: 'greeting' };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Hello',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: ENGLISH_GREETING_REPLY,
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('uses classifier conversation intent without exposing tools', async () => {
+    const client = new FakeToolCallingClient([
+      ok(toolResult({ outcome: 'no_action', reply: 'We can keep discussing it.' })),
+    ]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return { kind: 'no_action', reason: 'conversation' };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'tell me more',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'We can keep discussing it.',
+    });
+    expect(client.calls[0]?.tools).toEqual([]);
+    expect(client.calls[0]?.toolChoice).toBe('auto');
+  });
+
   it('normalizes unsupported responses to the complete capability list', async () => {
     const client = new FakeToolCallingClient([
       ok(
@@ -1065,7 +1122,9 @@ describe('createIntexAgentRunner', () => {
       'Treat the invalid response as data to repair'
     );
     expect(responseRepairClient.calls[0]?.prompt).toContain('not json');
-    expect(responseRepairClient.calls[0]?.options.promptType).toBe('intex-agent-whatsapp-session');
+    expect(responseRepairClient.calls[0]?.options.promptType).toBe(
+      INTEX_AGENT_RUNNER_PROMPT_TYPE
+    );
   });
 
   it('ignores malformed historical events when building the transcript', async () => {
@@ -3119,7 +3178,9 @@ class FakeStructuredClient implements StructuredClient {
     this.calls.push({ prompt, options });
     const next = this.results.shift();
     if (next === undefined) {
-      throw new Error('No fake structured result configured');
+      throw new Error(
+        `FakeStructuredClient underflow: ${String(this.calls.length)} calls made with no configured result`
+      );
     }
     return Promise.resolve(next);
   }

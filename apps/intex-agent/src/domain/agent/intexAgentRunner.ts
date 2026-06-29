@@ -518,7 +518,7 @@ async function validateRunnerOutput(
     client: firstResponseClient,
     prompt: 'Validate the Intex Agent runner response.',
     schema: IntexAgentRunnerOutputSchema,
-    promptType: 'intex-agent-whatsapp-session',
+    promptType: INTEX_AGENT_RUNNER_PROMPT_TYPE,
     ...(input.repairClient !== undefined
       ? {
           repairBuilder: (raw, error): string =>

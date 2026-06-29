@@ -8,7 +8,12 @@ import {
   type IntexAgentIntentClassifierToolName,
 } from '@intexuraos/llm-prompts';
 import type { Logger as AppLogger } from '@intexuraos/common-core';
-import { formatZodErrors, generateStructured, type StructuredClient } from '@intexuraos/llm-utils';
+import {
+  formatZodErrors,
+  generateStructured,
+  type StructuredClient,
+  withRetry,
+} from '@intexuraos/llm-utils';
 import {
   selectIntexAgentReplyLanguage,
   type IntexAgentLanguageMessage,
@@ -66,22 +71,26 @@ export function createLlmIntexAgentIntentClassifier(deps: {
     async classify(input): Promise<IntexAgentIntentClassification> {
       const replyLanguage = classifierReplyLanguage(input);
       const directIntent = classifyIntexAgentIntent(input.message);
+      if (directIntent.kind === 'tool') {
+        return directIntent;
+      }
+      if (directIntent.kind === 'no_action' && directIntent.reason === 'greeting') {
+        return directIntent;
+      }
       if (directIntent.kind === 'unsupported') {
         return {
           kind: 'needs_clarification',
           question: DEFAULT_CLARIFICATION_QUESTIONS[replyLanguage],
         };
       }
-      if (directIntent.kind === 'tool' || directIntent.reason === 'greeting') {
-        return directIntent;
-      }
 
       const prompt = intexAgentIntentClassifierPrompt.build({
         currentDateTime: input.currentDateTime,
         messages: buildClassifierMessages(input.events, input.message, input.replyContext),
       });
+      const retryingClient = createRetryingStructuredClient(deps.client);
       const result = await generateStructured({
-        client: deps.client,
+        client: retryingClient,
         prompt,
         schema: IntexAgentIntentClassifierOutputSchema,
         promptType: INTEX_AGENT_INTENT_CLASSIFIER_PROMPT_TYPE,
@@ -107,6 +116,17 @@ export function createLlmIntexAgentIntentClassifier(deps: {
       }
 
       return mapValidatedClassifierOutput(result.value.data, replyLanguage);
+    },
+  };
+}
+
+function createRetryingStructuredClient(client: StructuredClient): StructuredClient {
+  return {
+    generate(prompt, options): ReturnType<StructuredClient['generate']> {
+      return withRetry(() => client.generate(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 250,
+      });
     },
   };
 }
