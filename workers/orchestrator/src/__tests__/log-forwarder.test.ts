@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LogForwarder } from '../services/log-forwarder.js';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -302,6 +303,144 @@ describe('LogForwarder', () => {
 
         // Should succeed on 3rd attempt
         expect(attempts).toBe(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses retry warnings from Sentry while preserving retry logs', async () => {
+      vi.useFakeTimers();
+      try {
+        let attempts = 0;
+        vi.mocked(mockLogger.warn).mockReset();
+
+        mockFetch.mockImplementation(async () => {
+          attempts++;
+          if (attempts < 3) {
+            return {
+              ok: false,
+              status: 502,
+              json: async () => ({}),
+            } as Response;
+          }
+          return {
+            ok: true,
+            json: async () => ({ received: true }),
+          } as Response;
+        });
+
+        const forwarder = new LogForwarder(
+          { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+          mockLogger
+        );
+
+        const logFile = join(logBasePath, 'task-retry-skip-sentry.log');
+        forwarder.startForwarding('task-retry-skip-sentry', logFile);
+
+        writeFileSync(logFile, 'Test content\n');
+
+        await vi.advanceTimersByTimeAsync(7000);
+        await forwarder.stopForwarding('task-retry-skip-sentry');
+
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-retry-skip-sentry',
+            attempt: 1,
+            status: 502,
+            url: expect.stringContaining('/internal/logs'),
+            [SKIP_SENTRY_KEY]: true,
+          }),
+          'Log upload failed, retrying'
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses thrown fetch retry warnings from Sentry while preserving retry logs', async () => {
+      vi.useFakeTimers();
+      try {
+        let attempts = 0;
+        vi.mocked(mockLogger.warn).mockReset();
+
+        mockFetch.mockImplementation(async () => {
+          attempts++;
+          if (attempts < 3) {
+            throw new Error('boom');
+          }
+          return {
+            ok: true,
+            json: async () => ({ received: true }),
+          } as Response;
+        });
+
+        const forwarder = new LogForwarder(
+          { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+          mockLogger
+        );
+
+        const logFile = join(logBasePath, 'task-thrown-retry-skip-sentry.log');
+        forwarder.startForwarding('task-thrown-retry-skip-sentry', logFile);
+
+        writeFileSync(logFile, 'Test content\n');
+
+        await vi.advanceTimersByTimeAsync(7000);
+        await forwarder.stopForwarding('task-thrown-retry-skip-sentry');
+
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-thrown-retry-skip-sentry',
+            attempt: 1,
+            url: 'https://code-agent.test/internal/logs',
+            name: 'Error',
+            message: 'boom',
+            [SKIP_SENTRY_KEY]: true,
+          }),
+          'Log upload failed, retrying'
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses final upload failure errors from Sentry while tracking dropped chunks', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(mockLogger.error).mockReset();
+
+        mockFetch.mockImplementation(async () => {
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+          } as Response;
+        });
+
+        const forwarder = new LogForwarder(
+          { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+          mockLogger
+        );
+
+        const logFile = join(logBasePath, 'task-upload-failed-skip-sentry.log');
+        forwarder.startForwarding('task-upload-failed-skip-sentry', logFile);
+
+        writeFileSync(logFile, 'Test\n');
+
+        await vi.advanceTimersByTimeAsync(7000);
+
+        expect(forwarder.getDroppedChunkCount('task-upload-failed-skip-sentry')).toBe(1);
+
+        await forwarder.stopForwarding('task-upload-failed-skip-sentry');
+
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-upload-failed-skip-sentry',
+            count: 1,
+            url: 'https://code-agent.test/internal/logs',
+            [SKIP_SENTRY_KEY]: true,
+          }),
+          'Failed to upload log chunks after retries'
+        );
       } finally {
         vi.useRealTimers();
       }
