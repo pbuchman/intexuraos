@@ -401,7 +401,13 @@ async function runToolCall(
   const toolDef = toolMap.get(toolName);
 
   if (toolDef === undefined) {
-    logger.warn({ iteration, toolName }, 'OpenRouter tool calling: hallucinated tool name');
+    // Sentry INTEXURAOS-HETZNER-3J: a hallucinated tool name is a normal
+    // self-correction signal — we echo an error back to the model so it can
+    // retry with a real tool. Page noise; suppress while keeping stdout log.
+    logger.warn(
+      { iteration, toolName, _skipSentry: true },
+      'OpenRouter tool calling: hallucinated tool name'
+    );
     return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
 

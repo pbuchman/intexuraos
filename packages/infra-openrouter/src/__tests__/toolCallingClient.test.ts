@@ -372,6 +372,17 @@ describe('createOpenRouterToolCallingClient', () => {
         content: JSON.stringify({ error: 'boom' }),
       }),
     ]);
+
+    // Sentry INTEXURAOS-HETZNER-3J: hallucinated tool name is a normal
+    // self-correction signal; the warn must carry `_skipSentry` so the Pino
+    // transport does not page on it.
+    const hallucinationWarn = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([payload, msg]) =>
+        msg === 'OpenRouter tool calling: hallucinated tool name' &&
+        (payload as { toolName?: string } | undefined)?.toolName === 'missing_tool'
+    );
+    expect(hallucinationWarn).toBeDefined();
+    expect(hallucinationWarn?.[0]).toMatchObject({ _skipSentry: true });
   });
 
   it('uses fallback tool call metadata when OpenRouter omits tool id and function', async () => {
