@@ -1,8 +1,29 @@
 /**
  * Tests for WhatsAppCloudApiSender.
  */
+import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WhatsAppCloudApiSender } from '../../infra/whatsapp/sender.js';
+
+const { warnSpy, errorSpy, infoSpy, mockLogger } = vi.hoisted(() => {
+  const warnSpy = vi.fn();
+  const errorSpy = vi.fn();
+  const infoSpy = vi.fn();
+  const debugSpy = vi.fn();
+  const mockLogger = {
+    warn: warnSpy,
+    error: errorSpy,
+    info: infoSpy,
+    debug: debugSpy,
+    child: vi.fn(),
+  } as unknown as Logger;
+  return { warnSpy, errorSpy, infoSpy, mockLogger };
+});
+
+vi.mock('@intexuraos/infra-sentry', () => ({
+  createAppLogger: (): Logger => mockLogger,
+  SKIP_SENTRY_KEY: '_skipSentry',
+}));
 
 describe('WhatsAppCloudApiSender', () => {
   let sender: WhatsAppCloudApiSender;
@@ -12,6 +33,9 @@ describe('WhatsAppCloudApiSender', () => {
   beforeEach(() => {
     sender = new WhatsAppCloudApiSender(accessToken, phoneNumberId);
     vi.useFakeTimers();
+    warnSpy.mockClear();
+    errorSpy.mockClear();
+    infoSpy.mockClear();
   });
 
   afterEach(() => {
@@ -568,6 +592,74 @@ describe('WhatsAppCloudApiSender', () => {
       if (result.ok) {
         expect(result.value.wamid).toMatch(/^unknown-\d+$/);
       }
+    });
+  });
+
+  describe('truncation logging', () => {
+    const mockFetch = (): ReturnType<typeof vi.fn> =>
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+
+    it('marks text message truncation warn as Sentry-skipped', async () => {
+      vi.stubGlobal('fetch', mockFetch());
+      const longMessage = 'a'.repeat(5000);
+
+      await sender.sendTextMessage('+1234567890', longMessage);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _skipSentry: true,
+          originalLength: 5000,
+          maxLength: 4096,
+        }),
+        expect.stringContaining('Truncated text message body')
+      );
+    });
+
+    it('marks interactive message truncation warn as Sentry-skipped', async () => {
+      vi.stubGlobal('fetch', mockFetch());
+      const longMessage = 'c'.repeat(2000);
+
+      await sender.sendInteractiveMessage('+1234567890', longMessage, [
+        { type: 'reply' as const, reply: { id: 'btn-1', title: 'OK' } },
+      ]);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _skipSentry: true,
+          originalLength: 2000,
+          maxLength: 1024,
+        }),
+        expect.stringContaining('Truncated interactive message body')
+      );
+    });
+
+    it('marks CTA URL message truncation warn as Sentry-skipped', async () => {
+      vi.stubGlobal('fetch', mockFetch());
+      const longMessage = 'e'.repeat(2000);
+      const ctaUrl = { displayText: 'View Details', url: 'https://example.com/details' };
+
+      await sender.sendCtaUrlMessage('+1234567890', longMessage, ctaUrl);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _skipSentry: true,
+          originalLength: 2000,
+          maxLength: 1024,
+        }),
+        expect.stringContaining('Truncated CTA URL message body')
+      );
+    });
+
+    it('does not log a warn when text message fits within the limit', async () => {
+      vi.stubGlobal('fetch', mockFetch());
+
+      await sender.sendTextMessage('+1234567890', 'short');
+
+      expect(warnSpy).not.toHaveBeenCalled();
     });
   });
 });

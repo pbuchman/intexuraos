@@ -30,7 +30,10 @@ function truncateBody(message: string, maxLength: number, messageType: MessageTy
   if (message.length <= maxLength) {
     return message;
   }
-  logger.warn({ phoneNumber, originalLength: message.length, maxLength }, `Truncated ${messageType} message body to fit WhatsApp limit`);
+  logger.warn(
+    { phoneNumber, originalLength: message.length, maxLength, [SKIP_SENTRY_KEY]: true },
+    `Truncated ${messageType} message body to fit WhatsApp limit`
+  );
   return message.substring(0, maxLength);
 }
 
