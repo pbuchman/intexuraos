@@ -203,7 +203,7 @@ export function mapTeam(team: Team): LinearTeam {
  */
 export function isTransientUpstreamError(error: unknown): boolean {
   const message = getErrorMessage(error, '');
-  return message.includes('502') || message.includes('503') || message.includes('504');
+  return /\(Code:\s*50[234]\)/.test(message);
 }
 
 /** Maps unknown errors to typed LinearError. Exported for testing. */

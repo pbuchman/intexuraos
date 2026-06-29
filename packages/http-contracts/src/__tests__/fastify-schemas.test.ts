@@ -46,10 +46,11 @@ describe('Fastify Schemas', () => {
       expect(codes).toContain('FORBIDDEN');
       expect(codes).toContain('NOT_FOUND');
       expect(codes).toContain('CONFLICT');
+      expect(codes).toContain('SERVICE_UNAVAILABLE');
       expect(codes).toContain('DOWNSTREAM_ERROR');
       expect(codes).toContain('INTERNAL_ERROR');
       expect(codes).toContain('MISCONFIGURED');
-      expect(codes.length).toBe(8);
+      expect(codes.length).toBe(9);
     });
   });
 
