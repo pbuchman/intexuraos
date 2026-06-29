@@ -15,6 +15,10 @@ export interface SentryIssueEventRepository {
     input: ReserveSentryIssueEventInput
   ): Promise<Result<ReserveSentryIssueEventResult, SentryIssueEventRepositoryError>>;
 
+  reserveTaskForProblem(
+    input: ReserveSentryIssueEventInput
+  ): Promise<Result<ReserveSentryIssueEventResult, SentryIssueEventRepositoryError>>;
+
   markCodeTaskCreated(input: {
     dedupeKey: string;
     codeTaskId: string;

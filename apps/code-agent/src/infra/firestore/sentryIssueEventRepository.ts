@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { Timestamp, type Firestore } from '@intexuraos/infra-firestore';
 import type { Logger } from 'pino';
@@ -109,6 +110,23 @@ export function createSentryIssueDedupeKey(event: NormalizedSentryIssueEvent): s
   return `sentry:${event.organizationSlug}:${event.projectSlug}:${event.issueId}:${event.resource}:${action}`;
 }
 
+function normalizeProblemTitle(title: string): string {
+  const normalized = title.trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalized === '' ? 'unknown' : normalized;
+}
+
+export function createSentryProblemDedupeKey(event: NormalizedSentryIssueEvent): string {
+  const fingerprint = createHash('sha256')
+    .update(`${event.organizationSlug}\0${event.projectSlug}\0${normalizeProblemTitle(event.issueTitle)}`)
+    .digest('hex')
+    .slice(0, 32);
+  return `sentry-task:${event.organizationSlug}:${event.projectSlug}:${fingerprint}`;
+}
+
+function serializePayload(payload: unknown): string {
+  return JSON.stringify(payload ?? null);
+}
+
 function firestoreError(error: unknown): SentryIssueEventRepositoryError {
   return {
     code: 'FIRESTORE_ERROR',
@@ -123,69 +141,84 @@ export function createFirestoreSentryIssueEventRepository(deps: {
   const { firestore, logger } = deps;
   const collection = firestore.collection(COLLECTION_NAME);
 
+  async function reserveWithDedupeKey(
+    input: ReserveSentryIssueEventInput,
+    dedupeKey: string
+  ): Promise<Result<ReserveSentryIssueEventResult, SentryIssueEventRepositoryError>> {
+    try {
+      return await firestore.runTransaction(async (transaction) => {
+        const docRef = collection.doc(dedupeKey);
+        const snapshot = await transaction.get(docRef);
+        const payload = serializePayload(input.payload);
+        if (!snapshot.exists) {
+          const createdDoc = toFirestoreDoc({
+            dedupeKey,
+            event: input.event,
+            receivedAt: input.receivedAt,
+            latestReceivedAt: input.receivedAt,
+            duplicateCount: 0,
+            payload,
+          });
+          transaction.set(docRef, createdDoc);
+          return ok({
+            created: true,
+            record: toRecord(createdDoc),
+          });
+        }
+
+        const existing = snapshot.data() as SentryIssueEventDoc;
+        const duplicateCount = (typeof existing.duplicateCount === 'number' ? existing.duplicateCount : 0) + 1;
+        const merged: SentryIssueEventDoc = {
+          ...existing,
+          action: input.event.action,
+          resource: input.event.resource,
+          issueId: input.event.issueId,
+          issueTitle: input.event.issueTitle,
+          issueUrl: input.event.issueUrl,
+          projectId: input.event.projectId ?? null,
+          issueShortId: input.event.issueShortId ?? null,
+          status: input.event.status ?? null,
+          eventId: input.event.eventId ?? null,
+          latestReceivedAt: Timestamp.fromDate(input.receivedAt),
+          duplicateCount,
+          payload,
+        };
+        transaction.update(docRef, {
+          action: merged.action,
+          resource: merged.resource,
+          issueId: merged.issueId,
+          issueTitle: merged.issueTitle,
+          issueUrl: merged.issueUrl,
+          projectId: merged.projectId,
+          issueShortId: merged.issueShortId,
+          status: merged.status,
+          eventId: merged.eventId,
+          latestReceivedAt: merged.latestReceivedAt,
+          duplicateCount: merged.duplicateCount,
+          payload: merged.payload,
+        });
+        return ok({
+          created: false,
+          record: toRecord(merged),
+        });
+      });
+    } catch (error) {
+      logger.error({ error }, 'Failed to reserve Sentry issue event');
+      return err(firestoreError(error));
+    }
+  }
+
   return {
-    async reserve(
+    reserve(
       input: ReserveSentryIssueEventInput
     ): Promise<Result<ReserveSentryIssueEventResult, SentryIssueEventRepositoryError>> {
-      try {
-        return await firestore.runTransaction(async (transaction) => {
-          const dedupeKey = createSentryIssueDedupeKey(input.event);
-          const docRef = collection.doc(dedupeKey);
-          const snapshot = await transaction.get(docRef);
-          if (!snapshot.exists) {
-            const createdDoc = toFirestoreDoc({
-              dedupeKey,
-              event: input.event,
-              receivedAt: input.receivedAt,
-              latestReceivedAt: input.receivedAt,
-              duplicateCount: 0,
-              payload: input.payload,
-            });
-            transaction.set(docRef, createdDoc);
-            return ok({
-              created: true,
-              record: toRecord(createdDoc),
-            });
-          }
+      return reserveWithDedupeKey(input, createSentryIssueDedupeKey(input.event));
+    },
 
-          const existing = snapshot.data() as SentryIssueEventDoc;
-          const duplicateCount = (typeof existing.duplicateCount === 'number' ? existing.duplicateCount : 0) + 1;
-          const merged: SentryIssueEventDoc = {
-            ...existing,
-            action: input.event.action,
-            resource: input.event.resource,
-            issueTitle: input.event.issueTitle,
-            issueUrl: input.event.issueUrl,
-            projectId: input.event.projectId ?? null,
-            issueShortId: input.event.issueShortId ?? null,
-            status: input.event.status ?? null,
-            eventId: input.event.eventId ?? null,
-            latestReceivedAt: Timestamp.fromDate(input.receivedAt),
-            duplicateCount,
-            payload: input.payload,
-          };
-          transaction.update(docRef, {
-            action: merged.action,
-            resource: merged.resource,
-            issueTitle: merged.issueTitle,
-            issueUrl: merged.issueUrl,
-            projectId: merged.projectId,
-            issueShortId: merged.issueShortId,
-            status: merged.status,
-            eventId: merged.eventId,
-            latestReceivedAt: merged.latestReceivedAt,
-            duplicateCount: merged.duplicateCount,
-            payload: merged.payload,
-          });
-          return ok({
-            created: false,
-            record: toRecord(merged),
-          });
-        });
-      } catch (error) {
-        logger.error({ error }, 'Failed to reserve Sentry issue event');
-        return err(firestoreError(error));
-      }
+    reserveTaskForProblem(
+      input: ReserveSentryIssueEventInput
+    ): Promise<Result<ReserveSentryIssueEventResult, SentryIssueEventRepositoryError>> {
+      return reserveWithDedupeKey(input, createSentryProblemDedupeKey(input.event));
     },
 
     async markCodeTaskCreated(input): Promise<Result<SentryIssueEventRecord, SentryIssueEventRepositoryError>> {

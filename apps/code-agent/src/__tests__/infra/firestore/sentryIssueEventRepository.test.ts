@@ -10,6 +10,7 @@ import type { NormalizedSentryIssueEvent } from '../../../domain/models/sentryIs
 import {
   createFirestoreSentryIssueEventRepository,
   createSentryIssueDedupeKey,
+  createSentryProblemDedupeKey,
 } from '../../../infra/firestore/sentryIssueEventRepository.js';
 
 function buildEvent(overrides: Partial<NormalizedSentryIssueEvent> = {}): NormalizedSentryIssueEvent {
@@ -53,6 +54,28 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     );
   });
 
+  it('creates the same problem task key for different issue ids with the same project and title', () => {
+    const firstKey = createSentryProblemDedupeKey(buildEvent({
+      issueId: '4509001',
+      action: 'created',
+      issueTitle: ' Failed to record task completion metric ',
+    }));
+    const secondKey = createSentryProblemDedupeKey(buildEvent({
+      issueId: '4509002',
+      action: 'regressed',
+      issueTitle: 'failed   to record task completion metric',
+    }));
+
+    expect(firstKey).toBe(secondKey);
+    expect(firstKey).toMatch(/^sentry-task:intexuraos-dev-pbuchman:intexuraos-development:/);
+  });
+
+  it('uses unknown for blank problem title task key fingerprints', () => {
+    expect(createSentryProblemDedupeKey(buildEvent({ issueTitle: '   ' }))).toBe(
+      createSentryProblemDedupeKey(buildEvent({ issueTitle: 'unknown' }))
+    );
+  });
+
   it('reserves a new Sentry issue event and persists audit fields', async () => {
     const repo = createFirestoreSentryIssueEventRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -86,9 +109,45 @@ describe('createFirestoreSentryIssueEventRepository', () => {
           receivedAt,
           latestReceivedAt: receivedAt,
           duplicateCount: 0,
-          payload: { raw: true },
+          payload: '{"raw":true}',
         }),
       });
+    }
+  });
+
+  it('serializes raw payloads before storing them in Firestore audit records', async () => {
+    const repo = createFirestoreSentryIssueEventRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger: pino({ level: 'silent' }),
+    });
+
+    const result = await repo.reserve({
+      event: buildEvent(),
+      receivedAt: new Date('2026-06-28T10:00:00.000Z'),
+      payload: { '': [['nested', 'array']], raw: true },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.record.payload).toBe('{"":[["nested","array"]],"raw":true}');
+    }
+  });
+
+  it('serializes undefined payloads as null before storing Firestore audit records', async () => {
+    const repo = createFirestoreSentryIssueEventRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger: pino({ level: 'silent' }),
+    });
+
+    const result = await repo.reserve({
+      event: buildEvent(),
+      receivedAt: new Date('2026-06-28T10:00:00.000Z'),
+      payload: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.record.payload).toBe('null');
     }
   });
 
@@ -163,7 +222,68 @@ describe('createFirestoreSentryIssueEventRepository', () => {
           receivedAt: firstReceivedAt,
           latestReceivedAt: secondReceivedAt,
           duplicateCount: 1,
-          payload: { delivery: 2 },
+          payload: '{"delivery":2}',
+        }),
+      });
+    }
+  });
+
+  it('returns an existing problem task reservation for a new issue id with the same problem title', async () => {
+    const repo = createFirestoreSentryIssueEventRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger: pino({ level: 'silent' }),
+    });
+    const firstReceivedAt = new Date('2026-06-28T10:00:00.000Z');
+    const secondReceivedAt = new Date('2026-06-28T11:00:00.000Z');
+    const firstEvent = buildEvent({
+      issueId: '4509001',
+      issueTitle: 'Failed to record task duration metric',
+    });
+    const secondEvent = buildEvent({
+      issueId: '4509002',
+      issueUrl: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509002/',
+      action: 'regressed',
+      resource: 'event_alert',
+      eventId: 'event-4509002',
+      issueTitle: 'failed   to record task duration metric',
+    });
+    const problemKey = createSentryProblemDedupeKey(firstEvent);
+
+    const first = await repo.reserveTaskForProblem({
+      event: firstEvent,
+      receivedAt: firstReceivedAt,
+      payload: { delivery: 1 },
+    });
+    expect(first.ok && first.value.created).toBe(true);
+
+    await repo.markCodeTaskCreated({
+      dedupeKey: problemKey,
+      codeTaskId: 'task_existing_problem',
+      linearIssueId: 'INT-200',
+    });
+
+    const second = await repo.reserveTaskForProblem({
+      event: secondEvent,
+      receivedAt: secondReceivedAt,
+      payload: { delivery: 2 },
+    });
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value).toEqual({
+        created: false,
+        record: expect.objectContaining({
+          dedupeKey: problemKey,
+          codeTaskId: 'task_existing_problem',
+          linearIssueId: 'INT-200',
+          issueId: '4509002',
+          action: 'regressed',
+          resource: 'event_alert',
+          eventId: 'event-4509002',
+          receivedAt: firstReceivedAt,
+          latestReceivedAt: secondReceivedAt,
+          duplicateCount: 1,
+          payload: '{"delivery":2}',
         }),
       });
     }

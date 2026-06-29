@@ -15,6 +15,17 @@ import { resolveDefaultWorkerType } from '../utils/defaultWorkerTypeResolution.j
 const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'sentry-agent-system-prompt-v1';
 const ACTIONABLE_ISSUE_ACTIONS = new Set(['created', 'regressed', 'unresolved', 'reopened']);
 const TERMINAL_ISSUE_STATUSES = new Set(['resolved', 'ignored', 'muted', 'archived', 'deleted']);
+const SENTRY_AUTOMATION_SELF_ALERT_TITLES = new Set([
+  'failed to reserve sentry issue event',
+  'failed to record task completion metric',
+  'failed to record task duration metric',
+  'issue not found for comment',
+  'dispatch blocked by worker capability or health state',
+  'log upload failed, retrying',
+  'error: failed to upload log chunks after retries',
+  'code worker auth not ready',
+  'code worker auth not ready at startup',
+]);
 
 export type VerifySentrySignature = (payload: Buffer, signature: string, secret: string) => boolean;
 export type ParseSentryIssueEvent = (
@@ -83,17 +94,27 @@ function normalizeToken(value: string | undefined): string | undefined {
   return normalized === '' ? undefined : normalized;
 }
 
+function normalizeTitle(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function isTerminalIssueStatus(event: NormalizedSentryIssueEvent): boolean {
   const status = normalizeToken(event.status);
   return status !== undefined && TERMINAL_ISSUE_STATUSES.has(status);
 }
 
 function isSentrySampleEventAlert(event: NormalizedSentryIssueEvent): boolean {
-  const title = event.issueTitle.trim().toLowerCase();
+  const title = normalizeTitle(event.issueTitle);
   return title.startsWith('this is an example ')
     || title.includes('sentry sample')
     || title.includes('sample event')
     || title.includes('test event');
+}
+
+function isSentryAutomationSelfAlert(event: NormalizedSentryIssueEvent): boolean {
+  const title = normalizeTitle(event.issueTitle);
+  return SENTRY_AUTOMATION_SELF_ALERT_TITLES.has(title)
+    || title.startsWith('detected phantom summaries with no displayable tasks');
 }
 
 function classifySentryIssueEvent(event: NormalizedSentryIssueEvent):
@@ -171,6 +192,14 @@ export async function processSentryWebhook(
     return { ok: true, outcome: 'ignored', message: classification.message };
   }
 
+  if (isSentryAutomationSelfAlert(parsed.value)) {
+    return {
+      ok: true,
+      outcome: 'ignored',
+      message: `Ignored Sentry automation self-alert: ${parsed.value.issueTitle}`,
+    };
+  }
+
   const { sentryIssueEventRepo, workerSettingsRepo, linearIssueService, codeTaskRepo, taskEnqueueService } =
     getServices();
   if (sentryIssueEventRepo === undefined) {
@@ -196,6 +225,27 @@ export async function processSentryWebhook(
       message: 'Sentry issue already has a code task',
       ...(reserveResult.value.record.codeTaskId !== undefined && {
         codeTaskId: reserveResult.value.record.codeTaskId,
+      }),
+    };
+  }
+
+  const problemReserveResult = await sentryIssueEventRepo.reserveTaskForProblem({
+    event: parsed.value,
+    receivedAt,
+    payload: body,
+  });
+  if (!problemReserveResult.ok) {
+    logger.error({ error: problemReserveResult.error }, 'Failed to reserve Sentry problem task');
+    return { ok: false, reason: 'internal_error', message: problemReserveResult.error.message };
+  }
+
+  if (!problemReserveResult.value.created) {
+    return {
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry problem already has a code task',
+      ...(problemReserveResult.value.record.codeTaskId !== undefined && {
+        codeTaskId: problemReserveResult.value.record.codeTaskId,
       }),
     };
   }
@@ -283,6 +333,16 @@ export async function processSentryWebhook(
   if (!markResult.ok) {
     logger.error({ error: markResult.error, taskId: task.id }, 'Failed to link Sentry issue event to code task');
     return { ok: false, reason: 'internal_error', message: markResult.error.message };
+  }
+
+  const markProblemResult = await sentryIssueEventRepo.markCodeTaskCreated({
+    dedupeKey: problemReserveResult.value.record.dedupeKey,
+    codeTaskId: task.id,
+    linearIssueId: issueResult.linearIssueId,
+  });
+  if (!markProblemResult.ok) {
+    logger.error({ error: markProblemResult.error, taskId: task.id }, 'Failed to link Sentry problem task to code task');
+    return { ok: false, reason: 'internal_error', message: markProblemResult.error.message };
   }
 
   return {

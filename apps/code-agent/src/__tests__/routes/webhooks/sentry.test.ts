@@ -41,6 +41,7 @@ describe('POST /webhooks/sentry', () => {
   let app: FastifyInstance;
   let codeTaskCreate: ReturnType<typeof vi.fn>;
   let sentryIssueEventReserve: ReturnType<typeof vi.fn>;
+  let sentryProblemReserve: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_SENTRY_WEBHOOK_SECRET'] = WEBHOOK_SECRET;
@@ -58,10 +59,18 @@ describe('POST /webhooks/sentry', () => {
         duplicateCount: 0,
       },
     }));
+    sentryProblemReserve = vi.fn().mockResolvedValue(ok({
+      created: true,
+      record: {
+        dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+        duplicateCount: 0,
+      },
+    }));
     setServices({
       logger: pino({ level: 'silent' }),
       sentryIssueEventRepo: {
         reserve: sentryIssueEventReserve,
+        reserveTaskForProblem: sentryProblemReserve,
         markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
       },
       workerSettingsRepo: {
@@ -133,6 +142,12 @@ describe('POST /webhooks/sentry', () => {
     expect(codeTaskCreate).toHaveBeenCalledWith(expect.objectContaining({
       agentType: 'sentry',
       workerType: 'codex-xhigh',
+    }));
+    expect(sentryProblemReserve).toHaveBeenCalledWith(expect.objectContaining({
+      event: expect.objectContaining({
+        issueId: '4509001',
+        issueTitle: 'TypeError: Cannot read properties of undefined',
+      }),
     }));
   });
 
@@ -216,6 +231,7 @@ describe('POST /webhooks/sentry', () => {
       logger: pino({ level: 'silent' }),
       sentryIssueEventRepo: {
         reserve: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'reserve failed' })),
+        reserveTaskForProblem: vi.fn(),
         markCodeTaskCreated: vi.fn(),
       },
     } as unknown as ServiceContainer);
