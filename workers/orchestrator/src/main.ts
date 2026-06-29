@@ -14,6 +14,7 @@ import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { Logger } from '@intexuraos/common-core';
 import { flushAllUsageSinks } from '@intexuraos/llm-pricing';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const WEBHOOK_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -248,9 +249,17 @@ async function runStartupRecovery(
             logger.info({ taskId: task.taskId }, 'Adopted running container');
             continue; // Skip interrupted webhook
           }
-          // Adoption returned error — fall through to interrupted
+          // Adoption returned error — fall through to interrupted. The
+          // `adoptTask` failure (e.g. "Task at max attempts", capacity exhausted,
+          // or worktree rehydration error) is the normal recovery outcome that
+          // triggers the "interrupted" terminal transition; the code below
+          // already notifies the code-agent and persists the state change. The
+          // warn stays in stdout/Cloud Logging for ops visibility, but it is
+          // not an actionable Sentry alert — mark with SKIP_SENTRY_KEY to stop
+          // the Pino Sentry transport from paging on the expected recovery
+          // decision. (INT-1795)
           logger.warn(
-            { taskId: task.taskId, error: result.error },
+            { taskId: task.taskId, error: result.error, [SKIP_SENTRY_KEY]: true },
             'Adoption failed, marking as interrupted'
           );
         } catch (error) {
