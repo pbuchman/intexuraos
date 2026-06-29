@@ -14,6 +14,7 @@ const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
 const SUPPORTED_CAPABILITIES_REPLY =
   [
     'I could not safely handle that request. I can help with:',
+    '- summarize and reason over the current session',
     '- create notes',
     '- create and look up calendar events',
     '- create research drafts',
@@ -24,6 +25,7 @@ const SUPPORTED_CAPABILITIES_REPLY =
 const COMPLETION_FAILURE_CAPABILITIES_REPLY =
   [
     'I could not complete that request right now. I can help with:',
+    '- summarize and reason over the current session',
     '- create notes',
     '- create and look up calendar events',
     '- create research drafts',
@@ -31,6 +33,30 @@ const COMPLETION_FAILURE_CAPABILITIES_REPLY =
     '- create code tasks for planning or execution',
     '- manage INTEX Agent prompt preferences',
   ].join('\n');
+const POLISH_SUPPORTED_CAPABILITIES_REPLY =
+  [
+    'Nie mogłem bezpiecznie obsłużyć tej prośby. Mogę pomóc z:',
+    '- podsumowywaniem i analizowaniem bieżącej sesji',
+    '- tworzeniem notatek',
+    '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
+    '- tworzeniem szkiców researchu',
+    '- zapisywaniem bookmarków',
+    '- tworzeniem zadań programistycznych do planowania lub wykonania',
+    '- zarządzaniem preferencjami promptu agenta INTEX',
+  ].join('\n');
+const POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY =
+  [
+    'Nie mogłem teraz dokończyć tej prośby. Mogę pomóc z:',
+    '- podsumowywaniem i analizowaniem bieżącej sesji',
+    '- tworzeniem notatek',
+    '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
+    '- tworzeniem szkiców researchu',
+    '- zapisywaniem bookmarków',
+    '- tworzeniem zadań programistycznych do planowania lub wykonania',
+    '- zarządzaniem preferencjami promptu agenta INTEX',
+  ].join('\n');
+const ENGLISH_GREETING_REPLY = 'Hi! I am doing well. How can I help?';
+const POLISH_GREETING_REPLY = 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?';
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
   'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.';
 const EXTERNAL_SAVE_FAILED_REPLY =
@@ -80,21 +106,26 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('8.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('9.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'Reply in the language of the last reasonable user message in the current session.'
+    );
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
     expect(client.calls[0]?.systemPrompt).toContain('execution');
     expect(client.calls[0]?.systemPrompt).toContain('Return no_action');
     expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
-    expect(client.calls[0]?.systemPrompt).toContain('Use query_calendar_events only for read-only calendar questions');
+    expect(client.calls[0]?.systemPrompt).toContain('answer whether existing events are present');
     expect(client.calls[0]?.systemPrompt).toContain('For "next week", use the next calendar week after the current week');
     expect(client.calls[0]?.systemPrompt).toContain('previous calendar month unless the user says "last 30 days"');
     expect(client.calls[0]?.systemPrompt).toContain('put the event name in query and set mode to count');
     expect(client.calls[0]?.systemPrompt).toContain('Never use query_calendar_events to create, update, delete, or reschedule events');
     expect(client.calls[0]?.systemPrompt).toContain('Plain URL shares are the exception');
     expect(client.calls[0]?.systemPrompt).toContain('keywords inside URLs');
-    expect(client.calls[0]?.systemPrompt).toContain('If the request is not one of the supported jobs, do not call a tool');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'If the request is not one of the supported jobs and cannot be answered from the current session transcript'
+    );
     expect(client.calls[0]?.systemPrompt).toContain('manage INTEX Agent prompt preferences');
     expect(client.calls[0]?.systemPrompt).not.toMatch(/approval|command classification|action queue|voice/i);
     expect(client.calls[0]?.messages).toEqual([
@@ -308,6 +339,30 @@ describe('createIntexAgentRunner', () => {
     expect(SUPPORTED_CAPABILITIES_REPLY).toContain('- create code tasks for planning or execution');
   });
 
+  it('normalizes unsupported responses in Polish for Polish messages', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'unsupported',
+          reply: 'Nie mogę tego zrobić.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Kup mi bilet na koncert',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_SUPPORTED_CAPABILITIES_REPLY,
+    });
+  });
+
   it('normalizes no-action responses for greetings without closing the session', async () => {
     const client = new FakeToolCallingClient([]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
@@ -321,9 +376,44 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'no_action',
-      reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+      reply: POLISH_GREETING_REPLY,
     });
     expect(client.calls).toEqual([]);
+  });
+
+  it('replies to English greetings in English', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Hello',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: ENGLISH_GREETING_REPLY,
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('uses prior session context when the current message cannot classify reply language', async () => {
+    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [event('user_message', { text: 'Zapamiętaj, że wolę krótkie odpowiedzi.' })],
+        message: 'ok',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+    });
   });
 
   it('does not expose tools for informational questions that lack explicit creation intent', async () => {
@@ -350,6 +440,52 @@ describe('createIntexAgentRunner', () => {
     });
     expect(client.calls[0]?.tools).toEqual([]);
     expect(client.calls[0]?.toolChoice).toBe('auto');
+  });
+
+  it('allows current-session transcript summaries without exposing mutating tools', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Będę dyktować fragmenty notatki.',
+            sourceType: 'whatsapp_text',
+          }),
+          event('assistant_message', {
+            text: 'Rozumiem. Mogę zbierać kontekst w tej sesji.',
+          }),
+        ],
+        message: 'A co do tej pory powiedziałem? Możesz streścić to, co powiedziałem do tej pory w konwersacji?',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
+    });
+
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('9.0.0');
+    expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
+    expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
+    expect(client.calls[0]?.tools).toEqual([]);
+    expect(client.calls[0]?.messages).toEqual([
+      { role: 'user', content: 'Będę dyktować fragmenty notatki.' },
+      { role: 'assistant', content: 'Rozumiem. Mogę zbierać kontekst w tej sesji.' },
+      {
+        role: 'user',
+        content:
+          'A co do tej pory powiedziałem? Możesz streścić to, co powiedziałem do tej pory w konwersacji?',
+      },
+    ]);
   });
 
   it('exposes only the link tool for bare URL shares', async () => {
@@ -927,6 +1063,30 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'unsupported',
       reply: SUPPORTED_CAPABILITIES_REPLY,
+    });
+  });
+
+  it('localizes malformed confirmed execution requests using prior session context', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Dodaj notatkę o spotkaniu.' })],
+        toolName: 'query_calendar_events',
+        toolArgs: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00.000Z',
+          timeMax: '2026-06-26T00:00:00.000Z',
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_SUPPORTED_CAPABILITIES_REPLY,
     });
   });
 
@@ -1695,6 +1855,23 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'unsupported',
       reply: COMPLETION_FAILURE_CAPABILITIES_REPLY,
+    });
+  });
+
+  it('returns Polish capabilities when the tool-calling client fails for a Polish message', async () => {
+    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zapamiętaj to proszę',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
     });
   });
 

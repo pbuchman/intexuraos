@@ -9,6 +9,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // Track invocation order across mocks.
 const callOrder: string[] = [];
@@ -306,6 +308,19 @@ describe('start() — full bootstrap happy path', () => {
   it('surfaces errors thrown by the port checker', async () => {
     vi.mocked(ensurePortAvailable).mockRejectedValueOnce(new Error('Port 19199 is already in use'));
     await expect(start()).rejects.toThrow(/Port 19199 is already in use/);
+  });
+
+  it('creates the inactivity-evidence directory alongside the orchestrator logs dir (INT-1787)', async () => {
+    // Regression for INT-1787: ensureDirectoryExists must be called for
+    // `<logsDir>/inactivity-evidence` so the directory is available before
+    // copyOut runs during an inactivity restart.
+    const { mkdirSync } = await import('node:fs');
+    await start();
+
+    expect(mkdirSync).toHaveBeenCalledWith(
+      join(homedir(), '.code-orchestrator', 'logs', 'inactivity-evidence'),
+      { recursive: true }
+    );
   });
 
   it('forwards env overrides for repoPath, private-key, and git identity', async () => {

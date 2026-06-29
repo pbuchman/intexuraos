@@ -190,7 +190,13 @@ describe('StatusUpdateClient', () => {
     expect(result).toEqual({ ok: true });
     expect(nock.isDone()).toBe(true);
     // Exactly one warn for the failed attempt, and an info for the eventual recovery
-    expect(calls.filter((c) => c.level === 'warn')).toHaveLength(1);
+    const warns = calls.filter((c) => c.level === 'warn');
+    expect(warns).toHaveLength(1);
+    // The single warn MUST carry `_skipSentry: true` so transient 5xx retries
+    // do not page Sentry — only the terminal `error` (which doesn't fire on
+    // success) is the signal worth alerting on.
+    const data = warns[0]?.data as Record<string, unknown>;
+    expect(data['_skipSentry']).toBe(true);
     expect(calls.filter((c) => c.level === 'info')).toHaveLength(1);
   });
 
@@ -212,8 +218,14 @@ describe('StatusUpdateClient', () => {
       }
     }
     expect(nock.isDone()).toBe(true);
-    // Only one attempt → one warn, no retries
-    expect(calls.filter((c) => c.level === 'warn')).toHaveLength(1);
+    // Only one attempt → one warn, no retries. The single warn also MUST
+    // carry `_skipSentry: true` so 4xx attempts do not leak into Sentry as
+    // alert noise (the caller's `STATUS_UPDATE_COMMIT_FAILED` log captures
+    // the terminal outcome at error level instead).
+    const warns = calls.filter((c) => c.level === 'warn');
+    expect(warns).toHaveLength(1);
+    const data = warns[0]?.data as Record<string, unknown>;
+    expect(data['_skipSentry']).toBe(true);
   });
 
   it('returns err after exhausting retries on persistent 5xx', async () => {
@@ -238,7 +250,15 @@ describe('StatusUpdateClient', () => {
     }
     expect(nock.isDone()).toBe(true);
     // Three attempts → three warns
-    expect(calls.filter((c) => c.level === 'warn')).toHaveLength(3);
+    const warns = calls.filter((c) => c.level === 'warn');
+    expect(warns).toHaveLength(3);
+    // Every retry warn MUST mark `_skipSentry: true` so the Pino Sentry
+    // transport (warn→Sentry by default) does not capture transient proxy
+    // 5xx noise — only the terminal `error` log below should reach Sentry.
+    for (const warn of warns) {
+      const data = warn.data as Record<string, unknown>;
+      expect(data['_skipSentry']).toBe(true);
+    }
     // On retry exhaustion we escalate to a single error log so operators see
     // the terminal failure even if the caller forgets to log.
     const errors = calls.filter((c) => c.level === 'error');

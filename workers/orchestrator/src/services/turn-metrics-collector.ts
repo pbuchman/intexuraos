@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto';
 import { join } from 'node:path';
 import { availableParallelism } from 'node:os';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { buildTaskCallbackUrl } from './callback-url.js';
 
 export interface TurnMetrics {
@@ -334,8 +335,8 @@ export class TurnMetricsCollector {
 
   private async publish(
     metrics: TurnMetrics,
-    webhookUrl: string | undefined,
-    webhookSecret: string | undefined
+    webhookUrl?: string,
+    webhookSecret?: string
   ): Promise<void> {
     const body = JSON.stringify(metrics);
     const timestamp = Math.floor(Date.now() / 1000);
@@ -361,14 +362,13 @@ export class TurnMetricsCollector {
     });
 
     if (!response.ok) {
-      // Sentry INTEXURAOS-HOME-DEV-1Q: turn metrics are operational telemetry,
-      // not on the task success path. A 5xx from the code-agent receiver is a
-      // delivery blip — the orchestrator continues regardless and downstream
-      // task processing is unaffected. Suppressing the Sentry capture keeps
-      // the warn in stdout/Cloud Logging while removing alert noise, mirroring
-      // the api-key-validator and credential-refresher `_skipSentry` pattern.
+      // Turn metrics are best-effort telemetry; the upstream task has already completed
+      // and this publish call only feeds observability dashboards. A transient non-2xx
+      // (e.g. Cloud Run 502 from a restarting code-agent revision) does not block the
+      // task outcome and is not actionable — suppress from Sentry to avoid alert fatigue
+      // while preserving the stdout/Cloud Logging record for ops.
       this.logger.warn(
-        { taskId: metrics.taskId, status: response.status, _skipSentry: true },
+        { taskId: metrics.taskId, status: response.status, [SKIP_SENTRY_KEY]: true },
         'Turn metrics publish failed (non-fatal)'
       );
     }

@@ -23,8 +23,11 @@ import {
 import { buildIntexAgentSystemPrompt } from './systemPrompt.js';
 import { classifyIntexAgentIntent } from './intentGate.js';
 import {
+  buildGreetingReply,
   buildCompletionFailureCapabilitiesReply,
   buildUnsupportedCapabilitiesReply,
+  detectIntexAgentReplyLanguage,
+  type IntexAgentReplyLanguage,
 } from './capabilities.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
@@ -55,8 +58,9 @@ export interface IntexAgentRunnerConfig {
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
   return {
     async executeConfirmed(input): Promise<IntexAgentRunnerResult> {
+      const replyLanguage = detectReplyLanguage(input.events ?? []);
       if (!isMutatingToolName(input.toolName)) {
-        return malformedResult();
+        return malformedResult(replyLanguage);
       }
 
       const toolExecutions: IntexAgentToolExecution[] = [];
@@ -66,7 +70,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       const tool = tools.find((candidate) => candidate.name === input.toolName);
       /* v8 ignore start -- schema: mutating tool registry and tool definitions cannot diverge without breaking startup tests @preserve */
       if (tool === undefined) {
-        return malformedResult();
+        return malformedResult(replyLanguage);
       }
       /* v8 ignore stop @preserve */
 
@@ -75,7 +79,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         const toolExecution = getCompletedToolExecution(toolExecutions);
         /* v8 ignore start -- schema: every mutating tool definition executes through the tracking executor after argument validation @preserve */
         if (toolExecution === undefined) {
-          return malformedResult();
+          return malformedResult(replyLanguage);
         }
         /* v8 ignore stop @preserve */
         const parsedResult = parseToolResult(rawResult);
@@ -104,6 +108,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       }
     },
     async run(input): Promise<IntexAgentRunnerResult> {
+      const replyLanguage = detectReplyLanguage(input.events, input.message);
+
       if (input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined) {
         const args = {
           message: input.message.trim() === '' ? 'Image shared via WhatsApp.' : input.message.trim(),
@@ -121,14 +127,14 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (intent.kind === 'unsupported') {
         return {
           outcome: 'unsupported',
-          reply: unsupportedIntentReply(),
+          reply: unsupportedIntentReply(replyLanguage),
         };
       }
 
       if (intent.kind === 'no_action' && intent.reason === 'greeting') {
         return {
           outcome: 'no_action',
-          reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+          reply: buildGreetingReply(replyLanguage),
         };
       }
 
@@ -155,7 +161,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (!result.ok) {
         return {
           outcome: 'unsupported',
-          reply: buildCompletionFailureCapabilitiesReply(),
+          reply: buildCompletionFailureCapabilitiesReply(replyLanguage),
         };
       }
 
@@ -163,10 +169,38 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         result.value.content,
         toolExecutions,
         config.webAppUrl ?? DEFAULT_WEB_APP_URL,
-        config.userPreferences ?? null
+        config.userPreferences ?? null,
+        replyLanguage
       );
     },
   };
+}
+
+function detectReplyLanguage(
+  events: IntexAgentSessionEvent[],
+  currentMessage?: string
+): IntexAgentReplyLanguage {
+  if (currentMessage !== undefined) {
+    const currentLanguage = detectIntexAgentReplyLanguage(currentMessage);
+    if (currentLanguage === 'pl') {
+      return currentLanguage;
+    }
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'user_message') {
+      const priorMessage = event.payload['text'];
+      if (typeof priorMessage === 'string') {
+        const priorLanguage = detectIntexAgentReplyLanguage(priorMessage);
+        if (priorLanguage === 'pl') {
+          return priorLanguage;
+        }
+      }
+    }
+  }
+
+  return 'en';
 }
 
 interface IntexAgentToolExecution {
@@ -288,17 +322,18 @@ function parseRunnerContent(
   content: string,
   toolExecutions: IntexAgentToolExecution[],
   webAppUrl: string,
-  userPreferences: string | null
+  userPreferences: string | null,
+  replyLanguage: IntexAgentReplyLanguage
 ): IntexAgentRunnerResult {
   const parsed = parseJsonObject(content);
   if (parsed === null) {
-    return malformedResult();
+    return malformedResult(replyLanguage);
   }
 
   const outcome = parsed['outcome'];
   const reply = parsed['reply'];
   if (typeof outcome !== 'string' || typeof reply !== 'string') {
-    return malformedResult();
+    return malformedResult(replyLanguage);
   }
 
   const toolExecution = getCompletedToolExecution(toolExecutions);
@@ -322,13 +357,13 @@ function parseRunnerContent(
   }
 
   if (outcome === 'unsupported') {
-    return { outcome, reply: buildUnsupportedCapabilitiesReply() };
+    return { outcome, reply: buildUnsupportedCapabilitiesReply(replyLanguage) };
   }
 
   if (outcome === 'completed') {
     const summary = parsed['summary'];
     if (toolExecution === undefined) {
-      return malformedResult();
+      return malformedResult(replyLanguage);
     }
     const completedReply = buildCompletedReply(
       toolExecution.toolName,
@@ -351,7 +386,7 @@ function parseRunnerContent(
     };
   }
 
-  return malformedResult();
+  return malformedResult(replyLanguage);
 }
 
 function createConfirmationPreviewExecutor(executor: IntexAgentToolExecutor): IntexAgentToolExecutor {
@@ -837,13 +872,13 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
   }
 }
 
-function malformedResult(): IntexAgentRunnerResult {
+function malformedResult(replyLanguage: IntexAgentReplyLanguage = 'en'): IntexAgentRunnerResult {
   return {
     outcome: 'unsupported',
-    reply: buildUnsupportedCapabilitiesReply(),
+    reply: buildUnsupportedCapabilitiesReply(replyLanguage),
   };
 }
 
-function unsupportedIntentReply(): string {
-  return buildUnsupportedCapabilitiesReply();
+function unsupportedIntentReply(replyLanguage: IntexAgentReplyLanguage): string {
+  return buildUnsupportedCapabilitiesReply(replyLanguage);
 }

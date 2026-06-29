@@ -16,6 +16,7 @@ import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
 import {
   buildNewSessionReadyText,
   buildUnsupportedCapabilitiesReply,
+  detectIntexAgentReplyLanguage,
 } from '../agent/capabilities.js';
 
 export type IntexAgentRunnerResult =
@@ -59,6 +60,7 @@ export type IntexAgentRunnerResult =
 export interface IntexAgentRunner {
   executeConfirmed(input: {
     session: IntexAgentSession;
+    events?: IntexAgentSessionEvent[];
     toolName: IntexAgentToolName;
     toolArgs: Record<string, unknown>;
     currentDateTime: string;
@@ -146,7 +148,7 @@ export async function handleIncomingMessage(
   const effectiveMessage = decision.effectiveUserMessageText;
 
   if (effectiveMessage === null) {
-    const reply = newSessionReadyText();
+    const reply = newSessionReadyText(input.text);
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
@@ -269,6 +271,7 @@ async function handleConfirmationButton(
   try {
     executionResult = await deps.runner.executeConfirmed({
       session: currentSession,
+      events: await deps.sessionRepository.listEvents(currentSession.id, input.userId),
       toolName: pendingConfirmation.toolName,
       toolArgs: pendingConfirmation.toolArgs,
       currentDateTime: now,
@@ -418,7 +421,7 @@ async function applyRunnerResult(
   }
 
   if (runnerResult.toolName === undefined) {
-    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult());
+    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult(input.text));
     return;
   }
 
@@ -484,8 +487,8 @@ async function publishReply(
   });
 }
 
-function newSessionReadyText(): string {
-  return buildNewSessionReadyText();
+function newSessionReadyText(message: string): string {
+  return buildNewSessionReadyText(detectIntexAgentReplyLanguage(message));
 }
 
 function stripDuplicateSessionPrefix(text: string): string {
@@ -519,10 +522,12 @@ function summarizeUserMessage(message: string): string {
   return `${normalized.slice(0, 117)}...`;
 }
 
-function malformedRunnerResult(): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
+function malformedRunnerResult(
+  message: string
+): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
   return {
     outcome: 'unsupported',
-    reply: buildUnsupportedCapabilitiesReply(),
+    reply: buildUnsupportedCapabilitiesReply(detectIntexAgentReplyLanguage(message)),
   };
 }
 
