@@ -16,6 +16,7 @@ import {
   extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
+  extractVideoMedia,
   extractWabaId,
   getSupportedCountries,
   normalizePhoneNumber,
@@ -840,6 +841,118 @@ describe('shared utilities', () => {
         entry: [{ changes: [{ value: { messages: [] } }] }],
       };
       expect(extractAudioMedia(payload)).toBeNull();
+    });
+  });
+
+  describe('extractVideoMedia', () => {
+    it('extracts video media info', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'video',
+                      video: {
+                        id: 'video-123',
+                        mime_type: 'video/mp4',
+                        sha256: 'ghi789',
+                        caption: 'Video caption',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractVideoMedia(payload);
+      expect(result).toEqual({
+        id: 'video-123',
+        mimeType: 'video/mp4',
+        sha256: 'ghi789',
+        caption: 'Video caption',
+      });
+    });
+
+    it('returns video media without optional fields', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'video',
+                      video: {
+                        id: 'video-123',
+                        mime_type: 'video/3gpp',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractVideoMedia(payload);
+      expect(result).toEqual({
+        id: 'video-123',
+        mimeType: 'video/3gpp',
+      });
+    });
+
+    it('returns null when video is not present', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 'text' }] } }] }],
+      };
+      expect(extractVideoMedia(payload)).toBeNull();
+    });
+
+    it('returns null when video id is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'video', video: { mime_type: 'video/mp4' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractVideoMedia(payload)).toBeNull();
+    });
+
+    it('returns null when mime_type is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'video', video: { id: 'video-123' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractVideoMedia(payload)).toBeNull();
+    });
+
+    it('returns null when messages array is empty', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
+      };
+      expect(extractVideoMedia(payload)).toBeNull();
     });
   });
 

@@ -247,6 +247,39 @@ describe('MessageItem', () => {
     expect(within(screen.getByTestId('message-item-desktop')).queryByTitle('View transcription')).not.toBeInTheDocument();
   });
 
+  it('shows transcription actions and transcript content for completed video messages', () => {
+    const onTranscriptionClick = vi.fn();
+
+    render(
+      <MessageItem
+        message={createMessage({
+          id: 'video-complete',
+          mediaType: 'video',
+          hasMedia: true,
+          text: 'Video caption',
+          transcriptionStatus: 'completed',
+          transcription: 'Completed video transcription text',
+        })}
+        accessToken="token"
+        onDelete={vi.fn()}
+        onImageClick={vi.fn()}
+        onNoteClick={vi.fn()}
+        onTranscriptionClick={onTranscriptionClick}
+        isDeleting={false}
+      />
+    );
+
+    const mobileShell = screen.getByTestId('message-item-mobile');
+    const desktopShell = screen.getByTestId('message-item-desktop');
+    expect(within(mobileShell).getByTitle('View transcription')).toBeInTheDocument();
+    expect(within(desktopShell).getByTitle('View transcription')).toBeInTheDocument();
+    expect(screen.getAllByText('Completed video transcription text').length).toBeGreaterThan(0);
+
+    fireEvent.click(within(mobileShell).getByTitle('View transcription'));
+
+    expect(onTranscriptionClick).toHaveBeenCalledTimes(1);
+  });
+
   it('shows transcribing status in mobile shell for processing audio', () => {
     render(
       <MessageItem

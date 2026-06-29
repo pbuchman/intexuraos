@@ -35,6 +35,41 @@ export interface AudioStoredEvent {
 }
 
 /**
+ * Event received from Pub/Sub when stored WhatsApp media should be transcribed.
+ * Published by whatsapp-service for media types beyond the legacy audio event.
+ */
+export interface MediaTranscriptionRequestedEvent {
+  /** Event type identifier. */
+  type: 'whatsapp.media.transcription.requested';
+
+  /** Source collection where the message is stored. */
+  messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /** Kind of stored media to transcribe. */
+  mediaKind: 'audio' | 'video';
+
+  /** IntexuraOS user ID. */
+  userId: string;
+
+  /** WhatsApp message ID. */
+  messageId: string;
+
+  /** WhatsApp media ID. */
+  mediaId: string;
+
+  /** GCS path to the media file. */
+  gcsPath: string;
+
+  /** MIME type of the media file. */
+  mimeType: string;
+
+  /** Event timestamp (ISO 8601). */
+  timestamp: string;
+}
+
+export type TranscriptionRequestEvent = AudioStoredEvent | MediaTranscriptionRequestedEvent;
+
+/**
  * Event published to Pub/Sub when transcription completes or fails.
  * Consumed by whatsapp-service to update message state.
  */
@@ -44,6 +79,9 @@ export interface TranscriptionCompletedEvent {
 
   /** Source collection where the message is stored. */
   messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /** Kind of media that was transcribed. */
+  mediaKind?: 'audio' | 'video';
 
   /** IntexuraOS user ID. */
   userId: string;

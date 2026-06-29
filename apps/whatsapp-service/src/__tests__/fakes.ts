@@ -22,6 +22,7 @@ import type {
   LinkPreviewFetcherPort,
   LinkPreviewState,
   MediaCleanupEvent,
+  MediaTranscriptionRequestedEvent,
   MediaStoragePort,
   MediaUrlInfo,
   NotificationLevel,
@@ -1514,11 +1515,13 @@ export class FakeMediaStorage implements MediaStoragePort {
 export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
   private audioStoredEvents: AudioStoredEvent[] = [];
+  private mediaTranscriptionRequestedEvents: MediaTranscriptionRequestedEvent[] = [];
   private intexMessageIngestEvents: IntexMessageIngestEvent[] = [];
   private webhookProcessEvents: WebhookProcessEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
   private extractLinkPreviewsFailureMessage: string | null = null;
   private audioStoredFailureMessage: string | null = null;
+  private mediaTranscriptionRequestedFailureMessage: string | null = null;
   private intexMessageIngestFailureMessage: string | null = null;
   private webhookProcessFailureMessage: string | null = null;
 
@@ -1537,8 +1540,27 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
+  publishMediaTranscriptionRequested(
+    event: MediaTranscriptionRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.mediaTranscriptionRequestedFailureMessage !== null) {
+      return Promise.resolve(
+        err({
+          code: 'INTERNAL_ERROR' as const,
+          message: this.mediaTranscriptionRequestedFailureMessage,
+        })
+      );
+    }
+    this.mediaTranscriptionRequestedEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
   setAudioStoredFailure(message: string): void {
     this.audioStoredFailureMessage = message;
+  }
+
+  setMediaTranscriptionRequestedFailure(message: string): void {
+    this.mediaTranscriptionRequestedFailureMessage = message;
   }
 
   publishIntexMessageIngest(event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>> {
@@ -1593,6 +1615,10 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.audioStoredEvents];
   }
 
+  getMediaTranscriptionRequestedEvents(): MediaTranscriptionRequestedEvent[] {
+    return [...this.mediaTranscriptionRequestedEvents];
+  }
+
   getIntexMessageIngestEvents(): IntexMessageIngestEvent[] {
     return [...this.intexMessageIngestEvents];
   }
@@ -1608,11 +1634,13 @@ export class FakeEventPublisher implements EventPublisherPort {
   clear(): void {
     this.mediaCleanupEvents = [];
     this.audioStoredEvents = [];
+    this.mediaTranscriptionRequestedEvents = [];
     this.intexMessageIngestEvents = [];
     this.webhookProcessEvents = [];
     this.extractLinkPreviewsEvents = [];
     this.extractLinkPreviewsFailureMessage = null;
     this.audioStoredFailureMessage = null;
+    this.mediaTranscriptionRequestedFailureMessage = null;
     this.intexMessageIngestFailureMessage = null;
     this.webhookProcessFailureMessage = null;
   }

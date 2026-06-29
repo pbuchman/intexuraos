@@ -81,7 +81,7 @@ export interface WhatsAppConnectResponse {
 /**
  * WhatsApp message media type
  */
-export type WhatsAppMediaType = 'text' | 'image' | 'audio';
+export type WhatsAppMediaType = 'text' | 'image' | 'audio' | 'video';
 
 /**
  * Transcription status for audio messages.

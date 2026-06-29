@@ -13,7 +13,11 @@
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { AudioStoredEvent, TranscriptionCompletedEvent } from './types.js';
+import type {
+  AudioStoredEvent,
+  TranscriptionCompletedEvent,
+  TranscriptionRequestEvent,
+} from './types.js';
 import type { SpeechTranscriptionPort } from './providers/transcription-provider.js';
 import type { WorkerLogger as Logger } from './__shims__/common-worker.js';
 import { formatSpeechmaticsError } from './format-error.js';
@@ -67,13 +71,14 @@ export interface TranscriptionDeps {
  * @param logger - Logger for progress tracking
  */
 export async function transcribeAudio(
-  event: AudioStoredEvent,
+  event: TranscriptionRequestEvent,
   deps: TranscriptionDeps,
   logger: Logger
 ): Promise<void> {
   // mediaId is part of AudioStoredEvent for audit traceability in consuming services,
   // but is not needed for the transcription workflow itself (GCS path identifies the file).
   const { userId, messageId, gcsPath, mimeType, messageSource } = event;
+  const mediaKind = 'mediaKind' in event ? event.mediaKind : undefined;
 
   logger.info(
     { event: 'transcription_start', userId, messageId, gcsPath },
@@ -98,7 +103,16 @@ export async function transcribeAudio(
         { event: 'signed_url_error', userId, messageId, gcsPath, error: errorMessage },
         'Failed to generate signed URL'
       );
-      await publishFailed(deps, messageSource, userId, messageId, 'unknown', errorMessage, logger);
+      await publishFailed(
+        deps,
+        messageSource,
+        mediaKind,
+        userId,
+        messageId,
+        'unknown',
+        errorMessage,
+        logger
+      );
       return;
     }
 
@@ -121,6 +135,7 @@ export async function transcribeAudio(
       await publishFailed(
         deps,
         messageSource,
+        mediaKind,
         userId,
         messageId,
         'unknown',
@@ -147,6 +162,7 @@ export async function transcribeAudio(
       await publishFailed(
         deps,
         messageSource,
+        mediaKind,
         userId,
         messageId,
         jobId,
@@ -163,7 +179,16 @@ export async function transcribeAudio(
         { event: 'job_rejected', userId, messageId, jobId, error: rawError },
         'Transcription job was rejected'
       );
-      await publishFailed(deps, messageSource, userId, messageId, jobId, formattedError, logger);
+      await publishFailed(
+        deps,
+        messageSource,
+        mediaKind,
+        userId,
+        messageId,
+        jobId,
+        formattedError,
+        logger
+      );
       return;
     }
 
@@ -178,7 +203,16 @@ export async function transcribeAudio(
         { event: 'transcript_error', userId, messageId, jobId, error: rawError },
         'Failed to fetch transcript'
       );
-      await publishFailed(deps, messageSource, userId, messageId, jobId, formattedError, logger);
+      await publishFailed(
+        deps,
+        messageSource,
+        mediaKind,
+        userId,
+        messageId,
+        jobId,
+        formattedError,
+        logger
+      );
       return;
     }
 
@@ -196,6 +230,9 @@ export async function transcribeAudio(
     };
     if (messageSource !== undefined) {
       completedEvent.messageSource = messageSource;
+    }
+    if (mediaKind !== undefined) {
+      completedEvent.mediaKind = mediaKind;
     }
     if (summary !== undefined) {
       completedEvent.summary = summary;
@@ -229,7 +266,16 @@ export async function transcribeAudio(
       { event: 'unexpected_error', userId, messageId, error: errorMessage },
       'Unexpected error during transcription'
     );
-    await publishFailed(deps, messageSource, userId, messageId, 'unknown', errorMessage, logger);
+    await publishFailed(
+      deps,
+      messageSource,
+      mediaKind,
+      userId,
+      messageId,
+      'unknown',
+      errorMessage,
+      logger
+    );
   }
 }
 
@@ -239,6 +285,7 @@ export async function transcribeAudio(
 async function publishFailed(
   deps: TranscriptionDeps,
   messageSource: AudioStoredEvent['messageSource'],
+  mediaKind: TranscriptionCompletedEvent['mediaKind'],
   userId: string,
   messageId: string,
   jobId: string,
@@ -256,6 +303,9 @@ async function publishFailed(
   };
   if (messageSource !== undefined) {
     failedEvent.messageSource = messageSource;
+  }
+  if (mediaKind !== undefined) {
+    failedEvent.mediaKind = mediaKind;
   }
 
   const publishResult = await deps.publishEvent(failedEvent);

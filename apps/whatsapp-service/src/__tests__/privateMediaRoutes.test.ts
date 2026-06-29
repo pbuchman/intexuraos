@@ -154,6 +154,53 @@ describe('Private WhatsApp Media Routes', () => {
     expect(body.data.media.thumbnailGcsPath).toBeUndefined();
   });
 
+  it('uploads private video originals without generating thumbnails', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24video&mxcUri=mxc%3A%2F%2Fhome-dev%2Fvideo&mimeType=video%2Fmp4&fileName=clip.mp4&mediaId=home-dev-video',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('video-bytes'),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: {
+        media: {
+          mxcUri: string;
+          mimeType: string;
+          fileName: string;
+          sizeBytes: number;
+          storageStatus: string;
+          gcsPath: string;
+          thumbnailGcsPath?: string;
+          storedMimeType: string;
+          storedSizeBytes: number;
+          storedAt: string;
+        };
+      };
+    };
+    const messageId = createPrivateWhatsAppMessageId('private-source-123', '$video');
+    expect(body.data.media).toStrictEqual({
+      mxcUri: 'mxc://home-dev/video',
+      mimeType: 'video/mp4',
+      fileName: 'clip.mp4',
+      sizeBytes: 'video-bytes'.length,
+      storageStatus: 'stored',
+      gcsPath: `whatsapp/private/user-123/${messageId}/home-dev-video.mp4`,
+      storedMimeType: 'video/mp4',
+      storedSizeBytes: 'video-bytes'.length,
+      storedAt: expect.any(String),
+    });
+    expect(ctx.mediaStorage.getFile(body.data.media.gcsPath)?.buffer.toString()).toBe(
+      'video-bytes'
+    );
+    expect(body.data.media.thumbnailGcsPath).toBeUndefined();
+  });
+
   it('rejects uploads for unknown private source accounts', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
@@ -258,7 +305,7 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('rejects uploads when mimeType is not an image', async () => {
+  it('rejects uploads when mimeType is not image, audio, or video', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
       url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=application%2Fpdf&fileName=image.pdf&mediaId=image',

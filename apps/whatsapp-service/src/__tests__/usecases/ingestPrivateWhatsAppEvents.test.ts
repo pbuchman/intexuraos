@@ -10,6 +10,7 @@ import {
   type IngestPrivateWhatsAppEventInput,
   type IngestPrivateWhatsAppEventsInput,
   type MediaCleanupEvent,
+  type MediaTranscriptionRequestedEvent,
   type PrivateWhatsAppAccount,
   type PrivateWhatsAppAggregateRebuildInput,
   type PrivateWhatsAppAggregateRebuildResult,
@@ -197,7 +198,9 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
 
 class TestEventPublisher implements EventPublisherPort {
   readonly audioStoredEvents: AudioStoredEvent[] = [];
+  readonly mediaTranscriptionRequestedEvents: MediaTranscriptionRequestedEvent[] = [];
   failNextAudioStored = false;
+  failNextMediaTranscriptionRequested = false;
 
   publishMediaCleanup(_event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     return Promise.resolve(ok(undefined));
@@ -209,6 +212,19 @@ class TestEventPublisher implements EventPublisherPort {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Audio publish failed' }));
     }
     this.audioStoredEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishMediaTranscriptionRequested(
+    event: MediaTranscriptionRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.failNextMediaTranscriptionRequested) {
+      this.failNextMediaTranscriptionRequested = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Media transcription publish failed' })
+      );
+    }
+    this.mediaTranscriptionRequestedEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
@@ -525,6 +541,44 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
 
     expect(result.ok).toBe(true);
     expect(eventPublisher.audioStoredEvents).toEqual([]);
+  });
+
+  it('publishes private video transcription jobs only for enabled chats and created events', async () => {
+    repository.chatTranscriptionEnabled = true;
+    const videoEvent = createEvent({
+      matrixEventId: '$video-event-1',
+      message: {
+        direction: 'incoming',
+        type: 'video',
+        media: {
+          mxcUri: 'mxc://home-dev/video-event-1',
+          mimeType: 'video/mp4',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message-1/video.mp4',
+          storedMimeType: 'video/mp4',
+          storedSizeBytes: 4321,
+        },
+      },
+    });
+
+    const firstResult = await useCase.execute(createInput({ events: [videoEvent] }), logger);
+    const duplicateResult = await useCase.execute(createInput({ events: [videoEvent] }), logger);
+
+    expect(firstResult.ok).toBe(true);
+    expect(duplicateResult.ok).toBe(true);
+    expect(eventPublisher.mediaTranscriptionRequestedEvents).toEqual([
+      {
+        type: 'whatsapp.media.transcription.requested',
+        messageSource: 'private_whatsapp',
+        mediaKind: 'video',
+        userId: 'user-123',
+        messageId: 'message-1',
+        mediaId: 'mxc://home-dev/video-event-1',
+        gcsPath: 'whatsapp/private/user-123/message-1/video.mp4',
+        mimeType: 'video/mp4',
+        timestamp: expect.any(String),
+      },
+    ]);
   });
 
   it('returns a persistence error when publishing a private audio transcription job fails', async () => {

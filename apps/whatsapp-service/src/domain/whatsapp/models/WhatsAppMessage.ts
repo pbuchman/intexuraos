@@ -2,13 +2,13 @@ import type { LinkPreviewState } from './LinkPreview.js';
 
 /**
  * Domain model for stored WhatsApp messages.
- * Represents a text, image, or audio message received via WhatsApp webhook.
+ * Represents a text, image, audio, or video message received via WhatsApp webhook.
  */
 
 /**
  * Type of WhatsApp message content.
  */
-export type WhatsAppMediaType = 'text' | 'image' | 'audio';
+export type WhatsAppMediaType = 'text' | 'image' | 'audio' | 'video';
 
 /**
  * Media information from WhatsApp webhook.

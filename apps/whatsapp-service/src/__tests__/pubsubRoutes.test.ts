@@ -1487,6 +1487,34 @@ describe('Pub/Sub Routes', () => {
       });
     };
 
+    const setStoredVideoMessage = (
+      overrides: Partial<Parameters<FakeWhatsAppMessageRepository['setMessage']>[0]> = {}
+    ): void => {
+      messageRepository.setMessage({
+        id: 'stored-video-1',
+        userId: 'user-video',
+        waMessageId: 'wamid.video.1',
+        fromNumber: '15551234567',
+        toNumber: '15557654321',
+        text: 'Original video caption',
+        mediaType: 'video',
+        media: {
+          id: 'media-video-1',
+          mimeType: 'video/mp4',
+          fileSize: 4321,
+        },
+        gcsPath: 'whatsapp/user-video/wamid.video.1/media-video-1.mp4',
+        metadata: {
+          senderName: 'Test User',
+          phoneNumberId: '123456789012345',
+        },
+        timestamp: '1782669600',
+        receivedAt: '2026-06-28T09:59:00.000Z',
+        webhookEventId: 'event-video-1',
+        ...overrides,
+      });
+    };
+
     const storePrivateAudioMessage = async (
       overrides: {
         matrixEventId?: string;
@@ -1891,6 +1919,83 @@ describe('Pub/Sub Routes', () => {
           messageText: 'Transcription:\nBuy milk and call Joanna.',
           sentAt: expect.any(String),
           expiresAt: expect.any(Number),
+        },
+      ]);
+    });
+
+    it('stores a completed video transcription and sends it to Intex as video transcript', async () => {
+      setStoredVideoMessage();
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'public_whatsapp',
+        mediaKind: 'video',
+        userId: 'user-video',
+        messageId: 'stored-video-1',
+        jobId: 'job-video-123',
+        status: 'completed',
+        transcript: 'Video transcript text.',
+        timestamp: '2026-06-28T10:05:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageRepository.getMessageSync('stored-video-1')?.transcription).toEqual({
+        status: 'completed',
+        jobId: 'job-video-123',
+        text: 'Video transcript text.',
+        completedAt: '2026-06-28T10:05:00.000Z',
+      });
+      expect(eventPublisher.getIntexMessageIngestEvents()).toEqual([
+        {
+          type: 'intex.message.ingest',
+          userId: 'user-video',
+          messageId: 'wamid.video.1',
+          sourceType: 'whatsapp_video_transcript',
+          text: 'Video transcript text.',
+          whatsappSender: '15551234567',
+          timestamp: '2026-06-28T10:05:00.000Z',
+        },
+      ]);
+    });
+
+    it('falls back to stored video media type when completed event omits mediaKind', async () => {
+      setStoredVideoMessage();
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'public_whatsapp',
+        userId: 'user-video',
+        messageId: 'stored-video-1',
+        jobId: 'job-video-123',
+        status: 'completed',
+        transcript: 'Video transcript without media kind.',
+        timestamp: '2026-06-28T10:05:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toEqual([
+        {
+          type: 'intex.message.ingest',
+          userId: 'user-video',
+          messageId: 'wamid.video.1',
+          sourceType: 'whatsapp_video_transcript',
+          text: 'Video transcript without media kind.',
+          whatsappSender: '15551234567',
+          timestamp: '2026-06-28T10:05:00.000Z',
         },
       ]);
     });

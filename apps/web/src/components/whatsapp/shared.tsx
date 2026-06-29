@@ -52,9 +52,9 @@ export function TextWithLinks({ text }: { text: string }): React.JSX.Element {
 }
 
 // Media type filter config
-export type WhatsAppMediaType = 'all' | 'text' | 'image' | 'audio';
+export type WhatsAppMediaType = 'all' | 'text' | 'image' | 'audio' | 'video';
 
-export const WHATSAPP_MEDIA_TYPES: WhatsAppMediaType[] = ['all', 'text', 'image', 'audio'];
+export const WHATSAPP_MEDIA_TYPES: WhatsAppMediaType[] = ['all', 'text', 'image', 'audio', 'video'];
 
 export const WHATSAPP_MEDIA_FILTER_CONFIG: Record<
   WhatsAppMediaType,
@@ -83,6 +83,12 @@ export const WHATSAPP_MEDIA_FILTER_CONFIG: Record<
     dotClass: 'bg-purple-500',
     activeClass:
       'border-purple-500 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-900/30 dark:text-purple-400',
+  },
+  video: {
+    label: 'Video',
+    dotClass: 'bg-amber-500',
+    activeClass:
+      'border-amber-500 bg-amber-50 text-amber-700 dark:border-amber-400 dark:bg-amber-900/30 dark:text-amber-400',
   },
 };
 

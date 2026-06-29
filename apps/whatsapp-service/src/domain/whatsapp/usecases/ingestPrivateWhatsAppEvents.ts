@@ -141,7 +141,7 @@ export class IngestPrivateWhatsAppEventsUseCase {
       };
       messages.push(result);
 
-      const publishResult = await publishPrivateAudioStoredIfNeeded({
+      const publishResult = await publishPrivateTranscriptionRequestIfNeeded({
         event,
         outcome,
         storeInput,
@@ -168,7 +168,7 @@ export class IngestPrivateWhatsAppEventsUseCase {
   }
 }
 
-interface PublishPrivateAudioStoredInput {
+interface PublishPrivateTranscriptionRequestInput {
   event: IngestPrivateWhatsAppEventInput;
   outcome: PrivateWhatsAppIngestOutcome;
   storeInput: StorePrivateWhatsAppMessageInput;
@@ -176,14 +176,14 @@ interface PublishPrivateAudioStoredInput {
   logger: Logger;
 }
 
-async function publishPrivateAudioStoredIfNeeded(
-  input: PublishPrivateAudioStoredInput
+async function publishPrivateTranscriptionRequestIfNeeded(
+  input: PublishPrivateTranscriptionRequestInput
 ): Promise<Result<void, WhatsAppError>> {
   const { event, outcome, storeInput, eventPublisher, logger } = input;
   if (outcome.outcome !== 'created' || outcome.chatTranscriptionEnabled !== true) {
     return ok(undefined);
   }
-  if (storeInput.message.type !== 'audio') {
+  if (storeInput.message.type !== 'audio' && storeInput.message.type !== 'video') {
     return ok(undefined);
   }
   const media = storeInput.message.media;
@@ -193,25 +193,40 @@ async function publishPrivateAudioStoredIfNeeded(
     return ok(undefined);
   }
 
-  const publishResult = await eventPublisher.publishAudioStored({
-    type: 'whatsapp.audio.stored',
-    messageSource: 'private_whatsapp',
-    userId: storeInput.userId,
-    messageId: outcome.messageId,
-    mediaId: media.mxcUri,
-    gcsPath,
-    mimeType,
-    timestamp: new Date().toISOString(),
-  });
+  const timestamp = new Date().toISOString();
+  const publishResult =
+    storeInput.message.type === 'audio'
+      ? await eventPublisher.publishAudioStored({
+          type: 'whatsapp.audio.stored',
+          messageSource: 'private_whatsapp',
+          userId: storeInput.userId,
+          messageId: outcome.messageId,
+          mediaId: media.mxcUri,
+          gcsPath,
+          mimeType,
+          timestamp,
+        })
+      : await eventPublisher.publishMediaTranscriptionRequested({
+          type: 'whatsapp.media.transcription.requested',
+          messageSource: 'private_whatsapp',
+          mediaKind: 'video',
+          userId: storeInput.userId,
+          messageId: outcome.messageId,
+          mediaId: media.mxcUri,
+          gcsPath,
+          mimeType,
+          timestamp,
+        });
   if (!publishResult.ok) {
     logger.error(
       {
         matrixEventId: event.matrixEventId,
         sourceAccountId: storeInput.sourceAccountId,
         messageId: outcome.messageId,
+        mediaKind: storeInput.message.type,
         error: publishResult.error,
       },
-      'Failed to publish private WhatsApp audio transcription event'
+      'Failed to publish private WhatsApp media transcription event'
     );
     return err(publishResult.error);
   }

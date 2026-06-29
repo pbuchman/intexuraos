@@ -51,7 +51,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         receivedAt: { type: 'string', format: 'date-time' },
                         mediaType: {
                           type: 'string',
-                          enum: ['text', 'image', 'audio'],
+                          enum: ['text', 'image', 'audio', 'video'],
                           description: 'Type of message content',
                         },
                         hasMedia: {
@@ -66,11 +66,11 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         transcriptionStatus: {
                           type: 'string',
                           enum: ['pending', 'processing', 'completed', 'failed'],
-                          description: 'Transcription status for audio messages',
+                          description: 'Transcription status for audio/video messages',
                         },
                         transcription: {
                           type: 'string',
-                          description: 'Transcription text for completed audio messages',
+                          description: 'Transcription text for completed audio/video messages',
                         },
                         transcriptionError: {
                           type: 'object',
@@ -200,7 +200,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           caption: msg.caption ?? null,
         };
 
-        // Add transcription fields for audio messages
+        // Add transcription fields for audio/video messages
         if (msg.transcription !== undefined) {
           base['transcriptionStatus'] = msg.transcription.status;
           base['transcription'] = msg.transcription.text;

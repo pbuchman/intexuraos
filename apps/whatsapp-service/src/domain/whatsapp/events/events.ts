@@ -79,6 +79,57 @@ export interface AudioStoredEvent {
 }
 
 /**
+ * Event published after inbound WhatsApp media has been stored.
+ * Triggers the transcription worker for audio and video inputs.
+ */
+export interface MediaTranscriptionRequestedEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'whatsapp.media.transcription.requested';
+
+  /**
+   * Source collection where the message is stored.
+   */
+  messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /**
+   * Kind of media the worker should transcribe.
+   */
+  mediaKind: 'audio' | 'video';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * Stored WhatsApp message document ID.
+   */
+  messageId: string;
+
+  /**
+   * WhatsApp media ID.
+   */
+  mediaId: string;
+
+  /**
+   * GCS path to the original media file.
+   */
+  gcsPath: string;
+
+  /**
+   * MIME type of the stored media file.
+   */
+  mimeType: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
  * Event received after the transcription worker completes an audio job.
  */
 export interface TranscriptionCompletedEvent {
@@ -91,6 +142,11 @@ export interface TranscriptionCompletedEvent {
    * Source collection where the message is stored.
    */
   messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /**
+   * Kind of media that was transcribed.
+   */
+  mediaKind?: 'audio' | 'video';
 
   /**
    * IntexuraOS user ID.
@@ -219,6 +275,7 @@ export type IntexMessageSourceType =
   | 'whatsapp_text'
   | 'whatsapp_image'
   | 'whatsapp_audio_transcript'
+  | 'whatsapp_video_transcript'
   | 'whatsapp_button';
 
 /**
@@ -312,6 +369,7 @@ export interface ExtractLinkPreviewsEvent {
 export type WhatsAppEvent =
   | MediaCleanupEvent
   | AudioStoredEvent
+  | MediaTranscriptionRequestedEvent
   | TranscriptionCompletedEvent
   | IntexMessageIngestEvent
   | SendMessageEvent

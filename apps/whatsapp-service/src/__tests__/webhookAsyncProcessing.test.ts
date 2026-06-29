@@ -12,6 +12,7 @@ import {
   createReactionWebhookPayload,
   createReplyWebhookPayload,
   createSignature,
+  createVideoWebhookPayload,
   createWebhookPayload,
   describe,
   expect,
@@ -45,6 +46,27 @@ const SAMPLE_IMAGE_BUFFER = Buffer.from([
   0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xda,
   0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0xfb, 0xd5, 0xfb, 0xd5, 0xff, 0xd9,
 ]);
+
+interface MutableVideoWebhookPayload {
+  entry: {
+    changes: {
+      value: {
+        metadata: {
+          display_phone_number: string;
+          phone_number_id?: string;
+        };
+        messages: {
+          video?: {
+            id: string;
+            mime_type: string;
+            sha256?: string;
+            caption?: string;
+          };
+        }[];
+      };
+    }[];
+  }[];
+}
 
 describe('Webhook async processing', () => {
   const ctx = setupTestContext();
@@ -734,6 +756,151 @@ describe('Webhook async processing', () => {
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
       expect(sentMessages).toHaveLength(0);
     });
+  });
+
+  describe('video message processing', () => {
+    it('stores video media, publishes transcription request, and waits before Intex ingest', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+      const mediaId = 'test-video-id-12345';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setMediaUrl(mediaId, {
+        url: 'https://cdn.example.com/video.mp4',
+        mimeType: 'video/mp4',
+        fileSize: 2000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://cdn.example.com/video.mp4',
+        Buffer.from([0x00, 0x01, 0x02])
+      );
+
+      const payload = createVideoWebhookPayload({ mediaId, caption: 'video note' });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const messages = ctx.messageRepository.getAll();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        userId,
+        waMessageId: 'wamid.video.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDVBNzYwREQ0RjMwMjYzMDcA',
+        mediaType: 'video',
+        text: 'video note',
+        caption: 'video note',
+        media: {
+          id: mediaId,
+          mimeType: 'video/mp4',
+          fileSize: 3,
+          sha256: 'video789abc',
+        },
+      });
+      expect(ctx.mediaStorage.getAllFiles().size).toBe(1);
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()[0]).toMatchObject({
+        type: 'whatsapp.media.transcription.requested',
+        mediaKind: 'video',
+        messageSource: 'public_whatsapp',
+        userId,
+        messageId: messages[0]?.id,
+        mediaId,
+        gcsPath: messages[0]?.gcsPath,
+        mimeType: 'video/mp4',
+      });
+
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages).toHaveLength(0);
+    });
+
+    it('ignores video messages without media info', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      const payload = createVideoWebhookPayload() as MutableVideoWebhookPayload;
+      const message = payload.entry[0]?.changes[0]?.value.messages[0];
+      if (message === undefined) {
+        throw new Error('Expected video message in test payload');
+      }
+      delete message.video;
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason).toEqual({
+        code: 'NO_VIDEO_MEDIA',
+        message: 'Video message has no media info',
+      });
+      expect(ctx.messageRepository.getAll()).toHaveLength(0);
+    });
+
+    it('marks the webhook event failed when video processing fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setFailGetMediaUrl(true);
+
+      const payload = createVideoWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Failed to get video URL');
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
+    });
+
   });
 
   describe('text message error handling', () => {

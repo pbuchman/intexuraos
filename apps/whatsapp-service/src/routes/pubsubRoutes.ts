@@ -8,6 +8,7 @@ import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import type {
   ExtractLinkPreviewsEvent,
+  IntexMessageSourceType,
   MediaCleanupEvent,
   PrivateWhatsAppTranscriptionState,
   SendMessageEvent,
@@ -42,6 +43,14 @@ function maskPhoneNumber(phone: string): string {
 
 const TRANSCRIPTION_FAILURE_REPLY =
   'I could not transcribe this voice message. Please try again or send text.';
+
+function getTranscriptSourceType(
+  eventData: TranscriptionCompletedEvent,
+  message: WhatsAppMessage
+): IntexMessageSourceType {
+  const mediaKind = eventData.mediaKind ?? (message.mediaType === 'video' ? 'video' : 'audio');
+  return mediaKind === 'video' ? 'whatsapp_video_transcript' : 'whatsapp_audio_transcript';
+}
 
 function formatTranscriptionReply(transcript: string): string {
   return `Transcription:\n${transcript}`;
@@ -875,7 +884,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             type: 'intex.message.ingest',
             userId: eventData.userId,
             messageId: message.waMessageId,
-            sourceType: 'whatsapp_audio_transcript',
+            sourceType: getTranscriptSourceType(eventData, message),
             text: completedTranscriptText,
             whatsappSender: message.fromNumber,
             timestamp: eventData.timestamp,

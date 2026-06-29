@@ -13,6 +13,10 @@ const MIME_TO_EXTENSION: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
+  // Video
+  'video/mp4': 'mp4',
+  'video/3gpp': '3gp',
+  'video/quicktime': 'mov',
 };
 
 /**

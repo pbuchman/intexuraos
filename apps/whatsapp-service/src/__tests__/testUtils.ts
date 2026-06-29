@@ -403,6 +403,56 @@ export function createAudioWebhookPayload(options?: { mediaId?: string }): objec
 }
 
 /**
+ * Create a WhatsApp video message webhook payload.
+ * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
+ */
+export function createVideoWebhookPayload(options?: { mediaId?: string; caption?: string }): object {
+  const mediaId = options?.mediaId ?? 'test-video-id-12345';
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: 'wamid.video.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDVBNzYwREQ0RjMwMjYzMDcA',
+                  timestamp: '1234567890',
+                  type: 'video',
+                  video: {
+                    id: mediaId,
+                    mime_type: 'video/mp4',
+                    sha256: 'video789abc',
+                    ...(options?.caption !== undefined ? { caption: options.caption } : {}),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
  * Create a WhatsApp reaction webhook payload.
  * Used to test unsupported reaction handling.
  */
