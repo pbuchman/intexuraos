@@ -4,6 +4,7 @@
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import type {
   ExtractLinkPreviewsEvent,
@@ -231,6 +232,19 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         if (parsedType !== 'whatsapp.message.send') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
+        }
+
+        if (typeof eventData.userId !== 'string' || eventData.userId.trim() === '') {
+          request.log.warn(
+            {
+              messageId: body.message.messageId,
+              correlationId:
+                typeof eventData.correlationId === 'string' ? eventData.correlationId : undefined,
+              [SKIP_SENTRY_KEY]: true,
+            },
+            'Invalid send message event: userId is required'
+          );
+          return await reply.fail('INVALID_REQUEST', 'Invalid send message event');
         }
 
         request.log.info(

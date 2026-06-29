@@ -331,6 +331,53 @@ describe('Pub/Sub Routes', () => {
       expect(messageSender.getSentMessages()).toHaveLength(0);
     });
 
+    it('returns 400 before phone lookup when userId is missing', async () => {
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        message: 'Hello',
+        correlationId: 'corr-missing-user',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Invalid send message event');
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('returns 400 before phone lookup when userId and correlationId are missing', async () => {
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        message: 'Hello',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(responseBody.error.message).toBe('Invalid send message event');
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
     it('returns 500 when message sending fails', async () => {
       await userMappingRepository.saveMapping('user-123', ['+48123456789']);
       messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error' });
