@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { Task, TaskResult } from '../../types/task.js';
 import type { CreateTaskRequest } from '../../types/api.js';
 import type { WebhookClient } from '../webhook-client.js';
@@ -458,7 +459,10 @@ export async function checkForResult(
 
     return undefined;
   } catch (error) {
-    logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
+    logger.warn(
+      { taskId: task.taskId, error, [SKIP_SENTRY_KEY]: true },
+      'Failed to check for task result'
+    );
     return undefined;
   }
 }
