@@ -17,6 +17,9 @@ export async function handleLinearError(
   if (error.code === 'RATE_LIMIT') {
     return await reply.fail('DOWNSTREAM_ERROR', error.message);
   }
+  if (error.code === 'UPSTREAM_UNAVAILABLE') {
+    return await reply.fail('SERVICE_UNAVAILABLE', error.message);
+  }
   if (error.code === 'INTERNAL_ERROR') {
     return await reply.fail('INTERNAL_ERROR', error.message);
   }
