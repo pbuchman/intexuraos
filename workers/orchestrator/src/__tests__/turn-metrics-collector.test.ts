@@ -756,7 +756,7 @@ describe('TurnMetricsCollector', () => {
       await collector.collectAndPublish(params);
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task-123', status: 500 }),
+        expect.objectContaining({ taskId: 'task-123', status: 500, _skipSentry: true }),
         'Turn metrics publish failed (non-fatal)'
       );
 
