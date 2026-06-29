@@ -477,7 +477,7 @@ Please check worker availability and retry manually if needed.`;
         userId,
         message: formatTaskDispatchBlockedMessage(info),
         ctaUrl,
-        important: true,
+        important: false,
       });
 
       if (!result.ok) {

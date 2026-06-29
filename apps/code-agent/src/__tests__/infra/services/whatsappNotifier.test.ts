@@ -644,7 +644,7 @@ describe('WhatsAppNotifier', () => {
             displayText: 'View Task',
             url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',
           },
-          important: true,
+          important: false,
         })
       );
       expect(callArgs.message).toContain('Code task dispatch blocked');
