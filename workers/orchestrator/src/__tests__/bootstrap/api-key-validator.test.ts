@@ -239,6 +239,8 @@ describe('logWorkerAuthStartupStatus', () => {
       ([level, , message]) => level === 'warn' && message === 'Code worker auth not ready'
     );
     expect(claudeWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: expired-token startup warn must not page.
+    expect(claudeWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
   });
 
   it('logs info for codex when the codex state is active', () => {
@@ -280,6 +282,8 @@ describe('logWorkerAuthStartupStatus', () => {
       ([level, , message]) => level === 'warn' && message === 'Codex worker auth not ready'
     );
     expect(codexWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: expired-token startup warn must not page.
+    expect(codexWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
   });
 });
 
@@ -331,6 +335,9 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
         level === 'warn' && message === 'Code worker auth not ready at startup'
     );
     expect(claudeWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: this is the exact warn that produced the issue;
+    // it must carry `_skipSentry` so the Pino transport does not forward it.
+    expect(claudeWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
   });
 
   it('logs info for codex when the codex state is active', async () => {
@@ -372,5 +379,7 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
         level === 'warn' && message === 'Codex worker auth not ready at startup'
     );
     expect(codexWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: same suppression contract as the Claude warn.
+    expect(codexWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
   });
 });
