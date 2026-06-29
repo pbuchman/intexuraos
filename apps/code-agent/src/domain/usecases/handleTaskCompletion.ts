@@ -1482,93 +1482,16 @@ export async function handleTaskCompletion(
 
               await applyReadyToMergeLabel(prNumber);
             } else {
-              // Best-effort: remove stale review-outcome label from the associated Linear issue.
-              // A prior passing review may have set ready-to-merge / ready-to-implement;
-              // now that remediation is needed, clear it so the UI no longer shows merge-ready.
-              try {
-                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
-                let targetLinearIssueId: string | undefined; // @allow-undefined-type -- let binding requires union, not optional property
-                let targetUserId: string;
-                let labelToRemove: string;
-
-                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-                  targetLinearIssueId = originResult.value.linearIssueId;
-                  targetUserId = originResult.value.userId;
-                  labelToRemove = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
-                } else {
-                  targetLinearIssueId = task.linearIssueId;
-                  targetUserId = task.userId;
-                  labelToRemove = 'ready-to-merge';
-                }
-
-                if (targetLinearIssueId !== undefined) {
-                  await linearIssueService.removeLabel(targetUserId, targetLinearIssueId, labelToRemove);
-                  requestLog.info({ taskId, prNumber, label: labelToRemove, linearIssueId: targetLinearIssueId },
-                    'Removed stale review-outcome label after negative review');
-
-                  // Passing [] clears all label flags in the summary (same pattern as handlePrClose).
-                  // Safe because latestReviewNeedsRemediation is already true, which independently
-                  // blocks the merge-readiness check in deriveAggregateStatusFromSummary.
-                  const { groupSummaryRepo: summaryRepoForRemoval } = getServices();
-                  if (summaryRepoForRemoval !== undefined) {
-                    void summaryRepoForRemoval.recomputeWithLabels(
-                      targetUserId, targetLinearIssueId, [], completedAt.toISOString(),
-                    ).catch((recomputeErr: unknown) => {
-                      requestLog.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
-                        'Failed to recompute group summary after label removal (best-effort)');
-                    });
-                  }
-                }
-              } catch (labelRemovalError: unknown) {
-                requestLog.warn({ error: labelRemovalError, taskId, prNumber },
-                  'Failed to remove stale review-outcome label (best-effort)');
-              }
-
-              const { createRemediationTaskFn, logger: remediationLogger } = getServices();
-              if (createRemediationTaskFn !== undefined) {
-                const remediationResult = await createRemediationTaskFn(
-                  remediationLogger,
+              if (task.prMergedAt !== undefined || task.prClosedAt !== undefined) {
+                requestLog.info(
                   {
-                    repository: task.repository,
+                    taskId,
                     prNumber,
-                    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
-                    senderLogin: task.repository.split('/')[0] ?? task.userId,
-                    /* v8 ignore stop @preserve */
-                    workerType: 'auto',
-                    eventId: taskId,
-                    ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
-                    ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-                    ...(task.prBranch !== undefined && { prBranch: task.prBranch }),
+                    hasPrMergedAt: task.prMergedAt !== undefined,
+                    hasPrClosedAt: task.prClosedAt !== undefined,
                   },
+                  'Skipping remediation task creation because PR is already merged or closed',
                 );
-                if (remediationResult.ok) {
-                  requestLog.info(
-                    { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
-                    'Created remediation task from review task-complete',
-                  );
-                  recordRemediationDecision({
-                    repository: task.repository,
-                    prNumber,
-                    userId: task.userId,
-                    required: true,
-                    signal: remediationSignal,
-                    taskId: remediationResult.value.taskId,
-                  });
-                } else {
-                  requestLog.warn(
-                    { taskId, prNumber, error: remediationResult.error },
-                    'Failed to create remediation task from review task-complete (best-effort)',
-                  );
-                  recordRemediationDecision({
-                    repository: task.repository,
-                    prNumber,
-                    userId: task.userId,
-                    required: true,
-                    signal: remediationSignal,
-                  });
-                }
-              } else {
-                requestLog.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
                 recordRemediationDecision({
                   repository: task.repository,
                   prNumber,
@@ -1576,6 +1499,102 @@ export async function handleTaskCompletion(
                   required: true,
                   signal: remediationSignal,
                 });
+              } else {
+                // Best-effort: remove stale review-outcome label from the associated Linear issue.
+                // A prior passing review may have set ready-to-merge / ready-to-implement;
+                // now that remediation is needed, clear it so the UI no longer shows merge-ready.
+                try {
+                  const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                  let targetLinearIssueId: string | undefined; // @allow-undefined-type -- let binding requires union, not optional property
+                  let targetUserId: string;
+                  let labelToRemove: string;
+
+                  if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                    targetLinearIssueId = originResult.value.linearIssueId;
+                    targetUserId = originResult.value.userId;
+                    labelToRemove = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  } else {
+                    targetLinearIssueId = task.linearIssueId;
+                    targetUserId = task.userId;
+                    labelToRemove = 'ready-to-merge';
+                  }
+
+                  if (targetLinearIssueId !== undefined) {
+                    await linearIssueService.removeLabel(targetUserId, targetLinearIssueId, labelToRemove);
+                    requestLog.info({ taskId, prNumber, label: labelToRemove, linearIssueId: targetLinearIssueId },
+                      'Removed stale review-outcome label after negative review');
+
+                    // Passing [] clears all label flags in the summary (same pattern as handlePrClose).
+                    // Safe because latestReviewNeedsRemediation is already true, which independently
+                    // blocks the merge-readiness check in deriveAggregateStatusFromSummary.
+                    const { groupSummaryRepo: summaryRepoForRemoval } = getServices();
+                    if (summaryRepoForRemoval !== undefined) {
+                      void summaryRepoForRemoval.recomputeWithLabels(
+                        targetUserId, targetLinearIssueId, [], completedAt.toISOString(),
+                      ).catch((recomputeErr: unknown) => {
+                        requestLog.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                          'Failed to recompute group summary after label removal (best-effort)');
+                      });
+                    }
+                  }
+                } catch (labelRemovalError: unknown) {
+                  requestLog.warn({ error: labelRemovalError, taskId, prNumber },
+                    'Failed to remove stale review-outcome label (best-effort)');
+                }
+
+                const { createRemediationTaskFn, logger: remediationLogger } = getServices();
+                if (createRemediationTaskFn !== undefined) {
+                  const remediationResult = await createRemediationTaskFn(
+                    remediationLogger,
+                    {
+                      repository: task.repository,
+                      prNumber,
+                      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
+                      senderLogin: task.repository.split('/')[0] ?? task.userId,
+                      /* v8 ignore stop @preserve */
+                      workerType: 'auto',
+                      eventId: taskId,
+                      ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
+                      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                      ...(task.prBranch !== undefined && { prBranch: task.prBranch }),
+                    },
+                  );
+                  if (remediationResult.ok) {
+                    requestLog.info(
+                      { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
+                      'Created remediation task from review task-complete',
+                    );
+                    recordRemediationDecision({
+                      repository: task.repository,
+                      prNumber,
+                      userId: task.userId,
+                      required: true,
+                      signal: remediationSignal,
+                      taskId: remediationResult.value.taskId,
+                    });
+                  } else {
+                    requestLog.warn(
+                      { taskId, prNumber, error: remediationResult.error },
+                      'Failed to create remediation task from review task-complete (best-effort)',
+                    );
+                    recordRemediationDecision({
+                      repository: task.repository,
+                      prNumber,
+                      userId: task.userId,
+                      required: true,
+                      signal: remediationSignal,
+                    });
+                  }
+                } else {
+                  requestLog.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                  });
+                }
               }
             }
           } catch (remediationError: unknown) {
