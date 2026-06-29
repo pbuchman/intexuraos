@@ -4,12 +4,14 @@
 
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Timestamp } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
 import { resetServices, setServices, type ServiceContainer } from '../../services.js';
 import { processSentryWebhook, type ProcessSentryWebhookInput } from '../../domain/usecases/processSentryWebhook.js';
 import { verifySentrySignature } from '../../infra/sentry-webhook-auth.js';
 import { parseSentryIssueEvent } from '../../infra/sentry-event-parser.js';
 import { createMockLogger } from '../helpers/mockLogger.js';
+import { createFakeTask } from '../helpers/mockFirestore.js';
 
 const WEBHOOK_SECRET = 'sentry-webhook-secret';
 const ORCHESTRATOR_SECRET = 'orchestrator-secret';
@@ -100,7 +102,7 @@ interface MocksShape {
   };
   workerSettingsRepo: { getSettings: ReturnType<typeof vi.fn> };
   linearIssueService: { ensureIssueExists: ReturnType<typeof vi.fn> };
-  codeTaskRepo: { create: ReturnType<typeof vi.fn> };
+  codeTaskRepo: { create: ReturnType<typeof vi.fn>; findById?: ReturnType<typeof vi.fn> };
   taskEnqueueService: { enqueue: ReturnType<typeof vi.fn> };
 }
 
@@ -168,6 +170,11 @@ function installMocks(overrides: Partial<MocksShape> = {}): MocksShape {
     }),
   };
   const codeTaskRepo = overrides.codeTaskRepo ?? {
+    findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+      id: 'task_existing',
+      status: 'queued',
+      agentType: 'sentry',
+    }))),
     create: vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
       id: input['id'],
       ...input,
@@ -334,6 +341,253 @@ describe('processSentryWebhook', () => {
     expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
+  it('does not create a second task when the issue reservation points to a finished Sentry task with an open PR', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_completed_open_pr',
+            linearIssueId: 'INT-200',
+          },
+        })),
+        reserveTaskForProblem: vi.fn(),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_completed_open_pr',
+          status: 'implemented',
+          agentType: 'sentry',
+          result: {
+            sentry_outcome: 'fixed',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
+          },
+        }))),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry issue already has a code task',
+      codeTaskId: 'task_completed_open_pr',
+    });
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('does not create a second task when the issue reservation points to an implemented task with an open PR number', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_implemented_open_pr',
+            linearIssueId: 'INT-200',
+          },
+        })),
+        reserveTaskForProblem: vi.fn(),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_implemented_open_pr',
+          status: 'implemented',
+          agentType: 'sentry',
+          prNumber: 123,
+        }))),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry issue already has a code task',
+      codeTaskId: 'task_implemented_open_pr',
+    });
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a new task when the existing issue reservation points to an archived Sentry task without completion evidence', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_archived_duplicate',
+            linearIssueId: 'INT-1775',
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            duplicateCount: 0,
+          },
+        })),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_archived_duplicate',
+          status: 'archived',
+          agentType: 'sentry',
+        }))),
+        create: vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
+          id: input['id'],
+          ...input,
+          status: 'queued',
+        })),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome !== 'processed') {
+      throw new Error('Expected stale Sentry reservation to create a new task');
+    }
+    expect(mocks.codeTaskRepo.findById).toHaveBeenCalledWith('task_archived_duplicate');
+    expect(mocks.linearIssueService.ensureIssueExists).toHaveBeenCalledTimes(1);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).toHaveBeenCalledTimes(1);
+    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).toHaveBeenNthCalledWith(1, {
+      dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+      codeTaskId: result.codeTaskId,
+      linearIssueId: 'INT-200',
+    });
+  });
+
+  it('creates a new task when the existing issue reservation points to a merged Sentry PR', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_merged_duplicate',
+            linearIssueId: 'INT-1775',
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            duplicateCount: 0,
+          },
+        })),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_merged_duplicate',
+          status: 'implemented',
+          agentType: 'sentry',
+          prNumber: 123,
+          prMergedAt: Timestamp.fromDate(new Date('2026-06-29T02:00:00Z')),
+        }))),
+        create: vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
+          id: input['id'],
+          ...input,
+          status: 'queued',
+        })),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome !== 'processed') {
+      throw new Error('Expected merged Sentry PR reservation to create a replacement');
+    }
+    expect(mocks.codeTaskRepo.findById).toHaveBeenCalledWith('task_merged_duplicate');
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a new task when the existing issue reservation points to a missing task', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_missing',
+            linearIssueId: 'INT-1775',
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            duplicateCount: 0,
+          },
+        })),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'task missing' })),
+        create: vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
+          id: input['id'],
+          ...input,
+          status: 'queued',
+        })),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome !== 'processed') {
+      throw new Error('Expected missing linked Sentry task to create a replacement');
+    }
+    expect(mocks.codeTaskRepo.findById).toHaveBeenCalledWith('task_missing');
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns internal_error when duplicate reservation task lookup fails', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_lookup_error',
+            linearIssueId: 'INT-1775',
+          },
+        })),
+        reserveTaskForProblem: vi.fn(),
+        markCodeTaskCreated: vi.fn(),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'lookup failed' })),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({ ok: false, reason: 'internal_error', message: 'lookup failed' });
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
   it('does not create a task when the same Sentry problem already has a task for another issue id', async () => {
     resetServices();
     mocks = installMocks({
@@ -368,6 +622,91 @@ describe('processSentryWebhook', () => {
     expect(mocks.linearIssueService.ensureIssueExists).not.toHaveBeenCalled();
     expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
     expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).not.toHaveBeenCalled();
+  });
+
+  it('creates a new task when the same Sentry problem reservation points to an archived task without completion evidence', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509002:issue:created',
+            duplicateCount: 0,
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            codeTaskId: 'task_archived_problem_duplicate',
+            linearIssueId: 'INT-1775',
+          },
+        })),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_archived_problem_duplicate',
+          status: 'archived',
+          agentType: 'sentry',
+        }))),
+        create: vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
+          id: input['id'],
+          ...input,
+          status: 'queued',
+        })),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome !== 'processed') {
+      throw new Error('Expected stale Sentry problem reservation to create a new task');
+    }
+    expect(mocks.codeTaskRepo.findById).toHaveBeenCalledWith('task_archived_problem_duplicate');
+    expect(mocks.linearIssueService.ensureIssueExists).toHaveBeenCalledTimes(1);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).toHaveBeenNthCalledWith(2, {
+      dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+      codeTaskId: result.codeTaskId,
+      linearIssueId: 'INT-200',
+    });
+  });
+
+  it('returns internal_error when problem reservation task lookup fails', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509002:issue:created',
+            duplicateCount: 0,
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            codeTaskId: 'task_problem_lookup_error',
+            linearIssueId: 'INT-1775',
+          },
+        })),
+        markCodeTaskCreated: vi.fn(),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'problem lookup failed' })),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({ ok: false, reason: 'internal_error', message: 'problem lookup failed' });
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
     expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).not.toHaveBeenCalled();
   });
 
