@@ -281,6 +281,71 @@ describe('logWorkerAuthStartupStatus', () => {
     );
     expect(codexWarn).toHaveLength(1);
   });
+
+  // INT-1768: Sentry capture suppression for the expired-but-refreshable state.
+  // The orchestrator stores OAuth credentials that routinely expire between
+  // worker invocations; workers refresh on demand, so this warn is an
+  // operational status, not an error. Other non-active states (not_configured,
+  // invalid, refresh_failed) are still surfaced so genuine misconfigurations
+  // keep appearing in Sentry.
+  it('marks the claude expired-but-refreshable warn with _skipSentry for Sentry suppression', () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('expired', {
+        authMode: 'oauth',
+        refreshSupported: true,
+        message: 'Access token expired — workers will refresh on use',
+      }),
+      codex: makeState('not_configured'),
+    });
+
+    logWorkerAuthStartupStatus(registry, logger);
+
+    const claudeExpiredWarn = logger.calls.filter(
+      ([level, , message]) => level === 'warn' && message === 'Code worker auth not ready'
+    );
+    expect(claudeExpiredWarn).toHaveLength(1);
+    const extras = claudeExpiredWarn[0]?.[1] as Record<string, unknown>;
+    expect(extras).toMatchObject({ _skipSentry: true });
+  });
+
+  it('marks the codex expired-but-refreshable warn with _skipSentry for Sentry suppression', () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('active'),
+      codex: makeState('expired', {
+        authMode: 'oauth',
+        refreshSupported: true,
+        message: 'Access token expired — workers will refresh on use',
+      }),
+    });
+
+    logWorkerAuthStartupStatus(registry, logger);
+
+    const codexExpiredWarn = logger.calls.filter(
+      ([level, , message]) => level === 'warn' && message === 'Codex worker auth not ready'
+    );
+    expect(codexExpiredWarn).toHaveLength(1);
+    const extras = codexExpiredWarn[0]?.[1] as Record<string, unknown>;
+    expect(extras).toMatchObject({ _skipSentry: true });
+  });
+
+  it('does NOT mark genuine not_configured warns with _skipSentry', () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('not_configured', { refreshSupported: false }),
+      codex: makeState('not_configured'),
+    });
+
+    logWorkerAuthStartupStatus(registry, logger);
+
+    const claudeWarn = logger.calls.filter(
+      ([level, , message]) => level === 'warn' && message === 'Code worker auth not ready'
+    );
+    expect(claudeWarn).toHaveLength(1);
+    const extras = claudeWarn[0]?.[1] as Record<string, unknown>;
+    expect(extras).not.toMatchObject({ _skipSentry: true });
+  });
 });
 
 describe('validateWorkerApiKeys — auth-state logging branches', () => {
@@ -372,5 +437,69 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
         level === 'warn' && message === 'Codex worker auth not ready at startup'
     );
     expect(codexWarn).toHaveLength(1);
+  });
+
+  // INT-1768: same Sentry suppression rationale as logWorkerAuthStartupStatus
+  // — see that describe block for context.
+  it('marks the claude expired-but-refreshable startup warn with _skipSentry', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('expired', {
+        authMode: 'oauth',
+        refreshSupported: true,
+        message: 'Access token expired — workers will refresh on use',
+      }),
+      codex: makeState('not_configured'),
+    });
+
+    await validateWorkerApiKeys(registry, noKeys, logger);
+
+    const claudeExpiredWarn = logger.calls.filter(
+      ([level, , message]) =>
+        level === 'warn' && message === 'Code worker auth not ready at startup'
+    );
+    expect(claudeExpiredWarn).toHaveLength(1);
+    const extras = claudeExpiredWarn[0]?.[1] as Record<string, unknown>;
+    expect(extras).toMatchObject({ _skipSentry: true });
+  });
+
+  it('marks the codex expired-but-refreshable startup warn with _skipSentry', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('not_configured'),
+      codex: makeState('expired', {
+        authMode: 'oauth',
+        refreshSupported: true,
+        message: 'Access token expired — workers will refresh on use',
+      }),
+    });
+
+    await validateWorkerApiKeys(registry, noKeys, logger);
+
+    const codexExpiredWarn = logger.calls.filter(
+      ([level, , message]) =>
+        level === 'warn' && message === 'Codex worker auth not ready at startup'
+    );
+    expect(codexExpiredWarn).toHaveLength(1);
+    const extras = codexExpiredWarn[0]?.[1] as Record<string, unknown>;
+    expect(extras).toMatchObject({ _skipSentry: true });
+  });
+
+  it('still reports genuine not_configured state through to Sentry', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('not_configured', { refreshSupported: false }),
+      codex: makeState('not_configured'),
+    });
+
+    await validateWorkerApiKeys(registry, noKeys, logger);
+
+    const claudeWarn = logger.calls.filter(
+      ([level, , message]) =>
+        level === 'warn' && message === 'Code worker auth not ready at startup'
+    );
+    expect(claudeWarn).toHaveLength(1);
+    const extras = claudeWarn[0]?.[1] as Record<string, unknown>;
+    expect(extras).not.toMatchObject({ _skipSentry: true });
   });
 });

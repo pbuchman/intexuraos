@@ -14,6 +14,24 @@ import { IntexuraOSError } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import { WORKER_TYPES } from '../services/isolation/types.js';
 import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
+import type { WorkerAuthState } from '../services/worker-auth/types.js';
+
+/**
+ * OAuth access tokens routinely expire between worker invocations; workers
+ * refresh on demand, so this warn is an operational status, not an error.
+ * Genuine non-active states (not_configured, invalid, refresh_failed) still
+ * flow into Sentry — see INT-1768.
+ *
+ * @internal exported for unit tests.
+ */
+export function isExpiredRefreshable(state: WorkerAuthState): boolean {
+  return state.status === 'expired' && state.refreshSupported;
+}
+
+/** Build the warn log extras, opting expired-refreshable states out of Sentry. */
+function authNotReadyExtras(state: WorkerAuthState): Record<string, unknown> {
+  return isExpiredRefreshable(state) ? { state, _skipSentry: true } : { state };
+}
 
 /**
  * Synchronously validates an API key's format. Throws if the key is missing
@@ -195,7 +213,7 @@ export function logWorkerAuthStartupStatus(
       'Code worker auth active'
     );
   } else {
-    logger.warn({ state: claudeState }, 'Code worker auth not ready');
+    logger.warn(authNotReadyExtras(claudeState), 'Code worker auth not ready');
   }
 
   if (codexState.status === 'active') {
@@ -209,7 +227,7 @@ export function logWorkerAuthStartupStatus(
       'Codex worker auth active'
     );
   } else {
-    logger.warn({ state: codexState }, 'Codex worker auth not ready');
+    logger.warn(authNotReadyExtras(codexState), 'Codex worker auth not ready');
   }
 }
 
@@ -244,7 +262,7 @@ export async function validateWorkerApiKeys(
       'Code worker auth validated — Claude-backed tasks ready'
     );
   } else {
-    logger.warn({ state: claudeState }, 'Code worker auth not ready at startup');
+    logger.warn(authNotReadyExtras(claudeState), 'Code worker auth not ready at startup');
   }
 
   const codexState = workerAuthRegistry.getState('codex');
@@ -258,7 +276,7 @@ export async function validateWorkerApiKeys(
       'Codex worker auth validated — Codex tasks ready'
     );
   } else {
-    logger.warn({ state: codexState }, 'Codex worker auth not ready at startup');
+    logger.warn(authNotReadyExtras(codexState), 'Codex worker auth not ready at startup');
   }
 
   // Validate all third-party API keys in parallel.
