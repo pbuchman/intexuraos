@@ -1422,6 +1422,19 @@ describe('retryTask use case', () => {
         }),
         'Failed to record task submission metric for retry'
       );
+
+      // INT-1763: best-effort Cloud Monitoring writes may fail with
+      // `monitoring.timeSeries.create denied`. The warning must carry the
+      // _skipSentry marker so the warning stays in stdout/Cloud Logging but
+      // does not generate a Sentry issue.
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _skipSentry: true,
+          taskId: retryTaskId,
+          error: expect.anything(),
+        }),
+        'Failed to record task submission metric for retry'
+      );
     });
   });
 

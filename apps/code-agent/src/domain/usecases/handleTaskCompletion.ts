@@ -50,6 +50,7 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 /* eslint-disable eqeqeq */
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { loadConfig } from '../../config.js';
 import { parseLinearIdentifierFromUrl } from '../utils/linearIdentifierParser.js';
@@ -1649,11 +1650,17 @@ export async function handleTaskCompletion(
         }
 
         metricsClient.incrementTasksCompleted(task.workerType, resolvedStatus).catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 
@@ -1759,11 +1766,17 @@ export async function handleTaskCompletion(
             await cleanupLockIfPR();
 
             metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((metricsErr) => {
-              requestLog.warn({ taskId, error: metricsErr }, 'Failed to record task completion metric');
+              requestLog.warn(
+                { taskId, [SKIP_SENTRY_KEY]: true, error: metricsErr },
+                'Failed to record task completion metric'
+              );
             });
             if (body.duration) {
               metricsClient.recordTaskDuration(task.workerType, body.duration).catch((metricsErr) => {
-                requestLog.warn({ taskId, error: metricsErr }, 'Failed to record task duration metric');
+                requestLog.warn(
+                  { taskId, [SKIP_SENTRY_KEY]: true, error: metricsErr },
+                  'Failed to record task duration metric'
+                );
               });
             }
 
@@ -1791,11 +1804,17 @@ export async function handleTaskCompletion(
         );
 
         metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 
@@ -1834,11 +1853,17 @@ export async function handleTaskCompletion(
         );
 
         metricsClient.incrementTasksCompleted(task.workerType, 'interrupted').catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 
@@ -1878,11 +1903,17 @@ export async function handleTaskCompletion(
         );
 
         metricsClient.incrementTasksCompleted(task.workerType, 'cancelled').catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 
