@@ -21,6 +21,7 @@ import {
 const NOW = '2026-06-24T10:00:00.000Z';
 const UNSUPPORTED_CAPABILITIES_REPLY = [
   'I could not safely handle that request. I can help with:',
+  '- summarize and reason over the current session',
   '- create notes',
   '- create and look up calendar events',
   '- create research drafts',
@@ -30,6 +31,7 @@ const UNSUPPORTED_CAPABILITIES_REPLY = [
 ].join('\n');
 const NEW_SESSION_READY_REPLY = [
   'What would you like me to help with? I can help with:',
+  '- summarize and reason over the current session',
   '- create notes',
   '- create and look up calendar events',
   '- create research drafts',

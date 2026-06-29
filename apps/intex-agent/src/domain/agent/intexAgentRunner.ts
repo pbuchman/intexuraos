@@ -25,6 +25,8 @@ import { classifyIntexAgentIntent } from './intentGate.js';
 import {
   buildCompletionFailureCapabilitiesReply,
   buildUnsupportedCapabilitiesReply,
+  detectIntexAgentReplyLanguage,
+  type IntexAgentReplyLanguage,
 } from './capabilities.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
@@ -104,6 +106,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       }
     },
     async run(input): Promise<IntexAgentRunnerResult> {
+      const replyLanguage = detectIntexAgentReplyLanguage(input.message);
+
       if (input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined) {
         const args = {
           message: input.message.trim() === '' ? 'Image shared via WhatsApp.' : input.message.trim(),
@@ -121,7 +125,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (intent.kind === 'unsupported') {
         return {
           outcome: 'unsupported',
-          reply: unsupportedIntentReply(),
+          reply: unsupportedIntentReply(replyLanguage),
         };
       }
 
@@ -155,7 +159,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (!result.ok) {
         return {
           outcome: 'unsupported',
-          reply: buildCompletionFailureCapabilitiesReply(),
+          reply: buildCompletionFailureCapabilitiesReply(replyLanguage),
         };
       }
 
@@ -163,7 +167,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         result.value.content,
         toolExecutions,
         config.webAppUrl ?? DEFAULT_WEB_APP_URL,
-        config.userPreferences ?? null
+        config.userPreferences ?? null,
+        replyLanguage
       );
     },
   };
@@ -288,17 +293,18 @@ function parseRunnerContent(
   content: string,
   toolExecutions: IntexAgentToolExecution[],
   webAppUrl: string,
-  userPreferences: string | null
+  userPreferences: string | null,
+  replyLanguage: IntexAgentReplyLanguage
 ): IntexAgentRunnerResult {
   const parsed = parseJsonObject(content);
   if (parsed === null) {
-    return malformedResult();
+    return malformedResult(replyLanguage);
   }
 
   const outcome = parsed['outcome'];
   const reply = parsed['reply'];
   if (typeof outcome !== 'string' || typeof reply !== 'string') {
-    return malformedResult();
+    return malformedResult(replyLanguage);
   }
 
   const toolExecution = getCompletedToolExecution(toolExecutions);
@@ -322,13 +328,13 @@ function parseRunnerContent(
   }
 
   if (outcome === 'unsupported') {
-    return { outcome, reply: buildUnsupportedCapabilitiesReply() };
+    return { outcome, reply: buildUnsupportedCapabilitiesReply(replyLanguage) };
   }
 
   if (outcome === 'completed') {
     const summary = parsed['summary'];
     if (toolExecution === undefined) {
-      return malformedResult();
+      return malformedResult(replyLanguage);
     }
     const completedReply = buildCompletedReply(
       toolExecution.toolName,
@@ -351,7 +357,7 @@ function parseRunnerContent(
     };
   }
 
-  return malformedResult();
+  return malformedResult(replyLanguage);
 }
 
 function createConfirmationPreviewExecutor(executor: IntexAgentToolExecutor): IntexAgentToolExecutor {
@@ -837,13 +843,13 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
   }
 }
 
-function malformedResult(): IntexAgentRunnerResult {
+function malformedResult(replyLanguage: IntexAgentReplyLanguage = 'en'): IntexAgentRunnerResult {
   return {
     outcome: 'unsupported',
-    reply: buildUnsupportedCapabilitiesReply(),
+    reply: buildUnsupportedCapabilitiesReply(replyLanguage),
   };
 }
 
-function unsupportedIntentReply(): string {
-  return buildUnsupportedCapabilitiesReply();
+function unsupportedIntentReply(replyLanguage: IntexAgentReplyLanguage): string {
+  return buildUnsupportedCapabilitiesReply(replyLanguage);
 }

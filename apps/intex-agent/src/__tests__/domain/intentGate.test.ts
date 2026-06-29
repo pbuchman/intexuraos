@@ -84,6 +84,9 @@ describe('classifyIntexAgentIntent', () => {
     'Podaj mi liste wydarzen z kalendarza na jutro',
     'Wypisz wszystkie wydarzenia w kalendarzu na jutro',
     'Wyświetl moje wydarzenia w kalendarzu na jutro',
+    'Czy mam w kalendarzu jakieś wydarzenie pomiędzy 14:00 a 16:00?',
+    'Czy ma w kalendarzu jakieś wydarzenie pomiędzy 14:00 a 16:00?',
+    'Jakie terminy mam wolne jutro na godzinne spotkanie?',
   ])('allows read-only calendar queries: %s', (text) => {
     expect(classifyIntexAgentIntent(text)).toEqual({
       kind: 'tool',
@@ -98,6 +101,7 @@ describe('classifyIntexAgentIntent', () => {
     'Update the Jakub invitation preference to use jakub.nowak@gmail.com.',
     'Remove the row about mood preferences.',
     'Delete preference 2.',
+    'Jakie mamy w tej chwili preferencje dla promptu agenta?',
   ])('allows preference management intent: %s', (text) => {
     expect(classifyIntexAgentIntent(text)).toEqual({
       kind: 'tool',

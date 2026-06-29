@@ -81,10 +81,16 @@ function isExplicitPreferenceManagementRequest(text: string): boolean {
   const mentionsPreferences =
     /\b(preference|preferences|instruction|instructions|prompt preference|prompt preferences)\b/u.test(
       text
-    ) || /\b(row|wiersz)\b.*\b(preference|preferences|instruction|instructions)\b/u.test(text);
+    ) ||
+    /\b(preferencj\w*|instrukcj\w*|promptu agenta|prompt agenta)\b/u.test(text) ||
+    /\b(row|wiersz)\b.*\b(preference|preferences|instruction|instructions|preferencj\w*|instrukcj\w*)\b/u.test(
+      text
+    );
   const managementIntent =
     /\b(tell|show|list|what|defined|add|create|update|change|remove|delete)\b/u.test(text) ||
-    /\b(pokaz\w*|wypisz\w*|dodaj|utworz|stworz|zmien|usun)\b/u.test(text);
+    /\b(jakie|jaki|jaka|mamy|pokaz\w*|wypisz\w*|dodaj|utworz|stworz|zmien|usun)\b/u.test(
+      text
+    );
 
   if (mentionsPreferences && managementIntent) {
     return true;
@@ -107,8 +113,15 @@ function isReadOnlyCalendarQueryRequest(text: string): boolean {
       text
     ) || /\bco\b.*\bjest\b/u.test(text);
   const countIntent = /\b(how many times|how many|count|ile razy|ile)\b/u.test(text);
+  const existenceIntent =
+    /\b(is there|are there|do i have|have i got|am i free|available|free)\b/u.test(text) ||
+    /\bczy\b.*\b(ma|mam|masz|jest|sa|woln\w*)\b/u.test(text);
+  const availabilityIntent =
+    /\b(available|availability|free|woln\w*)\b/u.test(text) &&
+    /\b(termin\w*|spotkanie|meeting|appointment)\b/u.test(text) &&
+    mentionsCalendarTimeRange(text);
 
-  if (mentionsCalendar && (listIntent || countIntent)) {
+  if ((mentionsCalendar && (listIntent || countIntent || existenceIntent)) || availabilityIntent) {
     return true;
   }
 

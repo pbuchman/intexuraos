@@ -16,6 +16,7 @@ import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
 import {
   buildNewSessionReadyText,
   buildUnsupportedCapabilitiesReply,
+  detectIntexAgentReplyLanguage,
 } from '../agent/capabilities.js';
 
 export type IntexAgentRunnerResult =
@@ -418,7 +419,7 @@ async function applyRunnerResult(
   }
 
   if (runnerResult.toolName === undefined) {
-    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult());
+    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult(input.text));
     return;
   }
 
@@ -519,10 +520,12 @@ function summarizeUserMessage(message: string): string {
   return `${normalized.slice(0, 117)}...`;
 }
 
-function malformedRunnerResult(): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
+function malformedRunnerResult(
+  message: string
+): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
   return {
     outcome: 'unsupported',
-    reply: buildUnsupportedCapabilitiesReply(),
+    reply: buildUnsupportedCapabilitiesReply(detectIntexAgentReplyLanguage(message)),
   };
 }
 
