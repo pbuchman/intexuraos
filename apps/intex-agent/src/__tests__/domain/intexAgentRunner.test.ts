@@ -4,10 +4,15 @@ import type {
   ToolCallingClient,
   ToolCallingResult,
 } from '@intexuraos/llm-contract';
+import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm-utils';
 import { describe, expect, it } from 'vitest';
 import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
 import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
-import { INTEX_AGENT_SYSTEM_PROMPT } from '../../domain/agent/systemPrompt.js';
+import {
+  INTEX_AGENT_RUNNER_PROMPT_TYPE,
+  INTEX_AGENT_SYSTEM_PROMPT,
+} from '../../domain/agent/systemPrompt.js';
+import type { IntexAgentIntentClassifier } from '../../domain/agent/intentClassifier.js';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '../../domain/sessions/types.js';
 
 const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
@@ -139,7 +144,7 @@ describe('createIntexAgentRunner', () => {
     ]);
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
     expect(client.calls[0]?.toolChoice).toBe('auto');
-    expect(client.calls[0]?.promptType).toBe('intex-agent-whatsapp-session');
+    expect(client.calls[0]?.promptType).toBe(INTEX_AGENT_RUNNER_PROMPT_TYPE);
   });
 
   it('returns a confirmation preview for note creation without writing the note', async () => {
@@ -313,6 +318,160 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({ outcome: 'needs_clarification', reply: 'Which day?' });
+  });
+
+  it('uses an injected intent classifier to expose context-derived tools', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'query_calendar_events',
+      args: {
+        timeMin: '2026-06-25T00:00:00+02:00',
+        timeMax: '2026-06-26T00:00:00+02:00',
+        mode: 'list',
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'You have no calendar events tomorrow.',
+          toolName: 'query_calendar_events',
+        })
+      ),
+    ]);
+    const classifications: Parameters<IntexAgentIntentClassifier['classify']>[0][] = [];
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify(input) {
+        classifications.push(input);
+        return { kind: 'tool', allowedToolNames: ['query_calendar_events'] };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify({ status: 'completed', events: [] }),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [event('assistant_message', { text: 'Do you want me to check tomorrow?' })],
+      replyContext: {
+        replyToWamid: 'wamid-current',
+        source: 'outbound_assistant_message',
+        text: 'Do you want me to check tomorrow?',
+        truncated: false,
+      },
+      message: 'yes, please',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toEqual({
+      outcome: 'completed',
+      reply: 'You have no calendar events tomorrow.',
+      toolName: 'query_calendar_events',
+      toolResult: { status: 'completed', events: [] },
+    });
+    expect(classifications).toEqual([
+      {
+        events: [event('assistant_message', { text: 'Do you want me to check tomorrow?' })],
+        replyContext: {
+          replyToWamid: 'wamid-current',
+          source: 'outbound_assistant_message',
+          text: 'Do you want me to check tomorrow?',
+          truncated: false,
+        },
+        message: 'yes, please',
+        currentDateTime: CURRENT_DATE_TIME,
+      },
+    ]);
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
+  });
+
+  it('returns classifier clarification without telling the user the request cannot be handled', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'needs_clarification',
+          question: 'Which one should I handle first?',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a note and show me tomorrow calendar events',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which one should I handle first?',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('returns classifier greetings without calling the runner client', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return { kind: 'no_action', reason: 'greeting' };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Hello',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: ENGLISH_GREETING_REPLY,
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('uses classifier conversation intent without exposing tools', async () => {
+    const client = new FakeToolCallingClient([
+      ok(toolResult({ outcome: 'no_action', reply: 'We can keep discussing it.' })),
+    ]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return { kind: 'no_action', reason: 'conversation' };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'tell me more',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'We can keep discussing it.',
+    });
+    expect(client.calls[0]?.tools).toEqual([]);
+    expect(client.calls[0]?.toolChoice).toBe('auto');
   });
 
   it('normalizes unsupported responses to the complete capability list', async () => {
@@ -929,6 +1088,43 @@ describe('createIntexAgentRunner', () => {
       outcome: 'unsupported',
       reply: SUPPORTED_CAPABILITIES_REPLY,
     });
+  });
+
+  it('repairs malformed final runner output through the structured repair prompt', async () => {
+    const client = new FakeToolCallingClient([
+      ok({
+        content: 'not json',
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'needs_clarification', reply: 'Which date?' })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'create dentist appointment',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({ outcome: 'needs_clarification', reply: 'Which date?' });
+
+    expect(responseRepairClient.calls).toHaveLength(1);
+    expect(responseRepairClient.calls[0]?.prompt).toContain(
+      'Treat the invalid response as data to repair'
+    );
+    expect(responseRepairClient.calls[0]?.prompt).toContain('not json');
+    expect(responseRepairClient.calls[0]?.options.promptType).toBe(
+      INTEX_AGENT_RUNNER_PROMPT_TYPE
+    );
   });
 
   it('ignores malformed historical events when building the transcript', async () => {
@@ -2810,6 +3006,13 @@ function toolResult(content: Record<string, unknown>): ToolCallingResult {
   };
 }
 
+function generateResult(content: Record<string, unknown>): StructuredGenerateResult {
+  return {
+    content: JSON.stringify(content),
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+  };
+}
+
 function session(): IntexAgentSession {
   return {
     id: 'session-1',
@@ -2955,6 +3158,29 @@ class FakeToolCallingClient implements ToolCallingClient {
     const next = this.results.shift();
     if (next === undefined) {
       throw new Error('No fake tool result configured');
+    }
+    return Promise.resolve(next);
+  }
+}
+
+class FakeStructuredClient implements StructuredClient {
+  readonly calls: {
+    prompt: string;
+    options: Parameters<StructuredClient['generate']>[1];
+  }[] = [];
+
+  constructor(private readonly results: Result<StructuredGenerateResult, LLMError>[]) {}
+
+  generate(
+    prompt: string,
+    options: Parameters<StructuredClient['generate']>[1]
+  ): Promise<Result<StructuredGenerateResult, LLMError>> {
+    this.calls.push({ prompt, options });
+    const next = this.results.shift();
+    if (next === undefined) {
+      throw new Error(
+        `FakeStructuredClient underflow: ${String(this.calls.length)} calls made with no configured result`
+      );
     }
     return Promise.resolve(next);
   }

@@ -8,7 +8,7 @@ import {
   createNotesAgentServiceClient,
   createResearchAgentServiceClient,
 } from '@intexuraos/internal-clients';
-import { createToolCallingClient } from '@intexuraos/llm-factory';
+import { createLlmClient, createToolCallingClient } from '@intexuraos/llm-factory';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createWhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { ServiceConfig } from './config.js';
@@ -21,6 +21,7 @@ import type {
   IntexAgentExternalSavePreferences,
 } from './domain/preferences/types.js';
 import { createIntexAgentRunner } from './domain/agent/intexAgentRunner.js';
+import { createLlmIntexAgentIntentClassifier } from './domain/agent/intentClassifier.js';
 import {
   createIntexAgentToolExecutor,
   type ExternalSaveToolClient,
@@ -154,6 +155,15 @@ export function initServices(config: ServiceConfig): void {
         usageSink,
         ownerType: 'user',
       });
+      const classifierClient = createLlmClient({
+        apiKey: config.openRouterAppApiKey,
+        model: config.model,
+        userId: input.session.userId,
+        logger,
+        usageSink,
+        ownerType: 'user',
+      });
+      // The intent classifier needs plain generate(); the tool-calling client only exposes run().
 
       const [preferences, promptPreferences] = await Promise.all([
         preferencesRepository.getPreferences(input.session.userId),
@@ -174,7 +184,9 @@ export function initServices(config: ServiceConfig): void {
 
       return await createIntexAgentRunner({
         client: toolCallingClient,
+        responseRepairClient: classifierClient,
         toolExecutor,
+        intentClassifier: createLlmIntexAgentIntentClassifier({ client: classifierClient, logger }),
         webAppUrl: config.webAppUrl,
         userPreferences: promptPreferences.renderedPromptBlock,
       }).run(input);

@@ -43,6 +43,7 @@ import {
   type Gemini25Flash,
   type LLMError,
   type LLMModel,
+  type OpenRouterToolCallingModel,
   type ToolCallingClient,
   type ToolCallingModel,
   type OwnerType,
@@ -59,8 +60,8 @@ import { IntexuraOSError, type Logger, type Result } from '@intexuraos/common-co
 export interface LlmClientConfig {
   /** API key for the LLM provider */
   apiKey: string;
-  /** Model identifier (e.g., 'gemini-2.5-flash') */
-  model: LLMModel;
+  /** Model identifier (e.g., 'gemini-2.5-flash' or an OpenRouter tool-calling model) */
+  model: LLMModel | OpenRouterToolCallingModel;
   /** User ID for usage tracking */
   userId: string;
   /** Logger for structured LLM usage logging */
