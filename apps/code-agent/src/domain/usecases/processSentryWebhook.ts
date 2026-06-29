@@ -5,16 +5,20 @@ import { getServices } from '../../services.js';
 import type {
   NormalizedSentryIssueEvent,
   SentryIssueEventParseError,
+  SentryIssueEventRecord,
   SentryIssueTaskContext,
 } from '../models/sentryIssueEvent.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { resolveDefaultWorkerType } from '../utils/defaultWorkerTypeResolution.js';
+import type { CodeTask, TaskStatus } from '../models/codeTask.js';
+import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 
 const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'sentry-agent-system-prompt-v1';
 const ACTIONABLE_ISSUE_ACTIONS = new Set(['created', 'regressed', 'unresolved', 'reopened']);
 const TERMINAL_ISSUE_STATUSES = new Set(['resolved', 'ignored', 'muted', 'archived', 'deleted']);
+const ACTIVE_DUPLICATE_TASK_STATUSES = new Set<TaskStatus>(['queued', 'dispatched', 'running']);
 const SENTRY_AUTOMATION_SELF_ALERT_TITLES = new Set([
   'failed to reserve sentry issue event',
   'failed to record task completion metric',
@@ -149,6 +153,51 @@ function classifySentryIssueEvent(event: NormalizedSentryIssueEvent):
   return { actionable: true };
 }
 
+function hasOpenPullRequest(task: CodeTask): boolean {
+  const hasPullRequest = task.prNumber !== undefined || task.result?.prUrl !== undefined;
+  return hasPullRequest && task.prMergedAt === undefined && task.prClosedAt === undefined;
+}
+
+function isLinkedSentryTaskBlocking(task: CodeTask): boolean {
+  if (ACTIVE_DUPLICATE_TASK_STATUSES.has(task.status)) {
+    return true;
+  }
+
+  if (task.result?.sentry_outcome !== undefined && hasOpenPullRequest(task)) {
+    return true;
+  }
+
+  return task.status === 'implemented' && hasOpenPullRequest(task);
+}
+
+async function inspectDuplicateReservation(input: {
+  record: SentryIssueEventRecord;
+  codeTaskRepo: CodeTaskRepository;
+}): Promise<
+  | { ok: true; duplicate: true; codeTaskId?: string | undefined }
+  | { ok: true; duplicate: false }
+  | { ok: false; message: string }
+> {
+  const { record, codeTaskRepo } = input;
+  if (record.codeTaskId === undefined) {
+    return { ok: true, duplicate: true };
+  }
+
+  const taskResult = await codeTaskRepo.findById(record.codeTaskId);
+  if (!taskResult.ok) {
+    if (taskResult.error.code === 'NOT_FOUND') {
+      return { ok: true, duplicate: false };
+    }
+    return { ok: false, message: taskResult.error.message };
+  }
+
+  if (!isLinkedSentryTaskBlocking(taskResult.value)) {
+    return { ok: true, duplicate: false };
+  }
+
+  return { ok: true, duplicate: true, codeTaskId: record.codeTaskId };
+}
+
 export async function processSentryWebhook(
   input: ProcessSentryWebhookInput
 ): Promise<ProcessSentryWebhookResult> {
@@ -220,14 +269,28 @@ export async function processSentryWebhook(
   }
 
   if (!reserveResult.value.created) {
-    return {
-      ok: true,
-      outcome: 'duplicate',
-      message: 'Sentry issue already has a code task',
-      ...(reserveResult.value.record.codeTaskId !== undefined && {
+    const duplicate = await inspectDuplicateReservation({
+      record: reserveResult.value.record,
+      codeTaskRepo,
+    });
+    if (!duplicate.ok) {
+      return { ok: false, reason: 'internal_error', message: duplicate.message };
+    }
+    if (!duplicate.duplicate) {
+      logger.info({
+        dedupeKey: reserveResult.value.record.dedupeKey,
         codeTaskId: reserveResult.value.record.codeTaskId,
-      }),
-    };
+      }, 'Sentry issue reservation points to stale task; creating a replacement code task');
+    } else {
+      return {
+        ok: true,
+        outcome: 'duplicate',
+        message: 'Sentry issue already has a code task',
+        ...(duplicate.codeTaskId !== undefined && {
+          codeTaskId: duplicate.codeTaskId,
+        }),
+      };
+    }
   }
 
   const problemReserveResult = await sentryIssueEventRepo.reserveTaskForProblem({
@@ -241,14 +304,28 @@ export async function processSentryWebhook(
   }
 
   if (!problemReserveResult.value.created) {
-    return {
-      ok: true,
-      outcome: 'duplicate',
-      message: 'Sentry problem already has a code task',
-      ...(problemReserveResult.value.record.codeTaskId !== undefined && {
+    const duplicate = await inspectDuplicateReservation({
+      record: problemReserveResult.value.record,
+      codeTaskRepo,
+    });
+    if (!duplicate.ok) {
+      return { ok: false, reason: 'internal_error', message: duplicate.message };
+    }
+    if (!duplicate.duplicate) {
+      logger.info({
+        dedupeKey: problemReserveResult.value.record.dedupeKey,
         codeTaskId: problemReserveResult.value.record.codeTaskId,
-      }),
-    };
+      }, 'Sentry problem reservation points to stale task; creating a replacement code task');
+    } else {
+      return {
+        ok: true,
+        outcome: 'duplicate',
+        message: 'Sentry problem already has a code task',
+        ...(duplicate.codeTaskId !== undefined && {
+          codeTaskId: duplicate.codeTaskId,
+        }),
+      };
+    }
   }
 
   const settingsResult = await workerSettingsRepo.getSettings(automationUserId);
