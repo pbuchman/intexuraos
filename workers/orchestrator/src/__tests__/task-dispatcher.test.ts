@@ -30,6 +30,7 @@ import type {
   ComplianceValidationResult,
 } from '../services/agent-compliance-validator.js';
 import type { SessionJsonlEntry } from '../services/transcript-formatter.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 vi.mock('../services/transcript-reader.js', () => ({
   readSessionTranscript: vi.fn(),
@@ -3092,6 +3093,18 @@ describe('TaskDispatcher', () => {
         return p?.status === 'completed';
       });
       expect(sentCall).toBeDefined();
+
+      const telemetryWarning = vi.mocked(mockLogger.warn).mock.calls.find(([context, message]) => {
+        const logContext = context as { taskId?: string } | undefined;
+        return (
+          message === 'Accepting task despite missing telemetry (optional tier)' &&
+          logContext?.taskId === 'glm-tier-optional-accept'
+        );
+      });
+      expect(telemetryWarning?.[0]).toMatchObject({
+        taskId: 'glm-tier-optional-accept',
+        [SKIP_SENTRY_KEY]: true,
+      });
     });
 
     it('[INT-1461/INT-1470] tier=required worker with only telemetry missing → accepts with telemetryAccepted=true (was: retry 3x then fail)', async () => {
