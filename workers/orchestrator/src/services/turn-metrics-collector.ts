@@ -361,8 +361,14 @@ export class TurnMetricsCollector {
     });
 
     if (!response.ok) {
+      // Sentry INTEXURAOS-HOME-DEV-1Q: turn metrics are operational telemetry,
+      // not on the task success path. A 5xx from the code-agent receiver is a
+      // delivery blip — the orchestrator continues regardless and downstream
+      // task processing is unaffected. Suppressing the Sentry capture keeps
+      // the warn in stdout/Cloud Logging while removing alert noise, mirroring
+      // the api-key-validator and credential-refresher `_skipSentry` pattern.
       this.logger.warn(
-        { taskId: metrics.taskId, status: response.status },
+        { taskId: metrics.taskId, status: response.status, _skipSentry: true },
         'Turn metrics publish failed (non-fatal)'
       );
     }
