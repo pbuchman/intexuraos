@@ -1,4 +1,5 @@
 import { ok, getErrorMessage, IntexuraOSError, type Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { Timestamp } from '@google-cloud/firestore';
 import { z } from 'zod';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
@@ -224,7 +225,10 @@ export async function evaluateApplication(
   try {
     parsed = EvaluationSchema.parse(parseJsonObject(evaluationResult.value.content));
   } catch (firstError) {
-    deps.logger.warn({ err: firstError }, 'Evaluator response failed Zod parse, retrying with refinement prompt');
+    deps.logger.warn(
+      { err: firstError, [SKIP_SENTRY_KEY]: true },
+      'Evaluator response failed Zod parse, retrying with refinement prompt'
+    );
 
     const refinementPrompt = [
       evaluationPrompt,
@@ -340,7 +344,10 @@ export async function distillTask(
   try {
     return DistillationSchema.parse(parseJsonObject(result.value.content));
   } catch (firstError) {
-    deps.logger.warn({ err: firstError }, 'Distiller response failed Zod parse, retrying with refinement prompt');
+    deps.logger.warn(
+      { err: firstError, [SKIP_SENTRY_KEY]: true },
+      'Distiller response failed Zod parse, retrying with refinement prompt'
+    );
 
     const refinementPrompt = [
       prompt,

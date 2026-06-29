@@ -1788,7 +1788,7 @@ describe('processExecutionMemoryBacklog', () => {
       expect(callCount).toBe(2);
       expect(result.decision).toBe('skip');
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ err: expect.any(Error) }),
+        expect.objectContaining({ err: expect.any(Error), _skipSentry: true }),
         'Distiller response failed Zod parse, retrying with refinement prompt'
       );
     });
@@ -2630,7 +2630,7 @@ describe('processExecutionMemoryBacklog', () => {
       expect(summary).toBe('Memory was applied successfully.');
       expect(mockLlmClient.generate).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ err: expect.anything() }),
+        expect.objectContaining({ err: expect.anything(), _skipSentry: true }),
         'Evaluator response failed Zod parse, retrying with refinement prompt',
       );
     });
