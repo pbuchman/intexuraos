@@ -21,11 +21,16 @@ export interface IntexAgentIntentClassifierRepairPromptDeps extends PromptDeps {
   maxResponsePreviewLength?: number;
 }
 
+export const INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS = {
+  tool: 0.65,
+  unsupported: 0.75,
+} as const;
+
 export const intexAgentIntentClassifierPrompt: PromptBuilder<IntexAgentIntentClassifierPromptInput> =
   {
     name: 'intex-agent-intent-classifier',
     description: 'Classifies Intex Agent WhatsApp user intent before exposing tools',
-    version: '1.0.0',
+    version: '1.1.0',
     build(input: IntexAgentIntentClassifierPromptInput): string {
       return `You classify the current user intent for Intex in WhatsApp Assistant conversations.
 

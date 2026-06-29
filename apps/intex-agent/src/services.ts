@@ -8,7 +8,6 @@ import {
   createNotesAgentServiceClient,
   createResearchAgentServiceClient,
 } from '@intexuraos/internal-clients';
-import type { LLMModel } from '@intexuraos/llm-contract';
 import { createLlmClient, createToolCallingClient } from '@intexuraos/llm-factory';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createWhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
@@ -158,7 +157,7 @@ export function initServices(config: ServiceConfig): void {
       });
       const classifierClient = createLlmClient({
         apiKey: config.openRouterAppApiKey,
-        model: config.model as unknown as LLMModel,
+        model: config.model,
         userId: input.session.userId,
         logger,
         usageSink,

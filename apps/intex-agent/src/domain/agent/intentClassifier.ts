@@ -1,4 +1,5 @@
 import {
+  INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS,
   IntexAgentIntentClassifierOutputSchema,
   intexAgentIntentClassifierPrompt,
   intexAgentIntentClassifierRepairPrompt,
@@ -21,8 +22,6 @@ import type { IntexIncomingMessageReplyContext } from '../ports/incomingMessageH
 import type { IntexAgentSessionEvent, IntexAgentToolName } from '../sessions/types.js';
 import { classifyIntexAgentIntent } from './intentGate.js';
 
-const TOOL_CONFIDENCE_THRESHOLD = 0.65;
-const UNSUPPORTED_CONFIDENCE_THRESHOLD = 0.75;
 export const INTEX_AGENT_INTENT_CLASSIFIER_PROMPT_TYPE = 'intex-agent-intent-classifier';
 const DEFAULT_CLARIFICATION_QUESTIONS: Record<IntexAgentReplyLanguage, string> = {
   en: 'Which one should I handle first?',
@@ -118,7 +117,10 @@ function mapValidatedClassifierOutput(
 ): IntexAgentIntentClassification {
   if (output.outcome === 'tool') {
     const allowedToolNames = normalizeAllowedToolNames(output.allowedToolNames);
-    if (output.confidence < TOOL_CONFIDENCE_THRESHOLD || allowedToolNames.length === 0) {
+    if (
+      output.confidence < INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS.tool ||
+      allowedToolNames.length === 0
+    ) {
       return clarificationFromQuestion(output.question, replyLanguage);
     }
     if (
@@ -142,7 +144,7 @@ function mapValidatedClassifierOutput(
   }
 
   if (output.outcome === 'unsupported') {
-    if (output.confidence < UNSUPPORTED_CONFIDENCE_THRESHOLD) {
+    if (output.confidence < INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS.unsupported) {
       return clarificationFromQuestion(output.question, replyLanguage);
     }
     return { kind: 'unsupported', reason: 'unsupported_request' };

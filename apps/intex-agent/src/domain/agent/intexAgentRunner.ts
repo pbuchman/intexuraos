@@ -24,7 +24,7 @@ import {
   type UpdateUserPreferenceToolArgs,
   type IntexAgentToolExecutor,
 } from './toolDefinitions.js';
-import { buildIntexAgentSystemPrompt } from './systemPrompt.js';
+import { buildIntexAgentSystemPrompt, INTEX_AGENT_RUNNER_PROMPT_TYPE } from './systemPrompt.js';
 import { classifyIntexAgentIntent } from './intentGate.js';
 import {
   buildGreetingReply,
@@ -286,7 +286,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         messages: buildMessages(input.events, input.message, input.replyContext),
         tools,
         toolChoice: 'auto',
-        promptType: 'intex-agent-whatsapp-session',
+        promptType: INTEX_AGENT_RUNNER_PROMPT_TYPE,
         maxIterations: 5,
       });
 

@@ -7,3 +7,4 @@ export {
 } from '@intexuraos/llm-prompts';
 
 export const INTEX_AGENT_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
+export const INTEX_AGENT_RUNNER_PROMPT_TYPE = 'intex-agent-whatsapp-session';
