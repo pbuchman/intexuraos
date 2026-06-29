@@ -14,6 +14,7 @@ import type { WebhookClient } from '../services/webhook-client.js';
 import type { StatusUpdateClient } from '../services/status-update-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { Task, TaskResult } from '../types/task.js';
 import type { OrchestratorState } from '../types/state.js';
@@ -30,7 +31,6 @@ import type {
   ComplianceValidationResult,
 } from '../services/agent-compliance-validator.js';
 import type { SessionJsonlEntry } from '../services/transcript-formatter.js';
-import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 vi.mock('../services/transcript-reader.js', () => ({
   readSessionTranscript: vi.fn(),
@@ -8321,6 +8321,15 @@ describe('TaskDispatcher', () => {
         expect(mockLogForwarder.registerTask).not.toHaveBeenCalled();
         // Running count must be released so capacity is not permanently leaked.
         expect(dispatcher.getRunningCount()).toBe(0);
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'adopt-lost',
+            worktreePath: '/tmp/worktrees/adopt-lost',
+            error: expect.any(Error),
+            [SKIP_SENTRY_KEY]: true,
+          }),
+          'git worktree repair failed during adoption — marking task as WORKTREE_LOST'
+        );
         // Task must be finalized as failed with the WORKTREE_LOST webhook error code.
         expect(mockWebhookClient.send).toHaveBeenCalledWith(
           expect.objectContaining({
