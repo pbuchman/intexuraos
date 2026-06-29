@@ -1175,6 +1175,80 @@ describe('Private WhatsApp Sync Routes', () => {
     ]);
   });
 
+  it('publishes one private video transcription job after chat transcription is enabled', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    const updateResponse = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+
+    const videoPayload = createPayload({
+      events: [
+        {
+          ...(createPayload()['events'] as Record<string, unknown>[])[0],
+          matrixEventId: '$event-private-video',
+          message: {
+            direction: 'incoming',
+            type: 'video',
+            media: {
+              mxcUri: 'mxc://home-dev/private-video',
+              mimeType: 'video/mp4',
+              storageStatus: 'stored',
+              gcsPath: 'whatsapp/private/user-123/private-video/video.mp4',
+              storedMimeType: 'video/mp4',
+              storedSizeBytes: 4096,
+            },
+          },
+        },
+      ],
+    });
+
+    const firstIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: videoPayload,
+    });
+    const duplicateIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: videoPayload,
+    });
+
+    expect(firstIngest.statusCode).toBe(200);
+    expect(duplicateIngest.statusCode).toBe(200);
+    expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()).toEqual([
+      {
+        type: 'whatsapp.media.transcription.requested',
+        messageSource: 'private_whatsapp',
+        mediaKind: 'video',
+        userId: 'user-123',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-video',
+        mediaId: 'mxc://home-dev/private-video',
+        gcsPath: 'whatsapp/private/user-123/private-video/video.mp4',
+        mimeType: 'video/mp4',
+        timestamp: expect.any(String),
+      },
+    ]);
+  });
+
   it('returns stored private WhatsApp message transcription state in chat messages', async () => {
     const ingestResponse = await ctx.app.inject({
       method: 'POST',

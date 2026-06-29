@@ -13,6 +13,7 @@ import {
 import {
   createAudioWebhookPayload,
   createButtonWebhookPayload,
+  createVideoWebhookPayload,
   createReplyWebhookPayload,
   createWebhookPayload,
 } from '../testUtils.js';
@@ -107,6 +108,18 @@ function prepareAudioMedia(whatsappCloudApi: FakeWhatsAppCloudApiPort, mediaId: 
   );
 }
 
+function prepareVideoMedia(whatsappCloudApi: FakeWhatsAppCloudApiPort, mediaId: string): void {
+  whatsappCloudApi.setMediaUrl(mediaId, {
+    url: `https://cdn.example.com/${mediaId}.mp4`,
+    mimeType: 'video/mp4',
+    fileSize: 3,
+  });
+  whatsappCloudApi.setMediaContent(
+    `https://cdn.example.com/${mediaId}.mp4`,
+    Buffer.from([0x00, 0x01, 0x02])
+  );
+}
+
 describe('ProcessWebhookEventUseCase text-only branches', () => {
   it('completes audio messages without sending a response when phoneNumberId is missing', async () => {
     const {
@@ -165,6 +178,34 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
     expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
     expect(eventPublisher.getAudioStoredEvents()).toHaveLength(1);
+  });
+
+  it('completes video messages without marking read when phoneNumberId is missing', async () => {
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      messageRepository,
+      mediaStorage,
+      whatsappCloudApi,
+      eventPublisher,
+    } = await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    prepareVideoMedia(whatsappCloudApi, 'media-video-1');
+
+    const payload = createVideoWebhookPayload({ mediaId: 'media-video-1' }) as MutablePhoneMetadataPayload;
+    delete payload.entry[0]?.changes[0]?.value.metadata.phone_number_id;
+
+    await useCase.execute(payload as unknown as WebhookPayload, savedEvent, logger());
+
+    const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
+    expect(eventResult.ok && eventResult.value?.status).toBe('completed');
+    expect(messageRepository.getAll()).toHaveLength(1);
+    expect(messageRepository.getAll()[0]?.mediaType).toBe('video');
+    expect(mediaStorage.getAllFiles().size).toBe(1);
+    expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
+    expect(eventPublisher.getMediaTranscriptionRequestedEvents()).toHaveLength(1);
   });
 
   it('returns after audio storage fails without sending an unsupported response', async () => {

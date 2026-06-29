@@ -129,7 +129,9 @@ export type {
   AudioStoredEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
+  IntexMessageSourceType,
   MediaCleanupEvent,
+  MediaTranscriptionRequestedEvent,
   SendMessageEvent,
   TranscriptionCompletedEvent,
   WebhookProcessEvent,
@@ -155,6 +157,15 @@ export {
   type ProcessAudioMessageLogger,
   type AudioMediaInfo,
 } from './usecases/processAudioMessage.js';
+
+export {
+  ProcessVideoMessageUseCase,
+  type ProcessVideoMessageInput,
+  type ProcessVideoMessageResult,
+  type ProcessVideoMessageDeps,
+  type ProcessVideoMessageLogger,
+  type VideoMediaInfo,
+} from './usecases/processVideoMessage.js';
 
 export {
   ExtractLinkPreviewsUseCase,

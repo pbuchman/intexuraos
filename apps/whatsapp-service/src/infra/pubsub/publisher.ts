@@ -12,6 +12,7 @@ import type {
   IntexMessageIngestEvent,
   WhatsAppError,
   MediaCleanupEvent,
+  MediaTranscriptionRequestedEvent,
   WebhookProcessEvent,
 } from '../../domain/whatsapp/index.js';
 
@@ -72,6 +73,18 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { messageId: event.messageId },
       'audio stored'
+    );
+    return this.mapToWhatsAppError(result);
+  }
+
+  async publishMediaTranscriptionRequested(
+    event: MediaTranscriptionRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    const result = await this.publishToTopic(
+      this.audioStoredTopic,
+      event,
+      { messageId: event.messageId },
+      'media transcription requested'
     );
     return this.mapToWhatsAppError(result);
   }

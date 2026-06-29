@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Search,
   UserRound,
+  Video,
   UsersRound,
 } from 'lucide-react';
 import { Button, ErrorBanner, Layout } from '@/components';
@@ -107,7 +108,10 @@ function hasStoredImage(message: PrivateWhatsAppMessage): boolean {
 }
 
 function MessageTranscription({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element | null {
-  const transcription = message.messageType === 'audio' ? message.transcription : undefined;
+  const transcription =
+    message.messageType === 'audio' || message.messageType === 'video'
+      ? message.transcription
+      : undefined;
   if (transcription === undefined) {
     return null;
   }
@@ -179,7 +183,7 @@ function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JS
 
   const mediaName =
     message.media?.fileName ?? message.media?.mimeType ?? `${message.messageType} message`;
-  const Icon = message.messageType === 'image' ? Image : FileText;
+  const Icon = message.messageType === 'image' ? Image : message.messageType === 'video' ? Video : FileText;
 
   return (
     <div className="space-y-3">

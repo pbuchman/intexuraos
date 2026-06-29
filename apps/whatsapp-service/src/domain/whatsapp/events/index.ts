@@ -9,6 +9,7 @@ export type {
   IntexMessageReplyContextSource,
   IntexMessageSourceType,
   MediaCleanupEvent,
+  MediaTranscriptionRequestedEvent,
   SendMessageEvent,
   TranscriptionCompletedEvent,
   WebhookProcessEvent,

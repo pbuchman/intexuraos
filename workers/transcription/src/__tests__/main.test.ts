@@ -3,7 +3,11 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { transcribeAudio, type TranscriptionDeps } from '../main.js';
-import type { AudioStoredEvent, TranscriptionCompletedEvent } from '../types.js';
+import type {
+  AudioStoredEvent,
+  TranscriptionCompletedEvent,
+  TranscriptionRequestEvent,
+} from '../types.js';
 import type { SpeechTranscriptionPort } from '../providers/transcription-provider.js';
 import { ok, err } from '@intexuraos/common-core';
 
@@ -29,6 +33,15 @@ const sampleEvent: AudioStoredEvent = {
   gcsPath: 'whatsapp/user-123/msg-456/media-789.ogg',
   mimeType: 'audio/ogg',
   timestamp: '2024-01-01T00:00:00.000Z',
+};
+
+const sampleVideoEvent: TranscriptionRequestEvent = {
+  ...sampleEvent,
+  type: 'whatsapp.media.transcription.requested',
+  messageSource: 'public_whatsapp',
+  mediaKind: 'video',
+  mimeType: 'video/mp4',
+  gcsPath: 'whatsapp/user-123/msg-456/media-789.mp4',
 };
 
 const noopSleep = (): Promise<void> => Promise.resolve();
@@ -113,6 +126,16 @@ describe('transcribeAudio', () => {
       expect(publishedEvents[0]?.messageSource).toBe('private_whatsapp');
     });
 
+    it('preserves video media kind on completed events', async () => {
+      await transcribeAudio(sampleVideoEvent, deps, mockLogger);
+
+      expect(publishedEvents[0]).toMatchObject({
+        messageSource: 'public_whatsapp',
+        mediaKind: 'video',
+        status: 'completed',
+      });
+    });
+
     it('includes summary in completed event when provider returns one', async () => {
       const provider = makeProvider(
         ok({ jobId: 'job-123', apiCall: { timestamp: '', operation: 'submit', success: true } }),
@@ -187,6 +210,19 @@ describe('transcribeAudio', () => {
       );
 
       expect(publishedEvents[0]?.messageSource).toBe('private_whatsapp');
+    });
+
+    it('preserves video media kind on failed events', async () => {
+      deps.generateSignedUrl = vi.fn().mockResolvedValue(err({ message: 'GCS access denied' }));
+
+      await transcribeAudio(sampleVideoEvent, deps, mockLogger);
+
+      expect(publishedEvents[0]).toMatchObject({
+        messageSource: 'public_whatsapp',
+        mediaKind: 'video',
+        status: 'failed',
+        error: expect.stringContaining('GCS access denied'),
+      });
     });
 
     it('publishes failed event when job submission fails', async () => {

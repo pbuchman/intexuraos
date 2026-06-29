@@ -73,8 +73,12 @@ function isAudioMimeType(mimeType: string): boolean {
   return mimeType.startsWith('audio/');
 }
 
+function isVideoMimeType(mimeType: string): boolean {
+  return mimeType.startsWith('video/');
+}
+
 function isSupportedUploadMimeType(mimeType: string): boolean {
-  return isImageMimeType(mimeType) || isAudioMimeType(mimeType);
+  return isImageMimeType(mimeType) || isAudioMimeType(mimeType) || isVideoMimeType(mimeType);
 }
 
 function isPrivateImageMessage(message: PrivateWhatsAppMessage): boolean {
@@ -378,7 +382,10 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
         const mimeType = request.query.mimeType;
         if (mimeType === undefined || !isSupportedUploadMimeType(mimeType)) {
-          return await reply.fail('INVALID_REQUEST', 'mimeType must be an image or audio MIME type');
+          return await reply.fail(
+            'INVALID_REQUEST',
+            'mimeType must be an image, audio, or video MIME type'
+          );
         }
 
         const services = getServices();

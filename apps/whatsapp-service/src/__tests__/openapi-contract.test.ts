@@ -151,4 +151,10 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(uploadPrivateMedia).toBeDefined();
     expect(uploadPrivateMedia?.responses?.['413']).toBeDefined();
   });
+
+  it('documents video as a WhatsApp message media type', () => {
+    const messagesRoute = openapiSpec.paths?.['/messages']?.['get'];
+    expect(messagesRoute).toBeDefined();
+    expect(JSON.stringify(messagesRoute)).toContain('"video"');
+  });
 });

@@ -23,6 +23,7 @@ import type { IntexMessageReplyContext } from '../events/index.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import { ProcessImageMessageUseCase } from './processImageMessage.js';
 import { ProcessAudioMessageUseCase } from './processAudioMessage.js';
+import { ProcessVideoMessageUseCase } from './processVideoMessage.js';
 import type { WebhookPayload } from '../../../routes/schemas.js';
 import {
   extractAudioMedia,
@@ -38,6 +39,7 @@ import {
   extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
+  extractVideoMedia,
 } from '../../../routes/shared.js';
 
 const MAX_REPLY_CONTEXT_TEXT_LENGTH = 1200;
@@ -112,6 +114,7 @@ export class ProcessWebhookEventUseCase {
       const messageType = extractMessageType(payload);
       const imageMedia = extractImageMedia(payload);
       const audioMedia = extractAudioMedia(payload);
+      const videoMedia = extractVideoMedia(payload);
       const reactionData = extractReactionData(payload);
       const buttonResponse = extractButtonResponse(payload);
 
@@ -123,6 +126,7 @@ export class ProcessWebhookEventUseCase {
           hasText: messageText !== null,
           hasImage: imageMedia !== null,
           hasAudio: audioMedia !== null,
+          hasVideo: videoMedia !== null,
           hasReaction: reactionData !== null,
           reactionEmoji: reactionData?.emoji,
           hasButton: buttonResponse !== null,
@@ -132,7 +136,7 @@ export class ProcessWebhookEventUseCase {
       );
 
       // Validate message type
-      const supportedTypes = ['text', 'image', 'audio', 'reaction', 'button', 'interactive'];
+      const supportedTypes = ['text', 'image', 'audio', 'video', 'reaction', 'button', 'interactive'];
       if (messageType === null || !supportedTypes.includes(messageType)) {
         logger.info(
           { eventId: savedEvent.id, messageType },
@@ -141,7 +145,7 @@ export class ProcessWebhookEventUseCase {
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
           ignoredReason: {
             code: 'UNSUPPORTED_MESSAGE_TYPE',
-            message: `Only text, image, audio, reaction, button, and interactive messages are supported. Received: ${messageType ?? 'unknown'}`,
+            message: `Only text, image, audio, video, reaction, button, and interactive messages are supported. Received: ${messageType ?? 'unknown'}`,
             details: { messageType },
           },
         });
@@ -177,6 +181,17 @@ export class ProcessWebhookEventUseCase {
           ignoredReason: {
             code: 'NO_AUDIO_MEDIA',
             message: 'Audio message has no media info',
+          },
+        });
+        return;
+      }
+
+      if (messageType === 'video' && videoMedia === null) {
+        logger.info({ eventId: savedEvent.id }, 'Ignoring video message without media info');
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+          ignoredReason: {
+            code: 'NO_VIDEO_MEDIA',
+            message: 'Video message has no media info',
           },
         });
         return;
@@ -310,6 +325,23 @@ export class ProcessWebhookEventUseCase {
           senderName,
           phoneNumberId,
           audioMedia,
+          logger
+        );
+        return;
+      }
+
+      if (messageType === 'video' && videoMedia !== null) {
+        await this.handleVideoMessage(
+          payload,
+          savedEvent,
+          userId,
+          waMessageId,
+          fromNumber,
+          toNumber,
+          timestamp,
+          senderName,
+          phoneNumberId,
+          videoMedia,
           logger
         );
         return;
@@ -543,6 +575,67 @@ export class ProcessWebhookEventUseCase {
       logger.info(
         { eventId: savedEvent.id },
         'Cannot mark audio message as read with typing because phoneNumberId is missing'
+      );
+    }
+  }
+
+  /**
+   * Handle video messages by storing media and handing it to transcription.
+   */
+  private async handleVideoMessage(
+    payload: WebhookPayload,
+    savedEvent: { id: string },
+    userId: string,
+    waMessageId: string,
+    fromNumber: string,
+    toNumber: string,
+    timestamp: string,
+    senderName: string | null,
+    phoneNumberId: string | null,
+    videoMedia: { id: string; mimeType: string; sha256?: string; caption?: string },
+    logger: Logger
+  ): Promise<void> {
+    const {
+      webhookEventRepository,
+      messageRepository,
+      mediaStorage,
+      whatsappCloudApi,
+      eventPublisher,
+    } = this.deps;
+
+    const usecase = new ProcessVideoMessageUseCase({
+      webhookEventRepository,
+      messageRepository,
+      mediaStorage,
+      whatsappCloudApi,
+      eventPublisher,
+    });
+
+    const processResult = await usecase.execute(
+      {
+        eventId: savedEvent.id,
+        userId,
+        waMessageId,
+        fromNumber,
+        toNumber,
+        timestamp,
+        senderName,
+        phoneNumberId,
+        videoMedia,
+      },
+      logger
+    );
+
+    if (!processResult.ok) {
+      return;
+    }
+
+    if (phoneNumberId !== null) {
+      await this.markAudioAsReadWithTyping(payload, savedEvent, whatsappCloudApi, logger);
+    } else {
+      logger.info(
+        { eventId: savedEvent.id },
+        'Cannot mark video message as read with typing because phoneNumberId is missing'
       );
     }
   }

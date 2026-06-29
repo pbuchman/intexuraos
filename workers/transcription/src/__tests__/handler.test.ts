@@ -56,6 +56,20 @@ function makeValidAudioStoredEvent(): AudioStoredEvent {
   };
 }
 
+function makeValidVideoTranscriptionRequestedEvent(): Record<string, unknown> {
+  return {
+    type: 'whatsapp.media.transcription.requested',
+    messageSource: 'public_whatsapp',
+    mediaKind: 'video',
+    userId: 'user-123',
+    messageId: 'msg-video-456',
+    mediaId: 'media-video-789',
+    gcsPath: 'whatsapp/user-123/video.mp4',
+    mimeType: 'video/mp4',
+    timestamp: '2026-06-29T00:00:00.000Z',
+  };
+}
+
 describe('createAudioStoredHandler', () => {
   let baseLogger: FakeLogger;
   let publishedCompleted: TranscriptionCompletedEvent[];
@@ -149,6 +163,21 @@ describe('createAudioStoredHandler', () => {
       });
       expect(publishedCompleted).toHaveLength(0);
     });
+
+    it('returns DeadLetter "invalid_event_schema" when media transcription request omits mediaKind', async () => {
+      const handler = createAudioStoredHandler(deps);
+      const payload = makeValidVideoTranscriptionRequestedEvent();
+      delete payload['mediaKind'];
+      const event = makePubSubCloudEvent(payload);
+
+      const result = await handler(event, baseLogger);
+
+      expect(result).toEqual({
+        decision: AckDecision.DeadLetter,
+        reason: 'invalid_event_schema',
+      });
+      expect(publishedCompleted).toHaveLength(0);
+    });
   });
 
   describe('Ack path (happy publish)', () => {
@@ -162,6 +191,25 @@ describe('createAudioStoredHandler', () => {
       expect(publishedCompleted).toHaveLength(1);
       expect(publishedCompleted[0]?.status).toBe('completed');
       expect(publishedCompleted[0]?.userId).toBe('user-123');
+    });
+
+    it('returns Ack and publishes a video completed event for a valid media transcription request', async () => {
+      const handler = createAudioStoredHandler(deps);
+      const event = makePubSubCloudEvent(makeValidVideoTranscriptionRequestedEvent());
+
+      const result = await handler(event, baseLogger);
+
+      expect(result).toEqual({ decision: AckDecision.Ack });
+      expect(deps.generateSignedUrl).toHaveBeenCalledWith('whatsapp/user-123/video.mp4');
+      expect(publishedCompleted).toHaveLength(1);
+      expect(publishedCompleted[0]).toMatchObject({
+        type: 'srt.transcription.completed',
+        messageSource: 'public_whatsapp',
+        mediaKind: 'video',
+        userId: 'user-123',
+        messageId: 'msg-video-456',
+        status: 'completed',
+      });
     });
 
     it('uses extracted requestId as a child binding on the request logger', async () => {

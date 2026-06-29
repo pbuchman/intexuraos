@@ -192,11 +192,13 @@ export function WhatsAppNotesPage(): React.JSX.Element {
       text: 0,
       image: 0,
       audio: 0,
+      video: 0,
     };
     for (const msg of messages) {
       if (msg.mediaType === 'text') counts.text++;
       else if (msg.mediaType === 'image') counts.image++;
-      else counts.audio++;
+      else if (msg.mediaType === 'audio') counts.audio++;
+      else counts.video++;
     }
     return counts;
   }, [messages]);

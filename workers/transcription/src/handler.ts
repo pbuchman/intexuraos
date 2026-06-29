@@ -14,7 +14,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
 import { transcribeAudio } from './main.js';
 import type { PollingConfig } from './polling.js';
-import type { AudioStoredEvent, TranscriptionCompletedEvent } from './types.js';
+import type { TranscriptionCompletedEvent, TranscriptionRequestEvent } from './types.js';
 import { extractCorrelation } from './extractCorrelation.js';
 import { runWithRequestContext } from './requestContextShim.js';
 import {
@@ -67,21 +67,31 @@ export interface AudioStoredHandlerDeps {
 }
 
 /**
- * Validate a parsed Pub/Sub payload has every required `AudioStoredEvent`
+ * Validate a parsed Pub/Sub payload has every required transcription request
  * field. Guards against schema drift between whatsapp-service (the producer)
  * and this worker.
  */
-function isAudioStoredEvent(event: { type?: string }): event is AudioStoredEvent {
+function isSupportedTranscriptionEventType(type: unknown): boolean {
+  return type === 'whatsapp.audio.stored' || type === 'whatsapp.media.transcription.requested';
+}
+
+function isTranscriptionRequestEvent(event: { type?: string }): event is TranscriptionRequestEvent {
   const obj = event as Record<string, unknown>;
-  return (
-    obj['type'] === 'whatsapp.audio.stored' &&
-    typeof obj['userId'] === 'string' &&
-    typeof obj['messageId'] === 'string' &&
-    typeof obj['mediaId'] === 'string' &&
-    typeof obj['gcsPath'] === 'string' &&
-    typeof obj['mimeType'] === 'string' &&
-    typeof obj['timestamp'] === 'string'
-  );
+  if (
+    typeof obj['userId'] !== 'string' ||
+    typeof obj['messageId'] !== 'string' ||
+    typeof obj['mediaId'] !== 'string' ||
+    typeof obj['gcsPath'] !== 'string' ||
+    typeof obj['mimeType'] !== 'string' ||
+    typeof obj['timestamp'] !== 'string'
+  ) {
+    return false;
+  }
+  if (obj['type'] === 'whatsapp.media.transcription.requested') {
+    return obj['mediaKind'] === 'audio' || obj['mediaKind'] === 'video';
+  }
+  // The caller rejects unsupported type literals before this structural guard.
+  return true;
 }
 
 /**
@@ -118,10 +128,10 @@ export function createAudioStoredHandler(
         return { decision: AckDecision.DeadLetter, reason: 'missing_message_data' };
       }
 
-      let audioEvent: { type?: string };
+      let transcriptionEvent: { type?: string };
       try {
         const decoded = Buffer.from(messageData, 'base64').toString('utf-8');
-        audioEvent = JSON.parse(decoded) as { type?: string };
+        transcriptionEvent = JSON.parse(decoded) as { type?: string };
       } catch {
         reqLogger.error(
           { event: 'parse_error', eventId: event.id },
@@ -131,11 +141,10 @@ export function createAudioStoredHandler(
       }
 
       // Explicit type guard before structural validation so we can log the
-      // wrong type value for triage; `isAudioStoredEvent` re-checks the same
-      // literal but doesn't surface the unexpected value in its log line.
-      if (audioEvent.type !== 'whatsapp.audio.stored') {
+      // wrong type value for triage before structural validation.
+      if (!isSupportedTranscriptionEventType(transcriptionEvent.type)) {
         reqLogger.warn(
-          { event: 'unexpected_event_type', type: audioEvent.type, eventId: event.id },
+          { event: 'unexpected_event_type', type: transcriptionEvent.type, eventId: event.id },
           'Unexpected event type, dead-lettering'
         );
         return { decision: AckDecision.DeadLetter, reason: 'unexpected_event_type' };
@@ -143,17 +152,17 @@ export function createAudioStoredHandler(
 
       // Structural validation of the remaining required fields. After the
       // type-literal guard above, this branch only fails on missing
-      // userId / messageId / mediaId / gcsPath / mimeType / timestamp.
-      if (!isAudioStoredEvent(audioEvent)) {
+      // userId / messageId / mediaId / gcsPath / mimeType / timestamp / mediaKind.
+      if (!isTranscriptionRequestEvent(transcriptionEvent)) {
         reqLogger.warn(
           { event: 'invalid_event_schema', eventId: event.id },
-          'Audio stored event is missing required fields, dead-lettering'
+          'Transcription request event is missing required fields, dead-lettering'
         );
         return { decision: AckDecision.DeadLetter, reason: 'invalid_event_schema' };
       }
 
       await transcribeAudio(
-        audioEvent,
+        transcriptionEvent,
         {
           fetchUserProvider: (userId: string) => deps.fetchUserProvider(userId, reqLogger),
           generateSignedUrl: deps.generateSignedUrl,

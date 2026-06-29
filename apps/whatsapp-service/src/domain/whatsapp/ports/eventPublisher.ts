@@ -9,6 +9,7 @@ import type {
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   MediaCleanupEvent,
+  MediaTranscriptionRequestedEvent,
   WebhookProcessEvent,
 } from '../events/index.js';
 
@@ -27,6 +28,14 @@ export interface EventPublisherPort {
    * Triggers async transcription.
    */
   publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>>;
+
+  /**
+   * Publish a media transcription request event.
+   * Triggers async transcription for stored audio/video.
+   */
+  publishMediaTranscriptionRequested(
+    event: MediaTranscriptionRequestedEvent
+  ): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a WhatsApp Assistant message ingest event.

@@ -359,6 +359,30 @@ describe('PrivateWhatsAppLogPage', () => {
             ingestedAt: '2026-06-22T09:04:03.000Z',
             deliveryMode: 'live',
           },
+          {
+            id: 'video-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'video',
+            media: {
+              mxcUri: 'mxc://home-dev/video-completed',
+              mimeType: 'video/mp4',
+              fileName: 'clip.mp4',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-video-completed',
+              text: 'The video says to bring the blue folder.',
+              completedAt: '2026-06-22T09:05:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:05:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:05:02.000Z',
+            ingestedAt: '2026-06-22T09:05:03.000Z',
+            deliveryMode: 'live',
+          },
         ],
       })
     );
@@ -374,5 +398,6 @@ describe('PrivateWhatsAppLogPage', () => {
     expect(setChatTranscriptionEnabled).toHaveBeenCalledWith('chat-group', true);
     expect(screen.getByText('Bring the documents tomorrow.')).toBeInTheDocument();
     expect(screen.getByText('Audio format was not supported')).toBeInTheDocument();
+    expect(screen.getByText('The video says to bring the blue folder.')).toBeInTheDocument();
   });
 });
