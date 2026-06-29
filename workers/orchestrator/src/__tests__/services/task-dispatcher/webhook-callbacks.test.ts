@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
   sendSetupFailureWebhook,
   buildResultFromVerification,
@@ -863,13 +864,14 @@ describe('checkForResult', () => {
     expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
   });
 
-  it('swallows exec errors and logs them', async () => {
+  it('swallows exec errors and suppresses expected best-effort result checks from Sentry', async () => {
     const task = makeTask();
     const exec = makeExec([[isGitBranchShowCurrent, new Error('not a git repo')]]);
     const read = makeRead('{}');
     expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'task-1' }),
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-1', [SKIP_SENTRY_KEY]: true }),
       'Failed to check for task result'
     );
   });
