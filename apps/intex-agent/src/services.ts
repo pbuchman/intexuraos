@@ -102,7 +102,7 @@ export function initServices(config: ServiceConfig): void {
   const externalSaveTester: ExternalSaveConnectionTestPort = {
     async testConnection(externalSave) {
       const result = await createExternalSaveClient(toExternalSaveClientConfig(externalSave)).save({
-        message: 'INTEX Agent external save connection test.',
+        message: 'Intex Agent external save connection test.',
       });
       return result.ok
         ? { ok: true, status: 'success', message: 'Connection successful' }
@@ -135,7 +135,7 @@ export function initServices(config: ServiceConfig): void {
         client: {
           run() {
             return Promise.reject(
-              new Error('Confirmed INTEX Agent execution must not invoke the LLM')
+              new Error('Confirmed Intex Agent execution must not invoke the LLM')
             );
           },
         },

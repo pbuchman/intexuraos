@@ -25,7 +25,7 @@ const SUPPORTED_CAPABILITIES_REPLY =
     '- create research drafts',
     '- save bookmarks',
     '- create code tasks for planning or execution',
-    '- manage INTEX Agent prompt preferences',
+    '- manage Intex Agent prompt preferences',
   ].join('\n');
 const COMPLETION_FAILURE_CAPABILITIES_REPLY =
   [
@@ -36,7 +36,7 @@ const COMPLETION_FAILURE_CAPABILITIES_REPLY =
     '- create research drafts',
     '- save bookmarks',
     '- create code tasks for planning or execution',
-    '- manage INTEX Agent prompt preferences',
+    '- manage Intex Agent prompt preferences',
   ].join('\n');
 const POLISH_SUPPORTED_CAPABILITIES_REPLY =
   [
@@ -47,7 +47,7 @@ const POLISH_SUPPORTED_CAPABILITIES_REPLY =
     '- tworzeniem szkiców researchu',
     '- zapisywaniem bookmarków',
     '- tworzeniem zadań programistycznych do planowania lub wykonania',
-    '- zarządzaniem preferencjami promptu agenta INTEX',
+    '- zarządzaniem preferencjami promptu agenta Intex',
   ].join('\n');
 const POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY =
   [
@@ -58,7 +58,7 @@ const POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY =
     '- tworzeniem szkiców researchu',
     '- zapisywaniem bookmarków',
     '- tworzeniem zadań programistycznych do planowania lub wykonania',
-    '- zarządzaniem preferencjami promptu agenta INTEX',
+    '- zarządzaniem preferencjami promptu agenta Intex',
   ].join('\n');
 const ENGLISH_GREETING_REPLY = 'Hi! I am doing well. How can I help?';
 const POLISH_GREETING_REPLY = 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?';
@@ -69,7 +69,7 @@ const EXTERNAL_SAVE_FAILED_REPLY =
 const EXTERNAL_SAVE_UNKNOWN_FAILURE_REPLY =
   'I could not deliver this to the external system. The external save request failed: Unknown external save error. Please check the external system configuration and try again.';
 const POLISH_EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
-  'Nie skonfigurowano zewnętrznego systemu dla tej wiadomości, więc nie mogę jej przetworzyć. Skonfiguruj External Save w preferencjach agenta INTEX i wyślij ją ponownie.';
+  'Nie skonfigurowano zewnętrznego systemu dla tej wiadomości, więc nie mogę jej przetworzyć. Skonfiguruj External Save w preferencjach agenta Intex i wyślij ją ponownie.';
 const POLISH_EXTERNAL_SAVE_FAILED_REPLY =
   'Nie udało się dostarczyć tej treści do zewnętrznego systemu. Żądanie External Save nie powiodło się: HTTP 403: Forbidden. Sprawdź konfigurację zewnętrznego systemu i spróbuj ponownie.';
 
@@ -115,11 +115,11 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('10.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('11.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
-      'Always reply in the language of the last reasonable user message in the current session.'
+      'Default to the language of the last reasonable user message in the current session'
     );
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
     expect(client.calls[0]?.systemPrompt).toContain('execution');
@@ -133,9 +133,10 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain('Plain URL shares are the exception');
     expect(client.calls[0]?.systemPrompt).toContain('keywords inside URLs');
     expect(client.calls[0]?.systemPrompt).toContain(
-      'If the request is not one of the supported jobs and cannot be answered from the current session transcript'
+      'If the request is clearly outside supported jobs and cannot be answered from the current session transcript'
     );
-    expect(client.calls[0]?.systemPrompt).toContain('manage INTEX Agent prompt preferences');
+    expect(client.calls[0]?.systemPrompt).toContain('Explain the exact blocker first');
+    expect(client.calls[0]?.systemPrompt).toContain('manage Intex Agent prompt preferences');
     expect(client.calls[0]?.systemPrompt).not.toMatch(/approval|command classification|action queue|voice/i);
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'create event tomorrow' },
@@ -306,7 +307,17 @@ describe('createIntexAgentRunner', () => {
 
   it('normalizes clarification responses', async () => {
     const client = new FakeToolCallingClient([
-      ok(toolResult({ outcome: 'needs_clarification', reply: 'Which day?' })),
+      ok(
+        toolResult({
+          outcome: 'needs_clarification',
+          reply: 'Which day?',
+          clarification: 'Which day?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+          suggestedNextStep: 'Ask for the missing date.',
+        })
+      ),
     ]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
@@ -317,7 +328,15 @@ describe('createIntexAgentRunner', () => {
         message: 'create dentist appointment',
         currentDateTime: CURRENT_DATE_TIME,
       })
-    ).resolves.toEqual({ outcome: 'needs_clarification', reply: 'Which day?' });
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which day?',
+      clarification: 'Which day?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_calendar_event'],
+      suggestedNextStep: 'Ask for the missing date.',
+    });
   });
 
   it('uses an injected intent classifier to expose context-derived tools', async () => {
@@ -417,6 +436,184 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('returns classifier clarification metadata without telling the user the request cannot be handled', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'needs_clarification',
+          question: 'Which one should I handle first?',
+          blockerReason: 'multiple_possible_intents',
+          missingFields: ['intent'],
+          candidateIntents: ['create_note', 'query_calendar_events'],
+          suggestedNextStep: 'Ask which supported action to perform first.',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a note and show me tomorrow calendar events',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which one should I handle first?',
+      blockerReason: 'multiple_possible_intents',
+      missingFields: ['intent'],
+      candidateIntents: ['create_note', 'query_calendar_events'],
+      suggestedNextStep: 'Ask which supported action to perform first.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('returns classifier unsupported responses with exact blocker metadata', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'unsupported',
+          reason: 'tool_boundary',
+          blockerReason: 'tool_boundary',
+          suggestedNextStep: 'Offer to save the request details as a note.',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'summarize this website',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'I cannot do that with the available Intex Agent tools. I can save the request details as a note.',
+      blockerReason: 'tool_boundary',
+      suggestedNextStep: 'Offer to save the request details as a note.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('returns localized classifier unsupported responses with user-facing next steps', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'unsupported',
+          reason: 'permission_or_configuration',
+          blockerReason: 'permission_or_configuration',
+          suggestedNextStep: 'Sprawdź konfigurację External Save',
+          languageOverride: 'pl',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Po polsku zapisz zewnętrznie ten paragon',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'Nie mogę wykonać tej akcji, bo brakuje wymaganych uprawnień albo konfiguracji. Sprawdź konfigurację External Save.',
+      blockerReason: 'permission_or_configuration',
+      suggestedNextStep: 'Sprawdź konfigurację External Save',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('falls back safely for classifier unsupported metadata without a mapped blocker or next step', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'unsupported',
+          reason: 'missing_required_details',
+          blockerReason: 'missing_required_details',
+          suggestedNextStep: '',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'do it',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: "I cannot perform that action because it is outside Intex Agent's supported capabilities.",
+      blockerReason: 'missing_required_details',
+      suggestedNextStep: '',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('keeps already user-facing classifier next steps unchanged', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'unsupported',
+          reason: 'unsupported_capability',
+          blockerReason: 'unsupported_capability',
+          suggestedNextStep: 'I can save it as a note.',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'buy this ticket',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        "I cannot perform that action because it is outside Intex Agent's supported capabilities. I can save it as a note.",
+      blockerReason: 'unsupported_capability',
+      suggestedNextStep: 'I can save it as a note.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
   it('returns classifier greetings without calling the runner client', async () => {
     const client = new FakeToolCallingClient([]);
     const intentClassifier: IntexAgentIntentClassifier = {
@@ -474,13 +671,18 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.toolChoice).toBe('auto');
   });
 
-  it('normalizes unsupported responses to the complete capability list', async () => {
+  it('preserves unsupported responses with exact blocker metadata', async () => {
+    const unsupportedReply =
+      'I cannot buy concert tickets. I can save the ticket details as a note instead.';
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
           outcome: 'unsupported',
-          reply:
-            'Przepraszam, ale obecnie nie mam możliwości przeglądania ani wyświetlania istniejących wydarzeń w Twoim kalendarzu. Mogę jedynie tworzyć nowe notatki, wydarzenia w kalendarzu, szkice badań, zakładki oraz zadania programistyczne.',
+          reply: unsupportedReply,
+          blockerReason: 'unsupported_capability',
+          suggestedNextStep: 'Offer to save ticket details as a note.',
+          missingFields: ['supported_action'],
+          candidateIntents: ['create_note'],
         })
       ),
     ]);
@@ -495,19 +697,23 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      reply: unsupportedReply,
+      blockerReason: 'unsupported_capability',
+      suggestedNextStep: 'Offer to save ticket details as a note.',
+      missingFields: ['supported_action'],
+      candidateIntents: ['create_note'],
     });
-
-    expect(SUPPORTED_CAPABILITIES_REPLY).toContain('- create and look up calendar events');
-    expect(SUPPORTED_CAPABILITIES_REPLY).toContain('- create code tasks for planning or execution');
   });
 
-  it('normalizes unsupported responses in Polish for Polish messages', async () => {
+  it('preserves unsupported responses in Polish for Polish messages', async () => {
+    const unsupportedReply = 'Nie mogę kupić biletu. Mogę zapisać szczegóły jako notatkę.';
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
           outcome: 'unsupported',
-          reply: 'Nie mogę tego zrobić.',
+          reply: unsupportedReply,
+          blockerReason: 'unsupported_capability',
+          suggestedNextStep: 'Offer to save ticket details as a note.',
         })
       ),
     ]);
@@ -522,7 +728,9 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: POLISH_SUPPORTED_CAPABILITIES_REPLY,
+      reply: unsupportedReply,
+      blockerReason: 'unsupported_capability',
+      suggestedNextStep: 'Offer to save ticket details as a note.',
     });
   });
 
@@ -695,6 +903,92 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('uses classifier language override for deterministic confirmation text', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'The note is ready.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'tool',
+          allowedToolNames: ['create_note'],
+          languageOverride: 'en',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Po angielsku zapisz notatkę: kod do drzwi to 1234',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply: 'Add this note?\n\nTitle: Kod do drzwi\nContent: Kod do drzwi to 1234.',
+      toolName: 'create_note',
+      toolArgs: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
+    });
+  });
+
+  it('falls back to detected language for unknown classifier language overrides', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'The note is ready.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'tool',
+          allowedToolNames: ['create_note'],
+          languageOverride: 'fr',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zapisz notatkę: kod do drzwi to 1234',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply: 'Czy dodać notatkę?\n\nTytuł: Kod do drzwi\nTreść: Kod do drzwi to 1234.',
+      toolName: 'create_note',
+      toolArgs: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
+    });
+  });
+
   it('does not expose tools for informational questions that lack explicit creation intent', async () => {
     const client = new FakeToolCallingClient([
       ok(
@@ -752,7 +1046,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('10.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('11.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -2074,6 +2368,9 @@ describe('createIntexAgentRunner', () => {
       reply: EXTERNAL_SAVE_NOT_CONFIGURED_REPLY,
       toolName: 'save_external',
       error: 'External save is not configured',
+      errorCategory: 'configuration',
+      isRetryable: false,
+      attemptedAction: 'save_external',
     });
   });
 
@@ -2103,6 +2400,9 @@ describe('createIntexAgentRunner', () => {
       reply: POLISH_EXTERNAL_SAVE_NOT_CONFIGURED_REPLY,
       toolName: 'save_external',
       error: 'External save is not configured',
+      errorCategory: 'configuration',
+      isRetryable: false,
+      attemptedAction: 'save_external',
     });
   });
 
@@ -2131,6 +2431,9 @@ describe('createIntexAgentRunner', () => {
       reply: EXTERNAL_SAVE_FAILED_REPLY,
       toolName: 'save_external',
       error: 'Failed to save externally: HTTP 403: Forbidden',
+      errorCategory: 'permission',
+      isRetryable: false,
+      attemptedAction: 'save_external',
     });
   });
 
@@ -2160,6 +2463,9 @@ describe('createIntexAgentRunner', () => {
       reply: POLISH_EXTERNAL_SAVE_FAILED_REPLY,
       toolName: 'save_external',
       error: 'Failed to save externally: HTTP 403: Forbidden',
+      errorCategory: 'permission',
+      isRetryable: false,
+      attemptedAction: 'save_external',
     });
   });
 
@@ -2188,6 +2494,38 @@ describe('createIntexAgentRunner', () => {
       reply: EXTERNAL_SAVE_UNKNOWN_FAILURE_REPLY,
       toolName: 'save_external',
       error: 'Failed to save externally:   ',
+      errorCategory: 'unknown',
+      isRetryable: false,
+      attemptedAction: 'save_external',
+    });
+  });
+
+  it('marks confirmed transient tool failures as retryable', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        createNote: async (): Promise<string> => {
+          throw new Error('Temporary timeout, try again later');
+        },
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        toolName: 'create_note',
+        toolArgs: { content: 'Door code is 1234.' },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'tool_failed',
+      reply:
+        'I could not execute this action: Temporary timeout, try again later. Please try again later.',
+      toolName: 'create_note',
+      error: 'Temporary timeout, try again later',
+      errorCategory: 'transient',
+      isRetryable: true,
+      attemptedAction: 'create_note',
     });
   });
 
@@ -2211,6 +2549,9 @@ describe('createIntexAgentRunner', () => {
         'Nie udało się wykonać tej akcji: Tool argument content must be a string. Spróbuj ponownie później.',
       toolName: 'create_note',
       error: 'Tool argument content must be a string',
+      errorCategory: 'validation',
+      isRetryable: false,
+      attemptedAction: 'create_note',
     });
   });
 
@@ -2808,7 +3149,7 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toMatchObject({
       outcome: 'completed',
-      reply: 'No INTEX Agent preferences are defined yet.',
+      reply: 'No Intex Agent preferences are defined yet.',
       toolName: 'get_user_preferences',
     });
   });
@@ -2838,12 +3179,12 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Pokaż moje preferencje agenta INTEX.',
+        message: 'Pokaż moje preferencje agenta Intex.',
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toMatchObject({
       outcome: 'completed',
-      reply: 'Nie zdefiniowano jeszcze preferencji agenta INTEX.',
+      reply: 'Nie zdefiniowano jeszcze preferencji agenta Intex.',
       toolName: 'get_user_preferences',
     });
   });
@@ -2878,7 +3219,7 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toMatchObject({
       outcome: 'completed',
-      reply: 'No INTEX Agent preferences are defined yet.',
+      reply: 'No Intex Agent preferences are defined yet.',
       toolName: 'get_user_preferences',
     });
   });
@@ -2908,12 +3249,12 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Pokaż moje preferencje agenta INTEX.',
+        message: 'Pokaż moje preferencje agenta Intex.',
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toMatchObject({
       outcome: 'completed',
-      reply: 'Nie zdefiniowano jeszcze preferencji agenta INTEX.',
+      reply: 'Nie zdefiniowano jeszcze preferencji agenta Intex.',
       toolName: 'get_user_preferences',
     });
   });
@@ -2968,7 +3309,7 @@ describe('createIntexAgentRunner', () => {
 
     const systemPrompt = client.calls[0]?.systemPrompt ?? '';
     expect(systemPrompt).toContain(
-      'User Preferences are durable user guidance. Use them when performing supported INTEX Agent jobs'
+      'User Preferences are durable user guidance. Apply preferences for supported Intex Agent jobs'
     );
     expect(systemPrompt).toContain(promptBlock);
     expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000Z');

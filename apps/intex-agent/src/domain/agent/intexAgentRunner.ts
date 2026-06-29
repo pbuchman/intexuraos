@@ -36,7 +36,7 @@ import {
   type IntexAgentToolExecutor,
 } from './toolDefinitions.js';
 import { buildIntexAgentSystemPrompt, INTEX_AGENT_RUNNER_PROMPT_TYPE } from './systemPrompt.js';
-import { classifyIntexAgentIntent } from './intentGate.js';
+import { classifyIntexAgentIntent, type IntexAgentIntentDecision } from './intentGate.js';
 import {
   buildGreetingReply,
   buildCompletionFailureCapabilitiesReply,
@@ -44,7 +44,10 @@ import {
   selectIntexAgentReplyLanguage,
   type IntexAgentReplyLanguage,
 } from './capabilities.js';
-import type { IntexAgentIntentClassifier } from './intentClassifier.js';
+import type {
+  IntexAgentIntentClassification,
+  IntexAgentIntentClassifier,
+} from './intentClassifier.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
 type MutatingIntexAgentToolName = Exclude<
@@ -65,6 +68,12 @@ const MUTATING_TOOL_NAMES = new Set<MutatingIntexAgentToolName>([
 ]);
 
 type LocalizedText = Record<IntexAgentReplyLanguage, string>;
+interface ClassifierUnsupportedReplyMap {
+  unsupported_capability: string;
+  tool_boundary: string;
+  permission_or_configuration: string;
+  [key: string]: string | undefined;
+}
 
 const GENERIC_EXECUTION_FAILURE_PREFIX: LocalizedText = {
   en: 'I could not execute this action: ',
@@ -78,7 +87,7 @@ const GENERIC_EXECUTION_FAILURE_SUFFIX: LocalizedText = {
 
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLIES: LocalizedText = {
   en: 'No external system is configured for this message, so I cannot process it. Configure external save in Intex Agent preferences and send it again.',
-  pl: 'Nie skonfigurowano zewnętrznego systemu dla tej wiadomości, więc nie mogę jej przetworzyć. Skonfiguruj External Save w preferencjach agenta INTEX i wyślij ją ponownie.',
+  pl: 'Nie skonfigurowano zewnętrznego systemu dla tej wiadomości, więc nie mogę jej przetworzyć. Skonfiguruj External Save w preferencjach agenta Intex i wyślij ją ponownie.',
 };
 
 const EXTERNAL_SAVE_FAILURE_PREFIX: LocalizedText = {
@@ -89,6 +98,26 @@ const EXTERNAL_SAVE_FAILURE_PREFIX: LocalizedText = {
 const EXTERNAL_SAVE_FAILURE_SUFFIX: LocalizedText = {
   en: '. Please check the external system configuration and try again.',
   pl: '. Sprawdź konfigurację zewnętrznego systemu i spróbuj ponownie.',
+};
+
+const CLASSIFIER_UNSUPPORTED_REPLIES: Record<
+  IntexAgentReplyLanguage,
+  ClassifierUnsupportedReplyMap
+> = {
+  en: {
+    unsupported_capability:
+      "I cannot perform that action because it is outside Intex Agent's supported capabilities.",
+    tool_boundary: 'I cannot do that with the available Intex Agent tools.',
+    permission_or_configuration:
+      'I cannot do that because the required permission or configuration is missing.',
+  },
+  pl: {
+    unsupported_capability:
+      'Nie mogę wykonać tej akcji, bo wykracza poza obsługiwane możliwości agenta Intex.',
+    tool_boundary: 'Nie mogę wykonać tej akcji dostępnymi narzędziami agenta Intex.',
+    permission_or_configuration:
+      'Nie mogę wykonać tej akcji, bo brakuje wymaganych uprawnień albo konfiguracji.',
+  },
 };
 
 const CONFIRMATION_INTROS: Record<MutatingIntexAgentToolName, LocalizedText> = {
@@ -150,8 +179,8 @@ const COMPLETED_REPLIES = {
     pl: 'Zaktualizowałem pamięć instrukcji.',
   },
   preferencesEmpty: {
-    en: 'No INTEX Agent preferences are defined yet.',
-    pl: 'Nie zdefiniowano jeszcze preferencji agenta INTEX.',
+    en: 'No Intex Agent preferences are defined yet.',
+    pl: 'Nie zdefiniowano jeszcze preferencji agenta Intex.',
   },
   linkUrl: { en: 'Saved the link.', pl: 'Zapisałem link.' },
 } satisfies Record<string, LocalizedText>;
@@ -219,16 +248,18 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       } catch (error) {
         const errorMessage = getErrorMessage(error, 'Unknown tool execution error');
+        const failureMetadata = toolFailureMetadata(input.toolName, errorMessage);
         return {
           outcome: 'tool_failed',
           reply: buildConfirmedExecutionFailureReply(input.toolName, errorMessage, replyLanguage),
           toolName: input.toolName,
           error: errorMessage,
+          ...failureMetadata,
         };
       }
     },
     async run(input): Promise<IntexAgentRunnerResult> {
-      const replyLanguage = detectReplyLanguage(input.events, {
+      const detectedReplyLanguage = detectReplyLanguage(input.events, {
         text: input.message,
         ...(input.sourceType !== undefined ? { sourceType: input.sourceType } : {}),
         ...(input.sourceUrl !== undefined ? { hasSourceUrl: true } : {}),
@@ -245,7 +276,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             'save_external',
             args,
             config.userPreferences ?? null,
-            replyLanguage
+            detectedReplyLanguage
           ),
           toolName: 'save_external',
           toolArgs: args,
@@ -261,10 +292,19 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
               currentDateTime: input.currentDateTime,
               ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
             });
+      const replyLanguage = replyLanguageForIntent(intent, detectedReplyLanguage);
       if (intent.kind === 'unsupported') {
+        const blockerReason = 'blockerReason' in intent ? intent.blockerReason : undefined;
+        const suggestedNextStep =
+          'suggestedNextStep' in intent ? intent.suggestedNextStep : undefined;
         return {
           outcome: 'unsupported',
-          reply: unsupportedIntentReply(replyLanguage),
+          reply:
+            blockerReason !== undefined && suggestedNextStep !== undefined
+              ? unsupportedIntentReply(blockerReason, suggestedNextStep, replyLanguage)
+              : unsupportedIntentReplyFromFallbackGate(replyLanguage),
+          ...(blockerReason !== undefined ? { blockerReason } : {}),
+          ...(suggestedNextStep !== undefined ? { suggestedNextStep } : {}),
         };
       }
 
@@ -272,6 +312,14 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         return {
           outcome: 'needs_clarification',
           reply: intent.question,
+          ...(intent.blockerReason !== undefined ? { blockerReason: intent.blockerReason } : {}),
+          ...(intent.missingFields !== undefined ? { missingFields: intent.missingFields } : {}),
+          ...(intent.candidateIntents !== undefined
+            ? { candidateIntents: intent.candidateIntents }
+            : {}),
+          ...(intent.suggestedNextStep !== undefined
+            ? { suggestedNextStep: intent.suggestedNextStep }
+            : {}),
         };
       }
 
@@ -326,6 +374,53 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
   };
 }
 
+function toolFailureMetadata(
+  toolName: IntexAgentToolName,
+  errorMessage: string
+): {
+  errorCategory: string;
+  isRetryable: boolean;
+  attemptedAction: string;
+} {
+  if (toolName === 'save_external' && errorMessage === 'External save is not configured') {
+    return {
+      errorCategory: 'configuration',
+      isRetryable: false,
+      attemptedAction: toolName,
+    };
+  }
+
+  if (/HTTP 401|HTTP 403|Forbidden|Unauthorized/iu.test(errorMessage)) {
+    return {
+      errorCategory: 'permission',
+      isRetryable: false,
+      attemptedAction: toolName,
+    };
+  }
+
+  if (/validation|invalid|required|must\b/iu.test(errorMessage)) {
+    return {
+      errorCategory: 'validation',
+      isRetryable: false,
+      attemptedAction: toolName,
+    };
+  }
+
+  if (/timeout|rate limit|temporar|unavailable|try again/iu.test(errorMessage)) {
+    return {
+      errorCategory: 'transient',
+      isRetryable: true,
+      attemptedAction: toolName,
+    };
+  }
+
+  return {
+    errorCategory: 'unknown',
+    isRetryable: false,
+    attemptedAction: toolName,
+  };
+}
+
 function detectReplyLanguage(
   events: IntexAgentSessionEvent[],
   currentMessage?: {
@@ -356,6 +451,24 @@ function detectReplyLanguage(
     ...(currentMessage !== undefined ? { currentMessage } : {}),
     priorMessages,
   });
+}
+
+function replyLanguageForIntent(
+  intent: IntexAgentIntentClassification | IntexAgentIntentDecision,
+  fallback: IntexAgentReplyLanguage
+): IntexAgentReplyLanguage {
+  const override =
+    'languageOverride' in intent ? intent.languageOverride.trim().toLowerCase() : undefined;
+  if (override === undefined) {
+    return fallback;
+  }
+  if (['en', 'english', 'angielski', 'po angielsku'].includes(override)) {
+    return 'en';
+  }
+  if (['pl', 'polish', 'polski', 'po polsku'].includes(override)) {
+    return 'pl';
+  }
+  return fallback;
 }
 
 interface IntexAgentToolExecution {
@@ -473,11 +586,32 @@ async function parseRunnerContent(
 
   switch (parsed.outcome) {
     case 'needs_clarification':
-      return { outcome: parsed.outcome, reply: parsed.reply };
+      return {
+        outcome: parsed.outcome,
+        reply: parsed.reply,
+        ...(parsed.blockerReason !== undefined ? { blockerReason: parsed.blockerReason } : {}),
+        ...(parsed.missingFields !== undefined ? { missingFields: parsed.missingFields } : {}),
+        ...(parsed.candidateIntents !== undefined
+          ? { candidateIntents: parsed.candidateIntents }
+          : {}),
+        ...(parsed.suggestedNextStep !== undefined
+          ? { suggestedNextStep: parsed.suggestedNextStep }
+          : {}),
+        ...(parsed.clarification !== undefined ? { clarification: parsed.clarification } : {}),
+      };
     case 'no_action':
       return { outcome: parsed.outcome, reply: parsed.reply };
     case 'unsupported':
-      return { outcome: parsed.outcome, reply: buildUnsupportedCapabilitiesReply(replyLanguage) };
+      return {
+        outcome: parsed.outcome,
+        reply: parsed.reply,
+        blockerReason: parsed.blockerReason,
+        suggestedNextStep: parsed.suggestedNextStep,
+        ...(parsed.missingFields !== undefined ? { missingFields: parsed.missingFields } : {}),
+        ...(parsed.candidateIntents !== undefined
+          ? { candidateIntents: parsed.candidateIntents }
+          : {}),
+      };
     case 'completed': {
       if (toolExecution?.toolName !== parsed.toolName) {
         return malformedResult(replyLanguage);
@@ -1108,6 +1242,38 @@ function malformedResult(replyLanguage: IntexAgentReplyLanguage = 'en'): IntexAg
   };
 }
 
-function unsupportedIntentReply(replyLanguage: IntexAgentReplyLanguage): string {
+function unsupportedIntentReply(
+  blockerReason: string,
+  suggestedNextStep: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
+  const languageReplies = CLASSIFIER_UNSUPPORTED_REPLIES[replyLanguage];
+  const base = languageReplies[blockerReason] ?? languageReplies.unsupported_capability;
+  const nextStep = userFacingSuggestedNextStep(suggestedNextStep, replyLanguage);
+  return nextStep === undefined ? base : `${base} ${nextStep}`;
+}
+
+function unsupportedIntentReplyFromFallbackGate(replyLanguage: IntexAgentReplyLanguage): string {
   return buildUnsupportedCapabilitiesReply(replyLanguage);
+}
+
+function userFacingSuggestedNextStep(
+  suggestedNextStep: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string | undefined {
+  const trimmed = suggestedNextStep.trim();
+  if (trimmed === '') {
+    return undefined;
+  }
+  if (replyLanguage === 'en') {
+    const offerMatch = /^offer to\s+(.+)$/iu.exec(trimmed);
+    if (offerMatch?.[1] !== undefined) {
+      return ensureSentence(`I can ${offerMatch[1].replace(/\.+$/u, '').trim()}`);
+    }
+  }
+  return ensureSentence(trimmed);
+}
+
+function ensureSentence(value: string): string {
+  return /[.!?]\s*$/u.test(value) ? value : `${value}.`;
 }

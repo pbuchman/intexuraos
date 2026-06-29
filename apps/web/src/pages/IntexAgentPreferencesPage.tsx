@@ -17,7 +17,7 @@ import {
 import { formatDateTime } from '@/utils/dateFormat';
 
 const MAX_PREFERENCE_LENGTH = 500;
-const EMPTY_PROMPT_BLOCK = 'No INTEX Agent preferences are defined yet.';
+const EMPTY_PROMPT_BLOCK = 'No Intex Agent preferences are defined yet.';
 
 type PendingAction =
   | 'load'
@@ -277,7 +277,7 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">
-              INTEX Agent Preferences
+              Intex Agent Preferences
             </h1>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
               <span>Current version {String(current?.currentVersion ?? 0)}</span>

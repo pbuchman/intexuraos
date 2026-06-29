@@ -98,7 +98,7 @@ describe('IntexAgentPreferencesPage', () => {
 
     expect(screen.getByText(/loading preferences/i)).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText('INTEX Agent Preferences')).toBeInTheDocument();
+      expect(screen.getByText('Intex Agent Preferences')).toBeInTheDocument();
       expect(screen.getByText('Current version 1')).toBeInTheDocument();
       expect(screen.getByDisplayValue('When I invite Jakub, use jakub@gmail.com.')).toBeInTheDocument();
       expect(screen.getByText(/User Preferences v1:/)).toBeInTheDocument();

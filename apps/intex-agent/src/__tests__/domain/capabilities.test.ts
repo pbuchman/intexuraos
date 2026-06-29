@@ -15,7 +15,7 @@ const ENGLISH_UNSUPPORTED_REPLY = [
   '- create research drafts',
   '- save bookmarks',
   '- create code tasks for planning or execution',
-  '- manage INTEX Agent prompt preferences',
+  '- manage Intex Agent prompt preferences',
 ].join('\n');
 
 const POLISH_UNSUPPORTED_REPLY = [
@@ -26,7 +26,7 @@ const POLISH_UNSUPPORTED_REPLY = [
   '- tworzeniem szkiców researchu',
   '- zapisywaniem bookmarków',
   '- tworzeniem zadań programistycznych do planowania lub wykonania',
-  '- zarządzaniem preferencjami promptu agenta INTEX',
+  '- zarządzaniem preferencjami promptu agenta Intex',
 ].join('\n');
 
 const POLISH_NEW_SESSION_REPLY = [
@@ -37,7 +37,7 @@ const POLISH_NEW_SESSION_REPLY = [
   '- tworzeniem szkiców researchu',
   '- zapisywaniem bookmarków',
   '- tworzeniem zadań programistycznych do planowania lub wykonania',
-  '- zarządzaniem preferencjami promptu agenta INTEX',
+  '- zarządzaniem preferencjami promptu agenta Intex',
 ].join('\n');
 
 describe('Intex Agent capabilities replies', () => {

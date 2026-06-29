@@ -5,7 +5,7 @@ export const INTEX_AGENT_CAPABILITIES = [
   'create research drafts',
   'save bookmarks',
   'create code tasks for planning or execution',
-  'manage INTEX Agent prompt preferences',
+  'manage Intex Agent prompt preferences',
 ] as const;
 
 export type IntexAgentReplyLanguage = 'en' | 'pl';
@@ -24,7 +24,7 @@ const POLISH_INTEX_AGENT_CAPABILITIES = [
   'tworzeniem szkiców researchu',
   'zapisywaniem bookmarków',
   'tworzeniem zadań programistycznych do planowania lub wykonania',
-  'zarządzaniem preferencjami promptu agenta INTEX',
+  'zarządzaniem preferencjami promptu agenta Intex',
 ] as const;
 
 const CAPABILITIES_BY_LANGUAGE: Record<IntexAgentReplyLanguage, readonly string[]> = {

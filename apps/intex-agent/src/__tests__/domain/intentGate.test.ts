@@ -4,6 +4,7 @@ import { classifyIntexAgentIntent } from '../../domain/agent/intentGate.js';
 describe('classifyIntexAgentIntent', () => {
   it.each([
     ['Create a note: gate code is 4938', ['create_note']],
+    ['Hi, create a note: gate code is 4938', ['create_note']],
     ['Zapisz notatke: kod do bramy to 4938', ['create_note']],
     ['Add calendar event for dentist tomorrow at 9', ['create_calendar_event']],
     ['Dodaj wydarzenie w kalendarzu jutro o 9', ['create_calendar_event']],
@@ -96,7 +97,7 @@ describe('classifyIntexAgentIntent', () => {
 
   it.each([
     'Tell me my defined user preferences.',
-    'Show my INTEX instructions.',
+    'Show my Intex instructions.',
     'Add a preference: when I invite Jakub, use jakub@gmail.com.',
     'Update the Jakub invitation preference to use jakub.nowak@gmail.com.',
     'Remove the row about mood preferences.',

@@ -53,10 +53,18 @@ export type IntexAgentRunnerResult =
       reply: string;
       toolName: IntexAgentToolName;
       error: string;
+      errorCategory?: string;
+      isRetryable?: boolean;
+      attemptedAction?: string;
     }
   | {
       outcome: 'needs_clarification';
       reply: string;
+      blockerReason?: string;
+      missingFields?: string[];
+      candidateIntents?: string[];
+      suggestedNextStep?: string;
+      clarification?: string;
     }
   | {
       outcome: 'no_action';
@@ -65,6 +73,10 @@ export type IntexAgentRunnerResult =
   | {
       outcome: 'unsupported';
       reply: string;
+      blockerReason?: string;
+      missingFields?: string[];
+      candidateIntents?: string[];
+      suggestedNextStep?: string;
     };
 
 export interface IntexAgentRunner {
@@ -405,7 +417,10 @@ async function applyRunnerResult(
 
   if (runnerResult.outcome === 'needs_clarification') {
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
-    await appendEvent(deps, session, 'clarification_requested', { message: reply });
+    await appendEvent(deps, session, 'clarification_requested', {
+      message: reply,
+      ...runnerMetadataPayload(runnerResult),
+    });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
@@ -449,6 +464,13 @@ async function applyRunnerResult(
     await appendEvent(deps, session, 'tool_call_failed', {
       toolName: runnerResult.toolName,
       error: runnerResult.error,
+      ...(runnerResult.errorCategory !== undefined
+        ? { errorCategory: runnerResult.errorCategory }
+        : {}),
+      ...(runnerResult.isRetryable !== undefined ? { isRetryable: runnerResult.isRetryable } : {}),
+      ...(runnerResult.attemptedAction !== undefined
+        ? { attemptedAction: runnerResult.attemptedAction }
+        : {}),
     });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
@@ -462,7 +484,10 @@ async function applyRunnerResult(
 
   if (runnerResult.outcome === 'unsupported') {
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
-    await appendEvent(deps, session, 'unsupported_request', { message: runnerResult.reply });
+    await appendEvent(deps, session, 'unsupported_request', {
+      message: runnerResult.reply,
+      ...runnerMetadataPayload(runnerResult),
+    });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
@@ -560,7 +585,10 @@ async function applyUnsupportedRunnerResult(
   runnerResult: Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }>
 ): Promise<void> {
   const reply = stripDuplicateSessionPrefix(runnerResult.reply);
-  await appendEvent(deps, session, 'unsupported_request', { message: runnerResult.reply });
+  await appendEvent(deps, session, 'unsupported_request', {
+    message: runnerResult.reply,
+    ...runnerMetadataPayload(runnerResult),
+  });
   const assistantAt = await appendAssistantMessage(session, deps, reply);
   await deps.sessionRepository.updateSession(session.id, {
     status: 'waiting_for_user',
@@ -568,6 +596,32 @@ async function applyUnsupportedRunnerResult(
     summary: summarizeUserMessage(input.text),
   });
   await publishReply(input, deps, session.id, reply);
+}
+
+function runnerMetadataPayload(
+  runnerResult: Extract<
+    IntexAgentRunnerResult,
+    { outcome: 'needs_clarification' } | { outcome: 'unsupported' }
+  >
+): Record<string, unknown> {
+  return {
+    ...(runnerResult.blockerReason !== undefined
+      ? { blockerReason: runnerResult.blockerReason }
+      : {}),
+    ...(runnerResult.missingFields !== undefined
+      ? { missingFields: runnerResult.missingFields }
+      : {}),
+    ...(runnerResult.candidateIntents !== undefined
+      ? { candidateIntents: runnerResult.candidateIntents }
+      : {}),
+    ...(runnerResult.suggestedNextStep !== undefined
+      ? { suggestedNextStep: runnerResult.suggestedNextStep }
+      : {}),
+    ...(runnerResult.outcome === 'needs_clarification' &&
+    runnerResult.clarification !== undefined
+      ? { clarification: runnerResult.clarification }
+      : {}),
+  };
 }
 
 function summarizeUserMessage(message: string): string {

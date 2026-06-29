@@ -13,15 +13,37 @@ describe('IntexAgentRunnerOutputSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts non-tool terminal outputs with replies', () => {
-    for (const outcome of ['needs_clarification', 'no_action', 'unsupported'] as const) {
-      const result = IntexAgentRunnerOutputSchema.safeParse({
-        outcome,
-        reply: 'Which day?',
-      });
+  it('accepts clarification with targeted question metadata', () => {
+    const result = IntexAgentRunnerOutputSchema.safeParse({
+      outcome: 'needs_clarification',
+      reply: 'What time should I schedule it?',
+      clarification: 'What time should I schedule it?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['start', 'end'],
+      suggestedNextStep: 'Ask for the missing start and end time.',
+    });
 
-      expect(result.success).toBe(true);
-    }
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts unsupported only with exact blocker metadata', () => {
+    const result = IntexAgentRunnerOutputSchema.safeParse({
+      outcome: 'unsupported',
+      reply: 'I cannot buy concert tickets. I can save the ticket details as a note.',
+      blockerReason: 'unsupported_capability',
+      suggestedNextStep: 'Offer to save ticket details or create a reminder.',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts no-action replies without blocker metadata', () => {
+    const result = IntexAgentRunnerOutputSchema.safeParse({
+      outcome: 'no_action',
+      reply: 'Hi! How can I help?',
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it('rejects invalid runner outputs instead of silently normalizing them', () => {
@@ -46,5 +68,48 @@ describe('IntexAgentRunnerOutputSchema', () => {
         reply: 'Working on it.',
       }).success
     ).toBe(false);
+  });
+
+  it('rejects clarification without a question-like reply or clarification field', () => {
+    const result = IntexAgentRunnerOutputSchema.safeParse({
+      outcome: 'needs_clarification',
+      reply: 'Missing details.',
+      blockerReason: 'missing_required_details',
+      suggestedNextStep: 'Ask for the date.',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects clarification with a blank clarification field and non-question reply', () => {
+    const result = IntexAgentRunnerOutputSchema.safeParse({
+      outcome: 'needs_clarification',
+      reply: 'Missing details.',
+      clarification: '   ',
+      blockerReason: 'missing_required_details',
+      suggestedNextStep: 'Ask for the date.',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects unsupported without blocker metadata', () => {
+    const result = IntexAgentRunnerOutputSchema.safeParse({
+      outcome: 'unsupported',
+      reply: 'I cannot do that.',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects unsupported for clarification-only blocker reasons', () => {
+    const result = IntexAgentRunnerOutputSchema.safeParse({
+      outcome: 'unsupported',
+      reply: 'I cannot do that.',
+      blockerReason: 'missing_required_details',
+      suggestedNextStep: 'Ask for the missing details.',
+    });
+
+    expect(result.success).toBe(false);
   });
 });

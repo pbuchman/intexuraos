@@ -184,7 +184,17 @@ function mentionsNonCalendarResource(text: string): boolean {
 }
 
 function isGreeting(text: string): boolean {
-  return /^(hej|czesc|cześć|hello|hi|hey|so how are you|how are you)\b/u.test(text);
+  return new Set([
+    'hej',
+    'hej co u ciebie',
+    'czesc',
+    'czesc co u ciebie',
+    'hello',
+    'hi',
+    'hey',
+    'how are you',
+    'so how are you',
+  ]).has(text);
 }
 
 function hasUrl(text: string): boolean {

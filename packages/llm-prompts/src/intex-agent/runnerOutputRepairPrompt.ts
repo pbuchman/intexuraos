@@ -24,7 +24,7 @@ export const intexAgentRunnerOutputRepairPrompt: PromptBuilder<
 > = {
   name: 'intex-agent-runner-output-repair',
   description: 'Repairs invalid Intex Agent runner JSON output',
-  version: '1.0.0',
+  version: '2.0.0',
   build(
     input: IntexAgentRunnerOutputRepairPromptInput,
     deps?: IntexAgentRunnerOutputRepairPromptDeps
@@ -60,8 +60,18 @@ Return only a valid JSON object matching the runner output schema:
   "outcome": "completed" | "needs_clarification" | "no_action" | "unsupported",
   "reply": "user-facing reply",
   "summary": "optional short session summary",
-  "toolName": "required only for completed output"
+  "toolName": "required only for completed output",
+  "clarification": "required for needs_clarification when reply is not already a direct question",
+  "blockerReason": "required for unsupported; optional for needs_clarification",
+  "missingFields": ["optional missing fields"],
+  "candidateIntents": ["optional supported tool names being disambiguated"],
+  "suggestedNextStep": "required for unsupported",
+  "errorCategory": "optional deterministic tool/runtime error category",
+  "isRetryable": "optional deterministic retryability flag",
+  "attemptedAction": "optional bounded action summary"
 }
+
+For unsupported, include blockerReason and suggestedNextStep. For missing details, ambiguous intent, ambiguous preference target, or insufficient context, use needs_clarification rather than unsupported.
 
 Do not include markdown.`;
   },
