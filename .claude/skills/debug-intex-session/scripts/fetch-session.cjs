@@ -57,38 +57,37 @@ const ALLOWED_PAYLOAD_STRING_KEYS = new Set([
   'toolName',
 ]);
 
-const sessionInput = process.argv[2];
-const wantEvents = process.argv.includes('--events') || process.argv.includes('--events-only');
-const eventsOnly = process.argv.includes('--events-only');
+async function main(argv = process.argv) {
+  const sessionInput = argv[2];
+  const wantEvents = argv.includes('--events') || argv.includes('--events-only');
+  const eventsOnly = argv.includes('--events-only');
 
-if (!sessionInput) {
-  console.error('Usage: node fetch-session.cjs <sessionId> [--events] [--events-only]');
-  process.exit(1);
-}
+  if (!sessionInput) {
+    console.error('Usage: node fetch-session.cjs <sessionId> [--events] [--events-only]');
+    process.exit(1);
+  }
 
-const sessionId = extractSessionId(sessionInput);
-if (!sessionId.startsWith('intex_session_')) {
-  console.error('Expected session id starting with intex_session_: ' + sessionId);
-  process.exit(1);
-}
+  const sessionId = extractSessionId(sessionInput);
+  if (!sessionId.startsWith('intex_session_')) {
+    console.error('Expected session id starting with intex_session_: ' + sessionId);
+    process.exit(1);
+  }
 
-const credentialPath =
-  process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-  path.join(os.homedir(), '.config/gcloud/sa-key.json');
-const serviceAccount = readServiceAccount(credentialPath);
+  const credentialPath =
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    path.join(os.homedir(), '.config/gcloud/sa-key.json');
+  const serviceAccount = readServiceAccount(credentialPath);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  projectId: process.env.INTEXURAOS_GCP_PROJECT_ID || serviceAccount.project_id,
-});
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: process.env.INTEXURAOS_GCP_PROJECT_ID || serviceAccount.project_id,
+  });
 
-const db = admin.firestore();
-
-async function main() {
+  const db = admin.firestore();
   let session = null;
 
   if (!eventsOnly) {
-    const snap = await db.collection('intex_agent_sessions').doc(sessionId).get();
+    const snap = await db.collection(INTEX_AGENT_SESSIONS_COLLECTION).doc(sessionId).get();
     if (!snap.exists) {
       console.error('Session not found: ' + sessionId);
       process.exit(1);
@@ -97,6 +96,7 @@ async function main() {
     session = withId(snap.id, snap.data());
     console.log(JSON.stringify(sanitizeSession(session), null, 2));
   } else {
+    // Still read the parent session so event output can be filtered by the session owner.
     const snap = await db.collection(INTEX_AGENT_SESSIONS_COLLECTION).doc(sessionId).get();
     if (!snap.exists) {
       console.error('Session not found: ' + sessionId);
@@ -212,9 +212,12 @@ function redactString(value) {
 }
 
 function scrubSensitiveInline(value) {
-  return value
-    .replace(/\+?\d[\d ()-]{8,}\d/gu, '[redacted-phone]')
-    .replace(/(ya29|xox[baprs]|sk-[A-Za-z0-9_-]{12,})[A-Za-z0-9._-]*/gu, '[redacted-token]');
+  return (
+    value
+      // Intentionally broad: session dumps are diagnostic, so false-positive masking is safer than leaking phone numbers.
+      .replace(/\+?\d[\d ()-]{8,}\d/gu, '[redacted-phone]')
+      .replace(/(ya29|xox[baprs]|sk-[A-Za-z0-9_-]{12,})[A-Za-z0-9._-]*/gu, '[redacted-token]')
+  );
 }
 
 function normalizeFirestoreValue(value) {
@@ -251,7 +254,23 @@ function eventOrder(type) {
   return EVENT_TYPE_ORDER[type] ?? 999;
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+module.exports = {
+  __testables: {
+    compareEvents,
+    extractSessionId,
+    normalizeFirestoreValue,
+    redactString,
+    sanitizeEvent,
+    sanitizeSession,
+    scrubSensitiveInline,
+    shouldRedactString,
+    timestampMs,
+  },
+};
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}

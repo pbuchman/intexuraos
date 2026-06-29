@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = process.cwd();
@@ -29,6 +30,32 @@ const SESSION_FETCHER_PATH = path.join(
   'scripts',
   'fetch-session.cjs'
 );
+const require = createRequire(import.meta.url);
+
+interface RedactedString {
+  redacted: true;
+  len: number;
+  sha256_12: string;
+}
+
+interface FetchSessionTestables {
+  compareEvents: (a: Record<string, unknown>, b: Record<string, unknown>) => number;
+  extractSessionId: (input: string) => string;
+  normalizeFirestoreValue: (value: unknown) => unknown;
+  redactString: (value: string) => RedactedString;
+  sanitizeEvent: (event: Record<string, unknown>) => Record<string, unknown>;
+  scrubSensitiveInline: (value: string) => string;
+  shouldRedactString: (key: string, pathParts: string[]) => boolean;
+  timestampMs: (value: unknown) => number;
+}
+
+function loadFetchSessionTestables(): FetchSessionTestables {
+  const loaded = require(SESSION_FETCHER_PATH) as { __testables?: FetchSessionTestables };
+  if (loaded.__testables === undefined) {
+    throw new Error('fetch-session.cjs must export __testables');
+  }
+  return loaded.__testables;
+}
 
 describe('debug-code-task fetch wrapper', () => {
   it('documents the bundled wrapper explicitly', () => {
@@ -99,9 +126,152 @@ describe('debug-intex-session fetch wrapper', () => {
 
     const content = fs.readFileSync(SESSION_FETCHER_PATH, 'utf8');
 
-    expect(content).toContain("collection('intex_agent_sessions')");
+    expect(content).toContain('INTEX_AGENT_SESSIONS_COLLECTION');
     expect(content).toContain("collection('intex_agent_session_events')");
     expect(content).toContain('sha256_12');
     expect(content).toContain('redacted');
+  });
+
+  it('redacts direct sensitive fields with stable hashes', () => {
+    const { sanitizeEvent } = loadFetchSessionTestables();
+
+    const sanitized = sanitizeEvent({
+      id: 'event-1',
+      userId: 'user-123',
+      payload: {
+        status: 'pending',
+        text: 'Call me at +48 123 456 789',
+        nested: {
+          message: 'secret body',
+        },
+      },
+    });
+
+    expect(sanitized.id).toBe('event-1');
+    expect(sanitized.payload).toMatchObject({
+      status: 'pending',
+      text: {
+        redacted: true,
+        len: 'Call me at +48 123 456 789'.length,
+      },
+      nested: {
+        message: {
+          redacted: true,
+          len: 'secret body'.length,
+        },
+      },
+    });
+    expect(sanitized.userId).toMatchObject({
+      redacted: true,
+      len: 'user-123'.length,
+    });
+    expect((sanitized.userId as RedactedString).sha256_12).toHaveLength(12);
+  });
+
+  it('redacts tool arguments, result strings, and non-allowlisted payload strings', () => {
+    const { sanitizeEvent } = loadFetchSessionTestables();
+
+    const sanitized = sanitizeEvent({
+      toolArgs: {
+        accountId: 'acct-secret',
+      },
+      result: {
+        display: 'private result',
+      },
+      payload: {
+        toolName: 'calendar.create',
+        reason: 'user-approved',
+        arbitrary: 'private payload string',
+      },
+    });
+
+    expect(sanitized).toMatchObject({
+      toolArgs: {
+        accountId: {
+          redacted: true,
+          len: 'acct-secret'.length,
+        },
+      },
+      result: {
+        display: {
+          redacted: true,
+          len: 'private result'.length,
+        },
+      },
+      payload: {
+        toolName: 'calendar.create',
+        reason: 'user-approved',
+        arbitrary: {
+          redacted: true,
+          len: 'private payload string'.length,
+        },
+      },
+    });
+  });
+
+  it('scrubs inline phone numbers and tokens from otherwise allowed strings', () => {
+    const { scrubSensitiveInline } = loadFetchSessionTestables();
+
+    expect(scrubSensitiveInline('Call +48 (123) 456-789 with token sk-abcdefghijklmnop')).toBe(
+      'Call [redacted-phone] with token [redacted-token]'
+    );
+    expect(scrubSensitiveInline('Request 12345 stayed visible')).toBe(
+      'Request 12345 stayed visible'
+    );
+  });
+
+  it('extracts session ids from query strings, paths, and raw inputs', () => {
+    const { extractSessionId } = loadFetchSessionTestables();
+
+    expect(
+      extractSessionId('https://intexuraos.cloud/#/whatsapp/sessions?session=intex_session_query')
+    ).toBe('intex_session_query');
+    expect(extractSessionId('/whatsapp/sessions/intex_session_path')).toBe('intex_session_path');
+    expect(extractSessionId(' intex_session_raw ')).toBe('intex_session_raw');
+  });
+
+  it('normalizes Firestore timestamps and undefined values', () => {
+    const { normalizeFirestoreValue } = loadFetchSessionTestables();
+
+    expect(
+      normalizeFirestoreValue({
+        toDate: () => new Date('2026-01-02T03:04:05.006Z'),
+      })
+    ).toBe('2026-01-02T03:04:05.006Z');
+    expect(normalizeFirestoreValue({ _seconds: 1_767_000_000, _nanoseconds: 123_000_000 })).toBe(
+      '2025-12-29T09:20:00.123Z'
+    );
+    expect(normalizeFirestoreValue(undefined)).toBeUndefined();
+  });
+
+  it('sorts events by timestamp, semantic type order, and id', () => {
+    const { compareEvents } = loadFetchSessionTestables();
+
+    const events = [
+      { id: 'c', type: 'assistant_message', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'a', type: 'user_message', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'b', type: 'user_message', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'd', type: 'session_started', createdAt: '2026-01-02T00:00:00.000Z' },
+      { id: 'e', type: 'unknown', createdAt: 'not-a-date' },
+    ];
+
+    expect(events.sort(compareEvents).map((event) => event.id)).toEqual(['e', 'a', 'b', 'c', 'd']);
+  });
+
+  it('exposes redaction branch helpers for behavior coverage', () => {
+    const { redactString, shouldRedactString, timestampMs } = loadFetchSessionTestables();
+
+    expect(redactString('secret')).toEqual({
+      redacted: true,
+      len: 6,
+      sha256_12: '2bb80d537b1d',
+    });
+    expect(shouldRedactString('message', ['payload', 'message'])).toBe(true);
+    expect(shouldRedactString('accountId', ['toolArgs', 'accountId'])).toBe(true);
+    expect(shouldRedactString('display', ['result', 'display'])).toBe(true);
+    expect(shouldRedactString('status', ['payload', 'status'])).toBe(false);
+    expect(shouldRedactString('note', ['payload', 'note'])).toBe(true);
+    expect(timestampMs({ _seconds: 1, _nanoseconds: 0 })).toBe(1000);
+    expect(timestampMs(undefined)).toBe(0);
   });
 });
