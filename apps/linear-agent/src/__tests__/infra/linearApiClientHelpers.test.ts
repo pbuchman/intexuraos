@@ -227,6 +227,17 @@ describe('linearApiClient helper functions', () => {
       expect(isTransientLinearError(null)).toBe(false);
       expect(isTransientLinearError(undefined)).toBe(false);
     });
+
+    it('returns false for objects without a message', () => {
+      // getErrorMessage(error, '') returns the empty fallback for objects
+      // that carry no string-coercible message — treat as non-transient
+      // because there is no signal to classify the failure.
+      expect(isTransientLinearError({})).toBe(false);
+      expect(isTransientLinearError({ message: '' })).toBe(false);
+      expect(isTransientLinearError({ details: '' })).toBe(false);
+      expect(isTransientLinearError(123)).toBe(false);
+      expect(isTransientLinearError(true)).toBe(false);
+    });
   });
 
   describe('retryOnTransient', () => {
