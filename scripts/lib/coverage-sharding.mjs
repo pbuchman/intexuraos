@@ -26,18 +26,46 @@ export function mergeShardOutputs(outputs) {
     .join('');
 }
 
+const COVERAGE_TMP_FILE_RACE_PATTERN =
+  /ENOENT: no such file or directory, (?:open|read) '.*coverage\/shard-\d+\/\.tmp-\d+-\d+\/coverage-\d+\.json'/u;
+const COVERAGE_TMP_DIR_LSTAT_RACE_PATTERN =
+  /ENOENT: no such file or directory, lstat '.*coverage\/shard-\d+\/\.tmp-\d+-\d+'/u;
+const UNHANDLED_COVERAGE_ERROR_PATTERN = /(?:Unhandled Rejection|Unhandled Error)/u;
+const TEST_FAILURE_PATTERNS = [/^\s*FAIL\s+/mu, /Test Files\s+.*failed/iu, /Tests\s+.*failed/iu];
+
+function hasRealTestFailure(output) {
+  return TEST_FAILURE_PATTERNS.some((pattern) => pattern.test(output));
+}
+
 export function isKnownVitestCoverageTmpRace(output) {
   return (
-    /(?:Unhandled Rejection|Unhandled Error)/u.test(output) &&
-    /ENOENT: no such file or directory, (?:open|read) '.*coverage\/shard-\d+\/\.tmp-\d+-\d+\/coverage-\d+\.json'/u.test(
-      output
-    ) &&
-    !/^\s*FAIL\s+/mu.test(output) &&
-    !/Test Files\s+.*failed/iu.test(output) &&
-    !/Tests\s+.*failed/iu.test(output)
+    UNHANDLED_COVERAGE_ERROR_PATTERN.test(output) &&
+    (COVERAGE_TMP_FILE_RACE_PATTERN.test(output) ||
+      COVERAGE_TMP_DIR_LSTAT_RACE_PATTERN.test(output)) &&
+    !hasRealTestFailure(output)
+  );
+}
+
+export function isKnownVitestCoverageTmpDirCleanupRace(output) {
+  return (
+    UNHANDLED_COVERAGE_ERROR_PATTERN.test(output) &&
+    COVERAGE_TMP_DIR_LSTAT_RACE_PATTERN.test(output) &&
+    !hasRealTestFailure(output)
   );
 }
 
 export function shouldRetryCoverageShard(result) {
+  return (
+    result.code !== 0 &&
+    isKnownVitestCoverageTmpRace(result.output) &&
+    !isKnownVitestCoverageTmpDirCleanupRace(result.output)
+  );
+}
+
+export function shouldIgnoreCoverageShardFailure(result) {
+  return result.code !== 0 && isKnownVitestCoverageTmpDirCleanupRace(result.output);
+}
+
+export function shouldRetryCoverageMerge(result) {
   return result.code !== 0 && isKnownVitestCoverageTmpRace(result.output);
 }

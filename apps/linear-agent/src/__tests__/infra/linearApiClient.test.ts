@@ -234,7 +234,7 @@ describe('LinearApiClient', () => {
         }
         expect(mocks.issues).toHaveBeenCalledTimes(3);
         expect(mocks.warn).toHaveBeenCalledWith(
-          { teamId: 'team-1' },
+          { teamId: 'team-1', _skipSentry: true },
           'Linear API transiently unavailable while listing issues'
         );
         expect(mocks.error).not.toHaveBeenCalled();
