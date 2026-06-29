@@ -8,6 +8,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
 import { resetServices, setServices, type ServiceContainer } from '../../services.js';
 import { processSentryWebhook, type ProcessSentryWebhookInput } from '../../domain/usecases/processSentryWebhook.js';
+import type { CodeTask, TaskStatus } from '../../domain/models/codeTask.js';
 import { verifySentrySignature } from '../../infra/sentry-webhook-auth.js';
 import { parseSentryIssueEvent } from '../../infra/sentry-event-parser.js';
 import { createMockLogger } from '../helpers/mockLogger.js';
@@ -471,6 +472,72 @@ describe('processSentryWebhook', () => {
       linearIssueId: 'INT-200',
     });
   });
+
+  it.each([
+    { codeTaskId: 'task_failed_duplicate', status: 'failed' },
+    { codeTaskId: 'task_cancelled_duplicate', status: 'cancelled' },
+    { codeTaskId: 'task_interrupted_duplicate', status: 'interrupted' },
+    {
+      codeTaskId: 'task_closed_pr_duplicate',
+      status: 'implemented',
+      task: {
+        prNumber: 123,
+        prClosedAt: Timestamp.fromDate(new Date('2026-06-29T02:00:00Z')),
+      },
+    },
+  ] satisfies {
+    codeTaskId: string;
+    status: TaskStatus;
+    task?: Partial<CodeTask>;
+  }[])(
+    'creates a new task when the existing issue reservation points to $codeTaskId',
+    async ({ codeTaskId, status, task }) => {
+      resetServices();
+      mocks = installMocks({
+        sentryIssueEventRepo: {
+          reserve: vi.fn().mockResolvedValue(ok({
+            created: false,
+            record: {
+              dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+              codeTaskId,
+              linearIssueId: 'INT-1775',
+            },
+          })),
+          reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+            created: true,
+            record: {
+              dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+              duplicateCount: 0,
+            },
+          })),
+          markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+        },
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+            id: codeTaskId,
+            status,
+            agentType: 'sentry',
+            ...task,
+          }))),
+          create: vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
+            id: input['id'],
+            ...input,
+            status: 'queued',
+          })),
+        },
+      });
+
+      const result = await processSentryWebhook(buildInput());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok || result.outcome !== 'processed') {
+        throw new Error('Expected stale Sentry reservation to create a replacement');
+      }
+      expect(mocks.codeTaskRepo.findById).toHaveBeenCalledWith(codeTaskId);
+      expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+      expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it('creates a new task when the existing issue reservation points to a merged Sentry PR', async () => {
     resetServices();
