@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { Logger } from 'pino';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { buildTaskCallbackUrl } from './callback-url.js';
 
 /**
@@ -112,6 +113,7 @@ export class StatusUpdateClient {
           attempt: attempt + 1,
           errorType: outcome.error.type,
           errorMessage: outcome.error.message,
+          [SKIP_SENTRY_KEY]: true,
         },
         'Status update attempt failed'
       );
@@ -146,8 +148,8 @@ export class StatusUpdateClient {
   private async deliver(
     taskId: string,
     rawBody: string,
-    webhookUrl: string | undefined,
-    webhookSecret: string | undefined
+    webhookUrl: string | undefined, // @allow-undefined-type -- function parameter, not optional property
+    webhookSecret: string | undefined // @allow-undefined-type -- function parameter, not optional property
   ): Promise<{ ok: true } | { ok: false; error: StatusUpdateError }> {
     const timestamp = Math.floor(Date.now() / 1000);
     const signatureSecret = webhookSecret ?? this.orchestratorSecret;
