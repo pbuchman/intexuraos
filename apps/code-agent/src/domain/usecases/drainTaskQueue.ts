@@ -12,6 +12,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
@@ -724,7 +725,14 @@ export async function drainTaskQueue(
         hasChildren = validateResult.value.childCount > 0;
         linearIssueUuid = validateResult.value.id;
       } else {
-        logger.warn({ linearIssueId: task.linearIssueId }, 'Failed to refresh Linear labels during drain');
+        logger.warn(
+          {
+            linearIssueId: task.linearIssueId,
+            error: validateResult.error,
+            [SKIP_SENTRY_KEY]: true,
+          },
+          'Failed to refresh Linear labels during drain'
+        );
       }
     }
     // Step 4b: Fan-out check (INT-962) — if parent issue has children with code-task labels,

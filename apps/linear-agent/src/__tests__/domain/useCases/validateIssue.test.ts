@@ -328,7 +328,17 @@ describe('validateIssue', () => {
         logger: fakeLogger,
       });
 
-      expect(fakeLogger.warn).toHaveBeenCalled();
+      expect(fakeLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identifier: 'INT-123',
+          error: expect.objectContaining({
+            code: 'API_ERROR',
+            message: 'Rate limit exceeded',
+          }),
+          _skipSentry: true,
+        }),
+        'Failed to fetch issue'
+      );
     });
   });
 });
