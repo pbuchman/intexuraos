@@ -125,7 +125,7 @@ export class AttemptLifecycle {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       ctx.logger.error(
-        { taskId: task.taskId, worktreePath: task.worktreePath, error },
+        { taskId: task.taskId, worktreePath: task.worktreePath, error, [SKIP_SENTRY_KEY]: true },
         'git worktree repair failed during adoption — marking task as WORKTREE_LOST'
       );
 
