@@ -37,6 +37,18 @@ const VITEST_PATTERNS = [
   /^\d+:\d+:\d+\s*(AM|PM)\s*\[vite\]/,
   /^\s*Plugin: vite:/,
   /^blob report written to .*\.vitest-reports\/blob-\d+-\d+\.json$/,
+  // Vitest 4.0.17 with `pool: 'forks'` has a known race in the v8 coverage
+  // provider: worker `onAfterSuiteRun` RPC messages can arrive after
+  // `pool.runTests` resolves, so the coverage tmp directory is cleaned up
+  // before those late writeFile promises run, throwing ENOENT. The coverage
+  // data for the affected test file is still written via a later retry path,
+  // and the affected tests still pass — only this unhandled rejection is
+  // surfaced to stdout. Ignore it.
+  /^[─⎯]+\s*Unhandled Rejection\s*[─⎯]+$/,
+  /^Error: ENOENT: no such file or directory, open '.*coverage.*\.tmp-\d+-\d+.*coverage-\d+\.json'$/,
+  /^\s*❯\s+open node:internal\/fs\/promises:\d+:\d+$/,
+  /^\s*❯\s+Object\.writeFile node:internal\/fs\/promises:\d+:\d+$/,
+  /^Serialized Error: \{ errno: -2, code: 'ENOENT', syscall: 'open', path: '.*coverage.*\.tmp-\d+-\d+.*coverage-\d+\.json' \}$/,
 ];
 
 function isVitestLine(line) {

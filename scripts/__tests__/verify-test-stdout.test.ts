@@ -40,4 +40,29 @@ describe('verify-test-stdout', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('No unexpected test stdout output detected');
   });
+
+  it('allows known vitest 4.0.17 coverage tmp dir ENOENT unhandled rejection', () => {
+    mkdirSync('scripts/test-results', { recursive: true });
+    writeFileSync(
+      OUTPUT_FILE,
+      [
+        ' RUN  v4.0.17 /repo',
+        ' ✓ apps/code-agent/src/__tests__/routes/code/feedback-routes.test.ts (2 tests) 70ms',
+        '⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯',
+        "Error: ENOENT: no such file or directory, open '/repo/coverage/shard-1/.tmp-1-3/coverage-120.json'",
+        '  ❯ open node:internal/fs/promises:639:25',
+        '  ❯ Object.writeFile node:internal/fs/promises:1222:14',
+        "Serialized Error: { errno: -2, code: 'ENOENT', syscall: 'open', path: '/repo/coverage/shard-2/.tmp-2-3/coverage-171.json' }",
+        ' Tests  1 passed',
+      ].join('\n')
+    );
+
+    const result = spawnSync('node', [SCRIPT], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('No unexpected test stdout output detected');
+  });
 });
