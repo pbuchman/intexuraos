@@ -487,7 +487,7 @@ const MemoActiveProgressCard = memo(function ActiveProgressCard({ task }: { task
 function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
-      {'This task implements the IntexuraOS Agent-Based Code Task Execution Flow. '}
+      {'This task implements the IntexuraOS agent-based code task execution flow. '}
       <a
         href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
@@ -501,7 +501,7 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
 function ImplementationLinkBanner({ implementationTaskIds }: { implementationTaskIds: string[] }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-      {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
+      {'This task is the planning step of the IntexuraOS agent-based code task execution flow. '}
       {implementationTaskIds.map((taskId, index) => (
         <span key={taskId}>
           {index > 0 ? ', ' : null}

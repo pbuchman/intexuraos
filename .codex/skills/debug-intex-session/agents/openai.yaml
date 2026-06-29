@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Debug Intex Session'
+  short_description: 'Investigate IntexuraOS WhatsApp sessions'
+  default_prompt: 'Use $debug-intex-session to inspect a WhatsApp Assistant session URL or intex_session_* ID and summarize the sanitized session document plus timeline evidence.'

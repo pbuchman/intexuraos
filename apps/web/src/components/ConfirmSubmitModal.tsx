@@ -151,7 +151,7 @@ export function ConfirmSubmitModal({
               }}
             >
               <Send className="mr-2 h-4 w-4" />
-              Submit Task
+              Submit task
             </Button>
           </div>
         </>

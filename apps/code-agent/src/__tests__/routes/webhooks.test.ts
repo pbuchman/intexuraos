@@ -8150,7 +8150,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(params?.message).toContain('fix/login-bug');
     expect(params?.message).not.toContain('PR:');
     expect(params?.ctaUrl).toEqual({
-      displayText: 'View Pull Request',
+      displayText: 'View pull request',
       url: 'https://github.com/pbuchman/intexuraos/pull/123',
     });
     expect(params?.message).toContain('Fixed login redirect handling');

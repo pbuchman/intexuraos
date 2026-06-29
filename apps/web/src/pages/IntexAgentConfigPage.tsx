@@ -102,7 +102,7 @@ export function IntexAgentConfigPage(): React.JSX.Element {
       return;
     }
     if (
-      !window.confirm('Clear INTEX Agent External Save configuration?')
+      !window.confirm('Clear INTEX Agent external save configuration?')
     ) {
       return;
     }
@@ -227,7 +227,7 @@ export function IntexAgentConfigPage(): React.JSX.Element {
                 />
               </label>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                Cloudflare Access Client ID
+                Cloudflare Access client ID
                 <input
                   type="text"
                   className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
@@ -238,7 +238,7 @@ export function IntexAgentConfigPage(): React.JSX.Element {
                 />
               </label>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                Cloudflare Access Client Secret
+                Cloudflare Access client secret
                 <input
                   type="password"
                   className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"

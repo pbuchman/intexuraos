@@ -17,12 +17,12 @@ const CONFLICT_MESSAGES: Record<
   { title: string; description: string }
 > = {
   duplicate: {
-    title: 'Similar Task Detected',
+    title: 'Similar task detected',
     description:
       'A similar task was submitted in the last 5 minutes. You can view the existing task or close this to continue.',
   },
   active: {
-    title: 'Active Task Exists',
+    title: 'Active task exists',
     description:
       'An active task already exists for this Linear issue. You can view the existing task or close this to continue.',
   },
@@ -90,7 +90,7 @@ export function TaskConflictModal({
           Close
         </Button>
         <Button variant="primary" onClick={handleNavigate}>
-          View Existing Task
+          View existing task
         </Button>
       </div>
     </Modal>

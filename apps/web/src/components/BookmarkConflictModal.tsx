@@ -47,7 +47,7 @@ export function BookmarkConflictModal({
       onOpenChange={(open): void => {
         if (!open && !isUpdating) onClose();
       }}
-      title="Duplicate Link Detected"
+      title="Duplicate link detected"
       hideTitle
       padded={false}
       contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl dark:bg-slate-800"
@@ -59,7 +59,7 @@ export function BookmarkConflictModal({
             <AlertTriangle className="h-5 w-5 text-amber-600" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Duplicate Link Detected</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Duplicate link detected</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               This link already exists in your bookmarks
             </p>
@@ -105,7 +105,7 @@ export function BookmarkConflictModal({
           disabled={isUpdating}
           isLoading={isUpdating}
         >
-          {isUpdating ? 'Updating...' : 'Update with Fresh Data'}
+          {isUpdating ? 'Updating...' : 'Update with fresh data'}
         </Button>
       </div>
     </Modal>

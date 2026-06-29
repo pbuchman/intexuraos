@@ -43,13 +43,13 @@ export function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): Re
       onOpenChange={(open): void => {
         if (!open) onClose();
       }}
-      title="Create New Note"
+      title="Create new note"
       hideTitle
       padded={false}
       contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl dark:bg-slate-800"
     >
       <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create New Note</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create new note</h2>
         <button
           onClick={onClose}
           className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"

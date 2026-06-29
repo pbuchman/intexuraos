@@ -9,7 +9,7 @@ describe('createWhatsAppReplyPublisher', () => {
     const sendPublisher = new FakeWhatsAppSendPublisher();
     const publisher = createWhatsAppReplyPublisher({ sendPublisher });
     const ctaUrl = {
-      displayText: 'Open Note',
+      displayText: 'Open note',
       url: 'https://intexuraos.cloud/#/notes/note-1',
     };
 
