@@ -92,9 +92,12 @@ describe('AttemptLifecycle', () => {
         typeof vi.fn
       >;
       expect(copyOutMock).toHaveBeenCalledTimes(1);
-      const [, srcPath, destPath] = copyOutMock.mock.calls[0] as [string, string, string];
-      expect(srcPath).toBe('/tmp');
-      expect(destPath).toBe('/tmp/orchestrator-test/logs/inactivity-evidence/evidence-1/');
+      const logBasePath = harness.ctx.config.logBasePath;
+      expect(copyOutMock).toHaveBeenCalledWith(
+        expect.anything(),
+        '/tmp',
+        `${logBasePath}/inactivity-evidence/evidence-1/`
+      );
     });
   });
 

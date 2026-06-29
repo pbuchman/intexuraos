@@ -9,6 +9,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // Track invocation order across mocks.
 const callOrder: string[] = [];
@@ -315,11 +317,10 @@ describe('start() — full bootstrap happy path', () => {
     const { mkdirSync } = await import('node:fs');
     await start();
 
-    const calls = vi.mocked(mkdirSync).mock.calls.map((args) => args[0] as string);
-    const evidenceCall = calls.find(
-      (p) => typeof p === 'string' && p.endsWith('/inactivity-evidence')
+    expect(mkdirSync).toHaveBeenCalledWith(
+      join(homedir(), '.code-orchestrator', 'logs', 'inactivity-evidence'),
+      { recursive: true }
     );
-    expect(evidenceCall).toBeDefined();
   });
 
   it('forwards env overrides for repoPath, private-key, and git identity', async () => {
