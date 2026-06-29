@@ -243,7 +243,7 @@ export async function processWebhook(
 
     const issue = issueResult.value;
     if (!issue) {
-      logger.warn({ issueId: data.issueId }, 'Issue not found for comment');
+      logger.warn({ _skipSentry: true, issueId: data.issueId }, 'Issue not found for comment');
       return { outcome: 'ignored', message: 'Issue not found' };
     }
 
