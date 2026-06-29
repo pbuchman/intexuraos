@@ -10934,13 +10934,19 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.statsSnapshot).mockRejectedValueOnce(
         new Error('stats unavailable')
       );
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
 
       const dispatcher = await triggerInactivityRestart('stats-fail-test');
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-fail-test');
       const task = await dispatcher.getTask('stats-fail-test');
       expect(task?.inactivityRestartCount).toBe(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'stats-fail-test', _skipSentry: true }),
+        'Failed to capture container stats before inactivity kill'
+      );
 
+      warnSpy.mockRestore();
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
@@ -10990,6 +10996,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.statsSnapshot).mockImplementationOnce(
         () => new Promise(() => undefined)
       );
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
 
       const dispatcher = await triggerInactivityRestart('stats-hang-test');
       await vi.advanceTimersByTimeAsync(31_000);
@@ -10998,7 +11005,12 @@ describe('TaskDispatcher', () => {
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-hang-test');
       const task = await dispatcher.getTask('stats-hang-test');
       expect(task?.inactivityRestartCount).toBe(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'stats-hang-test', _skipSentry: true }),
+        'Failed to capture container stats before inactivity kill'
+      );
 
+      warnSpy.mockRestore();
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });

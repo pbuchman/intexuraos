@@ -4,6 +4,7 @@ import type { CreateTaskRequest } from '../../types/api.js';
 import type { SendMessageResult, SendMessageError } from '../../types/schemas.js';
 import { WORKER_TYPES } from '../isolation/types.js';
 import { withTimeout } from '../../with-timeout.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { fetchDispatchMetadata } from '../dispatch-metadata-client.js';
 import {
   pickAgentLabel as pickAgentLabelFn,
@@ -540,8 +541,11 @@ export class AttemptLifecycle {
     if (statsResult.status === 'fulfilled') {
       ctx.logger.warn({ taskId, stats: statsResult.value }, 'Container stats at inactivity kill');
     } else {
+      // Best-effort pre-kill telemetry (EVIDENCE_CAPTURE_TIMEOUT_MS = 30s). The inactivity
+      // restart proceeds regardless of this outcome, so the warn is operational noise,
+      // not an actionable error. Suppress from Sentry to avoid alert fatigue.
       ctx.logger.warn(
-        { taskId, error: getErrorMessage(statsResult.reason) },
+        { taskId, error: getErrorMessage(statsResult.reason), [SKIP_SENTRY_KEY]: true },
         'Failed to capture container stats before inactivity kill'
       );
     }
