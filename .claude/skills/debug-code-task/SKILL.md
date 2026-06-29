@@ -1,6 +1,6 @@
 ---
 name: debug-code-task
-description: Use when user pastes a dev.intexuraos.cloud or intexuraos.cloud code-task URL and asks to debug, investigate, or understand what went wrong. Also use when user mentions a code task ID (task_*) with investigation intent.
+description: Use only when user pastes a dev.intexuraos.cloud or intexuraos.cloud `/#/code-tasks/task_*` URL and asks to debug, investigate, or understand what went wrong. Also use when user mentions a code task ID (`task_*`) with investigation intent.
 ---
 
 # Debug Code Task
@@ -14,6 +14,8 @@ Investigate code-agent task execution by fetching task metadata and logs from Fi
 | `https://dev.intexuraos.cloud/#/code-tasks/task_*`      | Extract task ID, env=dev  |
 | `https://intexuraos.cloud/#/code-tasks/task_*`          | Extract task ID, env=prod |
 | `task_<uuid>` + "debug"/"investigate"/"what went wrong" | Use task ID directly      |
+
+Do not use this skill for WhatsApp Assistant session URLs such as `https://intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`, `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`, or direct `intex_session_*` inputs. Use `debug-intex-session` for those.
 
 ## Phase 1: Environment Detection
 

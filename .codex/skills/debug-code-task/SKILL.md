@@ -1,17 +1,26 @@
 ---
 name: debug-code-task
-description: Investigate IntexuraOS code-task executions when the user shares a `dev.intexuraos.cloud` or `intexuraos.cloud` code-task URL, or provides a `task_*` ID and asks to debug, investigate, or understand what happened.
+description: Investigate IntexuraOS code-task executions only when the user shares a `dev.intexuraos.cloud` or `intexuraos.cloud` `/#/code-tasks/task_*` URL, or provides a direct `task_*` ID and asks to debug, investigate, or understand what happened.
 ---
 
 # Debug Code Task
 
-Use this skill for code-task investigations backed by Firestore data.
+Use this skill for code-task URL investigations backed by Firestore data.
 
 ## Trigger patterns
 
 - `https://dev.intexuraos.cloud/#/code-tasks/task_*`
 - `https://intexuraos.cloud/#/code-tasks/task_*`
 - `task_*` plus intent such as `debug`, `investigate`, or `what went wrong`
+
+## Non-triggers
+
+Do not use this skill for WhatsApp Assistant session investigations.
+
+- Do not use this skill for `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`.
+- Do not use this skill for `https://intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`.
+- Do not use this skill for direct `intex_session_*` inputs.
+- Use `$debug-intex-session` for those session investigations instead.
 
 ## Workflow
 
