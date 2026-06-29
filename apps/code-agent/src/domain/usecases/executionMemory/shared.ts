@@ -344,7 +344,7 @@ export const distillationPrompt: PromptBuilder<DistillationPromptInput> = {
   name: 'execution-memory-distillation',
   description:
     'Routes a completed code task to the appropriate distillation prompt (execution, planning, or review)',
-  version: '1.0.0',
+  version: '1.0.1',
 
   build(input: DistillationPromptInput): string {
     const { task, logs, turnMetrics, issueContext } = input;
