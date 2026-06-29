@@ -676,11 +676,15 @@ describe('RepoManager', () => {
       );
       expect(setUrlCall).toBeDefined();
       expect(setUrlCall?.[3]).toBe('https://github.com/pbuchman/intexuraos.git');
-      expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect(mockLogger.info).toHaveBeenCalledWith(
         expect.objectContaining({
-          currentUrl: expect.any(String),
           expectedUrl: expect.any(String),
+          path: repoPath,
         }),
+        expect.stringContaining('Sanitized embedded credentials from remote.origin.url')
+      );
+      expect(mockLogger.warn).not.toHaveBeenCalledWith(
+        expect.anything(),
         expect.stringContaining('Remote origin URL differs from expected')
       );
     });
