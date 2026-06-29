@@ -618,7 +618,7 @@ describe('WhatsAppNotifier', () => {
   });
 
   describe('notifyTaskDispatchBlocked', () => {
-    it('sends an actionable dispatch blocker notification with a task link when a task id is present', async () => {
+    it('sends a low-priority dispatch blocker notification with a task link when a task id is present', async () => {
       const notifier = createWhatsAppNotifier({
         ...createMockConfig(),
         webAppUrl: 'https://dev.intexuraos.cloud/',
@@ -644,7 +644,7 @@ describe('WhatsAppNotifier', () => {
             displayText: 'View Task',
             url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',
           },
-          important: true,
+          important: false,
         })
       );
       expect(callArgs.message).toContain('Code task dispatch blocked');
@@ -654,6 +654,41 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('Example task: task-123');
       expect(callArgs.message).toContain('Workers: home-dev');
       expect(callArgs.message).toContain('Refresh Codex/ChatGPT authentication');
+    });
+
+    it('sends a low-priority dispatch blocker notification with a dispatch queue link when no task id is present', async () => {
+      const notifier = createWhatsAppNotifier({
+        ...createMockConfig(),
+        webAppUrl: 'https://dev.intexuraos.cloud/',
+      });
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskDispatchBlocked('user-123', {
+        workerType: 'sonnet',
+        reason: 'claude_auth_unavailable',
+        affectedTaskCount: 1,
+        message: 'No reachable worker has active Claude auth for sonnet.',
+        remediation: 'Refresh Claude authentication on a worker that can run this task.',
+        workerNames: [],
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs).toEqual(
+        expect.objectContaining({
+          userId: 'user-123',
+          ctaUrl: {
+            displayText: 'View Dispatch Queue',
+            url: 'https://dev.intexuraos.cloud/#/code-tasks/dispatch-queue',
+          },
+          important: false,
+        })
+      );
+      expect(callArgs.message).toContain('Code task dispatch blocked');
+      expect(callArgs.message).toContain('Worker type: sonnet');
+      expect(callArgs.message).toContain('Reason: claude_auth_unavailable');
+      expect(callArgs.message).toContain('Affected queued tasks: 1');
+      expect(callArgs.message).toContain('Refresh Claude authentication');
     });
 
     it('returns notification_failed when dispatch blocker publish fails', async () => {
