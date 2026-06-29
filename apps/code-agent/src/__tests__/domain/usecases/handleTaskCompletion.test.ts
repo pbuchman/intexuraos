@@ -17,6 +17,7 @@ import {
 import { resetServices, setServices, type ServiceContainer } from '../../../services.js';
 import type { TaskFormatterEntry } from '../../../domain/services/webhookHelpers.js';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 
 // Mock heavy downstream use cases — we only need to verify they are invoked.
@@ -720,6 +721,86 @@ describe('handleTaskCompletion', () => {
 
       expect(result).toEqual({ kind: 'received' });
       expect(recordTaskDuration).toHaveBeenCalledWith('claude-opus', 123);
+    });
+  });
+
+  describe('metric failure telemetry suppression (INT-1764)', () => {
+    // INT-1764: Google Cloud Monitoring custom-metric writes fail in prod with
+    // "Permission monitoring.timeSeries.create denied (or the resource may
+    // not exist)". The metric failure warnings must remain in stdout for
+    // operational visibility but MUST NOT escalate to Sentry, so the warn
+    // payload carries SKIP_SENTRY_KEY.
+
+    async function setupMetricsFailure(
+      taskId: string,
+      status: 'completed' | 'failed' | 'interrupted' | 'cancelled',
+      body: Partial<TaskCompleteWebhookBody> = {},
+      existingStatus: 'running' | 'queued' | 'dispatched' = 'running',
+    ): Promise<{ requestLog: ReturnType<typeof createMockLogger> }> {
+      const requestLog = createMockLogger();
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskFailed = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockRejectedValue(new Error('metric failure'));
+      const recordTaskDuration = vi.fn().mockRejectedValue(new Error('metric failure'));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: existingStatus,
+            agentType: 'execution',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete, notifyTaskFailed } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      await handleTaskCompletion(createMockLogger(), {
+        body: { taskId, status, ...body },
+        requestLog,
+        traceId: 'trace-1',
+        taskFormatterStates: new Map<string, TaskFormatterEntry>(),
+      });
+
+      return { requestLog };
+    }
+
+    it('marks the task duration metric failure warning as non-Sentry', async () => {
+      const { requestLog } = await setupMetricsFailure('t-duration', 'cancelled', {
+        duration: 42,
+      });
+
+      // Allow microtask queue to drain so .catch(...) handlers run.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const warnCalls = (requestLog.warn as ReturnType<typeof vi.fn>).mock.calls;
+      const durationWarn = warnCalls.find(
+        (call) => call[1] === 'Failed to record task duration metric',
+      );
+      expect(durationWarn).toBeDefined();
+      expect(durationWarn?.[0]).toEqual(
+        expect.objectContaining({ taskId: 't-duration', [SKIP_SENTRY_KEY]: true }),
+      );
+    });
+
+    it('marks the task completion metric failure warning as non-Sentry', async () => {
+      const { requestLog } = await setupMetricsFailure('t-completion', 'cancelled');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const warnCalls = (requestLog.warn as ReturnType<typeof vi.fn>).mock.calls;
+      const completionWarn = warnCalls.find(
+        (call) => call[1] === 'Failed to record task completion metric',
+      );
+      expect(completionWarn).toBeDefined();
+      expect(completionWarn?.[0]).toEqual(
+        expect.objectContaining({ taskId: 't-completion', [SKIP_SENTRY_KEY]: true }),
+      );
     });
   });
 });
