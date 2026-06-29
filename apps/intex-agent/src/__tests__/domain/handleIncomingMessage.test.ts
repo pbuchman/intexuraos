@@ -891,7 +891,7 @@ describe('handleIncomingMessage', () => {
         toolName: 'create_note',
         toolResult: { status: 'completed', id: 'note-1' },
         ctaUrl: {
-          displayText: 'Open Note',
+          displayText: 'Open note',
           url: 'https://intexuraos.cloud/#/notes/note-1',
         },
       },
@@ -906,7 +906,7 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]).toMatchObject({
       message: 'Zapisałem notatkę.',
       ctaUrl: {
-        displayText: 'Open Note',
+        displayText: 'Open note',
         url: 'https://intexuraos.cloud/#/notes/note-1',
       },
     });

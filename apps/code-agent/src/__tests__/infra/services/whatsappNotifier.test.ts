@@ -155,7 +155,7 @@ describe('WhatsAppNotifier', () => {
         expect.objectContaining({
           userId: 'user-123',
           message: expect.stringContaining('✅ Fix login bug'),
-          ctaUrl: { displayText: 'View Pull Request', url: 'https://github.com/pbuchman/intexuraos/pull/123' },
+          ctaUrl: { displayText: 'View pull request', url: 'https://github.com/pbuchman/intexuraos/pull/123' },
           correlationId: 'trace-123',
           important: true,
         })
@@ -167,12 +167,12 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('Commits: 3');
       expect(callArgs.message).toContain('Fixed login redirect handling');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Pull Request',
+        displayText: 'View pull request',
         url: 'https://github.com/pbuchman/intexuraos/pull/123',
       });
     });
 
-    it('formats completion message without PR URL and adds View Progress ctaUrl', async () => {
+    it('formats completion message without PR URL and adds View progress ctaUrl', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         result: createMockResult({
@@ -190,12 +190,12 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('Branch: fix/login-bug');
       expect(callArgs.message).toContain('Commits: 3');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
 
-    it('uses configured web app URL for View Progress ctaUrl', async () => {
+    it('uses configured web app URL for View progress ctaUrl', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         result: createMockResult({
@@ -213,12 +213,12 @@ describe('WhatsAppNotifier', () => {
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',
       });
     });
 
-    it('formats completion message with empty PR URL string and adds View Progress ctaUrl', async () => {
+    it('formats completion message with empty PR URL string and adds View progress ctaUrl', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         result: createMockResult({
@@ -234,7 +234,7 @@ describe('WhatsAppNotifier', () => {
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('PR:');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -343,7 +343,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('INT-404');
     });
 
-    it('handles completion without result and adds View Progress ctaUrl', async () => {
+    it('handles completion without result and adds View progress ctaUrl', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
       } as Partial<CodeTask> as CodeTask);
@@ -358,7 +358,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('Branch:');
       expect(callArgs.message).not.toContain('Commits:');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -407,7 +407,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('Branch: fix/quick');
       expect(callArgs.message).toContain('Commits: 1');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Pull Request',
+        displayText: 'View pull request',
         url: 'https://github.com/org/repo/pull/99',
       });
     });
@@ -590,7 +590,7 @@ describe('WhatsAppNotifier', () => {
         message: expect.any(String),
         correlationId: 'test-trace-id',
         ctaUrl: {
-          displayText: 'View Progress',
+          displayText: 'View progress',
           url: 'https://intexuraos.cloud/#/code-tasks/task-123',
         },
         important: true,
@@ -819,7 +819,7 @@ describe('WhatsAppNotifier', () => {
         },
       });
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -838,7 +838,7 @@ describe('WhatsAppNotifier', () => {
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.buttons).toEqual([]);
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -928,7 +928,7 @@ describe('WhatsAppNotifier', () => {
         },
       });
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -947,7 +947,7 @@ describe('WhatsAppNotifier', () => {
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.buttons).toEqual([]);
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -1176,7 +1176,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('Queued. Position: 2');
       expect(callArgs.correlationId).toBe('trace-123');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -1233,7 +1233,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('timed out before a worker could start');
       expect(callArgs.correlationId).toBe('trace-123');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -1315,7 +1315,7 @@ describe('WhatsAppNotifier', () => {
       const publishCall = getPublishSendMessageMock().mock.calls[0];
       const params = publishCall?.[0] as { message: string; ctaUrl?: { displayText: string; url: string } };
       expect(params.ctaUrl).toEqual({
-        displayText: 'View Pull Request',
+        displayText: 'View pull request',
         url: 'https://github.com/pbuchman/intexuraos/pull/202',
       });
     });
@@ -1359,7 +1359,7 @@ describe('WhatsAppNotifier', () => {
       expect(params.message).toContain('🔁 Fix login');
       expect(params.message).not.toContain('PR:');
       expect(params.ctaUrl).toEqual({
-        displayText: 'View Pull Request',
+        displayText: 'View pull request',
         url: 'https://github.com/test/repo/pull/9',
       });
     });
@@ -1408,7 +1408,7 @@ describe('WhatsAppNotifier', () => {
       const params = publishCall?.[0] as { buttons?: unknown; ctaUrl?: { displayText: string; url: string } };
       expect(params.buttons).toBeUndefined();
       expect(params.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -1567,7 +1567,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('GH Actions Run: https://github.com/pbuchman/intexuraos/runs/123');
       expect(callArgs.message).toContain('A follow-up fix task has been automatically dispatched.');
       expect(callArgs.ctaUrl).toEqual({
-        displayText: 'View Pull Request',
+        displayText: 'View pull request',
         url: 'https://github.com/pbuchman/intexuraos/pull/42',
       });
     });

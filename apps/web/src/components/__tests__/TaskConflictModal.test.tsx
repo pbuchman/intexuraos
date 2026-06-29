@@ -53,7 +53,7 @@ describe('TaskConflictModal', () => {
       render(<TaskConflictModal {...defaultProps} reason="duplicate" />);
 
       // Title is rendered both as sr-only Dialog.Title and visible h2
-      expect(screen.getAllByText('Similar Task Detected').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Similar task detected').length).toBeGreaterThan(0);
       expect(
         screen.getByText(/A similar task was submitted in the last 5 minutes/)
       ).toBeInTheDocument();
@@ -63,7 +63,7 @@ describe('TaskConflictModal', () => {
     it('renders modal with active reason', () => {
       render(<TaskConflictModal {...defaultProps} reason="active" />);
 
-      expect(screen.getAllByText('Active Task Exists').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Active task exists').length).toBeGreaterThan(0);
       expect(
         screen.getByText(/An active task already exists for this Linear issue/)
       ).toBeInTheDocument();
@@ -72,11 +72,11 @@ describe('TaskConflictModal', () => {
   });
 
   describe('User interactions', () => {
-    it('navigates to task on View Existing Task button click', () => {
+    it('navigates to task on View existing task button click', () => {
       const onNavigateToTask = vi.fn();
       render(<TaskConflictModal {...defaultProps} onNavigateToTask={onNavigateToTask} />);
 
-      const viewButton = screen.getByRole('button', { name: 'View Existing Task' });
+      const viewButton = screen.getByRole('button', { name: 'View existing task' });
       fireEvent.click(viewButton);
 
       expect(onNavigateToTask).toHaveBeenCalledWith('task_fa7666d5-bdf1-4498-b52b-1c12af89a578');
@@ -112,15 +112,15 @@ describe('TaskConflictModal', () => {
     it('does not render when isOpen is false', () => {
       render(<TaskConflictModal {...defaultProps} isOpen={false} />);
 
-      expect(screen.queryByText('Similar Task Detected')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'View Existing Task' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Similar task detected')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'View existing task' })).not.toBeInTheDocument();
     });
 
     it('renders when isOpen is true', () => {
       render(<TaskConflictModal {...defaultProps} isOpen={true} />);
 
-      expect(screen.getAllByText('Similar Task Detected').length).toBeGreaterThan(0);
-      expect(screen.getByRole('button', { name: 'View Existing Task' })).toBeInTheDocument();
+      expect(screen.getAllByText('Similar task detected').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'View existing task' })).toBeInTheDocument();
     });
   });
 

@@ -275,14 +275,14 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('should reset linearMode to create when modal cancelled without selection', () => {
     render(<CodeTaskNewPage />);
 
-    // Initially, "Create New" is active (border-blue-500)
+    // Initially, "Create new" is active (border-blue-500)
     expect(getCreateNewButton().className).toContain('border-blue-500');
     expect(getLinkExistingButton().className).not.toContain('border-blue-500');
 
-    // Click "Link Existing" to switch mode and open the modal
+    // Click "Link existing" to switch mode and open the modal
     fireEvent.click(getLinkExistingButton());
 
-    // Modal is open and "Link Existing" is now the active mode
+    // Modal is open and "Link existing" is now the active mode
     expect(screen.getByTestId('issue-selector-modal')).toBeInTheDocument();
     expect(getLinkExistingButton().className).toContain('border-blue-500');
     expect(getCreateNewButton().className).not.toContain('border-blue-500');
@@ -301,7 +301,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('should keep linearMode as link when issue is selected before modal closes', () => {
     render(<CodeTaskNewPage />);
 
-    // Click "Link Existing"
+    // Click "Link existing"
     fireEvent.click(getLinkExistingButton());
     expect(screen.getByTestId('issue-selector-modal')).toBeInTheDocument();
 
@@ -319,7 +319,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('should retain linearMode as link and keep selected issue when reopened via pencil then cancelled', () => {
     render(<CodeTaskNewPage />);
 
-    // Click "Link Existing" and select an issue
+    // Click "Link existing" and select an issue
     fireEvent.click(getLinkExistingButton());
     fireEvent.click(screen.getByTestId('modal-select-btn'));
 
@@ -343,18 +343,18 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     expect(screen.getByText('INT-123')).toBeInTheDocument();
   });
 
-  it('should stay in create mode when Create New is clicked after a cancelled Link Existing', () => {
+  it('should stay in create mode when Create new is clicked after a cancelled Link existing', () => {
     render(<CodeTaskNewPage />);
 
-    // Click "Link Existing" and cancel the modal
+    // Click "Link existing" and cancel the modal
     fireEvent.click(getLinkExistingButton());
     fireEvent.click(screen.getByTestId('modal-cancel-btn'));
 
-    // After cancel, "Create New" should be active (mode reset)
+    // After cancel, "Create new" should be active (mode reset)
     expect(getCreateNewButton().className).toContain('border-blue-500');
     expect(getLinkExistingButton().className).not.toContain('border-blue-500');
 
-    // Clicking "Create New" again retains 'create' mode
+    // Clicking "Create new" again retains 'create' mode
     fireEvent.click(getCreateNewButton());
     expect(getCreateNewButton().className).toContain('border-blue-500');
     expect(getLinkExistingButton().className).not.toContain('border-blue-500');
@@ -394,7 +394,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     expect(screen.getByRole('button', { name: /execution/i })).toBeInTheDocument();
   });
 
-  it('defaults to Planning mode when linear mode is Create New', () => {
+  it('defaults to Planning mode when linear mode is Create new', () => {
     render(<CodeTaskNewPage />);
 
     const planningButton = screen.getByRole('button', { name: /planning/i });
@@ -419,7 +419,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('allows user to override task mode back to Planning after linking issue', () => {
     render(<CodeTaskNewPage />);
 
-    // Switch to Link Existing (sets taskMode to execution)
+    // Switch to Link existing (sets taskMode to execution)
     fireEvent.click(getLinkExistingButton());
 
     const planningButton = screen.getByRole('button', { name: /planning/i });

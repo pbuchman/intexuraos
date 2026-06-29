@@ -151,7 +151,7 @@ export function LinearIssuesPage(): React.JSX.Element {
               void handleRefresh();
             }}
           >
-            Try Again
+            Try again
           </Button>
         </div>
       </Layout>

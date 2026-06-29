@@ -493,7 +493,7 @@ describe('Pub/Sub Routes', () => {
         type: 'whatsapp.message.send',
         userId: 'user-cta',
         message: 'Task completed successfully',
-        ctaUrl: { displayText: 'View Progress', url: 'https://intexuraos.cloud/#/code-tasks/task-123' },
+        ctaUrl: { displayText: 'View progress', url: 'https://intexuraos.cloud/#/code-tasks/task-123' },
         correlationId: 'corr-cta',
         timestamp: new Date().toISOString(),
       });
@@ -514,7 +514,7 @@ describe('Pub/Sub Routes', () => {
       expect(sentMessages[0]?.phoneNumber).toBe('48987654321');
       expect(sentMessages[0]?.message).toBe('Task completed successfully');
       expect(sentMessages[0]?.ctaUrl).toEqual({
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
       });
     });
@@ -549,7 +549,7 @@ describe('Pub/Sub Routes', () => {
     it('sends CTA URL message when ctaUrl is provided', async () => {
       await userMappingRepository.saveMapping('user-cta', ['+48111222333']);
 
-      const ctaUrl = { displayText: 'View Pull Request', url: 'https://github.com/owner/repo/pull/42' };
+      const ctaUrl = { displayText: 'View pull request', url: 'https://github.com/owner/repo/pull/42' };
 
       const body = createPubSubBody({
         type: 'whatsapp.message.send',

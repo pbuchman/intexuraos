@@ -61,7 +61,7 @@ const GENERIC_EXECUTION_FAILURE_SUFFIX: LocalizedText = {
 };
 
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLIES: LocalizedText = {
-  en: 'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.',
+  en: 'No external system is configured for this message, so I cannot process it. Configure external save in Intex Agent preferences and send it again.',
   pl: 'Nie skonfigurowano zewnętrznego systemu dla tej wiadomości, więc nie mogę jej przetworzyć. Skonfiguruj External Save w preferencjach agenta INTEX i wyślij ją ponownie.',
 };
 
@@ -141,12 +141,12 @@ const COMPLETED_REPLIES = {
 } satisfies Record<string, LocalizedText>;
 
 const CTA_LABELS = {
-  openNote: { en: 'Open Note', pl: 'Otwórz notatkę' },
-  openResearch: { en: 'Open Research', pl: 'Otwórz research' },
-  viewProgress: { en: 'View Progress', pl: 'Zobacz postęp' },
-  openBookmark: { en: 'Open Bookmark', pl: 'Otwórz zakładkę' },
-  openCalendar: { en: 'Open Calendar', pl: 'Otwórz kalendarz' },
-  openLink: { en: 'Open Link', pl: 'Otwórz link' },
+  openNote: { en: 'Open note', pl: 'Otwórz notatkę' },
+  openResearch: { en: 'Open research', pl: 'Otwórz research' },
+  viewProgress: { en: 'View progress', pl: 'Zobacz postęp' },
+  openBookmark: { en: 'Open bookmark', pl: 'Otwórz zakładkę' },
+  openCalendar: { en: 'Open calendar', pl: 'Otwórz kalendarz' },
+  openLink: { en: 'Open link', pl: 'Otwórz link' },
 } satisfies Record<string, LocalizedText>;
 
 export interface IntexAgentRunnerConfig {

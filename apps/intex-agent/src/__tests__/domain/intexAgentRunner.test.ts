@@ -58,7 +58,7 @@ const POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY =
 const ENGLISH_GREETING_REPLY = 'Hi! I am doing well. How can I help?';
 const POLISH_GREETING_REPLY = 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?';
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
-  'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.';
+  'No external system is configured for this message, so I cannot process it. Configure external save in Intex Agent preferences and send it again.';
 const EXTERNAL_SAVE_FAILED_REPLY =
   'I could not deliver this to the external system. The external save request failed: HTTP 403: Forbidden. Please check the external system configuration and try again.';
 const EXTERNAL_SAVE_UNKNOWN_FAILURE_REPLY =
@@ -1213,7 +1213,7 @@ describe('createIntexAgentRunner', () => {
         'Created the research draft.',
       toolName: 'create_research',
       ctaUrl: {
-        displayText: 'Open Research',
+        displayText: 'Open research',
         url: 'https://intexuraos.cloud/#/research/research-1',
       },
       toolResult: {
@@ -1287,7 +1287,7 @@ describe('createIntexAgentRunner', () => {
       expectedReply:
         'Created the code task.',
       expectedCtaUrl: {
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-1',
       },
     },
@@ -1309,7 +1309,7 @@ describe('createIntexAgentRunner', () => {
       expectedReply:
         'Created the calendar event.',
       expectedCtaUrl: {
-        displayText: 'Open Calendar',
+        displayText: 'Open calendar',
         url: 'https://calendar.google.com/event?eid=event-1',
       },
     },
@@ -1326,7 +1326,7 @@ describe('createIntexAgentRunner', () => {
       },
       expectedReply: 'Saved the bookmark.',
       expectedCtaUrl: {
-        displayText: 'Open Bookmark',
+        displayText: 'Open bookmark',
         url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
       },
     },
@@ -1358,7 +1358,7 @@ describe('createIntexAgentRunner', () => {
       },
       expectedReply: 'Saved the note.',
       expectedCtaUrl: {
-        displayText: 'Open Note',
+        displayText: 'Open note',
         url: 'https://intexuraos.cloud/#/notes/note-1',
       },
     },
@@ -1388,7 +1388,7 @@ describe('createIntexAgentRunner', () => {
       },
       expectedReply: 'Saved the note.',
       expectedCtaUrl: {
-        displayText: 'Open Note',
+        displayText: 'Open note',
         url: 'https://intexuraos.cloud/#/notes/note-1',
       },
     },
@@ -1427,7 +1427,7 @@ describe('createIntexAgentRunner', () => {
       },
       expectedReply: 'Created the research draft.',
       expectedCtaUrl: {
-        displayText: 'Open Research',
+        displayText: 'Open research',
         url: 'https://intexuraos.cloud/#/research/research-1',
       },
     },
@@ -1464,7 +1464,7 @@ describe('createIntexAgentRunner', () => {
       },
       expectedReply: 'Created the research draft.',
       expectedCtaUrl: {
-        displayText: 'Open Research',
+        displayText: 'Open research',
         url: 'https://intexuraos.cloud/#/research/research-1',
       },
     },
@@ -1481,7 +1481,7 @@ describe('createIntexAgentRunner', () => {
       },
       expectedReply: 'Created the code task.',
       expectedCtaUrl: {
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-1',
       },
     },
@@ -1513,7 +1513,7 @@ describe('createIntexAgentRunner', () => {
       runnerWebAppUrl: 'https://dev.intexuraos.cloud/',
       expectedReply: 'Created the code task.',
       expectedCtaUrl: {
-        displayText: 'View Progress',
+        displayText: 'View progress',
         url: 'https://dev.intexuraos.cloud/#/code-tasks/task-2',
       },
     },
@@ -1548,7 +1548,7 @@ describe('createIntexAgentRunner', () => {
       },
       expectedReply: 'Saved the link.',
       expectedCtaUrl: {
-        displayText: 'Open Link',
+        displayText: 'Open link',
         url: 'https://example.com/post',
       },
     },
