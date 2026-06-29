@@ -568,6 +568,57 @@ describe('processExecutionMemoryBacklog', () => {
     }));
   });
 
+  it('skips task with no_reusable_lesson default when LLM returns empty skipReason', async () => {
+    // Regression test for INTEXURAOS-HETZNER-3Q: LLM returning
+    // `"skipReason": ""` previously caused the backlog processor to log
+    // "Execution memory backlog processing failed" and mark the task as errored.
+    const task = createTask({
+      executionMemoryContext: { status: 'none' },
+    });
+    codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
+    codeTaskRepo.update.mockResolvedValue(ok(task));
+    mockLlmClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        decision: 'skip',
+        skipReason: '',
+        evidenceSummary: 'Nothing reusable to extract.',
+        memories: [],
+      }),
+    }));
+
+    const result = await processExecutionMemoryBacklog({
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      userServiceClient: userServiceClient as never,
+      embeddingClient: embeddingClient as never,
+      limit: 10,
+    });
+
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
+    expect(result.value).toEqual({
+      claimed: 1,
+      completed: 0,
+      skipped: 1,
+      errored: 0,
+      taskIds: ['task-1'],
+    });
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: task.id }),
+      'Execution memory backlog processing failed'
+    );
+    expect(codeTaskRepo.update).toHaveBeenLastCalledWith('task-1', expect.objectContaining({
+      executionMemoryPostRun: expect.objectContaining({
+        status: 'skipped',
+        skipReason: 'no_reusable_lesson',
+      }),
+    }));
+  });
+
   it('defaults missing post-run metadata when claiming and retrying backlog work', async () => {
     const task = createTask({
       linearIssueId: undefined,
@@ -1895,6 +1946,45 @@ describe('processExecutionMemoryBacklog', () => {
       const retryPrompt = capturedPrompts[1] ?? '';
       expect(retryPrompt).toContain('Fix the JSON schema violation and return valid JSON');
       expect(retryPrompt).toContain('Your previous response was invalid JSON');
+    });
+
+    it('treats empty-string skipReason from LLM as undefined instead of failing Zod parse', async () => {
+      // Regression test for INTEXURAOS-HETZNER-3Q: LLM occasionally returns
+      // `"skipReason": ""` for decision=skip. Zod enum rejects "" and the
+      // resulting parse failure surfaced as "Execution memory backlog processing failed".
+      const emptySkipReasonResponse = JSON.stringify({
+        decision: 'skip',
+        skipReason: '',
+        evidenceSummary: 'Nothing reusable to extract.',
+        memories: [],
+      });
+      mockLlmClient.generate.mockResolvedValue(ok({ content: emptySkipReasonResponse }));
+
+      const result = await processExecutionMemoryBacklogTestables.distillTask(
+        createTask(),
+        [{ text: 'log line' }],
+        [],
+        { description: null, comments: [] },
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          distillerClient: mockLlmClient as never,
+          limit: 10,
+        }
+      );
+
+      expect(result.decision).toBe('skip');
+      expect(mockLlmClient.generate).toHaveBeenCalledTimes(1);
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        'Distiller response failed Zod parse, retrying with refinement prompt'
+      );
     });
   });
 
