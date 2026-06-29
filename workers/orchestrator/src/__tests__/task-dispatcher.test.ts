@@ -11028,7 +11028,7 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'destroy-hang-test' }),
+        expect.objectContaining({ taskId: 'destroy-hang-test', _skipSentry: true }),
         'Failed to destroy worker for inactivity restart'
       );
       const task = await dispatcher.getTask('destroy-hang-test');

@@ -558,8 +558,13 @@ export class AttemptLifecycle {
       );
     } catch (destroyError) {
       const message = getErrorMessage(destroyError);
+      // destroyWorker is bounded by WORKER_DESTROY_TIMEOUT_MS (30s) and the task is
+      // finalized below as 'failed' with TASK_INACTIVITY_RESTART_FAILED, so the
+      // failure is captured via the task status path. The warn itself reflects
+      // docker daemon unresponsiveness (infrastructure), not application
+      // error, and would otherwise be operational noise for Sentry.
       ctx.logger.warn(
-        { taskId, error: destroyError },
+        { taskId, error: destroyError, [SKIP_SENTRY_KEY]: true },
         'Failed to destroy worker for inactivity restart'
       );
       ctx.appendOrchestratorTaskLog(
