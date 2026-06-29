@@ -172,9 +172,9 @@ export function createLinearApiClient(): LinearApiClient {
               'listIssues',
               Date.now(),
               {
-                onRetry: ({ attempt, delayMs, error }) => {
+                onRetry: ({ operationName, attempt, delayMs, error }) => {
                   logger.warn(
-                    { teamId, attempt, delayMs, error: getErrorMessage(error) },
+                    { teamId, operationName, attempt, delayMs, error: getErrorMessage(error) },
                     'Linear listIssues transient failure, retrying'
                   );
                 },
@@ -204,13 +204,10 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
-        // Only log non-transient failures as errors; transient ones are already
-        // surfaced as warnings during the retry loop.
-        if (!isTransientLinearError(error)) {
-          logger.error({ error, teamId }, 'Failed to list Linear issues');
-        } else {
-          logger.error({ error, teamId }, 'Failed to list Linear issues after retries');
-        }
+        const message = isTransientLinearError(error)
+          ? 'Failed to list Linear issues after retries'
+          : 'Failed to list Linear issues';
+        logger.error({ error, teamId }, message);
         return err(mapLinearError(error));
       }
     },

@@ -259,7 +259,12 @@ export interface RetryOnTransientOptions {
   /** Hard cap on delay between attempts in ms (default: 4000). */
   maxDelayMs?: number;
   /** Logger-like sink used for transient retry attempts (optional). */
-  onRetry?: (info: { attempt: number; delayMs: number; error: unknown }) => void;
+  onRetry?: (info: {
+    operationName: string;
+    attempt: number;
+    delayMs: number;
+    error: unknown;
+  }) => void;
 }
 
 /**
@@ -277,7 +282,7 @@ export async function retryOnTransient<T>(
   const maxRetries = options.maxRetries ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 500;
   const maxDelayMs = options.maxDelayMs ?? 4000;
-  // Tiny pseudo-jitter derived from the seed and attempt; deterministic per call.
+  // Bounded additive jitter derived from the seed; deterministic per call.
   const seedFraction = (Math.abs(jitterSeed) % 1000) / 1000;
 
   let attempt = 0;
@@ -291,11 +296,9 @@ export async function retryOnTransient<T>(
         throw error;
       }
       const exponentialDelay = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
-      const jitter = Math.floor(exponentialDelay * seedFraction);
-      const delayMs = exponentialDelay + jitter;
-      options.onRetry?.({ attempt: attempt + 1, delayMs, error });
-      // Suppress unused warning: operationName reserved for future structured logging
-      void operationName;
+      const jitter = Math.floor(exponentialDelay * seedFraction * 0.25);
+      const delayMs = Math.min(maxDelayMs, exponentialDelay + jitter);
+      options.onRetry?.({ operationName, attempt: attempt + 1, delayMs, error });
       await sleep(delayMs);
       attempt += 1;
     }
