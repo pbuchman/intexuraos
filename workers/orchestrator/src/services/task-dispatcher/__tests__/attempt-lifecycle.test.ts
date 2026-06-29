@@ -76,6 +76,26 @@ describe('AttemptLifecycle', () => {
         'Worker destroyed for inactivity restart'
       );
     });
+
+    it('copies /tmp evidence to a directory derived from config.logBasePath (INT-1787)', async () => {
+      // Regression for INT-1787: orchestrator was writing evidence to
+      // /var/log/orchestrator/inactivity-evidence/, which fails on hosts
+      // where /var/log is not writable by the orchestrator user (e.g. the
+      // home-dev VM running under systemd). Evidence must live under
+      // config.logBasePath which the orchestrator already creates at startup.
+      const task = makeTask({ taskId: 'evidence-1' });
+      harness.tasks.set(task.taskId, task);
+
+      await al.doHandleInactivityRestart(task.taskId);
+
+      const copyOutMock = harness.ctx.isolation.provider.copyOut as unknown as ReturnType<
+        typeof vi.fn
+      >;
+      expect(copyOutMock).toHaveBeenCalledTimes(1);
+      const [, srcPath, destPath] = copyOutMock.mock.calls[0] as [string, string, string];
+      expect(srcPath).toBe('/tmp');
+      expect(destPath).toBe('/tmp/orchestrator-test/logs/inactivity-evidence/evidence-1/');
+    });
   });
 
   describe('executeTaskSetup', () => {

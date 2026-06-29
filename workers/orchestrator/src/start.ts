@@ -97,6 +97,7 @@ export async function start(): Promise<void> {
   ensureDirectoryExists(orchestratorDir);
   ensureDirectoryExists(worktreeDir);
   ensureDirectoryExists(logsDir);
+  ensureDirectoryExists(join(logsDir, 'inactivity-evidence'));
 
   const env = loadEnvConfig();
   const repoPath = env.repoPath ?? defaultRepoPath;

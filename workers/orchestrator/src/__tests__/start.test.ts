@@ -308,6 +308,20 @@ describe('start() — full bootstrap happy path', () => {
     await expect(start()).rejects.toThrow(/Port 19199 is already in use/);
   });
 
+  it('creates the inactivity-evidence directory alongside the orchestrator logs dir (INT-1787)', async () => {
+    // Regression for INT-1787: ensureDirectoryExists must be called for
+    // `<logsDir>/inactivity-evidence` so the directory is available before
+    // copyOut runs during an inactivity restart.
+    const { mkdirSync } = await import('node:fs');
+    await start();
+
+    const calls = vi.mocked(mkdirSync).mock.calls.map((args) => args[0] as string);
+    const evidenceCall = calls.find(
+      (p) => typeof p === 'string' && p.endsWith('/inactivity-evidence')
+    );
+    expect(evidenceCall).toBeDefined();
+  });
+
   it('forwards env overrides for repoPath, private-key, and git identity', async () => {
     // Drive the truthy arms of `env.repoPath ?? defaultRepoPath`,
     // `env.githubPrivateKeyOverride !== undefined ? ... : {}`, and

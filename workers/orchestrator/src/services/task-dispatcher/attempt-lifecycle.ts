@@ -518,7 +518,7 @@ export class AttemptLifecycle {
       'Inactivity restart triggered'
     );
 
-    const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
+    const evidenceDir = `${ctx.config.logBasePath}/inactivity-evidence/${taskId}/`;
     const [copyResult, statsResult] = await Promise.allSettled([
       withTimeout(
         ctx.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
