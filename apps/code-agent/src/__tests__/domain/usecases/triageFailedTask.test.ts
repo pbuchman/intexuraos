@@ -280,6 +280,10 @@ describe('triageFailedTask', () => {
       // so the persisted delay is exactly COOLOFF_FALLBACK_MS relative to that sample.
       expect(persisted.getTime() - before).toBeGreaterThanOrEqual(COOLOFF_FALLBACK_MS);
       expect(persisted.getTime() - after).toBeLessThanOrEqual(COOLOFF_FALLBACK_MS);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task_cooloff_badjson', _skipSentry: true }),
+        expect.stringContaining('Cooloff parser rejected LLM response')
+      );
     });
 
     it('falls back to derivedBy "fallback" when userServiceClient.getLlmClient errors and propagates known user timezone', async () => {
@@ -308,6 +312,10 @@ describe('triageFailedTask', () => {
         | undefined;
       expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('fallback');
       expect(createInput?.dispatchSchedule?.['timezone']).toBe('America/New_York');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task_cooloff_nokey', _skipSentry: true }),
+        expect.stringContaining('User LLM unavailable')
+      );
     });
 
     it('still calls LLM with empty log lines when logLineRepo.listRecent returns err', async () => {
@@ -332,7 +340,7 @@ describe('triageFailedTask', () => {
       expect(result.action).toBe('retried_after_cooloff');
       expect(mockGenerate).toHaveBeenCalledOnce();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task_cooloff_logfail' }),
+        expect.objectContaining({ taskId: 'task_cooloff_logfail', _skipSentry: true }),
         expect.stringContaining('Failed to fetch log lines for cooloff parsing')
       );
     });
@@ -364,7 +372,7 @@ describe('triageFailedTask', () => {
 
       expect(result.action).toBe('retried_after_cooloff');
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task_cooloff_tz_throw' }),
+        expect.objectContaining({ taskId: 'task_cooloff_tz_throw', _skipSentry: true }),
         expect.stringContaining('Failed to fetch user timezone')
       );
       const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
@@ -397,7 +405,7 @@ describe('triageFailedTask', () => {
         | undefined;
       expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('fallback');
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task_cooloff_gen_err' }),
+        expect.objectContaining({ taskId: 'task_cooloff_gen_err', _skipSentry: true }),
         expect.stringContaining('LLM cooloff call failed')
       );
     });

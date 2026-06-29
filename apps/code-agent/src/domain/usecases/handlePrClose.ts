@@ -18,6 +18,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
@@ -107,14 +108,14 @@ export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrClos
     if (!userResult.ok) {
       for (const issueId of textIssueIds) {
         logger.warn(
-          { linearIssueId: issueId, login, error: userResult.error },
+          { linearIssueId: issueId, login, error: userResult.error, [SKIP_SENTRY_KEY]: true },
           'handlePrClose: failed to resolve userId for PR body/title issue'
         );
       }
     } else if (userResult.value === null) {
       for (const issueId of textIssueIds) {
         logger.warn(
-          { linearIssueId: issueId, login },
+          { linearIssueId: issueId, login, [SKIP_SENTRY_KEY]: true },
           'handlePrClose: failed to resolve userId — user not found'
         );
       }

@@ -8,6 +8,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask, TaskError } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
@@ -182,7 +183,7 @@ async function resolveCooloffSchedule(
   const recentLogLines = logResult.ok ? logResult.value.map((line) => line.text) : [];
   if (!logResult.ok) {
     logger.warn(
-      { taskId: task.id, error: logResult.error },
+      { taskId: task.id, error: logResult.error, [SKIP_SENTRY_KEY]: true },
       'Failed to fetch log lines for cooloff parsing'
     );
   }
@@ -193,7 +194,7 @@ async function resolveCooloffSchedule(
     userTimezone = await userServiceClient.getUserTimezone(task.userId);
   } catch (error) {
     logger.warn(
-      { taskId: task.id, userId: task.userId, error },
+      { taskId: task.id, userId: task.userId, error, [SKIP_SENTRY_KEY]: true },
       'Failed to fetch user timezone for cooloff parsing'
     );
     userTimezone = undefined;
@@ -231,7 +232,7 @@ async function resolveCooloffSchedule(
   const llmClientResult = await userServiceClient.getLlmClient(task.userId);
   if (!llmClientResult.ok) {
     logger.warn(
-      { taskId: task.id, userId: task.userId, error: llmClientResult.error },
+      { taskId: task.id, userId: task.userId, error: llmClientResult.error, [SKIP_SENTRY_KEY]: true },
       'User LLM unavailable for cooloff parsing; using fallback delay'
     );
     return fallback;
@@ -250,7 +251,7 @@ async function resolveCooloffSchedule(
   });
   if (!generateResult.ok) {
     logger.warn(
-      { taskId: task.id, error: generateResult.error },
+      { taskId: task.id, error: generateResult.error, [SKIP_SENTRY_KEY]: true },
       'LLM cooloff call failed; using fallback delay'
     );
     return fallback;
@@ -259,7 +260,7 @@ async function resolveCooloffSchedule(
   const parsed = parseCooloffResponse(generateResult.value.content, now);
   if (parsed === null) {
     logger.warn(
-      { taskId: task.id },
+      { taskId: task.id, [SKIP_SENTRY_KEY]: true },
       'Cooloff parser rejected LLM response; using fallback delay'
     );
     return fallback;

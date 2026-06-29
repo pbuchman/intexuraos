@@ -1745,6 +1745,14 @@ describe('drainTaskQueue', () => {
         linearIssueId: 'INT-123',
       })
     );
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        linearIssueId: 'INT-123',
+        error: { code: 'UNAVAILABLE', message: 'Linear down' },
+        _skipSentry: true,
+      }),
+      'Failed to refresh Linear labels during drain'
+    );
   });
 
   it('does not call notifyTaskStarted when update fails', async () => {
