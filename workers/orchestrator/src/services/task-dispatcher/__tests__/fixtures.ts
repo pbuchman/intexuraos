@@ -98,7 +98,7 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
 
   const ctx: DispatcherContext = {
     logger,
-    config: { capacity: 5 } as never,
+    config: { capacity: 5, logBasePath: '/tmp/orchestrator-test/logs' } as never,
     isolation: {
       provider: {
         isHealthy: vi.fn().mockReturnValue(true),
