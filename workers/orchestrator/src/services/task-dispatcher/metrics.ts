@@ -94,7 +94,10 @@ export async function prepareComplianceValidationInput(
 
     const prNumber = extractPrNumber(finalResult.prUrl);
     if (prNumber === undefined) {
-      logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no PR number');
+      logger.warn(
+        { taskId: task.taskId, _skipSentry: true },
+        'Compliance validation skipped: no PR number'
+      );
       return undefined;
     }
 
@@ -103,7 +106,10 @@ export async function prepareComplianceValidationInput(
     const entries = await readSessionTranscript(config.secretsBasePath, task.taskId, logger);
 
     if (entries.length === 0) {
-      logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no transcript entries');
+      logger.warn(
+        { taskId: task.taskId, _skipSentry: true },
+        'Compliance validation skipped: no transcript entries'
+      );
       return undefined;
     }
 
