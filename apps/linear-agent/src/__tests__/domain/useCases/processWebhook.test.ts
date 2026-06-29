@@ -39,6 +39,50 @@ function createFakeLogger(): Logger {
   } as unknown as Logger;
 }
 
+interface CapturedLogEntry {
+  level: 'info' | 'warn' | 'error' | 'debug' | 'trace' | 'fatal';
+  context: Record<string, unknown> | undefined;
+  message: string;
+}
+
+interface CapturingLogger extends Logger {
+  calls: CapturedLogEntry[];
+}
+
+function createCapturingLogger(): CapturingLogger {
+  const calls: CapturedLogEntry[] = [];
+  const record = (
+    level: CapturedLogEntry['level'],
+    args: unknown[]
+  ): void => {
+    const [first, second] = args;
+    let context: Record<string, unknown> | undefined;
+    let message: string;
+    if (typeof first === 'string') {
+      message = first;
+      context = undefined;
+    } else if (first !== null && typeof first === 'object') {
+      context = first as Record<string, unknown>;
+      message = typeof second === 'string' ? second : '';
+    } else {
+      message = '';
+      context = undefined;
+    }
+    calls.push({ level, context, message });
+  };
+  return {
+    calls,
+    info: (...args: unknown[]) => record('info', args),
+    warn: (...args: unknown[]) => record('warn', args),
+    error: (...args: unknown[]) => record('error', args),
+    debug: (...args: unknown[]) => record('debug', args),
+    trace: (...args: unknown[]) => record('trace', args),
+    fatal: (...args: unknown[]) => record('fatal', args),
+    silent: () => undefined,
+    level: 'info',
+  } as unknown as CapturingLogger;
+}
+
 // Fake repositories for testing
 class FakeConnectionRepository implements LinearConnectionRepository {
   private userIdsByTeam = new Map<string, string[]>();
@@ -582,6 +626,36 @@ describe('processWebhook', () => {
 
       expectIgnored(result);
       expect(result.message).toBe('Issue not found');
+    });
+
+    it('skips Sentry capture when issue is not found for comment', async () => {
+      const capturingLogger = createCapturingLogger();
+
+      const result = await processWebhook(
+        {
+          action: 'create',
+          type: 'Comment',
+          data: createCommentPayload(),
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-1',
+          rawBody,
+        },
+        {
+          connectionRepository: connectionRepo,
+          issueRepository: issueRepo,
+          commentRepository: commentRepo,
+          codeAgentClient,
+          validateSignature: createValidSignatureValidator(),
+          logger: capturingLogger,
+        }
+      );
+
+      expectIgnored(result);
+      expect(result.message).toBe('Issue not found');
+      const warnCalls = capturingLogger.calls.filter((c) => c.level === 'warn');
+      const issueNotFoundLog = warnCalls.find((c) => c.message === 'Issue not found for comment');
+      expect(issueNotFoundLog).toBeDefined();
+      expect(issueNotFoundLog?.context?.['_skipSentry']).toBe(true);
     });
 
     it('returns ignored when issue has no teamId', async () => {
