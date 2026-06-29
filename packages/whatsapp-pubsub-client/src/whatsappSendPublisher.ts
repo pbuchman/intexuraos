@@ -2,7 +2,7 @@
  * WhatsApp Send Message Publisher.
  * Publishes SendMessageEvent to Pub/Sub for whatsapp-service to process.
  */
-import { type Result } from '@intexuraos/common-core';
+import { err, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type {
   SendMessageEvent,
@@ -50,11 +50,19 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
     important?: boolean;
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
+    const userId = params.userId.trim();
+    if (userId === '') {
+      return err({
+        code: 'PUBLISH_FAILED',
+        message: 'WhatsApp send message userId is required',
+      });
+    }
+
     const correlationId = params.correlationId ?? crypto.randomUUID();
 
     const event: SendMessageEvent = {
       type: 'whatsapp.message.send',
-      userId: params.userId,
+      userId,
       message: params.message,
       correlationId,
       timestamp: new Date().toISOString(),
@@ -81,7 +89,7 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
     return await this.publishToTopic(
       this.topicName,
       event,
-      { correlationId, userId: params.userId },
+      { correlationId, userId },
       'WhatsApp send message'
     );
   }

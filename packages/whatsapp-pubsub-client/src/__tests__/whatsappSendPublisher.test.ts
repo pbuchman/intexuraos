@@ -83,6 +83,22 @@ describe('createWhatsAppSendPublisher', () => {
       expect((publishedData['correlationId'] as string).length).toBeGreaterThan(0);
     });
 
+    it('rejects blank userId before publishing', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      const result = await publisher.publishSendMessage({
+        userId: '   ',
+        message: 'Hello',
+      });
+
+      expect(result.ok).toBe(false);
+      expect(mockPublishMessage).not.toHaveBeenCalled();
+      if (!result.ok) {
+        expect(result.error.code).toBe('PUBLISH_FAILED');
+        expect(result.error.message).toContain('userId is required');
+      }
+    });
+
     it('includes replyToMessageId when provided', async () => {
       const publisher = createWhatsAppSendPublisher(config);
 
