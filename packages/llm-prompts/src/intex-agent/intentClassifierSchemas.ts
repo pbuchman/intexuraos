@@ -1,22 +1,12 @@
 import { z } from 'zod';
+import {
+  INTEX_AGENT_TOOL_NAMES,
+  IntexAgentToolNameSchema,
+  type IntexAgentPromptToolName,
+} from './toolNames.js';
 
-export const INTEX_AGENT_INTENT_CLASSIFIER_TOOL_NAMES = [
-  'create_note',
-  'create_calendar_event',
-  'query_calendar_events',
-  'create_research',
-  'create_link',
-  'create_code_task',
-  'save_external',
-  'get_user_preferences',
-  'add_user_preference',
-  'update_user_preference',
-  'delete_user_preference',
-] as const;
-
-export const IntexAgentIntentClassifierToolNameSchema = z.enum(
-  INTEX_AGENT_INTENT_CLASSIFIER_TOOL_NAMES
-);
+export const INTEX_AGENT_INTENT_CLASSIFIER_TOOL_NAMES = INTEX_AGENT_TOOL_NAMES;
+export const IntexAgentIntentClassifierToolNameSchema = IntexAgentToolNameSchema;
 
 const confidenceSchema = z.number().min(0).max(1);
 const optionalQuestionSchema = z.string().optional();
@@ -50,9 +40,7 @@ export const IntexAgentIntentClassifierOutputSchema = z.discriminatedUnion('outc
     .strict(),
 ]);
 
-export type IntexAgentIntentClassifierToolName = z.infer<
-  typeof IntexAgentIntentClassifierToolNameSchema
->;
+export type IntexAgentIntentClassifierToolName = IntexAgentPromptToolName;
 
 export type IntexAgentIntentClassifierOutput = z.infer<
   typeof IntexAgentIntentClassifierOutputSchema

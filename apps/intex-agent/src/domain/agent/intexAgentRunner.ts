@@ -1,5 +1,16 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { ToolCallingClient, ToolCallingMessage } from '@intexuraos/llm-contract';
+import {
+  IntexAgentRunnerOutputSchema,
+  intexAgentRunnerOutputRepairPrompt,
+  type IntexAgentRunnerOutput,
+} from '@intexuraos/llm-prompts';
+import {
+  formatZodErrors,
+  generateStructured,
+  type StructuredClient,
+  type StructuredGenerateResult,
+} from '@intexuraos/llm-utils';
 import type {
   IntexAgentRunner,
   IntexAgentRunnerResult,
@@ -152,6 +163,7 @@ const CTA_LABELS = {
 
 export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
+  responseRepairClient?: StructuredClient;
   toolExecutor: IntexAgentToolExecutor;
   intentClassifier?: IntexAgentIntentClassifier;
   webAppUrl?: string;
@@ -277,9 +289,10 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         currentDateTime: input.currentDateTime,
         userPreferences: config.userPreferences ?? null,
       });
+      const messages = buildMessages(input.events, input.message, input.replyContext);
       const result = await config.client.run({
         systemPrompt,
-        messages: buildMessages(input.events, input.message, input.replyContext),
+        messages,
         tools,
         toolChoice: 'auto',
         promptType: 'intex-agent-whatsapp-session',
@@ -293,8 +306,13 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
-      return parseRunnerContent(
-        result.value.content,
+      return await parseRunnerContent(
+        {
+          content: result.value.content,
+          repairClient: config.responseRepairClient,
+          systemPrompt,
+          messages,
+        },
         toolExecutions,
         config.webAppUrl ?? DEFAULT_WEB_APP_URL,
         config.userPreferences ?? null,
@@ -451,27 +469,27 @@ function parseReplyContext(value: unknown): IntexIncomingMessageReplyContext | u
   return { replyToWamid, source, text, truncated };
 }
 
-function parseRunnerContent(
-  content: string,
+interface RunnerOutputValidationInput {
+  content: string;
+  repairClient: StructuredClient | undefined;
+  systemPrompt: string;
+  messages: ToolCallingMessage[];
+}
+
+async function parseRunnerContent(
+  input: RunnerOutputValidationInput,
   toolExecutions: IntexAgentToolExecution[],
   webAppUrl: string,
   userPreferences: string | null,
   replyLanguage: IntexAgentReplyLanguage
-): IntexAgentRunnerResult {
-  const parsed = parseJsonObject(content);
+): Promise<IntexAgentRunnerResult> {
+  const parsed = await validateRunnerOutput(input);
   if (parsed === null) {
-    return malformedResult(replyLanguage);
-  }
-
-  const outcome = parsed['outcome'];
-  const reply = parsed['reply'];
-  if (typeof outcome !== 'string' || typeof reply !== 'string') {
     return malformedResult(replyLanguage);
   }
 
   const toolExecution = getCompletedToolExecution(toolExecutions);
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
-    const summary = parsed['summary'];
     return {
       outcome: 'needs_confirmation',
       reply: buildConfirmationReply(
@@ -482,50 +500,116 @@ function parseRunnerContent(
       ),
       toolName: toolExecution.toolName,
       toolArgs: toolExecution.args,
-      ...(typeof summary === 'string' ? { summary } : {}),
+      ...(parsed.summary !== undefined ? { summary: parsed.summary } : {}),
     };
   }
 
-  if (outcome === 'needs_clarification') {
-    return { outcome, reply };
-  }
+  switch (parsed.outcome) {
+    case 'needs_clarification':
+      return { outcome: parsed.outcome, reply: parsed.reply };
+    case 'no_action':
+      return { outcome: parsed.outcome, reply: parsed.reply };
+    case 'unsupported':
+      return { outcome: parsed.outcome, reply: buildUnsupportedCapabilitiesReply(replyLanguage) };
+    case 'completed': {
+      if (toolExecution?.toolName !== parsed.toolName) {
+        return malformedResult(replyLanguage);
+      }
+      const completedToolExecution = toolExecution;
+      const completedReply = buildCompletedReply(
+        completedToolExecution.toolName,
+        completedToolExecution.result,
+        parsed.reply,
+        webAppUrl,
+        replyLanguage
+      );
 
-  if (outcome === 'no_action') {
-    return { outcome, reply };
-  }
-
-  if (outcome === 'unsupported') {
-    return { outcome, reply: buildUnsupportedCapabilitiesReply(replyLanguage) };
-  }
-
-  if (outcome === 'completed') {
-    const summary = parsed['summary'];
-    if (toolExecution === undefined) {
-      return malformedResult(replyLanguage);
+      return {
+        outcome: parsed.outcome,
+        reply: completedReply.reply,
+        ...(parsed.summary !== undefined ? { summary: parsed.summary } : {}),
+        toolName: completedToolExecution.toolName,
+        ...(completedToolExecution.result !== undefined
+          ? { toolResult: completedToolExecution.result }
+          : {}),
+        /* v8 ignore start -- schema: normal completed turns cannot produce CTA URLs because mutating tools are confirmation-gated and read-only tools have no CTA results @preserve */
+        ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
+        /* v8 ignore stop @preserve */
+      };
     }
-    const completedReply = buildCompletedReply(
-      toolExecution.toolName,
-      toolExecution.result,
-      reply,
-      webAppUrl,
-      replyLanguage
-    );
+  }
+}
 
+async function validateRunnerOutput(
+  input: RunnerOutputValidationInput
+): Promise<IntexAgentRunnerOutput | null> {
+  const firstResponseClient = createFirstResponseThenRepairClient(
+    input.content,
+    input.repairClient
+  );
+  const result = await generateStructured({
+    client: firstResponseClient,
+    prompt: 'Validate the Intex Agent runner response.',
+    schema: IntexAgentRunnerOutputSchema,
+    promptType: 'intex-agent-whatsapp-session',
+    ...(input.repairClient !== undefined
+      ? {
+          repairBuilder: (raw, error): string =>
+            intexAgentRunnerOutputRepairPrompt.build({
+              systemPrompt: input.systemPrompt,
+              messages: input.messages,
+              invalidResponse: raw,
+              errorMessage: formatZodErrors(error),
+            }),
+          maxRepairAttempts: 1,
+        }
+      : { maxRepairAttempts: 0 }),
+  });
+
+  return result.ok ? result.value.data : null;
+}
+
+function createFirstResponseThenRepairClient(
+  content: string,
+  repairClient: StructuredClient | undefined
+): StructuredClient {
+  if (repairClient === undefined) {
     return {
-      outcome,
-      reply: completedReply.reply,
-      ...(typeof summary === 'string' ? { summary } : {}),
-      toolName: toolExecution.toolName,
-      ...(toolExecution.result !== undefined
-        ? { toolResult: toolExecution.result }
-        : {}),
-      /* v8 ignore start -- schema: normal completed turns cannot produce CTA URLs because mutating tools are confirmation-gated and read-only tools have no CTA results @preserve */
-      ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
-      /* v8 ignore stop @preserve */
+      generate(): ReturnType<StructuredClient['generate']> {
+        return Promise.resolve({
+          ok: true,
+          value: {
+            content,
+            usage: emptyStructuredUsage(),
+          },
+        });
+      },
     };
   }
 
-  return malformedResult(replyLanguage);
+  let didReturnOriginalContent = false;
+  return {
+    generate(
+      prompt: string,
+      options: Parameters<StructuredClient['generate']>[1]
+    ): ReturnType<StructuredClient['generate']> {
+      if (!didReturnOriginalContent) {
+        didReturnOriginalContent = true;
+        return Promise.resolve({
+          ok: true,
+          value: {
+            content,
+            usage: emptyStructuredUsage(),
+          },
+        });
+      }
+      return repairClient.generate(prompt, options);
+    },
+  };
+}
+
+function emptyStructuredUsage(): StructuredGenerateResult['usage'] {
+  return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
 }
 
 function createConfirmationPreviewExecutor(executor: IntexAgentToolExecutor): IntexAgentToolExecutor {

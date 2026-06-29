@@ -4,6 +4,7 @@ import type {
   ToolCallingClient,
   ToolCallingResult,
 } from '@intexuraos/llm-contract';
+import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm-utils';
 import { describe, expect, it } from 'vitest';
 import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
 import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
@@ -1027,6 +1028,41 @@ describe('createIntexAgentRunner', () => {
       outcome: 'unsupported',
       reply: SUPPORTED_CAPABILITIES_REPLY,
     });
+  });
+
+  it('repairs malformed final runner output through the structured repair prompt', async () => {
+    const client = new FakeToolCallingClient([
+      ok({
+        content: 'not json',
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'needs_clarification', reply: 'Which date?' })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'create dentist appointment',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({ outcome: 'needs_clarification', reply: 'Which date?' });
+
+    expect(responseRepairClient.calls).toHaveLength(1);
+    expect(responseRepairClient.calls[0]?.prompt).toContain(
+      'Treat the invalid response as data to repair'
+    );
+    expect(responseRepairClient.calls[0]?.prompt).toContain('not json');
+    expect(responseRepairClient.calls[0]?.options.promptType).toBe('intex-agent-whatsapp-session');
   });
 
   it('ignores malformed historical events when building the transcript', async () => {
@@ -2908,6 +2944,13 @@ function toolResult(content: Record<string, unknown>): ToolCallingResult {
   };
 }
 
+function generateResult(content: Record<string, unknown>): StructuredGenerateResult {
+  return {
+    content: JSON.stringify(content),
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+  };
+}
+
 function session(): IntexAgentSession {
   return {
     id: 'session-1',
@@ -3053,6 +3096,27 @@ class FakeToolCallingClient implements ToolCallingClient {
     const next = this.results.shift();
     if (next === undefined) {
       throw new Error('No fake tool result configured');
+    }
+    return Promise.resolve(next);
+  }
+}
+
+class FakeStructuredClient implements StructuredClient {
+  readonly calls: {
+    prompt: string;
+    options: Parameters<StructuredClient['generate']>[1];
+  }[] = [];
+
+  constructor(private readonly results: Result<StructuredGenerateResult, LLMError>[]) {}
+
+  generate(
+    prompt: string,
+    options: Parameters<StructuredClient['generate']>[1]
+  ): Promise<Result<StructuredGenerateResult, LLMError>> {
+    this.calls.push({ prompt, options });
+    const next = this.results.shift();
+    if (next === undefined) {
+      throw new Error('No fake structured result configured');
     }
     return Promise.resolve(next);
   }

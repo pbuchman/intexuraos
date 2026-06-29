@@ -184,6 +184,7 @@ export function initServices(config: ServiceConfig): void {
 
       return await createIntexAgentRunner({
         client: toolCallingClient,
+        responseRepairClient: classifierClient,
         toolExecutor,
         intentClassifier: createLlmIntexAgentIntentClassifier({ client: classifierClient }),
         webAppUrl: config.webAppUrl,
