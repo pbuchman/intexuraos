@@ -115,12 +115,19 @@ function normalizeProblemTitle(title: string): string {
   return normalized === '' ? 'unknown' : normalized;
 }
 
+function getProblemProjectIdentity(event: NormalizedSentryIssueEvent): string {
+  const projectId = event.projectId?.trim();
+  if (projectId !== undefined && projectId !== '') return projectId;
+  return event.projectSlug.trim();
+}
+
 export function createSentryProblemDedupeKey(event: NormalizedSentryIssueEvent): string {
+  const projectIdentity = getProblemProjectIdentity(event);
   const fingerprint = createHash('sha256')
-    .update(`${event.organizationSlug}\0${event.projectSlug}\0${normalizeProblemTitle(event.issueTitle)}`)
+    .update(`${event.organizationSlug}\0${projectIdentity}\0${normalizeProblemTitle(event.issueTitle)}`)
     .digest('hex')
     .slice(0, 32);
-  return `sentry-task:${event.organizationSlug}:${event.projectSlug}:${fingerprint}`;
+  return `sentry-task:${event.organizationSlug}:${projectIdentity}:${fingerprint}`;
 }
 
 function serializePayload(payload: unknown): string {

@@ -21,6 +21,7 @@ const SENTRY_AUTOMATION_SELF_ALERT_TITLES = new Set([
   'failed to record task duration metric',
   'issue not found for comment',
   'dispatch blocked by worker capability or health state',
+  'dispatch failed for fallback decision',
   'log upload failed, retrying',
   'error: failed to upload log chunks after retries',
   'code worker auth not ready',

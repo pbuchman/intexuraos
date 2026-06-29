@@ -67,13 +67,23 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     }));
 
     expect(firstKey).toBe(secondKey);
-    expect(firstKey).toMatch(/^sentry-task:intexuraos-dev-pbuchman:intexuraos-development:/);
+    expect(firstKey).toMatch(/^sentry-task:intexuraos-dev-pbuchman:100:/);
   });
 
   it('uses unknown for blank problem title task key fingerprints', () => {
     expect(createSentryProblemDedupeKey(buildEvent({ issueTitle: '   ' }))).toBe(
       createSentryProblemDedupeKey(buildEvent({ issueTitle: 'unknown' }))
     );
+  });
+
+  it('falls back to project slug for problem task keys when Sentry omits project id', () => {
+    const key = createSentryProblemDedupeKey(buildEvent({
+      projectId: undefined,
+      projectSlug: 'intexuraos-development',
+      issueTitle: 'Failed to record task completion metric',
+    }));
+
+    expect(key).toMatch(/^sentry-task:intexuraos-dev-pbuchman:intexuraos-development:/);
   });
 
   it('reserves a new Sentry issue event and persists audit fields', async () => {
@@ -284,6 +294,82 @@ describe('createFirestoreSentryIssueEventRepository', () => {
           latestReceivedAt: secondReceivedAt,
           duplicateCount: 1,
           payload: '{"delivery":2}',
+        }),
+      });
+    }
+  });
+
+  it('returns an existing problem task reservation when Sentry changes project slug shape for the same issue', async () => {
+    const repo = createFirestoreSentryIssueEventRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger: pino({ level: 'silent' }),
+    });
+    const firstReceivedAt = new Date('2026-06-29T01:19:18.085Z');
+    const secondReceivedAt = new Date('2026-06-29T01:19:29.105Z');
+    const firstEvent = buildEvent({
+      organizationSlug: 'piotr-buchman',
+      projectSlug: 'intexuraos-hetzner',
+      projectId: '4510702691024976',
+      issueId: '130876727',
+      issueShortId: 'INTEXURAOS-HETZNER-39',
+      issueTitle: 'Error: Failed to look up phone number for user',
+      issueUrl: 'https://piotr-buchman.sentry.io/issues/130876727/',
+      action: 'unresolved',
+      resource: 'issue',
+      status: 'unresolved',
+    });
+    const secondEvent = buildEvent({
+      organizationSlug: 'piotr-buchman',
+      projectSlug: '4510702691024976',
+      projectId: '4510702691024976',
+      issueId: '130876727',
+      issueShortId: undefined,
+      issueTitle: 'Error: Failed to look up phone number for user',
+      issueUrl: 'https://sentry.io/organizations/piotr-buchman/issues/130876727/',
+      action: 'triggered',
+      resource: 'event_alert',
+      status: undefined,
+      eventId: '6e36caa957e54c03963c63afccc684cb',
+    });
+    const problemKey = createSentryProblemDedupeKey(firstEvent);
+
+    expect(createSentryProblemDedupeKey(secondEvent)).toBe(problemKey);
+
+    const first = await repo.reserveTaskForProblem({
+      event: firstEvent,
+      receivedAt: firstReceivedAt,
+      payload: { delivery: 'issue' },
+    });
+    expect(first.ok && first.value.created).toBe(true);
+
+    await repo.markCodeTaskCreated({
+      dedupeKey: problemKey,
+      codeTaskId: 'task_existing_problem',
+      linearIssueId: 'INT-1775',
+    });
+
+    const second = await repo.reserveTaskForProblem({
+      event: secondEvent,
+      receivedAt: secondReceivedAt,
+      payload: { delivery: 'event-alert' },
+    });
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.value).toEqual({
+        created: false,
+        record: expect.objectContaining({
+          dedupeKey: problemKey,
+          codeTaskId: 'task_existing_problem',
+          linearIssueId: 'INT-1775',
+          issueId: '130876727',
+          action: 'triggered',
+          resource: 'event_alert',
+          eventId: '6e36caa957e54c03963c63afccc684cb',
+          receivedAt: firstReceivedAt,
+          latestReceivedAt: secondReceivedAt,
+          duplicateCount: 1,
+          payload: '{"delivery":"event-alert"}',
         }),
       });
     }

@@ -65,7 +65,7 @@ describe('scoring/handleFallback', () => {
     expect(deps.dispatchService.dispatch).toHaveBeenCalled();
   });
 
-  it('logs warning when dispatch fails', async () => {
+  it('logs Sentry-suppressed warning when dispatch fails', async () => {
     const deps = createDeps({
       dispatchService: {
         dispatch: vi.fn().mockResolvedValue({ success: false, error: 'boom' }),
@@ -73,7 +73,7 @@ describe('scoring/handleFallback', () => {
     });
     await handleFallback(deps, createFakeEvent({ eventType: 'issue_comment' }), 'x', Date.now(), logger);
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'boom' }),
+      expect.objectContaining({ error: 'boom', _skipSentry: true }),
       'Dispatch failed for fallback decision',
     );
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
