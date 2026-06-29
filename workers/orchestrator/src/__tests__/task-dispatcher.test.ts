@@ -6394,7 +6394,7 @@ describe('TaskDispatcher', () => {
 
       expect(result).toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'no-pr-test' }),
+        expect.objectContaining({ taskId: 'no-pr-test', _skipSentry: true }),
         'Compliance validation skipped: no PR number'
       );
     });
@@ -6433,7 +6433,7 @@ describe('TaskDispatcher', () => {
 
       expect(result).toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'empty-transcript' }),
+        expect.objectContaining({ taskId: 'empty-transcript', _skipSentry: true }),
         'Compliance validation skipped: no transcript entries'
       );
     });

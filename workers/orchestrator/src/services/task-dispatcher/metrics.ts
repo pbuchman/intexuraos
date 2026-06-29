@@ -1,4 +1,5 @@
 import { type Logger, getErrorMessage } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { OrchestratorConfig } from '../../types/config.js';
 import type { Task, TaskResult } from '../../types/task.js';
 import type { TurnMetricsCollector } from '../turn-metrics-collector.js';
@@ -94,7 +95,10 @@ export async function prepareComplianceValidationInput(
 
     const prNumber = extractPrNumber(finalResult.prUrl);
     if (prNumber === undefined) {
-      logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no PR number');
+      logger.warn(
+        { taskId: task.taskId, [SKIP_SENTRY_KEY]: true },
+        'Compliance validation skipped: no PR number'
+      );
       return undefined;
     }
 
@@ -103,7 +107,10 @@ export async function prepareComplianceValidationInput(
     const entries = await readSessionTranscript(config.secretsBasePath, task.taskId, logger);
 
     if (entries.length === 0) {
-      logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no transcript entries');
+      logger.warn(
+        { taskId: task.taskId, [SKIP_SENTRY_KEY]: true },
+        'Compliance validation skipped: no transcript entries'
+      );
       return undefined;
     }
 

@@ -277,7 +277,7 @@ describe('prepareComplianceValidationInput', () => {
     );
     expect(result).toBeUndefined();
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'task-1' }),
+      expect.objectContaining({ taskId: 'task-1', _skipSentry: true }),
       'Compliance validation skipped: no PR number'
     );
   });
