@@ -2,6 +2,7 @@ import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { WorkerRuntime } from '../runtime/types.js';
 import type { WorkerConfig, WorkerHandle, WorkerType } from './types.js';
 import { WORKER_TYPES } from './types.js';
@@ -175,6 +176,7 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
             taskId,
             before: worker.lockfileSha256,
             after: currentSha,
+            [SKIP_SENTRY_KEY]: true,
           },
           'pnpm-lock.yaml changed during attempt — review before merging'
         );
