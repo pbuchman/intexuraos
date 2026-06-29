@@ -25,6 +25,26 @@ const CAPABILITIES_BY_LANGUAGE: Record<IntexAgentReplyLanguage, readonly string[
   pl: POLISH_INTEX_AGENT_CAPABILITIES,
 };
 
+const UNSUPPORTED_REPLY_INTROS: Record<IntexAgentReplyLanguage, string> = {
+  en: 'I could not safely handle that request. I can help with:',
+  pl: 'Nie mogłem bezpiecznie obsłużyć tej prośby. Mogę pomóc z:',
+};
+
+const COMPLETION_FAILURE_REPLY_INTROS: Record<IntexAgentReplyLanguage, string> = {
+  en: 'I could not complete that request right now. I can help with:',
+  pl: 'Nie mogłem teraz dokończyć tej prośby. Mogę pomóc z:',
+};
+
+const NEW_SESSION_REPLY_INTROS: Record<IntexAgentReplyLanguage, string> = {
+  en: 'What would you like me to help with? I can help with:',
+  pl: 'W czym mogę pomóc? Mogę pomóc z:',
+};
+
+const GREETING_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'Hi! I am doing well. How can I help?',
+  pl: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+};
+
 export function detectIntexAgentReplyLanguage(text: string): IntexAgentReplyLanguage {
   return isLikelyPolish(text) ? 'pl' : 'en';
 }
@@ -39,28 +59,21 @@ export function buildCapabilitiesReply(
 }
 
 export function buildUnsupportedCapabilitiesReply(language: IntexAgentReplyLanguage = 'en'): string {
-  if (language === 'pl') {
-    return buildCapabilitiesReply('Nie mogłem bezpiecznie obsłużyć tej prośby. Mogę pomóc z:', 'pl');
-  }
-
-  return buildCapabilitiesReply('I could not safely handle that request. I can help with:', 'en');
+  return buildCapabilitiesReply(UNSUPPORTED_REPLY_INTROS[language], language);
 }
 
 export function buildCompletionFailureCapabilitiesReply(
   language: IntexAgentReplyLanguage = 'en'
 ): string {
-  if (language === 'pl') {
-    return buildCapabilitiesReply('Nie mogłem teraz dokończyć tej prośby. Mogę pomóc z:', 'pl');
-  }
-
-  return buildCapabilitiesReply(
-    'I could not complete that request right now. I can help with:',
-    'en'
-  );
+  return buildCapabilitiesReply(COMPLETION_FAILURE_REPLY_INTROS[language], language);
 }
 
-export function buildNewSessionReadyText(): string {
-  return buildCapabilitiesReply('What would you like me to help with? I can help with:');
+export function buildNewSessionReadyText(language: IntexAgentReplyLanguage = 'en'): string {
+  return buildCapabilitiesReply(NEW_SESSION_REPLY_INTROS[language], language);
+}
+
+export function buildGreetingReply(language: IntexAgentReplyLanguage = 'en'): string {
+  return GREETING_REPLIES[language];
 }
 
 function isLikelyPolish(text: string): boolean {
@@ -69,7 +82,7 @@ function isLikelyPolish(text: string): boolean {
     return true;
   }
 
-  return /\b(czy|jak|jakie|jaki|jaka|mam|masz|mamy|mozesz|utworz|stworz|dodaj|zapisz|zapamietaj|notatk\w*|kalendarz\w*|wydarzen\w*|spotkan\w*|termin\w*|woln\w*|dzisiaj|jutro|teraz|prosze|pomoc|preferencj\w*|kup|bilet|koncert)\b/iu.test(
+  return /\b(czy|jakie|jaki|jaka|mam|masz|mamy|mozesz|utworz|stworz|dodaj|zapisz|zapamietaj|notatk\w*|kalendarz\w*|wydarzen\w*|spotkan\w*|termin\w*|woln\w*|dzisiaj|jutro|teraz|prosze|pomoc|preferencj\w*|kup|bilet|koncert)\b/iu.test(
     normalized
   );
 }

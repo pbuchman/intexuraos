@@ -55,6 +55,8 @@ const POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY =
     '- tworzeniem zadań programistycznych do planowania lub wykonania',
     '- zarządzaniem preferencjami promptu agenta INTEX',
   ].join('\n');
+const ENGLISH_GREETING_REPLY = 'Hi! I am doing well. How can I help?';
+const POLISH_GREETING_REPLY = 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?';
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
   'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.';
 const EXTERNAL_SAVE_FAILED_REPLY =
@@ -104,7 +106,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('10.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('9.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -374,9 +376,44 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'no_action',
-      reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+      reply: POLISH_GREETING_REPLY,
     });
     expect(client.calls).toEqual([]);
+  });
+
+  it('replies to English greetings in English', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Hello',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: ENGLISH_GREETING_REPLY,
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('uses prior session context when the current message cannot classify reply language', async () => {
+    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [event('user_message', { text: 'Zapamiętaj, że wolę krótkie odpowiedzi.' })],
+        message: 'ok',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+    });
   });
 
   it('does not expose tools for informational questions that lack explicit creation intent', async () => {
@@ -436,7 +473,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('10.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('9.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -1026,6 +1063,30 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'unsupported',
       reply: SUPPORTED_CAPABILITIES_REPLY,
+    });
+  });
+
+  it('localizes malformed confirmed execution requests using prior session context', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Dodaj notatkę o spotkaniu.' })],
+        toolName: 'query_calendar_events',
+        toolArgs: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00.000Z',
+          timeMax: '2026-06-26T00:00:00.000Z',
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_SUPPORTED_CAPABILITIES_REPLY,
     });
   });
 

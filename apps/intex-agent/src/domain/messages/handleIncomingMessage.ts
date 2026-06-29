@@ -60,6 +60,7 @@ export type IntexAgentRunnerResult =
 export interface IntexAgentRunner {
   executeConfirmed(input: {
     session: IntexAgentSession;
+    events?: IntexAgentSessionEvent[];
     toolName: IntexAgentToolName;
     toolArgs: Record<string, unknown>;
     currentDateTime: string;
@@ -147,7 +148,7 @@ export async function handleIncomingMessage(
   const effectiveMessage = decision.effectiveUserMessageText;
 
   if (effectiveMessage === null) {
-    const reply = newSessionReadyText();
+    const reply = newSessionReadyText(input.text);
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
@@ -270,6 +271,7 @@ async function handleConfirmationButton(
   try {
     executionResult = await deps.runner.executeConfirmed({
       session: currentSession,
+      events: await deps.sessionRepository.listEvents(currentSession.id, input.userId),
       toolName: pendingConfirmation.toolName,
       toolArgs: pendingConfirmation.toolArgs,
       currentDateTime: now,
@@ -485,8 +487,8 @@ async function publishReply(
   });
 }
 
-function newSessionReadyText(): string {
-  return buildNewSessionReadyText();
+function newSessionReadyText(message: string): string {
+  return buildNewSessionReadyText(detectIntexAgentReplyLanguage(message));
 }
 
 function stripDuplicateSessionPrefix(text: string): string {

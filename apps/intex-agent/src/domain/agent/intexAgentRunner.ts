@@ -23,6 +23,7 @@ import {
 import { buildIntexAgentSystemPrompt } from './systemPrompt.js';
 import { classifyIntexAgentIntent } from './intentGate.js';
 import {
+  buildGreetingReply,
   buildCompletionFailureCapabilitiesReply,
   buildUnsupportedCapabilitiesReply,
   detectIntexAgentReplyLanguage,
@@ -57,8 +58,9 @@ export interface IntexAgentRunnerConfig {
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
   return {
     async executeConfirmed(input): Promise<IntexAgentRunnerResult> {
+      const replyLanguage = detectReplyLanguage(input.events ?? []);
       if (!isMutatingToolName(input.toolName)) {
-        return malformedResult();
+        return malformedResult(replyLanguage);
       }
 
       const toolExecutions: IntexAgentToolExecution[] = [];
@@ -68,7 +70,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       const tool = tools.find((candidate) => candidate.name === input.toolName);
       /* v8 ignore start -- schema: mutating tool registry and tool definitions cannot diverge without breaking startup tests @preserve */
       if (tool === undefined) {
-        return malformedResult();
+        return malformedResult(replyLanguage);
       }
       /* v8 ignore stop @preserve */
 
@@ -77,7 +79,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         const toolExecution = getCompletedToolExecution(toolExecutions);
         /* v8 ignore start -- schema: every mutating tool definition executes through the tracking executor after argument validation @preserve */
         if (toolExecution === undefined) {
-          return malformedResult();
+          return malformedResult(replyLanguage);
         }
         /* v8 ignore stop @preserve */
         const parsedResult = parseToolResult(rawResult);
@@ -106,7 +108,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       }
     },
     async run(input): Promise<IntexAgentRunnerResult> {
-      const replyLanguage = detectIntexAgentReplyLanguage(input.message);
+      const replyLanguage = detectReplyLanguage(input.events, input.message);
 
       if (input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined) {
         const args = {
@@ -132,7 +134,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       if (intent.kind === 'no_action' && intent.reason === 'greeting') {
         return {
           outcome: 'no_action',
-          reply: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
+          reply: buildGreetingReply(replyLanguage),
         };
       }
 
@@ -172,6 +174,33 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       );
     },
   };
+}
+
+function detectReplyLanguage(
+  events: IntexAgentSessionEvent[],
+  currentMessage?: string
+): IntexAgentReplyLanguage {
+  if (currentMessage !== undefined) {
+    const currentLanguage = detectIntexAgentReplyLanguage(currentMessage);
+    if (currentLanguage === 'pl') {
+      return currentLanguage;
+    }
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'user_message') {
+      const priorMessage = event.payload['text'];
+      if (typeof priorMessage === 'string') {
+        const priorLanguage = detectIntexAgentReplyLanguage(priorMessage);
+        if (priorLanguage === 'pl') {
+          return priorLanguage;
+        }
+      }
+    }
+  }
+
+  return 'en';
 }
 
 interface IntexAgentToolExecution {

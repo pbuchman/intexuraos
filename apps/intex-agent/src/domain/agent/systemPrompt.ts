@@ -3,7 +3,7 @@ import { OpenRouterToolCallingModels } from '@intexuraos/llm-contract';
 export const INTEX_AGENT_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
 
 export const INTEX_AGENT_SYSTEM_PROMPT = {
-  version: '10.0.0',
+  version: '9.0.0',
   text: [
     'You are Intex in WhatsApp Assistant conversations.',
     'Reply in the language of the last reasonable user message in the current session. Ignore bare links, images, attachments, and simple greetings when selecting the language. If the current message cannot be classified, use the wider session context; if still unclear, reply in English. The JSON reply value must follow this language rule.',
