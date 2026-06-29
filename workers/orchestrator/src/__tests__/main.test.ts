@@ -13,6 +13,7 @@ import type { HeartbeatManager } from '../heartbeat.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { OrchestratorState } from '../types/state.js';
 import type { IsolationProvider, DiscoveredContainer } from '../services/isolation/types.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 // Mock Fastify to avoid actual server startup
 vi.mock('fastify', () => ({
@@ -1088,8 +1089,12 @@ describe('main.ts', () => {
           }),
         })
       );
+      // INT-1795: Adoption-failed is the expected recovery decision (e.g.
+      // task at max attempts, capacity exhausted). It must NOT page Sentry —
+      // the warn context MUST carry SKIP_SENTRY_KEY so the Pino Sentry
+      // transport drops the event while stdout/Cloud Logging keeps the record.
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task-1' }),
+        expect.objectContaining({ taskId: 'task-1', [SKIP_SENTRY_KEY]: true }),
         'Adoption failed, marking as interrupted'
       );
     });
