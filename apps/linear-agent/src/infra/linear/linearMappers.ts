@@ -196,10 +196,29 @@ export function mapTeam(team: Team): LinearTeam {
   };
 }
 
+/**
+ * Detects transient upstream 5xx errors in error messages from the Linear SDK.
+ * The SDK embeds HTTP status codes in the thrown Error message (e.g.
+ * "GraphQL Error (Code: 502) - ..."), so classification is done by message
+ * inspection rather than a structured error code.
+ */
+export function isTransientUpstreamError(error: unknown): boolean {
+  const message = getErrorMessage(error, '');
+  return /\(Code:\s*50[234]\)/.test(message);
+}
+
 /** Maps unknown errors to typed LinearError. Exported for testing. */
 export function mapLinearError(error: unknown): LinearError {
   const message = getErrorMessage(error, 'Unknown Linear API error');
 
+  // Check transient upstream 5xx first: the Linear SDK embeds the status code
+  // in the thrown Error message (e.g. "GraphQL Error (Code: 502) - <html>..."),
+  // and the body may contain unrelated digits/tokens that would otherwise
+  // misclassify the error as 401/404.
+  if (isTransientUpstreamError(error)) {
+    // Replace potentially-bloated raw error body (e.g. Cloudflare HTML) with a clean message.
+    return { code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' };
+  }
   if (message.includes('429') || message.includes('rate limit')) {
     return { code: 'RATE_LIMIT', message: 'Linear API rate limit exceeded' };
   }

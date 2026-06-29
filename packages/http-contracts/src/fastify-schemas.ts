@@ -65,6 +65,7 @@ export const fastifyErrorCodeSchema = {
     'FORBIDDEN',
     'NOT_FOUND',
     'CONFLICT',
+    'SERVICE_UNAVAILABLE',
     'DOWNSTREAM_ERROR',
     'INTERNAL_ERROR',
     'MISCONFIGURED',

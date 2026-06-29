@@ -24,10 +24,11 @@ describe('OpenAPI Schemas', () => {
       expect(ERROR_CODES).toContain('FORBIDDEN');
       expect(ERROR_CODES).toContain('NOT_FOUND');
       expect(ERROR_CODES).toContain('CONFLICT');
+      expect(ERROR_CODES).toContain('SERVICE_UNAVAILABLE');
       expect(ERROR_CODES).toContain('DOWNSTREAM_ERROR');
       expect(ERROR_CODES).toContain('INTERNAL_ERROR');
       expect(ERROR_CODES).toContain('MISCONFIGURED');
-      expect(ERROR_CODES.length).toBe(8);
+      expect(ERROR_CODES.length).toBe(9);
     });
   });
 

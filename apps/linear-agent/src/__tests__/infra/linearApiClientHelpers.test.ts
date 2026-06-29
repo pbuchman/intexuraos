@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mapIssueStateType,
   mapLinearError,
+  isTransientUpstreamError,
   createDedupKey,
   filterIssuesByCompletionDate,
   DEFAULT_COMPLETED_SINCE_DAYS,
@@ -125,6 +126,48 @@ describe('linearApiClient helper functions', () => {
 
       expect(result.code).toBe('TEAM_NOT_FOUND');
       expect(result.message).toBe('404 Not Found');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE for 502 error', () => {
+      const error = new Error('GraphQL Error (Code: 502) - Bad gateway');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE for 503 error', () => {
+      const error = new Error('GraphQL Error (Code: 503) - Service Unavailable');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE for 504 error', () => {
+      const error = new Error('GraphQL Error (Code: 504) - Gateway Timeout');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE with clean message even when raw error contains HTML', () => {
+      const error = new Error('GraphQL Error (Code: 502) - <!DOCTYPE html><html>...</html>');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+      expect(result.message).not.toContain('<');
+      expect(result.message).not.toContain('html');
+    });
+
+    it('prioritizes structured 502 code over misleading auth keywords in the response body', () => {
+      const error = new Error('GraphQL Error (Code: 502) - <html>Unauthorized</html>');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
     });
 
     it('returns TEAM_NOT_FOUND for not found message', () => {
@@ -711,4 +754,48 @@ describe('linearApiClient helper functions', () => {
       expect(getDedupCacheSize()).toBe(0);
     });
   });
+
+  describe('isTransientUpstreamError', () => {
+    it('returns true for 502 in error message', () => {
+      expect(isTransientUpstreamError(new Error('GraphQL Error (Code: 502)'))).toBe(true);
+    });
+
+    it('returns true for 503 in error message', () => {
+      expect(isTransientUpstreamError(new Error('GraphQL Error (Code: 503)'))).toBe(true);
+    });
+
+    it('returns true for 504 in error message', () => {
+      expect(isTransientUpstreamError(new Error('GraphQL Error (Code: 504)'))).toBe(true);
+    });
+
+    it('returns false for 401 Unauthorized error', () => {
+      expect(isTransientUpstreamError(new Error('401 Unauthorized'))).toBe(false);
+    });
+
+    it('returns false for 404 Not Found error', () => {
+      expect(isTransientUpstreamError(new Error('404 Not Found'))).toBe(false);
+    });
+
+    it('returns false for 429 rate limit error', () => {
+      expect(isTransientUpstreamError(new Error('429 Too Many Requests'))).toBe(false);
+    });
+
+    it('returns false for null error', () => {
+      expect(isTransientUpstreamError(null)).toBe(false);
+    });
+
+    it('returns false for undefined error', () => {
+      expect(isTransientUpstreamError(undefined)).toBe(false);
+    });
+
+    it('returns false for string error', () => {
+      expect(isTransientUpstreamError('not an error')).toBe(false);
+    });
+
+    it('does not classify unrelated digit sequences as transient upstream errors', () => {
+      expect(isTransientUpstreamError(new Error('req-15020 failed'))).toBe(false);
+      expect(isTransientUpstreamError(new Error('504 chars parsed from issue body'))).toBe(false);
+    });
+  });
+
 });

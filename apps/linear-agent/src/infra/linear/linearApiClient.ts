@@ -26,6 +26,7 @@ import {
   mapIssueStateType,
   mapTeam,
   mapLinearError,
+  isTransientUpstreamError,
   filterIssuesByCompletionDate,
   mapIssuesWithBatchedStates,
   DEFAULT_COMPLETED_SINCE_DAYS,
@@ -50,6 +51,7 @@ export {
   mapIssueStateType,
   mapTeam,
   mapLinearError,
+  isTransientUpstreamError,
   createDedupKey,
   filterIssuesByCompletionDate,
   DEFAULT_COMPLETED_SINCE_DAYS,
@@ -172,6 +174,7 @@ export function createLinearApiClient(): LinearApiClient {
               'listIssues',
               Date.now(),
               {
+                maxRetries: 2,
                 onRetry: ({ operationName, attempt, delayMs, error }) => {
                   logger.warn(
                     { teamId, operationName, attempt, delayMs, error: getErrorMessage(error) },
@@ -204,10 +207,14 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
-        const message = isTransientLinearError(error)
-          ? 'Failed to list Linear issues after retries'
-          : 'Failed to list Linear issues';
-        logger.error({ error, teamId }, message);
+        // Transient upstream failures (5xx from Cloudflare/Linear) are noise in
+        // logs and Sentry — they self-recover on the next sync tick. Log at
+        // warn level so they remain visible without generating exceptions.
+        if (isTransientLinearError(error)) {
+          logger.warn({ teamId }, 'Linear API transiently unavailable while listing issues');
+          return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' });
+        }
+        logger.error({ error, teamId }, 'Failed to list Linear issues');
         return err(mapLinearError(error));
       }
     },

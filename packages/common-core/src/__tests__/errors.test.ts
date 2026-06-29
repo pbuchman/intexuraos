@@ -49,6 +49,10 @@ describe('Error utilities', () => {
       expect(ERROR_HTTP_STATUS.MISCONFIGURED).toBe(503);
     });
 
+    it('maps SERVICE_UNAVAILABLE to 503', () => {
+      expect(ERROR_HTTP_STATUS.SERVICE_UNAVAILABLE).toBe(503);
+    });
+
     it('has mapping for all error codes', () => {
       const allCodes: ErrorCode[] = [
         'INVALID_REQUEST',
@@ -62,6 +66,7 @@ describe('Error utilities', () => {
         'UNPROCESSABLE_ENTITY',
         'RATE_LIMITED',
         'LOCKED',
+        'SERVICE_UNAVAILABLE',
         'DOWNSTREAM_ERROR',
         'INTERNAL_ERROR',
         'MISCONFIGURED',
@@ -112,6 +117,7 @@ describe('Error utilities', () => {
         { code: 'NOT_FOUND', expectedStatus: 404 },
         { code: 'CONFLICT', expectedStatus: 409 },
         { code: 'VERSION_CONFLICT', expectedStatus: 409 },
+        { code: 'SERVICE_UNAVAILABLE', expectedStatus: 503 },
         { code: 'DOWNSTREAM_ERROR', expectedStatus: 502 },
         { code: 'INTERNAL_ERROR', expectedStatus: 500 },
         { code: 'MISCONFIGURED', expectedStatus: 503 },
