@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
 import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
 import { INTEX_AGENT_SYSTEM_PROMPT } from '../../domain/agent/systemPrompt.js';
+import type { IntexAgentIntentClassifier } from '../../domain/agent/intentClassifier.js';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '../../domain/sessions/types.js';
 
 const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
@@ -313,6 +314,103 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({ outcome: 'needs_clarification', reply: 'Which day?' });
+  });
+
+  it('uses an injected intent classifier to expose context-derived tools', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'query_calendar_events',
+      args: {
+        timeMin: '2026-06-25T00:00:00+02:00',
+        timeMax: '2026-06-26T00:00:00+02:00',
+        mode: 'list',
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'You have no calendar events tomorrow.',
+          toolName: 'query_calendar_events',
+        })
+      ),
+    ]);
+    const classifications: Parameters<IntexAgentIntentClassifier['classify']>[0][] = [];
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify(input) {
+        classifications.push(input);
+        return { kind: 'tool', allowedToolNames: ['query_calendar_events'] };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify({ status: 'completed', events: [] }),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [event('assistant_message', { text: 'Do you want me to check tomorrow?' })],
+      replyContext: {
+        replyToWamid: 'wamid-current',
+        source: 'outbound_assistant_message',
+        text: 'Do you want me to check tomorrow?',
+        truncated: false,
+      },
+      message: 'yes, please',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toEqual({
+      outcome: 'completed',
+      reply: 'You have no calendar events tomorrow.',
+      toolName: 'query_calendar_events',
+      toolResult: { status: 'completed', events: [] },
+    });
+    expect(classifications).toEqual([
+      {
+        events: [event('assistant_message', { text: 'Do you want me to check tomorrow?' })],
+        replyContext: {
+          replyToWamid: 'wamid-current',
+          source: 'outbound_assistant_message',
+          text: 'Do you want me to check tomorrow?',
+          truncated: false,
+        },
+        message: 'yes, please',
+        currentDateTime: CURRENT_DATE_TIME,
+      },
+    ]);
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
+  });
+
+  it('returns classifier clarification without telling the user the request cannot be handled', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'needs_clarification',
+          question: 'Which one should I handle first?',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a note and show me tomorrow calendar events',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which one should I handle first?',
+    });
+    expect(client.calls).toEqual([]);
   });
 
   it('normalizes unsupported responses to the complete capability list', async () => {

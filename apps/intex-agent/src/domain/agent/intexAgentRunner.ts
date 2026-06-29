@@ -29,6 +29,7 @@ import {
   selectIntexAgentReplyLanguage,
   type IntexAgentReplyLanguage,
 } from './capabilities.js';
+import type { IntexAgentIntentClassifier } from './intentClassifier.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
 type MutatingIntexAgentToolName = Exclude<
@@ -152,6 +153,7 @@ const CTA_LABELS = {
 export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
   toolExecutor: IntexAgentToolExecutor;
+  intentClassifier?: IntexAgentIntentClassifier;
   webAppUrl?: string;
   userPreferences?: string | null;
 }
@@ -234,11 +236,26 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
-      const intent = classifyIntexAgentIntent(input.message);
+      const intent =
+        config.intentClassifier === undefined
+          ? classifyIntexAgentIntent(input.message)
+          : await config.intentClassifier.classify({
+              message: input.message,
+              events: input.events,
+              currentDateTime: input.currentDateTime,
+              ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
+            });
       if (intent.kind === 'unsupported') {
         return {
           outcome: 'unsupported',
           reply: unsupportedIntentReply(replyLanguage),
+        };
+      }
+
+      if (intent.kind === 'needs_clarification') {
+        return {
+          outcome: 'needs_clarification',
+          reply: intent.question,
         };
       }
 

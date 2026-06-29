@@ -21,6 +21,7 @@ import type {
   IntexAgentExternalSavePreferences,
 } from './domain/preferences/types.js';
 import { createIntexAgentRunner } from './domain/agent/intexAgentRunner.js';
+import { createLlmIntexAgentIntentClassifier } from './domain/agent/intentClassifier.js';
 import {
   createIntexAgentToolExecutor,
   type ExternalSaveToolClient,
@@ -175,6 +176,7 @@ export function initServices(config: ServiceConfig): void {
       return await createIntexAgentRunner({
         client: toolCallingClient,
         toolExecutor,
+        intentClassifier: createLlmIntexAgentIntentClassifier({ client: toolCallingClient }),
         webAppUrl: config.webAppUrl,
         userPreferences: promptPreferences.renderedPromptBlock,
       }).run(input);
