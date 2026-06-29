@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import { getErrorCauseChain, type Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { stripDockerHeaders, stripBulkMetadata } from './log-formatter.js';
 import { deriveCallbackBaseUrl } from './callback-url.js';
 
@@ -441,7 +442,12 @@ export class LogForwarder {
     } else {
       state.droppedChunks += chunks.length;
       this.logger.error(
-        { taskId, count: chunks.length, url: `${state.callbackBaseUrl}/internal/logs` },
+        {
+          taskId,
+          count: chunks.length,
+          url: `${state.callbackBaseUrl}/internal/logs`,
+          [SKIP_SENTRY_KEY]: true,
+        },
         'Failed to upload log chunks after retries'
       );
     }
@@ -491,7 +497,13 @@ export class LogForwarder {
         }
 
         this.logger.warn(
-          { taskId: payload.taskId, attempt: i + 1, status: response.status, url },
+          {
+            taskId: payload.taskId,
+            attempt: i + 1,
+            status: response.status,
+            url,
+            [SKIP_SENTRY_KEY]: true,
+          },
           'Log upload failed, retrying'
         );
       } catch (error) {
@@ -500,7 +512,7 @@ export class LogForwarder {
             ? { name: error.name, message: error.message, cause: getErrorCauseChain(error) }
             : { error };
         this.logger.warn(
-          { taskId: payload.taskId, attempt: i + 1, url, ...errorInfo },
+          { taskId: payload.taskId, attempt: i + 1, url, ...errorInfo, [SKIP_SENTRY_KEY]: true },
           'Log upload failed, retrying'
         );
       }
