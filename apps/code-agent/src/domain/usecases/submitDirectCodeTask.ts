@@ -6,6 +6,7 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
@@ -422,7 +423,10 @@ export async function submitDirectCodeTask(
   try {
     await deps.metricsClient.incrementTasksSubmitted(effectiveWorkerType, source);
   } catch (error: unknown) {
-    logger.error({ error, taskId: task.id, workerType: effectiveWorkerType, source }, 'Failed to record task submission metric');
+    logger.error(
+      { error, taskId: task.id, workerType: effectiveWorkerType, source, [SKIP_SENTRY_KEY]: true },
+      'Failed to record task submission metric'
+    );
   }
 
   // Step 8: Return success — task is in queue, drainTaskQueue will dispatch it

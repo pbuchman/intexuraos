@@ -17,6 +17,7 @@ import {
 import { resetServices, setServices, type ServiceContainer } from '../../../services.js';
 import type { TaskFormatterEntry } from '../../../domain/services/webhookHelpers.js';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 
 // Mock heavy downstream use cases — we only need to verify they are invoked.
@@ -720,6 +721,123 @@ describe('handleTaskCompletion', () => {
 
       expect(result).toEqual({ kind: 'received' });
       expect(recordTaskDuration).toHaveBeenCalledWith('claude-opus', 123);
+    });
+  });
+
+  // INT-1763: best-effort Cloud Monitoring writes may fail with
+  // `monitoring.timeSeries.create denied` until the IAM role grant
+  // (terraform/modules/iam/main.tf: code_agent_monitoring_metric_writer) is
+  // propagated or has been pending permission setup. These warnings are
+  // expected best-effort telemetry — they stay in stdout/Cloud Logging for
+  // debugging but must not generate new Sentry issues.
+  describe('metrics telemetry is annotated as non-Sentry (INT-1763)', () => {
+    it('marks the task-completion metric warn payload with _skipSentry when incrementTasksCompleted rejects', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi
+        .fn()
+        .mockRejectedValue(new Error('Permission monitoring.timeSeries.create denied'));
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const addComment = vi.fn().mockResolvedValue(ok({ commentId: 'c-1' }));
+      const updateIssueState = vi.fn().mockResolvedValue(ok(undefined));
+      const updateIssueMetadata = vi.fn().mockResolvedValue(ok({ droppedLabels: [] }));
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+            linearIssueId: 'INT-1',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        linearAgentClient: {
+          validateIssue, addComment, updateIssueState, updateIssueMetadata,
+        } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: requestLog as never,
+      } as unknown as ServiceContainer);
+
+      await handleTaskCompletion(requestLog, {
+        ...buildInput({
+          taskId: 't-metrics-skip-sentry',
+          status: 'completed',
+          result: {
+            execution_outcome_label: 'already_completed',
+            prUrl: 'https://github.com/a/b/pull/9',
+            summary: 'Work already complete',
+          },
+        }),
+        requestLog,
+      });
+
+      // Allow the queued catch() callbacks to run.
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-metrics-skip-sentry',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Failed to record task completion metric'
+      );
+    });
+
+    it('marks the task-duration metric warn payload with _skipSentry when recordTaskDuration rejects', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskFailed = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi
+        .fn()
+        .mockRejectedValue(new Error('Permission monitoring.timeSeries.create denied'));
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskFailed } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        logger: requestLog as never,
+      } as unknown as ServiceContainer);
+
+      await handleTaskCompletion(requestLog, {
+        ...buildInput({
+          taskId: 't-duration-skip-sentry',
+          status: 'interrupted',
+          duration: 42,
+        }),
+        requestLog,
+      });
+
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-duration-skip-sentry',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Failed to record task duration metric'
+      );
     });
   });
 });

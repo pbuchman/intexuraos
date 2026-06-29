@@ -9,6 +9,7 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
@@ -382,7 +383,10 @@ ${additionalContext.trim()}
 
   // Step 11: Record metrics
   await deps.metricsClient.incrementTasksSubmitted(originalTask.workerType, 'web').catch((error: unknown) => {
-    logger.warn({ error, taskId: retryTask.id }, 'Failed to record task submission metric for retry');
+    logger.warn(
+      { [SKIP_SENTRY_KEY]: true, error, taskId: retryTask.id },
+      'Failed to record task submission metric for retry'
+    );
   });
 
   // Step 12: Archive original task (automatic cleanup on retry, INT-711)
