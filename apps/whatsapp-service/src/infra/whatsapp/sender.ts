@@ -26,6 +26,11 @@ type WhatsAppMessageBody =
 
 type MessageTypeLabel = 'text' | 'interactive' | 'CTA URL';
 
+// Truncation is intentional safety behavior — the sender caps the body to
+// the WhatsApp API limit before submitting. The warn is Sentry-skipped
+// because it represents expected API-constraint handling, not an actionable
+// application error.
+// See Sentry INTEXURAOS-HETZNER-3F / Linear INT-1770 and INT-1779.
 function truncateBody(message: string, maxLength: number, messageType: MessageTypeLabel, phoneNumber: string): string {
   if (message.length <= maxLength) {
     return message;
