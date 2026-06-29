@@ -24,7 +24,10 @@ export const EvaluationSchema = z.object({
 
 export const DistillationSchema = z.object({
   decision: z.enum(['create', 'skip']),
-  skipReason: z.enum(['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson', 'planning_unclear']).optional(),
+  skipReason: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson', 'planning_unclear']).optional()
+  ),
   evidenceSummary: z.string().min(1),
   memories: z.array(z.object({
     memoryType: z.enum([

@@ -117,7 +117,7 @@ export async function processMemoryEntry(
       status: 'skipped',
       generatedMemoryIds: [],
       ...(evaluationSummary !== undefined && { evaluationSummary }),
-      ...(distillationResult.skipReason !== undefined && { skipReason: distillationResult.skipReason }),
+      skipReason: distillationResult.skipReason ?? 'no_reusable_lesson',
     };
   }
 
