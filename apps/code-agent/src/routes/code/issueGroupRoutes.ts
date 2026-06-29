@@ -7,6 +7,7 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { timestampToIso } from '../codeRoutes.js';
 import type { JwtValidator } from '../codeRoutes.js';
@@ -435,7 +436,12 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
 
         if (Object.keys(phantomStatusDeltas).length > 0) {
           request.log.warn(
-            { phantomStatusDeltas, summaryCount: summaries.length, displayedCount: paginatedGroups.length },
+            {
+              phantomStatusDeltas,
+              summaryCount: summaries.length,
+              displayedCount: paginatedGroups.length,
+              [SKIP_SENTRY_KEY]: true,
+            },
             'Detected phantom summaries with no displayable tasks — counts corrected',
           );
         }

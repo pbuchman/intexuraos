@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(() => vi.fn()),
@@ -2232,6 +2233,69 @@ describe('GET /code/issue-groups', () => {
       };
       // Task is not a phantom (it exists), so done count stays at 1
       expect(body.data.counts['done']).toBe(1);
+    });
+
+    it('marks the phantom-correction warning payload as non-Sentry', async () => {
+      // INT-1762: phantom correction is intentional self-healing telemetry.
+      // The warning is kept in normal logs (stdout / Cloud Logging) for
+      // operational visibility, but it must NOT be captured by Sentry, so
+      // assert the payload carries SKIP_SENTRY_KEY.
+      const phantomSummary = makeSummary({
+        linearIssueId: 'INT-PHANTOM-SENTRY',
+        aggregateStatus: 'done',
+        taskCount: 1,
+      });
+      mockSummaries = [phantomSummary];
+      mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+      // Create an archived task so the only returned summary is a phantom.
+      const phantomInput = makeTaskInput({
+        linearIssueId: 'INT-PHANTOM-SENTRY',
+        agentType: 'planning',
+      });
+      const phantomCreateResult = await codeTaskRepo.create(phantomInput);
+      expect(phantomCreateResult.ok).toBe(true);
+      if (phantomCreateResult.ok) {
+        await codeTaskRepo.update(phantomCreateResult.value.id, { status: 'archived' });
+      }
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: makeGroupSummaryRepo({
+          getUserGroupCounts: async () => ok(mockCounts),
+          listGroupSummaries: async () => ok({ summaries: mockSummaries }),
+        }),
+      }));
+      await server.close();
+      server = await buildServer();
+
+      // Spy on request.log.warn by patching the method directly via a per-test
+      // onRequest hook. Replacing the entire request.log object can break
+      // downstream consumers that expect the full Pino shape, so we only
+      // intercept the warn method.
+      const warnSpy = vi.fn();
+      await server.addHook('onRequest', async (request) => {
+        const log = request.log as unknown as { warn: (...args: unknown[]) => void };
+        const originalWarn = log.warn.bind(request.log);
+        log.warn = ((...args: unknown[]): void => {
+          warnSpy(...args);
+          originalWarn(...args);
+        });
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/issue-groups?groupStatus=done',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phantomStatusDeltas: expect.objectContaining({ done: 1 }),
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Detected phantom summaries with no displayable tasks — counts corrected',
+      );
     });
 
     it('returns archived groups for archived linear-id queries when summary sort keys exist', async () => {
