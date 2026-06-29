@@ -170,12 +170,15 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               let toolResponse: string;
 
               if (toolDef === undefined) {
-                // Hallucinated tool name — send error back for self-correction
+                // Hallucinated tool name — send error back for self-correction.
+                // Sentry INTEXURAOS-HETZNER-3J: this is an expected self-correction
+                // signal, not an application error; suppress from Sentry while
+                // preserving stdout/Cloud Logging output.
                 toolResponse = JSON.stringify({
                   error: `Unknown tool: ${resolvedName}`,
                 });
                 logger.warn(
-                  { iteration, toolName: resolvedName },
+                  { iteration, toolName: resolvedName, _skipSentry: true },
                   'Tool calling: hallucinated tool name'
                 );
               } else {

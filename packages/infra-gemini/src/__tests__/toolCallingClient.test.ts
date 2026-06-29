@@ -263,7 +263,7 @@ describe('createGeminiToolCallingClient', () => {
     if (!result.ok) return;
     expect(result.value.toolCallsMade).toBe(1);
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ toolName: 'nonexistent_tool' }),
+      expect.objectContaining({ toolName: 'nonexistent_tool', _skipSentry: true }),
       'Tool calling: hallucinated tool name'
     );
   });
@@ -697,7 +697,7 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.ok).toBe(true);
     // The empty string tool name won't match 'my_tool', so it's hallucinated
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ toolName: '' }),
+      expect.objectContaining({ toolName: '', _skipSentry: true }),
       'Tool calling: hallucinated tool name'
     );
   });
