@@ -16,16 +16,21 @@ import { parseShardArg, selectShardItems } from './lib/sharding.mjs';
 
 const rootDir = resolve(import.meta.dirname, '..');
 
-// Run 4 workspaces at a time to balance speed vs memory
-// ESLint strictTypeChecked mode builds full TS AST for each file
+// Run 4 workspaces at a time to balance speed vs memory in normal CI.
+// ESLint strictTypeChecked mode builds full TS AST for each file.
 const CONCURRENT_LIMIT = 4;
 
 // Check for --sequential flag
-const args = process.argv.slice(2);
+const args = process.argv.slice(2).filter((arg) => arg !== '--');
 const SEQUENTIAL_MODE = args.includes('--sequential');
 const shardArg = args.find((arg) => arg.startsWith('--shard='));
 const shard = shardArg ? parseShardArg(shardArg.slice('--shard='.length)) : null;
-const concurrency = SEQUENTIAL_MODE ? 1 : CONCURRENT_LIMIT;
+const targetPaths = args.filter((arg) => arg !== '--sequential' && !arg.startsWith('--shard='));
+const envConcurrency = Number.parseInt(process.env.LINT_CONCURRENCY ?? '', 10);
+const defaultConcurrency = process.env.CODE_WORKER_MODE === '1' ? 1 : CONCURRENT_LIMIT;
+const configuredConcurrency =
+  Number.isInteger(envConcurrency) && envConcurrency > 0 ? envConcurrency : defaultConcurrency;
+const concurrency = SEQUENTIAL_MODE ? 1 : configuredConcurrency;
 
 // Workspace patterns from pnpm-workspace.yaml
 const WORKSPACE_PATTERNS = ['apps/*', 'packages/*', 'workers/*'];
@@ -83,8 +88,24 @@ function lintWorkspace(workspaceName, activeProcesses) {
   });
 }
 
+function lintTargets(paths) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('pnpm', ['exec', 'eslint', ...paths, '--max-warnings', '0'], {
+      stdio: 'inherit',
+    });
+
+    proc.on('close', (code, signal) => {
+      if (code !== 0) {
+        reject(new Error(`target lint failed${signal ? ` with ${signal}` : ''}`));
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
 // Run workspaces in batches to control memory usage
-async function runInBatches(workspaces, batchSize) {
+async function runInBatches(workspaces, batchSize, activeProcesses) {
   for (let i = 0; i < workspaces.length; i += batchSize) {
     const batch = workspaces.slice(i, i + batchSize);
     const batchNum = Math.floor(i / batchSize) + 1;
@@ -94,7 +115,7 @@ async function runInBatches(workspaces, batchSize) {
       `\n🔄 Batch ${batchNum}/${totalBatches}: ${batch.map((w) => w.replace('@intexuraos/', '')).join(', ')}\n`
     );
 
-    await Promise.all(batch.map((ws) => lintWorkspace(ws, [])));
+    await Promise.all(batch.map((ws) => lintWorkspace(ws, activeProcesses)));
   }
 }
 
@@ -104,6 +125,13 @@ async function runInBatches(workspaces, batchSize) {
     const allWorkspaces = getWorkspaces();
     const workspaces = shard ? selectShardItems(allWorkspaces, shard) : allWorkspaces;
     const activeProcesses = [];
+
+    if (targetPaths.length > 0) {
+      console.log(`Running lint for target path(s): ${targetPaths.join(', ')}\n`);
+      await lintTargets(targetPaths);
+      console.log('\n✅ Targeted lint passed\n');
+      process.exit(0);
+    }
 
     const modeText = SEQUENTIAL_MODE ? 'sequentially' : `in batches of ${concurrency}`;
     const shardText = shard ? ` (shard ${shard.index}/${shard.count})` : '';
@@ -123,7 +151,7 @@ async function runInBatches(workspaces, batchSize) {
         }
       } else {
         // Batched parallel execution
-        await runInBatches(workspaces, concurrency);
+        await runInBatches(workspaces, concurrency, activeProcesses);
       }
     } catch (error) {
       // Kill remaining processes on failure
