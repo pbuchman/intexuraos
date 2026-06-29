@@ -158,6 +158,18 @@ describe('fetchLinearIssueContext', () => {
     });
   });
 
+  it('returns undefined when Linear returns a non-OK response', async () => {
+    nock('https://api.linear.app').post('/graphql').reply(503, { error: 'unavailable' });
+
+    const result = await fetchLinearIssueContext('INT-503', 'test-api-key', mockLogger);
+
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-503', status: 503 }),
+      'Failed to fetch Linear issue context: non-OK status'
+    );
+  });
+
   it('filters empty comment bodies and falls back to blank createdAt when missing', async () => {
     nock('https://api.linear.app')
       .post('/graphql')
@@ -406,6 +418,25 @@ describe('fetchLinearIssueContextViaCodeAgent', () => {
     expect(result).toBeUndefined();
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ identifier: 'INT-404', status: 404 }),
+      'Failed to fetch Linear issue context via code-agent'
+    );
+  });
+
+  it('returns undefined when code-agent returns 503', async () => {
+    nock(codeAgentUrl)
+      .get('/internal/linear/issue-context/INT-503')
+      .matchHeader('X-Internal-Auth', authToken)
+      .reply(503, { error: 'unavailable' });
+
+    const result = await fetchLinearIssueContextViaCodeAgent(
+      'INT-503',
+      { codeAgentUrl, internalAuthToken: authToken },
+      mockLogger
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-503', status: 503 }),
       'Failed to fetch Linear issue context via code-agent'
     );
   });

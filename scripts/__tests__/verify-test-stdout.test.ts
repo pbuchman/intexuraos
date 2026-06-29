@@ -52,6 +52,7 @@ describe('verify-test-stdout', () => {
         "Error: ENOENT: no such file or directory, open '/repo/coverage/shard-1/.tmp-1-3/coverage-120.json'",
         '  ❯ open node:internal/fs/promises:639:25',
         '  ❯ Object.writeFile node:internal/fs/promises:1222:14',
+        '⎯⎯⎯⎯⎯⎯⎯⎯⎯',
         "Serialized Error: { errno: -2, code: 'ENOENT', syscall: 'open', path: '/repo/coverage/shard-2/.tmp-2-3/coverage-171.json' }",
         ' Tests  1 passed',
       ].join('\n')
@@ -64,5 +65,54 @@ describe('verify-test-stdout', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('No unexpected test stdout output detected');
+  });
+
+  it('allows known vitest 4.0.17 coverage tmp dir ENOENT unhandled error during merge', () => {
+    mkdirSync('scripts/test-results', { recursive: true });
+    writeFileSync(
+      OUTPUT_FILE,
+      [
+        ' RUN  v4.0.17 /repo',
+        ' ✓ apps/code-agent/src/__tests__/routes/code/feedback-routes.test.ts (2 tests) 70ms',
+        '⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯',
+        "Error: ENOENT: no such file or directory, read '/repo/coverage/shard-2/.tmp-2-3/coverage-11.json'",
+        '  ❯ open node:internal/fs/promises:639:25',
+        '  ❯ Object.readFile node:internal/fs/promises:1252:14',
+        '  ❯ node_modules/.pnpm/vitest@4.0.17/node_modules/vitest/dist/chunks/coverage.js:2999:23',
+        '  ❯ node_modules/.pnpm/@vitest+coverage-v8@4.0.17/node_modules/@vitest/coverage-v8/dist/provider.js:33:3',
+        '⎯⎯⎯⎯⎯⎯⎯⎯⎯',
+        "Serialized Error: { errno: -2, code: 'ENOENT', syscall: 'read', path: '/repo/coverage/shard-2/.tmp-2-3/coverage-11.json' }",
+        ' Tests  1 passed',
+      ].join('\n')
+    );
+
+    const result = spawnSync('node', [SCRIPT], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('No unexpected test stdout output detected');
+  });
+
+  it('rejects standalone separator-only stdout pollution', () => {
+    mkdirSync('scripts/test-results', { recursive: true });
+    writeFileSync(
+      OUTPUT_FILE,
+      [
+        ' RUN  v4.0.17 /repo',
+        ' ✓ apps/code-agent/src/__tests__/routes/code/feedback-routes.test.ts (2 tests) 70ms',
+        '⎯⎯⎯⎯⎯⎯⎯⎯',
+        ' Tests  1 passed',
+      ].join('\n')
+    );
+
+    const result = spawnSync('node', [SCRIPT], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Found 1 unexpected stdout line');
   });
 });
