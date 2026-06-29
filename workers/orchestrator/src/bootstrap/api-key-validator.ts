@@ -104,7 +104,6 @@ export async function fetchWithRetry(
  * accepted. Logs success/failure but never throws — a single provider
  * outage must not block the orchestrator from starting.
  */
-/* v8 ignore start -- module-init: bootstrap-time live upstream validation cannot be unit-tested without real HTTP sockets; the synchronous format validator is unit-tested instead @preserve */
 export async function validateThirdPartyApiKey(
   workerTypeName: string,
   apiKey: string,
@@ -161,8 +160,16 @@ export async function validateThirdPartyApiKey(
     if (resp.ok) {
       logger.info({ apiKey: suffix }, `${keyName} validated successfully`);
     } else {
+      // Sentry INTEXURAOS-HOME-DEV-1F: this is a startup-time health probe, not a
+      // runtime failure. The orchestrator continues to boot and dispatch tasks;
+      // worker tasks that need a rotated/revoked key will fail at the per-task
+      // call site, where the real user impact is already captured. Forwarding
+      // this to Sentry on every orchestrator restart (PM2 auto-restart loop)
+      // produces alert noise that the previous INT-1767 fix suppressed for the
+      // Claude/Codex auth-state warns; the third-party validator hits the same
+      // Pino transport, so it needs the same `_skipSentry` escape hatch.
       logger.error(
-        { status: resp.status, apiKey: suffix },
+        { status: resp.status, apiKey: suffix, _skipSentry: true },
         `${keyName} validation failed — ${workerTypeName} tasks will fail`
       );
     }
@@ -174,7 +181,6 @@ export async function validateThirdPartyApiKey(
     );
   }
 }
-/* v8 ignore stop @preserve */
 
 /** Logs the initial state of claude/codex worker auth at startup. */
 export function logWorkerAuthStartupStatus(
