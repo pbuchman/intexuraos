@@ -163,6 +163,14 @@ function isLinkedSentryTaskBlocking(task: CodeTask): boolean {
     return true;
   }
 
+  if (
+    task.agentType === 'sentry'
+    && task.status === 'implemented'
+    && (task.prNumber !== undefined || task.result?.prUrl !== undefined)
+  ) {
+    return true;
+  }
+
   if (task.result?.sentry_outcome !== undefined && hasOpenPullRequest(task)) {
     return true;
   }
