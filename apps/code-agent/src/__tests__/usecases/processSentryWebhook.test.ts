@@ -95,6 +95,7 @@ function signBody(body: unknown): { rawBody: Buffer; signatureHeader: string } {
 interface MocksShape {
   sentryIssueEventRepo: {
     reserve: ReturnType<typeof vi.fn>;
+    reserveTaskForProblem: ReturnType<typeof vi.fn>;
     markCodeTaskCreated: ReturnType<typeof vi.fn>;
   };
   workerSettingsRepo: { getSettings: ReturnType<typeof vi.fn> };
@@ -109,6 +110,22 @@ function installMocks(overrides: Partial<MocksShape> = {}): MocksShape {
       created: true,
       record: {
         dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+        organizationSlug: 'intexuraos-dev-pbuchman',
+        projectSlug: 'intexuraos-development',
+        issueId: '4509001',
+        issueUrl: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509001/',
+        issueTitle: 'TypeError: Cannot read properties of undefined',
+        action: 'created',
+        resource: 'issue',
+        receivedAt: new Date('2026-06-28T10:00:00.000Z'),
+        latestReceivedAt: new Date('2026-06-28T10:00:00.000Z'),
+        duplicateCount: 0,
+      },
+    })),
+    reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+      created: true,
+      record: {
+        dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
         organizationSlug: 'intexuraos-dev-pbuchman',
         projectSlug: 'intexuraos-development',
         issueId: '4509001',
@@ -240,6 +257,15 @@ describe('processSentryWebhook', () => {
         issueTitle: 'TypeError: Cannot read properties of undefined',
       }),
     }));
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).toHaveBeenCalledWith(expect.objectContaining({
+      event: expect.objectContaining({
+        resource: 'issue',
+        organizationSlug: 'intexuraos-dev-pbuchman',
+        projectSlug: 'intexuraos-development',
+        issueId: '4509001',
+        issueTitle: 'TypeError: Cannot read properties of undefined',
+      }),
+    }));
     expect(mocks.linearIssueService.ensureIssueExists).toHaveBeenCalledWith({
       userId: AUTOMATION_USER_ID,
       taskPrompt: expect.stringContaining('https://intexuraos-dev-pbuchman.sentry.io/issues/4509001/'),
@@ -265,8 +291,13 @@ describe('processSentryWebhook', () => {
       taskId: expect.stringMatching(/^task_/),
       userId: AUTOMATION_USER_ID,
     });
-    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).toHaveBeenCalledWith({
+    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).toHaveBeenNthCalledWith(1, {
       dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+      codeTaskId: expect.stringMatching(/^task_/),
+      linearIssueId: 'INT-200',
+    });
+    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).toHaveBeenNthCalledWith(2, {
+      dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
       codeTaskId: expect.stringMatching(/^task_/),
       linearIssueId: 'INT-200',
     });
@@ -284,6 +315,7 @@ describe('processSentryWebhook', () => {
             linearIssueId: 'INT-200',
           },
         })),
+        reserveTaskForProblem: vi.fn(),
         markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
       },
     });
@@ -297,8 +329,91 @@ describe('processSentryWebhook', () => {
       codeTaskId: 'task_existing',
     });
     expect(mocks.linearIssueService.ensureIssueExists).not.toHaveBeenCalled();
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
     expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
     expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('does not create a task when the same Sentry problem already has a task for another issue id', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509002:issue:created',
+            duplicateCount: 0,
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            codeTaskId: 'task_existing_problem',
+            linearIssueId: 'INT-200',
+          },
+        })),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry problem already has a code task',
+      codeTaskId: 'task_existing_problem',
+    });
+    expect(mocks.linearIssueService.ensureIssueExists).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).not.toHaveBeenCalled();
+  });
+
+  it('returns internal_error when reserving the Sentry problem task fails', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            duplicateCount: 0,
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(err({
+          code: 'FIRESTORE_ERROR',
+          message: 'problem reserve failed',
+        })),
+        markCodeTaskCreated: vi.fn(),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({ ok: false, reason: 'internal_error', message: 'problem reserve failed' });
+    expect(mocks.linearIssueService.ensureIssueExists).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('ignores Sentry automation self-alerts before reservation', async () => {
+    const body = buildIssueBody();
+    const data = body['data'] as { issue: { title: string } };
+    data.issue.title = 'Failed to record task completion metric';
+
+    const result = await processSentryWebhook(buildInput({ body }));
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'ignored',
+      message: 'Ignored Sentry automation self-alert: Failed to record task completion metric',
+    });
+    expect(mocks.sentryIssueEventRepo.reserve).not.toHaveBeenCalled();
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.linearIssueService.ensureIssueExists).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -470,6 +585,7 @@ describe('processSentryWebhook', () => {
     mocks = installMocks({
       sentryIssueEventRepo: {
         reserve: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'reserve failed' })),
+        reserveTaskForProblem: vi.fn(),
         markCodeTaskCreated: vi.fn(),
       },
     });
@@ -490,6 +606,7 @@ describe('processSentryWebhook', () => {
             dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
           },
         })),
+        reserveTaskForProblem: vi.fn(),
         markCodeTaskCreated: vi.fn(),
       },
     });
@@ -658,6 +775,13 @@ describe('processSentryWebhook', () => {
             duplicateCount: 0,
           },
         })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            duplicateCount: 0,
+          },
+        })),
         markCodeTaskCreated: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'link failed' })),
       },
     });
@@ -665,5 +789,35 @@ describe('processSentryWebhook', () => {
     const result = await processSentryWebhook(buildInput());
 
     expect(result).toEqual({ ok: false, reason: 'internal_error', message: 'link failed' });
+  });
+
+  it('returns internal_error when linking the problem task record to the code task fails', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            duplicateCount: 0,
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            duplicateCount: 0,
+          },
+        })),
+        markCodeTaskCreated: vi.fn()
+          .mockResolvedValueOnce(ok(undefined))
+          .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'problem link failed' })),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({ ok: false, reason: 'internal_error', message: 'problem link failed' });
+    expect(mocks.sentryIssueEventRepo.markCodeTaskCreated).toHaveBeenCalledTimes(2);
   });
 });
