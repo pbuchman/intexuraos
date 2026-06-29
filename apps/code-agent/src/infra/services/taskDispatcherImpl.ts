@@ -573,6 +573,14 @@ if (credentials === undefined) {
       });
 
       if (!response.ok) {
+        if (response.status === 409) {
+          this.logger.warn(
+            { taskId, location, status: response.status, [SKIP_SENTRY_KEY]: true },
+            'Worker cancellation target already completed'
+          );
+          return;
+        }
+
         this.logger.warn(
           { taskId, location, status: response.status },
           'Worker cancellation request failed'

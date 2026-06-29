@@ -902,6 +902,34 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('cancelOnWorker non-OK response', () => {
+    it('marks already-completed worker cancellation responses as expected for Sentry', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .delete('/tasks/task-already-complete')
+        .reply(409, { error: 'Task already completed' });
+
+      await service.cancelOnWorker(
+        'task-already-complete',
+        'test-worker',
+        {
+          url: WORKER_URL,
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+        }
+      );
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-already-complete',
+          location: 'test-worker',
+          status: 409,
+          _skipSentry: true,
+        }),
+        'Worker cancellation target already completed'
+      );
+    });
+
     it('logs warning and returns when worker returns non-OK status', async () => {
       const service = createTaskDispatcherService(deps);
 
