@@ -660,9 +660,15 @@ importers:
       '@intexuraos/llm-factory':
         specifier: workspace:*
         version: link:../../packages/llm-factory
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       '@intexuraos/whatsapp-pubsub-client':
         specifier: workspace:*
         version: link:../../packages/whatsapp-pubsub-client
