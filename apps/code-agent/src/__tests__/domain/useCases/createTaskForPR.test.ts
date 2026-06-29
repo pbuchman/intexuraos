@@ -430,6 +430,186 @@ describe('createTaskForPR', () => {
     expect(capturedCreateInput['trackingCommentId']).toBe('98765');
   });
 
+  it('does not create a task or Linear issue when the PR is already closed', async () => {
+    const ensureIssueExists = vi.fn<LinearIssueService['ensureIssueExists']>().mockResolvedValue({
+      linearIssueId: 'INT-100',
+      linearIssueTitle: 'Test Issue',
+      linearFallback: false,
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      linearIssueUrl: 'https://linear.app/intexura/issue/INT-100',
+    });
+    const create = vi.fn<CodeTaskRepository['create']>();
+    const enqueue = vi.fn<TaskEnqueueService['enqueue']>();
+    const updatePRTitle = vi.fn<GitHubPRClient['updatePRTitle']>();
+
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      ensureIssueExists,
+    };
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      create,
+    };
+    deps.taskEnqueueService = {
+      enqueue,
+    };
+    deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
+      async getPullRequestStatus(): ReturnType<GitHubPRClient['getPullRequestStatus']> {
+        return ok({ state: 'closed', mergedAt: null, headRef: 'task_closed_pr_branch' });
+      },
+      updatePRTitle,
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('pr_not_open');
+      expect(result.error.message).toContain('closed');
+    }
+    expect(ensureIssueExists).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(updatePRTitle).not.toHaveBeenCalled();
+  });
+
+  it('does not create a task or Linear issue when the PR has already merged', async () => {
+    const ensureIssueExists = vi.fn<LinearIssueService['ensureIssueExists']>().mockResolvedValue({
+      linearIssueId: 'INT-100',
+      linearIssueTitle: 'Test Issue',
+      linearFallback: false,
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      linearIssueUrl: 'https://linear.app/intexura/issue/INT-100',
+    });
+    const create = vi.fn<CodeTaskRepository['create']>();
+    const enqueue = vi.fn<TaskEnqueueService['enqueue']>();
+    const updatePRTitle = vi.fn<GitHubPRClient['updatePRTitle']>();
+
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      ensureIssueExists,
+    };
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      create,
+    };
+    deps.taskEnqueueService = {
+      enqueue,
+    };
+    deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
+      async getPullRequestStatus(): ReturnType<GitHubPRClient['getPullRequestStatus']> {
+        return ok({
+          state: 'open',
+          mergedAt: new Date('2026-06-29T08:14:23Z'),
+          headRef: 'task_merged_pr_branch',
+        });
+      },
+      updatePRTitle,
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('pr_not_open');
+      expect(result.error.message).toContain('already merged');
+    }
+    expect(ensureIssueExists).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(updatePRTitle).not.toHaveBeenCalled();
+  });
+
+  it('does not create a task or Linear issue when the PR status lookup returns not found', async () => {
+    const ensureIssueExists = vi.fn<LinearIssueService['ensureIssueExists']>().mockResolvedValue({
+      linearIssueId: 'INT-100',
+      linearIssueTitle: 'Test Issue',
+      linearFallback: false,
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      linearIssueUrl: 'https://linear.app/intexura/issue/INT-100',
+    });
+    const create = vi.fn<CodeTaskRepository['create']>();
+    const enqueue = vi.fn<TaskEnqueueService['enqueue']>();
+    const updatePRTitle = vi.fn<GitHubPRClient['updatePRTitle']>();
+
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      ensureIssueExists,
+    };
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      create,
+    };
+    deps.taskEnqueueService = {
+      enqueue,
+    };
+    deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
+      async getPullRequestStatus(): ReturnType<GitHubPRClient['getPullRequestStatus']> {
+        return err({ code: 'NOT_FOUND', message: 'PR not found' });
+      },
+      updatePRTitle,
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('pr_not_open');
+      expect(result.error.message).toContain('not found');
+    }
+    expect(ensureIssueExists).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(updatePRTitle).not.toHaveBeenCalled();
+  });
+
+  it('continues creating the task when PR status lookup fails unexpectedly', async () => {
+    const ensureIssueExists = vi.fn<LinearIssueService['ensureIssueExists']>().mockResolvedValue({
+      linearIssueId: 'INT-100',
+      linearIssueTitle: 'Test Issue',
+      linearFallback: false,
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      linearIssueUrl: 'https://linear.app/intexura/issue/INT-100',
+    });
+    const create = vi.fn<CodeTaskRepository['create']>().mockResolvedValue(ok({} as never));
+    const enqueue = vi.fn<TaskEnqueueService['enqueue']>().mockResolvedValue(ok({
+      taskId: 'task_mock',
+      queuePosition: 1,
+    }));
+
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      ensureIssueExists,
+    };
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      create,
+    };
+    deps.taskEnqueueService = {
+      enqueue,
+    };
+    deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
+      async getPullRequestStatus(): ReturnType<GitHubPRClient['getPullRequestStatus']> {
+        return err({ code: 'NETWORK_ERROR', message: 'GitHub temporarily unavailable' });
+      },
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(ensureIssueExists).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
   it('omits trackingCommentId from createInput when not provided in request', async () => {
     let capturedCreateInput: Record<string, unknown> = {};
 

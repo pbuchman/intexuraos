@@ -420,6 +420,87 @@ describe('processSentryWebhook', () => {
     expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
   });
 
+  it('does not create a second task when a prior task has a Sentry outcome and open PR URL', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_sentry_outcome_open_pr_url',
+            linearIssueId: 'INT-200',
+          },
+        })),
+        reserveTaskForProblem: vi.fn(),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_sentry_outcome_open_pr_url',
+          status: 'reviewed',
+          agentType: 'review',
+          result: {
+            sentry_outcome: 'fixed',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/456',
+          },
+        }))),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry issue already has a code task',
+      codeTaskId: 'task_sentry_outcome_open_pr_url',
+    });
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('does not create a second task when an implemented task has an open PR URL', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_implemented_open_pr_url',
+            linearIssueId: 'INT-200',
+          },
+        })),
+        reserveTaskForProblem: vi.fn(),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_implemented_open_pr_url',
+          status: 'implemented',
+          agentType: 'execution',
+          result: {
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/789',
+          },
+        }))),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry issue already has a code task',
+      codeTaskId: 'task_implemented_open_pr_url',
+    });
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
   it('creates a new task when the existing issue reservation points to an archived Sentry task without completion evidence', async () => {
     resetServices();
     mocks = installMocks({
@@ -472,7 +553,7 @@ describe('processSentryWebhook', () => {
     });
   });
 
-  it('creates a new task when the existing issue reservation points to a merged Sentry PR', async () => {
+  it('does not create a second task when the existing issue reservation points to a merged Sentry PR', async () => {
     resetServices();
     mocks = installMocks({
       sentryIssueEventRepo: {
@@ -511,12 +592,69 @@ describe('processSentryWebhook', () => {
 
     const result = await processSentryWebhook(buildInput());
 
-    expect(result.ok).toBe(true);
-    if (!result.ok || result.outcome !== 'processed') {
-      throw new Error('Expected merged Sentry PR reservation to create a replacement');
-    }
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry issue already has a code task',
+      codeTaskId: 'task_merged_duplicate',
+    });
     expect(mocks.codeTaskRepo.findById).toHaveBeenCalledWith('task_merged_duplicate');
-    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('does not create a second task when the existing Sentry reservation has only a merged PR URL', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        reserve: vi.fn().mockResolvedValue(ok({
+          created: false,
+          record: {
+            dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+            codeTaskId: 'task_merged_pr_url_duplicate',
+            linearIssueId: 'INT-1775',
+          },
+        })),
+        reserveTaskForProblem: vi.fn().mockResolvedValue(ok({
+          created: true,
+          record: {
+            dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
+            duplicateCount: 0,
+          },
+        })),
+        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+      },
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok(createFakeTask({
+          id: 'task_merged_pr_url_duplicate',
+          status: 'implemented',
+          agentType: 'sentry',
+          result: {
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/321',
+          },
+          prMergedAt: Timestamp.fromDate(new Date('2026-06-29T02:00:00Z')),
+        }))),
+        create: vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
+          id: input['id'],
+          ...input,
+          status: 'queued',
+        })),
+      },
+    });
+
+    const result = await processSentryWebhook(buildInput());
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry issue already has a code task',
+      codeTaskId: 'task_merged_pr_url_duplicate',
+    });
+    expect(mocks.codeTaskRepo.findById).toHaveBeenCalledWith('task_merged_pr_url_duplicate');
+    expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   it('creates a new task when the existing issue reservation points to a missing task', async () => {
