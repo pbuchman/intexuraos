@@ -5,11 +5,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
+import { FieldPath } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { NormalizedSentryIssueEvent } from '../../../domain/models/sentryIssueEvent.js';
 import {
   createFirestoreSentryIssueEventRepository,
   createSentryIssueDedupeKey,
+  sanitizePayloadForFirestore,
 } from '../../../infra/firestore/sentryIssueEventRepository.js';
 
 function buildEvent(overrides: Partial<NormalizedSentryIssueEvent> = {}): NormalizedSentryIssueEvent {
@@ -348,3 +350,129 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     });
   });
 });
+
+describe('sanitizePayloadForFirestore', () => {
+  it('strips top-level keys that are empty strings', () => {
+    const input = { '': 'orphan', keep: 'value' };
+    expect(sanitizePayloadForFirestore(input)).toEqual({ keep: 'value' });
+  });
+
+  it('strips nested keys that are empty strings', () => {
+    const input = {
+      data: {
+        event: {
+          user: { data: { '': 'orphan', environment: 'prod' } },
+        },
+      },
+    };
+    expect(sanitizePayloadForFirestore(input)).toEqual({
+      data: {
+        event: {
+          user: { data: { environment: 'prod' } },
+        },
+      },
+    });
+  });
+
+  it('preserves arrays, primitives, and null values', () => {
+    const input = {
+      count: 1,
+      name: 'sentry',
+      flag: false,
+      missing: null,
+      items: ['a', '', { nested: 'b' }],
+    };
+    expect(sanitizePayloadForFirestore(input)).toEqual({
+      count: 1,
+      name: 'sentry',
+      flag: false,
+      missing: null,
+      items: ['a', '', { nested: 'b' }],
+    });
+  });
+
+  it('returns primitives unchanged', () => {
+    expect(sanitizePayloadForFirestore('text')).toBe('text');
+    expect(sanitizePayloadForFirestore(0)).toBe(0);
+    expect(sanitizePayloadForFirestore(null)).toBeNull();
+    expect(sanitizePayloadForFirestore(undefined)).toBeUndefined();
+  });
+});
+
+describe('Sentry issue event payload sanitization (INTEXURAOS-HETZNER-39)', () => {
+  // Reproduces the production error:
+  //   Error: Element at index 0 should not be an empty string.
+  //     at new FieldPath (@google-cloud/firestore/build/src/path.js)
+  //     at validateUserInput (@google-cloud/firestore/build/src/serializer.js)
+  // The serializer calls `new FieldPath(key)` for every nested object key. An
+  // empty-string key in the Sentry payload (e.g. event.user.data[' '] from
+  // custom tags) trips the validator when we call transaction.set.
+
+  it('lets reserve() succeed when the Sentry payload contains an empty-string key', async () => {
+    const fake = createFakeFirestore();
+    setFirestore(fake as unknown as Firestore);
+
+    // Wrap runTransaction so every transaction.set() mirrors the production
+    // FieldPath validator. Without the sanitize fix, the validator rejects
+    // the payload and reserve() returns a FIRESTORE_ERROR.
+    interface AnyTransaction {
+      set: (ref: unknown, data: unknown, options?: unknown) => void;
+    }
+    const fakeAsAny = fake as unknown as {
+      runTransaction: <T>(updateFn: (transaction: AnyTransaction) => Promise<T>) => Promise<T>;
+    };
+    const originalRunTransaction = fakeAsAny.runTransaction.bind(fakeAsAny);
+    fakeAsAny.runTransaction = async <T>(updateFn: (transaction: AnyTransaction) => Promise<T>): Promise<T> => {
+      return originalRunTransaction(async (transaction: AnyTransaction): Promise<T> => {
+        const originalSet = transaction.set.bind(transaction);
+        transaction.set = (ref: unknown, data: unknown, options?: unknown): void => {
+          assertNoEmptyKeys(data);
+          originalSet(ref, data, options);
+        };
+        return updateFn(transaction);
+      });
+    };
+
+    const repo = createFirestoreSentryIssueEventRepository({
+      firestore: fake as unknown as Firestore,
+      logger: pino({ level: 'silent' }),
+    });
+    const receivedAt = new Date('2026-06-28T23:44:39.772Z');
+
+    const result = await repo.reserve({
+      event: buildEvent(),
+      receivedAt,
+      payload: {
+        action: 'created',
+        data: {
+          event: {
+            user: { data: { '': 'orphan', environment: 'production' } },
+          },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+
+    resetFirestore();
+  });
+});
+
+function assertNoEmptyKeys(value: unknown, path: string[] = []): void {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => {
+      assertNoEmptyKeys(entry, [...path, String(index)]);
+    });
+    return;
+  }
+  if (value !== null && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key === '') {
+        throw new Error(`Element at index ${path.length} should not be an empty string.`);
+      }
+      // Mirror real Firestore's validateUserInput recursion into FieldPath.
+      void new FieldPath(key);
+      assertNoEmptyKeys(entry, [...path, key]);
+    }
+  }
+}

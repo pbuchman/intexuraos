@@ -109,6 +109,38 @@ export function createSentryIssueDedupeKey(event: NormalizedSentryIssueEvent): s
   return `sentry:${event.organizationSlug}:${event.projectSlug}:${event.issueId}:${event.resource}:${action}`;
 }
 
+/**
+ * Strip object keys that would cause Firestore's FieldPath validator to reject the payload.
+ *
+ * `transaction.set` recursively walks the data with `validateUserInput`, which constructs
+ * a `new FieldPath(key)` for every nested object key. An empty-string key triggers
+ * `Error: Element at index 0 should not be an empty string.` from `@google-cloud/firestore`.
+ * Sentry webhook payloads occasionally contain nested objects (e.g. `event.user.data`,
+ * custom tags) with empty-string keys, which previously caused `reserve()` to fail.
+ *
+ * Arrays are preserved as ordered lists. Object keys that are non-empty strings (including
+ * symbols converted to strings) survive untouched. Non-object, non-array values pass through.
+ *
+ * @param value - Raw webhook payload from Sentry.
+ * @returns A deep copy safe to persist to Firestore.
+ */
+export function sanitizePayloadForFirestore(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizePayloadForFirestore(item));
+  }
+  if (value !== null && typeof value === 'object') {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key === '') {
+        continue;
+      }
+      cleaned[key] = sanitizePayloadForFirestore(entry);
+    }
+    return cleaned;
+  }
+  return value;
+}
+
 function firestoreError(error: unknown): SentryIssueEventRepositoryError {
   return {
     code: 'FIRESTORE_ERROR',
@@ -133,13 +165,14 @@ export function createFirestoreSentryIssueEventRepository(deps: {
           const docRef = collection.doc(dedupeKey);
           const snapshot = await transaction.get(docRef);
           if (!snapshot.exists) {
+            const sanitizedPayload = sanitizePayloadForFirestore(input.payload);
             const createdDoc = toFirestoreDoc({
               dedupeKey,
               event: input.event,
               receivedAt: input.receivedAt,
               latestReceivedAt: input.receivedAt,
               duplicateCount: 0,
-              payload: input.payload,
+              payload: sanitizedPayload,
             });
             transaction.set(docRef, createdDoc);
             return ok({
@@ -150,6 +183,7 @@ export function createFirestoreSentryIssueEventRepository(deps: {
 
           const existing = snapshot.data() as SentryIssueEventDoc;
           const duplicateCount = (typeof existing.duplicateCount === 'number' ? existing.duplicateCount : 0) + 1;
+          const sanitizedPayload = sanitizePayloadForFirestore(input.payload);
           const merged: SentryIssueEventDoc = {
             ...existing,
             action: input.event.action,
@@ -162,7 +196,7 @@ export function createFirestoreSentryIssueEventRepository(deps: {
             eventId: input.event.eventId ?? null,
             latestReceivedAt: Timestamp.fromDate(input.receivedAt),
             duplicateCount,
-            payload: input.payload,
+            payload: sanitizedPayload,
           };
           transaction.update(docRef, {
             action: merged.action,
