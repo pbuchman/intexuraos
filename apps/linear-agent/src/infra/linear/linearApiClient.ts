@@ -31,6 +31,8 @@ import {
   DEFAULT_COMPLETED_SINCE_DAYS,
   mapSingleIssue,
   mapSingleIssueWithTeam,
+  isTransientLinearError,
+  retryOnTransient,
 } from './linearMappers.js';
 import {
   getOrCreateClient,
@@ -54,6 +56,8 @@ export {
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
+  isTransientLinearError,
+  retryOnTransient,
 };
 
 /* istanbul ignore next -- @preserve API client methods require real Linear API key to test */
@@ -140,23 +144,54 @@ export function createLinearApiClient(): LinearApiClient {
 
           const client = getOrCreateClient(apiKey);
 
+          // Retry transient upstream failures (5xx, network errors) before
+          // surfacing them to Sentry. INT-1801 reduced 114 transient
+          // Cloudflare 502 alerts from scheduled `sync-all` runs.
+          const fetchPage = async (afterCursor: string | undefined): Promise<{
+            nodes: Issue[];
+            endCursor?: string;
+            hasNextPage: boolean;
+          }> => {
+            return await retryOnTransient(
+              async () => {
+                const issuesConnection = await client.issues({
+                  filter: {
+                    team: { id: { eq: teamId } },
+                  },
+                  first: 100,
+                  ...(afterCursor !== undefined ? { after: afterCursor } : {}),
+                });
+                return {
+                  nodes: issuesConnection.nodes,
+                  ...(issuesConnection.pageInfo.endCursor !== undefined
+                    ? { endCursor: issuesConnection.pageInfo.endCursor }
+                    : {}),
+                  hasNextPage: issuesConnection.pageInfo.hasNextPage,
+                };
+              },
+              'listIssues',
+              Date.now(),
+              {
+                onRetry: ({ operationName, attempt, delayMs, error }) => {
+                  logger.warn(
+                    { teamId, operationName, attempt, delayMs, error: getErrorMessage(error) },
+                    'Linear listIssues transient failure, retrying'
+                  );
+                },
+              }
+            );
+          };
+
           // Paginate through all issues
           const allIssues: Issue[] = [];
           let hasMore = true;
           let after: string | undefined;
 
           while (hasMore) {
-            const issuesConnection = await client.issues({
-              filter: {
-                team: { id: { eq: teamId } },
-              },
-              first: 100,
-              ...(after !== undefined ? { after } : {}),
-            });
-
-            allIssues.push(...issuesConnection.nodes);
-            hasMore = issuesConnection.pageInfo.hasNextPage;
-            after = issuesConnection.pageInfo.endCursor;
+            const page = await fetchPage(after);
+            allIssues.push(...page.nodes);
+            hasMore = page.hasNextPage;
+            after = page.endCursor;
           }
 
           logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
@@ -169,7 +204,10 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
-        logger.error({ error, teamId }, 'Failed to list Linear issues');
+        const message = isTransientLinearError(error)
+          ? 'Failed to list Linear issues after retries'
+          : 'Failed to list Linear issues';
+        logger.error({ error, teamId }, message);
         return err(mapLinearError(error));
       }
     },

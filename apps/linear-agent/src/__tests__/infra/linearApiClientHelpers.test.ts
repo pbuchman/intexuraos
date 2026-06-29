@@ -2,7 +2,7 @@
  * Tests for Linear API client helper functions.
  * Tests the exported pure functions for complete branch coverage.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mapIssueStateType,
   mapLinearError,
@@ -13,6 +13,8 @@ import {
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
+  isTransientLinearError,
+  retryOnTransient,
 } from '../../infra/linear/linearApiClient.js';
 import type { LinearIssue } from '../../domain/index.js';
 import type { Team } from '@linear/sdk';
@@ -171,6 +173,236 @@ describe('linearApiClient helper functions', () => {
       // getErrorMessage returns .message from plain objects with a message property
       expect(result.code).toBe('API_ERROR');
       expect(result.message).toBe('custom error object');
+    });
+  });
+
+  describe('isTransientLinearError', () => {
+    it('returns true for 502 errors', () => {
+      expect(isTransientLinearError(new Error('GraphQL Error (Code: 502)'))).toBe(true);
+    });
+
+    it('returns true for 503 errors', () => {
+      expect(isTransientLinearError(new Error('Service Unavailable (503)'))).toBe(true);
+    });
+
+    it('returns true for 504 errors', () => {
+      expect(isTransientLinearError(new Error('Gateway Timeout 504'))).toBe(true);
+    });
+
+    it('returns true for 500 errors', () => {
+      expect(isTransientLinearError(new Error('Internal Server Error 500'))).toBe(true);
+    });
+
+    const transientNetworkPatterns = [
+      'network request failed',
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'fetch failed',
+      'socket hang up',
+      'bad gateway',
+      'service unavailable',
+      'gateway timeout',
+    ];
+
+    it.each(transientNetworkPatterns)(
+      'returns true for network error pattern %s',
+      (pattern) => {
+        expect(isTransientLinearError(new Error(pattern))).toBe(true);
+      }
+    );
+
+    // getErrorMessage(error, '') returns the empty fallback for objects
+    // that carry no string-coercible message. Those have no signal to classify.
+    const emptyMessageErrors: unknown[] = [
+      {},
+      { message: '' },
+      { details: '' },
+      123,
+      true,
+    ];
+
+    it.each(emptyMessageErrors)(
+      'returns false for empty-message error %#',
+      (error) => {
+        expect(isTransientLinearError(error)).toBe(false);
+      }
+    );
+
+    it('returns false for plain string errors', () => {
+      expect(isTransientLinearError('plain string')).toBe(false);
+    });
+
+    it('returns false for null errors', () => {
+      expect(isTransientLinearError(null)).toBe(false);
+    });
+
+    it('returns false for undefined errors', () => {
+      expect(isTransientLinearError(undefined)).toBe(false);
+    });
+
+    it('returns true for 502 Bad Gateway with Cloudflare body', () => {
+      const err = new Error('GraphQL Error (Code: 502) - <!DOCTYPE html>...');
+      expect(isTransientLinearError(err)).toBe(true);
+    });
+
+    it('returns false for 401 errors', () => {
+      expect(isTransientLinearError(new Error('401 Unauthorized'))).toBe(false);
+    });
+
+    it('returns false for 404 errors', () => {
+      expect(isTransientLinearError(new Error('404 Not Found'))).toBe(false);
+    });
+
+    it('returns false for 429 rate limit errors', () => {
+      expect(isTransientLinearError(new Error('429 Too Many Requests'))).toBe(false);
+    });
+
+    it('returns false for unknown errors', () => {
+      expect(isTransientLinearError(new Error('Something went wrong'))).toBe(false);
+    });
+
+  });
+
+  describe('retryOnTransient', () => {
+    it('returns the result when the operation succeeds on first try', async () => {
+      const result = await retryOnTransient(async () => 'ok', 'op', 0);
+      expect(result).toBe('ok');
+    });
+
+    it('retries on transient errors and succeeds when transient clears', async () => {
+      let attempts = 0;
+      const result = await retryOnTransient(
+        async () => {
+          attempts += 1;
+          if (attempts < 3) {
+            throw new Error('GraphQL Error (Code: 502)');
+          }
+          return 'recovered';
+        },
+        'op',
+        0,
+        { baseDelayMs: 0 }
+      );
+      expect(result).toBe('recovered');
+      expect(attempts).toBe(3);
+    });
+
+    it('throws immediately on non-transient errors (no retry)', async () => {
+      let attempts = 0;
+      await expect(
+        retryOnTransient(async () => {
+          attempts += 1;
+          throw new Error('401 Unauthorized');
+        }, 'op', 0)
+      ).rejects.toThrow('401 Unauthorized');
+      expect(attempts).toBe(1);
+    });
+
+    it('throws the last transient error after exhausting retries', async () => {
+      let attempts = 0;
+      await expect(
+        retryOnTransient(
+          async () => {
+            attempts += 1;
+            throw new Error('Service Unavailable (503)');
+          },
+          'op',
+          0,
+          { maxRetries: 2, baseDelayMs: 0 }
+        )
+      ).rejects.toThrow('503');
+      expect(attempts).toBe(3);
+    });
+
+    it('passes operation name, attempt, delay, and error to onRetry', async () => {
+      const transientError = new Error('GraphQL Error (Code: 502)');
+      const onRetry = vi.fn();
+      let attempts = 0;
+
+      const result = await retryOnTransient(
+        async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            throw transientError;
+          }
+          return 'recovered';
+        },
+        'listIssues',
+        0,
+        { baseDelayMs: 0, onRetry }
+      );
+
+      expect(result).toBe('recovered');
+      expect(onRetry).toHaveBeenCalledExactlyOnceWith({
+        operationName: 'listIssues',
+        attempt: 1,
+        delayMs: 0,
+        error: transientError,
+      });
+    });
+
+    it('caps retry delay after bounded jitter is applied', async () => {
+      const onRetry = vi.fn();
+      let attempts = 0;
+
+      await expect(
+        retryOnTransient(
+          async () => {
+            attempts += 1;
+            throw new Error('Gateway Timeout 504');
+          },
+          'op',
+          999,
+          { maxRetries: 1, baseDelayMs: 100, maxDelayMs: 50, onRetry }
+        )
+      ).rejects.toThrow('504');
+
+      expect(attempts).toBe(2);
+      expect(onRetry).toHaveBeenCalledExactlyOnceWith({
+        operationName: 'op',
+        attempt: 1,
+        delayMs: 50,
+        error: expect.any(Error),
+      });
+    });
+
+    it('uses default retry count and delay settings', async () => {
+      let attempts = 0;
+
+      await expect(
+        retryOnTransient(
+          async () => {
+            attempts += 1;
+            throw new Error('Service Unavailable (503)');
+          },
+          'op',
+          0
+        )
+      ).rejects.toThrow('503');
+      expect(attempts).toBe(4);
+    });
+
+    it('does not retry when maxRetries is zero', async () => {
+      const onRetry = vi.fn();
+      let attempts = 0;
+
+      await expect(
+        retryOnTransient(
+          async () => {
+            attempts += 1;
+            throw new Error('Service Unavailable (503)');
+          },
+          'op',
+          0,
+          { maxRetries: 0, baseDelayMs: 0, onRetry }
+        )
+      ).rejects.toThrow('503');
+
+      expect(attempts).toBe(1);
+      expect(onRetry).not.toHaveBeenCalled();
     });
   });
 
