@@ -39,6 +39,26 @@ const NEW_SESSION_READY_REPLY = [
   '- create code tasks for planning or execution',
   '- manage INTEX Agent prompt preferences',
 ].join('\n');
+const POLISH_UNSUPPORTED_CAPABILITIES_REPLY = [
+  'Nie mogłem bezpiecznie obsłużyć tej prośby. Mogę pomóc z:',
+  '- podsumowywaniem i analizowaniem bieżącej sesji',
+  '- tworzeniem notatek',
+  '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
+  '- tworzeniem szkiców researchu',
+  '- zapisywaniem bookmarków',
+  '- tworzeniem zadań programistycznych do planowania lub wykonania',
+  '- zarządzaniem preferencjami promptu agenta INTEX',
+].join('\n');
+const POLISH_NEW_SESSION_READY_REPLY = [
+  'W czym mogę pomóc? Mogę pomóc z:',
+  '- podsumowywaniem i analizowaniem bieżącej sesji',
+  '- tworzeniem notatek',
+  '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
+  '- tworzeniem szkiców researchu',
+  '- zapisywaniem bookmarków',
+  '- tworzeniem zadań programistycznych do planowania lub wykonania',
+  '- zarządzaniem preferencjami promptu agenta INTEX',
+].join('\n');
 
 function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMessage {
   return {
@@ -53,7 +73,7 @@ function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMe
 }
 
 describe('handleIncomingMessage', () => {
-  it('creates a confirmation request for a note mutation and sends Tak/Nie buttons', async () => {
+  it('creates a confirmation request for a note mutation and sends Yes/No buttons for English requests', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
       {
@@ -98,21 +118,56 @@ describe('handleIncomingMessage', () => {
         replyToMessageId: 'wamid-1',
         correlationId: 'session-1',
         buttons: [
-          {
-            type: 'reply',
-            reply: {
-              id: 'intex_confirm:confirmation-3:yes',
-              title: 'Tak',
-            },
-          },
-          {
-            type: 'reply',
-            reply: {
-              id: 'intex_confirm:confirmation-3:no',
-              title: 'Nie',
-            },
-          },
+	          {
+	            type: 'reply',
+	            reply: {
+	              id: 'intex_confirm:confirmation-3:yes',
+	              title: 'Yes',
+	            },
+	          },
+	          {
+	            type: 'reply',
+	            reply: {
+	              id: 'intex_confirm:confirmation-3:no',
+	              title: 'No',
+	            },
+	          },
         ],
+      },
+    ]);
+  });
+
+  it('sends Tak/Nie confirmation buttons for Polish requests', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_confirmation',
+        reply: 'Czy dodać notatkę?\n\nTreść: Kod do drzwi to 1234.',
+        toolName: 'create_note',
+        toolArgs: { content: 'Kod do drzwi to 1234.' },
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ text: 'zapamiętaj że kod do drzwi to 1234' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(replies.messages[0]?.buttons).toEqual([
+      {
+        type: 'reply',
+        reply: {
+          id: 'intex_confirm:confirmation-3:yes',
+          title: 'Tak',
+        },
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'intex_confirm:confirmation-3:no',
+          title: 'Nie',
+        },
       },
     ]);
   });
@@ -332,6 +387,36 @@ describe('handleIncomingMessage', () => {
     ]);
   });
 
+  it.each([
+    { buttonTitle: 'Yes', expectedReply: 'This confirmation is no longer current. Send the request again.' },
+    { buttonTitle: 'Maybe', expectedReply: 'This confirmation is no longer current. Send the request again.' },
+  ])(
+    'uses the fallback language for a $buttonTitle confirmation button without an active session',
+    async ({ buttonTitle, expectedReply }) => {
+      const repo = new FakeSessionRepository();
+      const runner = new FakeRunner([]);
+      const replies = new FakeReplyPublisher();
+
+      await handleIncomingMessage(
+        message({
+          messageId: `wamid-button-without-session-${buttonTitle}`,
+          text: '',
+          sourceType: 'whatsapp_button',
+          buttonResponse: {
+            buttonId: 'intex_confirm:confirm-1:yes',
+            buttonTitle,
+            replyToWamid: 'wamid-confirmation-message',
+          },
+        }),
+        deps(repo, runner, replies)
+      );
+
+      expect(runner.calls).toEqual([]);
+      expect(runner.executeConfirmedCalls).toEqual([]);
+      expect(replies.messages[0]?.message).toBe(expectedReply);
+    }
+  );
+
   it('does not execute stale or mismatched confirmation buttons', async () => {
     const repo = new FakeSessionRepository();
     seedPendingConfirmation(repo, {
@@ -347,6 +432,7 @@ describe('handleIncomingMessage', () => {
         messageId: 'wamid-stale-button',
         text: '',
         sourceType: 'whatsapp_button',
+        sourceUrl: 'https://storage.example.com/signed/whatsapp/user-1/wamid-button/media.jpg',
         buttonResponse: {
           buttonId: 'intex_confirm:confirm-old:yes',
           buttonTitle: 'Tak',
@@ -360,6 +446,46 @@ describe('handleIncomingMessage', () => {
     expect(runner.executeConfirmedCalls).toEqual([]);
     expect(eventPayloads(repo, 'confirmation_resolved')).toEqual([]);
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(
+      'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.'
+    );
+  });
+
+  it('ignores historical attachment-only messages when selecting stale confirmation language', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { content: 'Door code is 1234.' },
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-polish',
+      text: 'Zapamiętaj, że wolę krótkie odpowiedzi.',
+      sourceType: 'whatsapp_text',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-attachment',
+      text: 'Attachment shared via WhatsApp.',
+      sourceType: 'whatsapp_document',
+      hasSourceUrl: true,
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-stale-button',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-2:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
     expect(replies.messages[0]?.message).toBe(
       'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.'
     );
@@ -392,7 +518,7 @@ describe('handleIncomingMessage', () => {
       sourceType: 'whatsapp_button',
     });
     expect(replies.messages[0]?.message).toBe(
-      'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.'
+      'This confirmation is no longer current. Send the request again.'
     );
   });
 
@@ -1027,6 +1153,48 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe(NEW_SESSION_READY_REPLY);
   });
 
+  it('uses prior Polish context for an explicit new-session fallback when the command has no language signal', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-previous',
+      text: 'Zapisz notatkę o spotkaniu.',
+      sourceType: 'whatsapp_text',
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-2', text: 'new session' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(POLISH_NEW_SESSION_READY_REPLY);
+  });
+
+  it('falls back to English for an explicit new-session command without prior context', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-new-session', text: 'new session' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(NEW_SESSION_READY_REPLY);
+  });
+
   it('continues the same session after a completed tool turn', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -1105,28 +1273,81 @@ describe('handleIncomingMessage', () => {
       text: 'Brak linku',
       result: { htmlLink: 'https://calendar.google.com/event?eid=event-1' },
       expectedUrl: 'https://calendar.google.com/event?eid=event-1',
+      sourceUrl: undefined,
     },
     {
       text: 'no link arrived',
       result: { url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1' },
       expectedUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
+      sourceUrl: 'https://storage.example.com/signed/whatsapp/user-1/wamid-image/media.jpg',
     },
     {
       text: 'I did not get the link',
       result: null,
       expectedUrl: null,
+      sourceUrl: undefined,
     },
     {
       text: "I didn't get the link",
       result: [],
       expectedUrl: null,
+      sourceUrl: undefined,
     },
     {
       text: 'I did not get any link',
       result: { status: 'completed' },
       expectedUrl: null,
+      sourceUrl: undefined,
     },
-  ])('handles missing-link follow-up variant: $text', async ({ text, result, expectedUrl }) => {
+  ])(
+    'handles missing-link follow-up variant: $text',
+    async ({ text, result, expectedUrl, sourceUrl }) => {
+      const repo = new FakeSessionRepository();
+      repo.seedSession({
+        id: 'session-existing',
+        userId: 'user-1',
+        channel: 'whatsapp',
+        status: 'waiting_for_user',
+        startedAt: '2026-06-24T09:50:00.000Z',
+        lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+        lastAssistantMessageAt: '2026-06-24T09:51:00.000Z',
+        startReason: 'no_active_session',
+      });
+      repo.seedEvent('session-existing', 'tool_call_completed', {
+        toolName: 'create_link',
+        result,
+      });
+      const runner = new FakeRunner([]);
+      const replies = new FakeReplyPublisher();
+
+      await handleIncomingMessage(
+        message({
+          messageId: 'wamid-missing-link',
+          text,
+          ...(sourceUrl === undefined ? {} : { sourceUrl }),
+        }),
+        deps(repo, runner, replies)
+      );
+
+      expect(runner.calls).toEqual([]);
+      expect(repo.createdSessions).toHaveLength(0);
+      if (expectedUrl === null) {
+        expect(replies.messages[0]?.message).toBe(
+          text === 'Brak linku'
+            ? 'Nie widzę zapisanego linku z poprzedniej akcji. Poproś mnie jeszcze raz wprost, a utworzę zasób od nowa.'
+            : 'I do not see a saved link from the previous action. Ask me directly again, and I will create the resource from scratch.'
+        );
+      } else {
+        expect(replies.messages[0]?.message).toBe(
+          text === 'Brak linku'
+            ? `Link z poprzedniej akcji: ${expectedUrl}`
+            : `Link from the previous action: ${expectedUrl}`
+        );
+      }
+    }
+  );
+
+  it('skips malformed historical user-message payloads when selecting missing-link reply language', async () => {
     const repo = new FakeSessionRepository();
     repo.seedSession({
       id: 'session-existing',
@@ -1135,30 +1356,28 @@ describe('handleIncomingMessage', () => {
       status: 'waiting_for_user',
       startedAt: '2026-06-24T09:50:00.000Z',
       lastUserMessageAt: '2026-06-24T09:50:00.000Z',
-      lastAssistantMessageAt: '2026-06-24T09:51:00.000Z',
       startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-malformed',
+      text: 123,
+      sourceType: 'whatsapp_text',
     });
     repo.seedEvent('session-existing', 'tool_call_completed', {
       toolName: 'create_link',
-      result,
+      result: { url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1' },
     });
     const runner = new FakeRunner([]);
     const replies = new FakeReplyPublisher();
 
     await handleIncomingMessage(
-      message({ messageId: 'wamid-missing-link', text }),
+      message({ messageId: 'wamid-missing-link', text: 'no link arrived' }),
       deps(repo, runner, replies)
     );
 
-    expect(runner.calls).toEqual([]);
-    expect(repo.createdSessions).toHaveLength(0);
-    if (expectedUrl === null) {
-      expect(replies.messages[0]?.message).toBe(
-        'Nie widzę zapisanego linku z poprzedniej akcji. Poproś mnie jeszcze raz wprost, a utworzę zasób od nowa.'
-      );
-    } else {
-      expect(replies.messages[0]?.message).toBe(`Link z poprzedniej akcji: ${expectedUrl}`);
-    }
+    expect(replies.messages[0]?.message).toBe(
+      'Link from the previous action: https://intexuraos.cloud/#/bookmarks/bookmark-1'
+    );
   });
 
   it('expires a stale session and rejects completed runner results without a tool name', async () => {
@@ -1200,6 +1419,75 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[1]?.endReason).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
     expect(replies.messages[0]?.message).toBe(UNSUPPORTED_CAPABILITIES_REPLY);
+  });
+
+  it('uses prior Polish context when rejecting a malformed completed runner result after a trivial current message', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-previous',
+      text: 'Zapisz notatkę o spotkaniu.',
+      sourceType: 'whatsapp_text',
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Saved it.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-2', text: 'ok' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(POLISH_UNSUPPORTED_CAPABILITIES_REPLY);
+  });
+
+  it('uses prior text-only event context when malformed fallback skips non-text events', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-non-text',
+      text: 42,
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-previous',
+      text: 'Zapisz notatkę o spotkaniu.',
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Saved it.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-2', text: 'ok' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(POLISH_UNSUPPORTED_CAPABILITIES_REPLY);
   });
 });
 

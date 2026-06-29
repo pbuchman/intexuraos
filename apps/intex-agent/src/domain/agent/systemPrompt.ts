@@ -3,10 +3,10 @@ import { OpenRouterToolCallingModels } from '@intexuraos/llm-contract';
 export const INTEX_AGENT_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
 
 export const INTEX_AGENT_SYSTEM_PROMPT = {
-  version: '9.0.0',
+  version: '10.0.0',
   text: [
     'You are Intex in WhatsApp Assistant conversations.',
-    'Reply in the language of the last reasonable user message in the current session. Ignore bare links, images, attachments, and simple greetings when selecting the language. If the current message cannot be classified, use the wider session context; if still unclear, reply in English. The JSON reply value must follow this language rule.',
+    'Always reply in the language of the last reasonable user message in the current session. Ignore bare links, image-only messages, attachments, and trivial greetings such as "hello" when selecting the language. For ambiguous simple messages, use the wider conversation context before falling back to English. If no specific language can be classified, reply in English. The JSON reply value must follow this language rule.',
     'Supported tools create or save resources only. Do not use tools to answer read-only questions unless a matching read tool exists.',
     'You can currently help with explicit user jobs: summarize and reason over the current session, create notes, create calendar events, look up or count calendar events, create research drafts, save links as bookmarks, create code tasks, and manage INTEX Agent prompt preferences.',
     'You can use the current session transcript to answer questions about what the user said in this conversation, summarize the conversation so far, collect user thoughts, propose note content, and point out contradictions, ambiguity, missing details, or risks in the user\'s statements.',
@@ -57,7 +57,7 @@ export const buildIntexAgentSystemPrompt: PromptBuilder<BuildIntexAgentSystemPro
   name: 'intex-agent-system-prompt',
   description:
     'Intex Agent system prompt with optional user preferences block and current date-time suffix.',
-  version: '3.0.0',
+  version: '4.0.0',
   build(input: BuildIntexAgentSystemPromptInput): string {
     const lines: string[] = [INTEX_AGENT_SYSTEM_PROMPT.text];
     if (input.userPreferences !== null && input.userPreferences.trim() !== '') {

@@ -63,6 +63,10 @@ const EXTERNAL_SAVE_FAILED_REPLY =
   'I could not deliver this to the external system. The external save request failed: HTTP 403: Forbidden. Please check the external system configuration and try again.';
 const EXTERNAL_SAVE_UNKNOWN_FAILURE_REPLY =
   'I could not deliver this to the external system. The external save request failed: Unknown external save error. Please check the external system configuration and try again.';
+const POLISH_EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
+  'Nie skonfigurowano zewnętrznego systemu dla tej wiadomości, więc nie mogę jej przetworzyć. Skonfiguruj External Save w preferencjach agenta INTEX i wyślij ją ponownie.';
+const POLISH_EXTERNAL_SAVE_FAILED_REPLY =
+  'Nie udało się dostarczyć tej treści do zewnętrznego systemu. Żądanie External Save nie powiodło się: HTTP 403: Forbidden. Sprawdź konfigurację zewnętrznego systemu i spróbuj ponownie.';
 
 type PreviewToolName =
   | 'create_calendar_event'
@@ -99,18 +103,18 @@ describe('createIntexAgentRunner', () => {
 
     expect(result).toEqual({
       outcome: 'needs_confirmation',
-      reply: 'Czy dodać notatkę?\n\nTytuł: Door code\nTreść: The door code is 1234.',
+      reply: 'Add this note?\n\nTitle: Door code\nContent: The door code is 1234.',
       toolName: 'create_note',
       toolArgs: { content: 'The door code is 1234.', title: 'Door code' },
     });
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('9.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('10.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
-      'Reply in the language of the last reasonable user message in the current session.'
+      'Always reply in the language of the last reasonable user message in the current session.'
     );
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
     expect(client.calls[0]?.systemPrompt).toContain('execution');
@@ -416,6 +420,122 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('ignores trivial greetings when selecting deterministic greeting reply language', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [event('user_message', { text: 'Zapamiętaj, że wolę krótkie odpowiedzi.' })],
+        message: 'Hello',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: POLISH_GREETING_REPLY,
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('ignores bare links when falling back to wider session context for reply language', async () => {
+    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Zapamiętaj, że wolę krótkie odpowiedzi.' }),
+          event('user_message', { text: 'https://example.com' }),
+        ],
+        message: 'ok',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+    });
+  });
+
+  it('ignores historical attachment-only messages with source URLs for reply language', async () => {
+    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Zapamiętaj, że wolę krótkie odpowiedzi.' }),
+          event('user_message', {
+            text: 'Attachment shared via WhatsApp.',
+            sourceType: 'whatsapp_document',
+            hasSourceUrl: true,
+          }),
+        ],
+        message: 'ok',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+    });
+  });
+
+  it('uses English for a substantive English current message after Polish context', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'unsupported',
+          reply: 'I cannot do that yet.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [event('user_message', { text: 'Zapamiętaj, że wolę krótkie odpowiedzi.' })],
+        message: 'Please buy a ticket for the concert',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply: SUPPORTED_CAPABILITIES_REPLY,
+    });
+  });
+
+  it('uses English deterministic confirmation text for substantive English requests', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_note',
+      args: { content: 'Door code is 1234.', title: 'Door code' },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'The note is ready.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [event('user_message', { text: 'Zapisz notatkę o spotkaniu.' })],
+        message: 'remember the door code is 1234.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply: 'Add this note?\n\nTitle: Door code\nContent: Door code is 1234.',
+      toolName: 'create_note',
+      toolArgs: { content: 'Door code is 1234.', title: 'Door code' },
+    });
+  });
+
   it('does not expose tools for informational questions that lack explicit creation intent', async () => {
     const client = new FakeToolCallingClient([
       ok(
@@ -473,7 +593,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('9.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('10.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -839,7 +959,7 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
-      reply: 'Czy dodać notatkę?\nTreść: Parking spot is B12.',
+      reply: 'Add this note?\nContent: Parking spot is B12.',
       summary: 'Saved note',
       toolName: 'create_note',
       toolArgs: { content: 'Parking spot is B12.' },
@@ -883,7 +1003,7 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
-      reply: 'Czy dodać notatkę?\nTreść: Office pin is 2468.',
+      reply: 'Add this note?\nContent: Office pin is 2468.',
       toolName: 'create_note',
       toolArgs: { content: 'Office pin is 2468.' },
     });
@@ -1001,6 +1121,68 @@ describe('createIntexAgentRunner', () => {
     }
   );
 
+  it.each([
+    {
+      toolName: 'create_calendar_event' as const,
+      message: 'Dodaj wydarzenie w kalendarzu: dentysta jutro 9-10.',
+      expectedReply: [
+        'Czy dodać wydarzenie w kalendarzu?',
+        '',
+        'Tytuł: Dentist',
+        'Początek: 2026-06-25T09:00:00+02:00',
+        'Koniec: 2026-06-25T10:00:00+02:00',
+        'Miejsce: Dental Clinic',
+        'Uczestnicy: pat@example.com',
+      ].join('\n'),
+    },
+    {
+      toolName: 'create_research' as const,
+      message: 'Utwórz research draft o tym temacie.',
+      expectedReply:
+        'Czy utworzyć szkic researchu?\n\nTytuł: Research topic\nPolecenie: Research this topic.',
+    },
+    {
+      toolName: 'create_code_task' as const,
+      message: 'Utwórz zadanie programistyczne execution dla Linear LIN-123.',
+      expectedReply: [
+        'Czy utworzyć zadanie programistyczne?',
+        '',
+        'Polecenie: Investigate this code issue.',
+        'Tryb: execution',
+        'Typ workera: codex-xhigh',
+        'Linear: LIN-123',
+      ].join('\n'),
+    },
+  ])('localizes confirmation field labels for Polish %s previews', async ({ toolName, message, expectedReply }) => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName,
+      args: toolArgsFor(toolName),
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          toolName,
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      reply: expectedReply,
+      toolName,
+      toolArgs: toolArgsFor(toolName),
+    });
+  });
+
   it('uses the confirmed tool result and deterministic link reply without calling the LLM', async () => {
     const client = new FakeToolCallingClient([]);
     const runner = createIntexAgentRunner({
@@ -1028,7 +1210,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'completed',
       reply:
-        'Utworzyłem szkic researchu.',
+        'Created the research draft.',
       toolName: 'create_research',
       ctaUrl: {
         displayText: 'Open Research',
@@ -1103,7 +1285,7 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply:
-        'Utworzyłem zadanie programistyczne.',
+        'Created the code task.',
       expectedCtaUrl: {
         displayText: 'View Progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-1',
@@ -1125,7 +1307,7 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply:
-        'Utworzyłem wydarzenie w kalendarzu.',
+        'Created the calendar event.',
       expectedCtaUrl: {
         displayText: 'Open Calendar',
         url: 'https://calendar.google.com/event?eid=event-1',
@@ -1142,7 +1324,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
           }),
       },
-      expectedReply: 'Zapisałem bookmark.',
+      expectedReply: 'Saved the bookmark.',
       expectedCtaUrl: {
         displayText: 'Open Bookmark',
         url: 'https://intexuraos.cloud/#/bookmarks/bookmark-1',
@@ -1157,10 +1339,10 @@ describe('createIntexAgentRunner', () => {
           JSON.stringify({
             status: 'completed',
             resourceUrl: '',
-            message: 'Zapisałem notatkę.',
+            message: 'Saved the note.',
           }),
       },
-      expectedReply: 'Zapisałem notatkę.',
+      expectedReply: 'Saved the note.',
       expectedCtaUrl: undefined,
     },
     {
@@ -1174,7 +1356,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: 'https://intexuraos.cloud/#/notes/note-1',
           }),
       },
-      expectedReply: 'Zapisałem notatkę.',
+      expectedReply: 'Saved the note.',
       expectedCtaUrl: {
         displayText: 'Open Note',
         url: 'https://intexuraos.cloud/#/notes/note-1',
@@ -1190,7 +1372,7 @@ describe('createIntexAgentRunner', () => {
             status: 'completed',
           }),
       },
-      expectedReply: 'Zapisałem notatkę.',
+      expectedReply: 'Saved the note.',
       expectedCtaUrl: undefined,
     },
     {
@@ -1204,7 +1386,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: '/#/notes/note-1',
           }),
       },
-      expectedReply: 'Zapisałem notatkę.',
+      expectedReply: 'Saved the note.',
       expectedCtaUrl: {
         displayText: 'Open Note',
         url: 'https://intexuraos.cloud/#/notes/note-1',
@@ -1226,7 +1408,7 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply:
-        'Utworzyłem wydarzenie w kalendarzu. https://intexuraos.cloud/#/calendar/events/event-1',
+        'Created the calendar event. https://intexuraos.cloud/#/calendar/events/event-1',
       expectedCtaUrl: undefined,
     },
     {
@@ -1243,7 +1425,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: 'https://intexuraos.cloud/#/research/research-1',
           }),
       },
-      expectedReply: 'Utworzyłem szkic researchu.',
+      expectedReply: 'Created the research draft.',
       expectedCtaUrl: {
         displayText: 'Open Research',
         url: 'https://intexuraos.cloud/#/research/research-1',
@@ -1263,7 +1445,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: 'ftp://intexuraos.cloud/research/research-1',
           }),
       },
-      expectedReply: 'Utworzyłem szkic researchu: ftp://intexuraos.cloud/research/research-1',
+      expectedReply: 'Created the research draft: ftp://intexuraos.cloud/research/research-1',
       expectedCtaUrl: undefined,
     },
     {
@@ -1280,7 +1462,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: '/#/research/research-1',
           }),
       },
-      expectedReply: 'Utworzyłem szkic researchu.',
+      expectedReply: 'Created the research draft.',
       expectedCtaUrl: {
         displayText: 'Open Research',
         url: 'https://intexuraos.cloud/#/research/research-1',
@@ -1297,7 +1479,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: '/#/code-tasks/task-1',
           }),
       },
-      expectedReply: 'Utworzyłem zadanie programistyczne.',
+      expectedReply: 'Created the code task.',
       expectedCtaUrl: {
         displayText: 'View Progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-1',
@@ -1314,7 +1496,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: 'ftp://intexuraos.cloud/code-tasks/task-1',
           }),
       },
-      expectedReply: 'Utworzyłem zadanie programistyczne: ftp://intexuraos.cloud/code-tasks/task-1',
+      expectedReply: 'Created the code task: ftp://intexuraos.cloud/code-tasks/task-1',
       expectedCtaUrl: undefined,
     },
     {
@@ -1329,7 +1511,7 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       runnerWebAppUrl: 'https://dev.intexuraos.cloud/',
-      expectedReply: 'Utworzyłem zadanie programistyczne.',
+      expectedReply: 'Created the code task.',
       expectedCtaUrl: {
         displayText: 'View Progress',
         url: 'https://dev.intexuraos.cloud/#/code-tasks/task-2',
@@ -1350,7 +1532,7 @@ describe('createIntexAgentRunner', () => {
             htmlLink: '/calendar/events/event-1',
           }),
       },
-      expectedReply: 'Utworzyłem wydarzenie w kalendarzu: /calendar/events/event-1',
+      expectedReply: 'Created the calendar event: /calendar/events/event-1',
       expectedCtaUrl: undefined,
     },
     {
@@ -1364,7 +1546,7 @@ describe('createIntexAgentRunner', () => {
             url: 'https://example.com/post',
           }),
       },
-      expectedReply: 'Zapisałem link.',
+      expectedReply: 'Saved the link.',
       expectedCtaUrl: {
         displayText: 'Open Link',
         url: 'https://example.com/post',
@@ -1381,7 +1563,7 @@ describe('createIntexAgentRunner', () => {
             url: '/relative-target',
           }),
       },
-      expectedReply: 'Zapisałem link: /relative-target',
+      expectedReply: 'Saved the link: /relative-target',
       expectedCtaUrl: undefined,
     },
     {
@@ -1395,7 +1577,7 @@ describe('createIntexAgentRunner', () => {
             url: 'mailto:person@example.com',
           }),
       },
-      expectedReply: 'Zapisałem link: mailto:person@example.com',
+      expectedReply: 'Saved the link: mailto:person@example.com',
       expectedCtaUrl: undefined,
     },
     {
@@ -1442,6 +1624,42 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('localizes CTA labels for Polish confirmed tool completions', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        createResearch: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            resourceUrl: 'https://intexuraos.cloud/#/research/research-1',
+          }),
+      }),
+    });
+
+    const result = await runner.executeConfirmed({
+      session: session(),
+      events: [event('user_message', { text: 'utwórz research o planie przeprowadzki biura' })],
+      toolName: 'create_research',
+      toolArgs: {
+        title: 'Plan przeprowadzki biura',
+        prompt: 'Przygotuj research o planie przeprowadzki biura.',
+      },
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'completed',
+      reply: 'Utworzyłem szkic researchu.',
+      toolName: 'create_research',
+      ctaUrl: {
+        displayText: 'Otwórz research',
+        url: 'https://intexuraos.cloud/#/research/research-1',
+      },
+    });
+    expect(client.calls).toEqual([]);
+  });
+
   it('returns a confirmation preview for WhatsApp images without calling the LLM or external save', async () => {
     const client = new FakeToolCallingClient([]);
     const saveCalls: { message: string; sourceUrl?: string }[] = [];
@@ -1469,7 +1687,7 @@ describe('createIntexAgentRunner', () => {
     expect(result).toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy wysłać tę treść do zewnętrznego systemu?\n\nTreść: Lunch receipt\nŹródło: https://storage.example.com/signed/receipt.jpg',
+        'Send this content to the external system?\n\nContent: Lunch receipt\nSource: https://storage.example.com/signed/receipt.jpg',
       toolName: 'save_external',
       toolArgs: {
         message: 'Lunch receipt',
@@ -1535,6 +1753,106 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('uses a Polish fallback reply when confirmed external save returns no JSON message payload after Polish context', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => 'external-save-1',
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Wyślij ten paragon do zewnętrznego systemu.' })],
+        toolName: 'save_external',
+        toolArgs: {
+          message: 'Paragon za lunch',
+          sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Wysłano do zewnętrznego systemu.',
+      toolName: 'save_external',
+    });
+  });
+
+  it('uses a Polish completed reply when confirmed external save returns an English JSON message after Polish context', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> =>
+          JSON.stringify({ status: 'completed', message: 'Saved externally' }),
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Wyślij ten paragon do zewnętrznego systemu.' })],
+        toolName: 'save_external',
+        toolArgs: {
+          message: 'Paragon za lunch',
+          sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Wysłano do zewnętrznego systemu.',
+      toolName: 'save_external',
+      toolResult: { status: 'completed', message: 'Saved externally' },
+    });
+  });
+
+  it.each([
+    {
+      toolName: 'create_note' as const,
+      toolArgs: { content: 'Kod do drzwi to 1234.' },
+      executorOverride: {
+        createNote: async (): Promise<string> =>
+          JSON.stringify({ status: 'completed', message: 'Note saved' }),
+      },
+      expectedReply: 'Zapisałem notatkę.',
+      expectedToolResult: { status: 'completed', message: 'Note saved' },
+    },
+    {
+      toolName: 'create_research' as const,
+      toolArgs: { title: 'Temat researchu', prompt: 'Sprawdź ten temat.' },
+      executorOverride: {
+        createResearch: async (): Promise<string> =>
+          JSON.stringify({ status: 'completed', message: 'Research created' }),
+      },
+      expectedReply: 'Utworzyłem szkic researchu.',
+      expectedToolResult: { status: 'completed', message: 'Research created' },
+    },
+  ])(
+    'uses a localized confirmed $toolName completion instead of an English backend message',
+    async ({ toolName, toolArgs, executorOverride, expectedReply, expectedToolResult }) => {
+      const runner = createIntexAgentRunner({
+        client: new FakeToolCallingClient([]),
+        toolExecutor: fakeToolExecutor(executorOverride),
+      });
+
+      await expect(
+        runner.executeConfirmed({
+          session: session(),
+          events: [event('user_message', { text: 'Zapisz to proszę.' })],
+          toolName,
+          toolArgs,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({
+        outcome: 'completed',
+        reply: expectedReply,
+        toolName,
+        toolResult: expectedToolResult,
+      });
+    }
+  );
+
   it('explains that confirmed external save cannot run when it is not configured', async () => {
     const runner = createIntexAgentRunner({
       client: new FakeToolCallingClient([]),
@@ -1563,6 +1881,35 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('explains in Polish that confirmed external save cannot run when it is not configured after Polish context', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => {
+          throw new Error('External save is not configured');
+        },
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Wyślij ten paragon do zewnętrznego systemu.' })],
+        toolName: 'save_external',
+        toolArgs: {
+          message: 'Paragon za lunch',
+          sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'tool_failed',
+      reply: POLISH_EXTERNAL_SAVE_NOT_CONFIGURED_REPLY,
+      toolName: 'save_external',
+      error: 'External save is not configured',
+    });
+  });
+
   it('notifies the user when confirmed external save processing fails', async () => {
     const runner = createIntexAgentRunner({
       client: new FakeToolCallingClient([]),
@@ -1586,6 +1933,35 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'tool_failed',
       reply: EXTERNAL_SAVE_FAILED_REPLY,
+      toolName: 'save_external',
+      error: 'Failed to save externally: HTTP 403: Forbidden',
+    });
+  });
+
+  it('notifies the user in Polish when confirmed external save processing fails after Polish context', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        saveExternal: async (): Promise<string> => {
+          throw new Error('Failed to save externally: HTTP 403: Forbidden');
+        },
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Wyślij ten paragon do zewnętrznego systemu.' })],
+        toolName: 'save_external',
+        toolArgs: {
+          message: 'Paragon za lunch',
+          sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'tool_failed',
+      reply: POLISH_EXTERNAL_SAVE_FAILED_REPLY,
       toolName: 'save_external',
       error: 'Failed to save externally: HTTP 403: Forbidden',
     });
@@ -1628,6 +2004,7 @@ describe('createIntexAgentRunner', () => {
     await expect(
       runner.executeConfirmed({
         session: session(),
+        events: [event('user_message', { text: 'Zapisz notatkę o spotkaniu.' })],
         toolName: 'create_note',
         toolArgs: {},
         currentDateTime: CURRENT_DATE_TIME,
@@ -1669,7 +2046,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy wysłać tę treść do zewnętrznego systemu?\n\nTreść: Save externally this copied LinkedIn detail',
+        'Send this content to the external system?\n\nContent: Save externally this copied LinkedIn detail',
       toolName: 'save_external',
       toolArgs: { message: 'Save externally this copied LinkedIn detail' },
     });
@@ -1701,7 +2078,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy utworzyć zadanie programistyczne?\n\nPrompt: Investigate the webhook retry path.\nTryb: planning',
+        'Create this code task?\n\nPrompt: Investigate the webhook retry path.\nMode: planning',
       toolName: 'create_code_task',
       toolArgs: { prompt: 'Investigate the webhook retry path.' },
     });
@@ -1736,7 +2113,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy dodać wydarzenie w kalendarzu?\n\nTytuł: Dentist\nStart: 2026-06-25T09:00:00+02:00\nKoniec: 2026-06-25T10:00:00+02:00',
+        'Add this calendar event?\n\nTitle: Dentist\nStart: 2026-06-25T09:00:00+02:00\nEnd: 2026-06-25T10:00:00+02:00',
       toolName: 'create_calendar_event',
       toolArgs: {
         summary: 'Dentist',
@@ -1951,7 +2328,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy zmodyfikować wpis w pamięci instrukcji?\n\nWpis: pref_jakub\nWcześniej: When I ask to invite Jakub, invite jakub.old@example.com.\nPo zmianie: When I ask to invite Jakub, invite jakub.new@example.com.',
+        'Update this instruction memory entry?\n\nEntry: pref_jakub\nBefore: When I ask to invite Jakub, invite jakub.old@example.com.\nAfter: When I ask to invite Jakub, invite jakub.new@example.com.',
       toolName: 'update_user_preference',
       toolArgs: {
         itemId: 'pref_jakub',
@@ -1970,7 +2347,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy usunąć wpis z pamięci instrukcji?\n\nWpis: pref_mood\nTreść: Prefer concise morning summaries.',
+        'Delete this instruction memory entry?\n\nEntry: pref_mood\nContent: Prefer concise morning summaries.',
       toolName: 'delete_user_preference',
       toolArgs: {
         itemId: 'pref_mood',
@@ -2046,7 +2423,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy zmodyfikować wpis w pamięci instrukcji?\n\nWpis: pref_missing\nPo zmianie: Always use the short project codename.',
+        'Update this instruction memory entry?\n\nEntry: pref_missing\nAfter: Always use the short project codename.',
       toolName: 'update_user_preference',
       toolArgs: {
         itemId: 'pref_missing',
@@ -2064,7 +2441,7 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
-      reply: 'Czy usunąć wpis z pamięci instrukcji?\n\nWpis: pref_non_string',
+      reply: 'Delete this instruction memory entry?\n\nEntry: pref_non_string',
       toolName: 'delete_user_preference',
       toolArgs: {
         itemId: 'pref_non_string',
@@ -2108,7 +2485,7 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Czy zmodyfikować wpis w pamięci instrukcji?\n\nWpis: pref_unknown\nPo zmianie: Prefer compact summaries.',
+        'Update this instruction memory entry?\n\nEntry: pref_unknown\nAfter: Prefer compact summaries.',
       toolName: 'update_user_preference',
       toolArgs: {
         itemId: 'pref_unknown',
@@ -2240,6 +2617,41 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('returns the empty preference sentence in Polish when no rows exist after Polish context', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Brak preferencji.',
+            toolName: 'get_user_preferences',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: '' }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Pokaż moje preferencje agenta INTEX.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: 'Nie zdefiniowano jeszcze preferencji agenta INTEX.',
+      toolName: 'get_user_preferences',
+    });
+  });
+
   it('returns the empty preference sentence when the preference tool result omits a string prompt block', async () => {
     const client = new ToolExecutingFakeToolCallingClient(
       { toolName: 'get_user_preferences', args: {} },
@@ -2271,6 +2683,41 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toMatchObject({
       outcome: 'completed',
       reply: 'No INTEX Agent preferences are defined yet.',
+      toolName: 'get_user_preferences',
+    });
+  });
+
+  it('returns the empty preference sentence in Polish when the preference tool omits a string prompt block', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Brak preferencji.',
+            toolName: 'get_user_preferences',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: 123 }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Pokaż moje preferencje agenta INTEX.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: 'Nie zdefiniowano jeszcze preferencji agenta INTEX.',
       toolName: 'get_user_preferences',
     });
   });
@@ -2462,40 +2909,40 @@ function explicitMessageFor(toolName: PreviewToolName): string {
 function expectedConfirmationReplyFor(toolName: PreviewToolName): string {
   if (toolName === 'create_calendar_event') {
     return [
-      'Czy dodać wydarzenie w kalendarzu?',
+      'Add this calendar event?',
       '',
-      'Tytuł: Dentist',
+      'Title: Dentist',
       'Start: 2026-06-25T09:00:00+02:00',
-      'Koniec: 2026-06-25T10:00:00+02:00',
-      'Miejsce: Dental Clinic',
-      'Uczestnicy: pat@example.com',
+      'End: 2026-06-25T10:00:00+02:00',
+      'Location: Dental Clinic',
+      'Attendees: pat@example.com',
     ].join('\n');
   }
   if (toolName === 'create_research') {
-    return 'Czy utworzyć szkic researchu?\n\nTytuł: Research topic\nPrompt: Research this topic.';
+    return 'Create this research draft?\n\nTitle: Research topic\nPrompt: Research this topic.';
   }
   if (toolName === 'create_link') {
-    return 'Czy zapisać bookmark?\n\nURL: https://example.com\nTytuł: Example';
+    return 'Save this bookmark?\n\nURL: https://example.com\nTitle: Example';
   }
   if (toolName === 'create_code_task') {
     return [
-      'Czy utworzyć zadanie programistyczne?',
+      'Create this code task?',
       '',
       'Prompt: Investigate this code issue.',
-      'Tryb: execution',
+      'Mode: execution',
       'Worker: codex-xhigh',
       'Linear: LIN-123',
     ].join('\n');
   }
   if (toolName === 'save_external') {
     return [
-      'Czy wysłać tę treść do zewnętrznego systemu?',
+      'Send this content to the external system?',
       '',
-      'Treść: Save externally this copied LinkedIn detail',
-      'Źródło: https://example.com/post',
+      'Content: Save externally this copied LinkedIn detail',
+      'Source: https://example.com/post',
     ].join('\n');
   }
-  return 'Czy dodać wpis w pamięci instrukcji?\n\nNowy wpis: Prefer concise morning summaries.';
+  return 'Add this instruction memory entry?\n\nNew entry: Prefer concise morning summaries.';
 }
 
 class FakeToolCallingClient implements ToolCallingClient {

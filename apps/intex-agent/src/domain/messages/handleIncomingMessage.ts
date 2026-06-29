@@ -16,8 +16,18 @@ import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
 import {
   buildNewSessionReadyText,
   buildUnsupportedCapabilitiesReply,
-  detectIntexAgentReplyLanguage,
+  selectIntexAgentReplyLanguage,
+  type IntexAgentLanguageMessage,
+  type IntexAgentReplyLanguage,
 } from '../agent/capabilities.js';
+
+const CONFIRMATION_BUTTON_LABELS: Record<
+  IntexAgentReplyLanguage,
+  { yes: string; no: string }
+> = {
+  en: { yes: 'Yes', no: 'No' },
+  pl: { yes: 'Tak', no: 'Nie' },
+};
 
 export type IntexAgentRunnerResult =
   | {
@@ -123,6 +133,37 @@ const CONFIRMABLE_TOOL_NAMES = new Set<IntexAgentToolName>([
   'delete_user_preference',
 ]);
 
+const STALE_CONFIRMATION_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'This confirmation is no longer current. Send the request again.',
+  pl: 'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.',
+};
+
+const REJECTED_CONFIRMATION_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'Okay, I will not run this action.',
+  pl: 'Okej, nie wykonuję tej akcji.',
+};
+
+const TOOL_EXECUTION_FAILURE_PREFIX: Record<IntexAgentReplyLanguage, string> = {
+  en: 'I could not execute this action: ',
+  pl: 'Nie udało się wykonać tej akcji: ',
+};
+
+const TOOL_EXECUTION_FAILURE_SUFFIX: Record<IntexAgentReplyLanguage, string> = {
+  en: '. Please try again later.',
+  pl: '. Spróbuj ponownie później.',
+};
+
+const MISSING_LINK_REPLIES = {
+  missing: {
+    en: 'I do not see a saved link from the previous action. Ask me directly again, and I will create the resource from scratch.',
+    pl: 'Nie widzę zapisanego linku z poprzedniej akcji. Poproś mnie jeszcze raz wprost, a utworzę zasób od nowa.',
+  },
+  prefix: {
+    en: 'Link from the previous action: ',
+    pl: 'Link z poprzedniej akcji: ',
+  },
+} satisfies Record<string, Record<IntexAgentReplyLanguage, string>>;
+
 export async function handleIncomingMessage(
   input: IntexIncomingMessage,
   deps: HandleIncomingMessageDeps
@@ -148,7 +189,9 @@ export async function handleIncomingMessage(
   const effectiveMessage = decision.effectiveUserMessageText;
 
   if (effectiveMessage === null) {
-    const reply = newSessionReadyText(input.text);
+    const priorEvents =
+      currentSession === null ? [] : await deps.sessionRepository.listEvents(currentSession.id, input.userId);
+    const reply = newSessionReadyText(input, priorEvents);
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
       status: 'waiting_for_user',
@@ -194,7 +237,7 @@ export async function handleIncomingMessage(
     currentDateTime: now,
     messageId: input.messageId,
   });
-  await applyRunnerResult(input, deps, session, runnerResult);
+  await applyRunnerResult(input, deps, session, runnerResult, events);
 
   return { sessionId: session.id };
 }
@@ -207,9 +250,12 @@ async function handleConfirmationButton(
   normalizedUserTimestamp: string
 ): Promise<IncomingMessageHandlerResult> {
   if (currentSession === null) {
+    const reply = staleConfirmationReply(
+      selectIntexAgentReplyLanguage({ currentMessage: messageLanguageInput(input) })
+    );
     await deps.replyPublisher.publishReply({
       userId: input.userId,
-      message: staleConfirmationReply(),
+      message: reply,
       replyToMessageId: input.messageId,
       correlationId: input.messageId,
     });
@@ -233,12 +279,13 @@ async function handleConfirmationButton(
   });
 
   const pendingConfirmation = findLatestPendingConfirmation(events);
+  const replyLanguage = selectReplyLanguage(input, events);
   if (
     buttonResponse === undefined ||
     parsedButton === null ||
     parsedButton.confirmationId !== pendingConfirmation?.confirmationId
   ) {
-    const reply = staleConfirmationReply();
+    const reply = staleConfirmationReply(replyLanguage);
     const assistantAt = await appendAssistantMessage(currentSession, deps, reply);
     await deps.sessionRepository.updateSession(currentSession.id, {
       status: 'waiting_for_user',
@@ -257,7 +304,7 @@ async function handleConfirmationButton(
   });
 
   if (parsedButton.decision === 'no') {
-    const reply = 'Okej, nie wykonuję tej akcji.';
+    const reply = REJECTED_CONFIRMATION_REPLIES[replyLanguage];
     const assistantAt = await appendAssistantMessage(currentSession, deps, reply);
     await deps.sessionRepository.updateSession(currentSession.id, {
       status: 'waiting_for_user',
@@ -278,18 +325,16 @@ async function handleConfirmationButton(
       messageId: input.messageId,
     });
   } catch (error) {
+    const errorMessage = getErrorMessage(error, 'Unknown tool execution error');
     executionResult = {
       outcome: 'tool_failed',
-      reply: `Nie udało się wykonać tej akcji: ${getErrorMessage(
-        error,
-        'Unknown tool execution error'
-      )}. Spróbuj ponownie później.`,
+      reply: `${TOOL_EXECUTION_FAILURE_PREFIX[replyLanguage]}${errorMessage}${TOOL_EXECUTION_FAILURE_SUFFIX[replyLanguage]}`,
       toolName: pendingConfirmation.toolName,
-      error: getErrorMessage(error, 'Unknown tool execution error'),
+      error: errorMessage,
     };
   }
 
-  await applyRunnerResult(input, deps, currentSession, executionResult);
+  await applyRunnerResult(input, deps, currentSession, executionResult, events);
   return { sessionId: currentSession.id };
 }
 
@@ -344,7 +389,8 @@ async function applyRunnerResult(
   input: IntexIncomingMessage,
   deps: HandleIncomingMessageDeps,
   session: IntexAgentSession,
-  runnerResult: IntexAgentRunnerResult
+  runnerResult: IntexAgentRunnerResult,
+  languageEvents: readonly IntexAgentSessionEvent[] = []
 ): Promise<void> {
   if (runnerResult.outcome === 'no_action') {
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
@@ -387,7 +433,14 @@ async function applyRunnerResult(
       activeTool: runnerResult.toolName,
       ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
     });
-    await publishReply(input, deps, session.id, reply, undefined, confirmationButtons(confirmationId));
+    await publishReply(
+      input,
+      deps,
+      session.id,
+      reply,
+      undefined,
+      confirmationButtons(confirmationId, selectReplyLanguage(input, languageEvents))
+    );
     return;
   }
 
@@ -421,7 +474,7 @@ async function applyRunnerResult(
   }
 
   if (runnerResult.toolName === undefined) {
-    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult(input.text));
+    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult(input, languageEvents));
     return;
   }
 
@@ -487,8 +540,11 @@ async function publishReply(
   });
 }
 
-function newSessionReadyText(message: string): string {
-  return buildNewSessionReadyText(detectIntexAgentReplyLanguage(message));
+function newSessionReadyText(
+  input: IntexIncomingMessage,
+  events: readonly IntexAgentSessionEvent[]
+): string {
+  return buildNewSessionReadyText(selectReplyLanguage(input, events));
 }
 
 function stripDuplicateSessionPrefix(text: string): string {
@@ -523,11 +579,12 @@ function summarizeUserMessage(message: string): string {
 }
 
 function malformedRunnerResult(
-  message: string
+  input: IntexIncomingMessage,
+  events: readonly IntexAgentSessionEvent[]
 ): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
   return {
     outcome: 'unsupported',
-    reply: buildUnsupportedCapabilitiesReply(detectIntexAgentReplyLanguage(message)),
+    reply: buildUnsupportedCapabilitiesReply(selectReplyLanguage(input, events)),
   };
 }
 
@@ -542,20 +599,24 @@ interface PendingConfirmation {
   toolArgs: Record<string, unknown>;
 }
 
-function confirmationButtons(confirmationId: string): WhatsAppInteractiveButton[] {
+function confirmationButtons(
+  confirmationId: string,
+  replyLanguage: IntexAgentReplyLanguage
+): WhatsAppInteractiveButton[] {
+  const labels = CONFIRMATION_BUTTON_LABELS[replyLanguage];
   return [
     {
       type: 'reply',
       reply: {
         id: `intex_confirm:${confirmationId}:yes`,
-        title: 'Tak',
+        title: labels.yes,
       },
     },
     {
       type: 'reply',
       reply: {
         id: `intex_confirm:${confirmationId}:no`,
-        title: 'Nie',
+        title: labels.no,
       },
     },
   ];
@@ -634,8 +695,8 @@ async function supersedePendingConfirmationIfNeeded(
   });
 }
 
-function staleConfirmationReply(): string {
-  return 'To potwierdzenie nie jest już aktualne. Wyślij prośbę jeszcze raz.';
+function staleConfirmationReply(replyLanguage: IntexAgentReplyLanguage): string {
+  return STALE_CONFIRMATION_REPLIES[replyLanguage];
 }
 
 function isConfirmableToolName(value: unknown): value is IntexAgentToolName {
@@ -650,13 +711,78 @@ function buildMissingLinkReply(message: string, events: IntexAgentSessionEvent[]
   if (!isMissingLinkFollowUp(message)) {
     return null;
   }
+  const replyLanguage = selectIntexAgentReplyLanguage({
+    currentMessage: { text: message },
+    priorMessages: languageMessagesFromEvents(events),
+  });
 
   const resourceUrl = findLastToolResourceUrl(events);
   if (resourceUrl === null) {
-    return 'Nie widzę zapisanego linku z poprzedniej akcji. Poproś mnie jeszcze raz wprost, a utworzę zasób od nowa.';
+    return MISSING_LINK_REPLIES.missing[replyLanguage];
   }
 
-  return `Link z poprzedniej akcji: ${resourceUrl}`;
+  return `${MISSING_LINK_REPLIES.prefix[replyLanguage]}${resourceUrl}`;
+}
+
+function selectReplyLanguage(
+  input: IntexIncomingMessage,
+  events: readonly IntexAgentSessionEvent[]
+): IntexAgentReplyLanguage {
+  return selectIntexAgentReplyLanguage({
+    currentMessage: messageLanguageInput(input),
+    priorMessages: languageMessagesFromEvents(events),
+  });
+}
+
+function messageLanguageInput(input: IntexIncomingMessage): IntexAgentLanguageMessage {
+  const languageHint =
+    input.buttonResponse === undefined
+      ? undefined
+      : confirmationButtonLanguage(input.buttonResponse.buttonTitle);
+  return {
+    text:
+      input.text.trim() !== ''
+        ? input.text
+        : input.buttonResponse?.buttonTitle ?? input.text,
+    sourceType: input.sourceType,
+    ...(input.sourceUrl !== undefined ? { hasSourceUrl: true } : {}),
+    ...(languageHint !== undefined ? { languageHint } : {}),
+  };
+}
+
+function confirmationButtonLanguage(buttonTitle: string): IntexAgentReplyLanguage | undefined {
+  const normalized = buttonTitle.trim().toLocaleLowerCase('pl-PL');
+  if (normalized === 'tak' || normalized === 'nie') {
+    return 'pl';
+  }
+  if (normalized === 'yes' || normalized === 'no') {
+    return 'en';
+  }
+  return undefined;
+}
+
+function languageMessagesFromEvents(
+  events: readonly IntexAgentSessionEvent[]
+): IntexAgentLanguageMessage[] {
+  const messages: IntexAgentLanguageMessage[] = [];
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type !== 'user_message') {
+      continue;
+    }
+    const text = event.payload['text'];
+    if (typeof text !== 'string') {
+      continue;
+    }
+    messages.push({
+      text,
+      ...(typeof event.payload['sourceType'] === 'string'
+        ? { sourceType: event.payload['sourceType'] }
+        : {}),
+      ...(event.payload['hasSourceUrl'] === true ? { hasSourceUrl: true } : {}),
+    });
+  }
+  return messages;
 }
 
 function isMissingLinkFollowUp(message: string): boolean {

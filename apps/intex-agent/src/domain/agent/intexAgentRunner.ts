@@ -26,7 +26,7 @@ import {
   buildGreetingReply,
   buildCompletionFailureCapabilitiesReply,
   buildUnsupportedCapabilitiesReply,
-  detectIntexAgentReplyLanguage,
+  selectIntexAgentReplyLanguage,
   type IntexAgentReplyLanguage,
 } from './capabilities.js';
 
@@ -47,6 +47,107 @@ const MUTATING_TOOL_NAMES = new Set<MutatingIntexAgentToolName>([
   'update_user_preference',
   'delete_user_preference',
 ]);
+
+type LocalizedText = Record<IntexAgentReplyLanguage, string>;
+
+const GENERIC_EXECUTION_FAILURE_PREFIX: LocalizedText = {
+  en: 'I could not execute this action: ',
+  pl: 'Nie udało się wykonać tej akcji: ',
+};
+
+const GENERIC_EXECUTION_FAILURE_SUFFIX: LocalizedText = {
+  en: '. Please try again later.',
+  pl: '. Spróbuj ponownie później.',
+};
+
+const EXTERNAL_SAVE_NOT_CONFIGURED_REPLIES: LocalizedText = {
+  en: 'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.',
+  pl: 'Nie skonfigurowano zewnętrznego systemu dla tej wiadomości, więc nie mogę jej przetworzyć. Skonfiguruj External Save w preferencjach agenta INTEX i wyślij ją ponownie.',
+};
+
+const EXTERNAL_SAVE_FAILURE_PREFIX: LocalizedText = {
+  en: 'I could not deliver this to the external system. The external save request failed: ',
+  pl: 'Nie udało się dostarczyć tej treści do zewnętrznego systemu. Żądanie External Save nie powiodło się: ',
+};
+
+const EXTERNAL_SAVE_FAILURE_SUFFIX: LocalizedText = {
+  en: '. Please check the external system configuration and try again.',
+  pl: '. Sprawdź konfigurację zewnętrznego systemu i spróbuj ponownie.',
+};
+
+const CONFIRMATION_INTROS: Record<MutatingIntexAgentToolName, LocalizedText> = {
+  create_note: { en: 'Add this note?', pl: 'Czy dodać notatkę?' },
+  create_calendar_event: {
+    en: 'Add this calendar event?',
+    pl: 'Czy dodać wydarzenie w kalendarzu?',
+  },
+  create_research: { en: 'Create this research draft?', pl: 'Czy utworzyć szkic researchu?' },
+  create_link: { en: 'Save this bookmark?', pl: 'Czy zapisać bookmark?' },
+  create_code_task: { en: 'Create this code task?', pl: 'Czy utworzyć zadanie programistyczne?' },
+  save_external: {
+    en: 'Send this content to the external system?',
+    pl: 'Czy wysłać tę treść do zewnętrznego systemu?',
+  },
+  add_user_preference: {
+    en: 'Add this instruction memory entry?',
+    pl: 'Czy dodać wpis w pamięci instrukcji?',
+  },
+  update_user_preference: {
+    en: 'Update this instruction memory entry?',
+    pl: 'Czy zmodyfikować wpis w pamięci instrukcji?',
+  },
+  delete_user_preference: {
+    en: 'Delete this instruction memory entry?',
+    pl: 'Czy usunąć wpis z pamięci instrukcji?',
+  },
+};
+
+const CONFIRMATION_LABELS = {
+  title: { en: 'Title', pl: 'Tytuł' },
+  content: { en: 'Content', pl: 'Treść' },
+  start: { en: 'Start', pl: 'Początek' },
+  end: { en: 'End', pl: 'Koniec' },
+  location: { en: 'Location', pl: 'Miejsce' },
+  attendees: { en: 'Attendees', pl: 'Uczestnicy' },
+  prompt: { en: 'Prompt', pl: 'Polecenie' },
+  mode: { en: 'Mode', pl: 'Tryb' },
+  worker: { en: 'Worker', pl: 'Typ workera' },
+  source: { en: 'Source', pl: 'Źródło' },
+  newEntry: { en: 'New entry', pl: 'Nowy wpis' },
+  entry: { en: 'Entry', pl: 'Wpis' },
+  before: { en: 'Before', pl: 'Wcześniej' },
+  after: { en: 'After', pl: 'Po zmianie' },
+} satisfies Record<string, LocalizedText>;
+
+const COMPLETED_REPLIES = {
+  create_note: { en: 'Saved the note.', pl: 'Zapisałem notatkę.' },
+  create_calendar_event: {
+    en: 'Created the calendar event.',
+    pl: 'Utworzyłem wydarzenie w kalendarzu.',
+  },
+  create_research: { en: 'Created the research draft.', pl: 'Utworzyłem szkic researchu.' },
+  create_link: { en: 'Saved the bookmark.', pl: 'Zapisałem bookmark.' },
+  create_code_task: { en: 'Created the code task.', pl: 'Utworzyłem zadanie programistyczne.' },
+  save_external: { en: 'Saved externally', pl: 'Wysłano do zewnętrznego systemu.' },
+  preference: {
+    en: 'Updated the instruction memory.',
+    pl: 'Zaktualizowałem pamięć instrukcji.',
+  },
+  preferencesEmpty: {
+    en: 'No INTEX Agent preferences are defined yet.',
+    pl: 'Nie zdefiniowano jeszcze preferencji agenta INTEX.',
+  },
+  linkUrl: { en: 'Saved the link.', pl: 'Zapisałem link.' },
+} satisfies Record<string, LocalizedText>;
+
+const CTA_LABELS = {
+  openNote: { en: 'Open Note', pl: 'Otwórz notatkę' },
+  openResearch: { en: 'Open Research', pl: 'Otwórz research' },
+  viewProgress: { en: 'View Progress', pl: 'Zobacz postęp' },
+  openBookmark: { en: 'Open Bookmark', pl: 'Otwórz zakładkę' },
+  openCalendar: { en: 'Open Calendar', pl: 'Otwórz kalendarz' },
+  openLink: { en: 'Open Link', pl: 'Otwórz link' },
+} satisfies Record<string, LocalizedText>;
 
 export interface IntexAgentRunnerConfig {
   client: ToolCallingClient;
@@ -86,8 +187,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         const completedReply = buildCompletedReply(
           input.toolName,
           parsedResult,
-          defaultCompletedReply(input.toolName),
-          config.webAppUrl ?? DEFAULT_WEB_APP_URL
+          defaultCompletedReply(input.toolName, replyLanguage),
+          config.webAppUrl ?? DEFAULT_WEB_APP_URL,
+          replyLanguage
         );
 
         return {
@@ -101,14 +203,18 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         const errorMessage = getErrorMessage(error, 'Unknown tool execution error');
         return {
           outcome: 'tool_failed',
-          reply: buildConfirmedExecutionFailureReply(input.toolName, errorMessage),
+          reply: buildConfirmedExecutionFailureReply(input.toolName, errorMessage, replyLanguage),
           toolName: input.toolName,
           error: errorMessage,
         };
       }
     },
     async run(input): Promise<IntexAgentRunnerResult> {
-      const replyLanguage = detectReplyLanguage(input.events, input.message);
+      const replyLanguage = detectReplyLanguage(input.events, {
+        text: input.message,
+        ...(input.sourceType !== undefined ? { sourceType: input.sourceType } : {}),
+        ...(input.sourceUrl !== undefined ? { hasSourceUrl: true } : {}),
+      });
 
       if (input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined) {
         const args = {
@@ -117,7 +223,12 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
         return {
           outcome: 'needs_confirmation',
-          reply: buildConfirmationReply('save_external', args, config.userPreferences ?? null),
+          reply: buildConfirmationReply(
+            'save_external',
+            args,
+            config.userPreferences ?? null,
+            replyLanguage
+          ),
           toolName: 'save_external',
           toolArgs: args,
         };
@@ -178,29 +289,34 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
 
 function detectReplyLanguage(
   events: IntexAgentSessionEvent[],
-  currentMessage?: string
-): IntexAgentReplyLanguage {
-  if (currentMessage !== undefined) {
-    const currentLanguage = detectIntexAgentReplyLanguage(currentMessage);
-    if (currentLanguage === 'pl') {
-      return currentLanguage;
-    }
+  currentMessage?: {
+    text: string;
+    sourceType?: string;
+    hasSourceUrl?: boolean;
   }
-
+): IntexAgentReplyLanguage {
+  const priorMessages = [];
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (event?.type === 'user_message') {
-      const priorMessage = event.payload['text'];
-      if (typeof priorMessage === 'string') {
-        const priorLanguage = detectIntexAgentReplyLanguage(priorMessage);
-        if (priorLanguage === 'pl') {
-          return priorLanguage;
-        }
-      }
+    if (event?.type !== 'user_message') {
+      continue;
+    }
+    const priorMessage = event.payload['text'];
+    if (typeof priorMessage === 'string') {
+      priorMessages.push({
+        text: priorMessage,
+        ...(typeof event.payload['sourceType'] === 'string'
+          ? { sourceType: event.payload['sourceType'] }
+          : {}),
+        ...(event.payload['hasSourceUrl'] === true ? { hasSourceUrl: true } : {}),
+      });
     }
   }
 
-  return 'en';
+  return selectIntexAgentReplyLanguage({
+    ...(currentMessage !== undefined ? { currentMessage } : {}),
+    priorMessages,
+  });
 }
 
 interface IntexAgentToolExecution {
@@ -341,7 +457,12 @@ function parseRunnerContent(
     const summary = parsed['summary'];
     return {
       outcome: 'needs_confirmation',
-      reply: buildConfirmationReply(toolExecution.toolName, toolExecution.args, userPreferences),
+      reply: buildConfirmationReply(
+        toolExecution.toolName,
+        toolExecution.args,
+        userPreferences,
+        replyLanguage
+      ),
       toolName: toolExecution.toolName,
       toolArgs: toolExecution.args,
       ...(typeof summary === 'string' ? { summary } : {}),
@@ -369,7 +490,8 @@ function parseRunnerContent(
       toolExecution.toolName,
       toolExecution.result,
       reply,
-      webAppUrl
+      webAppUrl,
+      replyLanguage
     );
 
     return {
@@ -520,25 +642,29 @@ function createTrackingToolExecutor(
   };
 }
 
-function buildExternalSaveFailureReply(errorMessage: string): string {
+function buildExternalSaveFailureReply(
+  errorMessage: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
   if (isExternalSaveNotConfiguredError(errorMessage)) {
-    return 'No external system is configured for this message, so I cannot process it. Configure External Save in Intex Agent preferences and send it again.';
+    return EXTERNAL_SAVE_NOT_CONFIGURED_REPLIES[replyLanguage];
   }
 
   const detail = normalizeExternalSaveFailureDetail(errorMessage);
-  return `I could not deliver this to the external system. The external save request failed: ${detail}. Please check the external system configuration and try again.`;
+  return `${EXTERNAL_SAVE_FAILURE_PREFIX[replyLanguage]}${detail}${EXTERNAL_SAVE_FAILURE_SUFFIX[replyLanguage]}`;
 }
 
 function buildConfirmedExecutionFailureReply(
   toolName: IntexAgentToolName,
-  errorMessage: string
+  errorMessage: string,
+  replyLanguage: IntexAgentReplyLanguage
 ): string {
   if (toolName === 'save_external') {
-    return buildExternalSaveFailureReply(errorMessage);
+    return buildExternalSaveFailureReply(errorMessage, replyLanguage);
   }
 
   const detail = normalizeExternalSaveFailureDetail(errorMessage);
-  return `Nie udało się wykonać tej akcji: ${detail}. Spróbuj ponownie później.`;
+  return `${GENERIC_EXECUTION_FAILURE_PREFIX[replyLanguage]}${detail}${GENERIC_EXECUTION_FAILURE_SUFFIX[replyLanguage]}`;
 }
 
 function isExternalSaveNotConfiguredError(errorMessage: string): boolean {
@@ -579,78 +705,101 @@ function parseToolResult(rawResult: string): Record<string, unknown> | undefined
 function buildConfirmationReply(
   toolName: MutatingIntexAgentToolName,
   args: Record<string, unknown>,
-  userPreferences: string | null
+  userPreferences: string | null,
+  replyLanguage: IntexAgentReplyLanguage
 ): string {
   if (toolName === 'create_note') {
-    const lines = ['Czy dodać notatkę?'];
+    const lines = [CONFIRMATION_INTROS.create_note[replyLanguage]];
     const title = readRawString(args, 'title');
     const content = readRawString(args, 'content');
-    if (title !== undefined) lines.push('', `Tytuł: ${title}`);
+    if (title !== undefined) lines.push('', `${CONFIRMATION_LABELS.title[replyLanguage]}: ${title}`);
     /* v8 ignore start -- schema: create_note preview args cannot omit content because validation runs before confirmation text is built @preserve */
-    if (content !== undefined) lines.push(`Treść: ${content}`);
+    if (content !== undefined) {
+      lines.push(`${CONFIRMATION_LABELS.content[replyLanguage]}: ${content}`);
+    }
     /* v8 ignore stop @preserve */
     return lines.join('\n');
   }
 
   if (toolName === 'create_calendar_event') {
-    const lines = ['Czy dodać wydarzenie w kalendarzu?'];
-    appendConfirmationLine(lines, 'Tytuł', readRawString(args, 'summary'));
-    appendConfirmationLine(lines, 'Start', readRawString(args, 'start'));
-    appendConfirmationLine(lines, 'Koniec', readRawString(args, 'end'));
-    appendConfirmationLine(lines, 'Miejsce', readRawString(args, 'location'));
-    appendConfirmationListLine(lines, 'Uczestnicy', readStringArray(args, 'attendees'));
+    const lines = [CONFIRMATION_INTROS.create_calendar_event[replyLanguage]];
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'summary'));
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.start[replyLanguage], readRawString(args, 'start'));
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.end[replyLanguage], readRawString(args, 'end'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.location[replyLanguage],
+      readRawString(args, 'location')
+    );
+    appendConfirmationListLine(
+      lines,
+      CONFIRMATION_LABELS.attendees[replyLanguage],
+      readStringArray(args, 'attendees')
+    );
     return lines.join('\n');
   }
 
   if (toolName === 'create_research') {
-    const lines = ['Czy utworzyć szkic researchu?'];
-    appendConfirmationLine(lines, 'Tytuł', readRawString(args, 'title'));
-    appendConfirmationLine(lines, 'Prompt', readRawString(args, 'prompt'));
+    const lines = [CONFIRMATION_INTROS.create_research[replyLanguage]];
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'title'));
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.prompt[replyLanguage], readRawString(args, 'prompt'));
     return lines.join('\n');
   }
 
   if (toolName === 'create_link') {
-    const lines = ['Czy zapisać bookmark?'];
+    const lines = [CONFIRMATION_INTROS.create_link[replyLanguage]];
     appendConfirmationLine(lines, 'URL', readRawString(args, 'url'));
-    appendConfirmationLine(lines, 'Tytuł', readRawString(args, 'title'));
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'title'));
     return lines.join('\n');
   }
 
   if (toolName === 'create_code_task') {
-    const lines = ['Czy utworzyć zadanie programistyczne?'];
-    appendConfirmationLine(lines, 'Prompt', readRawString(args, 'prompt'));
-    appendConfirmationLine(lines, 'Tryb', readRawString(args, 'taskMode') ?? 'planning');
-    appendConfirmationLine(lines, 'Worker', readRawString(args, 'workerType'));
+    const lines = [CONFIRMATION_INTROS.create_code_task[replyLanguage]];
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.prompt[replyLanguage], readRawString(args, 'prompt'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.mode[replyLanguage],
+      readRawString(args, 'taskMode') ?? 'planning'
+    );
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.worker[replyLanguage], readRawString(args, 'workerType'));
     appendConfirmationLine(lines, 'Linear', readRawString(args, 'linearIssueId'));
     return lines.join('\n');
   }
 
   if (toolName === 'save_external') {
-    const lines = ['Czy wysłać tę treść do zewnętrznego systemu?'];
-    appendConfirmationLine(lines, 'Treść', readRawString(args, 'message'));
-    appendConfirmationLine(lines, 'Źródło', readRawString(args, 'sourceUrl'));
+    const lines = [CONFIRMATION_INTROS.save_external[replyLanguage]];
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.content[replyLanguage], readRawString(args, 'message'));
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.source[replyLanguage], readRawString(args, 'sourceUrl'));
     return lines.join('\n');
   }
 
   if (toolName === 'add_user_preference') {
-    const lines = ['Czy dodać wpis w pamięci instrukcji?'];
-    appendConfirmationLine(lines, 'Nowy wpis', readRawString(args, 'text'));
+    const lines = [CONFIRMATION_INTROS.add_user_preference[replyLanguage]];
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.newEntry[replyLanguage], readRawString(args, 'text'));
     return lines.join('\n');
   }
 
   if (toolName === 'update_user_preference') {
-    const lines = ['Czy zmodyfikować wpis w pamięci instrukcji?'];
+    const lines = [CONFIRMATION_INTROS.update_user_preference[replyLanguage]];
     const itemId = readRawString(args, 'itemId');
-    appendConfirmationLine(lines, 'Wpis', itemId);
-    appendConfirmationLine(lines, 'Wcześniej', findPreferenceText(userPreferences, itemId));
-    appendConfirmationLine(lines, 'Po zmianie', readRawString(args, 'text'));
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.entry[replyLanguage], itemId);
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.before[replyLanguage],
+      findPreferenceText(userPreferences, itemId)
+    );
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.after[replyLanguage], readRawString(args, 'text'));
     return lines.join('\n');
   }
 
-  const lines = ['Czy usunąć wpis z pamięci instrukcji?'];
+  const lines = [CONFIRMATION_INTROS.delete_user_preference[replyLanguage]];
   const itemId = readRawString(args, 'itemId');
-  appendConfirmationLine(lines, 'Wpis', itemId);
-  appendConfirmationLine(lines, 'Treść', findPreferenceText(userPreferences, itemId));
+  appendConfirmationLine(lines, CONFIRMATION_LABELS.entry[replyLanguage], itemId);
+  appendConfirmationLine(
+    lines,
+    CONFIRMATION_LABELS.content[replyLanguage],
+    findPreferenceText(userPreferences, itemId)
+  );
   return lines.join('\n');
 }
 
@@ -704,7 +853,8 @@ function buildCompletedReply(
   toolName: IntexAgentToolName,
   result: Record<string, unknown> | undefined,
   fallbackReply: string,
-  webAppUrl: string
+  webAppUrl: string,
+  replyLanguage: IntexAgentReplyLanguage
 ): CompletedReply {
   if (result === undefined) {
     return { reply: fallbackReply };
@@ -716,7 +866,7 @@ function buildCompletedReply(
       reply:
         promptBlock !== undefined && promptBlock.trim() !== ''
           ? promptBlock
-          : 'No INTEX Agent preferences are defined yet.',
+          : COMPLETED_REPLIES.preferencesEmpty[replyLanguage],
     };
   }
 
@@ -725,35 +875,39 @@ function buildCompletedReply(
   if (absoluteResourceUrl !== undefined) {
     if (toolName === 'create_note') {
       return {
-        reply: 'Zapisałem notatkę.',
-        ctaUrl: { displayText: 'Open Note', url: absoluteResourceUrl },
+        reply: COMPLETED_REPLIES.create_note[replyLanguage],
+        ctaUrl: { displayText: CTA_LABELS.openNote[replyLanguage], url: absoluteResourceUrl },
       };
     }
     if (toolName === 'create_research') {
       return {
-        reply: 'Utworzyłem szkic researchu.',
-        ctaUrl: { displayText: 'Open Research', url: absoluteResourceUrl },
+        reply: COMPLETED_REPLIES.create_research[replyLanguage],
+        ctaUrl: { displayText: CTA_LABELS.openResearch[replyLanguage], url: absoluteResourceUrl },
       };
     }
     if (toolName === 'create_code_task') {
       return {
-        reply: 'Utworzyłem zadanie programistyczne.',
-        ctaUrl: { displayText: 'View Progress', url: absoluteResourceUrl },
+        reply: COMPLETED_REPLIES.create_code_task[replyLanguage],
+        ctaUrl: { displayText: CTA_LABELS.viewProgress[replyLanguage], url: absoluteResourceUrl },
       };
     }
     if (toolName === 'create_link') {
       return {
-        reply: 'Zapisałem bookmark.',
-        ctaUrl: { displayText: 'Open Bookmark', url: absoluteResourceUrl },
+        reply: COMPLETED_REPLIES.create_link[replyLanguage],
+        ctaUrl: { displayText: CTA_LABELS.openBookmark[replyLanguage], url: absoluteResourceUrl },
       };
     }
   }
   if (resourceUrl !== undefined) {
     if (toolName === 'create_research') {
-      return { reply: `Utworzyłem szkic researchu: ${resourceUrl}` };
+      return {
+        reply: `${COMPLETED_REPLIES.create_research[replyLanguage].replace(/\.$/u, '')}: ${resourceUrl}`,
+      };
     }
     if (toolName === 'create_code_task') {
-      return { reply: `Utworzyłem zadanie programistyczne: ${resourceUrl}` };
+      return {
+        reply: `${COMPLETED_REPLIES.create_code_task[replyLanguage].replace(/\.$/u, '')}: ${resourceUrl}`,
+      };
     }
     return { reply: `${fallbackReply.trim()} ${resourceUrl}`.trim() };
   }
@@ -762,53 +916,60 @@ function buildCompletedReply(
   const absoluteHtmlLink = toAbsoluteUrl(htmlLink);
   if (toolName === 'create_calendar_event' && absoluteHtmlLink !== undefined) {
     return {
-      reply: 'Utworzyłem wydarzenie w kalendarzu.',
-      ctaUrl: { displayText: 'Open Calendar', url: absoluteHtmlLink },
+      reply: COMPLETED_REPLIES.create_calendar_event[replyLanguage],
+      ctaUrl: { displayText: CTA_LABELS.openCalendar[replyLanguage], url: absoluteHtmlLink },
     };
   }
   if (htmlLink !== undefined && toolName === 'create_calendar_event') {
-    return { reply: `Utworzyłem wydarzenie w kalendarzu: ${htmlLink}` };
+    return {
+      reply: `${COMPLETED_REPLIES.create_calendar_event[replyLanguage].replace(/\.$/u, '')}: ${htmlLink}`,
+    };
   }
 
   const url = readString(result, 'url');
   const absoluteUrl = toAbsoluteUrl(url);
   if (toolName === 'create_link' && absoluteUrl !== undefined) {
     return {
-      reply: 'Zapisałem link.',
-      ctaUrl: { displayText: 'Open Link', url: absoluteUrl },
+      reply: COMPLETED_REPLIES.linkUrl[replyLanguage],
+      ctaUrl: { displayText: CTA_LABELS.openLink[replyLanguage], url: absoluteUrl },
     };
   }
   if (url !== undefined && toolName === 'create_link') {
-    return { reply: `Zapisałem link: ${url}` };
+    return {
+      reply: `${COMPLETED_REPLIES.linkUrl[replyLanguage].replace(/\.$/u, '')}: ${url}`,
+    };
   }
 
   const message = readString(result, 'message');
   if (toolName === 'save_external' && message !== undefined) {
-    return { reply: message };
+    return { reply: COMPLETED_REPLIES.save_external[replyLanguage] };
   }
-  return { reply: message ?? fallbackReply };
+  return { reply: fallbackReply };
 }
 
-function defaultCompletedReply(toolName: MutatingIntexAgentToolName): string {
+function defaultCompletedReply(
+  toolName: MutatingIntexAgentToolName,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
   if (toolName === 'create_note') {
-    return 'Zapisałem notatkę.';
+    return COMPLETED_REPLIES.create_note[replyLanguage];
   }
   if (toolName === 'create_calendar_event') {
-    return 'Utworzyłem wydarzenie w kalendarzu.';
+    return COMPLETED_REPLIES.create_calendar_event[replyLanguage];
   }
   if (toolName === 'create_research') {
-    return 'Utworzyłem szkic researchu.';
+    return COMPLETED_REPLIES.create_research[replyLanguage];
   }
   if (toolName === 'create_link') {
-    return 'Zapisałem bookmark.';
+    return COMPLETED_REPLIES.create_link[replyLanguage];
   }
   if (toolName === 'create_code_task') {
-    return 'Utworzyłem zadanie programistyczne.';
+    return COMPLETED_REPLIES.create_code_task[replyLanguage];
   }
   if (toolName === 'save_external') {
-    return 'Saved externally';
+    return COMPLETED_REPLIES.save_external[replyLanguage];
   }
-  return 'Zaktualizowałem pamięć instrukcji.';
+  return COMPLETED_REPLIES.preference[replyLanguage];
 }
 
 function isPreferenceToolName(toolName: IntexAgentToolName): boolean {

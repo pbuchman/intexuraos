@@ -60,6 +60,15 @@ describe('resolvePlanDocumentPathFromLinearContext', () => {
     expect(result).toBe('docs/plans/INT-800-design.md');
   });
 
+  it('skips invalid plain candidates and uses the next valid plan path', () => {
+    const result = resolvePlanDocumentPathFromLinearContext({
+      description: 'See docs/plans/../INT-800-design.md and docs/plans/INT-800-design.md',
+      comments: [],
+    });
+
+    expect(result).toBe('docs/plans/INT-800-design.md');
+  });
+
   it('rejects invalid traversal paths', () => {
     const result = resolvePlanDocumentPathFromLinearContext({
       description: 'Plan document: docs/plans/../../secrets.md',

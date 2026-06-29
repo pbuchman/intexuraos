@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { buildCoverageShardCommand, mergeShardOutputs } from '../lib/coverage-sharding.mjs'; // @allow-missing-js -- .mjs import
+import {
+  buildCoverageShardCommand,
+  coverageShardTmpDirectory,
+  isKnownVitestCoverageTmpRace,
+  mergeShardOutputs,
+  shouldRetryCoverageShard,
+} from '../lib/coverage-sharding.mjs'; // @allow-missing-js -- .mjs import
 
 describe('coverage sharding helpers', () => {
   it('builds a Vitest shard command that writes isolated shard artifacts', () => {
@@ -15,6 +21,7 @@ describe('coverage sharding helpers', () => {
       '--coverage.thresholds.functions=0',
       '--coverage.thresholds.statements=0',
       '--coverage.reportsDirectory=coverage/shard-2',
+      '--pool=threads',
       '--shard=2/3',
     ]);
   });
@@ -28,10 +35,63 @@ describe('coverage sharding helpers', () => {
     expect(output).toBe('first\nsecond\n');
   });
 
+  it('matches Vitest coverage v8 shard tmp directory naming', () => {
+    expect(coverageShardTmpDirectory(2, 3)).toBe('coverage/shard-2/.tmp-2-3');
+  });
+
   it('excludes local hook test copies from root coverage discovery', () => {
     const rootVitestConfig = readFileSync('vitest.config.ts', 'utf-8');
 
     expect(rootVitestConfig).toContain("'.claude/hooks/__tests__/**'");
     expect(rootVitestConfig).toContain("'.codex/hooks/__tests__/**'");
+  });
+
+  it('keeps aggregate coverage thresholds enabled on merge', () => {
+    const runShardedCoverageScript = readFileSync('scripts/run-sharded-coverage.mjs', 'utf-8');
+    const mergeStep = runShardedCoverageScript.slice(
+      runShardedCoverageScript.indexOf('async function runMerge()'),
+      runShardedCoverageScript.indexOf('async function runAllShardsWithKnownRaceRetry')
+    );
+
+    expect(mergeStep).toContain("'--merge-reports'");
+    expect(mergeStep).not.toContain('--coverage.thresholds.');
+  });
+
+  it('recognizes the known Vitest coverage tmp ENOENT race', () => {
+    expect(
+      isKnownVitestCoverageTmpRace(
+        [
+          '✓ apps/intex-agent/src/__tests__/domain/capabilities.test.ts (15 tests)',
+          '⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯',
+          "Error: ENOENT: no such file or directory, open '/repo/coverage/shard-2/.tmp-2-3/coverage-11.json'",
+          'Tests  399 passed',
+        ].join('\n')
+      )
+    ).toBe(true);
+  });
+
+  it('does not treat real Vitest failures as the coverage tmp race', () => {
+    expect(
+      isKnownVitestCoverageTmpRace(
+        [
+          'FAIL apps/intex-agent/src/__tests__/domain/capabilities.test.ts > language selector',
+          "Error: ENOENT: no such file or directory, open '/repo/coverage/shard-2/.tmp-2-3/coverage-11.json'",
+          'Test Files 1 failed',
+        ].join('\n')
+      )
+    ).toBe(false);
+  });
+
+  it('retries only non-zero shards with the known Vitest coverage tmp race', () => {
+    const knownRaceOutput = [
+      '✓ apps/intex-agent/src/__tests__/domain/capabilities.test.ts (15 tests)',
+      '⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯',
+      "Error: ENOENT: no such file or directory, open '/repo/coverage/shard-2/.tmp-2-3/coverage-0.json'",
+      'Tests  399 passed',
+    ].join('\n');
+
+    expect(shouldRetryCoverageShard({ code: 1, output: knownRaceOutput })).toBe(true);
+    expect(shouldRetryCoverageShard({ code: 0, output: knownRaceOutput })).toBe(false);
+    expect(shouldRetryCoverageShard({ code: 1, output: 'FAIL apps/test.test.ts' })).toBe(false);
   });
 });
