@@ -6,6 +6,7 @@
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { performHttpFetch } from '@intexuraos/common-http';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
 import type { SentryIssueTaskContext } from '../../domain/models/sentryIssueEvent.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
@@ -204,12 +205,21 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     });
 
     if (!dispatchability.dispatchable) {
+      // 'workers_at_capacity' is an expected, transient operational state (all
+      // capable workers are busy running legitimate tasks). The dispatch
+      // pipeline already handles this gracefully — it returns the 'at_capacity'
+      // error code, queues the task for retry, and notifies the user via
+      // WhatsApp. Surfacing it as a Sentry issue creates noise (e.g.
+      // INTEXURAOS-HETZNER-3E) without any actionable signal, so we suppress
+      // Sentry capture for this reason while keeping the warn log on stdout.
+      const skipSentry = dispatchability.reason === 'workers_at_capacity';
       this.logger.warn(
         {
           taskId: request.taskId,
           workerType: request.workerType,
           reason: dispatchability.reason,
           workerNames: dispatchability.workerNames,
+          [SKIP_SENTRY_KEY]: skipSentry,
         },
         'Dispatch blocked by worker capability or health state'
       );
