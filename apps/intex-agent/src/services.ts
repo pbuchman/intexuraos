@@ -164,6 +164,7 @@ export function initServices(config: ServiceConfig): void {
         usageSink,
         ownerType: 'user',
       });
+      // The intent classifier needs plain generate(); the tool-calling client only exposes run().
 
       const [preferences, promptPreferences] = await Promise.all([
         preferencesRepository.getPreferences(input.session.userId),
@@ -185,7 +186,7 @@ export function initServices(config: ServiceConfig): void {
       return await createIntexAgentRunner({
         client: toolCallingClient,
         toolExecutor,
-        intentClassifier: createLlmIntexAgentIntentClassifier({ client: classifierClient }),
+        intentClassifier: createLlmIntexAgentIntentClassifier({ client: classifierClient, logger }),
         webAppUrl: config.webAppUrl,
         userPreferences: promptPreferences.renderedPromptBlock,
       }).run(input);
