@@ -195,7 +195,9 @@ export function logWorkerAuthStartupStatus(
       'Code worker auth active'
     );
   } else {
-    logger.warn({ state: claudeState }, 'Code worker auth not ready');
+    // Expired OAuth tokens are refreshed on first use; this warning is informational.
+    // Real auth failures still surface via per-task error paths.
+    logger.warn({ state: claudeState, _skipSentry: true }, 'Code worker auth not ready');
   }
 
   if (codexState.status === 'active') {
@@ -209,7 +211,9 @@ export function logWorkerAuthStartupStatus(
       'Codex worker auth active'
     );
   } else {
-    logger.warn({ state: codexState }, 'Codex worker auth not ready');
+    // Same rationale as Claude: expired Codex auth is refreshed on demand,
+    // not a startup-time error worth paging on.
+    logger.warn({ state: codexState, _skipSentry: true }, 'Codex worker auth not ready');
   }
 }
 
@@ -244,7 +248,14 @@ export async function validateWorkerApiKeys(
       'Code worker auth validated — Claude-backed tasks ready'
     );
   } else {
-    logger.warn({ state: claudeState }, 'Code worker auth not ready at startup');
+    // Sentry INTEXURAOS-HOME-DEV-1G: an expired Claude OAuth token at startup is
+    // expected (tokens are refreshed on first use), so this warn is informational
+    // and must not become alert noise. The Pino Sentry transport honors
+    // `_skipSentry` and still writes the log to stdout for Cloud Logging.
+    logger.warn(
+      { state: claudeState, _skipSentry: true },
+      'Code worker auth not ready at startup'
+    );
   }
 
   const codexState = workerAuthRegistry.getState('codex');
@@ -258,7 +269,11 @@ export async function validateWorkerApiKeys(
       'Codex worker auth validated — Codex tasks ready'
     );
   } else {
-    logger.warn({ state: codexState }, 'Codex worker auth not ready at startup');
+    // Same rationale as Claude: do not page on an informational startup state.
+    logger.warn(
+      { state: codexState, _skipSentry: true },
+      'Codex worker auth not ready at startup'
+    );
   }
 
   // Validate all third-party API keys in parallel.
