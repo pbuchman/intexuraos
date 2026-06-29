@@ -639,6 +639,80 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.blocker?.reason).toBe('workers_at_capacity');
       }
     });
+
+    it('skips Sentry capture when blocker reason is workers_at_capacity', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 2,
+          available: 0,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-at-capacity',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-at-capacity',
+          reason: 'workers_at_capacity',
+          _skipSentry: true,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('does not skip Sentry capture when blocker reason is a critical condition', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'orchestrator-unreachable',
+          healthy: false,
+          reason: 'connection refused',
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-unreachable',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-unreachable',
+          reason: 'workers_unreachable',
+          _skipSentry: false,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
   });
 
   describe('failedWorkerLocation filtering', () => {
