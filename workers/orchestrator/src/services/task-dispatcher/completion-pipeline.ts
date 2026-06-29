@@ -663,6 +663,7 @@ export class CompletionPipeline {
             attempt,
             workerType: task.workerType,
             telemetryMissingFields: verification.telemetryMissing,
+            [SKIP_SENTRY_KEY]: true,
           },
           'Accepting task despite missing telemetry (optional tier)'
         );
