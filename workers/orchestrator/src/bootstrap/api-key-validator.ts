@@ -104,7 +104,6 @@ export async function fetchWithRetry(
  * accepted. Logs success/failure but never throws — a single provider
  * outage must not block the orchestrator from starting.
  */
-/* v8 ignore start -- module-init: bootstrap-time live upstream validation cannot be unit-tested without real HTTP sockets; the synchronous format validator is unit-tested instead @preserve */
 export async function validateThirdPartyApiKey(
   workerTypeName: string,
   apiKey: string,
@@ -182,7 +181,6 @@ export async function validateThirdPartyApiKey(
     );
   }
 }
-/* v8 ignore stop @preserve */
 
 /** Logs the initial state of claude/codex worker auth at startup. */
 export function logWorkerAuthStartupStatus(
