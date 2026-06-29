@@ -8,7 +8,10 @@ import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm
 import { describe, expect, it } from 'vitest';
 import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
 import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
-import { INTEX_AGENT_SYSTEM_PROMPT } from '../../domain/agent/systemPrompt.js';
+import {
+  INTEX_AGENT_RUNNER_PROMPT_TYPE,
+  INTEX_AGENT_SYSTEM_PROMPT,
+} from '../../domain/agent/systemPrompt.js';
 import type { IntexAgentIntentClassifier } from '../../domain/agent/intentClassifier.js';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '../../domain/sessions/types.js';
 
@@ -141,7 +144,7 @@ describe('createIntexAgentRunner', () => {
     ]);
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
     expect(client.calls[0]?.toolChoice).toBe('auto');
-    expect(client.calls[0]?.promptType).toBe('intex-agent-whatsapp-session');
+    expect(client.calls[0]?.promptType).toBe(INTEX_AGENT_RUNNER_PROMPT_TYPE);
   });
 
   it('returns a confirmation preview for note creation without writing the note', async () => {

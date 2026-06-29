@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS,
   intexAgentIntentClassifierPrompt,
   intexAgentIntentClassifierRepairPrompt,
 } from '../intentClassifierPrompt.js';
@@ -10,7 +11,11 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(intexAgentIntentClassifierPrompt.version).toBe('1.1.0');
+    expect(INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS).toEqual({
+      tool: 0.65,
+      unsupported: 0.75,
+    });
   });
 
   it('builds a literal-guarded transcript prompt with the response schema', () => {

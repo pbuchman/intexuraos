@@ -13,6 +13,7 @@ export {
 } from './intentClassifierSchemas.js';
 
 export {
+  INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS,
   intexAgentIntentClassifierPrompt,
   intexAgentIntentClassifierRepairPrompt,
   type IntexAgentIntentClassifierPromptInput,

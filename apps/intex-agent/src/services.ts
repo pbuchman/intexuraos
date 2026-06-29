@@ -8,7 +8,6 @@ import {
   createNotesAgentServiceClient,
   createResearchAgentServiceClient,
 } from '@intexuraos/internal-clients';
-import type { LLMModel } from '@intexuraos/llm-contract';
 import { createLlmClient, createToolCallingClient } from '@intexuraos/llm-factory';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createWhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
@@ -158,12 +157,13 @@ export function initServices(config: ServiceConfig): void {
       });
       const classifierClient = createLlmClient({
         apiKey: config.openRouterAppApiKey,
-        model: config.model as unknown as LLMModel,
+        model: config.model,
         userId: input.session.userId,
         logger,
         usageSink,
         ownerType: 'user',
       });
+      // The intent classifier needs plain generate(); the tool-calling client only exposes run().
 
       const [preferences, promptPreferences] = await Promise.all([
         preferencesRepository.getPreferences(input.session.userId),
@@ -186,7 +186,7 @@ export function initServices(config: ServiceConfig): void {
         client: toolCallingClient,
         responseRepairClient: classifierClient,
         toolExecutor,
-        intentClassifier: createLlmIntexAgentIntentClassifier({ client: classifierClient }),
+        intentClassifier: createLlmIntexAgentIntentClassifier({ client: classifierClient, logger }),
         webAppUrl: config.webAppUrl,
         userPreferences: promptPreferences.renderedPromptBlock,
       }).run(input);
