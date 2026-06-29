@@ -13,6 +13,8 @@ import {
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
+  isTransientLinearError,
+  retryOnTransient,
 } from '../../infra/linear/linearApiClient.js';
 import type { LinearIssue } from '../../domain/index.js';
 import type { Team } from '@linear/sdk';
@@ -171,6 +173,106 @@ describe('linearApiClient helper functions', () => {
       // getErrorMessage returns .message from plain objects with a message property
       expect(result.code).toBe('API_ERROR');
       expect(result.message).toBe('custom error object');
+    });
+  });
+
+  describe('isTransientLinearError', () => {
+    it('returns true for 502 errors', () => {
+      expect(isTransientLinearError(new Error('GraphQL Error (Code: 502)'))).toBe(true);
+    });
+
+    it('returns true for 503 errors', () => {
+      expect(isTransientLinearError(new Error('Service Unavailable (503)'))).toBe(true);
+    });
+
+    it('returns true for 504 errors', () => {
+      expect(isTransientLinearError(new Error('Gateway Timeout 504'))).toBe(true);
+    });
+
+    it('returns true for 500 errors', () => {
+      expect(isTransientLinearError(new Error('Internal Server Error 500'))).toBe(true);
+    });
+
+    it('returns true for network errors', () => {
+      expect(isTransientLinearError(new Error('network request failed'))).toBe(true);
+      expect(isTransientLinearError(new Error('ECONNRESET'))).toBe(true);
+      expect(isTransientLinearError(new Error('ETIMEDOUT'))).toBe(true);
+      expect(isTransientLinearError(new Error('ECONNREFUSED'))).toBe(true);
+      expect(isTransientLinearError(new Error('fetch failed'))).toBe(true);
+    });
+
+    it('returns true for 502 Bad Gateway with Cloudflare body', () => {
+      const err = new Error('GraphQL Error (Code: 502) - <!DOCTYPE html>...');
+      expect(isTransientLinearError(err)).toBe(true);
+    });
+
+    it('returns false for 401 errors', () => {
+      expect(isTransientLinearError(new Error('401 Unauthorized'))).toBe(false);
+    });
+
+    it('returns false for 404 errors', () => {
+      expect(isTransientLinearError(new Error('404 Not Found'))).toBe(false);
+    });
+
+    it('returns false for 429 rate limit errors', () => {
+      expect(isTransientLinearError(new Error('429 Too Many Requests'))).toBe(false);
+    });
+
+    it('returns false for unknown errors', () => {
+      expect(isTransientLinearError(new Error('Something went wrong'))).toBe(false);
+    });
+
+    it('returns false for non-Error objects', () => {
+      expect(isTransientLinearError('plain string')).toBe(false);
+      expect(isTransientLinearError(null)).toBe(false);
+      expect(isTransientLinearError(undefined)).toBe(false);
+    });
+  });
+
+  describe('retryOnTransient', () => {
+    it('returns the result when the operation succeeds on first try', async () => {
+      const result = await retryOnTransient(async () => 'ok', 'op', 0);
+      expect(result).toBe('ok');
+    });
+
+    it('retries on transient errors and succeeds when transient clears', async () => {
+      let attempts = 0;
+      const result = await retryOnTransient(async () => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new Error('GraphQL Error (Code: 502)');
+        }
+        return 'recovered';
+      }, 'op', 0);
+      expect(result).toBe('recovered');
+      expect(attempts).toBe(3);
+    });
+
+    it('throws immediately on non-transient errors (no retry)', async () => {
+      let attempts = 0;
+      await expect(
+        retryOnTransient(async () => {
+          attempts += 1;
+          throw new Error('401 Unauthorized');
+        }, 'op', 0)
+      ).rejects.toThrow('401 Unauthorized');
+      expect(attempts).toBe(1);
+    });
+
+    it('throws the last transient error after exhausting retries', async () => {
+      let attempts = 0;
+      await expect(
+        retryOnTransient(
+          async () => {
+            attempts += 1;
+            throw new Error('Service Unavailable (503)');
+          },
+          'op',
+          0,
+          { maxRetries: 2, baseDelayMs: 0 }
+        )
+      ).rejects.toThrow('503');
+      expect(attempts).toBe(3);
     });
   });
 
