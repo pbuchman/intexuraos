@@ -2,10 +2,11 @@
  * Tests for Linear API client helper functions.
  * Tests the exported pure functions for complete branch coverage.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mapIssueStateType,
   mapLinearError,
+  isTransientUpstreamError,
   createDedupKey,
   filterIssuesByCompletionDate,
   DEFAULT_COMPLETED_SINCE_DAYS,
@@ -13,6 +14,7 @@ import {
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
+  withLinearRetry,
 } from '../../infra/linear/linearApiClient.js';
 import type { LinearIssue } from '../../domain/index.js';
 import type { Team } from '@linear/sdk';
@@ -123,6 +125,40 @@ describe('linearApiClient helper functions', () => {
 
       expect(result.code).toBe('TEAM_NOT_FOUND');
       expect(result.message).toBe('404 Not Found');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE for 502 error', () => {
+      const error = new Error('GraphQL Error (Code: 502) - Bad gateway');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE for 503 error', () => {
+      const error = new Error('Service Unavailable (503)');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE for 504 error', () => {
+      const error = new Error('Gateway Timeout (504)');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+    });
+
+    it('returns UPSTREAM_UNAVAILABLE with clean message even when raw error contains HTML', () => {
+      const error = new Error('GraphQL Error (Code: 502) - <!DOCTYPE html><html>...</html>');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(result.message).toBe('Linear API temporarily unavailable');
+      expect(result.message).not.toContain('<');
+      expect(result.message).not.toContain('html');
     });
 
     it('returns TEAM_NOT_FOUND for not found message', () => {
@@ -477,6 +513,156 @@ describe('linearApiClient helper functions', () => {
     it('getDedupCacheSize returns 0 after clear', () => {
       clearClientCache();
       expect(getDedupCacheSize()).toBe(0);
+    });
+  });
+
+  describe('isTransientUpstreamError', () => {
+    it('returns true for 502 in error message', () => {
+      expect(isTransientUpstreamError(new Error('GraphQL Error (Code: 502)'))).toBe(true);
+    });
+
+    it('returns true for 503 in error message', () => {
+      expect(isTransientUpstreamError(new Error('503 Service Unavailable'))).toBe(true);
+    });
+
+    it('returns true for 504 in error message', () => {
+      expect(isTransientUpstreamError(new Error('504 Gateway Timeout'))).toBe(true);
+    });
+
+    it('returns false for 401 Unauthorized error', () => {
+      expect(isTransientUpstreamError(new Error('401 Unauthorized'))).toBe(false);
+    });
+
+    it('returns false for 404 Not Found error', () => {
+      expect(isTransientUpstreamError(new Error('404 Not Found'))).toBe(false);
+    });
+
+    it('returns false for 429 rate limit error', () => {
+      expect(isTransientUpstreamError(new Error('429 Too Many Requests'))).toBe(false);
+    });
+
+    it('returns false for null error', () => {
+      expect(isTransientUpstreamError(null)).toBe(false);
+    });
+
+    it('returns false for undefined error', () => {
+      expect(isTransientUpstreamError(undefined)).toBe(false);
+    });
+
+    it('returns false for string error', () => {
+      expect(isTransientUpstreamError('not an error')).toBe(false);
+    });
+  });
+
+  describe('withLinearRetry', () => {
+    function neverSleep(): Promise<void> {
+      return Promise.resolve();
+    }
+
+    it('returns value on first successful attempt without retrying', async () => {
+      const fn = vi.fn(async () => 'ok');
+      const result = await withLinearRetry(fn, {
+        maxAttempts: 3,
+        baseDelayMs: 1,
+        sleep: neverSleep,
+      });
+
+      expect(result).toBe('ok');
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries on transient 502 and succeeds on second attempt', async () => {
+      const fn = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error('GraphQL Error (Code: 502)'))
+        .mockResolvedValueOnce('ok');
+
+      const result = await withLinearRetry(fn, {
+        maxAttempts: 3,
+        baseDelayMs: 1,
+        sleep: neverSleep,
+      });
+
+      expect(result).toBe('ok');
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries up to maxAttempts on transient 5xx then throws the last error', async () => {
+      const err502 = new Error('GraphQL Error (Code: 502)');
+      const fn = vi.fn<() => Promise<string>>().mockRejectedValue(err502);
+
+      await expect(
+        withLinearRetry(fn, { maxAttempts: 3, baseDelayMs: 1, sleep: neverSleep })
+      ).rejects.toBe(err502);
+      expect(fn).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not retry on non-transient errors', async () => {
+      const authErr = new Error('401 Unauthorized');
+      const fn = vi.fn<() => Promise<string>>().mockRejectedValue(authErr);
+
+      await expect(
+        withLinearRetry(fn, { maxAttempts: 3, baseDelayMs: 1, sleep: neverSleep })
+      ).rejects.toBe(authErr);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not retry on 4xx (404, 429) errors', async () => {
+      const notFound = new Error('404 Not Found');
+      const fn = vi.fn<() => Promise<string>>().mockRejectedValue(notFound);
+
+      await expect(
+        withLinearRetry(fn, { maxAttempts: 3, baseDelayMs: 1, sleep: neverSleep })
+      ).rejects.toBe(notFound);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('invokes sleep between attempts with exponential backoff', async () => {
+      const sleeps: number[] = [];
+      const sleep = async (ms: number): Promise<void> => {
+        sleeps.push(ms);
+      };
+      const fn = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error('502'))
+        .mockRejectedValueOnce(new Error('503'))
+        .mockResolvedValueOnce('ok');
+
+      await withLinearRetry(fn, { maxAttempts: 3, baseDelayMs: 100, sleep });
+
+      expect(fn).toHaveBeenCalledTimes(3);
+      expect(sleeps).toEqual([100, 200]);
+    });
+
+    it('caps sleep delay at maxDelayMs', async () => {
+      const sleeps: number[] = [];
+      const sleep = async (ms: number): Promise<void> => {
+        sleeps.push(ms);
+      };
+      const fn = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error('502'))
+        .mockRejectedValueOnce(new Error('503'))
+        .mockRejectedValueOnce(new Error('504'))
+        .mockResolvedValueOnce('ok');
+
+      await withLinearRetry(fn, { maxAttempts: 4, baseDelayMs: 100, maxDelayMs: 150, sleep });
+
+      // First sleep: 100ms, second: 200 → capped at 150, third: would be 400 → capped at 150
+      expect(sleeps).toEqual([100, 150, 150]);
+    });
+
+    it('uses setTimeout-based default sleep when sleep option is omitted', async () => {
+      // Exercises the `opts.sleep ?? (ms => setTimeout(...))` branch by omitting sleep.
+      // baseDelayMs is set to 1 so the test completes quickly.
+      const fn = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error('502'))
+        .mockResolvedValueOnce('ok');
+
+      const result = await withLinearRetry(fn, { maxAttempts: 2, baseDelayMs: 1 });
+      expect(result).toBe('ok');
+      expect(fn).toHaveBeenCalledTimes(2);
     });
   });
 });

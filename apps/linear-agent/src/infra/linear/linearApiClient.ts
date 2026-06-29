@@ -26,6 +26,7 @@ import {
   mapIssueStateType,
   mapTeam,
   mapLinearError,
+  isTransientUpstreamError,
   filterIssuesByCompletionDate,
   mapIssuesWithBatchedStates,
   DEFAULT_COMPLETED_SINCE_DAYS,
@@ -48,6 +49,7 @@ export {
   mapIssueStateType,
   mapTeam,
   mapLinearError,
+  isTransientUpstreamError,
   createDedupKey,
   filterIssuesByCompletionDate,
   DEFAULT_COMPLETED_SINCE_DAYS,
@@ -55,6 +57,49 @@ export {
   getClientCacheSize,
   getDedupCacheSize,
 };
+
+/**
+ * Retry helper options for transient Linear API errors.
+ */
+export interface WithLinearRetryOptions {
+  /** Maximum number of attempts (inclusive of the first attempt). */
+  maxAttempts: number;
+  /** Initial backoff delay in milliseconds. Doubles every attempt. */
+  baseDelayMs: number;
+  /** Optional cap on backoff delay (default: 5_000ms). */
+  maxDelayMs?: number;
+  /** Sleep override for tests. Defaults to `setTimeout`-based promise. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Retry an operation on transient upstream errors (HTTP 502/503/504 from Linear).
+ * Other error types are returned immediately. Transient errors that exhaust the
+ * retry budget are returned unchanged so the caller can decide how to log them.
+ *
+ * Exported for testing.
+ */
+export async function withLinearRetry<T>(
+  fn: () => Promise<T>,
+  opts: WithLinearRetryOptions
+): Promise<T> {
+  const sleeper =
+    opts.sleep ?? ((ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)));
+  const maxDelay = opts.maxDelayMs ?? 5_000;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientUpstreamError(error)) throw error;
+      if (attempt === opts.maxAttempts) break;
+      await sleeper(Math.min(opts.baseDelayMs * 2 ** (attempt - 1), maxDelay));
+    }
+  }
+  throw lastError;
+}
 
 /* istanbul ignore next -- @preserve API client methods require real Linear API key to test */
 export function createLinearApiClient(): LinearApiClient {
@@ -138,30 +183,39 @@ export function createLinearApiClient(): LinearApiClient {
         const issues = await withDeduplication(dedupKey, async () => {
           logger.info({ teamId, completedSinceDays }, 'Listing Linear issues');
 
-          const client = getOrCreateClient(apiKey);
+          // Retry transient upstream 5xx (Linear's API is occasionally flaky)
+          // so a single bad gateway from Cloudflare doesn't fail the whole sync.
+          const fetched = await withLinearRetry(
+            async () => {
+              const client = getOrCreateClient(apiKey);
 
-          // Paginate through all issues
-          const allIssues: Issue[] = [];
-          let hasMore = true;
-          let after: string | undefined;
+              // Paginate through all issues
+              const allIssues: Issue[] = [];
+              let hasMore = true;
+              let after: string | undefined;
 
-          while (hasMore) {
-            const issuesConnection = await client.issues({
-              filter: {
-                team: { id: { eq: teamId } },
-              },
-              first: 100,
-              ...(after !== undefined ? { after } : {}),
-            });
+              while (hasMore) {
+                const issuesConnection = await client.issues({
+                  filter: {
+                    team: { id: { eq: teamId } },
+                  },
+                  first: 100,
+                  ...(after !== undefined ? { after } : {}),
+                });
 
-            allIssues.push(...issuesConnection.nodes);
-            hasMore = issuesConnection.pageInfo.hasNextPage;
-            after = issuesConnection.pageInfo.endCursor;
-          }
+                allIssues.push(...issuesConnection.nodes);
+                hasMore = issuesConnection.pageInfo.hasNextPage;
+                after = issuesConnection.pageInfo.endCursor;
+              }
 
-          logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
+              return allIssues;
+            },
+            { maxAttempts: 3, baseDelayMs: 500 }
+          );
 
-          const allMappedIssues = await mapIssuesWithBatchedStates(allIssues);
+          logger.info({ totalIssues: fetched.length }, 'Fetched all pages');
+
+          const allMappedIssues = await mapIssuesWithBatchedStates(fetched);
 
           return filterIssuesByCompletionDate(allMappedIssues, completedSinceDays);
         });
@@ -169,6 +223,13 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
+        // Transient upstream failures (5xx from Cloudflare/Linear) are noise in
+        // logs and Sentry — they self-recover on the next sync tick. Log at
+        // warn level so they remain visible without generating exceptions.
+        if (isTransientUpstreamError(error)) {
+          logger.warn({ teamId }, 'Linear API transiently unavailable while listing issues');
+          return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' });
+        }
         logger.error({ error, teamId }, 'Failed to list Linear issues');
         return err(mapLinearError(error));
       }
