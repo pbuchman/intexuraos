@@ -102,7 +102,7 @@ export function IntexAgentConfigPage(): React.JSX.Element {
       return;
     }
     if (
-      !window.confirm('Clear INTEX Agent external save configuration?')
+      !window.confirm('Clear Intex Agent external save configuration?')
     ) {
       return;
     }
@@ -155,11 +155,11 @@ export function IntexAgentConfigPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          INTEX Agent External Save
+          Intex Agent External Save
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Configure the protected endpoint used for explicit external-save requests and WhatsApp
-          images. Prompt preferences are managed from INTEX Agent Preferences.
+          images. Prompt preferences are managed from Intex Agent Preferences.
         </p>
       </div>
 

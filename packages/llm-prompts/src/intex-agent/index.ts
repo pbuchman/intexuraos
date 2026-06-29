@@ -8,8 +8,12 @@ export {
   INTEX_AGENT_INTENT_CLASSIFIER_TOOL_NAMES,
   IntexAgentIntentClassifierOutputSchema,
   IntexAgentIntentClassifierToolNameSchema,
+  IntexAgentBlockerReasonSchema,
+  IntexAgentStylePreferenceActionSchema,
+  type IntexAgentBlockerReason,
   type IntexAgentIntentClassifierOutput,
   type IntexAgentIntentClassifierToolName,
+  type IntexAgentStylePreferenceAction,
 } from './intentClassifierSchemas.js';
 
 export {

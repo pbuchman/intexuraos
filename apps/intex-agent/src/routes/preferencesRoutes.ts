@@ -48,9 +48,9 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
     {
       schema: {
         operationId: 'getIntexAgentPreferences',
-        summary: 'Get INTEX Agent preferences',
+        summary: 'Get Intex Agent preferences',
         description:
-          'Get legacy INTEX Agent configuration. Prompt preferences are exposed by /preferences/prompt.',
+          'Get legacy Intex Agent configuration. Prompt preferences are exposed by /preferences/prompt.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
       },
@@ -73,9 +73,9 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
     {
       schema: {
         operationId: 'saveIntexAgentPreferences',
-        summary: 'Save INTEX Agent preferences',
+        summary: 'Save Intex Agent preferences',
         description:
-          'Save legacy INTEX Agent External Save configuration. Prompt preferences are exposed by /preferences/prompt.',
+          'Save legacy Intex Agent External Save configuration. Prompt preferences are exposed by /preferences/prompt.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
         body: putPreferencesBodySchema,
@@ -98,7 +98,7 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       if (externalSaveResult.value === undefined) {
         return await reply.fail(
           'INVALID_REQUEST',
-          'Plain INTEX Agent instructions are no longer supported. Use /preferences/prompt/items for prompt preferences or include externalSave configuration.'
+          'Plain Intex Agent instructions are no longer supported. Use /preferences/prompt/items for prompt preferences or include externalSave configuration.'
         );
       }
 
@@ -115,7 +115,7 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
     {
       schema: {
         operationId: 'testIntexAgentExternalSave',
-        summary: 'Test INTEX Agent external save connection',
+        summary: 'Test Intex Agent external save connection',
         description:
           'Test the authenticated user external-save endpoint using configured Cloudflare Access credentials.',
         tags: ['intex-agent'],
@@ -164,9 +164,9 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
     {
       schema: {
         operationId: 'clearIntexAgentPreferences',
-        summary: 'Clear INTEX Agent preferences',
+        summary: 'Clear Intex Agent preferences',
         description:
-          'Clear legacy INTEX Agent External Save configuration. Prompt preferences are exposed by /preferences/prompt.',
+          'Clear legacy Intex Agent External Save configuration. Prompt preferences are exposed by /preferences/prompt.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
       },

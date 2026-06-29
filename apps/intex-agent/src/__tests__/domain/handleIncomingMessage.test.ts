@@ -27,7 +27,7 @@ const UNSUPPORTED_CAPABILITIES_REPLY = [
   '- create research drafts',
   '- save bookmarks',
   '- create code tasks for planning or execution',
-  '- manage INTEX Agent prompt preferences',
+  '- manage Intex Agent prompt preferences',
 ].join('\n');
 const NEW_SESSION_READY_REPLY = [
   'What would you like me to help with? I can help with:',
@@ -37,7 +37,7 @@ const NEW_SESSION_READY_REPLY = [
   '- create research drafts',
   '- save bookmarks',
   '- create code tasks for planning or execution',
-  '- manage INTEX Agent prompt preferences',
+  '- manage Intex Agent prompt preferences',
 ].join('\n');
 const POLISH_UNSUPPORTED_CAPABILITIES_REPLY = [
   'Nie mogłem bezpiecznie obsłużyć tej prośby. Mogę pomóc z:',
@@ -47,7 +47,7 @@ const POLISH_UNSUPPORTED_CAPABILITIES_REPLY = [
   '- tworzeniem szkiców researchu',
   '- zapisywaniem bookmarków',
   '- tworzeniem zadań programistycznych do planowania lub wykonania',
-  '- zarządzaniem preferencjami promptu agenta INTEX',
+  '- zarządzaniem preferencjami promptu agenta Intex',
 ].join('\n');
 const POLISH_NEW_SESSION_READY_REPLY = [
   'W czym mogę pomóc? Mogę pomóc z:',
@@ -57,7 +57,7 @@ const POLISH_NEW_SESSION_READY_REPLY = [
   '- tworzeniem szkiców researchu',
   '- zapisywaniem bookmarków',
   '- tworzeniem zadań programistycznych do planowania lub wykonania',
-  '- zarządzaniem preferencjami promptu agenta INTEX',
+  '- zarządzaniem preferencjami promptu agenta Intex',
 ].join('\n');
 
 function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMessage {
@@ -287,6 +287,9 @@ describe('handleIncomingMessage', () => {
         reply: 'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.',
         toolName: 'create_note',
         error: 'downstream denied it',
+        errorCategory: 'business',
+        isRetryable: false,
+        attemptedAction: 'create_note',
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -314,10 +317,51 @@ describe('handleIncomingMessage', () => {
     expect(eventPayloads(repo, 'tool_call_failed')[0]).toEqual({
       toolName: 'create_note',
       error: 'downstream denied it',
+      errorCategory: 'business',
+      isRetryable: false,
+      attemptedAction: 'create_note',
     });
     expect(replies.messages[0]?.message).toBe(
       'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.'
     );
+  });
+
+  it('records a failed confirmed execution without optional failure metadata', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-1',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    const runner = new FakeRunner([], [
+      {
+        outcome: 'tool_failed',
+        reply: 'I could not complete that action.',
+        toolName: 'create_note',
+        error: 'downstream denied it',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-button-failed-minimal',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-1:yes',
+          buttonTitle: 'Yes',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'tool_call_failed')[0]).toEqual({
+      toolName: 'create_note',
+      error: 'downstream denied it',
+    });
+    expect(replies.messages[0]?.message).toBe('I could not complete that action.');
   });
 
   it('rejects a pending confirmation after a matching Nie button', async () => {
@@ -965,6 +1009,11 @@ describe('handleIncomingMessage', () => {
       {
         outcome: 'needs_clarification',
         reply: 'New session started.\n\nWhich day should I schedule it for?',
+        blockerReason: 'missing_required_details',
+        missingFields: ['date'],
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep: 'Ask for the missing calendar date.',
+        clarification: 'Which day should I schedule it for?',
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -981,6 +1030,14 @@ describe('handleIncomingMessage', () => {
       'clarification_requested',
       'assistant_message',
     ]);
+    expect(eventPayloads(repo, 'clarification_requested')[0]).toEqual({
+      message: 'Which day should I schedule it for?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_calendar_event'],
+      suggestedNextStep: 'Ask for the missing calendar date.',
+      clarification: 'Which day should I schedule it for?',
+    });
     expect(replies.messages[0]?.message).toBe('Which day should I schedule it for?');
   });
 
@@ -1037,6 +1094,10 @@ describe('handleIncomingMessage', () => {
       {
         outcome: 'unsupported',
         reply: 'I do not support that yet. I can create notes and calendar events.',
+        blockerReason: 'unsupported_capability',
+        missingFields: ['supported_action'],
+        candidateIntents: ['create_note'],
+        suggestedNextStep: 'Offer to save the flight details as a note.',
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1056,6 +1117,13 @@ describe('handleIncomingMessage', () => {
       'unsupported_request',
       'assistant_message',
     ]);
+    expect(eventPayloads(repo, 'unsupported_request')[0]).toEqual({
+      message: 'I do not support that yet. I can create notes and calendar events.',
+      blockerReason: 'unsupported_capability',
+      missingFields: ['supported_action'],
+      candidateIntents: ['create_note'],
+      suggestedNextStep: 'Offer to save the flight details as a note.',
+    });
     expect(replies.messages[0]?.message).toBe(
       'I do not support that yet. I can create notes and calendar events.'
     );

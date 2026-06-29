@@ -43,8 +43,8 @@ export const promptPreferencesRoutes: FastifyPluginCallback = (fastify, _opts, d
     {
       schema: {
         operationId: 'getIntexAgentPromptPreferences',
-        summary: 'Get INTEX Agent prompt preferences',
-        description: 'Get current itemized INTEX Agent prompt preferences for the authenticated user.',
+        summary: 'Get Intex Agent prompt preferences',
+        description: 'Get current itemized Intex Agent prompt preferences for the authenticated user.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
       },
@@ -67,7 +67,7 @@ export const promptPreferencesRoutes: FastifyPluginCallback = (fastify, _opts, d
     {
       schema: {
         operationId: 'addIntexAgentPromptPreferenceItem',
-        summary: 'Add INTEX Agent prompt preference',
+        summary: 'Add Intex Agent prompt preference',
         description: 'Add one itemized prompt preference for the authenticated user.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
@@ -101,7 +101,7 @@ export const promptPreferencesRoutes: FastifyPluginCallback = (fastify, _opts, d
     {
       schema: {
         operationId: 'updateIntexAgentPromptPreferenceItem',
-        summary: 'Update INTEX Agent prompt preference',
+        summary: 'Update Intex Agent prompt preference',
         description: 'Update one current itemized prompt preference for the authenticated user.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
@@ -146,8 +146,8 @@ export const promptPreferencesRoutes: FastifyPluginCallback = (fastify, _opts, d
     {
       schema: {
         operationId: 'deleteIntexAgentPromptPreferenceItem',
-        summary: 'Delete INTEX Agent prompt preference',
-        description: 'Remove one item from current INTEX Agent prompt preferences.',
+        summary: 'Delete Intex Agent prompt preference',
+        description: 'Remove one item from current Intex Agent prompt preferences.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
         params: {
@@ -190,7 +190,7 @@ export const promptPreferencesRoutes: FastifyPluginCallback = (fastify, _opts, d
     {
       schema: {
         operationId: 'listIntexAgentPromptPreferenceVersions',
-        summary: 'List INTEX Agent prompt preference versions',
+        summary: 'List Intex Agent prompt preference versions',
         description: 'List immutable prompt-preference version summaries for the authenticated user.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],
@@ -214,7 +214,7 @@ export const promptPreferencesRoutes: FastifyPluginCallback = (fastify, _opts, d
     {
       schema: {
         operationId: 'getIntexAgentPromptPreferenceVersion',
-        summary: 'Get INTEX Agent prompt preference version',
+        summary: 'Get Intex Agent prompt preference version',
         description: 'Get one immutable prompt-preference version snapshot for the authenticated user.',
         tags: ['intex-agent'],
         security: [{ bearerAuth: [] }],

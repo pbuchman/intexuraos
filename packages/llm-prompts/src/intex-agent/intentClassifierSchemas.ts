@@ -11,37 +11,135 @@ export const IntexAgentIntentClassifierToolNameSchema = IntexAgentToolNameSchema
 const confidenceSchema = z.number().min(0).max(1);
 const optionalQuestionSchema = z.string().optional();
 const optionalReasonSchema = z.string().optional();
+const nonEmptyStringSchema = z.string().min(1);
 
-export const IntexAgentIntentClassifierOutputSchema = z.discriminatedUnion('outcome', [
+export const IntexAgentBlockerReasonSchema = z.enum([
+  'unsupported_capability',
+  'missing_required_details',
+  'multiple_possible_intents',
+  'tool_boundary',
+  'permission_or_configuration',
+  'not_enough_context',
+  'ambiguous_preference_target',
+]);
+
+export const IntexAgentStylePreferenceActionSchema = z.enum([
+  'none',
+  'apply_this_turn_only',
+  'save_new',
+  'update_existing',
+  'delete_existing',
+  'needs_clarification',
+]);
+
+const clarificationOnlyBlockerReasons = new Set<z.infer<typeof IntexAgentBlockerReasonSchema>>([
+  'missing_required_details',
+  'not_enough_context',
+  'multiple_possible_intents',
+  'ambiguous_preference_target',
+]);
+
+const preferenceActionToolRequirements: Partial<
+  Record<z.infer<typeof IntexAgentStylePreferenceActionSchema>, readonly IntexAgentPromptToolName[]>
+> = {
+  save_new: ['add_user_preference'],
+  update_existing: ['update_user_preference'],
+  delete_existing: ['delete_user_preference'],
+};
+
+const commonClassifierFields = {
+  confidence: confidenceSchema,
+  question: optionalQuestionSchema,
+  clarification: z.string().optional(),
+  reason: optionalReasonSchema,
+  blockerReason: IntexAgentBlockerReasonSchema.optional(),
+  missingFields: z.array(z.string()).optional(),
+  candidateIntents: z.array(IntexAgentIntentClassifierToolNameSchema).optional(),
+  suggestedNextStep: z.string().optional(),
+  stylePreferenceAction: IntexAgentStylePreferenceActionSchema,
+  languageOverride: z.string().optional(),
+  decisionEvidence: z.string().optional(),
+} as const;
+
+export const IntexAgentIntentClassifierOutputSchema = z.union([
   z
     .object({
       outcome: z.literal('tool'),
-      confidence: confidenceSchema,
-      allowedToolNames: z.array(IntexAgentIntentClassifierToolNameSchema),
-      question: optionalQuestionSchema,
-      reason: optionalReasonSchema,
+      ...commonClassifierFields,
+      allowedToolNames: z.array(IntexAgentIntentClassifierToolNameSchema).min(1),
     })
-    .strict(),
+    .strict()
+    .superRefine((value, context) => {
+      const requiredTools = preferenceActionToolRequirements[value.stylePreferenceAction];
+      if (
+        requiredTools !== undefined &&
+        !requiredTools.some((toolName) => value.allowedToolNames.includes(toolName))
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: `${value.stylePreferenceAction} requires a matching preference tool`,
+          path: ['allowedToolNames'],
+        });
+      }
+      if (
+        value.stylePreferenceAction === 'apply_this_turn_only' ||
+        value.stylePreferenceAction === 'needs_clarification'
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: `${value.stylePreferenceAction} is not a tool outcome`,
+          path: ['stylePreferenceAction'],
+        });
+      }
+    }),
   z
     .object({
       outcome: z.literal('needs_clarification'),
-      confidence: confidenceSchema,
-      question: optionalQuestionSchema,
-      reason: optionalReasonSchema,
+      ...commonClassifierFields,
+    })
+    .strict()
+    .superRefine((value, context) => {
+      if (isBlank(value.question) && isBlank(value.clarification)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'needs_clarification requires question or clarification',
+          path: ['question'],
+        });
+      }
+    }),
+  z
+    .object({
+      outcome: z.enum(['conversation', 'greeting']),
+      ...commonClassifierFields,
     })
     .strict(),
   z
     .object({
-      outcome: z.enum(['conversation', 'greeting', 'unsupported']),
-      confidence: confidenceSchema,
-      question: optionalQuestionSchema,
-      reason: optionalReasonSchema,
+      outcome: z.literal('unsupported'),
+      ...commonClassifierFields,
+      blockerReason: IntexAgentBlockerReasonSchema,
+      suggestedNextStep: nonEmptyStringSchema,
     })
-    .strict(),
+    .strict()
+    .superRefine((value, context) => {
+      if (clarificationOnlyBlockerReasons.has(value.blockerReason)) {
+        context.addIssue({
+          code: 'custom',
+          message: `${value.blockerReason} requires needs_clarification`,
+          path: ['blockerReason'],
+        });
+      }
+    }),
 ]);
 
 export type IntexAgentIntentClassifierToolName = IntexAgentPromptToolName;
+export type IntexAgentBlockerReason = z.infer<typeof IntexAgentBlockerReasonSchema>;
+export type IntexAgentStylePreferenceAction = z.infer<typeof IntexAgentStylePreferenceActionSchema>;
 
 export type IntexAgentIntentClassifierOutput = z.infer<
   typeof IntexAgentIntentClassifierOutputSchema
 >;
+
+function isBlank(value: string | undefined): boolean {
+  return value === undefined || value.trim() === '';
+}

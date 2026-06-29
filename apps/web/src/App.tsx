@@ -322,7 +322,7 @@ function AppRoutes(): React.JSX.Element {
             element={<NotificationDigestViewPage />}
           />
           <Route path="/notifications/digests" element={<NotificationDigestsPage />} />
-          {/* INTEX Agent routes */}
+          {/* Intex Agent routes */}
           <Route path="/intex-agent/config" element={<IntexAgentConfigPage />} />
           <Route path="/intex-agent/preferences" element={<IntexAgentPreferencesPage />} />
           {/* Fishing Assistant routes */}

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS,
   intexAgentIntentClassifierPrompt,
   intexAgentIntentClassifierRepairPrompt,
 } from '../intentClassifierPrompt.js';
@@ -11,11 +10,8 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toBe('1.1.0');
-    expect(INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS).toEqual({
-      tool: 0.65,
-      unsupported: 0.75,
-    });
+    expect(intexAgentIntentClassifierPrompt.version).toBe('2.0.0');
+    expect(intexAgentIntentClassifierRepairPrompt.version).toBe('2.0.0');
   });
 
   it('builds a literal-guarded transcript prompt with the response schema', () => {
@@ -35,8 +31,41 @@ describe('intexAgentIntentClassifierPrompt', () => {
     expect(prompt).toContain('"outcome"');
     expect(prompt).toContain('"confidence"');
     expect(prompt).toContain('"allowedToolNames"');
+    expect(prompt).toContain('"blockerReason"');
+    expect(prompt).toContain('"stylePreferenceAction"');
+    expect(prompt).toContain('"suggestedNextStep"');
     expect(prompt).toContain('needs_clarification');
     expect(prompt).toContain('Return only a valid JSON object');
+  });
+
+  it('includes few-shot examples for ambiguous, preference, URL, and calendar boundaries', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      messages: [{ role: 'user', content: 'Open this URL and summarize it https://example.com' }],
+    });
+
+    expect(prompt).toContain('Few-shot examples');
+    expect(prompt).toContain('bare URL');
+    expect(prompt).toContain('create_link');
+    expect(prompt).toContain('research draft from a URL');
+    expect(prompt).toContain('Answer this one in English');
+    expect(prompt).toContain('reply in Polish unless I ask otherwise');
+    expect(prompt).toContain('calendar event');
+    expect(prompt).toContain('query_calendar_events');
+    expect(prompt).toContain('multiple_possible_intents');
+    expect(prompt).toContain('unsupported_capability');
+  });
+
+  it('treats ambiguity and missing details as clarification rather than unsupported', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      messages: [{ role: 'user', content: 'Dodaj spotkanie jutro' }],
+    });
+
+    expect(prompt).toContain('Unclear intent is not unsupported');
+    expect(prompt).toContain('missing_required_details');
+    expect(prompt).toContain('ambiguous_preference_target');
+    expect(prompt).toContain('ask one targeted question');
   });
 });
 

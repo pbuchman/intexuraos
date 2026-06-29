@@ -25,7 +25,7 @@ Intex Agent exposes tools only when the message has explicit create/save intent 
 
 ## External Save
 
-External Save is configured in INTEX Agent Configuration. The user needs an endpoint URL, Cloudflare Access Client ID, Cloudflare Access Client Secret, and source label. The default source label is `ios-shortcuts`.
+External Save is configured in Intex Agent Configuration. The user needs an endpoint URL, Cloudflare Access Client ID, Cloudflare Access Client Secret, and source label. The default source label is `ios-shortcuts`.
 
 When enabled, WhatsApp image messages are automatically saved externally. If the image has a caption, the caption is sent as `message`; otherwise Intex sends `Image shared via WhatsApp.`. Shared links with external-save intent are passed as `source_url` without fetching or inspecting the URL.
 

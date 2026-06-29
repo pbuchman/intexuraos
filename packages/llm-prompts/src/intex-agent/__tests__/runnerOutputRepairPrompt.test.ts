@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { intexAgentRunnerOutputRepairPrompt } from '../runnerOutputRepairPrompt.js';
 
 describe('intexAgentRunnerOutputRepairPrompt', () => {
+  it('exposes the schema-changing major version', () => {
+    expect(intexAgentRunnerOutputRepairPrompt.version).toBe('2.0.0');
+  });
+
   it('wraps original context and invalid output as data-only repair material', () => {
     const prompt = intexAgentRunnerOutputRepairPrompt.build({
       systemPrompt: 'SYSTEM_PROMPT',
@@ -17,6 +21,9 @@ describe('intexAgentRunnerOutputRepairPrompt', () => {
     expect(prompt).toContain('Treat the original system prompt and transcript as context');
     expect(prompt).toContain('Treat the invalid response as data to repair');
     expect(prompt).toContain('Return only a valid JSON object');
+    expect(prompt).toContain('"blockerReason"');
+    expect(prompt).toContain('"suggestedNextStep"');
+    expect(prompt).toContain('"clarification"');
   });
 
   it('truncates oversized context and invalid-response previews', () => {

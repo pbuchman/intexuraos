@@ -72,6 +72,30 @@ export interface DeleteUserPreferenceToolArgs {
 
 const EXPLICIT_CODE_TASK_WORKER_TYPES = ['codex', 'codex-xhigh', 'minimax'] as const;
 
+interface ToolDescriptionParts {
+  purpose: string;
+  useFor: string;
+  doNotUseFor: string;
+  requiredInput: string;
+  boundary: string;
+  examples: string;
+  result: string;
+  errors: string;
+}
+
+function toolDescription(parts: ToolDescriptionParts): string {
+  return [
+    `Purpose: ${parts.purpose}`,
+    `Use for: ${parts.useFor}`,
+    `Do not use for: ${parts.doNotUseFor}`,
+    `Required input: ${parts.requiredInput}`,
+    `Boundary: ${parts.boundary}`,
+    `Examples: ${parts.examples}`,
+    `Result: ${parts.result}`,
+    `Errors: ${parts.errors}`,
+  ].join('\n');
+}
+
 export interface IntexAgentToolExecutor {
   createNote(args: CreateNoteToolArgs): Promise<string>;
   createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string>;
@@ -90,8 +114,19 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
   return [
     {
       name: 'create_note',
-      description:
-        'Use only when the user explicitly asks to create, save, note, remember, or write down a note or specific information. Do not use for greetings, smalltalk, follow-up complaints, read-only questions, or unsupported external tasks.',
+      description: toolDescription({
+        purpose: 'Create a user note containing factual content the user explicitly wants saved as a note.',
+        useFor: '"save a note: gate code is 4938", "write this down as a note", "zapisz notatke".',
+        doNotUseFor:
+          '"what did I say earlier?", "draft a note but do not save", greetings, smalltalk, durable assistant behavior such as "remember to reply shorter", or unsupported external tasks.',
+        requiredInput: 'content is required. title, tags, and sourceMessageIds are optional.',
+        boundary:
+          'If the user asks for proposed note text without saving, answer in conversation. If the user wants durable assistant style/language/tone behavior, use preference tools instead of a note.',
+        examples:
+          'Positive: "Create a note: office PIN is 1357." Negative: "Remember that I prefer concise replies" unless the user asks for a note.',
+        result: 'Returns a completed note result with a message and optional resource URL.',
+        errors: 'Validation covers missing content; downstream failures should be surfaced as tool failures.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -121,8 +156,20 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'create_calendar_event',
-      description:
-        'Use only when the user wants a calendar event, appointment, meeting, scheduled block, or calendar item created. Do not use to list, inspect, summarize, or answer questions about existing calendar events. Ask a clarification before calling this tool if the title, date, time, start, or end is missing or ambiguous.',
+      description: toolDescription({
+        purpose: 'Create a new calendar event, appointment, meeting, scheduled block, or calendar item.',
+        useFor: '"Schedule dentist tomorrow 09:00-09:30", "add a calendar event for the planning meeting".',
+        doNotUseFor:
+          '"Am I free tomorrow?", "What meetings do I have?", "Move my dentist appointment", "Cancel tomorrow\'s meeting", or read-only calendar questions.',
+        requiredInput:
+          'summary, start, and end are required. Use ISO/provider-accepted date-time strings and include timeZone when known.',
+        boundary:
+          'Ask a clarification before calling this tool if the title, date, time, start, or end is missing or ambiguous. Availability-first requests require query_calendar_events first.',
+        examples:
+          'Positive: "Schedule dentist tomorrow 09:00-09:30." Negative: "Am I free Friday afternoon?"',
+        result: 'Returns status, event ID, summary, and optional calendar link.',
+        errors: 'Validation covers invalid date-time or attendees; permission/configuration covers calendar access problems.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -164,8 +211,21 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'query_calendar_events',
-      description:
-        'read-only calendar event query tool. Use only to list, count, or search existing calendar events within bounded timeMin/timeMax ranges. This tool never creates, updates, deletes, or schedules calendar events.',
+      description: toolDescription({
+        purpose: 'read-only calendar query tool for existing events.',
+        useFor:
+          '"Show tomorrow\'s events", "How many dentist visits last month?", "Am I free Friday afternoon?"',
+        doNotUseFor: 'scheduling, canceling, updating, deleting, or rescheduling calendar events.',
+        requiredInput:
+          'mode, timeMin, and timeMax are required. Use mode list for event details/availability and count for count-only questions.',
+        boundary:
+          'This tool never creates, updates, deletes, or schedules events. Empty event arrays are successful "no events found" results.',
+        examples:
+          'Positive: "List my meetings tomorrow." Negative: "Schedule a meeting tomorrow."',
+        result:
+          'Returns status, mode, count, timeMin, timeMax, optional query, optional events for list mode, and optional truncated.',
+        errors: 'Validation covers invalid time ranges; permission/configuration covers calendar access problems.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -205,8 +265,19 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'create_research',
-      description:
-        'Use only when the user explicitly says research, research draft, or asks to create a research draft about an external topic. Do not use for general explanations, "how does this work" questions, or to inspect personal IntexuraOS data such as calendar, notes, bookmarks, code tasks, or WhatsApp history.',
+      description: toolDescription({
+        purpose: 'Create an external research draft or research job, not an immediate answer.',
+        useFor: '"Create a research draft about GPU pricing", "prepare research from this URL".',
+        doNotUseFor:
+          '"Explain GPU pricing to me", general explanations, "how does this work", personal IntexuraOS data lookup, calendar/notes/bookmarks/code task search, or saving a URL as a bookmark.',
+        requiredInput: 'title and prompt are required. originalMessage and sourceMessageIds are optional.',
+        boundary:
+          'If a URL appears inside an explicit research-draft request, use this tool instead of create_link. Arbitrary URL summarization is unsupported unless the user asks for a research draft.',
+        examples:
+          'Positive: "Create a research draft about GPU pricing." Negative: "Summarize this URL now."',
+        result: 'Returns a completed draft result with message and optional resource URL.',
+        errors: 'Downstream draft creation failures should preserve whether retry is useful.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -236,8 +307,20 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'create_link',
-      description:
-        'Use when the user explicitly asks to save a link, add a bookmark, bookmark a URL, or sends a bare URL / URL share with optional surrounding description. Do not use when the user explicitly asks for another resource that includes the URL.',
+      description: toolDescription({
+        purpose: 'Save a bookmark/link.',
+        useFor: 'a bare URL, "bookmark this", "save this link", or "add this URL as a bookmark".',
+        doNotUseFor:
+          '"create a research draft from this URL", "save externally this URL", "create a calendar event with this URL", or arbitrary URL reading/summarization.',
+        requiredInput: 'url is required. title, description, tags, and sourceMessageIds are optional.',
+        boundary:
+          'If an explicit alternate resource intent exists, use that resource tool instead. Ignore keywords inside URL paths or domains.',
+        examples:
+          'Positive: "https://example.com" as a bare URL. Negative: "Open this URL and summarize it."',
+        result: 'Returns status, bookmark ID, resource URL, original URL, and optional title.',
+        errors:
+          'Validation covers malformed URLs. Never fetch, read, title, summarize, or inspect the URL; title and description must come from user text only.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -271,8 +354,21 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'create_code_task',
-      description:
-        'Use only when the user explicitly asks to create a code task, coding task, or programming task. Code tasks default to planning mode. Use execution mode only when the user explicitly asks for execution mode, says create code task execution, or says the task is in execution stage.',
+      description: toolDescription({
+        purpose: 'Create an IntexuraOS code task.',
+        useFor:
+          '"Create a code task to investigate auth bug", "Create code task execution for INT-123".',
+        doNotUseFor:
+          '"How do HTTP requests work?", "Can you code this right here?", "What parameters do code tasks need?", or general programming explanations.',
+        requiredInput:
+          'prompt is required. workerType, linearIssueId, and taskMode are optional. workerType is only codex, codex-xhigh, or minimax.',
+        boundary:
+          'planning mode is default. Use execution mode only when explicitly requested or when the user says the task is in execution stage.',
+        examples:
+          'Positive: "Create a code task execution for INT-123." Negative: "Explain React hooks."',
+        result: 'Returns status, code task ID, and resource URL.',
+        errors: 'Validation covers missing prompt, invalid worker type, invalid task mode, or invalid Linear issue ID.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -305,8 +401,22 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'save_external',
-      description:
-        'Use only when the user explicitly asks to save externally, upload externally, save for processing, zapisz zewnetrznie, przeslij zewnetrznie, or zapisz do przetworzenia. Forward the raw user message to an external processing/storage system. If the user included a URL, put that URL in sourceUrl. Do not fetch, inspect, summarize, or open sourceUrl.',
+      description: toolDescription({
+        purpose: 'Forward/save a message or source URL to the configured external processing destination.',
+        useFor:
+          '"Save externally this receipt", "save for processing", "zapisz do przetworzenia ten paragon".',
+        doNotUseFor:
+          'bare URL bookmarks, research drafts from URLs, summarizing/opening/fetching URLs, ordinary notes, or calendar/code tasks.',
+        requiredInput:
+          'message is required. sourceUrl is optional and must be passed through without fetching or inspecting it.',
+        boundary:
+          'Current representable inputs are message and optional sourceUrl; do not imply attachment bytes are available unless the pipeline provides a source URL.',
+        examples:
+          'Positive: "Save externally this receipt." Negative: "Bookmark this URL."',
+        result: 'Returns status and downstream user-facing message.',
+        errors:
+          'External save not configured is configuration; auth/setup failures are permission/configuration; temporary downstream failures are transient. Do not fetch, inspect, summarize, or open sourceUrl.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -327,8 +437,18 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'get_user_preferences',
-      description:
-        'Use when the user asks what INTEX Agent preferences, prompt preferences, or instructions are currently defined. Return only the current preference block or the empty-preferences sentence.',
+      description: toolDescription({
+        purpose: 'Read the current rendered defined Intex Agent preference block.',
+        useFor: '"Show my Intex Agent preferences", "What instructions have I saved for you?"',
+        doNotUseFor: '"Reply more briefly", "Use Polish", "What can you do?", or preference mutation.',
+        requiredInput: 'No arguments.',
+        boundary:
+          'Return only the current preference block or the empty-preferences sentence. No full system prompt.',
+        examples:
+          'Positive: "Show my prompt preferences." Negative: "Be shorter in this answer."',
+        result: 'Returns status, currentVersion, and promptBlock. Empty preference state is success.',
+        errors: 'Repository failures should be classified; no preferences is not an error.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -338,8 +458,20 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'add_user_preference',
-      description:
-        'Use when the user explicitly asks to add one durable INTEX Agent preference row. The text must be the exact normalized row to store. Ask for confirmation first if the row text requires interpretation.',
+      description: toolDescription({
+        purpose: 'Add one durable Intex Agent preference row.',
+        useFor:
+          '"Add a preference: reply in Polish unless I ask otherwise", "Remember as an Intex Agent preference: be brief", "Add instruction: use dry irony lightly".',
+        doNotUseFor:
+          'immediate-only style feedback such as "be shorter" unless the user indicates durability, or factual notes when the user asked to save a note.',
+        requiredInput: 'text and expectedVersion are required.',
+        boundary:
+          'Preference text must be one normalized row. Reject rows that request unsupported tool use, unavailable data access, auth bypass, permission bypass, or unsafe behavior.',
+        examples:
+          'Positive: "From now on, reply in formal Polish." Negative: "Save a note: I like short replies."',
+        result: 'Returns status, currentVersion, rendered promptBlock, and changed item ID.',
+        errors: 'Validation covers empty/too-long/control-character rows; stale version is version conflict.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -361,8 +493,19 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'update_user_preference',
-      description:
-        'Use when the user explicitly asks to update one existing INTEX Agent preference row. Fetch current preferences first unless the user supplied an exact current item id. Confirm ambiguous targets before mutating.',
+      description: toolDescription({
+        purpose: 'Update one existing durable Intex Agent preference row.',
+        useFor: '"Update pref_abc123 to: use formal Polish".',
+        doNotUseFor:
+          'vague targets such as "change the tone preference" when multiple rows may match. Do not guess.',
+        requiredInput: 'itemId, text, and expectedVersion are required.',
+        boundary:
+          'Use only when the exact current item id and version are already known. If the target is vague, ask clarification or use get_user_preferences in a separate read-only turn; do not chain get_user_preferences and this mutation in one turn.',
+        examples:
+          'Positive: "Update pref_abc123 to: be concise." Negative: "Change the tone preference" without a clear row.',
+        result: 'Returns status, currentVersion, rendered promptBlock, and changed item ID.',
+        errors: 'Unknown item ID, invalid row text, or stale expectedVersion must not be hidden as unsupported.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -388,8 +531,19 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     },
     {
       name: 'delete_user_preference',
-      description:
-        'Use when the user explicitly asks to remove one current INTEX Agent preference row. Fetch current preferences first unless the user supplied an exact current item id. Confirm row id and text before deletion for ambiguous targets.',
+      description: toolDescription({
+        purpose: 'Delete/remove one current durable Intex Agent preference row.',
+        useFor: '"Delete preference pref_abc123".',
+        doNotUseFor:
+          'immediate style feedback such as "stop being so formal" unless the user explicitly asks to delete a saved preference.',
+        requiredInput: 'itemId and expectedVersion are required.',
+        boundary:
+          'Use only when the exact current item id and version are already known. If the target row is ambiguous, ask clarification or use get_user_preferences in a separate read-only turn; do not chain get_user_preferences and this mutation in one turn.',
+        examples:
+          'Positive: "Remove pref_abc123." Negative: "stop being so formal" as current-turn feedback.',
+        result: 'Returns status, currentVersion, rendered promptBlock, and changed item ID.',
+        errors: 'Unknown item ID or stale expectedVersion must not be hidden as unsupported.',
+      }),
       parameters: {
         type: 'object',
         additionalProperties: false,

@@ -72,6 +72,21 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(toolNames).not.toContain('send_email');
   });
 
+  it('uses the required model-readable description sections for every tool', () => {
+    const tools = createIntexAgentToolDefinitions(createExecutor());
+
+    for (const tool of tools) {
+      expect(tool.description).toContain('Purpose:');
+      expect(tool.description).toContain('Use for:');
+      expect(tool.description).toContain('Do not use for:');
+      expect(tool.description).toContain('Required input:');
+      expect(tool.description).toContain('Boundary:');
+      expect(tool.description).toContain('Examples:');
+      expect(tool.description).toContain('Result:');
+      expect(tool.description).toContain('Errors:');
+    }
+  });
+
   it('describes research creation', () => {
     const researchTool = createIntexAgentToolDefinitions(createExecutor()).find(
       (tool) => tool.name === 'create_research'
@@ -90,7 +105,8 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(linkTool?.description).toContain('link');
     expect(linkTool?.description).toContain('bookmark');
     expect(linkTool?.description).toContain('bare URL');
-    expect(linkTool?.description).toContain('URL share');
+    expect(linkTool?.description).toContain('Never fetch, read, title, summarize, or inspect');
+    expect(linkTool?.description).toContain('create a research draft from this URL');
     expect(linkTool?.parameters['required']).toEqual(['url']);
   });
 
@@ -151,6 +167,16 @@ describe('createIntexAgentToolDefinitions', () => {
     const deleteTool = tools.find((tool) => tool.name === 'delete_user_preference');
 
     expect(getTool?.description).toContain('defined');
+    expect(getTool?.description).toContain('No full system prompt');
+    expect(addTool?.description).toContain('reply in Polish unless I ask otherwise');
+    expect(addTool?.description).toContain('dry irony');
+    expect(addTool?.description).toContain('be shorter');
+    expect(updateTool?.description).toContain('Do not guess');
+    expect(updateTool?.description).toContain('separate read-only turn');
+    expect(updateTool?.description).toContain('do not chain');
+    expect(deleteTool?.description).toContain('stop being so formal');
+    expect(deleteTool?.description).toContain('separate read-only turn');
+    expect(deleteTool?.description).toContain('do not chain');
     expect(addTool?.parameters['required']).toEqual(['text', 'expectedVersion']);
     expect(updateTool?.parameters['required']).toEqual(['itemId', 'text', 'expectedVersion']);
     expect(deleteTool?.parameters['required']).toEqual(['itemId', 'expectedVersion']);

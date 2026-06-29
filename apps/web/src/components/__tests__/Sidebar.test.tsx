@@ -155,7 +155,7 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: /^whatsapp$/i })).not.toBeInTheDocument();
   });
 
-  it('renders the INTEX Agent section with Preferences and Sessions entries', () => {
+  it('renders the Intex Agent section with Preferences and Sessions entries', () => {
     render(
       <MemoryRouter initialEntries={['/intex-agent/preferences']}>
         <Sidebar />

@@ -60,7 +60,7 @@ export function Sidebar(): React.JSX.Element {
           <CollapsibleNavSection label="WhatsApp" icon={MessageSquare} items={whatsappItems} rootPath="/whatsapp" isOpen={s.isWhatsAppOpen} onToggle={s.setIsWhatsAppOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/whatsapp') || location.pathname === '/notes'} navigateFallback="/whatsapp/assistant" />
           <NotificationsSection isOpen={s.isNotificationsOpen} onToggle={s.setIsNotificationsOpen} isCollapsed={s.isCollapsed} savedFilters={s.savedFilters} />
           <TopLevelNavLink to="/my-notes" label="Notes" icon={StickyNote} isCollapsed={s.isCollapsed} />
-          <CollapsibleNavSection label="INTEX Agent" icon={Sparkles} items={intexAgentItems} rootPath="/intex-agent" isOpen={s.isIntexAgentOpen} onToggle={s.setIsIntexAgentOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/intex-agent')} navigateFallback="/intex-agent/config" />
+          <CollapsibleNavSection label="Intex Agent" icon={Sparkles} items={intexAgentItems} rootPath="/intex-agent" isOpen={s.isIntexAgentOpen} onToggle={s.setIsIntexAgentOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/intex-agent')} navigateFallback="/intex-agent/config" />
           <CollapsibleNavSection label="Settings" icon={Settings} items={settingsItems} isOpen={s.isSettingsOpen} onToggle={s.setIsSettingsOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/settings')} navigateOnOpen={false} exactMatchAllItems />
         </nav>
 
