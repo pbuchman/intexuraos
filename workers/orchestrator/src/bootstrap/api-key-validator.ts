@@ -252,10 +252,7 @@ export async function validateWorkerApiKeys(
     // expected (tokens are refreshed on first use), so this warn is informational
     // and must not become alert noise. The Pino Sentry transport honors
     // `_skipSentry` and still writes the log to stdout for Cloud Logging.
-    logger.warn(
-      { state: claudeState, _skipSentry: true },
-      'Code worker auth not ready at startup'
-    );
+    logger.warn({ state: claudeState, _skipSentry: true }, 'Code worker auth not ready at startup');
   }
 
   const codexState = workerAuthRegistry.getState('codex');
@@ -270,10 +267,7 @@ export async function validateWorkerApiKeys(
     );
   } else {
     // Same rationale as Claude: do not page on an informational startup state.
-    logger.warn(
-      { state: codexState, _skipSentry: true },
-      'Codex worker auth not ready at startup'
-    );
+    logger.warn({ state: codexState, _skipSentry: true }, 'Codex worker auth not ready at startup');
   }
 
   // Validate all third-party API keys in parallel.

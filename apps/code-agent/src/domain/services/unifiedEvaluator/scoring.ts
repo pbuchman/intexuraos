@@ -44,7 +44,7 @@ export async function handleFallback(
       logger,
     });
     if (!fallbackResult.success) {
-      logger.warn({ eventId: event.id, error: fallbackResult.error }, 'Dispatch failed for fallback decision');
+      logger.warn({ eventId: event.id, error: fallbackResult.error, _skipSentry: true }, 'Dispatch failed for fallback decision');
     }
     await recordDecision(deps, event, {
       decidedBy: 'hard_rules',

@@ -398,17 +398,20 @@ describe('processSentryWebhook', () => {
     expect(mocks.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
-  it('ignores Sentry automation self-alerts before reservation', async () => {
+  it.each([
+    ['Failed to record task completion metric'],
+    ['Dispatch failed for fallback decision'],
+  ])('ignores Sentry automation self-alert %s before reservation', async (title) => {
     const body = buildIssueBody();
     const data = body['data'] as { issue: { title: string } };
-    data.issue.title = 'Failed to record task completion metric';
+    data.issue.title = title;
 
     const result = await processSentryWebhook(buildInput({ body }));
 
     expect(result).toEqual({
       ok: true,
       outcome: 'ignored',
-      message: 'Ignored Sentry automation self-alert: Failed to record task completion metric',
+      message: `Ignored Sentry automation self-alert: ${title}`,
     });
     expect(mocks.sentryIssueEventRepo.reserve).not.toHaveBeenCalled();
     expect(mocks.sentryIssueEventRepo.reserveTaskForProblem).not.toHaveBeenCalled();
