@@ -1333,6 +1333,154 @@ describe('privateWhatsAppRepository', () => {
     ]);
   });
 
+  it('loads a private WhatsApp chat by source account and chat id', async () => {
+    const storeResult = await repository.storeIncomingMessage(createStoreInput());
+    expect(storeResult.ok).toBe(true);
+    if (!storeResult.ok) throw new Error(storeResult.error.message);
+
+    const chatResult = await repository.getChatById({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: storeResult.value.chatId,
+    });
+
+    expect(chatResult.ok).toBe(true);
+    if (!chatResult.ok) throw new Error(chatResult.error.message);
+    expect(chatResult.value).toMatchObject({
+      id: storeResult.value.chatId,
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatType: 'direct',
+      displayName: 'Alice',
+    });
+
+    const wrongSourceResult = await repository.getChatById({
+      sourceAccountId: 'wrong-source',
+      chatId: storeResult.value.chatId,
+    });
+    expect(wrongSourceResult.ok).toBe(true);
+    if (!wrongSourceResult.ok) throw new Error(wrongSourceResult.error.message);
+    expect(wrongSourceResult.value).toBeNull();
+  });
+
+  it('returns null when loading a missing private WhatsApp chat by id', async () => {
+    const result = await repository.getChatById({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: 'missing-chat',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toBeNull();
+  });
+
+  it('queries private conversation context messages oldest-first with cursor pagination', async () => {
+    const firstResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-1-context',
+          text: 'first',
+          eventTimestamp: '2026-06-22T10:00:00.000Z',
+        },
+      })
+    );
+    const secondResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-2-context',
+          text: 'second',
+          eventTimestamp: '2026-06-22T10:01:00.000Z',
+        },
+      })
+    );
+    const sameTimestampResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-3-context',
+          text: 'same timestamp',
+          eventTimestamp: '2026-06-22T10:02:00.000Z',
+        },
+      })
+    );
+    const beyondLimitResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-4-context',
+          text: 'beyond bounded snapshot',
+          eventTimestamp: '2026-06-22T10:03:00.000Z',
+        },
+      })
+    );
+    await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-outside-range',
+          text: 'outside range',
+          eventTimestamp: '2026-06-22T11:00:00.000Z',
+        },
+      })
+    );
+    expect(firstResult.ok).toBe(true);
+    expect(secondResult.ok).toBe(true);
+    expect(sameTimestampResult.ok).toBe(true);
+    expect(beyondLimitResult.ok).toBe(true);
+    if (!firstResult.ok) throw new Error(firstResult.error.message);
+
+    const result = await repository.findConversationContextMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: firstResult.value.chatId,
+      from: '2026-06-22T09:00:00.000Z',
+      to: '2026-06-22T11:00:00.000Z',
+      limit: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages.map((message) => message.matrixEventId)).toEqual([
+      '$event-1-context',
+      '$event-2-context',
+    ]);
+    expect(result.value.totalCount).toBe(4);
+    expect(result.value.nextCursor).toEqual(expect.any(String));
+
+    const nextCursor = result.value.nextCursor;
+    if (nextCursor === undefined) throw new Error('Expected next cursor');
+    const nextPageResult = await repository.findConversationContextMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: firstResult.value.chatId,
+      from: '2026-06-22T09:00:00.000Z',
+      to: '2026-06-22T11:00:00.000Z',
+      limit: 2,
+      cursor: nextCursor,
+    });
+
+    expect(nextPageResult.ok).toBe(true);
+    if (!nextPageResult.ok) throw new Error(nextPageResult.error.message);
+    expect(nextPageResult.value.messages.map((message) => message.matrixEventId)).toEqual([
+      '$event-3-context',
+      '$event-4-context',
+    ]);
+    expect(nextPageResult.value.totalCount).toBe(4);
+    expect(nextPageResult.value.nextCursor).toBeUndefined();
+
+    const zeroLimitResult = await repository.findConversationContextMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: firstResult.value.chatId,
+      from: '2026-06-22T09:00:00.000Z',
+      to: '2026-06-22T11:00:00.000Z',
+      limit: 0,
+    });
+
+    expect(zeroLimitResult.ok).toBe(true);
+    if (!zeroLimitResult.ok) throw new Error(zeroLimitResult.error.message);
+    expect(zeroLimitResult.value.messages).toEqual([]);
+    expect(zeroLimitResult.value.totalCount).toBe(4);
+    expect(zeroLimitResult.value.nextCursor).toBeUndefined();
+  });
+
   it('queries private WhatsApp chats newest-first and projects legacy chat documents safely', async () => {
     const olderResult = await repository.storeIncomingMessage(createStoreInput());
     const newerResult = await repository.storeIncomingMessage(

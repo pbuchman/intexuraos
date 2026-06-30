@@ -38,6 +38,7 @@ import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppChatQueryResult,
+  PrivateWhatsAppConversationContextMessageResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
@@ -641,6 +642,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   private failNextDataQueryError: WhatsAppError | null = null;
   private failNextMessageLookupError: WhatsAppError | null = null;
   private failNextChatTranscriptionUpdateError: WhatsAppError | null = null;
+  private failNextConversationContextQueryError: WhatsAppError | null = null;
 
   failNext(error: WhatsAppError): void {
     this.failNextError = error;
@@ -660,6 +662,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   failNextChatTranscriptionUpdate(error: WhatsAppError): void {
     this.failNextChatTranscriptionUpdateError = error;
+  }
+
+  failNextConversationContextQuery(error: WhatsAppError): void {
+    this.failNextConversationContextQueryError = error;
   }
 
   setAccount(account: FakePrivateWhatsAppAccount): void {
@@ -799,6 +805,27 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     return Promise.resolve(ok(this.toMessage(stored)));
   }
 
+  getChatById(input: {
+    sourceAccountId: string;
+    chatId: string;
+  }): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const chat = this.buildChats().get(input.chatId);
+    if (chat === undefined || chat.sourceAccountId !== input.sourceAccountId) {
+      return Promise.resolve(ok(null));
+    }
+    return Promise.resolve(ok(chat));
+  }
+
   updateChatTranscriptionSetting(
     input: UpdatePrivateWhatsAppChatTranscriptionInput
   ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
@@ -896,6 +923,64 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     const safeStartIndex = startIndex < 0 ? 0 : startIndex;
     const page = messages.slice(safeStartIndex, safeStartIndex + input.limit);
     const result: PrivateWhatsAppMessageQueryResult = { messages: page };
+    if (messages.length > safeStartIndex + input.limit) {
+      const lastMessage = page[page.length - 1];
+      if (lastMessage !== undefined) {
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(
+          lastMessage.eventTimestamp,
+          lastMessage.id
+        );
+      }
+    }
+    return Promise.resolve(ok(result));
+  }
+
+  findConversationContextMessages(input: {
+    sourceAccountId: string;
+    chatId: string;
+    from: string;
+    to: string;
+    limit: number;
+    cursor?: string;
+  }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
+    const contextFailure = this.consumeConversationContextQueryFailure();
+    if (contextFailure !== null) {
+      return Promise.resolve(err(contextFailure));
+    }
+
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const messages = Array.from(this.stored.values())
+      .filter((stored) => stored.sourceAccountId === input.sourceAccountId)
+      .map((stored) => this.toMessage(stored))
+      .filter((message) => message.chatId === input.chatId)
+      .filter((message) => message.eventTimestamp >= input.from)
+      .filter((message) => message.eventTimestamp < input.to)
+      .sort((a, b) => {
+        const timestampComparison = a.eventTimestamp.localeCompare(b.eventTimestamp);
+        return timestampComparison === 0 ? a.id.localeCompare(b.id) : timestampComparison;
+      });
+    const cursor = decodeFakePrivateWhatsAppCursor(input.cursor);
+    const startIndex =
+      cursor === undefined
+        ? 0
+        : messages.findIndex(
+            (message) => message.eventTimestamp === cursor.sortValue && message.id === cursor.id
+          ) + 1;
+    const safeStartIndex = startIndex < 0 ? 0 : startIndex;
+    const page = messages.slice(safeStartIndex, safeStartIndex + input.limit);
+    const result: PrivateWhatsAppConversationContextMessageResult = {
+      messages: page,
+      totalCount: messages.length,
+    };
     if (messages.length > safeStartIndex + input.limit) {
       const lastMessage = page[page.length - 1];
       if (lastMessage !== undefined) {
@@ -1064,6 +1149,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     this.failNextDataQueryError = null;
     this.failNextMessageLookupError = null;
     this.failNextChatTranscriptionUpdateError = null;
+    this.failNextConversationContextQueryError = null;
   }
 
   private consumeFailure(): WhatsAppError | null {
@@ -1108,6 +1194,15 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     const error = this.failNextChatTranscriptionUpdateError;
     this.failNextChatTranscriptionUpdateError = null;
+    return error;
+  }
+
+  private consumeConversationContextQueryFailure(): WhatsAppError | null {
+    if (this.failNextConversationContextQueryError === null) {
+      return null;
+    }
+    const error = this.failNextConversationContextQueryError;
+    this.failNextConversationContextQueryError = null;
     return error;
   }
 

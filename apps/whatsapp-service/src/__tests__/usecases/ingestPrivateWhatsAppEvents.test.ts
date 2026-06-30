@@ -17,6 +17,7 @@ import {
   type PrivateWhatsAppChat,
   type PrivateWhatsAppChatQueryInput,
   type PrivateWhatsAppChatQueryResult,
+  type PrivateWhatsAppConversationContextMessageResult,
   type PrivateWhatsAppIngestOutcome,
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppMessageQueryResult,
@@ -145,6 +146,13 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     return Promise.resolve(ok(null));
   }
 
+  getChatById(_input: {
+    sourceAccountId: string;
+    chatId: string;
+  }): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>> {
+    return Promise.resolve(ok(null));
+  }
+
   updateChatTranscriptionSetting(
     _input: UpdatePrivateWhatsAppChatTranscriptionInput
   ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
@@ -167,6 +175,17 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     _input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
     return Promise.resolve(ok({ messages: [] }));
+  }
+
+  findConversationContextMessages(_input: {
+    sourceAccountId: string;
+    chatId: string;
+    from: string;
+    to: string;
+    limit: number;
+    cursor?: string;
+  }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
+    return Promise.resolve(ok({ messages: [], totalCount: 0 }));
   }
 
   findChats(
