@@ -1,4 +1,4 @@
-import type { Firestore } from '@intexuraos/infra-firestore';
+import { FieldValue, type Firestore } from '@intexuraos/infra-firestore';
 import type {
   SessionRepository,
   SessionRepositorySessionDraft,
@@ -8,6 +8,7 @@ import type {
   IntexAgentSession,
   IntexAgentSessionEvent,
   IntexAgentSessionEventType,
+  IntexAgentToolName,
 } from '../../domain/sessions/types.js';
 import { getSessionTimestampMs } from '../../domain/sessions/sessionTimestamps.js';
 
@@ -18,7 +19,9 @@ export interface FirestoreSessionRepositoryDeps {
   firestore: Firestore;
 }
 
-type SessionDocument = IntexAgentSession;
+type SessionDocument = Omit<IntexAgentSession, 'activeTool'> & {
+  activeTool?: IntexAgentToolName | null;
+};
 type SessionEventDocument = IntexAgentSessionEvent;
 
 const OPEN_STATUSES = new Set(['active', 'waiting_for_user', 'executing_tool']);
@@ -116,7 +119,7 @@ export class FirestoreSessionRepository implements SessionRepository {
     update: SessionRepositorySessionUpdate
   ): Promise<IntexAgentSession> {
     const docRef = this.firestore.collection(INTEX_AGENT_SESSIONS_COLLECTION).doc(sessionId);
-    await docRef.update(update);
+    await docRef.update(toSessionUpdateDocument(update));
     const updated = await docRef.get();
     return toSession(updated.id, updated.data() as SessionDocument);
   }
@@ -130,7 +133,11 @@ export class FirestoreSessionRepository implements SessionRepository {
 }
 
 function toSession(id: string, doc: SessionDocument): IntexAgentSession {
-  return { ...doc, id };
+  const { activeTool, ...rest } = doc;
+  if (activeTool === undefined || activeTool === null) {
+    return { ...rest, id };
+  }
+  return { ...rest, id, activeTool };
 }
 
 function toEvent(id: string, doc: SessionEventDocument): IntexAgentSessionEvent {
@@ -139,6 +146,14 @@ function toEvent(id: string, doc: SessionEventDocument): IntexAgentSessionEvent 
 
 function toSessionDocument(session: IntexAgentSession): SessionDocument {
   return { ...session };
+}
+
+function toSessionUpdateDocument(update: SessionRepositorySessionUpdate): Record<string, unknown> {
+  const documentUpdate: Record<string, unknown> = { ...update };
+  if (update.activeTool === null) {
+    documentUpdate['activeTool'] = FieldValue.delete();
+  }
+  return documentUpdate;
 }
 
 function toEventDocument(event: IntexAgentSessionEvent): SessionEventDocument {

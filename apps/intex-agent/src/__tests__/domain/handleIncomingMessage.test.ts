@@ -954,12 +954,54 @@ describe('handleIncomingMessage', () => {
     );
 
     expect(repo.sessions[0]?.status).toBe('waiting_for_user');
-    expect(repo.sessions[0]?.activeTool).toBe('create_calendar_event');
+    expect(repo.sessions[0]?.activeTool).toBeUndefined();
     expect(repo.sessions[0]?.summary).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')[0]).toMatchObject({
       toolName: 'create_calendar_event',
     });
     expect(replies.messages[0]?.message).toBe('Created the calendar event.');
+  });
+
+  it('asks what to do next after completing a preference delete', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Usunięte.',
+        toolName: 'delete_user_preference',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ text: 'Usuń tę preferencję' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(repo.sessions[0]).toMatchObject({
+      status: 'waiting_for_user',
+    });
+    expect(repo.sessions[0]?.activeTool).toBeUndefined();
+    expect(replies.messages[0]?.message).toBe('Usunięte. Co mogę teraz dla Ciebie zrobić?');
+  });
+
+  it('does not duplicate the follow-up prompt when a completed preference reply already asks a question', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Usunięte. Co mogę teraz dla Ciebie zrobić?',
+        toolName: 'delete_user_preference',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ text: 'Usuń tę preferencję' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(replies.messages[0]?.message).toBe('Usunięte. Co mogę teraz dla Ciebie zrobić?');
   });
 
   it('passes the deterministic clock value to the runner', async () => {
@@ -1308,8 +1350,8 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[0]).toMatchObject({
       id: 'session-1',
       status: 'waiting_for_user',
-      activeTool: 'create_note',
     });
+    expect(repo.sessions[0]?.activeTool).toBeUndefined();
     expect(runner.calls[1]?.session.id).toBe('session-1');
     expect(runner.calls[1]?.events.map((event) => event.type)).toContain('assistant_message');
   });
@@ -1788,6 +1830,9 @@ class FakeSessionRepository implements SessionRepository {
       throw new Error(`Missing session ${sessionId}`);
     }
     const updated: IntexAgentSession = { ...this.sessions[index], ...update } as IntexAgentSession;
+    if (update.activeTool === null) {
+      delete updated.activeTool;
+    }
     this.sessions[index] = updated;
     return Promise.resolve(updated);
   }
