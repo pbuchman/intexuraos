@@ -6,7 +6,7 @@ const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('11.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('12.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(buildIntexAgentSystemPrompt.version).toBe('5.0.0');
@@ -48,6 +48,20 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('Ambiguous intent means ask one targeted clarification question');
     expect(prompt).toContain('explain the exact blocker');
     expect(prompt).not.toContain('Intex Agent'.toUpperCase());
+  });
+
+  it('prioritizes useful analysis before tool execution boundaries', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain('Do as much useful work as possible before naming a blocker');
+    expect(prompt).toContain('analyze, extract, classify, count, summarize');
+    expect(prompt).toContain('When the user provides a list of possible calendar events');
+    expect(prompt).toContain('show every event candidate you can identify');
+    expect(prompt).toContain('create only one calendar event per confirmed tool call');
+    expect(prompt).toContain('Current-date questions are answerable from Current date-time');
   });
 
   it('omits blank user preferences', () => {

@@ -1,6 +1,9 @@
 import { createFakeFirestore, type Firestore } from '@intexuraos/infra-firestore';
 import { describe, expect, it } from 'vitest';
-import { FirestoreSessionRepository } from '../../../infra/firestore/sessionRepository.js';
+import {
+  FirestoreSessionRepository,
+  INTEX_AGENT_SESSIONS_COLLECTION,
+} from '../../../infra/firestore/sessionRepository.js';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '../../../domain/sessions/types.js';
 
 describe('FirestoreSessionRepository', () => {
@@ -112,6 +115,51 @@ describe('FirestoreSessionRepository', () => {
       status: 'completed',
       endReason: 'tool_completed',
       summary: 'Saved a note',
+    });
+  });
+
+  it('clears activeTool when the session update sets it to null', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const repo = new FirestoreSessionRepository({ firestore });
+
+    await repo.createSession(session({ id: 'session-1', activeTool: 'create_calendar_event' }));
+    const updated = await repo.updateSession('session-1', {
+      status: 'waiting_for_user',
+      activeTool: null,
+    });
+
+    expect(updated.activeTool).toBeUndefined();
+    await expect(repo.getSession('session-1', 'user-1')).resolves.not.toHaveProperty(
+      'activeTool'
+    );
+  });
+
+  it('normalizes stored null activeTool values when reading old session documents', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const repo = new FirestoreSessionRepository({ firestore });
+
+    await firestore
+      .collection(INTEX_AGENT_SESSIONS_COLLECTION)
+      .doc('session-null-active-tool')
+      .set({
+        ...session({ id: 'session-null-active-tool' }),
+        activeTool: null,
+      });
+
+    await expect(repo.getSession('session-null-active-tool', 'user-1')).resolves.not.toHaveProperty(
+      'activeTool'
+    );
+  });
+
+  it('preserves activeTool when reading a session with an active tool', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const repo = new FirestoreSessionRepository({ firestore });
+
+    await repo.createSession(session({ id: 'session-active-tool', activeTool: 'create_note' }));
+
+    await expect(repo.getSession('session-active-tool', 'user-1')).resolves.toMatchObject({
+      id: 'session-active-tool',
+      activeTool: 'create_note',
     });
   });
 

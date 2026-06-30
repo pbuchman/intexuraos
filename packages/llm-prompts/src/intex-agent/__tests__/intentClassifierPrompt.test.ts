@@ -10,7 +10,7 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toBe('2.0.0');
+    expect(intexAgentIntentClassifierPrompt.version).toBe('3.0.0');
     expect(intexAgentIntentClassifierRepairPrompt.version).toBe('2.0.0');
   });
 
@@ -36,6 +36,24 @@ describe('intexAgentIntentClassifierPrompt', () => {
     expect(prompt).toContain('"suggestedNextStep"');
     expect(prompt).toContain('needs_clarification');
     expect(prompt).toContain('Return only a valid JSON object');
+  });
+
+  it('keeps event-list analysis as conversation until the user asks to create a specific event', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      messages: [
+        {
+          role: 'user',
+          content:
+            'Przeanalizuj tę listę eventów i pokaż w tabeli, gdzie widzisz wydarzenia: 1. demo produktu w środę, 2. rozmowa z klientem w piątek.',
+        },
+      ],
+    });
+
+    expect(prompt).toContain('Do not classify analysis, extraction, comparison, counting');
+    expect(prompt).toContain('lists of possible calendar events');
+    expect(prompt).toContain('"outcome":"conversation"');
+    expect(prompt).toContain('extract event candidates before any calendar creation');
   });
 
   it('includes few-shot examples for ambiguous, preference, URL, and calendar boundaries', () => {

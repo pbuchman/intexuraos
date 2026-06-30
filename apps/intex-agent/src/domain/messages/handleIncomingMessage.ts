@@ -27,6 +27,10 @@ const CONFIRMATION_BUTTON_LABELS: Record<
   en: { yes: 'Yes', no: 'No' },
   pl: { yes: 'Tak', no: 'Nie' },
 };
+const COMPLETED_FOLLOW_UP_PROMPTS: Record<IntexAgentReplyLanguage, string> = {
+  en: 'What can I help with next?',
+  pl: 'Co mogę teraz dla Ciebie zrobić?',
+};
 
 export type IntexAgentFallbackReason =
   | 'classifier_unsupported'
@@ -524,7 +528,11 @@ async function applyRunnerResult(
     return;
   }
 
-  const reply = stripDuplicateSessionPrefix(runnerResult.reply);
+  const reply = completedReplyWithFollowUp(
+    stripDuplicateSessionPrefix(runnerResult.reply),
+    runnerResult.toolName,
+    selectReplyLanguage(input, languageEvents)
+  );
   await appendEvent(deps, session, 'tool_call_completed', {
     toolName: runnerResult.toolName,
     ...(runnerResult.toolResult !== undefined ? { result: runnerResult.toolResult } : {}),
@@ -533,10 +541,32 @@ async function applyRunnerResult(
   await deps.sessionRepository.updateSession(session.id, {
     status: 'waiting_for_user',
     lastAssistantMessageAt: assistantAt,
-    activeTool: runnerResult.toolName,
+    activeTool: null,
     ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
   });
   await publishReply(input, deps, session.id, reply, runnerResult.ctaUrl);
+}
+
+function completedReplyWithFollowUp(
+  reply: string,
+  toolName: IntexAgentToolName,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
+  if (!isPreferenceMutationToolName(toolName)) {
+    return reply;
+  }
+  if (/[?？]\s*$/u.test(reply)) {
+    return reply;
+  }
+  return `${reply.replace(/[.。]\s*$/u, '')}. ${COMPLETED_FOLLOW_UP_PROMPTS[replyLanguage]}`;
+}
+
+function isPreferenceMutationToolName(toolName: IntexAgentToolName): boolean {
+  return (
+    toolName === 'add_user_preference' ||
+    toolName === 'update_user_preference' ||
+    toolName === 'delete_user_preference'
+  );
 }
 
 async function appendAssistantMessage(

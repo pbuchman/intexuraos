@@ -1,19 +1,15 @@
-import type { IntexAgentSession, IntexAgentSessionEvent } from '../sessions/types.js';
+import type { IntexAgentSession, IntexAgentSessionEvent, IntexAgentToolName } from '../sessions/types.js';
 
 export type SessionRepositorySessionDraft = IntexAgentSession;
 
 export type SessionRepositorySessionUpdate = Partial<
   Pick<
     IntexAgentSession,
-    | 'status'
-    | 'endedAt'
-    | 'lastUserMessageAt'
-    | 'lastAssistantMessageAt'
-    | 'endReason'
-    | 'activeTool'
-    | 'summary'
+    'status' | 'endedAt' | 'lastUserMessageAt' | 'lastAssistantMessageAt' | 'endReason' | 'summary'
   >
->;
+> & {
+  activeTool?: IntexAgentToolName | null;
+};
 
 export interface SessionRepository {
   listSessions(userId: string): Promise<IntexAgentSession[]>;
