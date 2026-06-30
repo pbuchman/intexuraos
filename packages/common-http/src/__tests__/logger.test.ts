@@ -1,6 +1,33 @@
-import { describe, expect, it, beforeEach } from 'vitest';
-import type { FastifyRequest } from 'fastify';
-import { shouldLogRequest, logIncomingRequest } from '../http/logger.js';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import {
+  shouldLogRequest,
+  logIncomingRequest,
+  registerQuietHealthCheckLogging,
+} from '../http/logger.js';
+
+type Done = () => void;
+type OnRequestHook = (request: FastifyRequest, reply: FastifyReply, done: Done) => void;
+type OnResponseHook = (request: FastifyRequest, reply: FastifyReply, done: Done) => void;
+
+function makeHookRecorder(): {
+  app: FastifyInstance;
+  hooks: { onRequest?: OnRequestHook; onResponse?: OnResponseHook };
+} {
+  const hooks: { onRequest?: OnRequestHook; onResponse?: OnResponseHook } = {};
+  const app = {
+    addHook: (name: string, handler: unknown) => {
+      if (name === 'onRequest') {
+        hooks.onRequest = handler as OnRequestHook;
+      }
+      if (name === 'onResponse') {
+        hooks.onResponse = handler as OnResponseHook;
+      }
+      return app;
+    },
+  } as unknown as FastifyInstance;
+  return { app, hooks };
+}
 
 describe('Logger utilities', () => {
   describe('shouldLogRequest', () => {
@@ -21,6 +48,67 @@ describe('Logger utilities', () => {
     it('extracts path from query string', () => {
       expect(shouldLogRequest('/health?foo=bar')).toBe(false);
       expect(shouldLogRequest('/api/test?query=value')).toBe(true);
+    });
+  });
+
+  describe('registerQuietHealthCheckLogging', () => {
+    it('logs request and response details for non-health paths', () => {
+      const { app, hooks } = makeHookRecorder();
+      registerQuietHealthCheckLogging(app);
+      const info = vi.fn();
+      const request = {
+        method: 'GET',
+        url: '/api/users?active=true',
+        headers: { host: 'api.example.test' },
+        ip: '127.0.0.1',
+        log: { info },
+      } as unknown as FastifyRequest;
+      const reply = { statusCode: 200, elapsedTime: 12.5 } as FastifyReply;
+      const done = vi.fn();
+
+      hooks.onRequest?.(request, reply, done);
+      hooks.onResponse?.(request, reply, done);
+
+      expect(done).toHaveBeenCalledTimes(2);
+      expect(info).toHaveBeenCalledWith(
+        {
+          req: {
+            method: 'GET',
+            url: '/api/users?active=true',
+            host: 'api.example.test',
+            remoteAddress: '127.0.0.1',
+          },
+        },
+        'incoming request'
+      );
+      expect(info).toHaveBeenCalledWith(
+        {
+          res: { statusCode: 200 },
+          responseTime: 12.5,
+        },
+        'request completed'
+      );
+    });
+
+    it('skips request and response logs for health checks', () => {
+      const { app, hooks } = makeHookRecorder();
+      registerQuietHealthCheckLogging(app);
+      const info = vi.fn();
+      const request = {
+        method: 'GET',
+        url: '/health?probe=cloud-run',
+        headers: { host: 'api.example.test' },
+        ip: '127.0.0.1',
+        log: { info },
+      } as unknown as FastifyRequest;
+      const reply = { statusCode: 200, elapsedTime: 1.5 } as FastifyReply;
+      const done = vi.fn();
+
+      hooks.onRequest?.(request, reply, done);
+      hooks.onResponse?.(request, reply, done);
+
+      expect(done).toHaveBeenCalledTimes(2);
+      expect(info).not.toHaveBeenCalled();
     });
   });
 

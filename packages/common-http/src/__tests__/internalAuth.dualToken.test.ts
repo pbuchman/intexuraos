@@ -86,7 +86,10 @@ describe('validateInternalAuth — dual-token rotation', () => {
 
     expect(result).toEqual({ valid: false, reason: 'token_mismatch' });
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn.mock.calls[0]?.[0]).toMatch(/token mismatch/);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ _skipSentry: true }),
+      'Internal auth failed: token mismatch'
+    );
   });
 
   it('rejects unknown token with token_mismatch when only CURRENT is configured', () => {
@@ -97,6 +100,10 @@ describe('validateInternalAuth — dual-token rotation', () => {
 
     expect(result).toEqual({ valid: false, reason: 'token_mismatch' });
     expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ _skipSentry: true }),
+      'Internal auth failed: token mismatch'
+    );
   });
 
   it('returns not_configured when CURRENT is missing, even if PREVIOUS is set', () => {
@@ -108,6 +115,9 @@ describe('validateInternalAuth — dual-token rotation', () => {
     expect(result).toEqual({ valid: false, reason: 'not_configured' });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn.mock.calls[0]?.[0]).toMatch(/not configured/);
+    expect(logger.warn.mock.calls[0]?.[0]).not.toEqual(
+      expect.objectContaining({ _skipSentry: true })
+    );
   });
 
   it('returns not_configured when CURRENT is missing and no header supplied', () => {
@@ -127,6 +137,9 @@ describe('validateInternalAuth — dual-token rotation', () => {
 
     expect(result).toEqual({ valid: false, reason: 'token_mismatch' });
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn.mock.calls[0]?.[0]).toMatch(/token mismatch/);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ _skipSentry: true }),
+      'Internal auth failed: token mismatch'
+    );
   });
 });

@@ -3,11 +3,12 @@
  * - GET /internal/users/:uid/llm-keys
  * - GET /internal/users/:uid/settings
  */
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
@@ -650,6 +651,38 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.error.message).toContain('auth failed');
+    });
+
+    it('marks invalid internal-auth endpoint warnings as non-Sentry', async () => {
+      app = await buildServer();
+      const warnSpy = vi.fn();
+      await app.addHook('onRequest', async (request) => {
+        const log = request.log as unknown as { warn: (...args: unknown[]) => void };
+        const originalWarn = log.warn.bind(request.log);
+        log.warn = ((...args: unknown[]): void => {
+          warnSpy(...args);
+          originalWarn(...args);
+        });
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/settings',
+        headers: {
+          'x-internal-auth': 'invalid-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const endpointWarn = warnSpy.mock.calls.find(
+        (call) => call[1] === 'Internal auth failed for users/:uid/settings endpoint'
+      );
+      expect(endpointWarn?.[0]).toEqual(
+        expect.objectContaining({
+          reason: 'token_mismatch',
+          [SKIP_SENTRY_KEY]: true,
+        })
+      );
     });
 
     it('returns user llmPreferences when valid auth header', async () => {
