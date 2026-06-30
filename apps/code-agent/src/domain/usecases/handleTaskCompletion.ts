@@ -1632,9 +1632,9 @@ export async function handleTaskCompletion(
           await applyReadyToMergeLabel(prNumber);
         }
 
-        // Best-effort In Review transition for agent types without deterministic enforcement
-        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
+        // Best-effort In Review transition for agent types without deterministic enforcement.
+        // If the PR is already merged/closed, handlePrClose owns the final Linear state.
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined && task.prMergedAt === undefined && task.prClosedAt === undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
 

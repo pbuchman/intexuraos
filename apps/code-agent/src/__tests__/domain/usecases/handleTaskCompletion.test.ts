@@ -338,6 +338,7 @@ describe('handleTaskCompletion', () => {
       const createRemediationTaskFn = vi.fn().mockResolvedValue(ok({ taskId: 'remed-1' }));
       const findOriginTaskByPR = vi.fn().mockResolvedValue(ok(null));
       const removeLabel = vi.fn().mockResolvedValue(undefined);
+      const markInReview = vi.fn().mockResolvedValue(undefined);
 
       setServices({
         codeTaskRepo: {
@@ -359,7 +360,7 @@ describe('handleTaskCompletion', () => {
         automationLog: { record: automationRecord } as never,
         linearIssueService: {
           removeLabel,
-          markInReview: vi.fn().mockResolvedValue(undefined),
+          markInReview,
         } as never,
         logger: createMockLogger() as never,
         createRemediationTaskFn,
@@ -381,6 +382,7 @@ describe('handleTaskCompletion', () => {
       expect(createRemediationTaskFn).not.toHaveBeenCalled();
       expect(findOriginTaskByPR).not.toHaveBeenCalled();
       expect(removeLabel).not.toHaveBeenCalled();
+      expect(markInReview).not.toHaveBeenCalled();
       const remediationCall = automationRecord.mock.calls.find((call) => {
         const event = call[1] as { type?: string; required?: boolean; signal?: string; taskId?: string };
         return event.type === 'remediation_decision';
