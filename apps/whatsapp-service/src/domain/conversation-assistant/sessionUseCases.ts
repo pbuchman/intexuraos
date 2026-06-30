@@ -195,7 +195,7 @@ async function appendQuestionAndAssistantTurn(
     promptInput.chatDisplayName = input.session.chatDisplayName;
   }
 
-  const llmResult = await callConversationAssistantModel(input.session.id, promptInput, deps);
+  const llmResult = await callConversationAssistantModel(input.session, promptInput, deps);
 
   const now = deps.clock.now();
   const assistantTurn: ConversationAssistantTurn =
@@ -271,18 +271,28 @@ function validateCreateInput(
 }
 
 async function callConversationAssistantModel(
-  sessionId: string,
+  session: ConversationAssistantSession,
   promptInput: Parameters<typeof buildWhatsAppConversationAssistantMessages>[0],
   deps: ConversationAssistantDeps
-): Promise<Awaited<ReturnType<NonNullable<ConversationAssistantDeps['llmClient']['generateChat']>>> | undefined> {
+): Promise<
+  | Awaited<
+      ReturnType<
+        NonNullable<
+          ReturnType<ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']>['generateChat']
+        >
+      >
+    >
+  | undefined
+> {
   try {
-    return await deps.llmClient.generateChat?.(
+    const llmClient = deps.llmClientFactory.createLlmClientForUser(session.userId);
+    return await llmClient.generateChat?.(
       buildWhatsAppConversationAssistantMessages(promptInput),
       {
         promptType: WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.promptType,
-        sessionId,
+        sessionId: session.id,
         temperature: 0.2,
-        correlation: { sessionId },
+        correlation: { sessionId: session.id },
       }
     );
   } catch (error) {

@@ -21,10 +21,14 @@ export interface ConversationAssistantIdGenerator {
   turnId(): string;
 }
 
+export interface ConversationAssistantLlmClientFactory {
+  createLlmClientForUser(userId: string): LlmGenerateClient;
+}
+
 export interface ConversationAssistantDeps {
   repository: ConversationAssistantRepository;
   privateWhatsAppRepository: import('../whatsapp/index.js').PrivateWhatsAppRepository;
-  llmClient: LlmGenerateClient;
+  llmClientFactory: ConversationAssistantLlmClientFactory;
   model: string;
   clock: ConversationAssistantClock;
   ids: ConversationAssistantIdGenerator;

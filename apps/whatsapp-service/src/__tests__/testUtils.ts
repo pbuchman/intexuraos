@@ -109,6 +109,7 @@ export const testConfig: Config = {
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: 'test-internal-auth-token',
+  llmUsageServiceUrl: 'http://llm-usage.test',
   openRouterAppApiKey: 'test-openrouter-key',
   conversationAssistantModel: 'or:google/gemini-3.5-flash',
   port: 8080,
@@ -591,7 +592,9 @@ export function setupTestContext(): TestContext {
       notificationPreferencesRepository: context.notificationPreferencesRepository,
       privateWhatsAppRepository: context.privateWhatsAppRepository,
       conversationAssistantRepository: context.conversationAssistantRepository,
-      llmClient: context.llmClient,
+      llmClientFactory: {
+        createLlmClientForUser: () => context.llmClient,
+      },
       conversationAssistantModel: 'or:google/gemini-3.5-flash',
     });
 

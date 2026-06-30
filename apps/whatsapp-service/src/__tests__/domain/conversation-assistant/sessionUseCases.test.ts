@@ -27,10 +27,12 @@ function makeDeps(): {
   conversationRepository: FakeConversationAssistantRepository;
   privateRepository: FakePrivateWhatsAppRepository;
   llmClient: FakeLlmGenerateClient;
+  llmFactoryUserIds: string[];
 } {
   const conversationRepository = new FakeConversationAssistantRepository();
   const privateRepository = new FakePrivateWhatsAppRepository();
   const llmClient = new FakeLlmGenerateClient();
+  const llmFactoryUserIds: string[] = [];
   const clock = { now: (): string => '2026-06-30T12:00:00.000Z' };
   const ids = {
     sessionId: (): string => 'whatsapp_conv_session_test',
@@ -46,7 +48,12 @@ function makeDeps(): {
     deps: {
       repository: conversationRepository,
       privateWhatsAppRepository: privateRepository,
-      llmClient,
+      llmClientFactory: {
+        createLlmClientForUser(userId: string): FakeLlmGenerateClient {
+          llmFactoryUserIds.push(userId);
+          return llmClient;
+        },
+      },
       model: 'or:google/gemini-3.5-flash',
       clock,
       ids,
@@ -54,6 +61,7 @@ function makeDeps(): {
     conversationRepository,
     privateRepository,
     llmClient,
+    llmFactoryUserIds,
   };
 }
 
@@ -124,7 +132,8 @@ describe('Conversation Assistant session use cases', () => {
   });
 
   it('creates a session with first user and assistant turns using OpenRouter session id', async () => {
-    const { deps, conversationRepository, privateRepository, llmClient } = makeDeps();
+    const { deps, conversationRepository, privateRepository, llmClient, llmFactoryUserIds } =
+      makeDeps();
     await seedDirectMessage(privateRepository);
 
     const result = await createConversationAssistantSession(
@@ -142,6 +151,7 @@ describe('Conversation Assistant session use cases', () => {
     if (!result.ok) return;
     expect(result.value.turns.map((turn) => turn.role)).toEqual(['user', 'assistant']);
     expect(conversationRepository.getAllTurns()).toHaveLength(2);
+    expect(llmFactoryUserIds).toEqual([USER_ID]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages)).toContain('cache_control');
   });
@@ -457,7 +467,12 @@ describe('Conversation Assistant session use cases', () => {
         to: '2026-07-01T00:00:00.000Z',
         question: longQuestion,
       },
-      { ...deps, llmClient: llmClientWithoutChat }
+      {
+        ...deps,
+        llmClientFactory: {
+          createLlmClientForUser: () => llmClientWithoutChat,
+        },
+      }
     );
     expect(created.ok).toBe(true);
     if (!created.ok) return;
@@ -507,7 +522,12 @@ describe('Conversation Assistant session use cases', () => {
         to: '2026-07-01T00:00:00.000Z',
         question: 'Summarize.',
       },
-      { ...deps, llmClient: rejectingClient }
+      {
+        ...deps,
+        llmClientFactory: {
+          createLlmClientForUser: () => rejectingClient,
+        },
+      }
     );
 
     expect(result.ok).toBe(true);

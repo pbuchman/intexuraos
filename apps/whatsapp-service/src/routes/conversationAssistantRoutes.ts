@@ -247,7 +247,7 @@ async function getConversationAssistantDeps(
   const services = getServices();
   if (
     services.conversationAssistantRepository === undefined ||
-    services.llmClient === undefined ||
+    services.llmClientFactory === undefined ||
     services.conversationAssistantModel === undefined
   ) {
     await reply.fail('INTERNAL_ERROR', 'Conversation Assistant services are not configured');
@@ -256,7 +256,7 @@ async function getConversationAssistantDeps(
   return {
     repository: services.conversationAssistantRepository,
     privateWhatsAppRepository: services.privateWhatsAppRepository,
-    llmClient: services.llmClient,
+    llmClientFactory: services.llmClientFactory,
     model: services.conversationAssistantModel,
     clock: conversationAssistantSystemClock,
     ids: conversationAssistantRandomIds,

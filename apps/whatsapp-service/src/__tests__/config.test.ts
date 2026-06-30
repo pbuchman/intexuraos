@@ -11,6 +11,7 @@ describe('config validation', () => {
   let savedPhone: string | undefined;
   let savedIntexMessageIngestTopic: string | undefined;
   let savedAudioStoredTopic: string | undefined;
+  let savedLlmUsageServiceUrl: string | undefined;
   let savedOpenRouterAppApiKey: string | undefined;
   let savedConversationAssistantModel: string | undefined;
 
@@ -23,6 +24,7 @@ describe('config validation', () => {
     savedIntexMessageIngestTopic =
       process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'];
     savedAudioStoredTopic = process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
+    savedLlmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
     savedOpenRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     savedConversationAssistantModel =
       process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
@@ -66,6 +68,11 @@ describe('config validation', () => {
     } else {
       delete process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
     }
+    if (savedLlmUsageServiceUrl !== undefined) {
+      process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = savedLlmUsageServiceUrl;
+    } else {
+      delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
+    }
     if (savedOpenRouterAppApiKey !== undefined) {
       process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = savedOpenRouterAppApiKey;
     } else {
@@ -85,11 +92,13 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
+    delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_APP_SECRET');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_WABA_ID');
+    expect(missing).toContain('INTEXURAOS_LLM_USAGE_SERVICE_URL');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
   });
@@ -110,6 +119,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
     process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       'or:google/gemini-3.5-flash';
@@ -134,6 +144,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
     process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       'or:google/gemini-3.5-flash';
@@ -155,6 +166,7 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'];
     delete process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
+    delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
 
     expect(() => loadConfig()).toThrow();
   });
@@ -175,6 +187,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
     process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       'or:google/gemini-3.5-flash';
@@ -182,6 +195,7 @@ describe('config validation', () => {
     const config = loadConfig();
     expect(config.allowedWabaIds).toEqual(['waba1', 'waba2']);
     expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
+    expect(config.llmUsageServiceUrl).toBe('http://llm-usage.test');
     expect(config.conversationAssistantModel).toBe('or:google/gemini-3.5-flash');
   });
 });

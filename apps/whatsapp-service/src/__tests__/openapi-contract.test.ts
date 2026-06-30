@@ -37,6 +37,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     gcpProjectId: 'test-project',
     webAgentUrl: 'https://web-agent.example.com',
     internalAuthToken: 'test-internal-auth-token',
+    llmUsageServiceUrl: 'http://llm-usage.test',
     openRouterAppApiKey: 'test-openrouter-key',
     conversationAssistantModel: 'or:google/gemini-3.5-flash',
     port: 8080,

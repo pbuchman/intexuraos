@@ -111,6 +111,11 @@ const configSchema = z.object({
   internalAuthToken: z.string().min(1, 'INTEXURAOS_INTERNAL_AUTH_TOKEN is required'),
 
   /**
+   * LLM usage service URL for Conversation Assistant usage reporting.
+   */
+  llmUsageServiceUrl: z.string().min(1, 'INTEXURAOS_LLM_USAGE_SERVICE_URL is required'),
+
+  /**
    * OpenRouter platform API key for Conversation Assistant model calls.
    */
   openRouterAppApiKey: z.string().min(1, 'INTEXURAOS_OPENROUTER_APP_API_KEY is required'),
@@ -153,6 +158,7 @@ export function loadConfig(): Config {
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+    llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'],
     openRouterAppApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'],
     conversationAssistantModel: process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'],
     intexMessageIngestTopic: process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'],
@@ -183,6 +189,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+    'INTEXURAOS_LLM_USAGE_SERVICE_URL',
     'INTEXURAOS_OPENROUTER_APP_API_KEY',
     'INTEXURAOS_CONVERSATION_ASSISTANT_MODEL',
   ];
