@@ -534,6 +534,61 @@ describe('createSentryStream - sendLogToSentry internal function', () => {
     expect(captureMessage).not.toHaveBeenCalled();
   });
 
+  it('skips Sentry captureMessage for internal auth token mismatch warnings', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const genericTokenMismatchLog = JSON.stringify({
+      level: 40,
+      msg: 'Internal auth failed: token mismatch',
+    });
+    const routeTokenMismatchLog = JSON.stringify({
+      level: 40,
+      msg: 'Internal auth failed for users/:uid/settings endpoint',
+      reason: 'token_mismatch',
+    });
+
+    ms.streams[0]?.stream.write(genericTokenMismatchLog);
+    ms.streams[0]?.stream.write(routeTokenMismatchLog);
+
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps Sentry captureMessage for internal auth configuration warnings', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const notConfiguredLog = JSON.stringify({
+      level: 40,
+      msg: 'Internal auth failed for users/:uid/settings endpoint',
+      reason: 'not_configured',
+    });
+
+    ms.streams[0]?.stream.write(notConfiguredLog);
+
+    expect(captureMessage).toHaveBeenCalledWith(
+      'Internal auth failed for users/:uid/settings endpoint'
+    );
+  });
+
   it('handles error level with non-string msg (number)', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
     const { captureException } = getMockedSentry();
