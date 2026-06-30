@@ -964,7 +964,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         const timestampComparison = a.eventTimestamp.localeCompare(b.eventTimestamp);
         return timestampComparison === 0 ? a.id.localeCompare(b.id) : timestampComparison;
       });
-    return Promise.resolve(ok({ messages, totalCount: messages.length }));
+    return Promise.resolve(
+      ok({ messages: messages.slice(0, input.limit + 1), totalCount: messages.length })
+    );
   }
 
   findChats(

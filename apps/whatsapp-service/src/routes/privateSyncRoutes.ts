@@ -50,6 +50,8 @@ interface PrivateIngestBody extends Omit<IngestPrivateWhatsAppEventsInput, 'user
   userId?: string;
 }
 
+const CONVERSATION_CONTEXT_RAW_SCAN_LIMIT = 5000;
+
 function getPrivateSyncLogMetadata(body: unknown): Record<string, unknown> {
   if (body === null || typeof body !== 'object') {
     return {
@@ -653,7 +655,7 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         chatId: request.body.chatId,
         from: request.body.from,
         to: request.body.to,
-        limit: maxMessages,
+        limit: Math.max(maxMessages, CONVERSATION_CONTEXT_RAW_SCAN_LIMIT),
       });
       if (!messagesResult.ok) {
         return await reply.fail('INTERNAL_ERROR', messagesResult.error.message);
