@@ -19,9 +19,11 @@ class MockGeminiClient {
 }
 
 const mockOrGenerate = vi.fn();
+const mockOrGenerateChat = vi.fn();
 
 class MockOpenRouterGenerateClient {
   generate = mockOrGenerate;
+  generateChat = mockOrGenerateChat;
 }
 
 const mockClaudeGenerate = vi.fn();
@@ -86,7 +88,7 @@ describe('llmClientFactory', () => {
       });
 
       expect(client.generate).toBeDefined();
-      expect(client).toBeInstanceOf(MockGeminiClient);
+      expect(client.generateChat).toBeDefined();
     });
 
     it('creates Gemini 2.5 Pro client', () => {
@@ -99,7 +101,7 @@ describe('llmClientFactory', () => {
       });
 
       expect(client.generate).toBeDefined();
-      expect(client).toBeInstanceOf(MockGeminiClient);
+      expect(client.generateChat).toBeDefined();
     });
 
     it('creates client for valid Gemini models', () => {
@@ -110,7 +112,8 @@ describe('llmClientFactory', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      expect(client).toBeInstanceOf(MockGeminiClient);
+      expect(client.generate).toBeDefined();
+      expect(client.generateChat).toBeDefined();
     });
 
     it('throws for unsupported provider models', () => {
@@ -151,7 +154,7 @@ describe('llmClientFactory', () => {
       });
 
       expect(client.generate).toBeDefined();
-      expect(client).toBeInstanceOf(MockClaudeGenerateClient);
+      expect(client.generateChat).toBeDefined();
     });
 
     it('creates GPT client for OpenAI models', () => {
@@ -164,7 +167,7 @@ describe('llmClientFactory', () => {
       });
 
       expect(client.generate).toBeDefined();
-      expect(client).toBeInstanceOf(MockGptGenerateClient);
+      expect(client.generateChat).toBeDefined();
     });
 
     it('creates Perplexity client for Perplexity models', () => {
@@ -177,7 +180,7 @@ describe('llmClientFactory', () => {
       });
 
       expect(client.generate).toBeDefined();
-      expect(client).toBeInstanceOf(MockPerplexityGenerateClient);
+      expect(client.generateChat).toBeDefined();
     });
 
     it('returns a defined client for each supported provider', () => {
@@ -208,6 +211,32 @@ describe('llmClientFactory', () => {
       expect(perplexity.generate).toBeDefined();
       expect(openrouter).toBeDefined();
       expect(openrouter.generate).toBeDefined();
+    });
+
+    it('adds a throwing generateChat method for non-OpenRouter factory clients', async () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      let captured: unknown;
+      try {
+        await client.generateChat?.([{ role: 'user', content: 'hello' }], {
+          promptType: 'test-chat',
+        });
+      } catch (error) {
+        captured = error;
+      }
+
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const error = captured as IntexuraOSError;
+      expect(error.code).toBe('INVALID_REQUEST');
+      expect(error.message).toBe(
+        'Chat message generation is only supported for OpenRouter clients'
+      );
     });
 
     it('forwards ownerType to createClaudeGenerateClient when passed', async () => {

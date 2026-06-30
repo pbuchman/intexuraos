@@ -33,7 +33,14 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { LlmProviders, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
+import {
+  LlmProviders,
+  type GenerateChatOptions,
+  type GenerateChatResult,
+  type GenerateResult,
+  type LlmChatMessage,
+  type NormalizedUsage,
+} from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type {
@@ -65,6 +72,14 @@ export interface OpenRouterClient {
     prompt: string,
     options: GenerateOptions
   ) => Promise<Result<GenerateResult, OpenRouterError>>;
+
+  /**
+   * Generates a chat completion using application-facing chat messages.
+   */
+  generateChat: (
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ) => Promise<Result<GenerateChatResult, OpenRouterError>>;
 
   /**
    * Validate an OpenRouter API key using the lightweight /api/v1/key endpoint.
@@ -162,22 +177,38 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   function extractUsage(usage?: OpenRouterUsage): {
     normalized: NormalizedUsage;
     providerReportedUsd: number | null;
+    cachedTokens?: number;
+    cacheWriteTokens?: number;
   } {
-    /* v8 ignore start -- upstream: cannot verify usage is present in all API responses @preserve */
     if (usage === undefined) {
       return {
         normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
         providerReportedUsd: null,
       };
     }
-    /* v8 ignore stop @preserve */
     const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
+    const cachedTokens =
+      typeof usage.prompt_tokens_details?.cached_tokens === 'number'
+        ? usage.prompt_tokens_details.cached_tokens
+        : undefined;
+    const cacheWriteTokens =
+      typeof usage.prompt_tokens_details?.cache_write_tokens === 'number'
+        ? usage.prompt_tokens_details.cache_write_tokens
+        : undefined;
     const normalized = normalizeUsage(
       usage.prompt_tokens,
       usage.completion_tokens,
       providerReportedUsd ?? undefined
     );
-    return { normalized, providerReportedUsd };
+    if (cachedTokens !== undefined) {
+      normalized.cacheTokens = cachedTokens;
+    }
+    return {
+      normalized,
+      providerReportedUsd,
+      ...(cachedTokens !== undefined && { cachedTokens }),
+      ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+    };
   }
 
   return {
@@ -314,6 +345,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       });
     },
 
+    async generateChat(
+      messages: LlmChatMessage[],
+      options: GenerateChatOptions
+    ): Promise<Result<GenerateChatResult, OpenRouterError>> {
+      return await withRetry(() => generateChatOnce(messages, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
+    },
+
     async validateKey(key: string): Promise<Result<OpenRouterKeyInfo, OpenRouterError>> {
       try {
         const response = await fetchWithTimeout(
@@ -347,6 +388,37 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     prompt: string,
     options: GenerateOptions
   ): Promise<Result<GenerateResult, OpenRouterError>> {
+    const messages: LlmChatMessage[] = [{ role: 'user', content: prompt }];
+    const chatResult = await generateChatOnce(messages, {
+      promptType: options.promptType,
+      ...(options.responseFormat !== undefined && {
+        responseFormat: options.responseFormat,
+      }),
+      ...(options.correlation !== undefined && { correlation: options.correlation }),
+      temperature: 0.2,
+    });
+    if (!chatResult.ok) {
+      return chatResult;
+    }
+
+    return ok({
+      content: chatResult.value.content,
+      usage: {
+        inputTokens: chatResult.value.usage.inputTokens,
+        outputTokens: chatResult.value.usage.outputTokens,
+        totalTokens: chatResult.value.usage.totalTokens,
+        costUsd: chatResult.value.usage.costUsd,
+        ...(chatResult.value.usage.cachedTokens !== undefined && {
+          cacheTokens: chatResult.value.usage.cachedTokens,
+        }),
+      },
+    });
+  }
+
+  async function generateChatOnce(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ): Promise<Result<GenerateChatResult, OpenRouterError>> {
     const start = Date.now();
     try {
       const { result, durationMs } = await measureLlmCall(
@@ -354,16 +426,14 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           content: string;
           normalized: NormalizedUsage;
           providerReportedUsd: number | null;
+          cachedTokens?: number;
+          cacheWriteTokens?: number;
         }> => {
           const requestBody = {
             model, // No :online suffix for synthesis
-            messages: [
-              {
-                role: 'user',
-                content: prompt,
-              },
-            ],
-            temperature: 0.2,
+            messages,
+            temperature: options.temperature ?? 0.2,
+            ...(options.sessionId !== undefined && { session_id: options.sessionId }),
             ...(options.responseFormat !== undefined && {
               response_format: options.responseFormat,
             }),
@@ -395,17 +465,23 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const firstChoice = data.choices[0];
           // Handle case where choices array is empty (upstream API may return this)
           if (firstChoice === undefined) {
-            /* v8 ignore start -- upstream: cannot verify firstChoice message structure when choices is empty @preserve */
             return {
               content: '',
               normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
               providerReportedUsd: null,
             };
-            /* v8 ignore stop @preserve */
           }
           const content = firstChoice.message.content;
-          const { normalized, providerReportedUsd } = extractUsage(data.usage);
-          return { content, normalized, providerReportedUsd };
+          const { normalized, providerReportedUsd, cachedTokens, cacheWriteTokens } = extractUsage(
+            data.usage
+          );
+          return {
+            content,
+            normalized,
+            providerReportedUsd,
+            ...(cachedTokens !== undefined && { cachedTokens }),
+            ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+          };
         }
       );
 
@@ -420,7 +496,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         options.correlation
       );
 
-      return ok({ content: result.content, usage: result.normalized });
+      const usage = {
+        inputTokens: result.normalized.inputTokens,
+        outputTokens: result.normalized.outputTokens,
+        totalTokens: result.normalized.totalTokens,
+        costUsd: result.normalized.costUsd,
+        ...(result.cachedTokens !== undefined && { cachedTokens: result.cachedTokens }),
+        ...(result.cacheWriteTokens !== undefined && { cacheWriteTokens: result.cacheWriteTokens }),
+      };
+
+      return ok({ content: result.content, usage });
     } catch (error) {
       const durationMs = Date.now() - start;
       const errorMsg = getErrorMessage(error);

@@ -12,6 +12,11 @@ export type {
   LLMError as OpenRouterError,
   ResearchResult,
   GenerateResult,
+  LlmChatRole,
+  LlmChatTextBlock,
+  LlmChatMessage,
+  GenerateChatOptions,
+  GenerateChatResult,
 } from '@intexuraos/llm-contract';
 
 /**
@@ -125,6 +130,10 @@ export interface OpenRouterUsage {
   completion_tokens: number;
   total_tokens: number;
   cost?: number; // OpenRouter reports USD cost per request (always present per docs, optional for back-compat)
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    cache_write_tokens?: number;
+  };
 }
 
 /**

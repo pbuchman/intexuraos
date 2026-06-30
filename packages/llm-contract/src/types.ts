@@ -122,6 +122,39 @@ export interface GenerateResult {
   usage: NormalizedUsage;
 }
 
+export type LlmChatRole = 'system' | 'developer' | 'user' | 'assistant';
+
+export interface LlmChatTextBlock {
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral'; ttl?: '1h' };
+}
+
+export interface LlmChatMessage {
+  role: LlmChatRole;
+  content: string | LlmChatTextBlock[];
+}
+
+export interface GenerateChatOptions {
+  promptType: string;
+  sessionId?: string;
+  temperature?: number;
+  responseFormat?: { type: 'json_object' | 'text' };
+  correlation?: LLMCorrelationOptions;
+}
+
+export interface GenerateChatResult {
+  content: string;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    costUsd: number;
+    cachedTokens?: number;
+    cacheWriteTokens?: number;
+  };
+}
+
 /**
  * Result from an image generation operation.
  *

@@ -13,10 +13,12 @@ const mockLogger: Logger = {
 const mockUsageSink = new FakeUsageSink();
 
 const mockOrGenerate = vi.fn();
+const mockOrGenerateChat = vi.fn();
 
 vi.mock('@intexuraos/infra-openrouter', () => ({
   createOpenRouterClient: vi.fn(() => ({
     generate: mockOrGenerate,
+    generateChat: mockOrGenerateChat,
   })),
 }));
 
@@ -39,6 +41,8 @@ describe('createOpenRouterGenerateClient', () => {
     const client = createOpenRouterGenerateClient(baseConfig);
     expect(client.generate).toBeDefined();
     expect(typeof client.generate).toBe('function');
+    expect(client.generateChat).toBeDefined();
+    expect(typeof client.generateChat).toBe('function');
   });
 
   it('satisfies the LlmGenerateClient interface by generating successfully', async () => {
@@ -71,6 +75,60 @@ describe('createOpenRouterGenerateClient', () => {
     expect(mockOrGenerate).toHaveBeenCalledWith('hi', {
       promptType: 'test-prompt',
       correlation: { researchId: 'r-1' },
+    });
+  });
+
+  it('forwards chat messages and options to the underlying OpenRouter client', async () => {
+    const expectedResult = {
+      content: 'Chat reply',
+      usage: {
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        costUsd: 0.001,
+        cachedTokens: 9,
+        cacheWriteTokens: 3,
+      },
+    };
+    mockOrGenerateChat.mockResolvedValue(ok(expectedResult));
+
+    const client = createOpenRouterGenerateClient(baseConfig);
+    const messages = [
+      {
+        role: 'system' as const,
+        content: [{ type: 'text' as const, text: 'Use the transcript only.' }],
+      },
+      {
+        role: 'user' as const,
+        content: 'What happened?',
+      },
+    ];
+
+    const generateChat = client.generateChat;
+    expect(generateChat).toBeDefined();
+    if (generateChat === undefined) {
+      throw new Error('generateChat should be defined for OpenRouter clients');
+    }
+
+    const result = await generateChat(messages, {
+      promptType: 'whatsapp-conversation-assistant',
+      sessionId: 'session-123',
+      temperature: 0.1,
+      responseFormat: { type: 'text' },
+      correlation: { sessionId: 'session-123' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual(expectedResult);
+    }
+
+    expect(mockOrGenerateChat).toHaveBeenCalledWith(messages, {
+      promptType: 'whatsapp-conversation-assistant',
+      sessionId: 'session-123',
+      temperature: 0.1,
+      responseFormat: { type: 'text' },
+      correlation: { sessionId: 'session-123' },
     });
   });
 
