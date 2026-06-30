@@ -247,6 +247,60 @@ export interface PrivateWhatsAppConversationContextMessageResult {
   nextCursor?: string;
 }
 
+export interface PrivateConversationContextRequest {
+  userId: string;
+  chatId: string;
+  from: string;
+  to: string;
+  maxMessages?: number;
+}
+
+export interface PrivateConversationContextMessage {
+  id: string;
+  eventTimestamp: string;
+  direction: PrivateWhatsAppMessageDirection;
+  speakerLabel: string;
+  messageType: PrivateWhatsAppMessageType;
+  contentKind: 'text' | 'transcription';
+  content: string;
+}
+
+export interface PrivateConversationContextOmittedCounts {
+  mediaOnly: number;
+  failedTranscriptions: number;
+  pendingTranscriptions: number;
+  nonText: number;
+  overLimit: number;
+}
+
+export interface PrivateConversationContextResponse {
+  chat: {
+    id: string;
+    displayName?: string;
+    chatType: 'direct';
+    firstSeenAt: string;
+    lastEventAt: string;
+    messageCount: number;
+  };
+  range: {
+    from: string;
+    to: string;
+  };
+  messages: PrivateConversationContextMessage[];
+  omitted: PrivateConversationContextOmittedCounts;
+  messageCount: number;
+  transcriptSha256: string;
+}
+
+export interface PrivateConversationContextMessageQueryInput {
+  sourceAccountId: string;
+  chatId: string;
+  from: string;
+  to: string;
+  limit: number;
+  cursor?: string;
+}
+
 export interface UpdatePrivateWhatsAppChatTranscriptionInput {
   sourceAccountId: string;
   chatId: string;

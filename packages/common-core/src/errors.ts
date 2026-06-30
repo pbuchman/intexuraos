@@ -4,6 +4,7 @@
  */
 export type ErrorCode =
   | 'INVALID_REQUEST'
+  | 'EMPTY_TRANSCRIPT'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
@@ -41,6 +42,7 @@ export type ErrorCode =
  */
 export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   INVALID_REQUEST: 400,
+  EMPTY_TRANSCRIPT: 400,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,

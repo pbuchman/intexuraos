@@ -11,7 +11,12 @@ export {
   type ToolCallingClientConfig,
   type LlmGenerateClient,
   type GenerateOptions,
+  type GenerateChatOptions,
+  type GenerateChatResult,
   type GenerateResult,
+  type LlmChatMessage,
+  type LlmChatRole,
+  type LlmChatTextBlock,
   type LLMError,
   isSupportedProvider,
 } from './llmClientFactory.js';

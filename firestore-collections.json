@@ -58,6 +58,14 @@
       "owner": "whatsapp-service",
       "description": "Per-private-WhatsApp-sender daily aggregates for time-range reads and future daily summaries."
     },
+    "whatsapp_conversation_assistant_sessions": {
+      "owner": "whatsapp-service",
+      "description": "Private WhatsApp Conversation Assistant sessions with frozen transcript snapshots and public metadata."
+    },
+    "whatsapp_conversation_assistant_turns": {
+      "owner": "whatsapp-service",
+      "description": "Autosaved user and assistant turns for private WhatsApp Conversation Assistant sessions."
+    },
     "mobile_notifications": {
       "owner": "mobile-notifications-service",
       "description": "Mobile push notifications received from user devices"

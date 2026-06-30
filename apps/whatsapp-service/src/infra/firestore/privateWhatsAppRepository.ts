@@ -32,6 +32,7 @@ import type {
   UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from '../../domain/whatsapp/index.js';
+import type { PrivateConversationContextMessageQueryInput } from '../../domain/whatsapp/models/PrivateWhatsApp.js';
 import type { PrivateWhatsAppRepository } from '../../domain/whatsapp/index.js';
 
 export const PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION = 'whatsapp_private_accounts';
@@ -128,31 +129,6 @@ async function getActiveAccountBySourceAccountId(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to resolve private WhatsApp account: ${getErrorMessage(error, 'Unknown Firestore error')}`,
-    });
-  }
-}
-
-async function getChatById(input: {
-  sourceAccountId: string;
-  chatId: string;
-}): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>> {
-  try {
-    const doc = await getFirestore()
-      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
-      .doc(input.chatId)
-      .get();
-    if (!doc.exists) {
-      return ok(null);
-    }
-    const chat = normalizeChat(doc.id, doc.data());
-    if (chat.sourceAccountId !== input.sourceAccountId) {
-      return ok(null);
-    }
-    return ok(chat);
-  } catch (error) {
-    return err({
-      code: 'PERSISTENCE_ERROR',
-      message: `Failed to load private WhatsApp chat: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
@@ -410,6 +386,31 @@ async function getMessageById(
   }
 }
 
+async function getChatById(input: {
+  sourceAccountId: string;
+  chatId: string;
+}): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>> {
+  try {
+    const doc = await getFirestore()
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .doc(input.chatId)
+      .get();
+    if (!doc.exists) {
+      return ok(null);
+    }
+    const chat = normalizeChat(doc.id, doc.data());
+    if (chat.sourceAccountId !== input.sourceAccountId) {
+      return ok(null);
+    }
+    return ok(chat);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to load private WhatsApp chat: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 async function updateChatTranscriptionSetting(
   input: UpdatePrivateWhatsAppChatTranscriptionInput
 ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
@@ -529,7 +530,10 @@ async function findMessages(
 
     const snapshot = await query.limit(input.limit + 1).get();
     const docs = snapshot.docs.slice(0, input.limit);
-    const messages = docs.map((doc) => doc.data() as PrivateWhatsAppMessage);
+    const messages = docs.map((doc) => {
+      const data = doc.data() as Omit<PrivateWhatsAppMessage, 'id'> & { id?: string };
+      return { ...data, id: data.id ?? doc.id };
+    });
     const result: PrivateWhatsAppMessageQueryResult = { messages };
     if (snapshot.docs.length > input.limit) {
       const lastMessage = messages[messages.length - 1];
@@ -546,14 +550,9 @@ async function findMessages(
   }
 }
 
-async function findConversationContextMessages(input: {
-  sourceAccountId: string;
-  chatId: string;
-  from: string;
-  to: string;
-  limit: number;
-  cursor?: string;
-}): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
+async function findConversationContextMessages(
+  input: PrivateConversationContextMessageQueryInput
+): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
   try {
     let query: Query = getFirestore()
       .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
@@ -579,7 +578,10 @@ async function findConversationContextMessages(input: {
         .get(),
     ]);
     const docs = snapshot.docs.slice(0, input.limit);
-    const messages = docs.map((doc) => doc.data() as PrivateWhatsAppMessage);
+    const messages = docs.map((doc) => {
+      const data = doc.data() as Omit<PrivateWhatsAppMessage, 'id'> & { id?: string };
+      return { ...data, id: data.id ?? doc.id };
+    });
     const result: PrivateWhatsAppConversationContextMessageResult = {
       messages,
       totalCount: countSnapshot.data().count,

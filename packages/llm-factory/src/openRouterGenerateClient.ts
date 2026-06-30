@@ -7,6 +7,9 @@ import {
   type LlmChatMessage,
 } from '@intexuraos/llm-contract';
 import type {
+  GenerateChatOptions,
+  GenerateChatResult,
+  LlmChatMessage,
   LlmClientConfig,
   LlmGenerateClient,
   GenerateResult,
