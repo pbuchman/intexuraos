@@ -9,7 +9,9 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import {
+  FakeConversationAssistantRepository,
   FakeEventPublisher,
+  FakeLlmGenerateClient,
   FakePrivateWhatsAppRepository,
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
@@ -107,6 +109,8 @@ export const testConfig: Config = {
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: 'test-internal-auth-token',
+  openRouterAppApiKey: 'test-openrouter-key',
+  conversationAssistantModel: 'or:google/gemini-3.5-flash',
   port: 8080,
   host: '0.0.0.0',
 };
@@ -521,6 +525,8 @@ export interface TestContext {
   privateWhatsAppRepository: FakePrivateWhatsAppRepository;
   messageSender: FakeMessageSender;
   linkPreviewFetcher: FakeLinkPreviewFetcherPort;
+  conversationAssistantRepository: FakeConversationAssistantRepository;
+  llmClient: FakeLlmGenerateClient;
 }
 
 /**
@@ -542,6 +548,8 @@ export function setupTestContext(): TestContext {
     privateWhatsAppRepository: null as unknown as FakePrivateWhatsAppRepository,
     messageSender: null as unknown as FakeMessageSender,
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
+    conversationAssistantRepository: null as unknown as FakeConversationAssistantRepository,
+    llmClient: null as unknown as FakeLlmGenerateClient,
   };
 
   beforeAll(async () => {
@@ -565,6 +573,8 @@ export function setupTestContext(): TestContext {
     context.privateWhatsAppRepository = new FakePrivateWhatsAppRepository();
     context.messageSender = new FakeMessageSender();
     context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
+    context.conversationAssistantRepository = new FakeConversationAssistantRepository();
+    context.llmClient = new FakeLlmGenerateClient();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
@@ -580,6 +590,9 @@ export function setupTestContext(): TestContext {
       phoneVerificationRepository: context.phoneVerificationRepository,
       notificationPreferencesRepository: context.notificationPreferencesRepository,
       privateWhatsAppRepository: context.privateWhatsAppRepository,
+      conversationAssistantRepository: context.conversationAssistantRepository,
+      llmClient: context.llmClient,
+      conversationAssistantModel: 'or:google/gemini-3.5-flash',
     });
 
     clearJwksCache();
@@ -590,6 +603,9 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = testConfig.allowedWabaIds.join(',');
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = testConfig.openRouterAppApiKey;
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
+      testConfig.conversationAssistantModel;
 
     context.app = await buildServer(testConfig);
   });
@@ -604,6 +620,8 @@ export function setupTestContext(): TestContext {
     delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
+    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    delete process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
   });
 
   return context;

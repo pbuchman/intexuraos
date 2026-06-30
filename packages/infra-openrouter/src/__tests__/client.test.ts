@@ -852,6 +852,134 @@ describe('createOpenRouterClient', () => {
     });
   });
 
+  describe('generateChat', () => {
+    it('posts chat messages with top-level session_id and preserves cache_control content blocks', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+      const messages = [
+        {
+          role: 'system' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Answer only from the supplied transcript.',
+            },
+          ],
+        },
+        {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Transcript follows:',
+            },
+            {
+              type: 'text' as const,
+              text: '2026-06-30 10:00 You: hello',
+              cache_control: { type: 'ephemeral' as const },
+            },
+          ],
+        },
+        {
+          role: 'user' as const,
+          content: 'What happened?',
+        },
+      ];
+
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'They greeted each other.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChat(messages, {
+        promptType: 'whatsapp-conversation-assistant',
+        sessionId: 'whatsapp_conv_session_123',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toMatchObject({
+        model: TEST_MODEL,
+        messages,
+        temperature: 0.2,
+        session_id: 'whatsapp_conv_session_123',
+      });
+    });
+
+    it('maps OpenRouter cache usage details into the generate result usage', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Cached answer.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 30,
+            total_tokens: 130,
+            cost: 0.004,
+            prompt_tokens_details: {
+              cached_tokens: 80,
+              cache_write_tokens: 20,
+            },
+          },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChat([{ role: 'user', content: 'Hello' }], {
+        promptType: 'whatsapp-conversation-assistant',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage).toMatchObject({
+          inputTokens: 100,
+          outputTokens: 30,
+          totalTokens: 130,
+          costUsd: 0.004,
+          cachedTokens: 80,
+          cacheWriteTokens: 20,
+        });
+      }
+    });
+  });
+
   describe('OpenRouter usage.cost passthrough', () => {
     it('uses usage.cost from API response and forwards it to the sink as providerReportedUsd', async () => {
       nock(API_BASE_URL)

@@ -305,7 +305,9 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('user-service')?.env.INTEXURAOS_SENTRY_WEBHOOK_SECRET).toBeUndefined();
     expect(byName.get('intex-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
     expect(byName.get('intex-agent')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
-    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
     expect(byName.get('user-service')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBe(
       'github-oauth-secret'
     );
@@ -356,6 +358,9 @@ describe('ecosystem.config.prod.cjs', () => {
     );
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC).toBe(
       'intexuraos-audio-stored-dev'
+    );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL).toBe(
+      'or:google/gemini-3.5-flash'
     );
     expect(byName.get('intex-agent')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'

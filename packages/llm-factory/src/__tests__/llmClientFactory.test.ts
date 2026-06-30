@@ -19,9 +19,11 @@ class MockGeminiClient {
 }
 
 const mockOrGenerate = vi.fn();
+const mockOrGenerateChat = vi.fn();
 
 class MockOpenRouterGenerateClient {
   generate = mockOrGenerate;
+  generateChat = mockOrGenerateChat;
 }
 
 const mockClaudeGenerate = vi.fn();
@@ -208,6 +210,26 @@ describe('llmClientFactory', () => {
       expect(perplexity.generate).toBeDefined();
       expect(openrouter).toBeDefined();
       expect(openrouter.generate).toBeDefined();
+    });
+
+    it('adds an INVALID_REQUEST generateChat fallback to non-OpenRouter clients', async () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await expect(
+        client.generateChat?.([{ role: 'user', content: 'Hello' }], {
+          promptType: 'whatsapp-conversation-assistant',
+        })
+      ).rejects.toMatchObject({
+        code: 'INVALID_REQUEST',
+        message: 'Chat message generation is only supported for OpenRouter clients',
+      });
+      expect(client).toBeInstanceOf(MockGeminiClient);
     });
 
     it('forwards ownerType to createClaudeGenerateClient when passed', async () => {

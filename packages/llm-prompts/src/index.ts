@@ -14,3 +14,4 @@ export * from './calendar/index.js';
 export * from './shared/index.js';
 export * from './digest/index.js';
 export * from './intex-agent/index.js';
+export * from './whatsapp-conversation-assistant/index.js';

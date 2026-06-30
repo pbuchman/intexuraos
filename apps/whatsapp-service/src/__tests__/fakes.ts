@@ -9,6 +9,14 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
+import type {
+  GenerateChatOptions,
+  GenerateChatResult,
+  GenerateResult,
+  LlmChatMessage,
+  LlmGenerateClient,
+  LLMError,
+} from '@intexuraos/llm-factory';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   AudioStoredEvent,
@@ -71,7 +79,92 @@ import type {
   WhatsAppWebhookEvent,
   WhatsAppWebhookEventRepository,
 } from '../domain/whatsapp/index.js';
+import type { PrivateConversationContextMessageQueryInput } from '../domain/whatsapp/models/PrivateWhatsApp.js';
+import type { ConversationAssistantRepository } from '../domain/conversation-assistant/ports.js';
+import type {
+  ConversationAssistantSession,
+  ConversationAssistantTurn,
+} from '../domain/conversation-assistant/types.js';
 import { randomUUID } from 'node:crypto';
+
+export class FakeConversationAssistantRepository implements ConversationAssistantRepository {
+  private readonly sessions = new Map<string, ConversationAssistantSession>();
+  private readonly turns = new Map<string, ConversationAssistantTurn>();
+
+  saveSession(session: ConversationAssistantSession): Promise<void> {
+    this.sessions.set(session.id, { ...session });
+    return Promise.resolve();
+  }
+
+  getSessionById(sessionId: string): Promise<ConversationAssistantSession | null> {
+    const session = this.sessions.get(sessionId);
+    return Promise.resolve(session === undefined ? null : { ...session });
+  }
+
+  listSessionsByUserId(userId: string): Promise<ConversationAssistantSession[]> {
+    const sessions = Array.from(this.sessions.values())
+      .filter((session) => session.userId === userId)
+      .sort((a, b) => {
+        const updatedComparison = b.updatedAt.localeCompare(a.updatedAt);
+        return updatedComparison === 0 ? b.id.localeCompare(a.id) : updatedComparison;
+      })
+      .map((session) => ({ ...session }));
+    return Promise.resolve(sessions);
+  }
+
+  saveTurn(turn: ConversationAssistantTurn): Promise<void> {
+    this.turns.set(turn.id, { ...turn });
+    return Promise.resolve();
+  }
+
+  listTurnsBySessionId(sessionId: string): Promise<ConversationAssistantTurn[]> {
+    const turns = Array.from(this.turns.values())
+      .filter((turn) => turn.sessionId === sessionId)
+      .sort((a, b) => {
+        const createdComparison = a.createdAt.localeCompare(b.createdAt);
+        return createdComparison === 0 ? a.id.localeCompare(b.id) : createdComparison;
+      })
+      .map((turn) => ({ ...turn }));
+    return Promise.resolve(turns);
+  }
+
+  getAllSessions(): ConversationAssistantSession[] {
+    return Array.from(this.sessions.values()).map((session) => ({ ...session }));
+  }
+
+  getAllTurns(): ConversationAssistantTurn[] {
+    return Array.from(this.turns.values()).map((turn) => ({ ...turn }));
+  }
+}
+
+export class FakeLlmGenerateClient implements LlmGenerateClient {
+  private nextChatResult: Result<GenerateChatResult, LLMError> = ok({
+    content: 'assistant answer',
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
+  });
+  readonly chatCalls: { messages: LlmChatMessage[]; options: GenerateChatOptions }[] = [];
+
+  generate(): Promise<Result<GenerateResult, LLMError>> {
+    return Promise.resolve(
+      ok({
+        content: 'assistant answer',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      })
+    );
+  }
+
+  generateChat(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ): Promise<Result<GenerateChatResult, LLMError>> {
+    this.chatCalls.push({ messages, options });
+    return Promise.resolve(this.nextChatResult);
+  }
+
+  failNextChat(message = 'model failed'): void {
+    this.nextChatResult = err({ code: 'API_ERROR', message });
+  }
+}
 
 /**
  * Fake WhatsApp webhook event repository for testing.
@@ -799,6 +892,27 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     return Promise.resolve(ok(this.toMessage(stored)));
   }
 
+  getChatById(input: {
+    sourceAccountId: string;
+    chatId: string;
+  }): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const chat = this.buildChats().get(input.chatId);
+    if (chat === undefined || chat.sourceAccountId !== input.sourceAccountId) {
+      return Promise.resolve(ok(null));
+    }
+    return Promise.resolve(ok(chat));
+  }
+
   updateChatTranscriptionSetting(
     input: UpdatePrivateWhatsAppChatTranscriptionInput
   ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
@@ -903,6 +1017,55 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       }
     }
     return Promise.resolve(ok(result));
+  }
+
+  findConversationContextMessages(
+    input: PrivateConversationContextMessageQueryInput
+  ): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const messages = Array.from(this.stored.values())
+      .filter((stored) => stored.sourceAccountId === input.sourceAccountId)
+      .map((stored) => this.toMessage(stored))
+      .filter((message) => message.chatId === input.chatId)
+      .filter((message) => message.eventTimestamp >= input.from)
+      .filter((message) => message.eventTimestamp < input.to)
+      .sort((a, b) => {
+        const timestampComparison = a.eventTimestamp.localeCompare(b.eventTimestamp);
+        return timestampComparison === 0 ? a.id.localeCompare(b.id) : timestampComparison;
+      })
+      .slice(0, input.limit + 1);
+    return Promise.resolve(ok(messages));
+  }
+
+  countConversationContextMessages(
+    input: Omit<PrivateConversationContextMessageQueryInput, 'limit'>
+  ): Promise<Result<number, WhatsAppError>> {
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const count = Array.from(this.stored.values())
+      .filter((stored) => stored.sourceAccountId === input.sourceAccountId)
+      .map((stored) => this.toMessage(stored))
+      .filter((message) => message.chatId === input.chatId)
+      .filter((message) => message.eventTimestamp >= input.from)
+      .filter((message) => message.eventTimestamp < input.to).length;
+    return Promise.resolve(ok(count));
   }
 
   findChats(

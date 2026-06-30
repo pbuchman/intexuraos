@@ -11,6 +11,8 @@ describe('config validation', () => {
   let savedPhone: string | undefined;
   let savedIntexMessageIngestTopic: string | undefined;
   let savedAudioStoredTopic: string | undefined;
+  let savedOpenRouterAppApiKey: string | undefined;
+  let savedConversationAssistantModel: string | undefined;
 
   beforeEach(() => {
     savedVerify = process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
@@ -21,6 +23,9 @@ describe('config validation', () => {
     savedIntexMessageIngestTopic =
       process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'];
     savedAudioStoredTopic = process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
+    savedOpenRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    savedConversationAssistantModel =
+      process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
   });
 
   afterEach(() => {
@@ -61,6 +66,17 @@ describe('config validation', () => {
     } else {
       delete process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
     }
+    if (savedOpenRouterAppApiKey !== undefined) {
+      process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = savedOpenRouterAppApiKey;
+    } else {
+      delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    }
+    if (savedConversationAssistantModel !== undefined) {
+      process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
+        savedConversationAssistantModel;
+    } else {
+      delete process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
+    }
   });
 
   it('validates required env vars', async () => {
@@ -94,6 +110,9 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
+      'or:google/gemini-3.5-flash';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
@@ -115,6 +134,9 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
+      'or:google/gemini-3.5-flash';
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -153,9 +175,13 @@ describe('config validation', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
+      'or:google/gemini-3.5-flash';
 
     const config = loadConfig();
     expect(config.allowedWabaIds).toEqual(['waba1', 'waba2']);
     expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
+    expect(config.conversationAssistantModel).toBe('or:google/gemini-3.5-flash');
   });
 });

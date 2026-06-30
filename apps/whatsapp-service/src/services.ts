@@ -15,6 +15,8 @@ import { GcpPubSubPublisher, type GcpPubSubPublisherConfig } from './infra/pubsu
 import { WhatsAppCloudApiAdapter, WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
 import { createWebAgentLinkPreviewClient } from './infra/linkpreview/webAgentLinkPreviewClient.js';
+import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import { NoopUsageSink } from '@intexuraos/llm-pricing';
 import type {
   EventPublisherPort,
   LinkPreviewFetcherPort,
@@ -30,8 +32,10 @@ import type {
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEventRepository,
 } from './domain/whatsapp/index.js';
+import type { ConversationAssistantRepository } from './domain/conversation-assistant/ports.js';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
 import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
+import { createConversationAssistantRepository } from './infra/firestore/conversationAssistantRepository.js';
 
 /**
  * Configuration for service initialization.
@@ -47,6 +51,8 @@ export interface ServiceConfig {
   whatsappPhoneNumberId: string;
   webAgentUrl: string;
   internalAuthToken: string;
+  openRouterAppApiKey: string;
+  conversationAssistantModel: string;
 }
 
 function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
@@ -81,6 +87,9 @@ export interface ServiceContainer {
   whatsappCloudApi: WhatsAppCloudApiPort;
   thumbnailGenerator: ThumbnailGeneratorPort;
   linkPreviewFetcher: LinkPreviewFetcherPort;
+  conversationAssistantRepository?: ConversationAssistantRepository;
+  llmClient?: LlmGenerateClient;
+  conversationAssistantModel?: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -128,6 +137,16 @@ export function getServices(): ServiceContainer {
       internalAuthToken: serviceConfig.internalAuthToken,
       logger: createAppLogger({ name: 'webAgentLinkPreviewClient' }),
     }),
+    conversationAssistantRepository: createConversationAssistantRepository(),
+    llmClient: createLlmClient({
+      apiKey: serviceConfig.openRouterAppApiKey,
+      model: serviceConfig.conversationAssistantModel as never,
+      userId: 'whatsapp-conversation-assistant',
+      logger: createAppLogger({ name: 'whatsapp-conversation-assistant-llm' }),
+      usageSink: new NoopUsageSink(),
+      ownerType: 'user',
+    }),
+    conversationAssistantModel: serviceConfig.conversationAssistantModel,
   };
   return container;
 }

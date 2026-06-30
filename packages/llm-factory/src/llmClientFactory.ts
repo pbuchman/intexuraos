@@ -33,6 +33,11 @@ import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGeminiToolCallingClient } from '@intexuraos/infra-gemini';
 import { createOpenRouterToolCallingClient } from '@intexuraos/infra-openrouter';
 import type { UsageSink } from '@intexuraos/llm-pricing';
+import type {
+  GenerateChatOptions,
+  GenerateChatResult,
+  LlmChatMessage,
+} from '@intexuraos/infra-openrouter';
 import {
   getOpenRouterRawId,
   getProviderForModel,
@@ -53,6 +58,14 @@ import { createClaudeGenerateClient } from './claudeGenerateClient.js';
 import { createGptGenerateClient } from './gptGenerateClient.js';
 import { createPerplexityGenerateClient } from './perplexityGenerateClient.js';
 import { IntexuraOSError, type Logger, type Result } from '@intexuraos/common-core';
+
+export type {
+  GenerateChatOptions,
+  GenerateChatResult,
+  LlmChatMessage,
+  LlmChatRole,
+  LlmChatTextBlock,
+} from '@intexuraos/infra-openrouter';
 
 /**
  * Configuration for creating an LLM client.
@@ -132,6 +145,10 @@ export interface LlmGenerateClient {
    * @returns Result with content and usage, or error
    */
   generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
+  generateChat?: (
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ) => Promise<Result<GenerateChatResult, LLMError>>;
 }
 
 /**
@@ -181,13 +198,13 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
   const providerForModel = getProviderForModel(config.model);
   switch (providerForModel) {
     case LlmProviders.Google:
-      return createGeminiClient(config);
+      return withGenerateChatFallback(createGeminiClient(config));
     case LlmProviders.Anthropic:
-      return createClaudeGenerateClient(config);
+      return withGenerateChatFallback(createClaudeGenerateClient(config));
     case LlmProviders.OpenAI:
-      return createGptGenerateClient(config);
+      return withGenerateChatFallback(createGptGenerateClient(config));
     case LlmProviders.Perplexity:
-      return createPerplexityGenerateClient(config);
+      return withGenerateChatFallback(createPerplexityGenerateClient(config));
     default:
       // OpenRouter (or any future provider not in the switch) lands here. Static
       // OpenRouter models don't exist in MODEL_PROVIDER_MAP — the `or:` prefix
@@ -195,6 +212,21 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
       // closed under unknown providers.
       throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM provider: ${providerForModel}`);
   }
+}
+
+function withGenerateChatFallback<T extends { generate: LlmGenerateClient['generate'] }>(
+  client: T
+): T & LlmGenerateClient {
+  return Object.assign(client, {
+    generateChat(): Promise<Result<GenerateChatResult, LLMError>> {
+      return Promise.reject(
+        new IntexuraOSError(
+          'INVALID_REQUEST',
+          'Chat message generation is only supported for OpenRouter clients'
+        )
+      );
+    },
+  });
 }
 
 /**

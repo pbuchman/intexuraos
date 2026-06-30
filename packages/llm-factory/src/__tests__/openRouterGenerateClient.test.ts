@@ -13,10 +13,12 @@ const mockLogger: Logger = {
 const mockUsageSink = new FakeUsageSink();
 
 const mockOrGenerate = vi.fn();
+const mockOrGenerateChat = vi.fn();
 
 vi.mock('@intexuraos/infra-openrouter', () => ({
   createOpenRouterClient: vi.fn(() => ({
     generate: mockOrGenerate,
+    generateChat: mockOrGenerateChat,
   })),
 }));
 
@@ -72,6 +74,54 @@ describe('createOpenRouterGenerateClient', () => {
       promptType: 'test-prompt',
       correlation: { researchId: 'r-1' },
     });
+  });
+
+  it('forwards cache-aware chat messages to the underlying OpenRouter client', async () => {
+    const messages = [
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'text' as const, text: 'Transcript follows:' },
+          {
+            type: 'text' as const,
+            text: 'Stable transcript',
+            cache_control: { type: 'ephemeral' as const },
+          },
+        ],
+      },
+      { role: 'user' as const, content: 'What does this show?' },
+    ];
+    const expectedResult = {
+      content: 'It shows a stable transcript.',
+      usage: {
+        inputTokens: 100,
+        outputTokens: 20,
+        totalTokens: 120,
+        costUsd: 0.002,
+        cachedTokens: 80,
+        cacheWriteTokens: 20,
+      },
+    };
+    mockOrGenerateChat.mockResolvedValue(ok(expectedResult));
+
+    const client = createOpenRouterGenerateClient(baseConfig);
+    expect(client.generateChat).toBeDefined();
+    const generateChat = client.generateChat;
+    if (generateChat === undefined) {
+      throw new Error('OpenRouter generateChat missing');
+    }
+    const result = await generateChat(messages, {
+      promptType: 'whatsapp-conversation-assistant',
+      sessionId: 'whatsapp_conv_session_123',
+      correlation: { sessionId: 'session-123' },
+    });
+
+    expect(mockOrGenerateChat).toHaveBeenCalledWith(messages, {
+      promptType: 'whatsapp-conversation-assistant',
+      sessionId: 'whatsapp_conv_session_123',
+      correlation: { sessionId: 'session-123' },
+    });
+    expect(result).toEqual(ok(expectedResult));
   });
 
   it('strips the or: prefix before passing model to createOpenRouterClient', async () => {

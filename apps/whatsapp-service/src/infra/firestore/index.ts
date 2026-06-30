@@ -60,3 +60,9 @@ export {
   createPrivateWhatsAppSenderId,
   createPrivateWhatsAppRepository,
 } from './privateWhatsAppRepository.js';
+
+export {
+  WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION,
+  WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
+  createConversationAssistantRepository,
+} from './conversationAssistantRepository.js';

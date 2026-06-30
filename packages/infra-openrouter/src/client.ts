@@ -37,7 +37,10 @@ import { LlmProviders, type NormalizedUsage, type GenerateResult } from '@intexu
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type {
+  GenerateChatOptions,
+  GenerateChatResult,
   GenerateOptions,
+  LlmChatMessage,
   OpenRouterConfig,
   OpenRouterError,
   OpenRouterKeyInfo,
@@ -65,6 +68,11 @@ export interface OpenRouterClient {
     prompt: string,
     options: GenerateOptions
   ) => Promise<Result<GenerateResult, OpenRouterError>>;
+
+  generateChat: (
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ) => Promise<Result<GenerateChatResult, OpenRouterError>>;
 
   /**
    * Validate an OpenRouter API key using the lightweight /api/v1/key endpoint.
@@ -162,6 +170,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   function extractUsage(usage?: OpenRouterUsage): {
     normalized: NormalizedUsage;
     providerReportedUsd: number | null;
+    cachedTokens?: number;
+    cacheWriteTokens?: number;
   } {
     /* v8 ignore start -- upstream: cannot verify usage is present in all API responses @preserve */
     if (usage === undefined) {
@@ -172,12 +182,23 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     }
     /* v8 ignore stop @preserve */
     const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
-    const normalized = normalizeUsage(
+    const baseNormalized = normalizeUsage(
       usage.prompt_tokens,
       usage.completion_tokens,
       providerReportedUsd ?? undefined
     );
-    return { normalized, providerReportedUsd };
+    const normalized = {
+      ...baseNormalized,
+      costUsd: providerReportedUsd ?? baseNormalized.costUsd,
+    };
+    const cachedTokens = usage.prompt_tokens_details?.cached_tokens;
+    const cacheWriteTokens = usage.prompt_tokens_details?.cache_write_tokens;
+    return {
+      normalized,
+      providerReportedUsd,
+      ...(cachedTokens !== undefined && { cachedTokens }),
+      ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+    };
   }
 
   return {
@@ -308,7 +329,17 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
-      return await withRetry(() => generateOnce(prompt, options), {
+      return await withRetry(() => generateChatOnce([{ role: 'user', content: prompt }], options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
+    },
+
+    async generateChat(
+      messages: LlmChatMessage[],
+      options: GenerateChatOptions
+    ): Promise<Result<GenerateChatResult, OpenRouterError>> {
+      return await withRetry(() => generateChatOnce(messages, options), {
         maxAttempts: 3,
         baseDelayMs: 500,
       });
@@ -343,10 +374,10 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     },
   };
 
-  async function generateOnce(
-    prompt: string,
-    options: GenerateOptions
-  ): Promise<Result<GenerateResult, OpenRouterError>> {
+  async function generateChatOnce(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ): Promise<Result<GenerateChatResult, OpenRouterError>> {
     const start = Date.now();
     try {
       const { result, durationMs } = await measureLlmCall(
@@ -354,16 +385,14 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           content: string;
           normalized: NormalizedUsage;
           providerReportedUsd: number | null;
+          cachedTokens?: number;
+          cacheWriteTokens?: number;
         }> => {
           const requestBody = {
             model, // No :online suffix for synthesis
-            messages: [
-              {
-                role: 'user',
-                content: prompt,
-              },
-            ],
-            temperature: 0.2,
+            messages,
+            temperature: options.temperature ?? 0.2,
+            ...(options.sessionId !== undefined && { session_id: options.sessionId }),
             ...(options.responseFormat !== undefined && {
               response_format: options.responseFormat,
             }),
@@ -404,8 +433,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             /* v8 ignore stop @preserve */
           }
           const content = firstChoice.message.content;
-          const { normalized, providerReportedUsd } = extractUsage(data.usage);
-          return { content, normalized, providerReportedUsd };
+          const { normalized, providerReportedUsd, cachedTokens, cacheWriteTokens } = extractUsage(
+            data.usage
+          );
+          return {
+            content,
+            normalized,
+            providerReportedUsd,
+            ...(cachedTokens !== undefined && { cachedTokens }),
+            ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+          };
         }
       );
 
@@ -420,7 +457,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         options.correlation
       );
 
-      return ok({ content: result.content, usage: result.normalized });
+      return ok({
+        content: result.content,
+        usage: {
+          ...result.normalized,
+          ...(result.cachedTokens !== undefined && { cachedTokens: result.cachedTokens }),
+          ...(result.cacheWriteTokens !== undefined && {
+            cacheWriteTokens: result.cacheWriteTokens,
+          }),
+        },
+      });
     } catch (error) {
       const durationMs = Date.now() - start;
       const errorMsg = getErrorMessage(error);
