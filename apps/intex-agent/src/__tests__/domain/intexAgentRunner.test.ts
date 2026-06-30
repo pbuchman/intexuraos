@@ -7,61 +7,37 @@ import type {
 import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm-utils';
 import { describe, expect, it } from 'vitest';
 import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
-import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
+import { createIntexAgentRunner as createBaseIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
 import {
   INTEX_AGENT_RUNNER_PROMPT_TYPE,
   INTEX_AGENT_SYSTEM_PROMPT,
 } from '../../domain/agent/systemPrompt.js';
 import type { IntexAgentIntentClassifier } from '../../domain/agent/intentClassifier.js';
-import type { IntexAgentSession, IntexAgentSessionEvent } from '../../domain/sessions/types.js';
+import type {
+  IntexAgentSession,
+  IntexAgentSessionEvent,
+  IntexAgentToolName,
+} from '../../domain/sessions/types.js';
 
 const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
-const SUPPORTED_CAPABILITIES_REPLY =
-  [
-    'I could not safely handle that request. I can help with:',
-    '- summarize and reason over the current session',
-    '- create notes',
-    '- create and look up calendar events',
-    '- create research drafts',
-    '- save bookmarks',
-    '- create code tasks for planning or execution',
-    '- manage Intex Agent prompt preferences',
-  ].join('\n');
-const COMPLETION_FAILURE_CAPABILITIES_REPLY =
-  [
-    'I could not complete that request right now. I can help with:',
-    '- summarize and reason over the current session',
-    '- create notes',
-    '- create and look up calendar events',
-    '- create research drafts',
-    '- save bookmarks',
-    '- create code tasks for planning or execution',
-    '- manage Intex Agent prompt preferences',
-  ].join('\n');
-const POLISH_SUPPORTED_CAPABILITIES_REPLY =
-  [
-    'Nie mogłem bezpiecznie obsłużyć tej prośby. Mogę pomóc z:',
-    '- podsumowywaniem i analizowaniem bieżącej sesji',
-    '- tworzeniem notatek',
-    '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
-    '- tworzeniem szkiców researchu',
-    '- zapisywaniem bookmarków',
-    '- tworzeniem zadań programistycznych do planowania lub wykonania',
-    '- zarządzaniem preferencjami promptu agenta Intex',
-  ].join('\n');
-const POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY =
-  [
-    'Nie mogłem teraz dokończyć tej prośby. Mogę pomóc z:',
-    '- podsumowywaniem i analizowaniem bieżącej sesji',
-    '- tworzeniem notatek',
-    '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
-    '- tworzeniem szkiców researchu',
-    '- zapisywaniem bookmarków',
-    '- tworzeniem zadań programistycznych do planowania lub wykonania',
-    '- zarządzaniem preferencjami promptu agenta Intex',
-  ].join('\n');
 const ENGLISH_GREETING_REPLY = 'Hi! I am doing well. How can I help?';
 const POLISH_GREETING_REPLY = 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?';
+
+type CreateRunnerConfig = Parameters<typeof createBaseIntexAgentRunner>[0];
+
+function createIntexAgentRunner(config: CreateRunnerConfig): ReturnType<typeof createBaseIntexAgentRunner> {
+  if (
+    config.intentClassifier === undefined &&
+    config.client instanceof ToolExecutingFakeToolCallingClient
+  ) {
+    return createBaseIntexAgentRunner({
+      ...config,
+      intentClassifier: toolIntentClassifier(config.client.toolNames()),
+    });
+  }
+
+  return createBaseIntexAgentRunner(config);
+}
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
   'No external system is configured for this message, so I cannot process it. Configure external save in Intex Agent preferences and send it again.';
 const EXTERNAL_SAVE_FAILED_REPLY =
@@ -164,6 +140,7 @@ describe('createIntexAgentRunner', () => {
     ]);
     const runner = createIntexAgentRunner({
       client,
+      intentClassifier: toolIntentClassifier(['create_note']),
       toolExecutor: fakeToolExecutor({
         createNote: async () => {
           createNoteCalls += 1;
@@ -474,6 +451,44 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('propagates classifier fallback metadata on clarification results', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'needs_clarification',
+          question: 'What would you like me to do with this?',
+          blockerReason: 'not_enough_context',
+          suggestedNextStep: 'Ask the user to restate the action.',
+          fallbackReason: 'llm_call_failed',
+          fallbackSourceOutcome: 'classifier',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'make it happen',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'classifier',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
   it('returns classifier unsupported responses with exact blocker metadata', async () => {
     const client = new FakeToolCallingClient([]);
     const intentClassifier: IntexAgentIntentClassifier = {
@@ -505,6 +520,8 @@ describe('createIntexAgentRunner', () => {
         'I cannot do that with the available Intex Agent tools. I can save the request details as a note.',
       blockerReason: 'tool_boundary',
       suggestedNextStep: 'Offer to save the request details as a note.',
+      fallbackReason: 'classifier_unsupported',
+      fallbackSourceOutcome: 'unsupported',
     });
     expect(client.calls).toEqual([]);
   });
@@ -541,18 +558,64 @@ describe('createIntexAgentRunner', () => {
         'Nie mogę wykonać tej akcji, bo brakuje wymaganych uprawnień albo konfiguracji. Sprawdź konfigurację External Save.',
       blockerReason: 'permission_or_configuration',
       suggestedNextStep: 'Sprawdź konfigurację External Save',
+      fallbackReason: 'classifier_unsupported',
+      fallbackSourceOutcome: 'unsupported',
     });
     expect(client.calls).toEqual([]);
   });
 
-  it('falls back safely for classifier unsupported metadata without a mapped blocker or next step', async () => {
+  it.each([
+    'missing_required_details',
+    'not_enough_context',
+    'multiple_possible_intents',
+    'ambiguous_preference_target',
+  ] as const)(
+    'converts clarification-only classifier unsupported reason %s into clarification',
+    async (blockerReason) => {
+      const client = new FakeToolCallingClient([]);
+      const intentClassifier: IntexAgentIntentClassifier = {
+        async classify() {
+          return {
+            kind: 'unsupported',
+            reason: blockerReason,
+            blockerReason,
+            suggestedNextStep: '',
+          };
+        },
+      };
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier,
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'do it',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: 'What would you like me to do with this?',
+        blockerReason,
+        suggestedNextStep: 'Ask the user to restate the action.',
+        fallbackReason: 'classifier_unsupported',
+        fallbackSourceOutcome: 'unsupported',
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
+
+  it('fills blank classifier unsupported next steps before emitting unsupported', async () => {
     const client = new FakeToolCallingClient([]);
     const intentClassifier: IntexAgentIntentClassifier = {
       async classify() {
         return {
           kind: 'unsupported',
-          reason: 'missing_required_details',
-          blockerReason: 'missing_required_details',
+          reason: 'unsupported_capability',
+          blockerReason: 'unsupported_capability',
           suggestedNextStep: '',
         };
       },
@@ -567,14 +630,92 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'do it',
+        message: 'buy this ticket',
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
       outcome: 'unsupported',
-      reply: "I cannot perform that action because it is outside Intex Agent's supported capabilities.",
-      blockerReason: 'missing_required_details',
-      suggestedNextStep: '',
+      reply:
+        "I cannot perform that action because it is outside Intex Agent's supported capabilities. Ask the user to describe a supported action.",
+      blockerReason: 'unsupported_capability',
+      suggestedNextStep: 'Ask the user to describe a supported action.',
+      fallbackReason: 'classifier_unsupported',
+      fallbackSourceOutcome: 'unsupported',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('uses Polish fallback next steps for blank classifier unsupported next steps', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'unsupported',
+          reason: 'unsupported_capability',
+          blockerReason: 'unsupported_capability',
+          suggestedNextStep: '   ',
+          languageOverride: 'pl',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'kup bilet',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        'Nie mogę wykonać tej akcji, bo wykracza poza obsługiwane możliwości agenta Intex. Poproś użytkownika o opisanie obsługiwanej akcji.',
+      blockerReason: 'unsupported_capability',
+      suggestedNextStep: 'Poproś użytkownika o opisanie obsługiwanej akcji.',
+      fallbackReason: 'classifier_unsupported',
+      fallbackSourceOutcome: 'unsupported',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('falls back to generic classifier unsupported text for unmapped blocker reasons', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'unsupported',
+          reason: 'new_blocker_reason',
+          blockerReason: 'new_blocker_reason',
+          suggestedNextStep: 'I can save it as a note.',
+        } as unknown as Awaited<ReturnType<IntexAgentIntentClassifier['classify']>>;
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'buy this ticket',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'unsupported',
+      reply:
+        "I cannot perform that action because it is outside Intex Agent's supported capabilities. I can save it as a note.",
+      blockerReason: 'new_blocker_reason',
+      suggestedNextStep: 'I can save it as a note.',
+      fallbackReason: 'classifier_unsupported',
+      fallbackSourceOutcome: 'unsupported',
     });
     expect(client.calls).toEqual([]);
   });
@@ -610,6 +751,8 @@ describe('createIntexAgentRunner', () => {
         "I cannot perform that action because it is outside Intex Agent's supported capabilities. I can save it as a note.",
       blockerReason: 'unsupported_capability',
       suggestedNextStep: 'I can save it as a note.',
+      fallbackReason: 'classifier_unsupported',
+      fallbackSourceOutcome: 'unsupported',
     });
     expect(client.calls).toEqual([]);
   });
@@ -702,6 +845,8 @@ describe('createIntexAgentRunner', () => {
       suggestedNextStep: 'Offer to save ticket details as a note.',
       missingFields: ['supported_action'],
       candidateIntents: ['create_note'],
+      fallbackReason: 'runner_declared_unsupported',
+      fallbackSourceOutcome: 'unsupported',
     });
   });
 
@@ -731,6 +876,8 @@ describe('createIntexAgentRunner', () => {
       reply: unsupportedReply,
       blockerReason: 'unsupported_capability',
       suggestedNextStep: 'Offer to save ticket details as a note.',
+      fallbackReason: 'runner_declared_unsupported',
+      fallbackSourceOutcome: 'unsupported',
     });
   });
 
@@ -782,8 +929,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'Nie mogłem teraz przetworzyć tej prośby. Napisz proszę jeszcze raz, co mam zrobić.',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Poproś użytkownika o doprecyzowanie akcji.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'llm_call_failed',
     });
   });
 
@@ -820,8 +971,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'Nie mogłem teraz przetworzyć tej prośby. Napisz proszę jeszcze raz, co mam zrobić.',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Poproś użytkownika o doprecyzowanie akcji.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'llm_call_failed',
     });
   });
 
@@ -844,12 +999,16 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'Nie mogłem teraz przetworzyć tej prośby. Napisz proszę jeszcze raz, co mam zrobić.',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Poproś użytkownika o doprecyzowanie akcji.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'llm_call_failed',
     });
   });
 
-  it('uses English for a substantive English current message after Polish context', async () => {
+  it('uses English fallback text for a substantive English current message after Polish context', async () => {
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
@@ -868,8 +1027,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
     });
   });
 
@@ -1075,7 +1238,7 @@ describe('createIntexAgentRunner', () => {
     await runner.run({
       session: session(),
       events: [],
-      message: 'https://research-world.com/notes-and-calendar-tasks Interesting launch',
+      message: 'https://research-world.com/notes-and-calendar-tasks',
       currentDateTime: CURRENT_DATE_TIME,
     });
 
@@ -1091,7 +1254,11 @@ describe('createIntexAgentRunner', () => {
         })
       ),
     ]);
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['save_external']),
+      toolExecutor: fakeToolExecutor(),
+    });
 
     await runner.run({
       session: session(),
@@ -1112,7 +1279,11 @@ describe('createIntexAgentRunner', () => {
         })
       ),
     ]);
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['save_external']),
+      toolExecutor: fakeToolExecutor(),
+    });
 
     await runner.run({
       session: session(),
@@ -1133,7 +1304,11 @@ describe('createIntexAgentRunner', () => {
         })
       ),
     ]);
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor(),
+    });
 
     await runner.run({
       session: session(),
@@ -1165,6 +1340,7 @@ describe('createIntexAgentRunner', () => {
     ]);
     const runner = createIntexAgentRunner({
       client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
         queryCalendarEvents: async () =>
           JSON.stringify({
@@ -1220,6 +1396,7 @@ describe('createIntexAgentRunner', () => {
     ]);
     const runner = createIntexAgentRunner({
       client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
         queryCalendarEvents: async () =>
           JSON.stringify({
@@ -1276,6 +1453,7 @@ describe('createIntexAgentRunner', () => {
     ]);
     const runner = createIntexAgentRunner({
       client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
         queryCalendarEvents: async () =>
           JSON.stringify({
@@ -1331,6 +1509,7 @@ describe('createIntexAgentRunner', () => {
     ]);
     const runner = createIntexAgentRunner({
       client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
         queryCalendarEvents: async () =>
           JSON.stringify({
@@ -1360,7 +1539,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain('Current date-time: 2026-06-26T17:00:00.000Z');
   });
 
-  it('returns unsupported when the model result is malformed instead of executing a hidden action', async () => {
+  it('asks for clarification when the successful model result is malformed', async () => {
     const client = new FakeToolCallingClient([
       ok({
         content: 'plain text',
@@ -1379,8 +1558,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
     });
   });
 
@@ -1509,7 +1692,7 @@ describe('createIntexAgentRunner', () => {
     ]);
   });
 
-  it('returns unsupported when the model returns a non-object JSON value', async () => {
+  it('asks for clarification when the model returns a non-object JSON value', async () => {
     const client = new FakeToolCallingClient([
       ok({
         content: '[]',
@@ -1528,12 +1711,16 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
     });
   });
 
-  it('returns unsupported when the model omits required response fields', async () => {
+  it('asks for clarification when the model omits required completed fields', async () => {
     const client = new FakeToolCallingClient([ok(toolResult({ outcome: 'completed' }))]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
@@ -1545,12 +1732,16 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'tool_result_mismatch',
+      fallbackSourceOutcome: 'completed',
     });
   });
 
-  it('returns unsupported when the model uses an unknown outcome', async () => {
+  it('asks for clarification when the model uses an unknown outcome', async () => {
     const client = new FakeToolCallingClient([
       ok(toolResult({ outcome: 'delegated', reply: 'Working on it.' })),
     ]);
@@ -1564,8 +1755,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
     });
   });
 
@@ -1677,6 +1872,7 @@ describe('createIntexAgentRunner', () => {
     const client = new FakeToolCallingClient([]);
     const runner = createIntexAgentRunner({
       client,
+      intentClassifier: toolIntentClassifier(['save_external']),
       toolExecutor: fakeToolExecutor({
         createResearch: async () =>
           JSON.stringify({
@@ -1715,7 +1911,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toEqual([]);
   });
 
-  it('rejects confirmed execution requests for read-only tools', async () => {
+  it('clarifies confirmed execution requests for read-only tools', async () => {
     const runner = createIntexAgentRunner({
       client: new FakeToolCallingClient([]),
       toolExecutor: fakeToolExecutor(),
@@ -1733,8 +1929,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'tool_result_mismatch',
+      fallbackSourceOutcome: 'confirmed_execution',
     });
   });
 
@@ -1757,8 +1957,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: POLISH_SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'Co mam z tym zrobić?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Poproś użytkownika o doprecyzowanie akcji.',
+      fallbackReason: 'tool_result_mismatch',
+      fallbackSourceOutcome: 'confirmed_execution',
     });
   });
 
@@ -2660,7 +2864,7 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
-  it('rejects completed responses when no tool actually ran and no supported toolName is present', async () => {
+  it('asks for clarification when a completed response has no matching tool execution', async () => {
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
@@ -2680,12 +2884,16 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'tool_result_mismatch',
+      fallbackSourceOutcome: 'completed',
     });
   });
 
-  it('rejects completed responses when the model claims a supported toolName but no tool ran', async () => {
+  it('asks for clarification when the model claims a supported toolName but no tool ran', async () => {
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
@@ -2706,14 +2914,39 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'tool_result_mismatch',
+      fallbackSourceOutcome: 'completed',
     });
   });
 
-  it('rejects completed responses when multiple tools ran in one turn', async () => {
-    const client = new FakeToolCallingClient([]);
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+  it('asks for clarification when multiple tools ran in one turn', async () => {
+    const client = new ToolExecutingFakeToolCallingClient([
+      { toolName: 'create_note', args: { content: 'Visit Lisbon.' } },
+      { toolName: 'create_link', args: { url: 'https://example.com', title: 'Example' } },
+    ], [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          summary: 'Handled request.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return { kind: 'tool', allowedToolNames: ['create_note', 'create_link'] };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
 
     await expect(
       runner.run({
@@ -2723,13 +2956,16 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'tool_result_mismatch',
+      fallbackSourceOutcome: 'completed',
     });
-    expect(client.calls).toEqual([]);
   });
 
-  it('rejects unsupported completed tool names from normalized responses', async () => {
+  it('asks for clarification when normalized output names an unsupported completed tool', async () => {
     const client = new FakeToolCallingClient([
       ok(
         toolResult({
@@ -2750,12 +2986,16 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: SUPPORTED_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
     });
   });
 
-  it('returns unsupported when the tool-calling client fails', async () => {
+  it('asks for clarification when the tool-calling client fails', async () => {
     const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
@@ -2767,12 +3007,16 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: COMPLETION_FAILURE_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'I could not process that request right now. Please restate what you want me to do.',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'llm_call_failed',
     });
   });
 
-  it('returns Polish capabilities when the tool-calling client fails for a Polish message', async () => {
+  it('asks for Polish clarification when the tool-calling client fails for a Polish message', async () => {
     const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
@@ -2784,8 +3028,12 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
-      outcome: 'unsupported',
-      reply: POLISH_COMPLETION_FAILURE_CAPABILITIES_REPLY,
+      outcome: 'needs_clarification',
+      reply: 'Nie mogłem teraz przetworzyć tej prośby. Napisz proszę jeszcze raz, co mam zrobić.',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Poproś użytkownika o doprecyzowanie akcji.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'llm_call_failed',
     });
   });
 
@@ -3049,6 +3297,12 @@ describe('createIntexAgentRunner', () => {
     );
     const runner = createIntexAgentRunner({
       client,
+      intentClassifier: toolIntentClassifier([
+        'get_user_preferences',
+        'add_user_preference',
+        'update_user_preference',
+        'delete_user_preference',
+      ]),
       toolExecutor: fakeToolExecutor({
         getUserPreferences: async () =>
           JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
@@ -3489,6 +3743,14 @@ function expectedConfirmationReplyFor(toolName: PreviewToolName): string {
   return 'Add this instruction memory entry?\n\nNew entry: Prefer concise morning summaries.';
 }
 
+function toolIntentClassifier(allowedToolNames: IntexAgentToolName[]): IntexAgentIntentClassifier {
+  return {
+    async classify(): ReturnType<IntexAgentIntentClassifier['classify']> {
+      return { kind: 'tool', allowedToolNames };
+    },
+  };
+}
+
 class FakeToolCallingClient implements ToolCallingClient {
   readonly calls: Parameters<ToolCallingClient['run']>[0][] = [];
 
@@ -3533,6 +3795,11 @@ class ToolExecutingFakeToolCallingClient extends FakeToolCallingClient {
     results: Result<ToolCallingResult, LLMError>[]
   ) {
     super(results);
+  }
+
+  toolNames(): IntexAgentToolName[] {
+    const toolCalls = Array.isArray(this.toolCalls) ? this.toolCalls : [this.toolCalls];
+    return [...new Set(toolCalls.map((toolCall) => toolCall.toolName))] as IntexAgentToolName[];
   }
 
   override async run(

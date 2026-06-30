@@ -9,9 +9,12 @@ import { formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
 const EVENT_TYPE_ORDER: Record<IntexAgentSessionEventType, number> = {
   session_started: 0,
   user_message: 10,
+  confirmation_requested: 20,
+  confirmation_resolved: 20,
   tool_call_started: 20,
   tool_call_completed: 30,
   tool_call_failed: 30,
+  agent_fallback: 39,
   unsupported_request: 40,
   clarification_requested: 40,
   assistant_message: 50,
@@ -103,11 +106,14 @@ export function getSessionEventClass(type: IntexAgentSessionEventType): string {
       return 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950';
     case 'assistant_message':
     case 'clarification_requested':
+    case 'confirmation_requested':
+    case 'confirmation_resolved':
       return 'border-blue-200 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/20';
     case 'tool_call_started':
     case 'tool_call_completed':
       return 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20';
     case 'tool_call_failed':
+    case 'agent_fallback':
     case 'unsupported_request':
       return 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20';
     case 'session_started':

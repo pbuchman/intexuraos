@@ -58,6 +58,7 @@ export type IntexAgentSessionEventType =
   | 'session_closed'
   | 'user_message'
   | 'assistant_message'
+  | 'agent_fallback'
   | 'clarification_requested'
   | 'confirmation_requested'
   | 'confirmation_resolved'

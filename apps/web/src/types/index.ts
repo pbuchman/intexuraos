@@ -349,10 +349,15 @@ export type IntexAgentSessionEndReason =
 export type IntexAgentToolName =
   | 'create_note'
   | 'create_calendar_event'
+  | 'query_calendar_events'
   | 'create_research'
   | 'create_link'
   | 'create_code_task'
-  | 'save_external';
+  | 'save_external'
+  | 'get_user_preferences'
+  | 'add_user_preference'
+  | 'update_user_preference'
+  | 'delete_user_preference';
 
 export interface IntexAgentSession {
   id: string;
@@ -374,7 +379,10 @@ export type IntexAgentSessionEventType =
   | 'session_closed'
   | 'user_message'
   | 'assistant_message'
+  | 'agent_fallback'
   | 'clarification_requested'
+  | 'confirmation_requested'
+  | 'confirmation_resolved'
   | 'tool_call_started'
   | 'tool_call_completed'
   | 'tool_call_failed'

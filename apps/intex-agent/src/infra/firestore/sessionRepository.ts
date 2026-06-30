@@ -30,6 +30,7 @@ const EVENT_TYPE_ORDER: Record<IntexAgentSessionEventType, number> = {
   tool_call_started: 20,
   tool_call_completed: 30,
   tool_call_failed: 30,
+  agent_fallback: 39,
   unsupported_request: 40,
   clarification_requested: 40,
   assistant_message: 50,

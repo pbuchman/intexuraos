@@ -34,6 +34,12 @@ function getEventTitle(event: IntexAgentSessionEvent): string {
       return 'IntexuraOS';
     case 'clarification_requested':
       return 'Clarification requested';
+    case 'agent_fallback':
+      return 'Agent fallback';
+    case 'confirmation_requested':
+      return 'Confirmation requested';
+    case 'confirmation_resolved':
+      return 'Confirmation resolved';
     case 'tool_call_started':
       return `${formatSessionValue(getPayloadString(event.payload, 'toolName'))} started`;
     case 'tool_call_completed':
@@ -74,6 +80,7 @@ function EventIcon({ event }: { event: IntexAgentSessionEvent }): React.JSX.Elem
   if (event.type === 'assistant_message' || event.type === 'clarification_requested') {
     return <Bot className="h-4 w-4" />;
   }
+  if (event.type === 'agent_fallback') return <Bot className="h-4 w-4" />;
   if (event.type.startsWith('tool_call')) return <Wrench className="h-4 w-4" />;
   if (event.type === 'session_closed') return <CheckCircle2 className="h-4 w-4" />;
   return <PlayCircle className="h-4 w-4" />;
