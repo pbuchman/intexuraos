@@ -1397,6 +1397,21 @@ export async function handleTaskCompletion(
         if (prNumber === undefined && task.prNumber !== undefined) {
           prNumber = task.prNumber;
         }
+        const isPrStillOpen = (): boolean => task.prMergedAt === undefined && task.prClosedAt === undefined;
+        const getInReviewTransitionIssueId = (): string | undefined => {
+          if (
+            task.agentType === 'execution' ||
+            task.agentType === 'pull_request' ||
+            task.agentType === 'planning' ||
+            task.agentType === 'remediation' ||
+            prNumber === undefined ||
+            !isPrStillOpen()
+          ) {
+            return undefined;
+          }
+
+          return task.linearIssueId;
+        };
 
         const resolvedStatus = resolveCompletedTaskStatus(task.agentType);
         const executionMemoryPostRun = shouldQueueExecutionMemoryPostRun({
@@ -1482,7 +1497,7 @@ export async function handleTaskCompletion(
 
               await applyReadyToMergeLabel(prNumber);
             } else {
-              if (task.prMergedAt !== undefined || task.prClosedAt !== undefined) {
+              if (!isPrStillOpen()) {
                 requestLog.info(
                   {
                     taskId,
@@ -1632,10 +1647,11 @@ export async function handleTaskCompletion(
           await applyReadyToMergeLabel(prNumber);
         }
 
-        // Best-effort In Review transition for agent types without deterministic enforcement
-        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
-          await linearIssueService.markInReview(task.userId, task.linearIssueId);
+        // Best-effort In Review transition for agent types without deterministic enforcement.
+        // If the PR is already merged/closed, handlePrClose owns the final Linear state.
+        const inReviewTransitionIssueId = getInReviewTransitionIssueId();
+        if (inReviewTransitionIssueId !== undefined) {
+          await linearIssueService.markInReview(task.userId, inReviewTransitionIssueId);
         }
 
         // Send WhatsApp notification (use updated task with result populated)
