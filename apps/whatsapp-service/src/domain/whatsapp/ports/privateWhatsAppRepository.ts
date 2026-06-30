@@ -8,6 +8,7 @@ import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppChatQueryResult,
+  PrivateWhatsAppConversationContextMessageResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
@@ -41,6 +42,10 @@ export interface PrivateWhatsAppRepository {
   getMessageById(
     messageId: string
   ): Promise<Result<PrivateWhatsAppMessage | null, WhatsAppError>>;
+  getChatById(input: {
+    sourceAccountId: string;
+    chatId: string;
+  }): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>>;
   updateChatTranscriptionSetting(
     input: UpdatePrivateWhatsAppChatTranscriptionInput
   ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>>;
@@ -50,6 +55,13 @@ export interface PrivateWhatsAppRepository {
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>>;
+  findConversationContextMessages(input: {
+    sourceAccountId: string;
+    chatId: string;
+    from: string;
+    to: string;
+    limit: number;
+  }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>>;
   findChats(
     input: PrivateWhatsAppChatQueryInput
   ): Promise<Result<PrivateWhatsAppChatQueryResult, WhatsAppError>>;

@@ -16,6 +16,7 @@ import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppChatQueryResult,
+  PrivateWhatsAppConversationContextMessageResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
@@ -73,9 +74,11 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
     disableAccount,
     storeIncomingMessage,
     getMessageById,
+    getChatById,
     updateChatTranscriptionSetting,
     updateMessageTranscription,
     findMessages,
+    findConversationContextMessages,
     findChats,
     findSenders,
     findSenderDays,
@@ -125,6 +128,31 @@ async function getActiveAccountBySourceAccountId(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to resolve private WhatsApp account: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function getChatById(input: {
+  sourceAccountId: string;
+  chatId: string;
+}): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>> {
+  try {
+    const doc = await getFirestore()
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .doc(input.chatId)
+      .get();
+    if (!doc.exists) {
+      return ok(null);
+    }
+    const chat = normalizeChat(doc.id, doc.data());
+    if (chat.sourceAccountId !== input.sourceAccountId) {
+      return ok(null);
+    }
+    return ok(chat);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to load private WhatsApp chat: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
@@ -514,6 +542,35 @@ async function findMessages(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to query private WhatsApp messages: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function findConversationContextMessages(input: {
+  sourceAccountId: string;
+  chatId: string;
+  from: string;
+  to: string;
+  limit: number;
+}): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
+  try {
+    const query = getFirestore()
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .where('sourceAccountId', '==', input.sourceAccountId)
+      .where('chatId', '==', input.chatId)
+      .where('eventTimestamp', '>=', input.from)
+      .where('eventTimestamp', '<', input.to)
+      .orderBy('eventTimestamp', 'asc')
+      .orderBy(FieldPath.documentId(), 'asc');
+    const [snapshot, countSnapshot] = await Promise.all([query.get(), query.count().get()]);
+    return ok({
+      messages: snapshot.docs.map((doc) => doc.data() as PrivateWhatsAppMessage),
+      totalCount: countSnapshot.data().count,
+    });
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to query private WhatsApp conversation context messages: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }

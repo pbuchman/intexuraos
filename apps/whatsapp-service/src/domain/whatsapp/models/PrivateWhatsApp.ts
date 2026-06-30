@@ -241,6 +241,11 @@ export interface PrivateWhatsAppMessageQueryResult {
   nextCursor?: string;
 }
 
+export interface PrivateWhatsAppConversationContextMessageResult {
+  messages: PrivateWhatsAppMessage[];
+  totalCount: number;
+}
+
 export interface UpdatePrivateWhatsAppChatTranscriptionInput {
   sourceAccountId: string;
   chatId: string;

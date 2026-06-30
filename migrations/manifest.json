@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "115",
+  "lastReservedId": "117",
   "entries": [
     {
       "id": "001",
@@ -575,6 +575,16 @@
       "id": "115",
       "name": "private-whatsapp-chat-pagination-indexes",
       "checksum": "sha256:91dd3afa29ceb6b20b85bd907931c6e883e1b44c52fedb5624bcdfbbc0b382f8"
+    },
+    {
+      "id": "116",
+      "name": "remove-command-action-indexes",
+      "checksum": "sha256:d46f7232d2847ba8dddb13636aeb652085b65bc992f4483b29e1244ff30ab5f6"
+    },
+    {
+      "id": "117",
+      "name": "private-whatsapp-conversation-context-index",
+      "checksum": "sha256:16d60af65075f7546ef4d4f7ed87c85d9936b2afeafc55b22ced2d7d7870d967"
     }
   ]
 }

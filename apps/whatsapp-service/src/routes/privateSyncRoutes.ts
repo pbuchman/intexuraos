@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { projectPrivateConversationContext } from '../domain/conversation-assistant/transcriptFormatting.js';
 import {
   IngestPrivateWhatsAppEventsUseCase,
   type IngestPrivateWhatsAppEventsInput,
@@ -37,6 +38,14 @@ interface PrivateAggregateRebuildBody {
   limit?: number;
 }
 
+interface PrivateConversationContextBody {
+  userId: string;
+  chatId: string;
+  from: string;
+  to: string;
+  maxMessages?: number;
+}
+
 interface PrivateIngestBody extends Omit<IngestPrivateWhatsAppEventsInput, 'userId'> {
   userId?: string;
 }
@@ -69,6 +78,25 @@ function getPrivateMessagesQueryLogMetadata(query: Partial<PrivateMessagesQuerys
     hasEventDayKey: typeof query.eventDayKey === 'string',
     hasCursor: typeof query.cursor === 'string',
     limit: normalizeLimit(query.limit),
+  };
+}
+
+function getPrivateConversationContextLogMetadata(body: unknown): Record<string, unknown> {
+  if (body === null || typeof body !== 'object') {
+    return {
+      route: 'internal_whatsapp_private_conversation_context',
+      bodyType: typeof body,
+    };
+  }
+
+  const payload = body as Partial<PrivateConversationContextBody>;
+  return {
+    route: 'internal_whatsapp_private_conversation_context',
+    hasUserId: typeof payload.userId === 'string',
+    hasChatId: typeof payload.chatId === 'string',
+    hasFrom: typeof payload.from === 'string',
+    hasTo: typeof payload.to === 'string',
+    maxMessages: normalizeConversationMaxMessages(payload.maxMessages),
   };
 }
 
@@ -109,6 +137,19 @@ function normalizeLimit(limit: number | undefined): number {
     return limit;
   }
   return 50;
+}
+
+function normalizeConversationMaxMessages(maxMessages: number | undefined): number {
+  if (typeof maxMessages === 'number') {
+    return maxMessages;
+  }
+  return 2000;
+}
+
+function hasValidIsoTimeRange(from: string, to: string): boolean {
+  const fromMs = Date.parse(from);
+  const toMs = Date.parse(to);
+  return Number.isFinite(fromMs) && Number.isFinite(toMs) && fromMs < toMs;
 }
 
 export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -395,6 +436,226 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       }
 
       return await reply.ok(result.value);
+    }
+  );
+
+  fastify.post<{ Body: PrivateConversationContextBody }>(
+    '/internal/whatsapp/private/conversation-context',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'getPrivateWhatsAppConversationContext',
+        summary: 'Export private WhatsApp conversation context',
+        description:
+          'Internal endpoint for agents to read sanitized text/transcript context for a user-owned private direct WhatsApp chat.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            userId: { type: 'string', minLength: 1 },
+            chatId: { type: 'string', minLength: 1 },
+            from: { type: 'string', minLength: 1 },
+            to: { type: 'string', minLength: 1 },
+            maxMessages: { type: 'integer', minimum: 1, maximum: 5000 },
+          },
+          required: ['userId', 'chatId', 'from', 'to'],
+        },
+        response: {
+          200: {
+            description: 'Private WhatsApp conversation context retrieved',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  chat: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: 'string' },
+                      displayName: { type: 'string' },
+                      chatType: { type: 'string', const: 'direct' },
+                      firstSeenAt: { type: 'string' },
+                      lastEventAt: { type: 'string' },
+                      messageCount: { type: 'integer' },
+                    },
+                    required: ['id', 'chatType', 'firstSeenAt', 'lastEventAt', 'messageCount'],
+                  },
+                  range: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      from: { type: 'string' },
+                      to: { type: 'string' },
+                    },
+                    required: ['from', 'to'],
+                  },
+                  messages: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        id: { type: 'string' },
+                        eventTimestamp: { type: 'string' },
+                        direction: { type: 'string', enum: ['incoming', 'outgoing'] },
+                        speakerLabel: { type: 'string' },
+                        messageType: { type: 'string' },
+                        contentKind: { type: 'string', enum: ['text', 'transcription'] },
+                        content: { type: 'string' },
+                      },
+                      required: [
+                        'id',
+                        'eventTimestamp',
+                        'direction',
+                        'speakerLabel',
+                        'messageType',
+                        'contentKind',
+                        'content',
+                      ],
+                    },
+                  },
+                  omitted: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      mediaOnly: { type: 'integer' },
+                      failedTranscriptions: { type: 'integer' },
+                      pendingTranscriptions: { type: 'integer' },
+                      nonText: { type: 'integer' },
+                      overLimit: { type: 'integer' },
+                    },
+                    required: [
+                      'mediaOnly',
+                      'failedTranscriptions',
+                      'pendingTranscriptions',
+                      'nonText',
+                      'overLimit',
+                    ],
+                  },
+                  messageCount: { type: 'integer' },
+                  transcriptSha256: { type: 'string' },
+                },
+                required: ['chat', 'range', 'messages', 'omitted', 'messageCount', 'transcriptSha256'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Private WhatsApp account or chat not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Persistence failure',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Body: PrivateConversationContextBody }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/whatsapp/private/conversation-context',
+        bodyPreviewLength: 0,
+        additionalFields: getPrivateConversationContextLogMetadata(request.body),
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for private WhatsApp conversation context query'
+        );
+        return await reply.fail(
+          'UNAUTHORIZED',
+          'Internal auth failed for private WhatsApp conversation context query'
+        );
+      }
+
+      const validatedRequest = request as ValidatedRequest;
+      if (validatedRequest.validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const maxMessages = normalizeConversationMaxMessages(request.body.maxMessages);
+      if (!hasValidIsoTimeRange(request.body.from, request.body.to)) {
+        return await reply.fail('INVALID_REQUEST', 'Invalid conversation context time range');
+      }
+
+      const repository = getServices().privateWhatsAppRepository;
+      const accountResult = await repository.getAccountByUserId(request.body.userId);
+      if (!accountResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', accountResult.error.message);
+      }
+      if (accountResult.value?.status !== 'active') {
+        return await reply.fail('NOT_FOUND', 'Private WhatsApp account not found');
+      }
+
+      const chatResult = await repository.getChatById({
+        sourceAccountId: accountResult.value.sourceAccountId,
+        chatId: request.body.chatId,
+      });
+      if (!chatResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', chatResult.error.message);
+      }
+      if (chatResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'Private WhatsApp chat not found');
+      }
+      if (chatResult.value.chatType !== 'direct') {
+        return await reply.fail('INVALID_REQUEST', 'Conversation context supports direct chats only');
+      }
+
+      const messagesResult = await repository.findConversationContextMessages({
+        sourceAccountId: accountResult.value.sourceAccountId,
+        chatId: request.body.chatId,
+        from: request.body.from,
+        to: request.body.to,
+        limit: maxMessages,
+      });
+      if (!messagesResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', messagesResult.error.message);
+      }
+
+      return await reply.ok(
+        projectPrivateConversationContext({
+          chat: chatResult.value,
+          range: { from: request.body.from, to: request.body.to },
+          maxMessages,
+          messages: messagesResult.value.messages,
+        })
+      );
     }
   );
 

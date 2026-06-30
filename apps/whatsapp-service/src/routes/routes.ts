@@ -25,6 +25,7 @@
  * GET    /whatsapp/private/media-access                   → ./privateMediaRoutes.ts
  * POST   /internal/whatsapp/private/media         → ./privateMediaRoutes.ts
  * GET    /internal/whatsapp/private/messages/:messageId/media → ./privateMediaRoutes.ts
+ * POST   /internal/whatsapp/private/conversation-context → ./privateSyncRoutes.ts
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
  * POST   /internal/whatsapp/webhooks/retry-pending → ./internalRoutes.ts
  * POST   /internal/whatsapp/private/events        → ./privateSyncRoutes.ts

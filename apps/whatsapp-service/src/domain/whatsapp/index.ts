@@ -53,6 +53,7 @@ export type {
   PrivateWhatsAppIngestEventResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppIngestResult,
+  PrivateWhatsAppConversationContextMessageResult,
   PrivateWhatsAppMediaInfo,
   PrivateWhatsAppMediaStorageStatus,
   PrivateWhatsAppMessage,
