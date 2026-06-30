@@ -2254,6 +2254,26 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.error.code).toBe('INVALID_REQUEST');
   });
 
+  it('rejects parseable non-ISO conversation context timestamps', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: 'chat-123',
+        from: '2026-06-22',
+        to: '2026-06-22T10:00:00.000Z',
+        maxMessages: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
   it('rejects group chats for conversation context export', async () => {
     const ingest = await ctx.app.inject({
       method: 'POST',

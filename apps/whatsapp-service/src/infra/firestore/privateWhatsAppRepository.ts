@@ -562,7 +562,10 @@ async function findConversationContextMessages(input: {
       .where('eventTimestamp', '<', input.to)
       .orderBy('eventTimestamp', 'asc')
       .orderBy(FieldPath.documentId(), 'asc');
-    const [snapshot, countSnapshot] = await Promise.all([query.get(), query.count().get()]);
+    const [snapshot, countSnapshot] = await Promise.all([
+      query.limit(input.limit + 1).get(),
+      query.count().get(),
+    ]);
     return ok({
       messages: snapshot.docs.map((doc) => doc.data() as PrivateWhatsAppMessage),
       totalCount: countSnapshot.data().count,

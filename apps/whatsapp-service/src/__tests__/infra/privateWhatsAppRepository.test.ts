@@ -1403,6 +1403,16 @@ describe('privateWhatsAppRepository', () => {
         },
       })
     );
+    const beyondLimitResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$event-4-context',
+          text: 'beyond bounded snapshot',
+          eventTimestamp: '2026-06-22T10:03:00.000Z',
+        },
+      })
+    );
     await repository.storeIncomingMessage(
       createStoreInput({
         message: {
@@ -1416,6 +1426,7 @@ describe('privateWhatsAppRepository', () => {
     expect(firstResult.ok).toBe(true);
     expect(secondResult.ok).toBe(true);
     expect(sameTimestampResult.ok).toBe(true);
+    expect(beyondLimitResult.ok).toBe(true);
     if (!firstResult.ok) throw new Error(firstResult.error.message);
 
     const result = await repository.findConversationContextMessages({
@@ -1433,7 +1444,7 @@ describe('privateWhatsAppRepository', () => {
       '$event-2-context',
       '$event-3-context',
     ]);
-    expect(result.value.totalCount).toBe(3);
+    expect(result.value.totalCount).toBe(4);
   });
 
   it('queries private WhatsApp chats newest-first and projects legacy chat documents safely', async () => {

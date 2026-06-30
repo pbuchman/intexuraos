@@ -147,9 +147,20 @@ function normalizeConversationMaxMessages(maxMessages: number | undefined): numb
 }
 
 function hasValidIsoTimeRange(from: string, to: string): boolean {
+  if (!isCanonicalIsoTimestamp(from) || !isCanonicalIsoTimestamp(to)) {
+    return false;
+  }
   const fromMs = Date.parse(from);
   const toMs = Date.parse(to);
   return Number.isFinite(fromMs) && Number.isFinite(toMs) && fromMs < toMs;
+}
+
+function isCanonicalIsoTimestamp(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return false;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
 export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
