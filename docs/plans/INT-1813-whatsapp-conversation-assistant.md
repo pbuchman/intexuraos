@@ -12,6 +12,12 @@
 **Plan document:** `docs/plans/INT-1813-whatsapp-conversation-assistant.md`
 **External references:** [OpenRouter prompt caching](https://openrouter.ai/docs/guides/best-practices/prompt-caching), [OpenRouter model catalog API](https://openrouter.ai/api/v1/models)
 
+## Ownership Boundary
+
+This is not an Intex Agent feature implemented inside `whatsapp-service`. The only new `whatsapp-service` responsibility is a private, internal-auth transcript export because that service owns the private WhatsApp storage schema, account ownership checks, message/transcription filtering, and media omission rules. `whatsapp-service` must not create assistant sessions, store assistant turns, assemble prompts, call OpenRouter, expose public Conversation Assistant APIs, or depend on `intex-agent`.
+
+`intex-agent` is the feature owner for the assistant runtime. It calls the sanitized WhatsApp export as a data source, freezes the returned text snapshot, owns the Conversation Assistant session and turn collections, assembles prompts, invokes the LLM, and exposes the authenticated web APIs.
+
 ## Global Constraints
 
 - MVP supports private WhatsApp direct chats only; group chats must be rejected with `INVALID_REQUEST`.
@@ -23,11 +29,12 @@
 - Assistant answers must be factual, critical, and explicitly say when the selected context does not contain enough evidence.
 - OpenRouter calls must pass a stable `session_id` no longer than 256 characters and keep the initial stable prompt prefix identical across turns.
 - Gemini caching must mark the large transcript content block with `cache_control: { type: 'ephemeral' }`; dynamic user questions must appear after the cached block.
-- Use current OpenRouter model `or:google/gemini-3.5-flash` unless the implementation verifies a better current Gemini thinking-capable model in the OpenRouter catalog before coding.
+- Use current OpenRouter model `or:google/gemini-3.5-flash`, verified in the OpenRouter model catalog on 2026-06-30, unless the implementation verifies a better current Gemini thinking-capable model before coding.
 - All new `PromptBuilder` prompts must include a semver `version` field.
 - Every HTTP endpoint must call `logIncomingRequest()`.
 - New Firestore collections must be registered in `firestore-collections.json`.
 - Firestore migrations are immutable; add new migration files for required composite indexes.
+- All new backend/package code must satisfy 100% branch coverage. Any `/* v8 ignore */` exemption must use a valid CLAUDE.md category and name the testing blocker, not merely describe the ignored code.
 - Implementation agents must use subagents for the parallel subtasks below.
 - Before commit in implementation tasks, `pnpm run ci:tracked` must pass.
 
@@ -37,7 +44,7 @@
 
 | Subtask | Owner boundary | Independent contract |
 | --- | --- | --- |
-| Shared LLM package work | `packages/infra-openrouter`, `packages/llm-factory`, `packages/llm-contract`, `packages/llm-prompts` | Exposes cache-aware chat generation types and `buildWhatsAppConversationAssistantMessages()`. No app code changes are required to verify the package contract. |
+| Shared LLM package work | `packages/infra-openrouter`, `packages/llm-factory`, `packages/llm-prompts`; `packages/llm-contract` only if shared role/content-block types belong there | Exposes cache-aware chat generation types and `buildWhatsAppConversationAssistantMessages()`. No app code changes are required to verify the package contract. |
 | WhatsApp context export | `apps/whatsapp-service` | Creates `POST /internal/whatsapp/private/conversation-context` that returns a sanitized transcript snapshot for a user-owned direct chat and time range. No `intex-agent` or web code changes. |
 | Conversation assistant runtime | `apps/intex-agent` | Creates authenticated session/turn APIs, calls the WhatsApp internal export contract, persists sessions/turns, and invokes the cache-aware LLM contract. Can test with fake WhatsApp context and fake LLM clients. |
 | Web experience | `apps/web` | Adds `/whatsapp/conversation-assistant`, nav entry, session list, chat picker/time-range form, and chat UI against fixed API DTOs. Can test with mocked service functions. |
@@ -303,7 +310,7 @@ Implementation may refine wording, but it must preserve these semantics:
 - Create `apps/intex-agent/src/infra/firestore/conversationAssistantRepository.ts`.
 - Create `apps/intex-agent/src/infra/http/whatsappPrivateContextClient.ts`.
 - Create `apps/intex-agent/src/routes/conversationAssistantRoutes.ts`.
-- Modify `apps/intex-agent/src/routes/index.ts` or `server.ts` route registration.
+- Modify `apps/intex-agent/src/server.ts` route registration.
 - Modify `apps/intex-agent/src/services.ts` to wire repository, WhatsApp internal client, LLM chat client, and usage sink.
 - Modify `apps/intex-agent/src/config.ts` and `apps/intex-agent/src/index.ts` to add `INTEXURAOS_WHATSAPP_SERVICE_URL` and `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`.
 - Modify `ecosystem.config.cjs` and `terraform/environments/dev/main.tf` for the new env vars if they are not already available to `intex-agent`.
@@ -569,7 +576,7 @@ Add required env vars:
 - `INTEXURAOS_WHATSAPP_SERVICE_URL`
 - `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`
 
-Default the model to `or:google/gemini-3.5-flash` after verifying the model exists in the OpenRouter catalog. Wire env vars in `apps/intex-agent/src/index.ts`, `ecosystem.config.cjs`, and `terraform/environments/dev/main.tf`.
+Default the model to `or:google/gemini-3.5-flash`, verified in the OpenRouter catalog on 2026-06-30. Wire env vars in `apps/intex-agent/src/index.ts`, `ecosystem.config.cjs`, and `terraform/environments/dev/main.tf`.
 
 - [ ] **Step 7: Add Firestore registry and indexes**
 
