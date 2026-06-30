@@ -1,5 +1,11 @@
 import { createOpenRouterClient } from '@intexuraos/infra-openrouter';
-import { getOpenRouterRawId, isOpenRouterModel } from '@intexuraos/llm-contract';
+import {
+  getOpenRouterRawId,
+  isOpenRouterModel,
+  type GenerateChatOptions,
+  type GenerateChatResult,
+  type LlmChatMessage,
+} from '@intexuraos/llm-contract';
 import type {
   LlmClientConfig,
   LlmGenerateClient,
@@ -29,6 +35,12 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
       options: GenerateOptions
     ): Promise<Result<GenerateResult, LLMError>> {
       return await orClient.generate(prompt, options);
+    },
+    async generateChat(
+      messages: LlmChatMessage[],
+      options: GenerateChatOptions
+    ): Promise<Result<GenerateChatResult, LLMError>> {
+      return await orClient.generateChat(messages, options);
     },
   };
 }

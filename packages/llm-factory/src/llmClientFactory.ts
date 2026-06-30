@@ -40,9 +40,12 @@ import {
   isToolCallingModel,
   isValidModel,
   LlmProviders,
+  type GenerateChatOptions,
+  type GenerateChatResult,
   type Gemini25Flash,
   type LLMError,
   type LLMModel,
+  type LlmChatMessage,
   type OpenRouterToolCallingModel,
   type ToolCallingClient,
   type ToolCallingModel,
@@ -132,6 +135,11 @@ export interface LlmGenerateClient {
    * @returns Result with content and usage, or error
    */
   generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
+
+  generateChat?(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ): Promise<Result<GenerateChatResult, LLMError>>;
 }
 
 /**
@@ -181,13 +189,13 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
   const providerForModel = getProviderForModel(config.model);
   switch (providerForModel) {
     case LlmProviders.Google:
-      return createGeminiClient(config);
+      return withUnsupportedGenerateChat(createGeminiClient(config));
     case LlmProviders.Anthropic:
-      return createClaudeGenerateClient(config);
+      return withUnsupportedGenerateChat(createClaudeGenerateClient(config));
     case LlmProviders.OpenAI:
-      return createGptGenerateClient(config);
+      return withUnsupportedGenerateChat(createGptGenerateClient(config));
     case LlmProviders.Perplexity:
-      return createPerplexityGenerateClient(config);
+      return withUnsupportedGenerateChat(createPerplexityGenerateClient(config));
     default:
       // OpenRouter (or any future provider not in the switch) lands here. Static
       // OpenRouter models don't exist in MODEL_PROVIDER_MAP — the `or:` prefix
@@ -195,6 +203,27 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
       // closed under unknown providers.
       throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM provider: ${providerForModel}`);
   }
+}
+
+function withUnsupportedGenerateChat(client: {
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
+}): LlmGenerateClient {
+  return {
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, LLMError>> {
+      return await client.generate(prompt, options);
+    },
+    generateChat(): Promise<Result<GenerateChatResult, LLMError>> {
+      return Promise.reject(
+        new IntexuraOSError(
+          'INVALID_REQUEST',
+          'Chat message generation is only supported for OpenRouter clients'
+        )
+      );
+    },
+  };
 }
 
 /**
