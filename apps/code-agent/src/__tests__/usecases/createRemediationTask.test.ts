@@ -232,6 +232,7 @@ describe('createRemediationTask', () => {
     });
     expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
     expect(deps.automationLog.record).not.toHaveBeenCalled();
+    expect(deps.logger.error).not.toHaveBeenCalled();
     expect(deps.logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
         existingTaskId: 'task-existing-remediation',
