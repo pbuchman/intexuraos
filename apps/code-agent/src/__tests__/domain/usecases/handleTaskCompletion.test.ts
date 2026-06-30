@@ -268,6 +268,7 @@ describe('handleTaskCompletion', () => {
       const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
       const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
       const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const markInReview = vi.fn().mockResolvedValue(undefined);
 
       setServices({
         codeTaskRepo: {
@@ -288,7 +289,7 @@ describe('handleTaskCompletion', () => {
         automationLog: { record: automationRecord } as never,
         linearIssueService: {
           removeLabel: vi.fn().mockResolvedValue(undefined),
-          markInReview: vi.fn().mockResolvedValue(undefined),
+          markInReview,
         } as never,
         logger: createMockLogger() as never,
         // No createRemediationTaskFn → the branch that records the decision
@@ -324,6 +325,7 @@ describe('handleTaskCompletion', () => {
         source: 'review_result',
       });
       expect(remediationCall?.[0]).toMatchObject({ repository: 'a/b', prNumber: 42 });
+      expect(markInReview).toHaveBeenCalledWith('u1', 'INT-1');
     });
 
     it.each([
