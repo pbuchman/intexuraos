@@ -653,7 +653,6 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
 
       const messages: PrivateWhatsAppMessage[] = [];
       let cursor: string | undefined;
-      let hasProjectedOverLimit = false;
       do {
         const query = {
           sourceAccountId: accountResult.value.sourceAccountId,
@@ -668,15 +667,8 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
           return await reply.fail('INTERNAL_ERROR', messagesResult.error.message);
         }
         messages.push(...messagesResult.value.messages);
-        const projected = projectPrivateConversationContext({
-          chat: chatResult.value,
-          range: { from: request.body.from, to: request.body.to },
-          maxMessages,
-          messages,
-        });
-        hasProjectedOverLimit = projected.omitted.overLimit > 0;
         cursor = messagesResult.value.nextCursor;
-      } while (cursor !== undefined && !hasProjectedOverLimit);
+      } while (cursor !== undefined);
 
       return await reply.ok(
         projectPrivateConversationContext({

@@ -2269,6 +2269,79 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.data.omitted.overLimit).toBe(0);
   });
 
+  it('counts omissions across all raw conversation pages after maxMessages is filled', async () => {
+    const chatMatrixRoomId = '!large-over-limit-room:matrix.example';
+    const storedMessages: StorePrivateWhatsAppMessageInput[] = [];
+    for (let index = 0; index < 6010; index += 1) {
+      const isTrailingMedia = index >= 6000;
+      const timestamp = new Date(Date.UTC(2026, 5, 22, 10, 0, index)).toISOString();
+      storedMessages.push({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: timestamp,
+        chat: {
+          matrixRoomId: chatMatrixRoomId,
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message: {
+          matrixRoomId: chatMatrixRoomId,
+          matrixEventId: `$event-large-over-limit-${String(index)}`,
+          matrixSenderId: '@alice:matrix.example',
+          senderDisplayName: 'Alice',
+          senderKey: 'matrix:@alice:matrix.example',
+          direction: 'incoming',
+          type: isTrailingMedia ? 'image' : 'text',
+          ...(isTrailingMedia
+            ? { media: { mxcUri: `mxc://matrix.example/trailing-${String(index)}` } }
+            : { text: `message ${String(index)}` }),
+          eventTimestamp: timestamp,
+          rawMatrixEvent: { type: 'm.room.message' },
+        },
+      });
+    }
+    await Promise.all(
+      storedMessages.map(async (message) =>
+        ctx.privateWhatsAppRepository.storeIncomingMessage(message)
+      )
+    );
+    const chatId = `chat:pbuchman-private-whatsapp:${chatMatrixRoomId}`;
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T12:00:00.000Z',
+        maxMessages: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        messages: { content: string; contentKind: string }[];
+        omitted: { mediaOnly: number; overLimit: number };
+        messageCount: number;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.messages).toEqual([
+      expect.objectContaining({
+        content: 'message 0',
+        contentKind: 'text',
+      }),
+    ]);
+    expect(body.data.messageCount).toBe(1);
+    expect(body.data.omitted.overLimit).toBe(5999);
+    expect(body.data.omitted.mediaOnly).toBe(10);
+  });
+
   it('rejects conversation context requests without internal auth', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
