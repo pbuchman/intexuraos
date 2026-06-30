@@ -35,6 +35,7 @@ import { Timestamp, type Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { err, ok } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
@@ -10033,6 +10034,15 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(createResult.ok).toBe(true);
     if (!createResult.ok) throw new Error('Failed');
     const task = createResult.value;
+    const warnSpy = vi.fn();
+    await app.addHook('onRequest', async (request) => {
+      const log = request.log as unknown as { warn: (...args: unknown[]) => void };
+      const originalWarn = log.warn.bind(request.log);
+      log.warn = ((...args: unknown[]): void => {
+        warnSpy(...args);
+        originalWarn(...args);
+      });
+    });
     const payload = {
       taskId: task.id,
       status: 'completed' as const,
@@ -10061,6 +10071,14 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     // Review tasks transition to 'reviewed' (not 'completed') on success.
     expect(g.value.status).toBe('reviewed');
     expect(g.value.error).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: task.id,
+        rawReviewCommentsPosted: undefined,
+        [SKIP_SENTRY_KEY]: true,
+      }),
+      'review_comments_posted missing or non-numeric; defaulting to "0" because review_id is present',
+    );
   });
 
   it('still hard-fails review when review_id is empty string and review_comments_posted is missing (INT-1570)', async () => {

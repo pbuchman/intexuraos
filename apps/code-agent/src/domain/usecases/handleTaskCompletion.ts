@@ -846,7 +846,7 @@ export async function handleTaskCompletion(
         if (!countIsValid) {
           if (hasReviewId) {
             requestLog.warn(
-              { taskId, rawReviewCommentsPosted: rawCount },
+              { taskId, rawReviewCommentsPosted: rawCount, [SKIP_SENTRY_KEY]: true },
               'review_comments_posted missing or non-numeric; defaulting to "0" because review_id is present'
             );
             reviewResult.review_comments_posted = '0';
