@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 const ENV_CURRENT = 'INTEXURAOS_INTERNAL_AUTH_TOKEN';
 const ENV_PREVIOUS = 'INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS';
 const HEADER = 'x-internal-auth';
+// Keep common-http independent of infra-sentry; this string mirrors SKIP_SENTRY_KEY.
 const SKIP_SENTRY_KEY = '_skipSentry';
 
 export interface InternalAuthResult {

@@ -100,15 +100,6 @@ describe('validateInternalAuth — dual-token rotation', () => {
 
     expect(result).toEqual({ valid: false, reason: 'token_mismatch' });
     expect(logger.warn).toHaveBeenCalledTimes(1);
-  });
-
-  it('marks token mismatch warnings as non-Sentry while preserving log visibility', () => {
-    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'current-token';
-    const { request, logger } = makeRequest('garbage');
-
-    const result = validateInternalAuth(request);
-
-    expect(result).toEqual({ valid: false, reason: 'token_mismatch' });
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ _skipSentry: true }),
       'Internal auth failed: token mismatch'
@@ -124,6 +115,9 @@ describe('validateInternalAuth — dual-token rotation', () => {
     expect(result).toEqual({ valid: false, reason: 'not_configured' });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn.mock.calls[0]?.[0]).toMatch(/not configured/);
+    expect(logger.warn.mock.calls[0]?.[0]).not.toEqual(
+      expect.objectContaining({ _skipSentry: true })
+    );
   });
 
   it('returns not_configured when CURRENT is missing and no header supplied', () => {
