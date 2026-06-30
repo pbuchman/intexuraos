@@ -268,6 +268,7 @@ describe('handleTaskCompletion', () => {
       const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
       const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
       const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const markInReview = vi.fn().mockResolvedValue(undefined);
 
       setServices({
         codeTaskRepo: {
@@ -288,7 +289,7 @@ describe('handleTaskCompletion', () => {
         automationLog: { record: automationRecord } as never,
         linearIssueService: {
           removeLabel: vi.fn().mockResolvedValue(undefined),
-          markInReview: vi.fn().mockResolvedValue(undefined),
+          markInReview,
         } as never,
         logger: createMockLogger() as never,
         // No createRemediationTaskFn → the branch that records the decision
@@ -324,6 +325,66 @@ describe('handleTaskCompletion', () => {
         source: 'review_result',
       });
       expect(remediationCall?.[0]).toMatchObject({ repository: 'a/b', prNumber: 42 });
+      expect(markInReview).toHaveBeenCalledWith('u1', 'INT-1');
+    });
+
+    it('marks the no-Linear-issue review label skip warning as non-Sentry', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        gitHubPRSummaryRepo: {
+          findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        userServiceClient: {
+          getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'No GitHub token' })),
+        } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: requestLog as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), {
+        ...buildInput({
+          taskId: 't-review-no-linear-issue',
+          status: 'completed',
+          result: {
+            review_id: 'rev-1',
+            review_comments_posted: '0',
+            review_types: 'code_quality',
+            prUrl: 'https://github.com/a/b/pull/42',
+            needs_remediation: '0',
+          },
+        }),
+        requestLog,
+      });
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-review-no-linear-issue',
+          prNumber: 42,
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'No Linear issue available for review-outcome label — skipping'
+      );
     });
 
     it.each([
@@ -338,6 +399,7 @@ describe('handleTaskCompletion', () => {
       const createRemediationTaskFn = vi.fn().mockResolvedValue(ok({ taskId: 'remed-1' }));
       const findOriginTaskByPR = vi.fn().mockResolvedValue(ok(null));
       const removeLabel = vi.fn().mockResolvedValue(undefined);
+      const markInReview = vi.fn().mockResolvedValue(undefined);
 
       setServices({
         codeTaskRepo: {
@@ -359,7 +421,7 @@ describe('handleTaskCompletion', () => {
         automationLog: { record: automationRecord } as never,
         linearIssueService: {
           removeLabel,
-          markInReview: vi.fn().mockResolvedValue(undefined),
+          markInReview,
         } as never,
         logger: createMockLogger() as never,
         createRemediationTaskFn,
@@ -381,6 +443,7 @@ describe('handleTaskCompletion', () => {
       expect(createRemediationTaskFn).not.toHaveBeenCalled();
       expect(findOriginTaskByPR).not.toHaveBeenCalled();
       expect(removeLabel).not.toHaveBeenCalled();
+      expect(markInReview).not.toHaveBeenCalled();
       const remediationCall = automationRecord.mock.calls.find((call) => {
         const event = call[1] as { type?: string; required?: boolean; signal?: string; taskId?: string };
         return event.type === 'remediation_decision';
