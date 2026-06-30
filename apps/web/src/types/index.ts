@@ -321,6 +321,78 @@ export interface PrivateWhatsAppSenderDaysResponse {
   nextCursor?: string;
 }
 
+export type ConversationAssistantSessionStatus = 'active' | 'archived';
+
+export interface ConversationAssistantOmittedCounts {
+  mediaOnly: number;
+  failedTranscriptions: number;
+  pendingTranscriptions: number;
+  nonText: number;
+  overLimit: number;
+}
+
+export interface ConversationAssistantUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  cachedTokens?: number;
+  cacheWriteTokens?: number;
+}
+
+export interface ConversationAssistantSession {
+  id: string;
+  userId: string;
+  chatId: string;
+  chatDisplayName?: string;
+  status: ConversationAssistantSessionStatus;
+  range: {
+    from: string;
+    to: string;
+  };
+  model: string;
+  transcriptSha256: string;
+  transcriptMessageCount: number;
+  omitted: ConversationAssistantOmittedCounts;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastTurnAt?: string;
+}
+
+export interface ConversationAssistantTurn {
+  id: string;
+  sessionId: string;
+  userId: string;
+  role: 'user' | 'assistant';
+  text: string;
+  createdAt: string;
+  usage?: ConversationAssistantUsage;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface ConversationAssistantSessionsResponse {
+  sessions: ConversationAssistantSession[];
+}
+
+export interface ConversationAssistantTurnsResponse {
+  turns: ConversationAssistantTurn[];
+}
+
+export interface CreateConversationAssistantSessionRequest {
+  chatId: string;
+  from: string;
+  to: string;
+  question?: string;
+}
+
+export interface SendConversationAssistantTurnRequest {
+  question: string;
+}
+
 export type IntexAgentSessionStatus =
   | 'active'
   | 'waiting_for_user'
