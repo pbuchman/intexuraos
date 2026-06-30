@@ -485,7 +485,7 @@ export async function prepareEventsForIngest(config, matrixAccessToken, events, 
 }
 
 function isPrivateMediaUploadMessageType(messageType) {
-  return messageType === 'image' || messageType === 'audio';
+  return messageType === 'image' || messageType === 'audio' || messageType === 'video';
 }
 
 export function createHealthServer(config, runtime) {
