@@ -997,6 +997,101 @@ describe('createOpenRouterClient', () => {
         });
       }
     });
+
+    it('returns zero usage when OpenRouter omits usage in chat response', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Chat response without usage', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChat(
+        [{ role: 'user', content: 'What happened in this chat?' }],
+        { promptType: 'test-chat-prompt' }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({
+          content: 'Chat response without usage',
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costUsd: 0,
+          },
+        });
+      }
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'generate',
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costUsd: 0,
+          },
+          success: true,
+        })
+      );
+    });
+
+    it('returns empty content and zero usage when chat response choices are empty', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [],
+          usage: { prompt_tokens: 50, completion_tokens: 0, total_tokens: 50 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChat(
+        [{ role: 'user', content: 'What happened in this chat?' }],
+        { promptType: 'test-chat-prompt' }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({
+          content: '',
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costUsd: 0,
+          },
+        });
+      }
+    });
   });
 
   describe('generate cache usage compatibility', () => {

@@ -180,14 +180,12 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     cachedTokens?: number;
     cacheWriteTokens?: number;
   } {
-    /* v8 ignore start -- upstream: cannot verify usage is present in all API responses @preserve */
     if (usage === undefined) {
       return {
         normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
         providerReportedUsd: null,
       };
     }
-    /* v8 ignore stop @preserve */
     const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
     const cachedTokens =
       typeof usage.prompt_tokens_details?.cached_tokens === 'number'
@@ -467,13 +465,11 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const firstChoice = data.choices[0];
           // Handle case where choices array is empty (upstream API may return this)
           if (firstChoice === undefined) {
-            /* v8 ignore start -- upstream: cannot verify firstChoice message structure when choices is empty @preserve */
             return {
               content: '',
               normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
               providerReportedUsd: null,
             };
-            /* v8 ignore stop @preserve */
           }
           const content = firstChoice.message.content;
           const { normalized, providerReportedUsd, cachedTokens, cacheWriteTokens } = extractUsage(
