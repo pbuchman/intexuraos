@@ -209,6 +209,38 @@ describe('createRemediationTask', () => {
     expect(result.error.code).toBe('task_creation_failed');
   });
 
+  it('reuses existing remediation task when repo.create returns DUPLICATE_PROMPT', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(err({
+          code: 'DUPLICATE_PROMPT',
+          message: 'Duplicate prompt within 5 minutes',
+          existingTaskId: 'task-existing-remediation',
+        })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createRemediationTask(deps, createDefaultRequest({ workerType: 'auto' }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual({
+      status: 'queued',
+      taskId: 'task-existing-remediation',
+      workerType: 'auto',
+    });
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(deps.automationLog.record).not.toHaveBeenCalled();
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingTaskId: 'task-existing-remediation',
+        error: expect.objectContaining({ code: 'DUPLICATE_PROMPT' }),
+      }),
+      'Reusing existing remediation task after repository dedup',
+    );
+  });
+
   it('returns queue_full when enqueue service is full', async () => {
     const deps = createFakeDeps({
       taskEnqueueService: {

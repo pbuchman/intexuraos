@@ -3,7 +3,7 @@
  *
  * Standalone use case — creates a fresh container with purpose-built prompt.
  * Key differences from createReviewTask:
- * - No dedup behavior (multiple remediation tasks can coexist)
+ * - Repository prompt dedup is idempotent when review completion repeats
  * - Linear issue linking from existing execution task only
  * - Purpose-built remediation prompt with review findings
  * - agentType: 'remediation'
@@ -168,8 +168,17 @@ export async function createRemediationTask(
 
   const createResult = await codeTaskRepo.create(taskInput);
   if (!createResult.ok) {
-    logger.error({ error: createResult.error }, 'Failed to create remediation task');
-    return err({ code: 'task_creation_failed', message: createResult.error.message });
+    const createError = createResult.error;
+    if (createError.code === 'DUPLICATE_PROMPT') {
+      logger.info(
+        { error: createError, existingTaskId: createError.existingTaskId },
+        'Reusing existing remediation task after repository dedup',
+      );
+      return ok({ status: 'queued' as const, taskId: createError.existingTaskId, workerType: effectiveWorkerType });
+    }
+
+    logger.error({ error: createError }, 'Failed to create remediation task');
+    return err({ code: 'task_creation_failed', message: createError.message });
   }
 
   const task = createResult.value;
