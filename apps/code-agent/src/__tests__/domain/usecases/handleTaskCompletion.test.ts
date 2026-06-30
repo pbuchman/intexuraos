@@ -326,6 +326,65 @@ describe('handleTaskCompletion', () => {
       expect(remediationCall?.[0]).toMatchObject({ repository: 'a/b', prNumber: 42 });
     });
 
+    it('marks the no-Linear-issue review label skip warning as non-Sentry', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        gitHubPRSummaryRepo: {
+          findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        userServiceClient: {
+          getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'No GitHub token' })),
+        } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: requestLog as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), {
+        ...buildInput({
+          taskId: 't-review-no-linear-issue',
+          status: 'completed',
+          result: {
+            review_id: 'rev-1',
+            review_comments_posted: '0',
+            review_types: 'code_quality',
+            prUrl: 'https://github.com/a/b/pull/42',
+            needs_remediation: '0',
+          },
+        }),
+        requestLog,
+      });
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-review-no-linear-issue',
+          prNumber: 42,
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'No Linear issue available for review-outcome label — skipping'
+      );
+    });
+
     it.each([
       ['merged', { prMergedAt: Timestamp.fromDate(new Date('2026-06-29T04:39:58Z')) }],
       ['closed', { prClosedAt: Timestamp.fromDate(new Date('2026-06-29T04:39:58Z')) }],

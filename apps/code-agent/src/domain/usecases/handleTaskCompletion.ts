@@ -267,7 +267,7 @@ export async function handleTaskCompletion(
           }
 
           if (targetLinearIssueId === undefined) {
-            requestLog.warn({ taskId, prNumber },
+            requestLog.warn({ taskId, prNumber, [SKIP_SENTRY_KEY]: true },
               'No Linear issue available for review-outcome label — skipping');
           } else {
             const issueValidation = await linearAgentClient.validateIssue({
