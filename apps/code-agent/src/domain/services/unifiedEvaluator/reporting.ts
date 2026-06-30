@@ -143,7 +143,11 @@ export async function dispatchAndRecord(
 ): Promise<void> {
   const result = await deps.dispatchService.dispatch({ event, decision, logger });
   if (!result.success) {
-    logger.warn({ eventId: event.id, error: result.error }, 'Dispatch failed for hard-rule decision');
+    logger.warn({
+      eventId: event.id,
+      error: result.error,
+      ...(result.error === 'Active task exists for Linear issue' && { _skipSentry: true }),
+    }, 'Dispatch failed for hard-rule decision');
   }
   await recordDecision(deps, event, {
     decidedBy: 'hard_rules',
