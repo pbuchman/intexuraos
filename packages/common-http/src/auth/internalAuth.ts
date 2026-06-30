@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 const ENV_CURRENT = 'INTEXURAOS_INTERNAL_AUTH_TOKEN';
 const ENV_PREVIOUS = 'INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS';
 const HEADER = 'x-internal-auth';
+const SKIP_SENTRY_KEY = '_skipSentry';
 
 export interface InternalAuthResult {
   valid: boolean;
@@ -47,6 +48,6 @@ export function validateInternalAuth(request: FastifyRequest): InternalAuthResul
     return { valid: true, tokenUsed: 'previous' };
   }
 
-  request.log.warn('Internal auth failed: token mismatch');
+  request.log.warn({ [SKIP_SENTRY_KEY]: true }, 'Internal auth failed: token mismatch');
   return { valid: false, reason: 'token_mismatch' };
 }

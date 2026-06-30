@@ -10,10 +10,18 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import { validateInternalAuth, logIncomingRequest, type InternalAuthResult } from '@intexuraos/common-http';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import type { LlmProvider } from '../domain/settings/index.js';
 import { getValidAccessToken, OAuthProviders } from '../domain/oauth/index.js';
+
+function internalAuthFailureLogContext(reason: InternalAuthResult['reason']): Record<string, unknown> {
+  return {
+    reason,
+    [SKIP_SENTRY_KEY]: reason === 'token_mismatch',
+  };
+}
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /internal/users/:uid/llm-keys
@@ -77,7 +85,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn(
-          { reason: authResult.reason },
+          internalAuthFailureLogContext(authResult.reason),
           'Internal auth failed for users/:uid/llm-keys endpoint'
         );
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for users/:uid/llm-keys endpoint');
@@ -172,7 +180,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn(
-          { reason: authResult.reason },
+          internalAuthFailureLogContext(authResult.reason),
           'Internal auth failed for llm-keys/:provider/last-used endpoint'
         );
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for llm-keys/:provider/last-used endpoint');
@@ -266,7 +274,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn(
-          { reason: authResult.reason },
+          internalAuthFailureLogContext(authResult.reason),
           'Internal auth failed for oauth/google/token endpoint'
         );
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for oauth/google/token endpoint');
@@ -367,7 +375,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn(
-          { reason: authResult.reason },
+          internalAuthFailureLogContext(authResult.reason),
           'Internal auth failed for users/:uid/settings endpoint'
         );
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for users/:uid/settings endpoint');
@@ -464,7 +472,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn(
-          { reason: authResult.reason },
+          internalAuthFailureLogContext(authResult.reason),
           'Internal auth failed for oauth/github/token endpoint'
         );
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for oauth/github/token endpoint');
@@ -560,7 +568,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn(
-          { reason: authResult.reason },
+          internalAuthFailureLogContext(authResult.reason),
           'Internal auth failed for users/by-github-username/:username endpoint'
         );
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for users/by-github-username/:username endpoint');
