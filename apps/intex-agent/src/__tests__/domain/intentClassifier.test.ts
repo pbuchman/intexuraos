@@ -604,6 +604,8 @@ describe('createLlmIntexAgentIntentClassifier', () => {
       question: 'What would you like me to do with this?',
       blockerReason: 'not_enough_context',
       suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'classifier',
     });
 
     await expect(
@@ -617,6 +619,8 @@ describe('createLlmIntexAgentIntentClassifier', () => {
       question: 'What would you like me to do with this?',
       blockerReason: 'not_enough_context',
       suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'llm_call_failed',
+      fallbackSourceOutcome: 'classifier',
     });
 
     expect(malformedLogger.warnCalls).toEqual([

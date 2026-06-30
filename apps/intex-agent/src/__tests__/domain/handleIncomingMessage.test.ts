@@ -11,6 +11,7 @@ import type {
   IntexAgentSessionEventType,
   IntexAgentToolName,
 } from '../../domain/sessions/types.js';
+import { buildUnsupportedCapabilitiesReply } from '../../domain/agent/capabilities.js';
 import {
   handleIncomingMessage,
   type IntexAgentRunner,
@@ -19,16 +20,6 @@ import {
 } from '../../domain/messages/handleIncomingMessage.js';
 
 const NOW = '2026-06-24T10:00:00.000Z';
-const UNSUPPORTED_CAPABILITIES_REPLY = [
-  'I could not safely handle that request. I can help with:',
-  '- summarize and reason over the current session',
-  '- create notes',
-  '- create and look up calendar events',
-  '- create research drafts',
-  '- save bookmarks',
-  '- create code tasks for planning or execution',
-  '- manage Intex Agent prompt preferences',
-].join('\n');
 const NEW_SESSION_READY_REPLY = [
   'What would you like me to help with? I can help with:',
   '- summarize and reason over the current session',
@@ -38,16 +29,6 @@ const NEW_SESSION_READY_REPLY = [
   '- save bookmarks',
   '- create code tasks for planning or execution',
   '- manage Intex Agent prompt preferences',
-].join('\n');
-const POLISH_UNSUPPORTED_CAPABILITIES_REPLY = [
-  'Nie mogłem bezpiecznie obsłużyć tej prośby. Mogę pomóc z:',
-  '- podsumowywaniem i analizowaniem bieżącej sesji',
-  '- tworzeniem notatek',
-  '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
-  '- tworzeniem szkiców researchu',
-  '- zapisywaniem bookmarków',
-  '- tworzeniem zadań programistycznych do planowania lub wykonania',
-  '- zarządzaniem preferencjami promptu agenta Intex',
 ].join('\n');
 const POLISH_NEW_SESSION_READY_REPLY = [
   'W czym mogę pomóc? Mogę pomóc z:',
@@ -1041,6 +1022,27 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe('Which day should I schedule it for?');
   });
 
+  it('records clarification requests without optional metadata when the runner omits it', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_clarification',
+        reply: 'Which action did you mean?',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ text: 'make it happen' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'clarification_requested')[0]).toEqual({
+      message: 'Which action did you mean?',
+    });
+    expect(replies.messages[0]?.message).toBe('Which action did you mean?');
+  });
+
   it('continues a waiting session when the user answers a clarification', async () => {
     const repo = new FakeSessionRepository();
     repo.seedSession({
@@ -1098,6 +1100,7 @@ describe('handleIncomingMessage', () => {
         missingFields: ['supported_action'],
         candidateIntents: ['create_note'],
         suggestedNextStep: 'Offer to save the flight details as a note.',
+        fallbackReason: 'runner_declared_unsupported',
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1114,15 +1117,21 @@ describe('handleIncomingMessage', () => {
     expect(eventTypes(repo)).toEqual([
       'session_started',
       'user_message',
+      'agent_fallback',
       'unsupported_request',
       'assistant_message',
     ]);
+    expect(eventPayloads(repo, 'agent_fallback')[0]).toEqual({
+      reason: 'runner_declared_unsupported',
+      sourceOutcome: 'unsupported',
+    });
     expect(eventPayloads(repo, 'unsupported_request')[0]).toEqual({
       message: 'I do not support that yet. I can create notes and calendar events.',
       blockerReason: 'unsupported_capability',
       missingFields: ['supported_action'],
       candidateIntents: ['create_note'],
       suggestedNextStep: 'Offer to save the flight details as a note.',
+      fallbackReason: 'runner_declared_unsupported',
     });
     expect(replies.messages[0]?.message).toBe(
       'I do not support that yet. I can create notes and calendar events.'
@@ -1135,6 +1144,9 @@ describe('handleIncomingMessage', () => {
       {
         outcome: 'unsupported',
         reply: 'I can only create notes and calendar events.',
+        blockerReason: 'unsupported_capability',
+        suggestedNextStep: 'I can save the details as a note.',
+        fallbackReason: 'runner_declared_unsupported',
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1155,6 +1167,9 @@ describe('handleIncomingMessage', () => {
       {
         outcome: 'unsupported',
         reply: 'I can only create notes and calendar events.',
+        blockerReason: 'unsupported_capability',
+        suggestedNextStep: 'I can save the details as a note.',
+        fallbackReason: 'runner_declared_unsupported',
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1448,7 +1463,7 @@ describe('handleIncomingMessage', () => {
     );
   });
 
-  it('expires a stale session and rejects completed runner results without a tool name', async () => {
+  it('expires a stale session and records a diagnostic fallback for completed runner results without a tool name', async () => {
     const repo = new FakeSessionRepository();
     repo.seedSession({
       id: 'session-stale',
@@ -1486,10 +1501,23 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[1]?.status).toBe('waiting_for_user');
     expect(repo.sessions[1]?.endReason).toBeUndefined();
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
-    expect(replies.messages[0]?.message).toBe(UNSUPPORTED_CAPABILITIES_REPLY);
+    expect(eventTypes(repo)).toEqual([
+      'session_closed',
+      'session_started',
+      'user_message',
+      'agent_fallback',
+      'clarification_requested',
+      'assistant_message',
+    ]);
+    expect(eventPayloads(repo, 'agent_fallback')[0]).toEqual({
+      reason: 'tool_result_mismatch',
+      sourceOutcome: 'completed',
+    });
+    expect(eventPayloads(repo, 'unsupported_request')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe('What would you like me to do with this?');
   });
 
-  it('uses prior Polish context when rejecting a malformed completed runner result after a trivial current message', async () => {
+  it('uses prior Polish context when clarifying a malformed completed runner result after a trivial current message', async () => {
     const repo = new FakeSessionRepository();
     repo.seedSession({
       id: 'session-existing',
@@ -1519,7 +1547,66 @@ describe('handleIncomingMessage', () => {
     );
 
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
-    expect(replies.messages[0]?.message).toBe(POLISH_UNSUPPORTED_CAPABILITIES_REPLY);
+    expect(eventPayloads(repo, 'agent_fallback')[0]).toEqual({
+      reason: 'tool_result_mismatch',
+      sourceOutcome: 'completed',
+    });
+    expect(eventPayloads(repo, 'unsupported_request')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe('Co mam z tym zrobić?');
+  });
+
+  it('keeps a prompt-preference session clarifiable on an ordinary correction without generic unsupported', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_clarification',
+        reply: 'Którą preferencję promptu mam sprawdzić?',
+        blockerReason: 'missing_required_details',
+        missingFields: ['preference_scope'],
+        candidateIntents: ['get_user_preferences'],
+        suggestedNextStep: 'Poproś użytkownika o zakres preferencji promptu.',
+        clarification: 'Którą preferencję promptu mam sprawdzić?',
+      },
+      {
+        outcome: 'completed',
+        reply: 'Jasne, rozumiem.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-prompt-preferences',
+        text: 'Czy mamy jakieś preferencje dla promptu agenta?',
+      }),
+      deps(repo, runner, replies)
+    );
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-ordinary-correction',
+        text: 'Nie o to chodziło, to była zwykła rozmowa bez akcji.',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls.map((call) => call.message)).toEqual([
+      'Czy mamy jakieś preferencje dla promptu agenta?',
+      'Nie o to chodziło, to była zwykła rozmowa bez akcji.',
+    ]);
+    expect(eventPayloads(repo, 'unsupported_request')).toEqual([]);
+    expect(eventPayloads(repo, 'agent_fallback')).toEqual([
+      {
+        reason: 'tool_result_mismatch',
+        sourceOutcome: 'completed',
+      },
+    ]);
+    expect(replies.messages.map((reply) => reply.message)).toEqual([
+      'Którą preferencję promptu mam sprawdzić?',
+      'Co mam z tym zrobić?',
+    ]);
+    expect(replies.messages.map((reply) => reply.message)).not.toContain(
+      buildUnsupportedCapabilitiesReply('pl')
+    );
   });
 
   it('uses prior text-only event context when malformed fallback skips non-text events', async () => {
@@ -1555,7 +1642,12 @@ describe('handleIncomingMessage', () => {
     );
 
     expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
-    expect(replies.messages[0]?.message).toBe(POLISH_UNSUPPORTED_CAPABILITIES_REPLY);
+    expect(eventPayloads(repo, 'agent_fallback')[0]).toEqual({
+      reason: 'tool_result_mismatch',
+      sourceOutcome: 'completed',
+    });
+    expect(eventPayloads(repo, 'unsupported_request')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe('Co mam z tym zrobić?');
   });
 });
 

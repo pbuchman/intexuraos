@@ -3,6 +3,7 @@ import type { ToolCallingClient, ToolCallingMessage } from '@intexuraos/llm-cont
 import {
   IntexAgentRunnerOutputSchema,
   intexAgentRunnerOutputRepairPrompt,
+  type IntexAgentBlockerReason,
   type IntexAgentRunnerOutput,
 } from '@intexuraos/llm-prompts';
 import {
@@ -12,6 +13,7 @@ import {
   type StructuredGenerateResult,
 } from '@intexuraos/llm-utils';
 import type {
+  IntexAgentFallbackReason,
   IntexAgentRunner,
   IntexAgentRunnerResult,
 } from '../messages/handleIncomingMessage.js';
@@ -39,8 +41,6 @@ import { buildIntexAgentSystemPrompt, INTEX_AGENT_RUNNER_PROMPT_TYPE } from './s
 import { classifyIntexAgentIntent, type IntexAgentIntentDecision } from './intentGate.js';
 import {
   buildGreetingReply,
-  buildCompletionFailureCapabilitiesReply,
-  buildUnsupportedCapabilitiesReply,
   selectIntexAgentReplyLanguage,
   type IntexAgentReplyLanguage,
 } from './capabilities.js';
@@ -50,6 +50,13 @@ import type {
 } from './intentClassifier.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
+const CLARIFICATION_ONLY_BLOCKER_REASONS = new Set<IntexAgentBlockerReason>([
+  'missing_required_details',
+  'not_enough_context',
+  'multiple_possible_intents',
+  'ambiguous_preference_target',
+]);
+
 type MutatingIntexAgentToolName = Exclude<
   IntexAgentToolName,
   'query_calendar_events' | 'get_user_preferences'
@@ -208,7 +215,11 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
     async executeConfirmed(input): Promise<IntexAgentRunnerResult> {
       const replyLanguage = detectReplyLanguage(input.events ?? []);
       if (!isMutatingToolName(input.toolName)) {
-        return malformedResult(replyLanguage);
+        return fallbackClarificationResult(
+          replyLanguage,
+          'tool_result_mismatch',
+          'confirmed_execution'
+        );
       }
 
       const toolExecutions: IntexAgentToolExecution[] = [];
@@ -218,7 +229,11 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       const tool = tools.find((candidate) => candidate.name === input.toolName);
       /* v8 ignore start -- schema: mutating tool registry and tool definitions cannot diverge without breaking startup tests @preserve */
       if (tool === undefined) {
-        return malformedResult(replyLanguage);
+        return fallbackClarificationResult(
+          replyLanguage,
+          'tool_result_mismatch',
+          'confirmed_execution'
+        );
       }
       /* v8 ignore stop @preserve */
 
@@ -227,7 +242,11 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         const toolExecution = getCompletedToolExecution(toolExecutions);
         /* v8 ignore start -- schema: every mutating tool definition executes through the tracking executor after argument validation @preserve */
         if (toolExecution === undefined) {
-          return malformedResult(replyLanguage);
+          return fallbackClarificationResult(
+            replyLanguage,
+            'tool_result_mismatch',
+            'confirmed_execution'
+          );
         }
         /* v8 ignore stop @preserve */
         const parsedResult = parseToolResult(rawResult);
@@ -294,18 +313,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             });
       const replyLanguage = replyLanguageForIntent(intent, detectedReplyLanguage);
       if (intent.kind === 'unsupported') {
-        const blockerReason = 'blockerReason' in intent ? intent.blockerReason : undefined;
-        const suggestedNextStep =
-          'suggestedNextStep' in intent ? intent.suggestedNextStep : undefined;
-        return {
-          outcome: 'unsupported',
-          reply:
-            blockerReason !== undefined && suggestedNextStep !== undefined
-              ? unsupportedIntentReply(blockerReason, suggestedNextStep, replyLanguage)
-              : unsupportedIntentReplyFromFallbackGate(replyLanguage),
-          ...(blockerReason !== undefined ? { blockerReason } : {}),
-          ...(suggestedNextStep !== undefined ? { suggestedNextStep } : {}),
-        };
+        return normalizeClassifierUnsupportedIntent(intent, replyLanguage);
       }
 
       if (intent.kind === 'needs_clarification') {
@@ -319,6 +327,10 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             : {}),
           ...(intent.suggestedNextStep !== undefined
             ? { suggestedNextStep: intent.suggestedNextStep }
+            : {}),
+          ...(intent.fallbackReason !== undefined ? { fallbackReason: intent.fallbackReason } : {}),
+          ...(intent.fallbackSourceOutcome !== undefined
+            ? { fallbackSourceOutcome: intent.fallbackSourceOutcome }
             : {}),
         };
       }
@@ -352,10 +364,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       });
 
       if (!result.ok) {
-        return {
-          outcome: 'unsupported',
-          reply: buildCompletionFailureCapabilitiesReply(replyLanguage),
-        };
+        return fallbackClarificationResult(replyLanguage, 'llm_call_failed');
       }
 
       return await parseRunnerContent(
@@ -565,7 +574,10 @@ async function parseRunnerContent(
 ): Promise<IntexAgentRunnerResult> {
   const parsed = await validateRunnerOutput(input);
   if (parsed === null) {
-    return malformedResult(replyLanguage);
+    return fallbackClarificationResult(
+      replyLanguage,
+      fallbackReasonForInvalidRunnerContent(input.content)
+    );
   }
 
   const toolExecution = getCompletedToolExecution(toolExecutions);
@@ -607,6 +619,8 @@ async function parseRunnerContent(
         reply: parsed.reply,
         blockerReason: parsed.blockerReason,
         suggestedNextStep: parsed.suggestedNextStep,
+        fallbackReason: 'runner_declared_unsupported',
+        fallbackSourceOutcome: 'unsupported',
         ...(parsed.missingFields !== undefined ? { missingFields: parsed.missingFields } : {}),
         ...(parsed.candidateIntents !== undefined
           ? { candidateIntents: parsed.candidateIntents }
@@ -614,7 +628,7 @@ async function parseRunnerContent(
       };
     case 'completed': {
       if (toolExecution?.toolName !== parsed.toolName) {
-        return malformedResult(replyLanguage);
+        return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch');
       }
       const completedToolExecution = toolExecution;
       const completedReply = buildCompletedReply(
@@ -1235,10 +1249,96 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
   }
 }
 
-function malformedResult(replyLanguage: IntexAgentReplyLanguage = 'en'): IntexAgentRunnerResult {
+function fallbackReasonForInvalidRunnerContent(content: string): Extract<
+  IntexAgentFallbackReason,
+  'runner_output_malformed' | 'tool_result_mismatch'
+> {
+  const parsed = parseJsonObject(content);
+  if (parsed?.['outcome'] === 'completed' && typeof parsed['toolName'] !== 'string') {
+    return 'tool_result_mismatch';
+  }
+  return 'runner_output_malformed';
+}
+
+function fallbackClarificationResult(
+  replyLanguage: IntexAgentReplyLanguage,
+  fallbackReason: Extract<
+    IntexAgentFallbackReason,
+    'runner_output_malformed' | 'tool_result_mismatch' | 'llm_call_failed'
+  >,
+  fallbackSourceOutcome?: string
+): IntexAgentRunnerResult {
+  return {
+    outcome: 'needs_clarification',
+    reply:
+      fallbackReason === 'llm_call_failed'
+        ? LLM_FAILURE_CLARIFICATION_REPLIES[replyLanguage]
+        : FALLBACK_CLARIFICATION_REPLIES[replyLanguage],
+    blockerReason: 'not_enough_context',
+    suggestedNextStep: FALLBACK_CLARIFICATION_NEXT_STEPS[replyLanguage],
+    fallbackReason,
+    fallbackSourceOutcome:
+      fallbackSourceOutcome ?? defaultFallbackSourceOutcome(fallbackReason),
+  };
+}
+
+function defaultFallbackSourceOutcome(
+  fallbackReason: Extract<
+    IntexAgentFallbackReason,
+    'runner_output_malformed' | 'tool_result_mismatch' | 'llm_call_failed'
+  >
+): string {
+  if (fallbackReason === 'tool_result_mismatch') {
+    return 'completed';
+  }
+  if (fallbackReason === 'runner_output_malformed') {
+    return 'raw_response';
+  }
+  return 'llm_call_failed';
+}
+
+const FALLBACK_CLARIFICATION_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'What would you like me to do with this?',
+  pl: 'Co mam z tym zrobić?',
+};
+
+const LLM_FAILURE_CLARIFICATION_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'I could not process that request right now. Please restate what you want me to do.',
+  pl: 'Nie mogłem teraz przetworzyć tej prośby. Napisz proszę jeszcze raz, co mam zrobić.',
+};
+
+const FALLBACK_CLARIFICATION_NEXT_STEPS: Record<IntexAgentReplyLanguage, string> = {
+  en: 'Ask the user to restate the action.',
+  pl: 'Poproś użytkownika o doprecyzowanie akcji.',
+};
+
+function normalizeClassifierUnsupportedIntent(
+  intent: Extract<IntexAgentIntentClassification, { kind: 'unsupported' }>,
+  replyLanguage: IntexAgentReplyLanguage
+): IntexAgentRunnerResult {
+  const suggestedNextStep =
+    readNonBlankString(intent.suggestedNextStep) ?? fallbackUnsupportedNextStep(replyLanguage);
+
+  if (CLARIFICATION_ONLY_BLOCKER_REASONS.has(intent.blockerReason)) {
+    return {
+      outcome: 'needs_clarification',
+      reply: FALLBACK_CLARIFICATION_REPLIES[replyLanguage],
+      blockerReason: intent.blockerReason,
+      suggestedNextStep:
+        readNonBlankString(intent.suggestedNextStep) ??
+        FALLBACK_CLARIFICATION_NEXT_STEPS[replyLanguage],
+      fallbackReason: 'classifier_unsupported',
+      fallbackSourceOutcome: 'unsupported',
+    };
+  }
+
   return {
     outcome: 'unsupported',
-    reply: buildUnsupportedCapabilitiesReply(replyLanguage),
+    reply: unsupportedIntentReply(intent.blockerReason, suggestedNextStep, replyLanguage),
+    blockerReason: intent.blockerReason,
+    suggestedNextStep,
+    fallbackReason: 'classifier_unsupported',
+    fallbackSourceOutcome: 'unsupported',
   };
 }
 
@@ -1250,21 +1350,25 @@ function unsupportedIntentReply(
   const languageReplies = CLASSIFIER_UNSUPPORTED_REPLIES[replyLanguage];
   const base = languageReplies[blockerReason] ?? languageReplies.unsupported_capability;
   const nextStep = userFacingSuggestedNextStep(suggestedNextStep, replyLanguage);
-  return nextStep === undefined ? base : `${base} ${nextStep}`;
+  return `${base} ${nextStep}`;
 }
 
-function unsupportedIntentReplyFromFallbackGate(replyLanguage: IntexAgentReplyLanguage): string {
-  return buildUnsupportedCapabilitiesReply(replyLanguage);
+function fallbackUnsupportedNextStep(replyLanguage: IntexAgentReplyLanguage): string {
+  return replyLanguage === 'pl'
+    ? 'Poproś użytkownika o opisanie obsługiwanej akcji.'
+    : 'Ask the user to describe a supported action.';
+}
+
+function readNonBlankString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
 }
 
 function userFacingSuggestedNextStep(
   suggestedNextStep: string,
   replyLanguage: IntexAgentReplyLanguage
-): string | undefined {
+): string {
   const trimmed = suggestedNextStep.trim();
-  if (trimmed === '') {
-    return undefined;
-  }
   if (replyLanguage === 'en') {
     const offerMatch = /^offer to\s+(.+)$/iu.exec(trimmed);
     if (offerMatch?.[1] !== undefined) {

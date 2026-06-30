@@ -15,7 +15,6 @@ import type {
 import { normalizeSessionTimestamp } from '../sessions/sessionTimestamps.js';
 import {
   buildNewSessionReadyText,
-  buildUnsupportedCapabilitiesReply,
   selectIntexAgentReplyLanguage,
   type IntexAgentLanguageMessage,
   type IntexAgentReplyLanguage,
@@ -28,6 +27,13 @@ const CONFIRMATION_BUTTON_LABELS: Record<
   en: { yes: 'Yes', no: 'No' },
   pl: { yes: 'Tak', no: 'Nie' },
 };
+
+export type IntexAgentFallbackReason =
+  | 'classifier_unsupported'
+  | 'runner_declared_unsupported'
+  | 'runner_output_malformed'
+  | 'tool_result_mismatch'
+  | 'llm_call_failed';
 
 export type IntexAgentRunnerResult =
   | {
@@ -65,6 +71,8 @@ export type IntexAgentRunnerResult =
       candidateIntents?: string[];
       suggestedNextStep?: string;
       clarification?: string;
+      fallbackReason?: IntexAgentFallbackReason;
+      fallbackSourceOutcome?: string;
     }
   | {
       outcome: 'no_action';
@@ -73,10 +81,15 @@ export type IntexAgentRunnerResult =
   | {
       outcome: 'unsupported';
       reply: string;
-      blockerReason?: string;
+      blockerReason: string;
       missingFields?: string[];
       candidateIntents?: string[];
-      suggestedNextStep?: string;
+      suggestedNextStep: string;
+      fallbackReason: Extract<
+        IntexAgentFallbackReason,
+        'classifier_unsupported' | 'runner_declared_unsupported'
+      >;
+      fallbackSourceOutcome?: string;
     };
 
 export interface IntexAgentRunner {
@@ -417,6 +430,7 @@ async function applyRunnerResult(
 
   if (runnerResult.outcome === 'needs_clarification') {
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
+    await appendAgentFallbackIfNeeded(deps, session, runnerResult, 'needs_clarification');
     await appendEvent(deps, session, 'clarification_requested', {
       message: reply,
       ...runnerMetadataPayload(runnerResult),
@@ -484,6 +498,7 @@ async function applyRunnerResult(
 
   if (runnerResult.outcome === 'unsupported') {
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
+    await appendAgentFallbackIfNeeded(deps, session, runnerResult, 'unsupported');
     await appendEvent(deps, session, 'unsupported_request', {
       message: runnerResult.reply,
       ...runnerMetadataPayload(runnerResult),
@@ -499,7 +514,13 @@ async function applyRunnerResult(
   }
 
   if (runnerResult.toolName === undefined) {
-    await applyUnsupportedRunnerResult(input, deps, session, malformedRunnerResult(input, languageEvents));
+    await applyRunnerResult(
+      input,
+      deps,
+      session,
+      fallbackClarificationResult(input, languageEvents, 'tool_result_mismatch'),
+      languageEvents
+    );
     return;
   }
 
@@ -578,26 +599,6 @@ function stripDuplicateSessionPrefix(text: string): string {
     .trimStart();
 }
 
-async function applyUnsupportedRunnerResult(
-  input: IntexIncomingMessage,
-  deps: HandleIncomingMessageDeps,
-  session: IntexAgentSession,
-  runnerResult: Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }>
-): Promise<void> {
-  const reply = stripDuplicateSessionPrefix(runnerResult.reply);
-  await appendEvent(deps, session, 'unsupported_request', {
-    message: runnerResult.reply,
-    ...runnerMetadataPayload(runnerResult),
-  });
-  const assistantAt = await appendAssistantMessage(session, deps, reply);
-  await deps.sessionRepository.updateSession(session.id, {
-    status: 'waiting_for_user',
-    lastAssistantMessageAt: assistantAt,
-    summary: summarizeUserMessage(input.text),
-  });
-  await publishReply(input, deps, session.id, reply);
-}
-
 function runnerMetadataPayload(
   runnerResult: Extract<
     IntexAgentRunnerResult,
@@ -617,6 +618,9 @@ function runnerMetadataPayload(
     ...(runnerResult.suggestedNextStep !== undefined
       ? { suggestedNextStep: runnerResult.suggestedNextStep }
       : {}),
+    ...(runnerResult.fallbackReason !== undefined
+      ? { fallbackReason: runnerResult.fallbackReason }
+      : {}),
     ...(runnerResult.outcome === 'needs_clarification' &&
     runnerResult.clarification !== undefined
       ? { clarification: runnerResult.clarification }
@@ -632,15 +636,53 @@ function summarizeUserMessage(message: string): string {
   return `${normalized.slice(0, 117)}...`;
 }
 
-function malformedRunnerResult(
+async function appendAgentFallbackIfNeeded(
+  deps: HandleIncomingMessageDeps,
+  session: IntexAgentSession,
+  runnerResult: Extract<
+    IntexAgentRunnerResult,
+    { outcome: 'needs_clarification' } | { outcome: 'unsupported' }
+  >,
+  sourceOutcome: 'needs_clarification' | 'unsupported'
+): Promise<void> {
+  if (runnerResult.fallbackReason === undefined) {
+    return;
+  }
+
+  await appendEvent(deps, session, 'agent_fallback', {
+    reason: runnerResult.fallbackReason,
+    sourceOutcome: runnerResult.fallbackSourceOutcome ?? sourceOutcome,
+  });
+}
+
+function fallbackClarificationResult(
   input: IntexIncomingMessage,
-  events: readonly IntexAgentSessionEvent[]
-): Extract<IntexAgentRunnerResult, { outcome: 'unsupported' }> {
+  events: readonly IntexAgentSessionEvent[],
+  fallbackReason: Extract<
+    IntexAgentFallbackReason,
+    'runner_output_malformed' | 'tool_result_mismatch' | 'llm_call_failed'
+  >
+): Extract<IntexAgentRunnerResult, { outcome: 'needs_clarification' }> {
+  const language = selectReplyLanguage(input, events);
   return {
-    outcome: 'unsupported',
-    reply: buildUnsupportedCapabilitiesReply(selectReplyLanguage(input, events)),
+    outcome: 'needs_clarification',
+    reply: FALLBACK_CLARIFICATION_REPLIES[language],
+    blockerReason: 'not_enough_context',
+    suggestedNextStep: FALLBACK_CLARIFICATION_NEXT_STEPS[language],
+    fallbackReason,
+    fallbackSourceOutcome: 'completed',
   };
 }
+
+const FALLBACK_CLARIFICATION_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'What would you like me to do with this?',
+  pl: 'Co mam z tym zrobić?',
+};
+
+const FALLBACK_CLARIFICATION_NEXT_STEPS: Record<IntexAgentReplyLanguage, string> = {
+  en: 'Ask the user to restate the action.',
+  pl: 'Poproś użytkownika o doprecyzowanie akcji.',
+};
 
 interface ParsedConfirmationButton {
   confirmationId: string;

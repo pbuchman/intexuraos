@@ -77,6 +77,8 @@ export type IntexAgentIntentClassification =
       missingFields?: string[];
       candidateIntents?: IntexAgentToolName[];
       suggestedNextStep?: string;
+      fallbackReason?: 'llm_call_failed';
+      fallbackSourceOutcome?: string;
       stylePreferenceAction?: IntexAgentStylePreferenceAction;
       languageOverride?: string;
       reason?: string;
@@ -306,6 +308,8 @@ function genericClarification(replyLanguage: IntexAgentReplyLanguage): IntexAgen
     question: GENERIC_CLARIFICATION_QUESTIONS[replyLanguage],
     blockerReason: 'not_enough_context',
     suggestedNextStep: GENERIC_CLARIFICATION_NEXT_STEPS[replyLanguage],
+    fallbackReason: 'llm_call_failed',
+    fallbackSourceOutcome: 'classifier',
   };
 }
 
