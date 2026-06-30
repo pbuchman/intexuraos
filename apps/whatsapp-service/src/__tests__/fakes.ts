@@ -1028,14 +1028,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     return Promise.resolve(ok(result));
   }
 
-  findConversationContextMessages(input: {
-    sourceAccountId: string;
-    chatId: string;
-    from: string;
-    to: string;
-    limit: number;
-    cursor?: string;
-  }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
+  findConversationContextMessages(
+    input: PrivateConversationContextMessageQueryInput
+  ): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
     const contextFailure = this.consumeConversationContextQueryFailure();
     if (contextFailure !== null) {
       return Promise.resolve(err(contextFailure));
@@ -1081,55 +1076,6 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       }
     }
     return Promise.resolve(ok(result));
-  }
-
-  findConversationContextMessages(
-    input: PrivateConversationContextMessageQueryInput
-  ): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>> {
-    const dataFailure = this.consumeDataQueryFailure();
-    if (dataFailure !== null) {
-      return Promise.resolve(err(dataFailure));
-    }
-
-    const failure = this.consumeFailure();
-    if (failure !== null) {
-      return Promise.resolve(err(failure));
-    }
-
-    const messages = Array.from(this.stored.values())
-      .filter((stored) => stored.sourceAccountId === input.sourceAccountId)
-      .map((stored) => this.toMessage(stored))
-      .filter((message) => message.chatId === input.chatId)
-      .filter((message) => message.eventTimestamp >= input.from)
-      .filter((message) => message.eventTimestamp < input.to)
-      .sort((a, b) => {
-        const timestampComparison = a.eventTimestamp.localeCompare(b.eventTimestamp);
-        return timestampComparison === 0 ? a.id.localeCompare(b.id) : timestampComparison;
-      })
-      .slice(0, input.limit + 1);
-    return Promise.resolve(ok(messages));
-  }
-
-  countConversationContextMessages(
-    input: Omit<PrivateConversationContextMessageQueryInput, 'limit'>
-  ): Promise<Result<number, WhatsAppError>> {
-    const dataFailure = this.consumeDataQueryFailure();
-    if (dataFailure !== null) {
-      return Promise.resolve(err(dataFailure));
-    }
-
-    const failure = this.consumeFailure();
-    if (failure !== null) {
-      return Promise.resolve(err(failure));
-    }
-
-    const count = Array.from(this.stored.values())
-      .filter((stored) => stored.sourceAccountId === input.sourceAccountId)
-      .map((stored) => this.toMessage(stored))
-      .filter((message) => message.chatId === input.chatId)
-      .filter((message) => message.eventTimestamp >= input.from)
-      .filter((message) => message.eventTimestamp < input.to).length;
-    return Promise.resolve(ok(count));
   }
 
   findChats(

@@ -11,15 +11,17 @@ export {
   type ToolCallingClientConfig,
   type LlmGenerateClient,
   type GenerateOptions,
-  type GenerateChatOptions,
-  type GenerateChatResult,
   type GenerateResult,
-  type LlmChatMessage,
-  type LlmChatRole,
-  type LlmChatTextBlock,
   type LLMError,
   isSupportedProvider,
 } from './llmClientFactory.js';
+export type {
+  GenerateChatOptions,
+  GenerateChatResult,
+  LlmChatMessage,
+  LlmChatRole,
+  LlmChatTextBlock,
+} from '@intexuraos/llm-contract';
 export { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
 export { createClaudeGenerateClient } from './claudeGenerateClient.js';
 export { createGptGenerateClient } from './gptGenerateClient.js';

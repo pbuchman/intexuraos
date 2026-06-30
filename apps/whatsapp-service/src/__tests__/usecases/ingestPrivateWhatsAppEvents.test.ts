@@ -19,7 +19,6 @@ import {
   type PrivateWhatsAppChatQueryResult,
   type PrivateWhatsAppConversationContextMessageResult,
   type PrivateWhatsAppIngestOutcome,
-  type PrivateWhatsAppMessage,
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppMessageQueryResult,
   type PrivateWhatsAppRepository,

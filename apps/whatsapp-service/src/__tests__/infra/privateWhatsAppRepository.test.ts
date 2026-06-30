@@ -677,23 +677,15 @@ describe('privateWhatsAppRepository', () => {
       to: '2026-06-22T10:02:00.000Z',
       limit: 2,
     });
-    const count = await repository.countConversationContextMessages({
-      sourceAccountId: input.sourceAccountId,
-      chatId,
-      from: '2026-06-22T10:00:00.000Z',
-      to: '2026-06-22T10:02:00.000Z',
-    });
 
     expect(result.ok).toBe(true);
-    expect(count.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
-    if (!count.ok) throw new Error(count.error.message);
-    expect(result.value.map((candidate) => candidate.id)).toEqual([
+    expect(result.value.messages.map((candidate) => candidate.id)).toEqual([
       first,
       second,
-      sameTimestampLaterId,
     ]);
-    expect(count.value).toBe(3);
+    expect(result.value.nextCursor).toEqual(expect.any(String));
+    expect(result.value.totalCount).toBe(3);
   });
 
   it('projects legacy private WhatsApp messages by document id when embedded id is absent', async () => {
@@ -735,6 +727,42 @@ describe('privateWhatsAppRepository', () => {
     expect(result.value?.media?.gcsPath).toBe(
       'whatsapp/private/user-123/message/legacy-image.jpg'
     );
+  });
+
+  it('projects legacy private WhatsApp message query rows by document id when embedded id is absent', async () => {
+    const messageId = deterministicId('pbuchman-private-whatsapp', '$legacy-query-event');
+    const chatId = deterministicId('pbuchman-private-whatsapp', '!room:matrix.example');
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId).set({
+      chatId,
+      userId: 'user-123',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$legacy-query-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      direction: 'incoming',
+      messageType: 'text',
+      text: 'legacy query row',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      receivedAt: '2026-06-22T10:00:02.000Z',
+      ingestedAt: '2026-06-22T10:00:03.000Z',
+      deliveryMode: 'live',
+      rawMatrixEvent: { type: 'm.room.message', event_id: '$legacy-query-event' },
+    });
+
+    const result = await repository.findMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId,
+      from: '2026-06-22T09:00:00.000Z',
+      to: '2026-06-22T11:00:00.000Z',
+      limit: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages[0]?.id).toBe(messageId);
   });
 
   it('updates private WhatsApp account ingest stats only for first-write messages', async () => {

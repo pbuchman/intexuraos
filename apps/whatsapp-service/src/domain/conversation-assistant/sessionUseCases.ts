@@ -17,6 +17,7 @@ import type {
   CreateConversationAssistantSessionResult,
   SendConversationAssistantTurnInput,
 } from './types.js';
+import type { PrivateWhatsAppMessage } from '../whatsapp/index.js';
 import {
   DEFAULT_CONVERSATION_ASSISTANT_MAX_MESSAGES,
   MAX_CONVERSATION_ASSISTANT_MAX_MESSAGES,
@@ -31,6 +32,8 @@ export const conversationAssistantRandomIds = {
   sessionId: (): string => `whatsapp_conv_session_${randomUUID()}`,
   turnId: (): string => `whatsapp_conv_turn_${randomUUID()}`,
 };
+
+const CONVERSATION_CONTEXT_RAW_SCAN_LIMIT = 5000;
 
 export async function createConversationAssistantSession(
   input: CreateConversationAssistantSessionInput,
@@ -64,32 +67,33 @@ export async function createConversationAssistantSession(
   }
 
   const maxMessages = input.maxMessages ?? DEFAULT_CONVERSATION_ASSISTANT_MAX_MESSAGES;
-  const messagesResult = await deps.privateWhatsAppRepository.findConversationContextMessages({
-    sourceAccountId: accountResult.value.sourceAccountId,
-    chatId: input.chatId,
-    from: input.from,
-    to: input.to,
-    limit: maxMessages,
-  });
-  if (!messagesResult.ok) {
-    return err(toPersistenceError(messagesResult.error.message));
-  }
-  const messageCountResult = await deps.privateWhatsAppRepository.countConversationContextMessages({
-    sourceAccountId: accountResult.value.sourceAccountId,
-    chatId: input.chatId,
-    from: input.from,
-    to: input.to,
-  });
-  if (!messageCountResult.ok) {
-    return err(toPersistenceError(messageCountResult.error.message));
+  const messages: PrivateWhatsAppMessage[] = [];
+  let cursor: string | undefined;
+  do {
+    const messagesResult = await deps.privateWhatsAppRepository.findConversationContextMessages({
+      sourceAccountId: accountResult.value.sourceAccountId,
+      chatId: input.chatId,
+      from: input.from,
+      to: input.to,
+      limit: CONVERSATION_CONTEXT_RAW_SCAN_LIMIT,
+      ...(cursor !== undefined ? { cursor } : {}),
+    });
+    if (!messagesResult.ok) {
+      return err(toPersistenceError(messagesResult.error.message));
+    }
+    messages.push(...messagesResult.value.messages);
+    cursor = messagesResult.value.nextCursor;
+  } while (cursor !== undefined);
+
+  if (messages.length === 0) {
+    return err({ code: 'EMPTY_TRANSCRIPT', message: 'Selected range contains no textual messages' });
   }
 
   const context = projectPrivateConversationContext({
     chat: chatResult.value,
     range: { from: input.from, to: input.to },
-    messages: messagesResult.value,
+    messages,
     maxMessages,
-    totalMatchingMessages: messageCountResult.value,
   });
   if (context.messages.length === 0) {
     return err({ code: 'EMPTY_TRANSCRIPT', message: 'Selected range contains no textual messages' });

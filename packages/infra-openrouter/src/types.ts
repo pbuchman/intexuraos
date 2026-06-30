@@ -19,19 +19,6 @@ export type {
   GenerateChatResult,
 } from '@intexuraos/llm-contract';
 
-export type LlmChatRole = 'system' | 'developer' | 'user' | 'assistant';
-
-export interface LlmChatTextBlock {
-  type: 'text';
-  text: string;
-  cache_control?: { type: 'ephemeral'; ttl?: '1h' };
-}
-
-export interface LlmChatMessage {
-  role: LlmChatRole;
-  content: string | LlmChatTextBlock[];
-}
-
 /**
  * Options for the generate method.
  */
@@ -50,25 +37,6 @@ export interface GenerateOptions {
     sessionId?: string | null;
     taskId?: string | null;
     requestId?: string | null;
-  };
-}
-
-export interface GenerateChatOptions extends GenerateOptions {
-  /** Stable OpenRouter prompt-cache/session identifier. */
-  sessionId?: string;
-  /** Sampling temperature. Defaults to 0.2. */
-  temperature?: number;
-}
-
-export interface GenerateChatResult {
-  content: string;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    costUsd: number;
-    cachedTokens?: number;
-    cacheWriteTokens?: number;
   };
 }
 

@@ -67,7 +67,7 @@ function makeDeps(): {
 
 async function seedDirectMessage(
   repository: FakePrivateWhatsAppRepository,
-  options: { displayName?: string | undefined; text?: string } = {}
+  options: { displayName?: string | undefined; text?: string; type?: 'text' | 'image' } = {}
 ): Promise<void> {
   const hasDisplayName = Object.hasOwn(options, 'displayName');
   const displayName = hasDisplayName ? options.displayName : 'Alice';
@@ -94,12 +94,14 @@ async function seedDirectMessage(
       matrixSenderId: '@alice:matrix.example',
       senderKey: 'phone:+48111111111',
       direction: 'incoming',
-      type: 'text',
-      text: options.text ?? 'We agreed to meet at 17:00.',
+      type: options.type ?? 'text',
       eventTimestamp: '2026-06-30T10:00:00.000Z',
       rawMatrixEvent: { type: 'm.room.message' },
     },
   };
+  if (options.type !== 'image') {
+    input.message.text = options.text ?? 'We agreed to meet at 17:00.';
+  }
   if (displayName !== undefined) {
     input.chat.displayName = displayName;
     input.message.senderDisplayName = displayName;
@@ -129,6 +131,40 @@ describe('Conversation Assistant session use cases', () => {
     expect(result.value.session.transcriptText).toContain('We agreed to meet at 17:00.');
     expect(result.value.session.transcriptSha256).toBe(result.value.context.transcriptSha256);
     expect(conversationRepository.getAllSessions()).toHaveLength(1);
+  });
+
+  it('continues reading context pages until the selected range is exhausted', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const calls: PrivateConversationContextMessageQueryInput[] = [];
+    const findContextMessages =
+      privateRepository.findConversationContextMessages.bind(privateRepository);
+    privateRepository.findConversationContextMessages = (
+      input
+    ): ReturnType<FakePrivateWhatsAppRepository['findConversationContextMessages']> => {
+      calls.push(input);
+      if (calls.length === 1) {
+        return Promise.resolve(ok({ messages: [], totalCount: 1, nextCursor: 'page-two' }));
+      }
+      return findContextMessages(input);
+    };
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.cursor).toBe('page-two');
+    if (result.ok) {
+      expect(result.value.context.messages).toHaveLength(1);
+    }
   });
 
   it('creates a session with first user and assistant turns using OpenRouter session id', async () => {
@@ -252,6 +288,24 @@ describe('Conversation Assistant session use cases', () => {
     if (!empty.ok) expect(empty.error.code).toBe('EMPTY_TRANSCRIPT');
   });
 
+  it('rejects ranges with raw messages that project to no textual transcript', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, { type: 'image' });
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('EMPTY_TRANSCRIPT');
+  });
+
   it('maps private WhatsApp repository failures and missing resources', async () => {
     const { deps, privateRepository } = makeDeps();
     privateRepository.failNext({ code: 'PERSISTENCE_ERROR', message: 'account failed' });
@@ -323,22 +377,6 @@ describe('Conversation Assistant session use cases', () => {
     expect(messageFailure.ok).toBe(false);
     if (!messageFailure.ok) expect(messageFailure.error.code).toBe('PERSISTENCE_ERROR');
 
-    const countFailureRepository = Object.create(privateRepository) as FakePrivateWhatsAppRepository;
-    countFailureRepository.countConversationContextMessages = (
-      _input: Omit<PrivateConversationContextMessageQueryInput, 'limit'>
-    ): ReturnType<FakePrivateWhatsAppRepository['countConversationContextMessages']> =>
-      Promise.resolve(err({ code: 'PERSISTENCE_ERROR', message: 'count failed' }));
-    const countFailure = await createConversationAssistantSession(
-      {
-        userId: USER_ID,
-        chatId: CHAT_ID,
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      { ...deps, privateWhatsAppRepository: countFailureRepository }
-    );
-    expect(countFailure.ok).toBe(false);
-    if (!countFailure.ok) expect(countFailure.error.code).toBe('PERSISTENCE_ERROR');
   });
 
   it('validates create and follow-up inputs and session ownership', async () => {
@@ -477,7 +515,7 @@ describe('Conversation Assistant session use cases', () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
     expect(created.value.session.chatDisplayName).toBeUndefined();
-    expect(created.value.session.transcriptText).toContain('Contact:');
+    expect(created.value.session.transcriptText).toContain('Unknown:');
     expect(created.value.session.transcriptText).not.toContain('phone:');
     expect(created.value.session.transcriptText).not.toContain('+48');
     expect(created.value.session.title).toBe(`${'x'.repeat(77)}...`);
