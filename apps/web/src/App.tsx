@@ -160,6 +160,11 @@ const NotionConnectionPage = React.lazy(() =>
 const PrivateWhatsAppLogPage = React.lazy(() =>
   import('@/pages/PrivateWhatsAppLogPage').then((m) => ({ default: m.PrivateWhatsAppLogPage })),
 );
+const WhatsAppConversationAssistantPage = React.lazy(() =>
+  import('@/pages/WhatsAppConversationAssistantPage').then((m) => ({
+    default: m.WhatsAppConversationAssistantPage,
+  })),
+);
 const GitHubEventLogPage = React.lazy(() =>
   import('@/pages/GitHubEventLogPage').then((m) => ({ default: m.GitHubEventLogPage })),
 );
@@ -304,6 +309,7 @@ function AppRoutes(): React.JSX.Element {
           <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
           <Route path="/whatsapp/sessions" element={<IntexAgentSessionsPage />} />
           <Route path="/whatsapp/private" element={<PrivateWhatsAppLogPage />} />
+          <Route path="/whatsapp/conversation-assistant" element={<WhatsAppConversationAssistantPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />
           <Route path="/my-bookmarks" element={<BookmarksListPage />} />

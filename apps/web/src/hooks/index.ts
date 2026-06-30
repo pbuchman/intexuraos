@@ -21,6 +21,10 @@ export {
   usePrivateWhatsAppLog,
   type UsePrivateWhatsAppLogResult,
 } from './usePrivateWhatsAppLog.js';
+export {
+  useWhatsAppConversationAssistant,
+  type UseWhatsAppConversationAssistantResult,
+} from './useWhatsAppConversationAssistant.js';
 export { useResearch, useResearches } from './useResearch.js';
 export { useResearchDetailActions, type ResearchDetailActions } from './useResearchDetailActions.js';
 export { useTaskView, type MessageStatus, type TaskViewState } from './useTaskView.js';
