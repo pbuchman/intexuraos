@@ -218,8 +218,8 @@ describe('useWhatsAppConversationAssistant', () => {
 
     expect(mocks.createConversationAssistantSession).toHaveBeenCalledWith('tok', {
       chatId: directChat.id,
-      from: '2026-06-20T09:00:00.000Z',
-      to: '2026-06-21T10:00:00.000Z',
+      from: new Date('2026-06-20T09:00').toISOString(),
+      to: new Date('2026-06-21T10:00').toISOString(),
       question: 'What changed?',
     });
     expect(result.current.selectedSession?.id).toBe(session.id);
