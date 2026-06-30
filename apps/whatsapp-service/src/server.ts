@@ -115,6 +115,9 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    llmUsageServiceUrl: config.llmUsageServiceUrl,
+    openRouterAppApiKey: config.openRouterAppApiKey,
+    conversationAssistantModel: config.conversationAssistantModel,
   };
   if (config.webhookProcessTopic !== undefined) {
     (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =

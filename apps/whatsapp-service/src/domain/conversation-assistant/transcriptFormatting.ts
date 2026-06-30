@@ -99,7 +99,7 @@ export function projectPrivateConversationContext(
     omitted.nonText += 1;
   }
 
-  const transcriptText = formatTranscriptText(contextMessages);
+  const transcriptText = buildPrivateConversationTranscriptText(contextMessages);
   return {
     chat: toContextChat(input.chat),
     range: input.range,
@@ -151,7 +151,9 @@ function firstNonEmpty(...values: (string | undefined)[]): string | undefined {
   return values.map((value) => value?.trim()).find((value) => value !== undefined && value.length > 0);
 }
 
-function formatTranscriptText(messages: PrivateConversationContextMessage[]): string {
+export function buildPrivateConversationTranscriptText(
+  messages: PrivateConversationContextMessage[]
+): string {
   return messages
     .map((message) => `[${message.eventTimestamp}] ${message.speakerLabel}: ${message.content}`)
     .join('\n');

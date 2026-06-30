@@ -61,6 +61,7 @@ export const fastifyErrorCodeSchema = {
   type: 'string',
   enum: [
     'INVALID_REQUEST',
+    'EMPTY_TRANSCRIPT',
     'UNAUTHORIZED',
     'FORBIDDEN',
     'NOT_FOUND',

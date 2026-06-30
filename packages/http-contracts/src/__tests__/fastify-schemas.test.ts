@@ -42,6 +42,7 @@ describe('Fastify Schemas', () => {
     it('has all expected error codes', () => {
       const codes = fastifyErrorCodeSchema.enum;
       expect(codes).toContain('INVALID_REQUEST');
+      expect(codes).toContain('EMPTY_TRANSCRIPT');
       expect(codes).toContain('UNAUTHORIZED');
       expect(codes).toContain('FORBIDDEN');
       expect(codes).toContain('NOT_FOUND');
@@ -50,7 +51,7 @@ describe('Fastify Schemas', () => {
       expect(codes).toContain('DOWNSTREAM_ERROR');
       expect(codes).toContain('INTERNAL_ERROR');
       expect(codes).toContain('MISCONFIGURED');
-      expect(codes.length).toBe(9);
+      expect(codes.length).toBe(10);
     });
   });
 

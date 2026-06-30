@@ -573,6 +573,121 @@ describe('privateWhatsAppRepository', () => {
     );
   });
 
+  it('loads private WhatsApp chats by id within the source account', async () => {
+    const input = createStoreInput();
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const result = await repository.getChatById({
+      sourceAccountId: input.sourceAccountId,
+      chatId: stored.value.chatId,
+    });
+    const crossAccount = await repository.getChatById({
+      sourceAccountId: 'other-source',
+      chatId: stored.value.chatId,
+    });
+    const missing = await repository.getChatById({
+      sourceAccountId: input.sourceAccountId,
+      chatId: 'missing-chat',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(crossAccount.ok).toBe(true);
+    expect(missing.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    if (!crossAccount.ok) throw new Error(crossAccount.error.message);
+    if (!missing.ok) throw new Error(missing.error.message);
+    expect(result.value?.id).toBe(stored.value.chatId);
+    expect(result.value?.sourceAccountId).toBe(input.sourceAccountId);
+    expect(crossAccount.value).toBeNull();
+    expect(missing.value).toBeNull();
+  });
+
+  it('finds private conversation context messages ascending and returns limit plus one', async () => {
+    const input = createStoreInput();
+    const chatId = deterministicId(input.sourceAccountId, input.chat.matrixRoomId);
+    const outOfRangeBefore = 'context-before';
+    const first = 'context-first';
+    const second = 'context-second';
+    const sameTimestampLaterId = 'context-zzz';
+    const otherChat = 'context-other-chat';
+    const outOfRangeAfter = 'context-after';
+    const baseMessage = {
+      chatId,
+      userId: input.userId,
+      sourceAccountId: input.sourceAccountId,
+      matrixRoomId: input.chat.matrixRoomId,
+      matrixSenderId: input.message.matrixSenderId,
+      direction: 'incoming',
+      messageType: 'text',
+      receivedAt: '2026-06-22T10:00:01.000Z',
+      ingestedAt: '2026-06-22T10:00:02.000Z',
+      deliveryMode: 'live',
+      rawMatrixEvent: { type: 'm.room.message' },
+      schemaVersion: 2,
+    };
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(outOfRangeBefore).set({
+      ...baseMessage,
+      id: outOfRangeBefore,
+      matrixEventId: '$before',
+      text: 'before',
+      eventTimestamp: '2026-06-22T09:59:59.999Z',
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(second).set({
+      ...baseMessage,
+      id: second,
+      matrixEventId: '$second',
+      text: 'second',
+      eventTimestamp: '2026-06-22T10:01:00.000Z',
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(first).set({
+      ...baseMessage,
+      matrixEventId: '$first',
+      text: 'first',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(sameTimestampLaterId).set({
+      ...baseMessage,
+      id: sameTimestampLaterId,
+      matrixEventId: '$zzz',
+      text: 'same timestamp later id',
+      eventTimestamp: '2026-06-22T10:01:00.000Z',
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(otherChat).set({
+      ...baseMessage,
+      id: otherChat,
+      chatId: 'other-chat',
+      matrixEventId: '$other-chat',
+      text: 'other chat',
+      eventTimestamp: '2026-06-22T10:00:30.000Z',
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(outOfRangeAfter).set({
+      ...baseMessage,
+      id: outOfRangeAfter,
+      matrixEventId: '$after',
+      text: 'after',
+      eventTimestamp: '2026-06-22T10:02:00.000Z',
+    });
+
+    const result = await repository.findConversationContextMessages({
+      sourceAccountId: input.sourceAccountId,
+      chatId,
+      from: '2026-06-22T10:00:00.000Z',
+      to: '2026-06-22T10:02:00.000Z',
+      limit: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages.map((candidate) => candidate.id)).toEqual([
+      first,
+      second,
+    ]);
+    expect(result.value.nextCursor).toEqual(expect.any(String));
+    expect(result.value.totalCount).toBe(3);
+  });
+
   it('projects legacy private WhatsApp messages by document id when embedded id is absent', async () => {
     const messageId = deterministicId('pbuchman-private-whatsapp', '$legacy-event');
     await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId).set({
@@ -612,6 +727,42 @@ describe('privateWhatsAppRepository', () => {
     expect(result.value?.media?.gcsPath).toBe(
       'whatsapp/private/user-123/message/legacy-image.jpg'
     );
+  });
+
+  it('projects legacy private WhatsApp message query rows by document id when embedded id is absent', async () => {
+    const messageId = deterministicId('pbuchman-private-whatsapp', '$legacy-query-event');
+    const chatId = deterministicId('pbuchman-private-whatsapp', '!room:matrix.example');
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId).set({
+      chatId,
+      userId: 'user-123',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$legacy-query-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      direction: 'incoming',
+      messageType: 'text',
+      text: 'legacy query row',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      receivedAt: '2026-06-22T10:00:02.000Z',
+      ingestedAt: '2026-06-22T10:00:03.000Z',
+      deliveryMode: 'live',
+      rawMatrixEvent: { type: 'm.room.message', event_id: '$legacy-query-event' },
+    });
+
+    const result = await repository.findMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId,
+      from: '2026-06-22T09:00:00.000Z',
+      to: '2026-06-22T11:00:00.000Z',
+      limit: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages[0]?.id).toBe(messageId);
   });
 
   it('updates private WhatsApp account ingest stats only for first-write messages', async () => {

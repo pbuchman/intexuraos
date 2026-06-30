@@ -15,6 +15,8 @@ import { GcpPubSubPublisher, type GcpPubSubPublisherConfig } from './infra/pubsu
 import { WhatsAppCloudApiAdapter, WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
 import { createWebAgentLinkPreviewClient } from './infra/linkpreview/webAgentLinkPreviewClient.js';
+import { createLlmClient } from '@intexuraos/llm-factory';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import type {
   EventPublisherPort,
   LinkPreviewFetcherPort,
@@ -30,8 +32,13 @@ import type {
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEventRepository,
 } from './domain/whatsapp/index.js';
+import type {
+  ConversationAssistantLlmClientFactory,
+  ConversationAssistantRepository,
+} from './domain/conversation-assistant/ports.js';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
 import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
+import { createConversationAssistantRepository } from './infra/firestore/conversationAssistantRepository.js';
 
 /**
  * Configuration for service initialization.
@@ -47,6 +54,9 @@ export interface ServiceConfig {
   whatsappPhoneNumberId: string;
   webAgentUrl: string;
   internalAuthToken: string;
+  llmUsageServiceUrl: string;
+  openRouterAppApiKey: string;
+  conversationAssistantModel: string;
 }
 
 function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
@@ -81,6 +91,9 @@ export interface ServiceContainer {
   whatsappCloudApi: WhatsAppCloudApiPort;
   thumbnailGenerator: ThumbnailGeneratorPort;
   linkPreviewFetcher: LinkPreviewFetcherPort;
+  conversationAssistantRepository?: ConversationAssistantRepository;
+  llmClientFactory?: ConversationAssistantLlmClientFactory;
+  conversationAssistantModel?: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -128,8 +141,37 @@ export function getServices(): ServiceContainer {
       internalAuthToken: serviceConfig.internalAuthToken,
       logger: createAppLogger({ name: 'webAgentLinkPreviewClient' }),
     }),
+    conversationAssistantRepository: createConversationAssistantRepository(),
+    llmClientFactory: createConversationAssistantLlmClientFactory(serviceConfig),
+    conversationAssistantModel: serviceConfig.conversationAssistantModel,
   };
   return container;
+}
+
+function createConversationAssistantLlmClientFactory(
+  config: ServiceConfig
+): ConversationAssistantLlmClientFactory {
+  const usageSink = new HttpInternalAuthUsageSink({
+    usageServiceUrl: config.llmUsageServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    service: 'whatsapp-service',
+    component: 'conversation-assistant',
+    logger: createAppLogger({ name: 'whatsapp-conversation-assistant-usage-sink' }),
+  });
+  return {
+    createLlmClientForUser(userId: string): ReturnType<
+      ConversationAssistantLlmClientFactory['createLlmClientForUser']
+    > {
+      return createLlmClient({
+        apiKey: config.openRouterAppApiKey,
+        model: config.conversationAssistantModel as never,
+        userId,
+        logger: createAppLogger({ name: 'whatsapp-conversation-assistant-llm' }),
+        usageSink,
+        ownerType: 'user',
+      });
+    },
+  };
 }
 
 /**

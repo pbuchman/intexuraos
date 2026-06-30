@@ -56,6 +56,7 @@ describe('Error utilities', () => {
     it('has mapping for all error codes', () => {
       const allCodes: ErrorCode[] = [
         'INVALID_REQUEST',
+        'EMPTY_TRANSCRIPT',
         'UNAUTHORIZED',
         'FORBIDDEN',
         'NOT_FOUND',
@@ -112,6 +113,7 @@ describe('Error utilities', () => {
     it('sets correct HTTP status for each error code', () => {
       const testCases: { code: ErrorCode; expectedStatus: number }[] = [
         { code: 'INVALID_REQUEST', expectedStatus: 400 },
+        { code: 'EMPTY_TRANSCRIPT', expectedStatus: 400 },
         { code: 'UNAUTHORIZED', expectedStatus: 401 },
         { code: 'FORBIDDEN', expectedStatus: 403 },
         { code: 'NOT_FOUND', expectedStatus: 404 },

@@ -34,6 +34,7 @@ import {
   type WebhookProcessEvent,
   type WhatsAppError,
 } from '../../domain/whatsapp/index.js';
+import type { PrivateConversationContextMessageQueryInput } from '../../domain/whatsapp/models/PrivateWhatsApp.js';
 import type { Logger } from '../../domain/whatsapp/utils/logger.js';
 
 const logger: Logger = {
@@ -177,14 +178,9 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     return Promise.resolve(ok({ messages: [] }));
   }
 
-  findConversationContextMessages(_input: {
-    sourceAccountId: string;
-    chatId: string;
-    from: string;
-    to: string;
-    limit: number;
-    cursor?: string;
-  }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
+  findConversationContextMessages(
+    _input: PrivateConversationContextMessageQueryInput
+  ): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
     return Promise.resolve(ok({ messages: [], totalCount: 0 }));
   }
 

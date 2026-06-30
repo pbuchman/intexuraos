@@ -110,6 +110,9 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ?? 'whatsapp-media-cleanup-push',
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? 'whatsapp-webhook-process',
+    INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
+    INTEXURAOS_CONVERSATION_ASSISTANT_MODEL:
+      process.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL ?? 'or:google/gemini-3.5-flash',
   },
   'code-agent': {
     INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/code',
