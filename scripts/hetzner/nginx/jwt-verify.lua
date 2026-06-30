@@ -23,6 +23,12 @@ local ROUTE_ALLOWED_SERVICE_ACCOUNTS = {
   },
 }
 
+local ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS = {
+  ["/internal/users/"] = {
+    ["ixos-transcription-fn-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
+}
+
 local opts = {
   discovery = "https://accounts.google.com/.well-known/openid-configuration",
   jwk_expires_in = 3600,
@@ -69,6 +75,12 @@ local function is_service_account_allowed(email)
   local route_allowed_service_accounts = ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]
   if route_allowed_service_accounts ~= nil then
     return route_allowed_service_accounts[email] == true
+  end
+
+  for prefix, route_prefix_allowed_service_accounts in pairs(ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS) do
+    if string.sub(ngx.var.uri, 1, string.len(prefix)) == prefix then
+      return route_prefix_allowed_service_accounts[email] == true
+    end
   end
 
   return GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email] == true
