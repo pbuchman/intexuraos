@@ -244,6 +244,7 @@ export interface PrivateWhatsAppMessageQueryResult {
 export interface PrivateWhatsAppConversationContextMessageResult {
   messages: PrivateWhatsAppMessage[];
   totalCount: number;
+  nextCursor?: string;
 }
 
 export interface UpdatePrivateWhatsAppChatTranscriptionInput {

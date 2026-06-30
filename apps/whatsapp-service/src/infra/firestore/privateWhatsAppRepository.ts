@@ -552,9 +552,10 @@ async function findConversationContextMessages(input: {
   from: string;
   to: string;
   limit: number;
+  cursor?: string;
 }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
   try {
-    const query = getFirestore()
+    let query: Query = getFirestore()
       .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
       .where('sourceAccountId', '==', input.sourceAccountId)
       .where('chatId', '==', input.chatId)
@@ -562,14 +563,34 @@ async function findConversationContextMessages(input: {
       .where('eventTimestamp', '<', input.to)
       .orderBy('eventTimestamp', 'asc')
       .orderBy(FieldPath.documentId(), 'asc');
+    const cursor = decodeCursor(input.cursor);
+    if (cursor !== undefined) {
+      query = query.startAfter(cursor.sortValue, cursor.id);
+    }
     const [snapshot, countSnapshot] = await Promise.all([
       query.limit(input.limit + 1).get(),
-      query.count().get(),
+      getFirestore()
+        .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+        .where('sourceAccountId', '==', input.sourceAccountId)
+        .where('chatId', '==', input.chatId)
+        .where('eventTimestamp', '>=', input.from)
+        .where('eventTimestamp', '<', input.to)
+        .count()
+        .get(),
     ]);
-    return ok({
-      messages: snapshot.docs.map((doc) => doc.data() as PrivateWhatsAppMessage),
+    const docs = snapshot.docs.slice(0, input.limit);
+    const messages = docs.map((doc) => doc.data() as PrivateWhatsAppMessage);
+    const result: PrivateWhatsAppConversationContextMessageResult = {
+      messages,
       totalCount: countSnapshot.data().count,
-    });
+    };
+    if (snapshot.docs.length > input.limit) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage !== undefined) {
+        result.nextCursor = encodeCursor(lastMessage.eventTimestamp, lastMessage.id);
+      }
+    }
+    return ok(result);
   } catch (error) {
     return err({
       code: 'PERSISTENCE_ERROR',

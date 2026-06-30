@@ -61,6 +61,7 @@ export interface PrivateWhatsAppRepository {
     from: string;
     to: string;
     limit: number;
+    cursor?: string;
   }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>>;
   findChats(
     input: PrivateWhatsAppChatQueryInput

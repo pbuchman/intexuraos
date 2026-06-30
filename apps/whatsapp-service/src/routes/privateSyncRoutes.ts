@@ -5,6 +5,7 @@ import {
   IngestPrivateWhatsAppEventsUseCase,
   type IngestPrivateWhatsAppEventsInput,
   type PrivateWhatsAppAggregateRebuildInput,
+  type PrivateWhatsAppMessage,
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppSenderDayQueryInput,
 } from '../domain/whatsapp/index.js';
@@ -650,23 +651,39 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         return await reply.fail('INVALID_REQUEST', 'Conversation context supports direct chats only');
       }
 
-      const messagesResult = await repository.findConversationContextMessages({
-        sourceAccountId: accountResult.value.sourceAccountId,
-        chatId: request.body.chatId,
-        from: request.body.from,
-        to: request.body.to,
-        limit: Math.max(maxMessages, CONVERSATION_CONTEXT_RAW_SCAN_LIMIT),
-      });
-      if (!messagesResult.ok) {
-        return await reply.fail('INTERNAL_ERROR', messagesResult.error.message);
-      }
+      const messages: PrivateWhatsAppMessage[] = [];
+      let cursor: string | undefined;
+      let hasProjectedOverLimit = false;
+      do {
+        const query = {
+          sourceAccountId: accountResult.value.sourceAccountId,
+          chatId: request.body.chatId,
+          from: request.body.from,
+          to: request.body.to,
+          limit: CONVERSATION_CONTEXT_RAW_SCAN_LIMIT,
+          ...(cursor !== undefined ? { cursor } : {}),
+        };
+        const messagesResult = await repository.findConversationContextMessages(query);
+        if (!messagesResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', messagesResult.error.message);
+        }
+        messages.push(...messagesResult.value.messages);
+        const projected = projectPrivateConversationContext({
+          chat: chatResult.value,
+          range: { from: request.body.from, to: request.body.to },
+          maxMessages,
+          messages,
+        });
+        hasProjectedOverLimit = projected.omitted.overLimit > 0;
+        cursor = messagesResult.value.nextCursor;
+      } while (cursor !== undefined && !hasProjectedOverLimit);
 
       return await reply.ok(
         projectPrivateConversationContext({
           chat: chatResult.value,
           range: { from: request.body.from, to: request.body.to },
           maxMessages,
-          messages: messagesResult.value.messages,
+          messages,
         })
       );
     }

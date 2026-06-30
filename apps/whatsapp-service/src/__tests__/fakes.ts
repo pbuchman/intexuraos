@@ -926,7 +926,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     if (messages.length > safeStartIndex + input.limit) {
       const lastMessage = page[page.length - 1];
       if (lastMessage !== undefined) {
-        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastMessage.eventTimestamp, lastMessage.id);
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(
+          lastMessage.eventTimestamp,
+          lastMessage.id
+        );
       }
     }
     return Promise.resolve(ok(result));
@@ -938,6 +941,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     from: string;
     to: string;
     limit: number;
+    cursor?: string;
   }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
     const contextFailure = this.consumeConversationContextQueryFailure();
     if (contextFailure !== null) {
@@ -964,9 +968,26 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         const timestampComparison = a.eventTimestamp.localeCompare(b.eventTimestamp);
         return timestampComparison === 0 ? a.id.localeCompare(b.id) : timestampComparison;
       });
-    return Promise.resolve(
-      ok({ messages: messages.slice(0, input.limit + 1), totalCount: messages.length })
-    );
+    const cursor = decodeFakePrivateWhatsAppCursor(input.cursor);
+    const startIndex =
+      cursor === undefined
+        ? 0
+        : messages.findIndex(
+            (message) => message.eventTimestamp === cursor.sortValue && message.id === cursor.id
+          ) + 1;
+    const safeStartIndex = startIndex < 0 ? 0 : startIndex;
+    const page = messages.slice(safeStartIndex, safeStartIndex + input.limit);
+    const result: PrivateWhatsAppConversationContextMessageResult = {
+      messages: page,
+      totalCount: messages.length,
+    };
+    if (messages.length > safeStartIndex + input.limit) {
+      const lastMessage = page[page.length - 1];
+      if (lastMessage !== undefined) {
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastMessage.eventTimestamp, lastMessage.id);
+      }
+    }
+    return Promise.resolve(ok(result));
   }
 
   findChats(

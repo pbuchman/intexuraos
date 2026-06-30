@@ -183,6 +183,7 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     from: string;
     to: string;
     limit: number;
+    cursor?: string;
   }): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
     return Promise.resolve(ok({ messages: [], totalCount: 0 }));
   }

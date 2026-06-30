@@ -1372,7 +1372,7 @@ describe('privateWhatsAppRepository', () => {
     expect(result.value).toBeNull();
   });
 
-  it('queries private conversation context messages oldest-first with one over-limit row', async () => {
+  it('queries private conversation context messages oldest-first with cursor pagination', async () => {
     const firstResult = await repository.storeIncomingMessage(
       createStoreInput({
         message: {
@@ -1442,9 +1442,43 @@ describe('privateWhatsAppRepository', () => {
     expect(result.value.messages.map((message) => message.matrixEventId)).toEqual([
       '$event-1-context',
       '$event-2-context',
-      '$event-3-context',
     ]);
     expect(result.value.totalCount).toBe(4);
+    expect(result.value.nextCursor).toEqual(expect.any(String));
+
+    const nextCursor = result.value.nextCursor;
+    if (nextCursor === undefined) throw new Error('Expected next cursor');
+    const nextPageResult = await repository.findConversationContextMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: firstResult.value.chatId,
+      from: '2026-06-22T09:00:00.000Z',
+      to: '2026-06-22T11:00:00.000Z',
+      limit: 2,
+      cursor: nextCursor,
+    });
+
+    expect(nextPageResult.ok).toBe(true);
+    if (!nextPageResult.ok) throw new Error(nextPageResult.error.message);
+    expect(nextPageResult.value.messages.map((message) => message.matrixEventId)).toEqual([
+      '$event-3-context',
+      '$event-4-context',
+    ]);
+    expect(nextPageResult.value.totalCount).toBe(4);
+    expect(nextPageResult.value.nextCursor).toBeUndefined();
+
+    const zeroLimitResult = await repository.findConversationContextMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      chatId: firstResult.value.chatId,
+      from: '2026-06-22T09:00:00.000Z',
+      to: '2026-06-22T11:00:00.000Z',
+      limit: 0,
+    });
+
+    expect(zeroLimitResult.ok).toBe(true);
+    if (!zeroLimitResult.ok) throw new Error(zeroLimitResult.error.message);
+    expect(zeroLimitResult.value.messages).toEqual([]);
+    expect(zeroLimitResult.value.totalCount).toBe(4);
+    expect(zeroLimitResult.value.nextCursor).toBeUndefined();
   });
 
   it('queries private WhatsApp chats newest-first and projects legacy chat documents safely', async () => {

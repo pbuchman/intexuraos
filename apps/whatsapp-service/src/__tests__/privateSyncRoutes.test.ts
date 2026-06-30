@@ -14,6 +14,7 @@ vi.mock('@intexuraos/common-http', async (importOriginal) => {
 });
 
 import { beforeEach, createToken, describe, expect, it, setupTestContext } from './testUtils.js';
+import type { StorePrivateWhatsAppMessageInput } from '../domain/whatsapp/index.js';
 
 interface PublicPrivateWhatsAppMediaDto {
   mxcUri: string;
@@ -2194,6 +2195,78 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(body.success).toBe(true);
     expect(body.data.messages).toHaveLength(2);
     expect(body.data.omitted.overLimit).toBe(3);
+  });
+
+  it('continues scanning raw conversation rows until maxMessages usable context messages are projected', async () => {
+    const chatMatrixRoomId = '!large-context-room:matrix.example';
+    const storedMessages: StorePrivateWhatsAppMessageInput[] = [];
+    for (let index = 0; index < 5100; index += 1) {
+      const isLeadingMedia = index < 100;
+      const timestamp = new Date(Date.UTC(2026, 5, 22, 10, 0, index)).toISOString();
+      storedMessages.push({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: timestamp,
+        chat: {
+          matrixRoomId: chatMatrixRoomId,
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message: {
+          matrixRoomId: chatMatrixRoomId,
+          matrixEventId: `$event-large-context-${String(index)}`,
+          matrixSenderId: '@alice:matrix.example',
+          senderDisplayName: 'Alice',
+          senderKey: 'matrix:@alice:matrix.example',
+          direction: 'incoming',
+          type: isLeadingMedia ? 'image' : 'text',
+          ...(isLeadingMedia
+            ? { media: { mxcUri: `mxc://matrix.example/large-leading-${String(index)}` } }
+            : { text: `message ${String(index)}` }),
+          eventTimestamp: timestamp,
+          rawMatrixEvent: { type: 'm.room.message' },
+        },
+      });
+    }
+    await Promise.all(
+      storedMessages.map(async (message) =>
+        ctx.privateWhatsAppRepository.storeIncomingMessage(message)
+      )
+    );
+    const chatId = `chat:pbuchman-private-whatsapp:${chatMatrixRoomId}`;
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T12:00:00.000Z',
+        maxMessages: 5000,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        messages: { content: string; contentKind: string }[];
+        omitted: { mediaOnly: number; overLimit: number };
+        messageCount: number;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.messages).toHaveLength(5000);
+    expect(body.data.messages[0]).toMatchObject({
+      content: 'message 100',
+      contentKind: 'text',
+    });
+    expect(body.data.messageCount).toBe(5000);
+    expect(body.data.omitted.mediaOnly).toBe(100);
+    expect(body.data.omitted.overLimit).toBe(0);
   });
 
   it('rejects conversation context requests without internal auth', async () => {
