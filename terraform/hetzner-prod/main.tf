@@ -70,6 +70,7 @@ locals {
     "/internal/merge-conflicts/reconcile"               = "code-agent"
     "/internal/merge-queue/tick"                        = "code-agent"
     "/internal/notifications/digest/run-yesterday"      = "mobile-notifications-service"
+    "/internal/users/"                                  = "user-service"
     "/internal/whatsapp/private/events"                 = "whatsapp-service"
     "/internal/whatsapp/private/media"                  = "whatsapp-service"
     "/internal/whatsapp/pubsub/media-cleanup"           = "whatsapp-service"

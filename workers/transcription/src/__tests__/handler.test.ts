@@ -415,4 +415,103 @@ describe('fetchUserProvider', () => {
     expect(result).toBe('speechmatics');
     expect(fakeLogger.entries.some((e) => e.level === 'warn')).toBe(true);
   });
+
+  it('uses Hetzner internal edge OIDC when production public user-service base is configured', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () =>
+        Promise.resolve({
+          success: true,
+          data: { transcriptionPreferences: { provider: 'speechmatics' } },
+        }),
+    } as unknown as Response);
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await fetchUserProvider(
+      'user-1',
+      'https://intexuraos.cloud/api/user',
+      'internal-token',
+      fakeLogger,
+      async (audience: string) => {
+        expect(audience).toBe('https://intexuraos.cloud');
+        return 'oidc-token';
+      }
+    );
+
+    expect(result).toBe('speechmatics');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://intexuraos.cloud/internal/users/user-1/settings',
+      {
+        headers: { Authorization: 'Bearer oidc-token' },
+      }
+    );
+  });
+
+  it('fetches a metadata identity token for the default Hetzner edge auth path', async () => {
+    const fetchSpy = vi.fn().mockImplementation((input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.startsWith('http://metadata.google.internal/')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => Promise.resolve('metadata-oidc-token'),
+        } as unknown as Response);
+      }
+
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () =>
+          Promise.resolve({
+            success: true,
+            data: { transcriptionPreferences: { provider: 'speechmatics' } },
+          }),
+      } as unknown as Response);
+    });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await fetchUserProvider(
+      'user-1',
+      'https://intexuraos.cloud/api/user',
+      'internal-token',
+      fakeLogger
+    );
+
+    expect(result).toBe('speechmatics');
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=https%3A%2F%2Fintexuraos.cloud&format=full',
+      { headers: { 'Metadata-Flavor': 'Google' } }
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'https://intexuraos.cloud/internal/users/user-1/settings',
+      { headers: { Authorization: 'Bearer metadata-oidc-token' } }
+    );
+  });
+
+  it('falls back and warns when Hetzner metadata identity token fetch fails', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => Promise.resolve('metadata error'),
+    } as unknown as Response);
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await fetchUserProvider(
+      'user-1',
+      'https://intexuraos.cloud/api/user',
+      'internal-token',
+      fakeLogger
+    );
+
+    expect(result).toBe('speechmatics');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fakeLogger.entries).toContainEqual({
+      level: 'warn',
+      obj: { event: 'fetch_provider_network_error', userId: 'user-1' },
+      msg: 'Network error fetching user settings, defaulting to speechmatics',
+    });
+  });
 });

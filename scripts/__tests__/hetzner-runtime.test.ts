@@ -210,6 +210,7 @@ describe('Hetzner nginx runtime config', () => {
       ['/internal/linear/prune-issues', 'linear_agent'],
       ['/internal/notifications/', 'mobile_notifications_service'],
       ['/internal/drain-queue', 'code_agent'],
+      ['/internal/users/', 'user_service'],
     ];
 
     for (const [path, upstream] of routes) {
@@ -239,6 +240,7 @@ describe('Hetzner nginx runtime config', () => {
     expect(verifier).toContain('EXPECTED_AUD = "https://intexuraos.cloud"');
     expect(verifier).toContain('GLOBAL_ALLOWED_SERVICE_ACCOUNTS');
     expect(verifier).toContain('ROUTE_ALLOWED_SERVICE_ACCOUNTS');
+    expect(verifier).toContain('ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS');
     expect(verifier).toContain('ngx.var.uri');
     expect(verifier).toContain(
       'intexuraos-scheduler-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
@@ -257,6 +259,9 @@ describe('Hetzner nginx runtime config', () => {
     );
     expect(verifier).not.toContain(
       'intexuraos-mobile-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+    expect(verifier).toContain(
+      'ixos-transcription-fn-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
     const retiredCommandServiceAccount = `intexuraos-${retiredDashed(
       'commands',
@@ -281,7 +286,13 @@ describe('Hetzner nginx runtime config', () => {
       verifier.indexOf('GLOBAL_ALLOWED_SERVICE_ACCOUNTS'),
       verifier.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS')
     );
-    const routeAllowlist = verifier.slice(verifier.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS'));
+    const routeAllowlist = verifier.slice(
+      verifier.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS'),
+      verifier.indexOf('ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS')
+    );
+    const routePrefixAllowlist = verifier.slice(
+      verifier.indexOf('ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS')
+    );
     expect(globalAllowlist).not.toContain(
       'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
@@ -290,8 +301,13 @@ describe('Hetzner nginx runtime config', () => {
     expect(routeAllowlist).toContain(
       'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
+    expect(routePrefixAllowlist).toContain('["/internal/users/"]');
+    expect(routePrefixAllowlist).toContain(
+      'ixos-transcription-fn-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
     expect(hetznerMain).toContain('"/internal/whatsapp/private/events"');
     expect(hetznerMain).toContain('"/internal/whatsapp/private/media"');
+    expect(hetznerMain).toContain('"/internal/users/"');
     expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/events');
     expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/media');
 
@@ -300,9 +316,11 @@ describe('Hetzner nginx runtime config', () => {
       verifier.indexOf('local auth_header')
     );
     const routeLookupIndex = allowFunction.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]');
+    const routePrefixLookupIndex = allowFunction.indexOf('ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS');
     const globalLookupIndex = allowFunction.indexOf('GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email]');
     expect(routeLookupIndex).toBeGreaterThanOrEqual(0);
-    expect(globalLookupIndex).toBeGreaterThan(routeLookupIndex);
+    expect(routePrefixLookupIndex).toBeGreaterThan(routeLookupIndex);
+    expect(globalLookupIndex).toBeGreaterThan(routePrefixLookupIndex);
   });
 });
 

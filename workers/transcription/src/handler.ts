@@ -66,6 +66,13 @@ export interface AudioStoredHandlerDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
+export type IdentityTokenProvider = (audience: string) => Promise<string>;
+
+const HETZNER_PUBLIC_ORIGIN = 'https://intexuraos.cloud';
+const HETZNER_PUBLIC_USER_SERVICE_BASE = `${HETZNER_PUBLIC_ORIGIN}/api/user`;
+const GCP_METADATA_IDENTITY_ENDPOINT =
+  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity';
+
 /**
  * Validate a parsed Pub/Sub payload has every required transcription request
  * field. Guards against schema drift between whatsapp-service (the producer)
@@ -194,15 +201,17 @@ export async function fetchUserProvider(
   userId: string,
   userServiceUrl: string,
   internalAuthToken: string,
-  reqLogger: WorkerLogger
+  reqLogger: WorkerLogger,
+  identityTokenProvider: IdentityTokenProvider = fetchGoogleIdentityToken
 ): Promise<string> {
   try {
-    const response = await fetch(
-      `${userServiceUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
-      {
-        headers: { 'X-Internal-Auth': internalAuthToken },
-      }
+    const request = await buildUserSettingsRequest(
+      userId,
+      userServiceUrl,
+      internalAuthToken,
+      identityTokenProvider
     );
+    const response = await fetch(request.url, { headers: request.headers });
 
     if (!response.ok) {
       reqLogger.warn(
@@ -229,6 +238,40 @@ export async function fetchUserProvider(
     );
     return 'speechmatics';
   }
+}
+
+async function buildUserSettingsRequest(
+  userId: string,
+  userServiceUrl: string,
+  internalAuthToken: string,
+  identityTokenProvider: IdentityTokenProvider
+): Promise<{ url: string; headers: Record<string, string> }> {
+  const encodedUserId = encodeURIComponent(userId);
+  const normalizedUserServiceUrl = userServiceUrl.replace(/\/+$/, '');
+
+  if (normalizedUserServiceUrl === HETZNER_PUBLIC_USER_SERVICE_BASE) {
+    const token = await identityTokenProvider(HETZNER_PUBLIC_ORIGIN);
+    return {
+      url: `${HETZNER_PUBLIC_ORIGIN}/internal/users/${encodedUserId}/settings`,
+      headers: { Authorization: `Bearer ${token}` },
+    };
+  }
+
+  return {
+    url: `${normalizedUserServiceUrl}/internal/users/${encodedUserId}/settings`,
+    headers: { 'X-Internal-Auth': internalAuthToken },
+  };
+}
+
+async function fetchGoogleIdentityToken(audience: string): Promise<string> {
+  const params = new URLSearchParams({ audience, format: 'full' });
+  const response = await fetch(`${GCP_METADATA_IDENTITY_ENDPOINT}?${params.toString()}`, {
+    headers: { 'Metadata-Flavor': 'Google' },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Google identity token: HTTP ${String(response.status)}`);
+  }
+  return await response.text();
 }
 
 /**
