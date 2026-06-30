@@ -1165,6 +1165,71 @@ test('prepareEventsForIngest uploads new Matrix audio before posting ingest even
   });
 });
 
+test('prepareEventsForIngest uploads new Matrix video before posting ingest events', async () => {
+  const prepared = await prepareEventsForIngest(
+    config,
+    'matrix-token',
+    [
+      {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$video',
+        matrixSenderId: '@whatsapp_48536911713:home-dev',
+        eventTimestamp: '2026-06-30T12:54:45.000Z',
+        chat: { type: 'group' },
+        message: {
+          direction: 'incoming',
+          type: 'video',
+          text: 'video.mp4',
+          media: {
+            mxcUri: 'mxc://home-dev/video',
+            mimeType: 'video/mp4',
+            fileName: 'video.mp4',
+          },
+        },
+        rawMatrixEvent: {},
+      },
+    ],
+    {
+      fetchMatrixMedia: async (_config, accessToken, mxcUri) => {
+        assert.equal(accessToken, 'matrix-token');
+        assert.equal(mxcUri, 'mxc://home-dev/video');
+        return {
+          buffer: Buffer.from('video-bytes'),
+          contentType: 'video/mp4',
+        };
+      },
+      uploadPrivateMedia: async (_config, event, media, downloaded) => {
+        assert.equal(event.matrixEventId, '$video');
+        assert.equal(media.mxcUri, 'mxc://home-dev/video');
+        assert.equal(downloaded.contentType, 'video/mp4');
+        return {
+          mxcUri: media.mxcUri,
+          mimeType: 'video/mp4',
+          fileName: 'video.mp4',
+          sizeBytes: downloaded.buffer.length,
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user/message/video.mp4',
+          storedMimeType: 'video/mp4',
+          storedSizeBytes: downloaded.buffer.length,
+          storedAt: '2026-06-30T12:55:00.000Z',
+        };
+      },
+    }
+  );
+
+  assert.deepEqual(prepared[0]?.message.media, {
+    mxcUri: 'mxc://home-dev/video',
+    mimeType: 'video/mp4',
+    fileName: 'video.mp4',
+    sizeBytes: 'video-bytes'.length,
+    storageStatus: 'stored',
+    gcsPath: 'whatsapp/private/user/message/video.mp4',
+    storedMimeType: 'video/mp4',
+    storedSizeBytes: 'video-bytes'.length,
+    storedAt: '2026-06-30T12:55:00.000Z',
+  });
+});
+
 test('runSyncIteration does not persist Matrix state when image upload fails', async () => {
   const stateFile = await createTempStateFile({
     nextBatch: 'batch-1',

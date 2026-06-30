@@ -71,7 +71,7 @@ The request body must include:
 - `deliveryMode`
 - `events`
 
-Image and audio events upload media bytes to
+Image, audio, and video events upload media bytes to
 `POST /internal/whatsapp/private/media` before the adapter posts the event batch
 to `POST /internal/whatsapp/private/events`. Both endpoints require the same
 private-sync service account OIDC identity.
@@ -125,7 +125,7 @@ The adapter should receive Matrix and Google credentials as mounted secret files
 6. IntexuraOS resolves `sourceAccountId` to the canonical user id.
 7. IntexuraOS stores immutable message docs and updates sender/sender-day read models.
 
-For new `m.image` events only, the adapter downloads the Matrix media bytes with its Matrix access token, uploads the bytes to `POST /internal/whatsapp/private/media`, receives GCS metadata, and includes that metadata in the private event sent to `POST /internal/whatsapp/private/events`. Existing image messages without stored media metadata remain placeholders in the private log.
+For new `m.image`, `m.audio`, and `m.video` events, the adapter downloads the Matrix media bytes with its Matrix access token, uploads the bytes to `POST /internal/whatsapp/private/media`, receives GCS metadata, and includes that metadata in the private event sent to `POST /internal/whatsapp/private/events`. Existing media messages without stored media metadata remain placeholders in the private log.
 
 Backfills should use the same endpoint with `deliveryMode: "backfill"` and deterministic Matrix event ids so duplicate ingest does not double-count aggregates.
 
