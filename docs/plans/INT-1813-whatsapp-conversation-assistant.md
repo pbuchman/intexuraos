@@ -4,7 +4,7 @@
 
 **Goal:** Add a web-based WhatsApp Conversation Assistant that lets a user select a private direct WhatsApp chat, freeze a time-bounded text/transcript context, and ask follow-up questions against that context with autosaved sessions.
 
-**Architecture:** `whatsapp-service` remains the owner of private WhatsApp message storage and exposes a narrowly scoped internal transcript export. `intex-agent` owns the new Conversation Assistant session model, autosaved turns, prompt assembly, OpenRouter calls, and authenticated web APIs. Shared LLM packages add a cache-aware OpenRouter chat contract so the stable transcript block can be sent with `session_id` and `cache_control`; the web app consumes only public authenticated APIs and never receives hidden message-owner fields.
+**Architecture:** `whatsapp-service` owns the WhatsApp Conversation Assistant end to end because the feature analyzes private WhatsApp message context. It owns private message storage access, text/transcription filtering, assistant sessions, autosaved turns, prompt assembly, OpenRouter calls, and authenticated web APIs. Shared LLM packages add a cache-aware OpenRouter chat contract so the stable transcript block can be sent with `session_id` and `cache_control`; the web app consumes only public authenticated WhatsApp Assistant APIs and never receives hidden message-owner fields.
 
 **Tech Stack:** TypeScript strict mode, Fastify, Firestore, React/Vite/Tailwind, `@intexuraos/infra-openrouter`, `@intexuraos/llm-factory`, `@intexuraos/llm-prompts`, OpenRouter Chat Completions, Gemini via OpenRouter, Vitest, `pnpm run ci:tracked`.
 
@@ -14,9 +14,9 @@
 
 ## Ownership Boundary
 
-This is not an Intex Agent feature implemented inside `whatsapp-service`. The only new `whatsapp-service` responsibility is a private, internal-auth transcript export because that service owns the private WhatsApp storage schema, account ownership checks, message/transcription filtering, and media omission rules. `whatsapp-service` must not create assistant sessions, store assistant turns, assemble prompts, call OpenRouter, expose public Conversation Assistant APIs, or depend on `intex-agent`.
+This is a WhatsApp feature implemented in `whatsapp-service`, not an Intex Agent feature. `whatsapp-service` owns the private WhatsApp storage schema, account ownership checks, message/transcription filtering, media omission rules, assistant sessions, assistant turns, prompt assembly, OpenRouter invocation, and public authenticated Conversation Assistant APIs.
 
-`intex-agent` is the feature owner for the assistant runtime. It calls the sanitized WhatsApp export as a data source, freezes the returned text snapshot, owns the Conversation Assistant session and turn collections, assembles prompts, invokes the LLM, and exposes the authenticated web APIs.
+`intex-agent` must not be modified for this MVP. Do not add Conversation Assistant routes, collections, services, prompts, or runtime code under `apps/intex-agent`; existing Intex Agent routes remain unchanged.
 
 ## Global Constraints
 
@@ -45,9 +45,9 @@ This is not an Intex Agent feature implemented inside `whatsapp-service`. The on
 | Subtask | Owner boundary | Independent contract |
 | --- | --- | --- |
 | Shared LLM package work | `packages/infra-openrouter`, `packages/llm-factory`, `packages/llm-prompts`; `packages/llm-contract` only if shared role/content-block types belong there | Exposes cache-aware chat generation types and `buildWhatsAppConversationAssistantMessages()`. No app code changes are required to verify the package contract. |
-| WhatsApp context export | `apps/whatsapp-service` | Creates `POST /internal/whatsapp/private/conversation-context` that returns a sanitized transcript snapshot for a user-owned direct chat and time range. No `intex-agent` or web code changes. |
-| Conversation assistant runtime | `apps/intex-agent` | Creates authenticated session/turn APIs, calls the WhatsApp internal export contract, persists sessions/turns, and invokes the cache-aware LLM contract. Can test with fake WhatsApp context and fake LLM clients. |
-| Web experience | `apps/web` | Adds `/whatsapp/conversation-assistant`, nav entry, session list, chat picker/time-range form, and chat UI against fixed API DTOs. Can test with mocked service functions. |
+| WhatsApp transcript projection | `apps/whatsapp-service` | Adds sanitized transcript projection for a user-owned direct chat and time range. No `intex-agent` or web code changes. |
+| WhatsApp assistant runtime | `apps/whatsapp-service` | Creates authenticated session/turn APIs, persists sessions/turns, freezes transcript snapshots, and invokes the cache-aware LLM contract. Can test with fake repositories and fake LLM clients. |
+| Web experience | `apps/web` | Adds `/whatsapp/conversation-assistant`, WhatsApp submenu nav entry, session list, chat picker/time-range form, and chat UI against fixed WhatsApp Assistant API DTOs. Can test with mocked service functions. |
 
 No Linear dependencies should be created between subtasks. The contracts in this document are the handoff surface, so each subagent can work independently.
 
@@ -55,17 +55,16 @@ No Linear dependencies should be created between subtasks. The contracts in this
 
 | Type | Endpoint | Owner | Details |
 | --- | --- | --- | --- |
-| Created | `POST /internal/whatsapp/private/conversation-context` | `whatsapp-service` | Internal-auth only transcript export for one user-owned direct private chat and `[from, to]` range. |
-| Created | `GET /conversation-assistant/sessions` | `intex-agent` | Authenticated list of current user's Conversation Assistant sessions. |
-| Created | `POST /conversation-assistant/sessions` | `intex-agent` | Authenticated create/freeze context; optional first question starts the first LLM turn. |
-| Created | `GET /conversation-assistant/sessions/:sessionId` | `intex-agent` | Authenticated read of one session owned by the current user. |
-| Created | `GET /conversation-assistant/sessions/:sessionId/turns` | `intex-agent` | Authenticated chronological turn list. |
-| Created | `POST /conversation-assistant/sessions/:sessionId/turns` | `intex-agent` | Authenticated follow-up question; appends user and assistant turns. |
+| Created | `POST /whatsapp/conversation-assistant/sessions` | `whatsapp-service` | Authenticated create/freeze context; optional first question starts the first LLM turn. |
+| Created | `GET /whatsapp/conversation-assistant/sessions` | `whatsapp-service` | Authenticated list of current user's Conversation Assistant sessions. |
+| Created | `GET /whatsapp/conversation-assistant/sessions/:sessionId` | `whatsapp-service` | Authenticated read of one session owned by the current user. |
+| Created | `GET /whatsapp/conversation-assistant/sessions/:sessionId/turns` | `whatsapp-service` | Authenticated chronological turn list. |
+| Created | `POST /whatsapp/conversation-assistant/sessions/:sessionId/turns` | `whatsapp-service` | Authenticated follow-up question; appends user and assistant turns. |
 | Modified | Web route `/whatsapp/conversation-assistant` | `apps/web` | New WhatsApp submenu page. |
 | Modified | OpenRouter Chat Completions request body | shared LLM packages | Accepts `messages`, `session_id`, `cache_control`, content blocks, and cache usage metrics. |
 | Removed | None | - | No endpoint removal. |
 | Unchanged | `GET /private/chats`, `GET /private/chats/:chatId/messages` | `whatsapp-service` | Existing private log API remains read-only and unchanged. |
-| Unchanged | Existing `/sessions` Intex Agent routes | `intex-agent` | Existing WhatsApp inbound-agent sessions remain separate. |
+| Unchanged | Existing Intex Agent routes | `intex-agent` | No Intex Agent files or routes are modified. |
 
 ## Shared Contracts
 
@@ -90,6 +89,7 @@ export interface LlmChatMessage {
 export interface GenerateChatOptions {
   promptType: string;
   sessionId?: string;
+  temperature?: number;
   responseFormat?: { type: 'json_object' | 'text' };
   correlation?: {
     sessionId?: string | null;
@@ -205,10 +205,10 @@ export interface ConversationAssistantTurn {
 }
 ```
 
-Firestore should persist two new collections owned by `intex-agent`:
+Firestore should persist two new collections owned by `whatsapp-service`:
 
-- `intex_conversation_assistant_sessions`
-- `intex_conversation_assistant_turns`
+- `whatsapp_conversation_assistant_sessions`
+- `whatsapp_conversation_assistant_turns`
 
 The session document must include the frozen `transcriptText` used for prompts. That field must never be returned in public API responses.
 
@@ -290,34 +290,29 @@ Implementation may refine wording, but it must preserve these semantics:
 ### WhatsApp Service
 
 - Modify `apps/whatsapp-service/src/domain/whatsapp/models/PrivateWhatsApp.ts` for context DTOs if they live in the domain.
+- Create `apps/whatsapp-service/src/domain/conversation-assistant/types.ts`.
+- Create `apps/whatsapp-service/src/domain/conversation-assistant/ports.ts`.
+- Create `apps/whatsapp-service/src/domain/conversation-assistant/transcriptFormatting.ts`.
+- Create `apps/whatsapp-service/src/domain/conversation-assistant/sessionUseCases.ts`.
 - Modify `apps/whatsapp-service/src/domain/whatsapp/ports/privateWhatsAppRepository.ts` to add `getChatById()` and `findConversationContextMessages()`.
 - Modify `apps/whatsapp-service/src/infra/firestore/privateWhatsAppRepository.ts` to implement chat lookup and ascending range query.
+- Create `apps/whatsapp-service/src/infra/firestore/conversationAssistantRepository.ts`.
 - Modify `apps/whatsapp-service/src/routes/privateReadRoutes.ts` only if shared public serializers are reused.
-- Create `apps/whatsapp-service/src/routes/privateConversationContextRoutes.ts`.
-- Modify `apps/whatsapp-service/src/routes/index.ts` to register the new internal route.
+- Create `apps/whatsapp-service/src/routes/conversationAssistantRoutes.ts`.
+- Modify `apps/whatsapp-service/src/routes/index.ts` to register the new authenticated routes.
+- Modify `apps/whatsapp-service/src/services.ts` to wire repository and LLM chat client if the service container owns those dependencies.
+- Modify `apps/whatsapp-service/src/config.ts` and `apps/whatsapp-service/src/index.ts` to add `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`.
 - Modify `apps/whatsapp-service/src/__tests__/fakes.ts`.
-- Create `apps/whatsapp-service/src/__tests__/privateConversationContextRoutes.test.ts`.
+- Create `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/sessionUseCases.test.ts`.
+- Create `apps/whatsapp-service/src/__tests__/conversationAssistantRoutes.test.ts`.
 - Modify `apps/whatsapp-service/src/__tests__/infra/privateWhatsAppRepository.test.ts` for range query and chat ownership coverage.
+- Create `apps/whatsapp-service/src/__tests__/infra/conversationAssistantRepository.test.ts`.
 - Create `migrations/117_private-whatsapp-conversation-context-index.mjs`.
 - Create `migrations/__tests__/117-private-whatsapp-conversation-context-index.test.ts`.
-
-### Intex Agent
-
-- Create `apps/intex-agent/src/domain/conversation-assistant/types.ts`.
-- Create `apps/intex-agent/src/domain/conversation-assistant/ports.ts`.
-- Create `apps/intex-agent/src/domain/conversation-assistant/transcriptFormatting.ts`.
-- Create `apps/intex-agent/src/domain/conversation-assistant/sessionUseCases.ts`.
-- Create `apps/intex-agent/src/infra/firestore/conversationAssistantRepository.ts`.
-- Create `apps/intex-agent/src/infra/http/whatsappPrivateContextClient.ts`.
-- Create `apps/intex-agent/src/routes/conversationAssistantRoutes.ts`.
-- Modify `apps/intex-agent/src/server.ts` route registration.
-- Modify `apps/intex-agent/src/services.ts` to wire repository, WhatsApp internal client, LLM chat client, and usage sink.
-- Modify `apps/intex-agent/src/config.ts` and `apps/intex-agent/src/index.ts` to add `INTEXURAOS_WHATSAPP_SERVICE_URL` and `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`.
-- Modify `ecosystem.config.cjs` and `terraform/environments/dev/main.tf` for the new env vars if they are not already available to `intex-agent`.
+- Create `migrations/118_whatsapp-conversation-assistant-indexes.mjs`.
+- Create `migrations/__tests__/118-whatsapp-conversation-assistant-indexes.test.ts`.
+- Modify `ecosystem.config.cjs` and `terraform/environments/dev/main.tf` for `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`.
 - Modify `firestore-collections.json`.
-- Create tests under `apps/intex-agent/src/__tests__/domain/conversation-assistant/`, `apps/intex-agent/src/__tests__/infra/firestore/conversationAssistantRepository.test.ts`, `apps/intex-agent/src/__tests__/infra/http/whatsappPrivateContextClient.test.ts`, and `apps/intex-agent/src/__tests__/routes/conversationAssistantRoutes.test.ts`.
-- Create `migrations/118_intex-conversation-assistant-indexes.mjs`.
-- Create `migrations/__tests__/118-intex-conversation-assistant-indexes.test.ts`.
 
 ### Web App
 
@@ -372,7 +367,7 @@ Add the shared chat types to `packages/infra-openrouter/src/types.ts`. Implement
 const requestBody = {
   model,
   messages,
-  temperature: 0.2,
+  temperature: options.temperature ?? 0.2,
   ...(options.sessionId !== undefined ? { session_id: options.sessionId } : {}),
   ...(options.responseFormat !== undefined ? { response_format: options.responseFormat } : {}),
 };
@@ -386,9 +381,17 @@ Keep `generate(prompt, options)` as a wrapper that calls `generateChat([{ role: 
 
 Add optional `generateChat()` to `LlmGenerateClient`, implement it in `createOpenRouterGenerateClient()`, and throw `IntexuraOSError('INVALID_REQUEST', 'Chat message generation is only supported for OpenRouter clients')` for non-OpenRouter factory clients if a caller invokes the optional method.
 
-- [ ] **Step 5: Add the Conversation Assistant prompt builder**
+- [ ] **Step 5: Add prompt builder tests and the Conversation Assistant prompt builder**
 
-Create `packages/llm-prompts/src/whatsapp-conversation-assistant/conversationAssistantPrompt.ts` with semver prompt metadata, stable transcript content block, and strict factuality instructions from the Prompt Contract.
+Create tests that prove:
+
+- the cached transcript block is placed before prior turns and the current question;
+- prior user/assistant turns are appended after the cached transcript block;
+- the system message contains the no-invention, evidence-missing, no-web-search, and no-omitted-media instructions;
+- `cache_control` is set only on the transcript block;
+- the prompt metadata includes semver `version: '1.0.0'`.
+
+Then create `packages/llm-prompts/src/whatsapp-conversation-assistant/conversationAssistantPrompt.ts` with semver prompt metadata, stable transcript content block, and strict factuality instructions from the Prompt Contract.
 
 - [ ] **Step 6: Verify package tests**
 
@@ -400,16 +403,15 @@ pnpm vitest run packages/infra-openrouter/src/__tests__/client.test.ts packages/
 
 Expected: PASS.
 
-## Task 2: WhatsApp Private Conversation Context Export
+## Task 2: WhatsApp Private Conversation Transcript Projection
 
 **Files:**
 - Modify: `apps/whatsapp-service/src/domain/whatsapp/models/PrivateWhatsApp.ts`
+- Create: `apps/whatsapp-service/src/domain/conversation-assistant/transcriptFormatting.ts`
 - Modify: `apps/whatsapp-service/src/domain/whatsapp/ports/privateWhatsAppRepository.ts`
 - Modify: `apps/whatsapp-service/src/infra/firestore/privateWhatsAppRepository.ts`
-- Create: `apps/whatsapp-service/src/routes/privateConversationContextRoutes.ts`
-- Modify: `apps/whatsapp-service/src/routes/index.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/fakes.ts`
-- Create: `apps/whatsapp-service/src/__tests__/privateConversationContextRoutes.test.ts`
+- Create: `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/infra/privateWhatsAppRepository.test.ts`
 - Create: `migrations/117_private-whatsapp-conversation-context-index.mjs`
 - Create: `migrations/__tests__/117-private-whatsapp-conversation-context-index.test.ts`
@@ -434,17 +436,17 @@ findConversationContextMessages(input: {
 }): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>>;
 ```
 
-- [ ] **Step 1: Write failing route tests**
+- [ ] **Step 1: Write failing transcript projection tests**
 
-Cover auth failure, invalid time range, unknown account, non-owned chat, group chat rejection, text-only transcript output, completed transcription output, media-only omission counts, and no raw Matrix/media fields in the response.
+Cover text-only transcript output, completed transcription output, pending/failed transcription omission counts, media-only omission counts, non-text omission counts, over-limit counts, stable normalized transcript text, `transcriptSha256`, speaker labels, and no raw Matrix/media fields in the projected response.
 
 Run:
 
 ```bash
-pnpm vitest run apps/whatsapp-service/src/__tests__/privateConversationContextRoutes.test.ts
+pnpm vitest run apps/whatsapp-service/src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts
 ```
 
-Expected: FAIL because the route does not exist.
+Expected: FAIL because the projector does not exist.
 
 - [ ] **Step 2: Add repository methods and tests**
 
@@ -474,9 +476,9 @@ Build a pure projector that emits `PrivateConversationContextMessage[]`:
 - count pending/failed transcriptions and media-only/non-text omissions;
 - compute `transcriptSha256` from the normalized prompt transcript text, not raw message JSON.
 
-- [ ] **Step 4: Register internal route**
+- [ ] **Step 4: Expose projector to the WhatsApp assistant runtime**
 
-Create `privateConversationContextRoutes.ts`; require internal auth; call `logIncomingRequest()` with counts and booleans only, never message text or phone numbers. Register it in `routes/index.ts`.
+Keep transcript projection inside `whatsapp-service`; no internal export route or Intex Agent client is required for this MVP. Route-level auth, empty-transcript handling, and HTTP error mapping are covered in Task 3.
 
 - [ ] **Step 5: Add Firestore index migration**
 
@@ -496,49 +498,46 @@ Create `migrations/117_private-whatsapp-conversation-context-index.mjs` for `wha
 Run:
 
 ```bash
-pnpm --filter @intexuraos/whatsapp-service test -- src/__tests__/privateConversationContextRoutes.test.ts src/__tests__/infra/privateWhatsAppRepository.test.ts
+pnpm --filter @intexuraos/whatsapp-service test -- src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts src/__tests__/infra/privateWhatsAppRepository.test.ts
 ```
 
 Expected: PASS.
 
-## Task 3: Intex Agent Conversation Assistant Runtime
+## Task 3: WhatsApp Service Conversation Assistant Runtime
 
 **Files:**
-- Create: `apps/intex-agent/src/domain/conversation-assistant/types.ts`
-- Create: `apps/intex-agent/src/domain/conversation-assistant/ports.ts`
-- Create: `apps/intex-agent/src/domain/conversation-assistant/transcriptFormatting.ts`
-- Create: `apps/intex-agent/src/domain/conversation-assistant/sessionUseCases.ts`
-- Create: `apps/intex-agent/src/infra/firestore/conversationAssistantRepository.ts`
-- Create: `apps/intex-agent/src/infra/http/whatsappPrivateContextClient.ts`
-- Create: `apps/intex-agent/src/routes/conversationAssistantRoutes.ts`
-- Modify: `apps/intex-agent/src/server.ts`
-- Modify: `apps/intex-agent/src/services.ts`
-- Modify: `apps/intex-agent/src/config.ts`
-- Modify: `apps/intex-agent/src/index.ts`
+- Create: `apps/whatsapp-service/src/domain/conversation-assistant/types.ts`
+- Create: `apps/whatsapp-service/src/domain/conversation-assistant/ports.ts`
+- Create: `apps/whatsapp-service/src/domain/conversation-assistant/sessionUseCases.ts`
+- Create: `apps/whatsapp-service/src/infra/firestore/conversationAssistantRepository.ts`
+- Create: `apps/whatsapp-service/src/routes/conversationAssistantRoutes.ts`
+- Modify: `apps/whatsapp-service/src/routes/index.ts`
+- Modify: `apps/whatsapp-service/src/services.ts`
+- Modify: `apps/whatsapp-service/src/config.ts`
+- Modify: `apps/whatsapp-service/src/index.ts`
 - Modify: `ecosystem.config.cjs`
 - Modify: `terraform/environments/dev/main.tf`
 - Modify: `firestore-collections.json`
-- Create: `migrations/118_intex-conversation-assistant-indexes.mjs`
-- Create: `migrations/__tests__/118-intex-conversation-assistant-indexes.test.ts`
-- Create tests under `apps/intex-agent/src/__tests__/domain/conversation-assistant/`
-- Create: `apps/intex-agent/src/__tests__/routes/conversationAssistantRoutes.test.ts`
-- Create: `apps/intex-agent/src/__tests__/infra/firestore/conversationAssistantRepository.test.ts`
-- Create: `apps/intex-agent/src/__tests__/infra/http/whatsappPrivateContextClient.test.ts`
+- Create: `migrations/118_whatsapp-conversation-assistant-indexes.mjs`
+- Create: `migrations/__tests__/118-whatsapp-conversation-assistant-indexes.test.ts`
+- Create: `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/sessionUseCases.test.ts`
+- Create: `apps/whatsapp-service/src/__tests__/conversationAssistantRoutes.test.ts`
+- Create: `apps/whatsapp-service/src/__tests__/infra/conversationAssistantRepository.test.ts`
 
 **Interfaces:**
-- Consumes: WhatsApp internal context export.
+- Consumes: WhatsApp private chat/message repositories and transcript projector from Task 2.
 - Consumes: `LlmGenerateClient.generateChat(messages, options)`.
 - Produces: authenticated Conversation Assistant session/turn APIs.
-- Produces Firestore collections `intex_conversation_assistant_sessions` and `intex_conversation_assistant_turns`.
+- Produces Firestore collections `whatsapp_conversation_assistant_sessions` and `whatsapp_conversation_assistant_turns`.
 
 - [ ] **Step 1: Write failing domain tests**
 
-Cover creating a session from context, freezing normalized transcript text, deriving a title from chat/range/first question, rejecting empty transcript contexts, and building follow-up messages with unchanged transcript prefix.
+Cover creating a shell session from context when no first question is supplied, creating a session plus first LLM turn when `question` is supplied, freezing normalized transcript text, deriving a title from chat/range/first question, rejecting empty transcript contexts with `EMPTY_TRANSCRIPT`, and building follow-up messages with unchanged transcript prefix.
 
 Run:
 
 ```bash
-pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/conversation-assistant
+pnpm --filter @intexuraos/whatsapp-service test -- src/__tests__/domain/conversation-assistant/sessionUseCases.test.ts
 ```
 
 Expected: FAIL because domain files do not exist.
@@ -561,31 +560,41 @@ Use ids `whatsapp_conv_session_${randomUUID()}` and `whatsapp_conv_turn_${random
 
 Store session documents with private fields `transcriptText` and public metadata. Store turns separately. Query sessions by `userId` ordered by `updatedAt desc`; query turns by `sessionId` ordered by `createdAt asc`.
 
-- [ ] **Step 4: Implement WhatsApp internal client**
+- [ ] **Step 4: Implement routes and HTTP semantics**
 
-Create `whatsappPrivateContextClient.ts` using `X-Internal-Auth`, path `/internal/whatsapp/private/conversation-context`, timeout `30000`, and response envelope parsing consistent with internal clients.
+Register routes under `/whatsapp/conversation-assistant`. Each route must `requireAuth()`, call `logIncomingRequest()`, reject cross-user access, and never return `transcriptText`.
 
-- [ ] **Step 5: Implement routes**
+Route tests must cover this error-code surface:
 
-Register routes under `/conversation-assistant`. Each route must `requireAuth()`, call `logIncomingRequest()`, reject cross-user access, and never return `transcriptText`.
+| Route | Failure | Error code |
+| --- | --- | --- |
+| `POST /whatsapp/conversation-assistant/sessions` | `from >= to`, invalid ISO timestamps, invalid `maxMessages`, or group chat | `INVALID_REQUEST` |
+| `POST /whatsapp/conversation-assistant/sessions` | no active private account, unknown chat, or non-owned chat | `NOT_FOUND` |
+| `POST /whatsapp/conversation-assistant/sessions` | zero textual messages after projection | `EMPTY_TRANSCRIPT` |
+| `POST /whatsapp/conversation-assistant/sessions` | no `question` field | `201` shell session with zero turns |
+| `POST /whatsapp/conversation-assistant/sessions` | LLM failure after supplied first question | persisted user turn plus assistant error turn with `LLM_ERROR` |
+| `GET /whatsapp/conversation-assistant/sessions/:sessionId` | session missing or foreign user | `NOT_FOUND` |
+| `GET /whatsapp/conversation-assistant/sessions/:sessionId/turns` | session missing or foreign user | `NOT_FOUND` |
+| `POST /whatsapp/conversation-assistant/sessions/:sessionId/turns` | empty question | `INVALID_REQUEST` |
+| `POST /whatsapp/conversation-assistant/sessions/:sessionId/turns` | session missing or foreign user | `NOT_FOUND` |
+| `POST /whatsapp/conversation-assistant/sessions/:sessionId/turns` | LLM failure | persisted user turn plus assistant error turn with `LLM_ERROR` |
 
-- [ ] **Step 6: Wire configuration**
+- [ ] **Step 5: Wire configuration**
 
 Add required env vars:
 
-- `INTEXURAOS_WHATSAPP_SERVICE_URL`
 - `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`
 
-Default the model to `or:google/gemini-3.5-flash`, verified in the OpenRouter catalog on 2026-06-30. Wire env vars in `apps/intex-agent/src/index.ts`, `ecosystem.config.cjs`, and `terraform/environments/dev/main.tf`.
+Default the model to `or:google/gemini-3.5-flash`, verified in the OpenRouter catalog on 2026-06-30. Wire env vars in `apps/whatsapp-service/src/index.ts`, `ecosystem.config.cjs`, and `terraform/environments/dev/main.tf`.
 
-- [ ] **Step 7: Add Firestore registry and indexes**
+- [ ] **Step 6: Add Firestore registry and indexes**
 
-Register the two collections in `firestore-collections.json`. Add `migrations/118_intex-conversation-assistant-indexes.mjs` for:
+Register the two collections in `firestore-collections.json`. Add `migrations/118_whatsapp-conversation-assistant-indexes.mjs` for:
 
 ```javascript
 [
   {
-    collectionGroup: 'intex_conversation_assistant_sessions',
+    collectionGroup: 'whatsapp_conversation_assistant_sessions',
     queryScope: 'COLLECTION',
     fields: [
       { fieldPath: 'userId', order: 'ASCENDING' },
@@ -594,7 +603,7 @@ Register the two collections in `firestore-collections.json`. Add `migrations/11
     ],
   },
   {
-    collectionGroup: 'intex_conversation_assistant_turns',
+    collectionGroup: 'whatsapp_conversation_assistant_turns',
     queryScope: 'COLLECTION',
     fields: [
       { fieldPath: 'sessionId', order: 'ASCENDING' },
@@ -605,12 +614,12 @@ Register the two collections in `firestore-collections.json`. Add `migrations/11
 ]
 ```
 
-- [ ] **Step 8: Verify Intex Agent tests**
+- [ ] **Step 7: Verify WhatsApp assistant runtime tests**
 
 Run:
 
 ```bash
-pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/conversation-assistant src/__tests__/routes/conversationAssistantRoutes.test.ts src/__tests__/infra/firestore/conversationAssistantRepository.test.ts src/__tests__/infra/http/whatsappPrivateContextClient.test.ts
+pnpm --filter @intexuraos/whatsapp-service test -- src/__tests__/domain/conversation-assistant/sessionUseCases.test.ts src/__tests__/conversationAssistantRoutes.test.ts src/__tests__/infra/conversationAssistantRepository.test.ts
 ```
 
 Expected: PASS.
@@ -626,26 +635,27 @@ Expected: PASS.
 - Create: `apps/web/src/pages/WhatsAppConversationAssistantPage.tsx`
 - Create: `apps/web/src/components/whatsapp/ConversationAssistantSessionRail.tsx`
 - Create: `apps/web/src/components/whatsapp/ConversationAssistantComposer.tsx`
+- Create: `apps/web/src/__tests__/App.conversationAssistantRoute.test.tsx`
 - Create: `apps/web/src/pages/__tests__/WhatsAppConversationAssistantPage.test.tsx`
 - Create: `apps/web/src/hooks/__tests__/useWhatsAppConversationAssistant.test.tsx`
 - Create: `apps/web/src/services/__tests__/conversationAssistantApi.test.ts`
 
 **Interfaces:**
 - Consumes: existing `listPrivateWhatsAppChats()` from `apps/web/src/services/whatsappApi.ts`.
-- Consumes: new `intex-agent` Conversation Assistant APIs.
+- Consumes: new `whatsapp-service` Conversation Assistant APIs.
 - Produces: route `/#/whatsapp/conversation-assistant`.
 
-- [ ] **Step 1: Write failing API service tests**
+- [ ] **Step 1: Write failing API service and route tests**
 
-Test each API function path, method, request body, and `config.intexAgentUrl` usage.
+Test each API function path, method, request body, and WhatsApp service base URL usage. Add an `App.tsx` route-registration test proving `/#/whatsapp/conversation-assistant` resolves to `WhatsAppConversationAssistantPage` using the existing `apps/web/src/__tests__/` route-test patterns.
 
 Run:
 
 ```bash
-pnpm vitest run apps/web/src/services/__tests__/conversationAssistantApi.test.ts
+pnpm vitest run apps/web/src/services/__tests__/conversationAssistantApi.test.ts apps/web/src/__tests__/App.conversationAssistantRoute.test.tsx
 ```
 
-Expected: FAIL because the service file does not exist.
+Expected: FAIL because the service file and route do not exist.
 
 - [ ] **Step 2: Implement API service and web types**
 
@@ -684,12 +694,14 @@ Add lazy route `/whatsapp/conversation-assistant` in `App.tsx`. Add WhatsApp nav
 { to: '/whatsapp/conversation-assistant', label: 'Conversation Assistant', icon: Bot }
 ```
 
+The nav item must be added to the `whatsappItems` array in `apps/web/src/components/sidebar/navItems.ts`, not to `intexAgentItems`.
+
 - [ ] **Step 7: Verify web tests**
 
 Run:
 
 ```bash
-pnpm --filter @intexuraos/web test -- src/services/__tests__/conversationAssistantApi.test.ts src/hooks/__tests__/useWhatsAppConversationAssistant.test.tsx src/pages/__tests__/WhatsAppConversationAssistantPage.test.tsx
+pnpm --filter @intexuraos/web test -- src/services/__tests__/conversationAssistantApi.test.ts src/hooks/__tests__/useWhatsAppConversationAssistant.test.tsx src/pages/__tests__/WhatsAppConversationAssistantPage.test.tsx src/__tests__/App.conversationAssistantRoute.test.tsx
 ```
 
 Expected: PASS.
@@ -697,11 +709,11 @@ Expected: PASS.
 ## Final Verification
 
 - [ ] Run package-focused tests listed in Task 1.
-- [ ] Run `pnpm --filter @intexuraos/whatsapp-service test -- src/__tests__/privateConversationContextRoutes.test.ts src/__tests__/infra/privateWhatsAppRepository.test.ts`.
-- [ ] Run `pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/conversation-assistant src/__tests__/routes/conversationAssistantRoutes.test.ts src/__tests__/infra/firestore/conversationAssistantRepository.test.ts src/__tests__/infra/http/whatsappPrivateContextClient.test.ts`.
+- [ ] Run `pnpm --filter @intexuraos/whatsapp-service test -- src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts src/__tests__/infra/privateWhatsAppRepository.test.ts`.
+- [ ] Run `pnpm --filter @intexuraos/whatsapp-service test -- src/__tests__/domain/conversation-assistant/sessionUseCases.test.ts src/__tests__/conversationAssistantRoutes.test.ts src/__tests__/infra/conversationAssistantRepository.test.ts`.
+- [ ] Run `pnpm vitest run migrations/__tests__/117-private-whatsapp-conversation-context-index.test.ts migrations/__tests__/118-whatsapp-conversation-assistant-indexes.test.ts`.
 - [ ] Run web tests listed in Task 4.
 - [ ] Run `pnpm run verify:workspace:tracked -- whatsapp-service`.
-- [ ] Run `pnpm run verify:workspace:tracked -- intex-agent`.
 - [ ] Run `pnpm run verify:workspace:tracked -- web`.
 - [ ] Run `pnpm run verify:package-exports`.
 - [ ] Run `pnpm run ci:tracked`.
@@ -722,4 +734,4 @@ Expected: PASS.
 
 - Spec coverage: user-facing submenu, private chat selection, time range selection, multiple autosaved sessions, continuing old sessions, text/transcription-only context, Gemini via OpenRouter, prompt caching, factuality constraints, and no-media MVP are all mapped to tasks.
 - Placeholder scan: no implementation task uses placeholder language; exact paths, endpoint names, DTOs, and verification commands are specified.
-- Type consistency: DTO names are shared across the package, WhatsApp, Intex Agent, and web task sections.
+- Type consistency: DTO names are shared across the package, WhatsApp service, and web task sections.
