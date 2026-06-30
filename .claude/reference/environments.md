@@ -2,61 +2,75 @@
 
 ## Overview
 
-| Environment | Domain               | Infra                                       | Machine  | Deploy Target                              |
-| ----------- | -------------------- | ------------------------------------------- | -------- | ------------------------------------------ |
-| **dev**     | dev.intexuraos.cloud | PM2                                         | home-dev | `~/deploy/intexuraos`                      |
-| **prod**    | intexuraos.cloud     | Hetzner PM2/nginx + retained GCP data plane | Hetzner  | GitHub Actions deploy to `/opt/intexuraos` |
+| Environment | Domain               | Infra                                        | Machine                | Deploy Target                              |
+| ----------- | -------------------- | -------------------------------------------- | ---------------------- | ------------------------------------------ |
+| **local**   | `localhost`          | PM2 watch + Vite + per-host Pub/Sub emulator | mac-dev/developer host | current checkout                           |
+| **dev**     | dev.intexuraos.cloud | PM2 + per-host Pub/Sub emulator              | home-dev               | `~/deploy/intexuraos`                      |
+| **prod**    | intexuraos.cloud     | Hetzner PM2/nginx + retained GCP data plane  | Hetzner                | GitHub Actions deploy to `/opt/intexuraos` |
 
-**⛔ There is NO "local" environment. Only dev and prod exist. If you think about local, STOP - you are wrong.**
+**Single retained GCP project.** Local, dev, and prod use the SAME retained GCP project `intexuraos-dev-pbuchman` for Firestore, Cloud Storage, Secret Manager, and Auth0 configuration. The `-dev-pbuchman` suffix is legacy; there is no separate prod GCP project. The environment distinction is about runtime target and routing, not project ownership.
 
-**Single GCP project.** Both `dev.intexuraos.cloud` and `intexuraos.cloud` use the SAME retained GCP project `intexuraos-dev-pbuchman` for data-plane resources. The `-dev-pbuchman` suffix is legacy — there is no separate prod GCP project. The dev/prod distinction is about _deployment target_ (PM2 on `home-dev` vs PM2/nginx on Hetzner), not about project ownership. `terraform/environments/dev/` owns retained GCP resources; `terraform/hetzner-prod/` owns the production Hetzner host and Hetzner-targeted async/control-plane resources.
+**Local follows the same data/async pattern as dev.** Local and dev both use real retained GCP Firestore/Storage/Auth0/Secret Manager and both use a per-host Pub/Sub emulator on `localhost:8102`. The difference is process location: local runs the current checkout on the developer host; dev runs the deployed checkout on `home-dev`.
+
+**Firestore is SHARED across local, dev, and prod.** Same database, same collections. Treat local data writes as writes to the shared retained project.
 
 ## Environment Detection Signals
 
-| Signal                           | dev                                      | prod                                   |
-| -------------------------------- | ---------------------------------------- | -------------------------------------- |
-| URL (public)                     | `dev.intexuraos.cloud`                   | `intexuraos.cloud` (without `dev.`)    |
-| URL (internal)                   | `localhost:*` (service URLs on home-dev) | `127.0.0.1:*` on the Hetzner VM        |
-| User says                        | "dev", "dev environment"                 | "prod", "production", "cloud"          |
-| `uname -n`                       | `home-dev`                               | Hetzner VM hostname                    |
-| Logs via                         | `pm2 logs <name>`                        | SSH to Hetzner, then `pm2 logs <name>` |
-| `INTEXURAOS_ENVIRONMENT` env var | `dev`                                    | `prod`                                 |
+| Signal                           | local                                             | dev                                       | prod                                |
+| -------------------------------- | ------------------------------------------------- | ----------------------------------------- | ----------------------------------- |
+| URL (public)                     | `http://localhost:3000` or `http://localhost:*`   | `https://dev.intexuraos.cloud`            | `https://intexuraos.cloud`          |
+| URL (internal)                   | `http://localhost:81xx` on current developer host | `localhost:*` service URLs on home-dev    | `127.0.0.1:*` on the Hetzner VM     |
+| User says                        | "local", "localhost", "pnpm run dev"              | "dev", "dev environment"                  | "prod", "production", "cloud"       |
+| `uname -n`                       | developer machine hostname, often Darwin/mac-dev  | `home-dev`                                | Hetzner VM hostname                 |
+| Logs via                         | local `pnpm exec pm2 logs <name>`                 | `pm2 logs <name>` on home-dev             | SSH to Hetzner, then PM2/nginx logs |
+| `INTEXURAOS_ENVIRONMENT` env var | currently `dev` for service compatibility         | `dev`                                     | `prod`                              |
+| Pub/Sub                          | own Docker emulator `localhost:8102`              | own emulator on home-dev `localhost:8102` | Hetzner-targeted async plane        |
 
-**Firestore is SHARED between both environments.** Same database, same collections.
+Do not classify an issue from `localhost` alone. First identify the machine and context: local developer checkout, home-dev internal service URL, or Hetzner internal URL.
 
 ## Sentry Routing
 
-Sentry routing is DSN-based; environment labels are still only `dev` and `prod`.
+Sentry routing is DSN-based. Runtime labels remain `dev` and `prod`; local currently runs with the dev service label for compatibility.
 
 | Runtime | Backend project       | Web project               | `INTEXURAOS_ENVIRONMENT` |
 | ------- | --------------------- | ------------------------- | ------------------------ |
+| local   | `intexuraos-home-dev` | `intexuraos-web-home-dev` | `dev`                    |
 | dev     | `intexuraos-home-dev` | `intexuraos-web-home-dev` | `dev`                    |
 | prod    | `intexuraos-hetzner`  | `intexuraos-web-hetzner`  | `prod`                   |
 
-Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports
-older values such as `development`. The home-dev orchestrator systemd env file
-at `~/.code-orchestrator/env` must also set `INTEXURAOS_ENVIRONMENT=dev` and
-`INTEXURAOS_RUNTIME=dev`. Production receives the Hetzner DSNs from Secret
-Manager via `scripts/hetzner/load-secrets.sh`; the web DSN is baked into the
-static bundle by `scripts/hetzner/deploy-web.sh`.
+Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports older values such as `development`. The home-dev orchestrator systemd env file at `~/.code-orchestrator/env` must also set `INTEXURAOS_ENVIRONMENT=dev` and `INTEXURAOS_RUNTIME=dev`. Production receives the Hetzner DSNs from Secret Manager via `scripts/hetzner/load-secrets.sh`; the web DSN is baked into the static bundle by `scripts/hetzner/deploy-web.sh`.
 
-**Credentials source of truth:** GCP Secret Manager
+## Credentials And Secrets
 
-- **prod:** Uses secrets directly from Secret Manager
-- **dev:** Syncs secrets + overrides via `.envrc.local`
+**Credentials source of truth:** GCP Secret Manager.
 
-## ⛔ Environment Awareness — BEFORE Investigating Any Runtime Issue
+| Environment | Secret Loading                                                                                                                |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| local       | `./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman`, then `direnv allow`; local overrides live in `.envrc.local` |
+| dev         | synced secrets + overrides via `.envrc.local` on home-dev                                                                     |
+| prod        | secrets loaded from Secret Manager by Hetzner deploy/runtime scripts                                                          |
 
-**RULE: Identify WHERE the issue is happening before investigating.** Wrong assumptions waste time.
+Local and dev PM2 services must not inherit `FIRESTORE_EMULATOR_HOST` or `STORAGE_EMULATOR_HOST`; they must use real retained GCP Firestore/Storage. Local and dev PM2 services must set `PUBSUB_EMULATOR_HOST=localhost:8102` against their own host-local Pub/Sub emulator.
 
-```
-STEP 1: Check the URL/context. Does it contain dev.intexuraos.cloud or localhost? → dev
-STEP 2: Does it contain intexuraos.cloud (no dev.)? → prod
-STEP 3: For code tasks: check Firestore `code_tasks` collection for workerLocation field
-STEP 4: Check service status with the right tool (pm2 on home-dev for dev, SSH + pm2 on Hetzner for prod)
-```
+Automated login credentials live outside the repo in `~/.intexuraos/logins.md` with mode `0600`. The file must contain at least two Auth0 username/password accounts using `kontakt+...@pbuchman.com`. The same Auth0 tenant/client configuration is shared by local, dev, and prod, so these credentials are intended to work across all three application environments. Local browser login tests must use `http://localhost:3000/#/login`; `127.0.0.1` is not a configured SPA callback URL. Never commit or paste the passwords.
 
-## On home-dev (dev environment)
+## Local Environment
+
+Use local when the goal is edit-run-verify feedback on the current checkout. It is dev running on the current machine: same shared GCP resources, same Auth0, same Pub/Sub-emulator alias pattern, different process location.
+
+| Component             | Manager | Commands                                                                         |
+| --------------------- | ------- | -------------------------------------------------------------------------------- |
+| Secret sync           | direnv  | `./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman && direnv allow` |
+| Pub/Sub emulator + UI | Docker  | `node scripts/dev-setup.mjs`                                                     |
+| Apps (services + web) | PM2     | `pnpm run dev` or `pnpm run services:start`                                      |
+| Logs                  | PM2     | `pnpm exec pm2 logs <name>`                                                      |
+| Status                | PM2     | `pnpm exec pm2 status`                                                           |
+
+`pnpm run dev` is the simple path: it runs `scripts/dev-setup.mjs`, starts PM2 from `ecosystem.config.cjs` with `--update-env`, and tails logs. Services run through `tsx` from `src/` and PM2 watches source files for automatic reload. The web app runs through Vite on port `3000`.
+
+If Docker Desktop config uses a GUI credential store, `scripts/dev-setup.mjs` creates a temporary Docker config for compose startup that removes `credsStore` while preserving CLI plugins. This avoids credential-helper hangs without modifying `~/.docker/config.json`.
+
+## Dev Environment On home-dev
 
 | Component                 | Manager | Commands                                                         |
 | ------------------------- | ------- | ---------------------------------------------------------------- |
@@ -66,32 +80,32 @@ STEP 4: Check service status with the right tool (pm2 on home-dev for dev, SSH +
 
 **Orchestrator is NOT in PM2.** Runs under systemd as `intexuraos-orchestrator@pbuchman`, executing compiled `dist/index.js`. Check with `systemctl status`, not `pm2 status`.
 
-**Auto-deploy via webhook handler.** A GitHub webhook at `~/tools/webhook-handler/` receives push events to `development`, detects changed files, and restarts affected services. PM2 services restart via `pm2 restart`; the orchestrator rebuilds (`pnpm --filter orchestrator build`) then restarts via `systemctl restart`. PM2 file watching is disabled (`watch: false`).
+**Auto-deploy via webhook handler.** A GitHub webhook at `~/tools/webhook-handler/` receives push events to `development`, detects changed files, and restarts affected services. PM2 services restart via `pm2 restart`; the orchestrator rebuilds (`pnpm --filter orchestrator build`) then restarts via `systemctl restart`. PM2 file watching is disabled on home-dev.
 
 **Pub/Sub on home-dev uses emulator aliases, not Terraform topic names.** PM2 services publish to `PUBSUB_EMULATOR_HOST=localhost:8102`, so `ecosystem.config.cjs` fallbacks MUST match the aliases configured in `tools/pubsub-ui/server.mjs` (for WhatsApp: `whatsapp-send-message`, `whatsapp-media-cleanup`, `whatsapp-webhook-process`, `whatsapp-transcription`, `commands-ingest`, `approval-reply`). Do NOT use Terraform-managed `intexuraos-*-dev` topic names as PM2 fallbacks on home-dev; those names exist in Cloud Run/GCP, not in the local emulator.
 
-**Port reference:** See `ecosystem.config.cjs` for the full port map of all dev services.
+**Port reference:** See `ecosystem.config.cjs` for the full port map of all local/dev PM2 services.
 
 ## Development Machines
 
-Code tasks are forwarded from **both dev and prod** to one of two development machines. Both machines serve as task workers:
+Code tasks are forwarded from both dev and prod to one of two development machines. Both machines serve as task workers:
 
 | Machine      | OS     | `uname -n` | Role                                       | SSH Access               |
 | ------------ | ------ | ---------- | ------------------------------------------ | ------------------------ |
-| **mac-dev**  | Darwin | varies     | Code editing, commits, pushes              | Can SSH to home-dev      |
+| **mac-dev**  | Darwin | varies     | Code editing, commits, pushes, local stack | Can SSH to home-dev      |
 | **home-dev** | Linux  | `home-dev` | Runs dev environment, auto-deploys on push | Has dev services running |
 
-**Both use `~/deploy/intexuraos/` as project path (relative to home).**
+**Both use `~/deploy/intexuraos/` as project path when running the deployed checkout.** Local developer checkouts may also exist under `~/personal/`.
 
 **Key differences between machines:**
 
-- `home-dev`: Has auto-deploy webhook — pushing to `development` automatically updates and restarts services.
-- `mac-dev`: Runs the project via `pnpm` in `~/deploy/intexuraos/` but has **no auto-hook** — codebase does not update automatically on push.
-- From `mac-dev` you can access both machines: `home-dev` is reachable via SSH; `mac-dev` services run locally.
+- `home-dev`: Has auto-deploy webhook; pushing to `development` automatically updates and restarts services.
+- `mac-dev`: Can run the local stack from the current checkout with `pnpm run dev`; there is no auto-hook from pushes.
+- From `mac-dev` you can access both machines: `home-dev` is reachable via SSH; mac-dev services run locally.
 
-**When investigating any issue: first determine which machine you are on**, then use the appropriate access method. If you're on `mac-dev` and the issue is on `home-dev`, SSH there.
+**When investigating any issue: first determine which machine and environment you are on**, then use the appropriate access method. If you're on `mac-dev` and the issue is on `home-dev`, SSH there.
 
-**home-dev configuration reference:** The repo at `~/personal/pbuchman-dev/` documents all configuration, services, and infrastructure on `home-dev`. It **must be kept up to date** with the real state of services/configs/infra for future recovery. Always consult it when investigating home-dev service issues.
+**home-dev configuration reference:** The repo at `~/personal/pbuchman-dev/` documents all configuration, services, and infrastructure on `home-dev`. It must be kept up to date with the real state of services/configs/infra for future recovery. Always consult it when investigating home-dev service issues.
 
 **Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field contains a user-configured string (e.g., `"mac-dev"`, `"office-pc"`) — read whatever value is stored; it is not a fixed hostname.
 
@@ -110,8 +124,8 @@ For task logs, lifecycle events, turn metrics, status updates, and completion ca
 
 ## Forbidden Assumptions
 
-- "This is local" — WRONG. There is NO local. Only dev or prod.
-- "Platform is darwin therefore home-dev" — WRONG. darwin = mac-dev, home-dev is Linux.
-- "This is a prod issue" — verify first by checking URL or logs source.
-- "I can't access that service" — on home-dev, you CAN. It's localhost.
-- "We need to restart/deploy" — webhook auto-deploys on push to development. Just push.
+- "localhost means dev" — WRONG. Check whether it is the local checkout, home-dev internals, or Hetzner internals.
+- "This is a prod issue" — verify first by checking URL, callback base, machine, and logs source.
+- "Platform is darwin therefore home-dev" — WRONG. darwin = mac-dev/developer machine, home-dev is Linux.
+- "I can't access that service" — on local and home-dev, you usually can through localhost.
+- "We need to restart/deploy" — home-dev webhook auto-deploys on push to development; local needs PM2 restart only when env/process config changes.

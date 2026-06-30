@@ -151,6 +151,39 @@ function loadInheritedNodeOptions(): Record<string, string | undefined> {
   return JSON.parse(stdout.toString()) as Record<string, string | undefined>;
 }
 
+function loadInheritedEmulatorEnv(): Record<string, Record<string, string | undefined>> {
+  const stdout = execFileSync(
+    process.execPath,
+    [
+      '-e',
+      `
+        process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8101';
+        process.env.STORAGE_EMULATOR_HOST = 'http://localhost:8103';
+        process.env.PUBSUB_EMULATOR_HOST = 'stale-pubsub:9999';
+        const config = require('./ecosystem.config.cjs');
+        const result = {};
+        for (const app of config.apps) {
+          result[app.name] = {
+            FIRESTORE_EMULATOR_HOST: app.env.FIRESTORE_EMULATOR_HOST,
+            STORAGE_EMULATOR_HOST: app.env.STORAGE_EMULATOR_HOST,
+            PUBSUB_EMULATOR_HOST: app.env.PUBSUB_EMULATOR_HOST,
+          };
+        }
+        process.stdout.write(JSON.stringify(result));
+      `,
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        HOME: process.env.HOME ?? '/tmp',
+        PATH: process.env.PATH ?? '',
+      },
+    }
+  );
+
+  return JSON.parse(stdout.toString()) as Record<string, Record<string, string | undefined>>;
+}
+
 describe('ecosystem.config.cjs', () => {
   it('omits removed agents and their shared runtime URLs from dev PM2 config', () => {
     const config = loadDevConfig();
@@ -192,6 +225,16 @@ describe('ecosystem.config.cjs', () => {
 
   it('does not inherit NODE_OPTIONS into PM2 service environments', () => {
     expect(loadInheritedNodeOptions()).toEqual({});
+  });
+
+  it('overrides local datastore emulators while pinning Pub/Sub to the local emulator', () => {
+    const envByApp = loadInheritedEmulatorEnv();
+
+    for (const [appName, env] of Object.entries(envByApp)) {
+      expect(env.FIRESTORE_EMULATOR_HOST, appName).toBe('');
+      expect(env.STORAGE_EMULATOR_HOST, appName).toBe('');
+      expect(env.PUBSUB_EMULATOR_HOST, appName).toBe('localhost:8102');
+    }
   });
 
   it('forces home-dev runtime environment tags even when the shell exports stale values', () => {

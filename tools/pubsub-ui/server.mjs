@@ -23,6 +23,7 @@ const TOPICS = [
   'llm-call',
   'bookmark-enrich',
   'bookmark-summarize',
+  'pr-triage',
 ];
 
 const TOPIC_ENDPOINTS = {
@@ -39,6 +40,7 @@ const TOPIC_ENDPOINTS = {
   'llm-call': 'http://host.docker.internal:8116/internal/llm/pubsub/process-llm-call',
   'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
+  'pr-triage': 'http://host.docker.internal:8128/internal/code/pubsub/pr-triage',
 };
 
 const app = express();
