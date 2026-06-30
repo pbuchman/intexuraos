@@ -17,6 +17,7 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
+import { createDockerComposeEnv } from './lib/docker-compose-env.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '..');
@@ -46,11 +47,15 @@ const SERVICES = [
   { name: 'notion-service', port: 8112 },
   { name: 'whatsapp-service', port: 8113 },
   { name: 'mobile-notifications-service', port: 8114 },
+  { name: 'fishing-assistant-service', port: 8119 },
   { name: 'notes-agent', port: 8121 },
   { name: 'bookmarks-agent', port: 8124 },
   { name: 'calendar-agent', port: 8125 },
   { name: 'linear-agent', port: 8126 },
   { name: 'code-agent', port: 8128 },
+  { name: 'hellscript-agent', port: 8131 },
+  { name: 'llm-usage-service', port: 8132 },
+  { name: 'intex-agent', port: 8134 },
   { name: 'web-agent', port: 8127 },
   { name: 'user-service', port: 8110 },
   { name: 'research-agent', port: 8116 },
@@ -124,7 +129,7 @@ async function checkPortsAvailable() {
   const allPorts = [
     ...SERVICES.map((s) => ({ name: s.name, port: s.port, type: 'service' })),
     { name: WEB_APP.name, port: WEB_APP.port, type: 'web' },
-    { name: 'API Docs Hub', port: 8115, type: 'service' },
+    { name: 'API Docs Hub', port: 8133, type: 'service' },
     { name: 'Pub/Sub UI', port: 8105, type: 'emulator' },
     { name: 'Log Server', port: 8106, type: 'emulator' },
   ];
@@ -193,13 +198,17 @@ async function startEmulators() {
     throw new Error(`Docker compose file not found: ${composeFile}`);
   }
 
+  const dockerEnv = createDockerComposeEnv();
   try {
     execSync(`docker compose -f "${composeFile}" up -d --build`, {
       cwd: ROOT_DIR,
+      env: dockerEnv.env,
       stdio: 'inherit',
     });
   } catch (error) {
     throw new Error(`Failed to start emulators: ${error.message}`);
+  } finally {
+    dockerEnv.cleanup();
   }
 
   log('Verifying all Docker services are running...');
@@ -213,9 +222,11 @@ async function startEmulators() {
 async function verifyDockerServices(composeFile) {
   const requiredServices = ['pubsub-ui'];
 
+  const dockerEnv = createDockerComposeEnv();
   try {
     const output = execSync(`docker compose -f "${composeFile}" ps --format json`, {
       encoding: 'utf-8',
+      env: dockerEnv.env,
       stdio: 'pipe',
     });
 
@@ -247,6 +258,8 @@ async function verifyDockerServices(composeFile) {
       throw error;
     }
     throw new Error(`Failed to verify Docker services: ${error.message}`);
+  } finally {
+    dockerEnv.cleanup();
   }
 }
 
@@ -313,11 +326,11 @@ async function main() {
   console.log(`${BOLD}🌐 Application Endpoints:${RESET}`);
   console.log('  Web App:        http://localhost:3000');
   console.log('  Log Viewer:     http://localhost:8107');
-  console.log('  API Docs Hub:   http://localhost:8115/docs');
+  console.log('  API Docs Hub:   http://localhost:8133/docs');
   console.log('');
   console.log(`${BOLD}💡 Quick Check:${RESET}`);
   console.log('  curl http://localhost:3000       # Web app');
-  console.log('  curl http://localhost:8115/docs  # API docs');
+  console.log('  curl http://localhost:8133/docs  # API docs');
   console.log('  pnpm services:status             # All services');
   console.log('');
 }
