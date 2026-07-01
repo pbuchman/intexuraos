@@ -56,10 +56,10 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
   });
 
   describe('constructor', () => {
-    it('creates BatchClient with intexuraos-transcription appId', () => {
+    it('creates BatchClient with unversioned Speechmatics API origin and appId', () => {
       expect(constructorArgs[0]).toEqual({
         apiKey: 'test-api-key',
-        apiUrl: 'https://asr.api.speechmatics.com/v2',
+        apiUrl: 'https://asr.api.speechmatics.com',
         appId: 'intexuraos-transcription',
       });
     });
