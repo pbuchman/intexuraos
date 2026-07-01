@@ -189,19 +189,22 @@ Events:
 
 ```text
 event: user_turn
-data: {"turn":{"id":"whatsapp_conv_turn_user","sessionId":"whatsapp_conv_session_1","userId":"user_1","role":"user","text":"Question text","createdAt":"2026-07-01T10:00:00.000Z"}}
+data: {"type":"user_turn","turn":{"id":"whatsapp_conv_turn_user","sessionId":"whatsapp_conv_session_1","userId":"user_1","role":"user","text":"Question text","createdAt":"2026-07-01T10:00:00.000Z"}}
 
 event: assistant_delta
-data: {"text":"partial text"}
+data: {"type":"assistant_delta","text":"partial text"}
+
+event: usage
+data: {"type":"usage","usage":{"promptTokens":1200,"completionTokens":300,"totalTokens":1500}}
 
 event: assistant_turn
-data: {"turn":{"id":"whatsapp_conv_turn_assistant","sessionId":"whatsapp_conv_session_1","userId":"user_1","role":"assistant","text":"Final answer text","createdAt":"2026-07-01T10:00:05.000Z"}}
+data: {"type":"assistant_turn","turn":{"id":"whatsapp_conv_turn_assistant","sessionId":"whatsapp_conv_session_1","userId":"user_1","role":"assistant","text":"Final answer text","createdAt":"2026-07-01T10:00:05.000Z"}}
 
 event: done
-data: {}
+data: {"type":"done"}
 
 event: error
-data: {"code":"LLM_ERROR","message":"The assistant could not answer because the model call failed."}
+data: {"type":"error","error":{"code":"LLM_ERROR","message":"The assistant could not answer because the model call failed."}}
 ```
 
 ### Modified
