@@ -273,6 +273,106 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(result.current.firstQuestion).toBe('');
   });
 
+  it('keeps first-question streamed turns by suppressing the selected-session loader', async () => {
+    const createdSession: ConversationAssistantSession = {
+      ...session,
+      id: 'session-created',
+      title: 'Created context',
+      createdAt: '2026-06-21T12:00:00.000Z',
+      updatedAt: '2026-06-21T12:00:00.000Z',
+    };
+    const streamRequest = createDeferred<undefined>();
+    let streamEventHandler: ((event: unknown) => void) | undefined;
+    mocks.createConversationAssistantSession.mockResolvedValue(createdSession);
+    mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
+      Promise.resolve(sessionId === createdSession.id ? createdSession : session)
+    );
+    mocks.listConversationAssistantTurns.mockImplementation((_token: string, sessionId: string) =>
+      Promise.resolve({ turns: sessionId === createdSession.id ? [] : turns })
+    );
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        _streamSessionId: string,
+        _request: { question: string },
+        onEvent: (event: unknown) => void
+      ) => {
+        streamEventHandler = onEvent;
+        return await streamRequest.promise;
+      }
+    );
+
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.directChats).toEqual([directChat]);
+    });
+
+    act(() => {
+      result.current.selectChat(directChat.id);
+      result.current.setFirstQuestion('What changed?');
+    });
+
+    let createPromise!: Promise<void>;
+    act(() => {
+      createPromise = result.current.createSession();
+    });
+
+    await waitFor(() => {
+      expect(mocks.streamConversationAssistantTurn).toHaveBeenCalledWith(
+        'tok',
+        createdSession.id,
+        { question: 'What changed?' },
+        expect.any(Function)
+      );
+    });
+
+    await act(async () => {
+      streamEventHandler?.({
+        type: 'user_turn',
+        turn: {
+          id: 'turn-created-user',
+          sessionId: createdSession.id,
+          userId: 'user-1',
+          role: 'user',
+          text: 'What changed?',
+          createdAt: '2026-06-21T12:01:00.000Z',
+        },
+      });
+      streamEventHandler?.({
+        type: 'assistant_turn',
+        turn: {
+          id: 'turn-created-assistant',
+          sessionId: createdSession.id,
+          userId: 'user-1',
+          role: 'assistant',
+          text: 'Created streamed answer.',
+          createdAt: '2026-06-21T12:02:00.000Z',
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.turns.map((turn) => turn.id)).toEqual([
+        'turn-created-user',
+        'turn-created-assistant',
+      ]);
+    });
+    expect(mocks.listConversationAssistantTurns).not.toHaveBeenCalledWith('tok', createdSession.id);
+    expect(result.current.turns.map((turn) => turn.id)).toEqual([
+      'turn-created-user',
+      'turn-created-assistant',
+    ]);
+
+    await act(async () => {
+      streamRequest.resolve(undefined);
+      await streamRequest.promise;
+      await createPromise;
+    });
+  });
+
   it('requires confirmation before creating a session with a large context', async () => {
     const createdSession: ConversationAssistantSession = {
       ...session,
