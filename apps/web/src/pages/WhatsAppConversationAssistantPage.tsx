@@ -90,6 +90,15 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
     }
   }, [assistant.loadingTurns, assistant.turns]);
 
+  useEffect(() => {
+    if (!assistant.sending) return;
+    followTurnsRef.current = true;
+    const element = turnsScrollRef.current;
+    if (element !== null) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [assistant.sending]);
+
   return (
     <Layout>
       <div data-testid="whatsapp-conversation-assistant-shell" className="flex w-full min-w-0 flex-col gap-4">

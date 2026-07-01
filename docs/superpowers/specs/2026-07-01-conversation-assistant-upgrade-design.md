@@ -22,7 +22,7 @@ The referenced screenshot shows assistant markdown displayed as raw text and ISO
 
 ## External API Notes
 
-- OpenRouter documents MiniMax M3 at `minimax/minimax-m3` with a 1M-token context window: https://openrouter.ai/minimax/minimax-m3
+- OpenRouter documents MiniMax M2.7 at `minimax/minimax-m2.7` with a 1M-token context window: https://openrouter.ai/minimax/minimax-m2.7
 - OpenRouter documents `reasoning` and `reasoning_effort` request parameters for thinking-token models: https://openrouter.ai/docs/api/reference/parameters
 - OpenRouter chat completions support streaming and non-streaming modes: https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request
 
@@ -38,7 +38,7 @@ If the user has no OpenRouter key, the assistant turn will fail with a clear per
 
 ### 2. MiniMax With Thinking
 
-The Conversation Assistant model default will be `or:minimax/minimax-m3`.
+The Conversation Assistant model default will be `or:minimax/minimax-m2.7`.
 
 Each Conversation Assistant model call, both sync fallback and streaming, will pass:
 
@@ -246,7 +246,7 @@ No endpoint is removed.
 | Requirement | Spec Coverage |
 | --- | --- |
 | Use user key, not app key | Section 1 removes app key and fetches `openrouter` from user-service per call. |
-| Change Gemini Thinking to MiniMax with thinking | Section 2 sets `or:minimax/minimax-m3` and sends `reasoning.enabled = true`. |
+| Change Gemini Thinking to MiniMax with thinking | Section 2 sets `or:minimax/minimax-m2.7` and sends `reasoning.enabled = true`. |
 | Do not output exact timestamps | Section 3 changes prompt and transcript labels away from ISO timestamps. |
 | Render markdown in UI | Section 7 uses `MarkdownContent` for assistant turns. |
 | Remove 2000 cutoff and warn above 5000 | Section 4 removes cap and adds preflight confirmation above 5000. |
@@ -270,7 +270,7 @@ No endpoint is removed.
 
 ## Assumptions
 
-- "Mini Max" means OpenRouter `minimax/minimax-m3`, exposed internally as `or:minimax/minimax-m3`.
+- "Mini Max" means OpenRouter `minimax/minimax-m2.7`, exposed internally as `or:minimax/minimax-m2.7`.
 - "Thinking enabled" means OpenRouter unified `reasoning.enabled = true`.
 - The >5000 threshold applies to raw messages in the selected range, since that is what the user chooses and what the repository can count before projection.
 - If the confirmed full transcript exceeds provider limits, the system should fail clearly rather than silently truncate, because the explicit requirement forbids hidden context cutting.

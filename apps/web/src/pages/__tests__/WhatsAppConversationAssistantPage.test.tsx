@@ -154,6 +154,56 @@ describe('WhatsAppConversationAssistantPage', () => {
     expect(screen.getByText(/abc123/i)).toBeInTheDocument();
   });
 
+  it('forces bottom-follow mode back on while a send is in progress', () => {
+    const result = createHookResult();
+    const firstTurn = {
+      id: 'turn-user',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      role: 'user' as const,
+      text: 'What did we agree?',
+      createdAt: '2026-06-21T11:01:00.000Z',
+    };
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSession: result.sessions[0],
+        turns: [firstTurn],
+      })
+    );
+
+    const { getByTestId, rerender } = render(<WhatsAppConversationAssistantPage />);
+    const turnsContainer = getByTestId('conversation-assistant-turns');
+    Object.defineProperties(turnsContainer, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+
+    turnsContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
+    expect(turnsContainer.scrollTop).toBe(0);
+
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSession: result.sessions[0],
+        sending: true,
+        turns: [
+          firstTurn,
+          {
+            id: 'turn-assistant',
+            sessionId: 'session-1',
+            userId: 'user-1',
+            role: 'assistant',
+            text: 'Streaming answer.',
+            createdAt: '2026-06-21T11:02:00.000Z',
+          },
+        ],
+      })
+    );
+    rerender(<WhatsAppConversationAssistantPage />);
+
+    expect(turnsContainer.scrollTop).toBe(400);
+  });
+
   it('submits create and follow-up actions through the hook', async () => {
     const user = userEvent.setup();
     const createSession = vi.fn();

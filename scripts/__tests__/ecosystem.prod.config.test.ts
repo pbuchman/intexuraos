@@ -358,7 +358,7 @@ describe('ecosystem.config.prod.cjs', () => {
       'intexuraos-audio-stored-dev'
     );
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL).toBe(
-      'or:minimax/minimax-m3'
+      'or:minimax/minimax-m2.7'
     );
     expect(byName.get('intex-agent')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'

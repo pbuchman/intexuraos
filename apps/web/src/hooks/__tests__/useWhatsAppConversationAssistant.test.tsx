@@ -220,7 +220,7 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(mocks.listConversationAssistantTurns).toHaveBeenCalledWith('tok', session.id);
   });
 
-  it('creates a new session from selected chat, time range, and optional first question', async () => {
+  it('creates a new session and streams the optional first question', async () => {
     const createdSession: ConversationAssistantSession = {
       ...session,
       id: 'session-created',
@@ -261,8 +261,13 @@ describe('useWhatsAppConversationAssistant', () => {
       chatId: directChat.id,
       from: new Date('2026-06-20T09:00').toISOString(),
       to: new Date('2026-06-21T10:00').toISOString(),
-      question: 'What changed?',
     });
+    expect(mocks.streamConversationAssistantTurn).toHaveBeenCalledWith(
+      'tok',
+      createdSession.id,
+      { question: 'What changed?' },
+      expect.any(Function)
+    );
     expect(result.current.sessions[0]).toEqual(createdSession);
     expect(result.current.selectedSession?.id).toBe(createdSession.id);
     expect(result.current.firstQuestion).toBe('');

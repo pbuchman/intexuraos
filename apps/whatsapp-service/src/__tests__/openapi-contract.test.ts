@@ -39,7 +39,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     internalAuthToken: 'test-internal-auth-token',
     llmUsageServiceUrl: 'http://llm-usage.test',
     userServiceUrl: 'http://user-service.test',
-    conversationAssistantModel: 'or:minimax/minimax-m3',
+    conversationAssistantModel: 'or:minimax/minimax-m2.7',
     port: 8080,
     host: '0.0.0.0',
   };
