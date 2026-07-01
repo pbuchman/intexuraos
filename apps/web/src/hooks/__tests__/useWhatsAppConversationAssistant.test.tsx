@@ -197,6 +197,18 @@ describe('useWhatsAppConversationAssistant', () => {
   });
 
   it('creates a new session from selected chat, time range, and optional first question', async () => {
+    const createdSession: ConversationAssistantSession = {
+      ...session,
+      id: 'session-created',
+      title: 'Created context',
+      createdAt: '2026-06-21T12:00:00.000Z',
+      updatedAt: '2026-06-21T12:00:00.000Z',
+    };
+    mocks.createConversationAssistantSession.mockResolvedValue(createdSession);
+    mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
+      Promise.resolve(sessionId === createdSession.id ? createdSession : session)
+    );
+
     const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
       wrapper: createWrapper(),
     });
@@ -222,7 +234,8 @@ describe('useWhatsAppConversationAssistant', () => {
       to: new Date('2026-06-21T10:00').toISOString(),
       question: 'What changed?',
     });
-    expect(result.current.selectedSession?.id).toBe(session.id);
+    expect(result.current.sessions[0]).toEqual(createdSession);
+    expect(result.current.selectedSession?.id).toBe(createdSession.id);
     expect(result.current.firstQuestion).toBe('');
   });
 

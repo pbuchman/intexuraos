@@ -1,6 +1,7 @@
 import { config } from '@/config';
 import type {
   ConversationAssistantSession,
+  ConversationAssistantTurn,
   ConversationAssistantSessionsResponse,
   ConversationAssistantTurnsResponse,
   CreateConversationAssistantSessionRequest,
@@ -9,6 +10,15 @@ import type {
 import { apiRequest } from './apiClient.js';
 
 const CONVERSATION_ASSISTANT_SESSIONS_PATH = '/conversation-assistant/sessions';
+
+interface ConversationAssistantSessionResponse {
+  session: ConversationAssistantSession;
+}
+
+interface CreateConversationAssistantSessionResponse {
+  session: ConversationAssistantSession;
+  turns: ConversationAssistantTurn[];
+}
 
 function getSessionPath(sessionId: string): string {
   return `${CONVERSATION_ASSISTANT_SESSIONS_PATH}/${encodeURIComponent(sessionId)}`;
@@ -28,7 +38,7 @@ export async function createConversationAssistantSession(
   accessToken: string,
   request: CreateConversationAssistantSessionRequest
 ): Promise<ConversationAssistantSession> {
-  return await apiRequest<ConversationAssistantSession>(
+  const response = await apiRequest<CreateConversationAssistantSessionResponse>(
     config.whatsappServiceUrl,
     CONVERSATION_ASSISTANT_SESSIONS_PATH,
     accessToken,
@@ -37,17 +47,19 @@ export async function createConversationAssistantSession(
       body: request,
     }
   );
+  return response.session;
 }
 
 export async function getConversationAssistantSession(
   accessToken: string,
   sessionId: string
 ): Promise<ConversationAssistantSession> {
-  return await apiRequest<ConversationAssistantSession>(
+  const response = await apiRequest<ConversationAssistantSessionResponse>(
     config.whatsappServiceUrl,
     getSessionPath(sessionId),
     accessToken
   );
+  return response.session;
 }
 
 export async function listConversationAssistantTurns(

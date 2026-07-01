@@ -39,7 +39,8 @@ describe('conversationAssistantApi', () => {
 
   it('creates a conversation assistant session with a POST body', async () => {
     const { apiRequest } = await import('../apiClient.js');
-    vi.mocked(apiRequest).mockResolvedValue({ id: 'session-1' });
+    const session = { id: 'session-1' };
+    vi.mocked(apiRequest).mockResolvedValue({ session, turns: [] });
 
     const request = {
       chatId: 'chat-1',
@@ -48,7 +49,7 @@ describe('conversationAssistantApi', () => {
       question: 'What happened?',
     };
 
-    await createConversationAssistantSession(TOKEN, request);
+    const result = await createConversationAssistantSession(TOKEN, request);
 
     expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
       'https://wa.test',
@@ -59,19 +60,22 @@ describe('conversationAssistantApi', () => {
         body: request,
       }
     );
+    expect(result).toEqual(session);
   });
 
   it('loads a single conversation assistant session with URL-encoded session ids', async () => {
     const { apiRequest } = await import('../apiClient.js');
-    vi.mocked(apiRequest).mockResolvedValue({ id: 'session/with spaces?' });
+    const session = { id: 'session/with spaces?' };
+    vi.mocked(apiRequest).mockResolvedValue({ session });
 
-    await getConversationAssistantSession(TOKEN, 'session/with spaces?');
+    const result = await getConversationAssistantSession(TOKEN, 'session/with spaces?');
 
     expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
       'https://wa.test',
       '/conversation-assistant/sessions/session%2Fwith%20spaces%3F',
       TOKEN
     );
+    expect(result).toEqual(session);
   });
 
   it('lists conversation assistant turns with URL-encoded session ids', async () => {
