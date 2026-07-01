@@ -736,7 +736,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           const privateMessage = privateMessageResult.value;
           if (privateMessage?.userId !== eventData.userId) {
             request.log.warn(
-              { userId: eventData.userId, messageId: eventData.messageId },
+              {
+                userId: eventData.userId,
+                messageId: eventData.messageId,
+                [SKIP_SENTRY_KEY]: true,
+              },
               'Private WhatsApp audio message not found for transcription completion'
             );
             return await reply.ok({});
@@ -826,7 +830,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const message = messageResult.value;
         if (message === null) {
           request.log.warn(
-            { userId: eventData.userId, messageId: eventData.messageId },
+            {
+              userId: eventData.userId,
+              messageId: eventData.messageId,
+              [SKIP_SENTRY_KEY]: true,
+            },
             'Audio message not found for transcription completion'
           );
           return await reply.ok({});
