@@ -5,10 +5,9 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import * as jose from 'jose';
 import type { Logger } from 'pino';
-
-const SKIP_SENTRY_KEY = '_skipSentry';
 
 export interface JwtValidatorConfig {
   audience: string;
