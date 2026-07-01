@@ -10,6 +10,7 @@ Created:
 - `PUT /whatsapp/private/account`
 - `DELETE /whatsapp/private/account`
 - `POST /internal/whatsapp/private/media`
+- `POST /internal/whatsapp/private/media/backfill`
 - `GET /whatsapp/private/messages/:messageId/media`
 - `GET /whatsapp/private/messages/:messageId/thumbnail`
 - `GET /internal/whatsapp/private/messages/:messageId/media`
@@ -53,6 +54,12 @@ Media upload URL:
 https://intexuraos.cloud/internal/whatsapp/private/media
 ```
 
+Stored media backfill URL:
+
+```text
+https://intexuraos.cloud/internal/whatsapp/private/media/backfill
+```
+
 OIDC audience:
 
 ```text
@@ -73,8 +80,10 @@ The request body must include:
 
 Image, audio, and video events upload media bytes to
 `POST /internal/whatsapp/private/media` before the adapter posts the event batch
-to `POST /internal/whatsapp/private/events`. Both endpoints require the same
-private-sync service account OIDC identity.
+to `POST /internal/whatsapp/private/events`. Existing media placeholders can be
+repaired by posting stored media metadata to
+`POST /internal/whatsapp/private/media/backfill`. All three endpoints require
+the same private-sync service account OIDC identity.
 
 `sourceAccountId` is generated per user in `Settings > WhatsApp > Private WhatsApp Mirror`. The adapter may still send a legacy `userId` field, but IntexuraOS ignores it and resolves ownership from `whatsapp_private_accounts`.
 
@@ -125,8 +134,8 @@ The adapter should receive Matrix and Google credentials as mounted secret files
 6. IntexuraOS resolves `sourceAccountId` to the canonical user id.
 7. IntexuraOS stores immutable message docs and updates sender/sender-day read models.
 
-For new `m.image`, `m.audio`, and `m.video` events, the adapter downloads the Matrix media bytes with its Matrix access token, uploads the bytes to `POST /internal/whatsapp/private/media`, receives GCS metadata, and includes that metadata in the private event sent to `POST /internal/whatsapp/private/events`. Existing media messages without stored media metadata remain placeholders in the private log.
+For new `m.image`, `m.audio`, and `m.video` events, the adapter downloads the Matrix media bytes with its Matrix access token, uploads the bytes to `POST /internal/whatsapp/private/media`, receives GCS metadata, and includes that metadata in the private event sent to `POST /internal/whatsapp/private/events`. Existing media messages without stored media metadata can be repaired by uploading the Matrix bytes and posting the resulting stored metadata to `POST /internal/whatsapp/private/media/backfill`.
 
-Backfills should use the same endpoint with `deliveryMode: "backfill"` and deterministic Matrix event ids so duplicate ingest does not double-count aggregates.
+Message backfills should use the ingest endpoint with `deliveryMode: "backfill"` and deterministic Matrix event ids so duplicate ingest does not double-count aggregates. Media placeholder backfills should use `POST /internal/whatsapp/private/media/backfill` for messages that already exist in IntexuraOS.
 
 Deployment order: stop the Matrix sync adapter, deploy `whatsapp-service`, deploy the updated `tools/whatsapp-private-matrix-sync` container/configuration with `INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_URL`, then restart the adapter. This prevents the old adapter from advancing the Matrix `next_batch` token while image bytes are not yet being copied into IntexuraOS.

@@ -61,15 +61,19 @@ interface PrivateIngestBody extends Omit<IngestPrivateWhatsAppEventsInput, 'user
 
 const CONVERSATION_CONTEXT_RAW_SCAN_LIMIT = 5000;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function getPrivateSyncLogMetadata(body: unknown): Record<string, unknown> {
-  if (body === null || typeof body !== 'object') {
+  if (!isRecord(body)) {
     return {
       route: 'internal_whatsapp_private_events',
       bodyType: typeof body,
     };
   }
 
-  const payload = body as Record<string, unknown>;
+  const payload = body;
   return {
     route: 'internal_whatsapp_private_events',
     deliveryMode: typeof payload['deliveryMode'] === 'string' ? payload['deliveryMode'] : 'unknown',
@@ -93,7 +97,7 @@ function getPrivateMessagesQueryLogMetadata(query: Partial<PrivateMessagesQuerys
 }
 
 function getPrivateMediaBackfillLogMetadata(body: unknown): Record<string, unknown> {
-  if (body === null || typeof body !== 'object') {
+  if (!isRecord(body)) {
     return {
       route: 'internal_whatsapp_private_media_backfill',
       bodyType: typeof body,
@@ -102,20 +106,21 @@ function getPrivateMediaBackfillLogMetadata(body: unknown): Record<string, unkno
 
   const payload = body as Partial<PrivateMediaBackfillBody>;
   const media = payload.media;
+  const hasMedia = isRecord(media);
   return {
     route: 'internal_whatsapp_private_media_backfill',
     hasSourceAccountId: typeof payload.sourceAccountId === 'string',
     hasMessageId: typeof payload.messageId === 'string',
-    hasMedia: typeof media === 'object',
+    hasMedia,
     mediaStorageStatus:
-      typeof media === 'object' && typeof media.storageStatus === 'string'
+      hasMedia && typeof media.storageStatus === 'string'
         ? media.storageStatus
         : 'unknown',
   };
 }
 
 function getPrivateConversationContextLogMetadata(body: unknown): Record<string, unknown> {
-  if (body === null || typeof body !== 'object') {
+  if (!isRecord(body)) {
     return {
       route: 'internal_whatsapp_private_conversation_context',
       bodyType: typeof body,
@@ -148,7 +153,7 @@ function getPrivateSenderDaysQueryLogMetadata(
 }
 
 function getPrivateAggregateRebuildLogMetadata(body: unknown): Record<string, unknown> {
-  if (body === null || typeof body !== 'object') {
+  if (!isRecord(body)) {
     return {
       route: 'internal_whatsapp_private_aggregates_rebuild',
       bodyType: typeof body,

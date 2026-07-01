@@ -738,6 +738,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   private failNextMessageLookupError: WhatsAppError | null = null;
   private failNextChatTranscriptionUpdateError: WhatsAppError | null = null;
   private failNextConversationContextQueryError: WhatsAppError | null = null;
+  private failNextStoredMediaUpdateError: WhatsAppError | null = null;
 
   failNext(error: WhatsAppError): void {
     this.failNextError = error;
@@ -761,6 +762,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   failNextConversationContextQuery(error: WhatsAppError): void {
     this.failNextConversationContextQueryError = error;
+  }
+
+  failNextStoredMediaUpdate(error: WhatsAppError): void {
+    this.failNextStoredMediaUpdateError = error;
   }
 
   setAccount(account: FakePrivateWhatsAppAccount): void {
@@ -963,7 +968,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   updateMessageStoredMedia(
     input: UpdatePrivateWhatsAppMessageStoredMediaInput
   ): Promise<Result<UpdatePrivateWhatsAppMessageStoredMediaResult, WhatsAppError>> {
-    const failure = this.consumeFailure();
+    const failure = this.consumeStoredMediaUpdateFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
     }
@@ -1322,6 +1327,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     this.failNextMessageLookupError = null;
     this.failNextChatTranscriptionUpdateError = null;
     this.failNextConversationContextQueryError = null;
+    this.failNextStoredMediaUpdateError = null;
   }
 
   private consumeFailure(): WhatsAppError | null {
@@ -1375,6 +1381,15 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     const error = this.failNextConversationContextQueryError;
     this.failNextConversationContextQueryError = null;
+    return error;
+  }
+
+  private consumeStoredMediaUpdateFailure(): WhatsAppError | null {
+    if (this.failNextStoredMediaUpdateError === null) {
+      return null;
+    }
+    const error = this.failNextStoredMediaUpdateError;
+    this.failNextStoredMediaUpdateError = null;
     return error;
   }
 

@@ -115,6 +115,82 @@ describe('Private WhatsApp Sync Routes', () => {
     });
   }
 
+  function createStoredBackfillPayload(
+    messageId: string,
+    overrides: Record<string, unknown> = {}
+  ): Record<string, unknown> {
+    return {
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/private-audio-placeholder',
+        mimeType: 'audio/ogg',
+        fileName: 'Voice message.ogg',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        storedMimeType: 'audio/ogg',
+        storedSizeBytes: 2048,
+        storedAt: '2026-06-22T10:05:00.000Z',
+        ...overrides,
+      },
+    };
+  }
+
+  async function ingestPlaceholderMediaMessage(
+    messageType: 'audio' | 'image',
+    matrixEventId: string,
+    mediaOverrides: Record<string, unknown> = {}
+  ): Promise<string> {
+    const payload = createPayload({
+      events: [
+        {
+          ...(createPayload()['events'] as Record<string, unknown>[])[0],
+          matrixEventId,
+          message: {
+            direction: 'incoming',
+            type: messageType,
+            media: {
+              mxcUri: 'mxc://home-dev/private-audio-placeholder',
+              mimeType: messageType === 'audio' ? 'audio/ogg' : 'image/jpeg',
+              fileName: messageType === 'audio' ? 'Voice message.ogg' : 'Image.jpg',
+              ...mediaOverrides,
+            },
+          },
+        },
+      ],
+    });
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload,
+    });
+    expect(response.statusCode).toBe(200);
+    return `message:pbuchman-private-whatsapp:${matrixEventId}`;
+  }
+
+  async function enableFirstPrivateChatTranscription(): Promise<void> {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatsBody.data.chats[0]?.id ?? '')}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+  }
+
   it('requires internal auth on the production internal path', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
@@ -1288,6 +1364,224 @@ describe('Private WhatsApp Sync Routes', () => {
         storedMimeType: 'audio/ogg',
       });
     }
+  });
+
+  it('rejects null media backfill payloads with a standard validation error', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-null-media',
+        media: null,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'internal_whatsapp_private_media_backfill',
+          hasSourceAccountId: true,
+          hasMessageId: true,
+          hasMedia: false,
+          mediaStorageStatus: 'unknown',
+        },
+      })
+    );
+  });
+
+  it('logs missing private media backfill bodies without inspecting contents', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'internal_whatsapp_private_media_backfill',
+          bodyType: 'undefined',
+        },
+      })
+    );
+  });
+
+  it('requires internal auth for private media backfill', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      payload: createStoredBackfillPayload('message:pbuchman-private-whatsapp:$event-auth'),
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('rejects private media backfill for unknown source accounts', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        ...createStoredBackfillPayload('message:unknown:$event-unknown'),
+        sourceAccountId: 'unknown-private-source',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns not found when private media backfill targets a missing message', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createStoredBackfillPayload('message:pbuchman-private-whatsapp:$event-missing'),
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns a standard error when private media backfill account lookup fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated private source account lookup failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createStoredBackfillPayload('message:pbuchman-private-whatsapp:$event-account-fail'),
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('maps private media backfill validation failures to invalid request', async () => {
+    const messageId = await ingestPlaceholderMediaMessage('audio', '$event-media-mismatch');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createStoredBackfillPayload(messageId, {
+        mxcUri: 'mxc://home-dev/different-media',
+      }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('returns a standard error when private media backfill update fails', async () => {
+    const messageId = await ingestPlaceholderMediaMessage('audio', '$event-update-fails');
+    ctx.privateWhatsAppRepository.failNextStoredMediaUpdate({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated stored media update failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createStoredBackfillPayload(messageId),
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns a standard error when private media backfill transcription publish fails', async () => {
+    await enableFirstPrivateChatTranscription();
+    const messageId = await ingestPlaceholderMediaMessage('audio', '$event-publish-fails');
+    ctx.eventPublisher.setAudioStoredFailure('Simulated private audio publish failure');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createStoredBackfillPayload(messageId),
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('backfills private image media without publishing transcription jobs', async () => {
+    await enableFirstPrivateChatTranscription();
+    const messageId = await ingestPlaceholderMediaMessage('image', '$event-image-backfill', {
+      mxcUri: 'mxc://home-dev/private-image-placeholder',
+      mimeType: 'image/jpeg',
+      fileName: 'Image.jpg',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createStoredBackfillPayload(messageId, {
+        mxcUri: 'mxc://home-dev/private-image-placeholder',
+        mimeType: 'image/jpeg',
+        fileName: 'Image.jpg',
+        gcsPath: 'whatsapp/private/user-123/private-image-placeholder/image.jpg',
+        storedMimeType: 'image/jpeg',
+      }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(body.data).toEqual({ status: 'updated', transcriptionPublished: false });
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([]);
+    expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()).toEqual([]);
+  });
+
+  it('backfills private audio media without transcription when chat transcription is disabled', async () => {
+    const messageId = await ingestPlaceholderMediaMessage('audio', '$event-disabled-chat-backfill');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createStoredBackfillPayload(messageId),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(body.data).toEqual({ status: 'updated', transcriptionPublished: false });
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([]);
   });
 
   it('publishes one private video transcription job after chat transcription is enabled', async () => {

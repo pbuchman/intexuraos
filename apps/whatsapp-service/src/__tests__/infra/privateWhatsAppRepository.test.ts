@@ -573,6 +573,297 @@ describe('privateWhatsAppRepository', () => {
     );
   });
 
+  it('updates placeholder private WhatsApp message media with stored metadata', async () => {
+    const input = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        type: 'audio',
+        media: {
+          mxcUri: 'mxc://home-dev/audio-placeholder',
+          mimeType: 'audio/ogg',
+          fileName: 'Voice message.ogg',
+        },
+      },
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const result = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId: stored.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-placeholder',
+        mimeType: 'audio/ogg',
+        fileName: 'Voice message.ogg',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+        storedMimeType: 'audio/ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.status).toBe('updated');
+    expect(result.value.message.id).toBe(stored.value.messageId);
+    expect(result.value.message.media?.gcsPath).toBe(
+      'whatsapp/private/user-123/message/audio.ogg'
+    );
+  });
+
+  it('rejects invalid stored media update inputs before opening a transaction', async () => {
+    const result = await repository.updateMessageStoredMedia({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      messageId: 'message-id',
+      media: {
+        mxcUri: 'mxc://home-dev/audio-placeholder',
+        storageStatus: 'stored',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected invalid stored media to be rejected');
+    expect(result.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns not found for missing or cross-account stored media updates', async () => {
+    const missing = await repository.updateMessageStoredMedia({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      messageId: 'missing-message',
+      media: {
+        mxcUri: 'mxc://home-dev/audio-placeholder',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+    expect(missing.ok).toBe(false);
+    if (missing.ok) throw new Error('Expected missing message to be rejected');
+    expect(missing.error.code).toBe('NOT_FOUND');
+
+    const input = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        type: 'audio',
+        media: { mxcUri: 'mxc://home-dev/audio-placeholder' },
+      },
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const crossAccount = await repository.updateMessageStoredMedia({
+      sourceAccountId: 'other-private-source',
+      messageId: stored.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-placeholder',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+
+    expect(crossAccount.ok).toBe(false);
+    if (crossAccount.ok) throw new Error('Expected cross-account update to be rejected');
+    expect(crossAccount.error.code).toBe('NOT_FOUND');
+  });
+
+  it('validates stored media updates against existing message media and chat ownership', async () => {
+    const noMedia = await repository.storeIncomingMessage(createStoreInput());
+    expect(noMedia.ok).toBe(true);
+    if (!noMedia.ok) throw new Error(noMedia.error.message);
+    const noMediaResult = await repository.updateMessageStoredMedia({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      messageId: noMedia.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-placeholder',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+    expect(noMediaResult.ok).toBe(false);
+    if (noMediaResult.ok) throw new Error('Expected message without media to be rejected');
+    expect(noMediaResult.error.code).toBe('VALIDATION_ERROR');
+
+    const input = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$event-2',
+        type: 'audio',
+        media: { mxcUri: 'mxc://home-dev/audio-placeholder' },
+      },
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const mediaMismatch = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId: stored.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/different-media',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+    expect(mediaMismatch.ok).toBe(false);
+    if (mediaMismatch.ok) throw new Error('Expected media mismatch to be rejected');
+    expect(mediaMismatch.error.code).toBe('VALIDATION_ERROR');
+
+    fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION)?.delete(stored.value.chatId);
+    const missingChat = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId: stored.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-placeholder',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+    expect(missingChat.ok).toBe(false);
+    if (missingChat.ok) throw new Error('Expected missing chat to be rejected');
+    expect(missingChat.error.code).toBe('NOT_FOUND');
+  });
+
+  it('rejects stored media updates when the message chat belongs to another source account', async () => {
+    const input = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        type: 'audio',
+        media: { mxcUri: 'mxc://home-dev/audio-placeholder' },
+      },
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const chat = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION)?.get(stored.value.chatId);
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .doc(stored.value.chatId)
+      .set({
+        ...chat,
+        sourceAccountId: 'other-private-source',
+      });
+
+    const result = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId: stored.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-placeholder',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected chat source mismatch to be rejected');
+    expect(result.error.code).toBe('NOT_FOUND');
+  });
+
+  it('updates legacy private WhatsApp message media when embedded id is absent', async () => {
+    const messageId = deterministicId('pbuchman-private-whatsapp', '$legacy-media-update');
+    const chatId = deterministicId('pbuchman-private-whatsapp', '!legacy-room:matrix.example');
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(chatId).set({
+      id: chatId,
+      userId: 'user-123',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      matrixRoomId: '!legacy-room:matrix.example',
+      chatType: 'direct',
+      firstSeenAt: '2026-06-22T10:00:00.000Z',
+      lastEventAt: '2026-06-22T10:00:00.000Z',
+      updatedAt: '2026-06-22T10:00:00.000Z',
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId).set({
+      chatId,
+      userId: 'user-123',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      matrixRoomId: '!legacy-room:matrix.example',
+      matrixEventId: '$legacy-media-update',
+      matrixSenderId: '@alice:matrix.example',
+      direction: 'incoming',
+      messageType: 'audio',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      receivedAt: '2026-06-22T10:00:02.000Z',
+      ingestedAt: '2026-06-22T10:00:03.000Z',
+      deliveryMode: 'live',
+      rawMatrixEvent: { type: 'm.room.message', event_id: '$legacy-media-update' },
+      media: { mxcUri: 'mxc://home-dev/legacy-audio' },
+      schemaVersion: 2,
+    });
+
+    const result = await repository.updateMessageStoredMedia({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/legacy-audio',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/legacy-audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.message.id).toBe(messageId);
+    expect(result.value.message.media?.gcsPath).toBe(
+      'whatsapp/private/user-123/message/legacy-audio.ogg'
+    );
+  });
+
+  it('handles already stored private media idempotently and rejects conflicting stored paths', async () => {
+    const input = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        type: 'audio',
+        media: {
+          mxcUri: 'mxc://home-dev/audio-stored',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+        },
+      },
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const samePath = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId: stored.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-stored',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/audio.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+    expect(samePath.ok).toBe(true);
+    if (!samePath.ok) throw new Error(samePath.error.message);
+    expect(samePath.value.status).toBe('already_stored');
+
+    const differentPath = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId: stored.value.messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-stored',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/message/different.ogg',
+      },
+      now: '2026-06-22T10:06:00.000Z',
+    });
+    expect(differentPath.ok).toBe(false);
+    if (differentPath.ok) throw new Error('Expected conflicting path to be rejected');
+    expect(differentPath.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('loads private WhatsApp chats by id within the source account', async () => {
     const input = createStoreInput();
     const stored = await repository.storeIncomingMessage(input);

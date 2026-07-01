@@ -407,8 +407,10 @@ Private WhatsApp sync uses the same edge-auth path. The external bridge machine
 must call both
 `POST https://intexuraos.cloud/internal/whatsapp/private/events` and
 `POST https://intexuraos.cloud/internal/whatsapp/private/media` with a Google
-OIDC bearer token whose audience is `https://intexuraos.cloud` and whose email
-claim is
+OIDC bearer token. Stored-media placeholder repair also calls
+`POST https://intexuraos.cloud/internal/whatsapp/private/media/backfill` with
+the same token. The token audience is `https://intexuraos.cloud` and its email
+claim must be
 `intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com`.
 The public `/api/whatsapp/internal/*` prefix is blocked and must not be used.
 

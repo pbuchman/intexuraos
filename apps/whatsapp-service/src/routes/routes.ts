@@ -24,6 +24,7 @@
  * GET    /whatsapp/private/messages/:messageId/thumbnail  → ./privateMediaRoutes.ts
  * GET    /whatsapp/private/media-access                   → ./privateMediaRoutes.ts
  * POST   /internal/whatsapp/private/media         → ./privateMediaRoutes.ts
+ * POST   /internal/whatsapp/private/media/backfill → ./privateSyncRoutes.ts
  * GET    /internal/whatsapp/private/messages/:messageId/media → ./privateMediaRoutes.ts
  * POST   /internal/whatsapp/private/conversation-context → ./privateSyncRoutes.ts
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
