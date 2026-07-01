@@ -154,6 +154,7 @@ describe('test conversation routes', () => {
     ['extra failure wrapper field', { toolMocks: { create_note: { mode: 'failure', message: 'fail', token: 'secret' } } }],
     ['tool failure message must be string', { toolMocks: { create_note: { mode: 'failure', message: 123 } } }],
     ['tool failure message too long', { toolMocks: { create_note: { mode: 'failure', message: 'x'.repeat(2049) } } }],
+    ['tool failure message contains secret-like text', { toolMocks: { create_note: { mode: 'failure', message: 'token abc' } } }],
     ['tool success result must be object', { toolMocks: { create_note: { mode: 'success', result: null } } }],
     ['tool result allowed field unsupported type', { toolMocks: { create_note: { mode: 'success', result: { status: { nested: true } } } } }],
     ['tool result string too long', { toolMocks: { create_note: { mode: 'success', result: { status: 'x'.repeat(2049) } } } }],
@@ -190,6 +191,26 @@ describe('test conversation routes', () => {
           create_note: {
             mode: 'success',
             result: { status: 'completed', resourceUrl: '/#/notes/mock-note' },
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(testConversationRunner.calls).toHaveLength(1);
+  });
+
+  it('accepts bounded non-secret tool failure messages', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/test/conversation',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: {
+        ...validPayload(),
+        toolMocks: {
+          create_note: {
+            mode: 'failure',
+            message: 'mock note failure',
           },
         },
       },

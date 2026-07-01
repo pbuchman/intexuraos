@@ -11,6 +11,7 @@ import {
   previewText,
   sanitizeAssistantReplies,
   sanitizeEventsBySessionId,
+  sanitizeSessions,
   sanitizeToolCalls,
 } from './testConversationSanitizer.js';
 import { createCapturedReplyPublisher } from './testToolMocks.js';
@@ -122,7 +123,7 @@ export async function runTestConversation(
     finalSessionId,
     turns,
     toolCalls: sanitizedToolCalls,
-    sessions,
+    sessions: sanitizeSessions(sessions),
     sessionTransitions: transitions,
     eventsBySessionId: sanitizeEventsBySessionId(rawEventsBySessionId),
     behavioralTranscript: buildBehavioralTranscript({

@@ -4,6 +4,7 @@ import {
   sanitizeAssistantReplies,
   sanitizeRecord,
   sanitizeEventsBySessionId,
+  sanitizeSessions,
   sanitizeToolCalls,
 } from '../../domain/testConversation/testConversationSanitizer.js';
 import type {
@@ -85,6 +86,69 @@ describe('test conversation sanitizer', () => {
   it('sanitizes captured tool calls that have no optional summaries', () => {
     expect(sanitizeToolCalls([{ toolName: 'create_note', status: 'completed' }])).toEqual([
       { toolName: 'create_note', status: 'completed' },
+    ]);
+  });
+
+  it('sanitizes sessions through an allowlisted DTO without summaries', () => {
+    const sanitized = sanitizeSessions([
+      {
+        id: 'intex_session_1',
+        userId: 'test-intex-agent-run',
+        channel: 'whatsapp',
+        status: 'completed',
+        startedAt: '2026-07-01T10:00:00.000Z',
+        endedAt: '2026-07-01T10:05:00.000Z',
+        lastUserMessageAt: '2026-07-01T10:00:00.000Z',
+        lastAssistantMessageAt: '2026-07-01T10:05:00.000Z',
+        startReason: 'no_active_session',
+        endReason: 'tool_completed',
+        activeTool: 'create_note',
+        summary: 'private summary with token abc',
+      },
+    ]);
+
+    expect(sanitized).toEqual([
+      {
+        id: 'intex_session_1',
+        userId: 'test-intex-agent-run',
+        channel: 'whatsapp',
+        status: 'completed',
+        startedAt: '2026-07-01T10:00:00.000Z',
+        endedAt: '2026-07-01T10:05:00.000Z',
+        lastUserMessageAt: '2026-07-01T10:00:00.000Z',
+        lastAssistantMessageAt: '2026-07-01T10:05:00.000Z',
+        startReason: 'no_active_session',
+        endReason: 'tool_completed',
+        activeTool: 'create_note',
+      },
+    ]);
+    expect(JSON.stringify(sanitized)).not.toContain('private summary');
+    expect(JSON.stringify(sanitized)).not.toContain('token abc');
+  });
+
+  it('sanitizes sessions that have no optional timestamp or tool fields', () => {
+    expect(
+      sanitizeSessions([
+        {
+          id: 'intex_session_2',
+          userId: 'test-intex-agent-run',
+          channel: 'whatsapp',
+          status: 'active',
+          startedAt: '2026-07-01T10:00:00.000Z',
+          lastUserMessageAt: '2026-07-01T10:00:00.000Z',
+          startReason: 'no_active_session',
+        },
+      ])
+    ).toEqual([
+      {
+        id: 'intex_session_2',
+        userId: 'test-intex-agent-run',
+        channel: 'whatsapp',
+        status: 'active',
+        startedAt: '2026-07-01T10:00:00.000Z',
+        lastUserMessageAt: '2026-07-01T10:00:00.000Z',
+        startReason: 'no_active_session',
+      },
     ]);
   });
 

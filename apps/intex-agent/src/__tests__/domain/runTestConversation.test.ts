@@ -130,6 +130,50 @@ describe('test conversation contract', () => {
     expect(result.behavioralTranscript.turns[1]).not.toHaveProperty('toolOutcome');
   });
 
+  it('does not expose secret-like session summaries in serialized responses', async () => {
+    const repository = new MemorySessionRepository();
+    const result = await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-summary',
+        runId: 'intex-e2e-summary',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: [
+          {
+            kind: 'message',
+            messageId: 'wamid-summary-1',
+            text: 'Summarize this safely. intex-e2e-summary',
+          },
+        ],
+      },
+      {
+        sessionRepository: repository,
+        runner: new ScriptedRunner([
+          {
+            outcome: 'completed',
+            reply: 'Done.',
+            summary: 'private summary with token abc',
+          },
+        ]),
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls: [],
+        logger: silentLogger(),
+      }
+    );
+
+    expect(result.sessions).toEqual([
+      expect.objectContaining({
+        id: 'intex_session_test_1',
+        status: 'waiting_for_user',
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain('private summary');
+    expect(JSON.stringify(result)).not.toContain('token abc');
+    expect(result.sessions[0]).not.toHaveProperty('summary');
+  });
+
   it('returns an empty transcript for direct empty-turn use case calls', async () => {
     const result = await runTestConversation(
       {

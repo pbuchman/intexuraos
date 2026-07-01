@@ -104,6 +104,20 @@ export interface SanitizedSessionEvent {
   payload: Record<string, unknown>;
 }
 
+export interface SanitizedTestConversationSession {
+  id: string;
+  userId: string;
+  channel: IntexAgentSession['channel'];
+  status: IntexAgentSession['status'];
+  startedAt: string;
+  endedAt?: string;
+  lastUserMessageAt: string;
+  lastAssistantMessageAt?: string;
+  startReason: IntexAgentSession['startReason'];
+  endReason?: IntexAgentSession['endReason'];
+  activeTool?: IntexAgentToolName;
+}
+
 export interface BehavioralTranscript {
   turns: {
     turnIndex: number;
@@ -124,7 +138,7 @@ export interface TestConversationResponse {
   finalSessionId: string | null;
   turns: TestConversationTurnResult[];
   toolCalls: CapturedToolCall[];
-  sessions: IntexAgentSession[];
+  sessions: SanitizedTestConversationSession[];
   sessionTransitions: TestConversationSessionTransition[];
   eventsBySessionId: Record<string, SanitizedSessionEvent[]>;
   behavioralTranscript: BehavioralTranscript;

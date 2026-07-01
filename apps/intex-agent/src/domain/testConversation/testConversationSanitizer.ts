@@ -5,9 +5,11 @@ import type {
   CapturedToolCall,
   SanitizedAssistantReply,
   SanitizedSessionEvent,
+  SanitizedTestConversationSession,
   TestConversationSessionTransition,
   TestConversationTurnResult,
 } from './testConversationTypes.js';
+import type { IntexAgentSession } from '../sessions/types.js';
 
 const SECRET_FIELD_PATTERN =
   /token|secret|password|key|authorization|auth|credential|toolargs|promptblock|replycontext|sourceurl|whatsappsender/iu;
@@ -68,6 +70,26 @@ export function sanitizeEventsBySessionId(
       })),
     ])
   );
+}
+
+export function sanitizeSessions(
+  sessions: readonly IntexAgentSession[]
+): SanitizedTestConversationSession[] {
+  return sessions.map((session) => ({
+    id: session.id,
+    userId: session.userId,
+    channel: session.channel,
+    status: session.status,
+    startedAt: session.startedAt,
+    ...(session.endedAt !== undefined ? { endedAt: session.endedAt } : {}),
+    lastUserMessageAt: session.lastUserMessageAt,
+    ...(session.lastAssistantMessageAt !== undefined
+      ? { lastAssistantMessageAt: session.lastAssistantMessageAt }
+      : {}),
+    startReason: session.startReason,
+    ...(session.endReason !== undefined ? { endReason: session.endReason } : {}),
+    ...(session.activeTool !== undefined ? { activeTool: session.activeTool } : {}),
+  }));
 }
 
 export function buildBehavioralTranscript(input: {

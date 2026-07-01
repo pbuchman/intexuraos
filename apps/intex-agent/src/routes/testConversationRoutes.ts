@@ -12,6 +12,8 @@ const TEST_USER_ID_PATTERN = /^test-intex-agent-[a-z0-9._-]{1,96}$/u;
 const RUN_ID_PATTERN = /^[a-z0-9._-]{1,128}$/u;
 const SECRET_FIELD_PATTERN =
   /token|secret|password|key|authorization|auth|credential|promptblock|preference|toolargs|replycontext|whatsappsender/iu;
+const SECRET_TEXT_PATTERN =
+  /\b(?:token|secret|password|credential|authorization|api\s*key)\b\s*(?::|=|\s)\s*\S+/iu;
 const TOOL_MOCK_ALLOWED_RESULT_FIELDS: Record<IntexAgentToolName, ReadonlySet<string>> = {
   create_note: new Set(['status', 'message', 'resourceUrl']),
   create_calendar_event: new Set(['status', 'eventId', 'summary', 'htmlLink']),
@@ -281,7 +283,13 @@ function validateToolMock(toolName: IntexAgentToolName, mock: unknown): string |
     if (typeof message !== 'string') {
       return 'tool mock failure message must be a string';
     }
-    return validateBoundedString(message, 'tool mock failure message');
+    const messageError = validateBoundedString(message, 'tool mock failure message');
+    if (messageError !== null) {
+      return messageError;
+    }
+    return SECRET_TEXT_PATTERN.test(message)
+      ? 'tool mock failure message must not contain secret-like text'
+      : null;
   }
   const unsupportedKeys = Object.keys(mock).filter((key) => key !== 'mode' && key !== 'result');
   if (unsupportedKeys.length > 0) {
@@ -338,14 +346,7 @@ function validateMockValue(
       ? null
       : `toolMocks result array contains nested objects: ${key}`;
   }
-  /* v8 ignore start -- schema: JSON-supported scalar and array values return above; nested objects are defensive here @preserve */
-  if (typeof value === 'object') {
-    return `toolMocks result nested objects are not allowed: ${key}`;
-  }
-  /* v8 ignore stop @preserve */
-  /* v8 ignore start -- schema: JSON request bodies cannot carry symbols or functions after Fastify parsing @preserve */
-  return `toolMocks result field is unsupported: ${key}`;
-  /* v8 ignore stop @preserve */
+  return `toolMocks result nested objects are not allowed: ${key}`;
 }
 
 function validateCalendarEventMocks(events: readonly unknown[]): string | null {
