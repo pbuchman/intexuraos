@@ -314,6 +314,19 @@ export interface UpdatePrivateWhatsAppMessageTranscriptionInput {
   transcription: PrivateWhatsAppTranscriptionState;
 }
 
+export interface UpdatePrivateWhatsAppMessageStoredMediaInput {
+  sourceAccountId: string;
+  messageId: string;
+  media: PrivateWhatsAppMediaInfo;
+  now: string;
+}
+
+export interface UpdatePrivateWhatsAppMessageStoredMediaResult {
+  status: 'updated' | 'already_stored';
+  message: PrivateWhatsAppMessage;
+  chat: PrivateWhatsAppChat;
+}
+
 export interface PrivateWhatsAppChatQueryInput {
   sourceAccountId: string;
   limit: number;

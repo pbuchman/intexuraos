@@ -51,6 +51,21 @@ function createStoreInput(
   };
 }
 
+function createAudioStoreInput(
+  matrixEventId: string,
+  media: NonNullable<StorePrivateWhatsAppMessageInput['message']['media']>
+): StorePrivateWhatsAppMessageInput {
+  const { text: _text, ...baseMessage } = createStoreInput().message;
+  return createStoreInput({
+    message: {
+      ...baseMessage,
+      matrixEventId,
+      type: 'audio',
+      media,
+    },
+  });
+}
+
 describe('privateWhatsAppRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let repository: ReturnType<typeof createPrivateWhatsAppRepository>;
@@ -114,6 +129,282 @@ describe('privateWhatsAppRepository', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value).toBeNull();
+  });
+
+  it('updates stored private WhatsApp media metadata idempotently', async () => {
+    const input = createAudioStoreInput('$event-audio-media', {
+      mxcUri: 'mxc://home-dev/audio-media',
+      mimeType: 'audio/ogg',
+      fileName: 'Voice message.ogg',
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+
+    const messageId = deterministicId(input.sourceAccountId, '$event-audio-media');
+    const updated = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-media',
+        mimeType: 'audio/ogg',
+        fileName: 'Voice message.ogg',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-media/audio.ogg',
+        storedMimeType: 'audio/ogg',
+        storedSizeBytes: 2048,
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) throw new Error(updated.error.message);
+    expect(updated.value).toMatchObject({
+      status: 'updated',
+      message: {
+        id: messageId,
+        media: {
+          mxcUri: 'mxc://home-dev/audio-media',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/audio-media/audio.ogg',
+          storedMimeType: 'audio/ogg',
+        },
+      },
+    });
+
+    const repeated = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-media',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-media/audio.ogg',
+      },
+      now: '2026-06-22T10:04:00.000Z',
+    });
+    expect(repeated.ok).toBe(true);
+    if (!repeated.ok) throw new Error(repeated.error.message);
+    expect(repeated.value.status).toBe('already_stored');
+
+    const persisted = await repository.getMessageById(messageId);
+    expect(persisted.ok).toBe(true);
+    if (!persisted.ok) throw new Error(persisted.error.message);
+    expect(persisted.value?.media).toMatchObject({
+      mxcUri: 'mxc://home-dev/audio-media',
+      storageStatus: 'stored',
+      gcsPath: 'whatsapp/private/user-123/audio-media/audio.ogg',
+    });
+  });
+
+  it('updates stored media when a private WhatsApp message document relies on the document id', async () => {
+    const input = createAudioStoreInput('$event-audio-without-embedded-id', {
+      mxcUri: 'mxc://home-dev/audio-without-embedded-id',
+      mimeType: 'audio/ogg',
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+    const messageId = deterministicId(input.sourceAccountId, '$event-audio-without-embedded-id');
+    const messageRef = fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId);
+    const messageDoc = await messageRef.get();
+    const { id: _id, ...messageWithoutEmbeddedId } = messageDoc.data() as Record<string, unknown>;
+    await messageRef.set(messageWithoutEmbeddedId);
+
+    const updated = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-without-embedded-id',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-without-embedded-id/audio.ogg',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) throw new Error(updated.error.message);
+    expect(updated.value.message.id).toBe(messageId);
+    expect(updated.value.status).toBe('updated');
+  });
+
+  it('rejects invalid private WhatsApp stored media updates', async () => {
+    const input = createAudioStoreInput('$event-audio-invalid-media', {
+      mxcUri: 'mxc://home-dev/audio-invalid-media',
+      mimeType: 'audio/ogg',
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+    const messageId = deterministicId(input.sourceAccountId, '$event-audio-invalid-media');
+
+    const missingPath = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-invalid-media',
+        storageStatus: 'stored',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(missingPath.ok).toBe(false);
+    if (missingPath.ok) throw new Error('Expected missing path to fail');
+    expect(missingPath.error.code).toBe('VALIDATION_ERROR');
+
+    const missingMessage = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId: 'missing-message',
+      media: {
+        mxcUri: 'mxc://home-dev/audio-invalid-media',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-invalid-media/audio.ogg',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(missingMessage.ok).toBe(false);
+    if (missingMessage.ok) throw new Error('Expected missing message to fail');
+    expect(missingMessage.error.code).toBe('NOT_FOUND');
+
+    const wrongSource = await repository.updateMessageStoredMedia({
+      sourceAccountId: 'wrong-source',
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-invalid-media',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-invalid-media/audio.ogg',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(wrongSource.ok).toBe(false);
+    if (wrongSource.ok) throw new Error('Expected wrong source to fail');
+    expect(wrongSource.error.code).toBe('NOT_FOUND');
+
+    const mismatchedMxc = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/different-media',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-invalid-media/audio.ogg',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(mismatchedMxc.ok).toBe(false);
+    if (mismatchedMxc.ok) throw new Error('Expected mismatched media to fail');
+    expect(mismatchedMxc.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects stored media updates for text messages and conflicting stored paths', async () => {
+    const textInput = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$event-text-no-media',
+      },
+    });
+    const textStored = await repository.storeIncomingMessage(textInput);
+    expect(textStored.ok).toBe(true);
+    if (!textStored.ok) throw new Error(textStored.error.message);
+    const textMessageId = deterministicId(textInput.sourceAccountId, '$event-text-no-media');
+    const noMedia = await repository.updateMessageStoredMedia({
+      sourceAccountId: textInput.sourceAccountId,
+      messageId: textMessageId,
+      media: {
+        mxcUri: 'mxc://home-dev/no-media',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/no-media/audio.ogg',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(noMedia.ok).toBe(false);
+    if (noMedia.ok) throw new Error('Expected no-media update to fail');
+    expect(noMedia.error.code).toBe('VALIDATION_ERROR');
+
+    const audioInput = createAudioStoreInput('$event-audio-conflicting-path', {
+      mxcUri: 'mxc://home-dev/audio-conflicting-path',
+      mimeType: 'audio/ogg',
+    });
+    const audioStored = await repository.storeIncomingMessage(audioInput);
+    expect(audioStored.ok).toBe(true);
+    if (!audioStored.ok) throw new Error(audioStored.error.message);
+    const audioMessageId = deterministicId(audioInput.sourceAccountId, '$event-audio-conflicting-path');
+    const firstUpdate = await repository.updateMessageStoredMedia({
+      sourceAccountId: audioInput.sourceAccountId,
+      messageId: audioMessageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-conflicting-path',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-conflicting-path/audio.ogg',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(firstUpdate.ok).toBe(true);
+    if (!firstUpdate.ok) throw new Error(firstUpdate.error.message);
+
+    const conflictingPath = await repository.updateMessageStoredMedia({
+      sourceAccountId: audioInput.sourceAccountId,
+      messageId: audioMessageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-conflicting-path',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-conflicting-path/different.ogg',
+      },
+      now: '2026-06-22T10:04:00.000Z',
+    });
+    expect(conflictingPath.ok).toBe(false);
+    if (conflictingPath.ok) throw new Error('Expected conflicting stored path to fail');
+    expect(conflictingPath.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns not found when stored media update cannot resolve the matching chat', async () => {
+    const input = createAudioStoreInput('$event-audio-missing-chat', {
+      mxcUri: 'mxc://home-dev/audio-missing-chat',
+      mimeType: 'audio/ogg',
+    });
+    const stored = await repository.storeIncomingMessage(input);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error(stored.error.message);
+    const messageId = deterministicId(input.sourceAccountId, '$event-audio-missing-chat');
+    const chatId = deterministicId(input.sourceAccountId, input.chat.matrixRoomId);
+
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(chatId).delete();
+    const missingChat = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-missing-chat',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-missing-chat/audio.ogg',
+      },
+      now: '2026-06-22T10:03:00.000Z',
+    });
+    expect(missingChat.ok).toBe(false);
+    if (missingChat.ok) throw new Error('Expected missing chat to fail');
+    expect(missingChat.error.code).toBe('NOT_FOUND');
+
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .doc(chatId)
+      .set({
+        id: chatId,
+        userId: input.userId,
+        sourceAccountId: 'wrong-source',
+        matrixRoomId: input.chat.matrixRoomId,
+        chatType: 'direct',
+        firstSeenAt: input.message.eventTimestamp,
+        lastEventAt: input.message.eventTimestamp,
+        updatedAt: input.receivedAt,
+      });
+    const wrongChatSource = await repository.updateMessageStoredMedia({
+      sourceAccountId: input.sourceAccountId,
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/audio-missing-chat',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/audio-missing-chat/audio.ogg',
+      },
+      now: '2026-06-22T10:04:00.000Z',
+    });
+    expect(wrongChatSource.ok).toBe(false);
+    if (wrongChatSource.ok) throw new Error('Expected wrong chat source to fail');
+    expect(wrongChatSource.error.code).toBe('NOT_FOUND');
   });
 
   it('updates a private WhatsApp chat transcription setting and preserves it across later messages', async () => {

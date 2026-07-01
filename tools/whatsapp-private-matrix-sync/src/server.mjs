@@ -19,6 +19,11 @@ export function defaultMediaUploadUrl(ingestUrl) {
   return ingestUrl.replace(/\/events$/, '/media');
 }
 
+export function defaultMediaBackfillUrl(ingestUrl) {
+  if (typeof ingestUrl !== 'string' || ingestUrl === '') return '';
+  return ingestUrl.replace(/\/events$/, '/media/backfill');
+}
+
 export function createConfig(env = process.env) {
   return {
     port: Number(env.PORT ?? DEFAULT_PORT),
@@ -29,6 +34,9 @@ export function createConfig(env = process.env) {
     mediaUploadUrl:
       env.INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_URL ??
       defaultMediaUploadUrl(env.INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL ?? ''),
+    mediaBackfillUrl:
+      env.INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_BACKFILL_URL ??
+      defaultMediaBackfillUrl(env.INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL ?? ''),
     googleApplicationCredentialsFile:
       env.INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE ??
       env.GOOGLE_APPLICATION_CREDENTIALS ??
@@ -482,6 +490,41 @@ export async function prepareEventsForIngest(config, matrixAccessToken, events, 
     });
   }
   return prepared;
+}
+
+export async function backfillPrivateMedia(config, input, deps = {}) {
+  const readAccessTokenFn = deps.readAccessToken ?? readAccessToken;
+  const fetchMatrixMediaFn = deps.fetchMatrixMedia ?? fetchMatrixMedia;
+  const uploadPrivateMediaFn = deps.uploadPrivateMedia ?? uploadPrivateMedia;
+  const postPrivateMediaBackfillFn = deps.postPrivateMediaBackfill ?? postPrivateMediaBackfill;
+
+  const matrixAccessToken = readAccessTokenFn(config.matrixAccessTokenFile);
+  if (matrixAccessToken === '') {
+    throw new Error('missing_matrix_access_token');
+  }
+  if (!isRecord(input) || typeof input.messageId !== 'string' || !isRecord(input.media)) {
+    throw new Error('invalid_private_media_backfill_input');
+  }
+
+  const matrixEventId =
+    typeof input.matrixEventId === 'string' && input.matrixEventId !== ''
+      ? input.matrixEventId
+      : matrixEventIdFromPrivateMessageId(input.messageId, config.sourceAccountId);
+  const media = input.media;
+  if (typeof media.mxcUri !== 'string' || media.mxcUri === '') {
+    throw new Error('missing_private_media_mxc_uri');
+  }
+
+  const downloaded = await fetchMatrixMediaFn(config, matrixAccessToken, media.mxcUri);
+  const storedMedia = await uploadPrivateMediaFn(config, { matrixEventId }, media, downloaded);
+  return await postPrivateMediaBackfillFn(config, {
+    sourceAccountId: config.sourceAccountId,
+    messageId: input.messageId,
+    media: {
+      ...media,
+      ...storedMedia,
+    },
+  });
 }
 
 function isPrivateMediaUploadMessageType(messageType) {
@@ -1003,7 +1046,7 @@ async function postEvents(config, events) {
   }
 }
 
-async function uploadPrivateMedia(config, event, media, downloaded) {
+export async function uploadPrivateMedia(config, event, media, downloaded) {
   if (config.mediaUploadUrl === '') {
     throw new Error('missing_private_media_upload_url');
   }
@@ -1044,6 +1087,42 @@ async function uploadPrivateMedia(config, event, media, downloaded) {
     throw new Error('intexuraos_private_media_upload_invalid_response');
   }
   return body.data.media;
+}
+
+export async function postPrivateMediaBackfill(config, payload) {
+  if (config.mediaBackfillUrl === '') {
+    throw new Error('missing_private_media_backfill_url');
+  }
+  const authorization = await createGoogleIdentityAuthorizationHeader(config);
+  const response = await fetch(config.mediaBackfillUrl, {
+    method: 'POST',
+    headers: {
+      authorization,
+      'content-type': 'application/json',
+      'user-agent': 'home-dev-whatsapp-sync/1.0',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(`intexuraos_private_media_backfill_failed_${response.status}`);
+  }
+  const body = await response.json();
+  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) {
+    throw new Error('intexuraos_private_media_backfill_invalid_response');
+  }
+  return body.data;
+}
+
+export function matrixEventIdFromPrivateMessageId(messageId, sourceAccountId) {
+  const prefix = `message:${sourceAccountId}:`;
+  if (typeof messageId !== 'string' || !messageId.startsWith(prefix)) {
+    throw new Error('invalid_private_message_id');
+  }
+  const matrixEventId = messageId.slice(prefix.length);
+  if (matrixEventId === '') {
+    throw new Error('invalid_private_message_id');
+  }
+  return matrixEventId;
 }
 
 async function createGoogleIdentityAuthorizationHeader(config) {

@@ -10,7 +10,7 @@ This tool is intentionally placed under `tools/`, not `apps/`, because it is dep
 - This adapter runs a Matrix `/sync` loop with a stored `next_batch` token.
 - On the first successful sync it stores the batch token and skips historical events.
 - Later sync batches are mapped to the private WhatsApp ingest payload and posted to IntexuraOS.
-- For new Matrix `m.image` events, the adapter downloads media through the authenticated Matrix media API, uploads bytes to IntexuraOS, and only then posts the ingest event.
+- For new Matrix image, audio, and video events, the adapter downloads media through the authenticated Matrix media API, uploads bytes to IntexuraOS, and only then posts the ingest event.
 - The adapter is read-only with respect to WhatsApp. It only observes Matrix events and posts ingest batches.
 
 ## IntexuraOS Contract
@@ -56,6 +56,7 @@ The adapter requires:
 - `MATRIX_ACCESS_TOKEN_FILE`
 - `INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL`
 - `INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_URL`
+- `INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_BACKFILL_URL` (optional, defaults from the events URL)
 - `INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE` or `GOOGLE_APPLICATION_CREDENTIALS`
 - `INTEXURAOS_OIDC_AUDIENCE`
 - `INTEXURAOS_OIDC_IMPERSONATE_SERVICE_ACCOUNT`
@@ -74,6 +75,16 @@ Docker image build:
 
 ```bash
 docker build -t whatsapp-private-matrix-sync:local tools/whatsapp-private-matrix-sync
+```
+
+Stored media backfill for a message ingested before media upload metadata existed:
+
+```bash
+pnpm --filter whatsapp-private-matrix-sync backfill:media -- \
+  --message-id 'message:pbuchman-private-whatsapp:$event-id' \
+  --mxc-uri 'mxc://home-dev/media-id' \
+  --mime-type 'audio/ogg' \
+  --file-name 'Voice message.ogg'
 ```
 
 ## Relationship To Home Dev

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  backfillPrivateMedia,
   buildHealthPayload,
   buildImpersonatedIdTokenRequest,
   buildIngestPayload,
@@ -1228,6 +1229,101 @@ test('prepareEventsForIngest uploads new Matrix video before posting ingest even
     storedSizeBytes: 'video-bytes'.length,
     storedAt: '2026-06-30T12:55:00.000Z',
   });
+});
+
+test('backfillPrivateMedia uploads Matrix media and posts stored metadata to IntexuraOS', async () => {
+  const calls = [];
+
+  const result = await backfillPrivateMedia(
+    {
+      ...config,
+      mediaBackfillUrl: 'https://intexuraos.cloud/internal/whatsapp/private/media/backfill',
+    },
+    {
+      messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+      media: {
+        mxcUri: 'mxc://home-dev/private-audio-placeholder',
+        mimeType: 'audio/ogg',
+        fileName: 'Voice message.ogg',
+      },
+    },
+    {
+      readAccessToken: () => 'matrix-token',
+      fetchMatrixMedia: async (_config, accessToken, mxcUri) => {
+        calls.push({ step: 'fetch', accessToken, mxcUri });
+        return {
+          buffer: Buffer.from('audio-bytes'),
+          contentType: 'audio/ogg',
+        };
+      },
+      uploadPrivateMedia: async (_config, event, media, downloaded) => {
+        calls.push({
+          step: 'upload',
+          matrixEventId: event.matrixEventId,
+          media,
+          bytes: downloaded.buffer.length,
+        });
+        return {
+          mxcUri: media.mxcUri,
+          mimeType: media.mimeType,
+          fileName: media.fileName,
+          sizeBytes: downloaded.buffer.length,
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+          storedMimeType: 'audio/ogg',
+          storedSizeBytes: downloaded.buffer.length,
+          storedAt: '2026-06-30T22:02:00.000Z',
+        };
+      },
+      postPrivateMediaBackfill: async (_config, payload) => {
+        calls.push({ step: 'backfill', payload });
+        return {
+          status: 'updated',
+          transcriptionPublished: true,
+        };
+      },
+    }
+  );
+
+  assert.deepEqual(result, {
+    status: 'updated',
+    transcriptionPublished: true,
+  });
+  assert.deepEqual(calls, [
+    {
+      step: 'fetch',
+      accessToken: 'matrix-token',
+      mxcUri: 'mxc://home-dev/private-audio-placeholder',
+    },
+    {
+      step: 'upload',
+      matrixEventId: '$event-private-audio-placeholder',
+      media: {
+        mxcUri: 'mxc://home-dev/private-audio-placeholder',
+        mimeType: 'audio/ogg',
+        fileName: 'Voice message.ogg',
+      },
+      bytes: 'audio-bytes'.length,
+    },
+    {
+      step: 'backfill',
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          mimeType: 'audio/ogg',
+          fileName: 'Voice message.ogg',
+          sizeBytes: 'audio-bytes'.length,
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+          storedMimeType: 'audio/ogg',
+          storedSizeBytes: 'audio-bytes'.length,
+          storedAt: '2026-06-30T22:02:00.000Z',
+        },
+      },
+    },
+  ]);
 });
 
 test('runSyncIteration does not persist Matrix state when image upload fails', async () => {
