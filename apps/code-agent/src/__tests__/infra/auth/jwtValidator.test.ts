@@ -3,6 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { createJwtValidator, createE2eJwtValidator, type JwtValidatorConfig } from '../../../infra/auth/jwtValidator.js';
 import pino from 'pino';
 import type { Logger } from 'pino';
@@ -45,6 +46,28 @@ describe('createJwtValidator', () => {
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
+    });
+
+    it.each([
+      ['missing', {}],
+      ['invalid prefix', { authorization: 'Basic abc123' }],
+    ])('marks %s Authorization header warnings as skipped for Sentry', async (_caseName, headers) => {
+      const warn = vi.fn();
+      const validator = createJwtValidator(mockConfig, {
+        warn,
+        debug: vi.fn(),
+      } as unknown as Logger);
+      const request: TestRequest = { headers, url: '/workers/status' };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
+
+      await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        { url: '/workers/status', [SKIP_SENTRY_KEY]: true },
+        'Missing or invalid Authorization header'
+      );
       expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
     });
 
