@@ -382,6 +382,18 @@ export interface ConversationAssistantTurnsResponse {
   turns: ConversationAssistantTurn[];
 }
 
+export interface ConversationAssistantContextCheckRequest {
+  chatId: string;
+  from: string;
+  to: string;
+}
+
+export interface ConversationAssistantContextCheckResponse {
+  messageCount: number;
+  warningThreshold: number;
+  requiresConfirmation: boolean;
+}
+
 export interface CreateConversationAssistantSessionRequest {
   chatId: string;
   from: string;
@@ -392,6 +404,14 @@ export interface CreateConversationAssistantSessionRequest {
 export interface SendConversationAssistantTurnRequest {
   question: string;
 }
+
+export type ConversationAssistantStreamEvent =
+  | { type: 'user_turn'; turn: ConversationAssistantTurn }
+  | { type: 'assistant_delta'; text: string }
+  | { type: 'usage'; usage: ConversationAssistantUsage }
+  | { type: 'error'; error: { code: string; message: string } }
+  | { type: 'assistant_turn'; turn: ConversationAssistantTurn }
+  | { type: 'done' };
 
 export type IntexAgentSessionStatus =
   | 'active'

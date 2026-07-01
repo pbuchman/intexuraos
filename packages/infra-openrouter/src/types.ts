@@ -16,7 +16,10 @@ export type {
   LlmChatTextBlock,
   LlmChatMessage,
   GenerateChatOptions,
+  GenerateChatReasoningEffort,
+  GenerateChatReasoningOptions,
   GenerateChatResult,
+  GenerateChatStreamEvent,
 } from '@intexuraos/llm-contract';
 
 /**

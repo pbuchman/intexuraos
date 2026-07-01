@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import type { GenerateChatResult, LLMError } from '@intexuraos/llm-factory';
 import {
   WHATSAPP_CONVERSATION_ASSISTANT_PROMPT,
   buildWhatsAppConversationAssistantMessages,
@@ -10,19 +11,20 @@ import {
 } from './transcriptFormatting.js';
 import type { ConversationAssistantDeps } from './ports.js';
 import type {
+  CheckConversationAssistantContextInput,
+  CheckConversationAssistantContextResult,
   ConversationAssistantResult,
   ConversationAssistantSession,
+  ConversationAssistantStreamEvent,
   ConversationAssistantTurn,
   CreateConversationAssistantSessionInput,
   CreateConversationAssistantSessionResult,
   SendConversationAssistantTurnInput,
 } from './types.js';
-import type { PrivateWhatsAppMessage } from '../whatsapp/index.js';
 import {
-  DEFAULT_CONVERSATION_ASSISTANT_MAX_MESSAGES,
-  MAX_CONVERSATION_ASSISTANT_MAX_MESSAGES,
-  MIN_CONVERSATION_ASSISTANT_MAX_MESSAGES,
+  CONVERSATION_ASSISTANT_LARGE_CONTEXT_WARNING_THRESHOLD,
 } from './types.js';
+import type { PrivateWhatsAppChat, PrivateWhatsAppMessage } from '../whatsapp/index.js';
 
 export const conversationAssistantSystemClock = {
   now: (): string => new Date().toISOString(),
@@ -44,34 +46,16 @@ export async function createConversationAssistantSession(
     return err(validation);
   }
 
-  const accountResult = await deps.privateWhatsAppRepository.getAccountByUserId(input.userId);
-  if (!accountResult.ok) {
-    return err(toPersistenceError(accountResult.error.message));
-  }
-  if (accountResult.value?.status !== 'active') {
-    return err({ code: 'NOT_FOUND', message: 'Private WhatsApp mirror is not configured' });
+  const chatLoadResult = await loadOwnedDirectChat(input, deps);
+  if (!chatLoadResult.ok) {
+    return chatLoadResult;
   }
 
-  const chatResult = await deps.privateWhatsAppRepository.getChatById({
-    sourceAccountId: accountResult.value.sourceAccountId,
-    chatId: input.chatId,
-  });
-  if (!chatResult.ok) {
-    return err(toPersistenceError(chatResult.error.message));
-  }
-  if (chatResult.value === null) {
-    return err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' });
-  }
-  if (chatResult.value.chatType !== 'direct') {
-    return err({ code: 'INVALID_REQUEST', message: 'Conversation Assistant supports direct chats only' });
-  }
-
-  const maxMessages = input.maxMessages ?? DEFAULT_CONVERSATION_ASSISTANT_MAX_MESSAGES;
   const messages: PrivateWhatsAppMessage[] = [];
   let cursor: string | undefined;
   do {
     const messagesResult = await deps.privateWhatsAppRepository.findConversationContextMessages({
-      sourceAccountId: accountResult.value.sourceAccountId,
+      sourceAccountId: chatLoadResult.value.sourceAccountId,
       chatId: input.chatId,
       from: input.from,
       to: input.to,
@@ -90,10 +74,9 @@ export async function createConversationAssistantSession(
   }
 
   const context = projectPrivateConversationContext({
-    chat: chatResult.value,
+    chat: chatLoadResult.value.chat,
     range: { from: input.from, to: input.to },
     messages,
-    maxMessages,
   });
   if (context.messages.length === 0) {
     return err({ code: 'EMPTY_TRANSCRIPT', message: 'Selected range contains no textual messages' });
@@ -111,12 +94,12 @@ export async function createConversationAssistantSession(
     transcriptMessageCount: context.messageCount,
     transcriptText: buildPrivateConversationTranscriptText(context.messages),
     omitted: context.omitted,
-    title: deriveTitle(chatResult.value.displayName, input.from, input.to, input.question),
+    title: deriveTitle(chatLoadResult.value.chat.displayName, input.from, input.to, input.question),
     createdAt: now,
     updatedAt: now,
   };
-  if (chatResult.value.displayName !== undefined) {
-    session.chatDisplayName = chatResult.value.displayName;
+  if (chatLoadResult.value.chat.displayName !== undefined) {
+    session.chatDisplayName = chatLoadResult.value.chat.displayName;
   }
 
   await deps.repository.saveSession(session);
@@ -129,6 +112,39 @@ export async function createConversationAssistantSession(
   }
 
   return ok({ session, turns, context });
+}
+
+export async function checkConversationAssistantContext(
+  input: CheckConversationAssistantContextInput,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<CheckConversationAssistantContextResult>> {
+  const validation = validateCreateInput(input);
+  if (validation !== null) {
+    return err(validation);
+  }
+
+  const chatLoadResult = await loadOwnedDirectChat(input, deps);
+  if (!chatLoadResult.ok) {
+    return chatLoadResult;
+  }
+
+  const messagesResult = await deps.privateWhatsAppRepository.findConversationContextMessages({
+    sourceAccountId: chatLoadResult.value.sourceAccountId,
+    chatId: input.chatId,
+    from: input.from,
+    to: input.to,
+    limit: 1,
+  });
+  if (!messagesResult.ok) {
+    return err(toPersistenceError(messagesResult.error.message));
+  }
+
+  const messageCount = messagesResult.value.totalCount;
+  return ok({
+    messageCount,
+    warningThreshold: CONVERSATION_ASSISTANT_LARGE_CONTEXT_WARNING_THRESHOLD,
+    requiresConfirmation: messageCount > CONVERSATION_ASSISTANT_LARGE_CONTEXT_WARNING_THRESHOLD,
+  });
 }
 
 export async function sendConversationAssistantTurn(
@@ -147,6 +163,53 @@ export async function sendConversationAssistantTurn(
 
   const result = await appendQuestionAndAssistantTurn({ session, question }, deps);
   return ok(result.turns);
+}
+
+export async function streamConversationAssistantTurn(
+  input: SendConversationAssistantTurnInput,
+  deps: ConversationAssistantDeps,
+  onEvent: (event: ConversationAssistantStreamEvent) => void
+): Promise<ConversationAssistantResult<ConversationAssistantTurn[]>> {
+  const question = input.question.trim();
+  if (question.length === 0) {
+    return err({ code: 'INVALID_REQUEST', message: 'Question is required' });
+  }
+
+  const session = await deps.repository.getSessionById(input.sessionId);
+  if (!isOwnedSession(session, input.userId)) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+
+  const userTurn = createTurn(session, 'user', question, deps);
+  await deps.repository.saveTurn(userTurn);
+  onEvent({ type: 'user_turn', turn: userTurn });
+
+  const promptInput = await buildPromptInputAfterUserTurn({ session, question }, deps);
+  const llmResult = await callConversationAssistantModelStream(
+    session,
+    promptInput,
+    deps,
+    onEvent
+  );
+  const assistantTurn = createAssistantTurnFromModelResult(
+    session,
+    llmResult,
+    deps,
+    'Chat message streaming is unavailable'
+  );
+
+  if (assistantTurn.error !== undefined) {
+    onEvent({
+      type: 'error',
+      error: { code: 'LLM_ERROR', message: assistantTurn.error.message },
+    });
+  }
+
+  await persistAssistantTurnAndTouchSession(session, assistantTurn, deps);
+  onEvent({ type: 'assistant_turn', turn: assistantTurn });
+  onEvent({ type: 'done' });
+
+  return ok([userTurn, assistantTurn]);
 }
 
 export async function listConversationAssistantSessions(
@@ -185,6 +248,56 @@ async function appendQuestionAndAssistantTurn(
   const userTurn = createTurn(input.session, 'user', input.question, deps);
   await deps.repository.saveTurn(userTurn);
 
+  const promptInput = await buildPromptInputAfterUserTurn(input, deps);
+  const llmResult = await callConversationAssistantModel(input.session, promptInput, deps);
+  const assistantTurn = createAssistantTurnFromModelResult(
+    input.session,
+    llmResult,
+    deps,
+    'Chat message generation is unavailable'
+  );
+
+  await persistAssistantTurnAndTouchSession(input.session, assistantTurn, deps);
+
+  return { turns: [userTurn, assistantTurn] };
+}
+
+async function loadOwnedDirectChat(
+  input: { userId: string; chatId: string },
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<{ sourceAccountId: string; chat: PrivateWhatsAppChat }>> {
+  const accountResult = await deps.privateWhatsAppRepository.getAccountByUserId(input.userId);
+  if (!accountResult.ok) {
+    return err(toPersistenceError(accountResult.error.message));
+  }
+  if (accountResult.value?.status !== 'active') {
+    return err({ code: 'NOT_FOUND', message: 'Private WhatsApp mirror is not configured' });
+  }
+
+  const chatResult = await deps.privateWhatsAppRepository.getChatById({
+    sourceAccountId: accountResult.value.sourceAccountId,
+    chatId: input.chatId,
+  });
+  if (!chatResult.ok) {
+    return err(toPersistenceError(chatResult.error.message));
+  }
+  if (chatResult.value === null) {
+    return err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' });
+  }
+  if (chatResult.value.chatType !== 'direct') {
+    return err({
+      code: 'INVALID_REQUEST',
+      message: 'Conversation Assistant supports direct chats only',
+    });
+  }
+
+  return ok({ sourceAccountId: accountResult.value.sourceAccountId, chat: chatResult.value });
+}
+
+async function buildPromptInputAfterUserTurn(
+  input: { session: ConversationAssistantSession; question: string },
+  deps: ConversationAssistantDeps
+): Promise<Parameters<typeof buildWhatsAppConversationAssistantMessages>[0]> {
   const priorTurns = (await deps.repository.listTurnsBySessionId(input.session.id)).map((turn) => ({
     role: turn.role,
     text: turn.text,
@@ -198,42 +311,53 @@ async function appendQuestionAndAssistantTurn(
   if (input.session.chatDisplayName !== undefined) {
     promptInput.chatDisplayName = input.session.chatDisplayName;
   }
+  return promptInput;
+}
 
-  const llmResult = await callConversationAssistantModel(input.session, promptInput, deps);
-
+function createAssistantTurnFromModelResult(
+  session: ConversationAssistantSession,
+  llmResult: Result<GenerateChatResult, LLMError> | undefined,
+  deps: ConversationAssistantDeps,
+  fallbackMessage: string
+): ConversationAssistantTurn {
   const now = deps.clock.now();
-  const assistantTurn: ConversationAssistantTurn =
-    llmResult?.ok === true
-      ? {
-          id: deps.ids.turnId(),
-          sessionId: input.session.id,
-          userId: input.session.userId,
-          role: 'assistant',
-          text: llmResult.value.content,
-          createdAt: now,
-          usage: llmResult.value.usage,
-        }
-      : {
-          id: deps.ids.turnId(),
-          sessionId: input.session.id,
-          userId: input.session.userId,
-          role: 'assistant',
-          text: 'The assistant could not answer because the model call failed.',
-          createdAt: now,
-          error: {
-            code: 'LLM_ERROR',
-            message: llmResult?.error.message ?? 'Chat message generation is unavailable',
-          },
-        };
+  if (llmResult?.ok === true) {
+    return {
+      id: deps.ids.turnId(),
+      sessionId: session.id,
+      userId: session.userId,
+      role: 'assistant',
+      text: llmResult.value.content,
+      createdAt: now,
+      usage: llmResult.value.usage,
+    };
+  }
 
+  return {
+    id: deps.ids.turnId(),
+    sessionId: session.id,
+    userId: session.userId,
+    role: 'assistant',
+    text: 'The assistant could not answer because the model call failed.',
+    createdAt: now,
+    error: {
+      code: 'LLM_ERROR',
+      message: llmResult?.error.message ?? fallbackMessage,
+    },
+  };
+}
+
+async function persistAssistantTurnAndTouchSession(
+  session: ConversationAssistantSession,
+  assistantTurn: ConversationAssistantTurn,
+  deps: ConversationAssistantDeps
+): Promise<void> {
   await deps.repository.saveTurn(assistantTurn);
   await deps.repository.saveSession({
-    ...input.session,
-    updatedAt: now,
-    lastTurnAt: now,
+    ...session,
+    updatedAt: assistantTurn.createdAt,
+    lastTurnAt: assistantTurn.createdAt,
   });
-
-  return { turns: [userTurn, assistantTurn] };
 }
 
 function createTurn(
@@ -263,14 +387,6 @@ function validateCreateInput(
   if (fromTime >= toTime) {
     return { code: 'INVALID_REQUEST', message: 'from must be before to' };
   }
-  const maxMessages = input.maxMessages ?? DEFAULT_CONVERSATION_ASSISTANT_MAX_MESSAGES;
-  if (
-    !Number.isInteger(maxMessages) ||
-    maxMessages < MIN_CONVERSATION_ASSISTANT_MAX_MESSAGES ||
-    maxMessages > MAX_CONVERSATION_ASSISTANT_MAX_MESSAGES
-  ) {
-    return { code: 'INVALID_REQUEST', message: 'maxMessages must be between 1 and 5000' };
-  }
   return null;
 }
 
@@ -278,25 +394,55 @@ async function callConversationAssistantModel(
   session: ConversationAssistantSession,
   promptInput: Parameters<typeof buildWhatsAppConversationAssistantMessages>[0],
   deps: ConversationAssistantDeps
-): Promise<
-  | Awaited<
-      ReturnType<
-        NonNullable<
-          ReturnType<ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']>['generateChat']
-        >
-      >
-    >
-  | undefined
-> {
+): Promise<Result<GenerateChatResult, LLMError> | undefined> {
   try {
-    const llmClient = deps.llmClientFactory.createLlmClientForUser(session.userId);
+    const llmClientResult = await deps.llmClientFactory.createLlmClientForUser(session.userId);
+    if (!llmClientResult.ok) {
+      return err({ code: 'API_ERROR', message: llmClientResult.error.message });
+    }
+    const llmClient = llmClientResult.value;
     return await llmClient.generateChat?.(
       buildWhatsAppConversationAssistantMessages(promptInput),
       {
         promptType: WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.promptType,
         sessionId: session.id,
         temperature: 0.2,
+        reasoning: { enabled: true },
         correlation: { sessionId: session.id },
+      }
+    );
+  } catch (error) {
+    return err({ code: 'API_ERROR', message: getErrorMessage(error) });
+  }
+}
+
+async function callConversationAssistantModelStream(
+  session: ConversationAssistantSession,
+  promptInput: Parameters<typeof buildWhatsAppConversationAssistantMessages>[0],
+  deps: ConversationAssistantDeps,
+  onEvent: (event: ConversationAssistantStreamEvent) => void
+): Promise<Result<GenerateChatResult, LLMError> | undefined> {
+  try {
+    const llmClientResult = await deps.llmClientFactory.createLlmClientForUser(session.userId);
+    if (!llmClientResult.ok) {
+      return err({ code: 'API_ERROR', message: llmClientResult.error.message });
+    }
+    const llmClient = llmClientResult.value;
+    return await llmClient.generateChatStream?.(
+      buildWhatsAppConversationAssistantMessages(promptInput),
+      {
+        promptType: WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.promptType,
+        sessionId: session.id,
+        temperature: 0.2,
+        reasoning: { enabled: true },
+        correlation: { sessionId: session.id },
+      },
+      (event) => {
+        if (event.type === 'delta') {
+          onEvent({ type: 'assistant_delta', text: event.text });
+          return;
+        }
+        onEvent({ type: 'usage', usage: event.usage });
       }
     );
   } catch (error) {

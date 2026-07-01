@@ -42,6 +42,7 @@ import {
   LlmProviders,
   type GenerateChatOptions,
   type GenerateChatResult,
+  type GenerateChatStreamEvent,
   type Gemini25Flash,
   type LLMError,
   type LLMModel,
@@ -140,6 +141,12 @@ export interface LlmGenerateClient {
     messages: LlmChatMessage[],
     options: GenerateChatOptions
   ): Promise<Result<GenerateChatResult, LLMError>>;
+
+  generateChatStream?(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions,
+    onEvent: (event: GenerateChatStreamEvent) => void
+  ): Promise<Result<GenerateChatResult, LLMError>>;
 }
 
 /**
@@ -220,6 +227,14 @@ function withUnsupportedGenerateChat(client: {
         new IntexuraOSError(
           'INVALID_REQUEST',
           'Chat message generation is only supported for OpenRouter clients'
+        )
+      );
+    },
+    generateChatStream(): Promise<Result<GenerateChatResult, LLMError>> {
+      return Promise.reject(
+        new IntexuraOSError(
+          'INVALID_REQUEST',
+          'Chat message streaming is only supported for OpenRouter clients'
         )
       );
     },

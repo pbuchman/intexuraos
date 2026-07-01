@@ -116,9 +116,9 @@ const configSchema = z.object({
   llmUsageServiceUrl: z.string().min(1, 'INTEXURAOS_LLM_USAGE_SERVICE_URL is required'),
 
   /**
-   * OpenRouter platform API key for Conversation Assistant model calls.
+   * User service URL for fetching per-user LLM API keys.
    */
-  openRouterAppApiKey: z.string().min(1, 'INTEXURAOS_OPENROUTER_APP_API_KEY is required'),
+  userServiceUrl: z.string().min(1, 'INTEXURAOS_USER_SERVICE_URL is required'),
 
   /**
    * OpenRouter model used for frozen WhatsApp Conversation Assistant sessions.
@@ -126,7 +126,7 @@ const configSchema = z.object({
   conversationAssistantModel: z
     .string()
     .min(1)
-    .default('or:google/gemini-3.5-flash'),
+    .default('or:minimax/minimax-m2.7'),
 
   /**
    * Server port.
@@ -159,7 +159,7 @@ export function loadConfig(): Config {
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'],
-    openRouterAppApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'],
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'],
     conversationAssistantModel: process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'],
     intexMessageIngestTopic: process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'],
     audioStoredTopic: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'],
@@ -190,7 +190,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_LLM_USAGE_SERVICE_URL',
-    'INTEXURAOS_OPENROUTER_APP_API_KEY',
+    'INTEXURAOS_USER_SERVICE_URL',
     'INTEXURAOS_CONVERSATION_ASSISTANT_MODEL',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');

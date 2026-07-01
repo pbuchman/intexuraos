@@ -28,7 +28,10 @@ export { normalizeUsage, toModelPricing } from './costCalculator.js';
 export type {
   GenerateOptions,
   GenerateChatOptions,
+  GenerateChatReasoningEffort,
+  GenerateChatReasoningOptions,
   GenerateChatResult,
+  GenerateChatStreamEvent,
   LlmChatMessage,
   LlmChatRole,
   LlmChatTextBlock,

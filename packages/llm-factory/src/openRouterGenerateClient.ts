@@ -4,6 +4,7 @@ import {
   isOpenRouterModel,
   type GenerateChatOptions,
   type GenerateChatResult,
+  type GenerateChatStreamEvent,
   type LlmChatMessage,
 } from '@intexuraos/llm-contract';
 import type {
@@ -41,6 +42,13 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
       options: GenerateChatOptions
     ): Promise<Result<GenerateChatResult, LLMError>> {
       return await orClient.generateChat(messages, options);
+    },
+    async generateChatStream(
+      messages: LlmChatMessage[],
+      options: GenerateChatOptions,
+      onEvent: (event: GenerateChatStreamEvent) => void
+    ): Promise<Result<GenerateChatResult, LLMError>> {
+      return await orClient.generateChatStream(messages, options, onEvent);
     },
   };
 }

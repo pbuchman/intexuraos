@@ -1,5 +1,6 @@
+import { useCallback, useEffect, useRef } from 'react';
 import { Bot, RefreshCw } from 'lucide-react';
-import { Button, ErrorBanner, Layout } from '@/components';
+import { Button, ErrorBanner, Layout, MarkdownContent } from '@/components';
 import { ConversationAssistantComposer } from '@/components/whatsapp/ConversationAssistantComposer';
 import { ConversationAssistantSessionRail } from '@/components/whatsapp/ConversationAssistantSessionRail';
 import { useWhatsAppConversationAssistant } from '@/hooks/useWhatsAppConversationAssistant';
@@ -64,6 +65,39 @@ function SessionMetadata({
 export function WhatsAppConversationAssistantPage(): React.JSX.Element {
   const assistant = useWhatsAppConversationAssistant();
   const selectedSessionId = assistant.selectedSessionId;
+  const turnsScrollRef = useRef<HTMLDivElement | null>(null);
+  const followTurnsRef = useRef(true);
+
+  const updateTurnScrollFollow = useCallback((): void => {
+    const element = turnsScrollRef.current;
+    if (element === null) return;
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    followTurnsRef.current = distanceFromBottom < 64;
+  }, []);
+
+  useEffect(() => {
+    followTurnsRef.current = true;
+    const element = turnsScrollRef.current;
+    if (element !== null) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    const element = turnsScrollRef.current;
+    if (element !== null && followTurnsRef.current) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [assistant.loadingTurns, assistant.turns]);
+
+  useEffect(() => {
+    if (!assistant.sending) return;
+    followTurnsRef.current = true;
+    const element = turnsScrollRef.current;
+    if (element !== null) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [assistant.sending]);
 
   return (
     <Layout>
@@ -165,21 +199,63 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
                   onClick={(): void => {
                     void assistant.createSession();
                   }}
-                  isLoading={assistant.creating}
-                  loadingText="Creating"
-                  disabled={assistant.selectedChatId === undefined || assistant.creating}
+                  isLoading={assistant.creating || assistant.checkingContext}
+                  loadingText={assistant.checkingContext ? 'Checking' : 'Creating'}
+                  disabled={
+                    assistant.selectedChatId === undefined ||
+                    assistant.creating ||
+                    assistant.checkingContext
+                  }
                   className="h-10"
                 >
                   Create session
                 </Button>
               </div>
+              {assistant.largeContextWarning !== null ? (
+                <div
+                  role="alert"
+                  className="mt-3 flex flex-col gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100 lg:flex-row lg:items-center lg:justify-between"
+                >
+                  <p className="min-w-0">
+                    Selected range contains{' '}
+                    {assistant.largeContextWarning.messageCount.toLocaleString()} messages. This may take longer and cost more than usual.
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={assistant.dismissLargeContextWarning}
+                      disabled={assistant.creating}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={(): void => {
+                        void assistant.confirmLargeContextCreate();
+                      }}
+                      isLoading={assistant.creating}
+                      loadingText="Creating"
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="border-b border-slate-200 p-4 dark:border-slate-800">
               <SessionMetadata session={assistant.selectedSession} />
             </div>
 
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950">
+            <div
+              ref={turnsScrollRef}
+              data-testid="conversation-assistant-turns"
+              onScroll={updateTurnScrollFollow}
+              className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950"
+            >
               {assistant.loadingTurns ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">Loading turns...</p>
               ) : null}
@@ -208,9 +284,15 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
                       <span>{isUser ? 'You' : 'Assistant'}</span>
                       <span>{formatDateTimeCompact(turn.createdAt)}</span>
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-950 dark:text-slate-50">
-                      {turn.text}
-                    </p>
+                    {isUser ? (
+                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-950 dark:text-slate-50">
+                        {turn.text}
+                      </p>
+                    ) : (
+                      <div className="break-words text-sm leading-6 text-slate-950 dark:text-slate-50">
+                        <MarkdownContent content={turn.text} />
+                      </div>
+                    )}
                     {turn.error !== undefined ? (
                       <p className="mt-2 text-xs text-red-600 dark:text-red-400">
                         {turn.error.code}: {turn.error.message}

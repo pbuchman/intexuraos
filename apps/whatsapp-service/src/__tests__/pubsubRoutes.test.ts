@@ -41,8 +41,8 @@ const testConfig: Config = {
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: INTERNAL_AUTH_TOKEN,
   llmUsageServiceUrl: 'http://llm-usage.test',
-  openRouterAppApiKey: 'test-openrouter-key',
-  conversationAssistantModel: 'or:google/gemini-3.5-flash',
+  userServiceUrl: 'http://user-service.test',
+  conversationAssistantModel: 'or:minimax/minimax-m2.7',
   port: 8080,
   host: '0.0.0.0',
 };

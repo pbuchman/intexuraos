@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  checkConversationAssistantContext,
   createConversationAssistantSession,
   getConversationAssistantSession,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
   sendConversationAssistantTurn,
+  streamConversationAssistantTurn,
 } from '../conversationAssistantApi.js';
 
 vi.mock('../apiClient.js', () => ({
@@ -22,6 +24,7 @@ const TOKEN = 'access-token';
 describe('conversationAssistantApi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('lists conversation assistant sessions from the WhatsApp service base URL', async () => {
@@ -61,6 +64,34 @@ describe('conversationAssistantApi', () => {
       }
     );
     expect(result).toEqual(session);
+  });
+
+  it('checks conversation context size with a POST body', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({
+      messageCount: 5001,
+      warningThreshold: 5000,
+      requiresConfirmation: true,
+    });
+
+    const request = {
+      chatId: 'chat-1',
+      from: '2026-06-01T00:00:00.000Z',
+      to: '2026-06-02T00:00:00.000Z',
+    };
+
+    const result = await checkConversationAssistantContext(TOKEN, request);
+
+    expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
+      'https://wa.test',
+      '/conversation-assistant/context/check',
+      TOKEN,
+      {
+        method: 'POST',
+        body: request,
+      }
+    );
+    expect(result.requiresConfirmation).toBe(true);
   });
 
   it('loads a single conversation assistant session with URL-encoded session ids', async () => {
@@ -110,5 +141,61 @@ describe('conversationAssistantApi', () => {
         body: request,
       }
     );
+  });
+
+  it('streams a conversation assistant turn and parses split SSE frames', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller): void {
+        controller.enqueue(
+          encoder.encode('event: user_turn\ndata: {"type":"user_turn","turn":{"id":"turn-1"')
+        );
+        controller.enqueue(
+          encoder.encode(
+            ',"sessionId":"session/with spaces?","userId":"user-1","role":"user","text":"Hi","createdAt":"2026-06-01T00:00:00.000Z"}}\n\n'
+          )
+        );
+        controller.enqueue(
+          encoder.encode('event: assistant_delta\ndata: {"type":"assistant_delta","text":"Hello"}\n\n')
+        );
+        controller.enqueue(encoder.encode('event: done\ndata: {"type":"done"}\n\n'));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+    );
+    const events: unknown[] = [];
+
+    await streamConversationAssistantTurn(
+      TOKEN,
+      'session/with spaces?',
+      { question: 'Hi' },
+      (event) => events.push(event)
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://wa.test/conversation-assistant/sessions/session%2Fwith%20spaces%3F/turns/stream',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ question: 'Hi' }),
+        cache: 'no-store',
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${TOKEN}`,
+          'Content-Type': 'application/json',
+        }),
+      })
+    );
+    expect(events.map((event) => (event as { type: string }).type)).toEqual([
+      'user_turn',
+      'assistant_delta',
+      'done',
+    ]);
   });
 });

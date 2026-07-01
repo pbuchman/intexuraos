@@ -12,6 +12,7 @@ import { err, ok } from '@intexuraos/common-core';
 import type {
   GenerateChatOptions,
   GenerateChatResult,
+  GenerateChatStreamEvent,
   GenerateResult,
   LlmChatMessage,
   LlmGenerateClient,
@@ -145,7 +146,13 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
     content: 'assistant answer',
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
   });
+  private nextStreamResult: Result<GenerateChatResult, LLMError> = ok({
+    content: 'assistant answer',
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
+  });
+  private nextStreamEvents: GenerateChatStreamEvent[] = [];
   readonly chatCalls: { messages: LlmChatMessage[]; options: GenerateChatOptions }[] = [];
+  readonly streamChatCalls: { messages: LlmChatMessage[]; options: GenerateChatOptions }[] = [];
 
   generate(): Promise<Result<GenerateResult, LLMError>> {
     return Promise.resolve(
@@ -164,8 +171,29 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
     return Promise.resolve(this.nextChatResult);
   }
 
+  generateChatStream(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions,
+    onEvent: (event: GenerateChatStreamEvent) => void
+  ): Promise<Result<GenerateChatResult, LLMError>> {
+    this.streamChatCalls.push({ messages, options });
+    for (const event of this.nextStreamEvents) {
+      onEvent(event);
+    }
+    return Promise.resolve(this.nextStreamResult);
+  }
+
+  setNextStreamEvents(events: GenerateChatStreamEvent[]): void {
+    this.nextStreamEvents = events;
+  }
+
   failNextChat(message = 'model failed'): void {
     this.nextChatResult = err({ code: 'API_ERROR', message });
+  }
+
+  failNextStream(message = 'stream failed', events: GenerateChatStreamEvent[] = []): void {
+    this.nextStreamEvents = events;
+    this.nextStreamResult = err({ code: 'API_ERROR', message });
   }
 }
 

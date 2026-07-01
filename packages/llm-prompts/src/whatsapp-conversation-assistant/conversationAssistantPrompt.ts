@@ -1,7 +1,7 @@
 import type { LlmChatMessage } from '@intexuraos/llm-contract';
 
 export const WHATSAPP_CONVERSATION_ASSISTANT_PROMPT = {
-  version: '1.0.0',
+  version: '2.0.0',
   promptType: 'whatsapp-conversation-assistant',
 } as const;
 
@@ -25,7 +25,10 @@ export function buildWhatsAppConversationAssistantMessages(
           text: [
             'You are a critical conversation analysis assistant.',
             'Answer only from the supplied WhatsApp transcript and prior user and assistant turns.',
-            'Distinguish facts from inference and cite message dates or times when the transcript supports them.',
+            'Adapt your role and tone to the user need: you may reason like a psychologist, analyst, or lawyer when that framing is useful.',
+            'Distinguish facts, inference, uncertainty, and missing evidence.',
+            'When citing timing, cite only the day and month, not exact times.',
+            'Do not output raw ISO timestamps, bracketed timestamp IDs, or second-level timestamp citations.',
             'If evidence is missing, say so directly.',
             'Do not invent events, motives, dates, promises, advice, or media contents.',
             'Do not use web search.',
@@ -39,7 +42,7 @@ export function buildWhatsAppConversationAssistantMessages(
       content: [
         {
           type: 'text',
-          text: `Conversation: ${input.chatDisplayName ?? 'selected WhatsApp chat'}\nRange: ${input.range.from} to ${input.range.to}\n\nTranscript follows:`,
+          text: `Conversation: ${input.chatDisplayName ?? 'selected WhatsApp chat'}\nRange: ${formatPromptDateLabel(input.range.from)} to ${formatPromptDateLabel(input.range.to)}\n\nTranscript follows:`,
         },
         {
           type: 'text',
@@ -57,4 +60,28 @@ export function buildWhatsAppConversationAssistantMessages(
       content: input.question,
     },
   ];
+}
+
+const ENGLISH_MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const;
+
+function formatPromptDateLabel(value: string): string {
+  const date = new Date(value);
+  const month = ENGLISH_MONTHS[date.getUTCMonth()];
+  if (month === undefined) {
+    return 'Unknown date';
+  }
+  return `${String(date.getUTCDate())} ${month}`;
 }

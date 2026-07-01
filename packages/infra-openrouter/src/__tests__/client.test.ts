@@ -34,6 +34,10 @@ const { createOpenRouterClient } = await import('../client.js');
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const TEST_MODEL = 'anthropic/claude-sonnet-4.6';
 
+function openRouterSse(chunks: string[]): string {
+  return chunks.map((chunk) => `data: ${chunk}\n\n`).join('');
+}
+
 describe('createOpenRouterClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -853,6 +857,206 @@ describe('createOpenRouterClient', () => {
   });
 
   describe('generateChat', () => {
+    it('forwards reasoning options to OpenRouter chat completions', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, {
+          id: 'test-id',
+          model: 'minimax/minimax-m2.7',
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5, cost: 0.001 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: 'minimax/minimax-m2.7',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChat([{ role: 'user', content: 'hello' }], {
+        promptType: 'whatsapp-conversation-assistant',
+        reasoning: {
+          enabled: true,
+          effort: 'high',
+          maxTokens: 2048,
+          exclude: true,
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody?.['reasoning']).toEqual({
+        enabled: true,
+        effort: 'high',
+        max_tokens: 2048,
+        exclude: true,
+      });
+    });
+
+    it('streams chat completion deltas and final usage', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          const typed = body as Record<string, unknown>;
+          capturedBody = typed;
+          return (
+            typed['stream'] === true && JSON.stringify(typed['reasoning']) === '{"enabled":true}'
+          );
+        })
+        .reply(
+          200,
+          openRouterSse([
+            JSON.stringify({ choices: [{ delta: { content: 'Hel' } }] }),
+            JSON.stringify({ choices: [{ delta: { content: 'lo' } }] }),
+            JSON.stringify({
+              usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5, cost: 0.001 },
+            }),
+            '[DONE]',
+          ]),
+          { 'Content-Type': 'text/event-stream' }
+        );
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: 'minimax/minimax-m2.7',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      const events: unknown[] = [];
+
+      const result = await client.generateChatStream(
+        [{ role: 'user', content: 'hello' }],
+        {
+          promptType: 'whatsapp-conversation-assistant',
+          reasoning: { enabled: true },
+          sessionId: 'session-123',
+          responseFormat: { type: 'json_object' },
+        },
+        (event) => {
+          events.push(event);
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toMatchObject({
+        session_id: 'session-123',
+        response_format: { type: 'json_object' },
+      });
+      expect(events).toContainEqual({ type: 'delta', text: 'Hel' });
+      expect(events).toContainEqual({ type: 'delta', text: 'lo' });
+      expect(events).toContainEqual({
+        type: 'usage',
+        usage: expect.objectContaining({ inputTokens: 3, outputTokens: 2, totalTokens: 5 }),
+      });
+      if (result.ok) {
+        expect(result.value.content).toBe('Hello');
+        expect(result.value.usage.totalTokens).toBe(5);
+      }
+    });
+
+    it('ignores streaming comments and buffers incomplete SSE frames', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(
+          200,
+          ': keep-alive\n\nevent: completion\n\ndata: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n',
+          { 'Content-Type': 'text/event-stream' }
+        );
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: 'minimax/minimax-m2.7',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChatStream(
+        [{ role: 'user', content: 'hello' }],
+        { promptType: 'whatsapp-conversation-assistant', reasoning: { enabled: true } },
+        vi.fn()
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('Hi');
+      }
+    });
+
+    it('maps non-ok streaming responses and empty stream bodies to errors', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(500, 'stream failed');
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: 'minimax/minimax-m2.7',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const httpError = await client.generateChatStream(
+        [{ role: 'user', content: 'hello' }],
+        { promptType: 'whatsapp-conversation-assistant' },
+        vi.fn()
+      );
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+      const emptyBody = await client.generateChatStream(
+        [{ role: 'user', content: 'hello again' }],
+        { promptType: 'whatsapp-conversation-assistant' },
+        vi.fn()
+      );
+      fetchSpy.mockRestore();
+
+      expect(httpError.ok).toBe(false);
+      if (!httpError.ok) expect(httpError.error.message).toContain('stream failed');
+      expect(emptyBody.ok).toBe(false);
+      if (!emptyBody.ok) expect(emptyBody.error.message).toContain('Response body is empty');
+    });
+
+    it('maps streaming provider error chunks to API errors', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, openRouterSse([JSON.stringify({ error: { message: 'provider failed' } })]), {
+          'Content-Type': 'text/event-stream',
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: 'minimax/minimax-m2.7',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChatStream(
+        [{ role: 'user', content: 'hello' }],
+        { promptType: 'whatsapp-conversation-assistant', reasoning: { enabled: true } },
+        vi.fn()
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('provider failed');
+      }
+    });
+
     it('serializes session_id, response_format, temperature, and cache_control blocks', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 

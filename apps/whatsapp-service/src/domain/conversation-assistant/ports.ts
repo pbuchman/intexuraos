@@ -1,5 +1,6 @@
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type {
+  ConversationAssistantResult,
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from './types.js';
@@ -22,7 +23,7 @@ export interface ConversationAssistantIdGenerator {
 }
 
 export interface ConversationAssistantLlmClientFactory {
-  createLlmClientForUser(userId: string): LlmGenerateClient;
+  createLlmClientForUser(userId: string): Promise<ConversationAssistantResult<LlmGenerateClient>>;
 }
 
 export interface ConversationAssistantDeps {
