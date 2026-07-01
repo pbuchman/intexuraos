@@ -51,4 +51,12 @@ describe('Cloud Function production package generation', () => {
     expect(Object.values(pkg.dependencies ?? {})).not.toContain('catalog:');
     expect(pkg.dependencies?.pino).toBe(getCatalogVersion('pino'));
   });
+
+  it('pins Speechmatics for transcription Cloud Function deploys', () => {
+    buildWorker('@intexuraos/transcription');
+
+    const pkg = readBuiltPackageJson('workers/transcription/dist/package.json');
+
+    expect(pkg.dependencies?.['@speechmatics/batch-client']).toBe('5.1.0');
+  });
 });

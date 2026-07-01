@@ -1968,7 +1968,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/infra-sentry
       '@speechmatics/batch-client':
-        specifier: ^5.1.0
+        specifier: 5.1.0
         version: 5.1.0
       pino:
         specifier: 'catalog:'
