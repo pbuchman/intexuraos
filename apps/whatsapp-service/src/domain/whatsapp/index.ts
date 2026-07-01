@@ -74,6 +74,8 @@ export type {
   PrivateWhatsAppSummaryStatus,
   StorePrivateWhatsAppMessageInput,
   UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageStoredMediaInput,
+  UpdatePrivateWhatsAppMessageStoredMediaResult,
   UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from './models/PrivateWhatsApp.js';
@@ -193,6 +195,13 @@ export {
   type IngestPrivateWhatsAppEventsDeps,
   type IngestPrivateWhatsAppEventsInput,
 } from './usecases/ingestPrivateWhatsAppEvents.js';
+
+export {
+  BackfillPrivateWhatsAppStoredMediaUseCase,
+  type BackfillPrivateWhatsAppStoredMediaDeps,
+  type BackfillPrivateWhatsAppStoredMediaInput,
+  type BackfillPrivateWhatsAppStoredMediaResult,
+} from './usecases/backfillPrivateWhatsAppStoredMedia.js';
 
 export {
   shouldDeliverMessage,

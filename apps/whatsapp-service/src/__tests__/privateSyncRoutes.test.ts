@@ -1176,6 +1176,469 @@ describe('Private WhatsApp Sync Routes', () => {
     ]);
   });
 
+  it('backfills stored private audio media and publishes one transcription job', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    const messageId = 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder';
+    const sparseAudioPayload = createPayload({
+      events: [
+        {
+          ...(createPayload()['events'] as Record<string, unknown>[])[0],
+          matrixEventId: '$event-private-audio-placeholder',
+          message: {
+            direction: 'incoming',
+            type: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/private-audio-placeholder',
+              mimeType: 'audio/ogg',
+              fileName: 'Voice message.ogg',
+            },
+          },
+        },
+      ],
+    });
+    const ingestResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: sparseAudioPayload,
+    });
+    expect(ingestResponse.statusCode).toBe(200);
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([]);
+
+    const backfillPayload = {
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/private-audio-placeholder',
+        mimeType: 'audio/ogg',
+        fileName: 'Voice message.ogg',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        storedMimeType: 'audio/ogg',
+        storedSizeBytes: 2048,
+        storedAt: '2026-06-22T10:05:00.000Z',
+      },
+    };
+    const firstBackfill = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: backfillPayload,
+    });
+    const secondBackfill = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: backfillPayload,
+    });
+
+    expect(firstBackfill.statusCode).toBe(200);
+    expect(secondBackfill.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstBackfill.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    const secondBody = JSON.parse(secondBackfill.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(firstBody.data).toEqual({ status: 'updated', transcriptionPublished: true });
+    expect(secondBody.data).toEqual({
+      status: 'already_stored',
+      transcriptionPublished: false,
+    });
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([
+      {
+        type: 'whatsapp.audio.stored',
+        messageSource: 'private_whatsapp',
+        userId: 'user-123',
+        messageId,
+        mediaId: 'mxc://home-dev/private-audio-placeholder',
+        gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        mimeType: 'audio/ogg',
+        timestamp: expect.any(String),
+      },
+    ]);
+
+    const storedMessageResult = await ctx.privateWhatsAppRepository.getMessageById(messageId);
+    expect(storedMessageResult.ok).toBe(true);
+    if (storedMessageResult.ok) {
+      expect(storedMessageResult.value?.media).toMatchObject({
+        mxcUri: 'mxc://home-dev/private-audio-placeholder',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        storedMimeType: 'audio/ogg',
+      });
+    }
+  });
+
+  it('requires internal auth for private WhatsApp media backfills', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('validates private WhatsApp media backfill request bodies before mutation', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('logs malformed private WhatsApp media backfill bodies without inspecting contents', async () => {
+    const nonObjectResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: {
+        'content-type': 'application/json',
+        'x-internal-auth': 'test-internal-token',
+      },
+      payload: 'null',
+    });
+    const missingMediaResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+      },
+    });
+
+    expect(nonObjectResponse.statusCode).toBe(400);
+    expect(missingMediaResponse.statusCode).toBe(400);
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_media_backfill',
+        }),
+      })
+    );
+  });
+
+  it('returns not found when media backfill targets an inactive private source account', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'unknown-private-whatsapp',
+        messageId: 'message:unknown-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns internal error when media backfill account lookup fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated account lookup failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns not found when media backfill targets a missing private message', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$missing-audio',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns invalid request when media backfill does not match stored message media', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-audio-mismatch',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/original-audio',
+                mimeType: 'audio/ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-mismatch',
+        media: {
+          mxcUri: 'mxc://home-dev/different-audio',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-mismatch/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns internal error when media backfill transcription publishing fails', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-audio-publish-failure',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/private-audio-publish-failure',
+                mimeType: 'audio/ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+    ctx.eventPublisher.setAudioStoredFailure('Simulated audio publish failure');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-publish-failure',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-publish-failure',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-publish-failure/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('backfills private audio media without publishing when chat transcription is disabled', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-audio-transcription-disabled',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/private-audio-transcription-disabled',
+                mimeType: 'audio/ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-transcription-disabled',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-transcription-disabled',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-transcription-disabled/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(body.data).toEqual({ status: 'updated', transcriptionPublished: false });
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([]);
+  });
+
+  it('backfills private image media without publishing a transcription job', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-image-backfill',
+            message: {
+              direction: 'incoming',
+              type: 'image',
+              media: {
+                mxcUri: 'mxc://home-dev/private-image-backfill',
+                mimeType: 'image/jpeg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-image-backfill',
+        media: {
+          mxcUri: 'mxc://home-dev/private-image-backfill',
+          mimeType: 'image/jpeg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-image-backfill/image.jpg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(body.data).toEqual({ status: 'updated', transcriptionPublished: false });
+    expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()).toEqual([]);
+  });
+
   it('publishes one private video transcription job after chat transcription is enabled', async () => {
     await ctx.app.inject({
       method: 'POST',

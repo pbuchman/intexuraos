@@ -20,6 +20,8 @@ import type {
   PrivateWhatsAppSenderDayQueryResult,
   StorePrivateWhatsAppMessageInput,
   UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageStoredMediaInput,
+  UpdatePrivateWhatsAppMessageStoredMediaResult,
   UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from '../models/PrivateWhatsApp.js';
@@ -50,6 +52,9 @@ export interface PrivateWhatsAppRepository {
   updateChatTranscriptionSetting(
     input: UpdatePrivateWhatsAppChatTranscriptionInput
   ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>>;
+  updateMessageStoredMedia(
+    input: UpdatePrivateWhatsAppMessageStoredMediaInput
+  ): Promise<Result<UpdatePrivateWhatsAppMessageStoredMediaResult, WhatsAppError>>;
   updateMessageTranscription(
     input: UpdatePrivateWhatsAppMessageTranscriptionInput
   ): Promise<Result<void, WhatsAppError>>;

@@ -2,9 +2,11 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { projectPrivateConversationContext } from '../domain/conversation-assistant/transcriptFormatting.js';
 import {
+  BackfillPrivateWhatsAppStoredMediaUseCase,
   IngestPrivateWhatsAppEventsUseCase,
   type IngestPrivateWhatsAppEventsInput,
   type PrivateWhatsAppAggregateRebuildInput,
+  type PrivateWhatsAppMediaInfo,
   type PrivateWhatsAppMessage,
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppSenderDayQueryInput,
@@ -37,6 +39,12 @@ interface PrivateAggregateRebuildBody {
   from?: string;
   to?: string;
   limit?: number;
+}
+
+interface PrivateMediaBackfillBody {
+  sourceAccountId: string;
+  messageId: string;
+  media: PrivateWhatsAppMediaInfo;
 }
 
 interface PrivateConversationContextBody {
@@ -81,6 +89,28 @@ function getPrivateMessagesQueryLogMetadata(query: Partial<PrivateMessagesQuerys
     hasEventDayKey: typeof query.eventDayKey === 'string',
     hasCursor: typeof query.cursor === 'string',
     limit: normalizeLimit(query.limit),
+  };
+}
+
+function getPrivateMediaBackfillLogMetadata(body: unknown): Record<string, unknown> {
+  if (body === null || typeof body !== 'object') {
+    return {
+      route: 'internal_whatsapp_private_media_backfill',
+      bodyType: typeof body,
+    };
+  }
+
+  const payload = body as Partial<PrivateMediaBackfillBody>;
+  const media = payload.media;
+  return {
+    route: 'internal_whatsapp_private_media_backfill',
+    hasSourceAccountId: typeof payload.sourceAccountId === 'string',
+    hasMessageId: typeof payload.messageId === 'string',
+    hasMedia: typeof media === 'object',
+    mediaStorageStatus:
+      typeof media === 'object' && typeof media.storageStatus === 'string'
+        ? media.storageStatus
+        : 'unknown',
   };
 }
 
@@ -315,6 +345,164 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       );
 
       if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value);
+    }
+  );
+
+  fastify.post<{ Body: PrivateMediaBackfillBody }>(
+    '/internal/whatsapp/private/media/backfill',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'backfillPrivateWhatsAppStoredMedia',
+        summary: 'Backfill stored private WhatsApp media',
+        description:
+          'Internal endpoint for a Matrix/mautrix bridge to attach stored media metadata to an existing private WhatsApp message.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            sourceAccountId: { type: 'string', minLength: 1 },
+            messageId: { type: 'string', minLength: 1 },
+            media: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                mxcUri: { type: 'string', minLength: 1 },
+                mimeType: { type: 'string', minLength: 1 },
+                fileName: { type: 'string', minLength: 1 },
+                sizeBytes: { type: 'number', minimum: 0 },
+                width: { type: 'number', minimum: 0 },
+                height: { type: 'number', minimum: 0 },
+                durationMs: { type: 'number', minimum: 0 },
+                sha256: { type: 'string', minLength: 1 },
+                storageStatus: { type: 'string', const: 'stored' },
+                gcsPath: { type: 'string', minLength: 1 },
+                thumbnailGcsPath: { type: 'string', minLength: 1 },
+                storedMimeType: { type: 'string', minLength: 1 },
+                storedSizeBytes: { type: 'number', minimum: 0 },
+                storedAt: { type: 'string', minLength: 1 },
+              },
+              required: ['mxcUri', 'storageStatus', 'gcsPath'],
+            },
+          },
+          required: ['sourceAccountId', 'messageId', 'media'],
+        },
+        response: {
+          200: {
+            description: 'Private WhatsApp media backfill completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['updated', 'already_stored'] },
+                  transcriptionPublished: { type: 'boolean' },
+                },
+                required: ['status', 'transcriptionPublished'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Private WhatsApp account or message not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Persistence failure',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: PrivateMediaBackfillBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/whatsapp/private/media/backfill',
+        bodyPreviewLength: 0,
+        additionalFields: getPrivateMediaBackfillLogMetadata(request.body),
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for private WhatsApp media backfill'
+        );
+        return await reply.fail(
+          'UNAUTHORIZED',
+          'Internal auth failed for private WhatsApp media backfill'
+        );
+      }
+
+      const validatedRequest = request as ValidatedRequest;
+      if (validatedRequest.validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+
+      const services = getServices();
+      const accountResult =
+        await services.privateWhatsAppRepository.getActiveAccountBySourceAccountId(
+          request.body.sourceAccountId
+        );
+      if (!accountResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', accountResult.error.message);
+      }
+      if (accountResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'Private WhatsApp source account is not active');
+      }
+
+      const useCase = new BackfillPrivateWhatsAppStoredMediaUseCase({
+        privateWhatsAppRepository: services.privateWhatsAppRepository,
+        eventPublisher: services.eventPublisher,
+      });
+      const result = await useCase.execute(
+        {
+          sourceAccountId: request.body.sourceAccountId,
+          messageId: request.body.messageId,
+          media: request.body.media,
+        },
+        request.log
+      );
+      if (!result.ok) {
+        if (result.error.code === 'VALIDATION_ERROR') {
+          return await reply.fail('INVALID_REQUEST', result.error.message);
+        }
+        if (result.error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', result.error.message);
+        }
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
