@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { Writable } from 'node:stream';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { buildServer } from '../../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../../services.js';
@@ -31,16 +32,21 @@ interface RoutePayload {
 describe('test conversation routes', () => {
   let app: FastifyInstance;
   let testConversationRunner: FakeTestConversationRunner;
+  let logChunks: string[];
+  let previousLogLevel: string | undefined;
 
   beforeEach(async () => {
     vi.mocked(requireAuth).mockResolvedValue({ userId: 'user-1', claims: {} });
     vi.mocked(logIncomingRequest).mockClear();
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
     process.env['INTEXURAOS_ENVIRONMENT'] = 'dev';
+    previousLogLevel = process.env['LOG_LEVEL'];
+    process.env['LOG_LEVEL'] = 'info';
     testConversationRunner = new FakeTestConversationRunner();
+    logChunks = [];
 
     setServices(createRouteTestServices(testConversationRunner));
-    app = await buildServer();
+    app = await buildServer(createLoggerCapture(logChunks));
     await app.ready();
   });
 
@@ -49,6 +55,11 @@ describe('test conversation routes', () => {
     resetServices();
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
     delete process.env['INTEXURAOS_ENVIRONMENT'];
+    if (previousLogLevel === undefined) {
+      delete process.env['LOG_LEVEL'];
+    } else {
+      process.env['LOG_LEVEL'] = previousLogLevel;
+    }
   });
 
   it('requires internal auth and does not accept Pub/Sub from header bypass', async () => {
@@ -299,6 +310,10 @@ describe('test conversation routes', () => {
 
     expect(response.statusCode).toBe(500);
     expect(response.body).not.toContain('private runner stack');
+    const logOutput = logChunks.join('');
+    expect(logOutput).toContain('Intex-agent test conversation failed');
+    expect(logOutput).not.toContain('private runner stack');
+    expect(logOutput).not.toContain('token abc');
   });
 
   it('rejects oversized bodies with 413', async () => {
@@ -344,6 +359,15 @@ describe('test conversation routes', () => {
     );
   });
 });
+
+function createLoggerCapture(chunks: string[]): NodeJS.WritableStream {
+  return new Writable({
+    write(chunk, _encoding, callback): void {
+      chunks.push(String(chunk));
+      callback();
+    },
+  });
+}
 
 function validPayload(): RoutePayload {
   return {

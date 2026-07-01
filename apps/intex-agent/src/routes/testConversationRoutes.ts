@@ -1,4 +1,3 @@
-import { getErrorMessage } from '@intexuraos/common-core';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import type { IntexAgentToolName } from '../domain/sessions/types.js';
@@ -184,9 +183,14 @@ export const testConversationRoutes: FastifyPluginCallback = (fastify, _opts, do
         );
         const result = await getServices().testConversationRunner.run(validatedBody);
         return await reply.ok(result);
-      } catch (error) {
+      } catch (_error) {
         request.log.error(
-          { error: getErrorMessage(error, 'Unknown test conversation error') },
+          {
+            runId: validatedBody.runId,
+            userId: validatedBody.userId,
+            mode: validatedBody.mode,
+            failure: 'test_conversation_runner_failed',
+          },
           'Intex-agent test conversation failed'
         );
         return await reply.fail('INTERNAL_ERROR', 'Test conversation failed');

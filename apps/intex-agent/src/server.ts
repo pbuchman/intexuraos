@@ -72,10 +72,14 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   };
 }
 
-export async function buildServer(): Promise<FastifyInstance> {
+export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Promise<FastifyInstance> {
   const app = Fastify({
-    logger:
-      process.env['NODE_ENV'] === 'test'
+    logger: testLoggerStream
+      ? {
+          level: process.env['LOG_LEVEL'] ?? 'info',
+          stream: testLoggerStream,
+        }
+      : process.env['NODE_ENV'] === 'test'
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
