@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { PrivateWhatsAppChat, PrivateWhatsAppMessage } from '../../../domain/whatsapp/index.js';
-import { projectPrivateConversationContext } from '../../../domain/conversation-assistant/transcriptFormatting.js';
+import {
+  buildPrivateConversationTranscriptText,
+  projectPrivateConversationContext,
+} from '../../../domain/conversation-assistant/transcriptFormatting.js';
 
 const chat: PrivateWhatsAppChat = {
   id: 'chat-123',
@@ -187,6 +190,21 @@ describe('projectPrivateConversationContext', () => {
 
     expect(result.messages.map((item) => item.content)).toEqual(['first', 'second', 'third']);
     expect(result.omitted.overLimit).toBe(0);
+  });
+
+  it('uses a stable fallback transcript label for invalid message timestamps', () => {
+    const result = projectPrivateConversationContext({
+      chat,
+      range: {
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+      messages: [message({ eventTimestamp: 'not-a-date', text: 'invalid timestamp text' })],
+    });
+
+    const transcriptText = buildPrivateConversationTranscriptText(result.messages);
+    expect(transcriptText).toBe('[Unknown date] Alice: invalid timestamp text');
+    expect(transcriptText).not.toContain('NaN');
   });
 
   it('preserves explicit max-message caps for legacy context callers', () => {

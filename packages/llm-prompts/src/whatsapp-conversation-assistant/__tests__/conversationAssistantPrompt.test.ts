@@ -71,6 +71,18 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
     expect(messages.at(-1)).toEqual({ role: 'user', content: 'What is missing?' });
   });
 
+  it('uses a stable fallback label for invalid range dates', () => {
+    const messages = buildWhatsAppConversationAssistantMessages({
+      transcriptText: 'Transcript',
+      range: { from: 'not-a-date', to: '2026-06-02T00:00:00.000Z' },
+      priorTurns: [],
+      question: 'What happened?',
+    });
+
+    expect(JSON.stringify(messages)).toContain('Range: Unknown date to 2 June');
+    expect(JSON.stringify(messages)).not.toContain('NaN');
+  });
+
   it('adds cache_control only to the transcript block', () => {
     const messages = buildWhatsAppConversationAssistantMessages({
       transcriptText: 'Transcript',

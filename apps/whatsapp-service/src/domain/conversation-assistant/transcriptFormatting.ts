@@ -183,8 +183,9 @@ const ENGLISH_MONTHS = [
 
 function formatTranscriptDateLabel(value: string): string {
   const date = new Date(value);
-  /* v8 ignore start -- ts-type: getUTCMonth always returns 0-11 and ENGLISH_MONTHS covers all month indexes @preserve */
-  const month = ENGLISH_MONTHS[date.getUTCMonth()] ?? 'Unknown';
-  /* v8 ignore stop @preserve */
+  const month = ENGLISH_MONTHS[date.getUTCMonth()];
+  if (month === undefined) {
+    return 'Unknown date';
+  }
   return `${String(date.getUTCDate())} ${month}`;
 }
