@@ -6,6 +6,26 @@ const USER_ID = 'user-123';
 const SOURCE_ACCOUNT_ID = 'source-123';
 const CHAT_ID = `chat:${SOURCE_ACCOUNT_ID}:!direct`;
 
+function parseSseEvents(body: string): { event: string; data: unknown }[] {
+  return body
+    .trim()
+    .split('\n\n')
+    .map((frame) => {
+      const event = frame
+        .split('\n')
+        .find((line) => line.startsWith('event: '))
+        ?.slice('event: '.length);
+      const data = frame
+        .split('\n')
+        .find((line) => line.startsWith('data: '))
+        ?.slice('data: '.length);
+      if (event === undefined || data === undefined) {
+        throw new Error(`Invalid SSE frame: ${frame}`);
+      }
+      return { event, data: JSON.parse(data) as unknown };
+    });
+}
+
 describe('Conversation Assistant routes', () => {
   const ctx = setupTestContext();
 
@@ -105,6 +125,49 @@ describe('Conversation Assistant routes', () => {
     expect(JSON.parse(listed.body).data.sessions[0].transcriptText).toBeUndefined();
     expect(JSON.stringify(JSON.parse(listed.body).data.sessions)).not.toContain('We agreed to meet');
     expect(JSON.parse(turns.body).data.turns).toHaveLength(2);
+  });
+
+  it('checks selected context size before creating a session', async () => {
+    const token = await seed();
+
+    const checked = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/context/check',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+    });
+
+    expect(checked.statusCode).toBe(200);
+    expect(JSON.parse(checked.body).data).toEqual({
+      messageCount: 1,
+      warningThreshold: 5000,
+      requiresConfirmation: false,
+    });
+
+    const invalidBody = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/context/check',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    expect(invalidBody.statusCode).toBe(400);
+
+    const invalidRange = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/context/check',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-07-01T00:00:00.000Z',
+        to: '2026-06-30T00:00:00.000Z',
+      },
+    });
+    expect(invalidRange.statusCode).toBe(400);
+    expect(JSON.parse(invalidRange.body).error.code).toBe('INVALID_REQUEST');
   });
 
   it('rejects invalid ranges and foreign session access', async () => {
@@ -224,6 +287,52 @@ describe('Conversation Assistant routes', () => {
       'assistant',
     ]);
 
+    ctx.llmClient.setNextStreamEvents([
+      { type: 'delta', text: 'streamed ' },
+      { type: 'delta', text: 'answer' },
+    ]);
+    const streamed = await ctx.app.inject({
+      method: 'POST',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}/turns/stream`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { question: 'Stream this.' },
+    });
+    expect(streamed.statusCode).toBe(200);
+    expect(streamed.headers['content-type']).toContain('text/event-stream');
+    const events = parseSseEvents(streamed.body);
+    expect(events.map((event) => event.event)).toEqual([
+      'user_turn',
+      'assistant_delta',
+      'assistant_delta',
+      'assistant_turn',
+      'done',
+    ]);
+    expect(ctx.llmClient.streamChatCalls[0]?.options.sessionId).toBe(
+      createdBody.data.session.id
+    );
+
+    const invalidStreamBody = await ctx.app.inject({
+      method: 'POST',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}/turns/stream`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    expect(invalidStreamBody.statusCode).toBe(400);
+
+    const missingStreamSession = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions/whatsapp_conv_session_missing/turns/stream',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { question: 'Hello?' },
+    });
+    expect(missingStreamSession.statusCode).toBe(200);
+    const missingStreamEvents = parseSseEvents(missingStreamSession.body);
+    expect(missingStreamEvents.map((event) => event.event)).toEqual(['error', 'done']);
+    expect(missingStreamEvents[0]?.data).toMatchObject({
+      type: 'error',
+      error: { code: 'NOT_FOUND' },
+    });
+
     const emptyTranscript = await ctx.app.inject({
       method: 'POST',
       url: '/conversation-assistant/sessions',
@@ -242,11 +351,17 @@ describe('Conversation Assistant routes', () => {
     const token = await seed();
     const unauthenticatedRequests = [
       { method: 'POST' as const, url: '/conversation-assistant/sessions', payload: {} },
+      { method: 'POST' as const, url: '/conversation-assistant/context/check', payload: {} },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/turns' },
       {
         method: 'POST' as const,
         url: '/conversation-assistant/sessions/missing/turns',
+        payload: { question: 'hello' },
+      },
+      {
+        method: 'POST' as const,
+        url: '/conversation-assistant/sessions/missing/turns/stream',
         payload: { question: 'hello' },
       },
     ];
@@ -268,11 +383,25 @@ describe('Conversation Assistant routes', () => {
           to: '2026-07-01T00:00:00.000Z',
         },
       },
+      {
+        method: 'POST' as const,
+        url: '/conversation-assistant/context/check',
+        payload: {
+          chatId: CHAT_ID,
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+      },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/turns' },
       {
         method: 'POST' as const,
         url: '/conversation-assistant/sessions/missing/turns',
+        payload: { question: 'hello' },
+      },
+      {
+        method: 'POST' as const,
+        url: '/conversation-assistant/sessions/missing/turns/stream',
         payload: { question: 'hello' },
       },
     ];

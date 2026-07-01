@@ -42,7 +42,7 @@ export interface ProjectPrivateConversationContextInput {
   chat: PrivateWhatsAppChat;
   range: { from: string; to: string };
   messages: PrivateWhatsAppMessage[];
-  maxMessages: number;
+  maxMessages?: number;
   totalMessageCount?: number;
 }
 
@@ -63,7 +63,7 @@ export function projectPrivateConversationContext(
   for (const message of input.messages) {
     const text = message.text?.trim();
     if (text !== undefined && text.length > 0) {
-      if (contextMessages.length >= input.maxMessages) {
+      if (hasReachedMaxMessages(contextMessages.length, input.maxMessages)) {
         omitted.overLimit += 1;
         continue;
       }
@@ -75,7 +75,7 @@ export function projectPrivateConversationContext(
     if (transcription?.status === 'completed') {
       const transcriptionText = transcription.text?.trim();
       if (transcriptionText !== undefined && transcriptionText.length > 0) {
-        if (contextMessages.length >= input.maxMessages) {
+        if (hasReachedMaxMessages(contextMessages.length, input.maxMessages)) {
           omitted.overLimit += 1;
           continue;
         }
@@ -155,6 +155,36 @@ export function buildPrivateConversationTranscriptText(
   messages: PrivateConversationContextMessage[]
 ): string {
   return messages
-    .map((message) => `[${message.eventTimestamp}] ${message.speakerLabel}: ${message.content}`)
+    .map(
+      (message) =>
+        `[${formatTranscriptDateLabel(message.eventTimestamp)}] ${message.speakerLabel}: ${message.content}`
+    )
     .join('\n');
+}
+
+function hasReachedMaxMessages(currentLength: number, maxMessages: number | undefined): boolean {
+  return maxMessages !== undefined && currentLength >= maxMessages;
+}
+
+const ENGLISH_MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const;
+
+function formatTranscriptDateLabel(value: string): string {
+  const date = new Date(value);
+  /* v8 ignore start -- ts-type: getUTCMonth always returns 0-11 and ENGLISH_MONTHS covers all month indexes @preserve */
+  const month = ENGLISH_MONTHS[date.getUTCMonth()] ?? 'Unknown';
+  /* v8 ignore stop @preserve */
+  return `${String(date.getUTCDate())} ${month}`;
 }

@@ -16,7 +16,9 @@ import { WhatsAppCloudApiAdapter, WhatsAppCloudApiSender } from './infra/whatsap
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
 import { createWebAgentLinkPreviewClient } from './infra/linkpreview/webAgentLinkPreviewClient.js';
 import { createLlmClient } from '@intexuraos/llm-factory';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { err, ok } from '@intexuraos/common-core';
 import type {
   EventPublisherPort,
   LinkPreviewFetcherPort,
@@ -55,7 +57,7 @@ export interface ServiceConfig {
   webAgentUrl: string;
   internalAuthToken: string;
   llmUsageServiceUrl: string;
-  openRouterAppApiKey: string;
+  userServiceUrl: string;
   conversationAssistantModel: string;
 }
 
@@ -148,7 +150,7 @@ export function getServices(): ServiceContainer {
   return container;
 }
 
-function createConversationAssistantLlmClientFactory(
+export function createConversationAssistantLlmClientFactory(
   config: ServiceConfig
 ): ConversationAssistantLlmClientFactory {
   const usageSink = new HttpInternalAuthUsageSink({
@@ -158,18 +160,35 @@ function createConversationAssistantLlmClientFactory(
     component: 'conversation-assistant',
     logger: createAppLogger({ name: 'whatsapp-conversation-assistant-usage-sink' }),
   });
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'whatsapp-conversation-assistant-user-service' }),
+    usageSink,
+  });
   return {
-    createLlmClientForUser(userId: string): ReturnType<
-      ConversationAssistantLlmClientFactory['createLlmClientForUser']
-    > {
-      return createLlmClient({
-        apiKey: config.openRouterAppApiKey,
+    async createLlmClientForUser(
+      userId: string
+    ): ReturnType<ConversationAssistantLlmClientFactory['createLlmClientForUser']> {
+      const keysResult = await userServiceClient.getApiKeys(userId);
+      if (!keysResult.ok) {
+        return err({ code: 'LLM_ERROR', message: keysResult.error.message });
+      }
+      const openRouterKey = keysResult.value.openrouter;
+      if (openRouterKey === undefined) {
+        return err({
+          code: 'LLM_ERROR',
+          message: 'No OpenRouter API key configured. Please add your OpenRouter API key in settings.',
+        });
+      }
+      return ok(createLlmClient({
+        apiKey: openRouterKey,
         model: config.conversationAssistantModel as never,
         userId,
         logger: createAppLogger({ name: 'whatsapp-conversation-assistant-llm' }),
         usageSink,
         ownerType: 'user',
-      });
+      }));
     },
   };
 }

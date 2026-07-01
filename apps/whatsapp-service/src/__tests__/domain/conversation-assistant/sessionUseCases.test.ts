@@ -1,19 +1,23 @@
 import { err, ok } from '@intexuraos/common-core';
 import type { GenerateResult, LlmGenerateClient } from '@intexuraos/llm-factory';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   FakeConversationAssistantRepository,
   FakeLlmGenerateClient,
   FakePrivateWhatsAppRepository,
 } from '../../fakes.js';
 import {
+  checkConversationAssistantContext,
   createConversationAssistantSession,
   getConversationAssistantSession,
   listConversationAssistantTurns,
   sendConversationAssistantTurn,
+  streamConversationAssistantTurn,
 } from '../../../domain/conversation-assistant/sessionUseCases.js';
 import type { ConversationAssistantDeps } from '../../../domain/conversation-assistant/ports.js';
+import type { ConversationAssistantStreamEvent } from '../../../domain/conversation-assistant/types.js';
 import type {
+  PrivateWhatsAppMessage,
   PrivateConversationContextMessageQueryInput,
   StorePrivateWhatsAppMessageInput,
 } from '../../../domain/whatsapp/models/PrivateWhatsApp.js';
@@ -49,9 +53,11 @@ function makeDeps(): {
       repository: conversationRepository,
       privateWhatsAppRepository: privateRepository,
       llmClientFactory: {
-        createLlmClientForUser(userId: string): FakeLlmGenerateClient {
+        createLlmClientForUser(userId: string): ReturnType<
+          ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']
+        > {
           llmFactoryUserIds.push(userId);
-          return llmClient;
+          return Promise.resolve(ok(llmClient));
         },
       },
       model: 'or:google/gemini-3.5-flash',
@@ -108,6 +114,30 @@ async function seedDirectMessage(
   }
   const result = await repository.storeIncomingMessage(input);
   expect(result.ok).toBe(true);
+}
+
+function makeTranscriptMessage(index: number): PrivateWhatsAppMessage {
+  const eventTimestamp = new Date(Date.UTC(2026, 5, 30, 0, 0, index)).toISOString();
+  return {
+    id: `msg-${String(index).padStart(4, '0')}`,
+    chatId: CHAT_ID,
+    userId: USER_ID,
+    sourceAccountId: SOURCE_ACCOUNT_ID,
+    matrixRoomId: '!direct',
+    matrixEventId: `$event-${index}`,
+    matrixSenderId: '@alice:matrix.example',
+    senderKey: 'phone:+48111111111',
+    senderDisplayName: 'Alice',
+    direction: 'incoming',
+    messageType: 'text',
+    text: `Message ${index}`,
+    eventTimestamp,
+    receivedAt: eventTimestamp,
+    ingestedAt: eventTimestamp,
+    deliveryMode: 'backfill',
+    rawMatrixEvent: { type: 'm.room.message' },
+    schemaVersion: 1,
+  };
 }
 
 describe('Conversation Assistant session use cases', () => {
@@ -167,6 +197,132 @@ describe('Conversation Assistant session use cases', () => {
     }
   });
 
+  it('retains more than 2000 projected messages when creating a session', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const messages = Array.from({ length: 2001 }, (_, index) =>
+      makeTranscriptMessage(index + 1)
+    );
+    privateRepository.findConversationContextMessages = (
+      input
+    ): ReturnType<FakePrivateWhatsAppRepository['findConversationContextMessages']> => {
+      expect(input.limit).toBe(5000);
+      return Promise.resolve(ok({ messages, totalCount: messages.length }));
+    };
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.transcriptMessageCount).toBe(2001);
+    expect(result.value.session.transcriptText).toContain('Message 2001');
+  });
+
+  it('checks context size with the large-context warning threshold', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const calls: PrivateConversationContextMessageQueryInput[] = [];
+    privateRepository.findConversationContextMessages = (
+      input
+    ): ReturnType<FakePrivateWhatsAppRepository['findConversationContextMessages']> => {
+      calls.push(input);
+      return Promise.resolve(ok({ messages: [], totalCount: 5001 }));
+    };
+
+    const result = await checkConversationAssistantContext(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.limit).toBe(1);
+    expect(result.value).toEqual({
+      messageCount: 5001,
+      warningThreshold: 5000,
+      requiresConfirmation: true,
+    });
+  });
+
+  it('maps context check validation, ownership, and message query failures', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+
+    const invalid = await checkConversationAssistantContext(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-07-01T00:00:00.000Z',
+        to: '2026-06-30T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) expect(invalid.error.code).toBe('INVALID_REQUEST');
+
+    const groupResult = await privateRepository.storeIncomingMessage({
+      sourceAccountId: SOURCE_ACCOUNT_ID,
+      userId: USER_ID,
+      deliveryMode: 'backfill',
+      receivedAt: '2026-06-30T11:00:00.000Z',
+      chat: { matrixRoomId: '!group-context', type: 'group', displayName: 'Group' },
+      message: {
+        matrixRoomId: '!group-context',
+        matrixEventId: '$event-group-context',
+        matrixSenderId: '@bob:matrix.example',
+        senderDisplayName: 'Bob',
+        direction: 'incoming',
+        type: 'text',
+        text: 'hello',
+        eventTimestamp: '2026-06-30T11:00:00.000Z',
+        rawMatrixEvent: {},
+      },
+    });
+    expect(groupResult.ok).toBe(true);
+
+    const group = await checkConversationAssistantContext(
+      {
+        userId: USER_ID,
+        chatId: `chat:${SOURCE_ACCOUNT_ID}:!group-context`,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(group.ok).toBe(false);
+    if (!group.ok) expect(group.error.code).toBe('INVALID_REQUEST');
+
+    privateRepository.failNextConversationContextQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'count failed',
+    });
+    const queryFailure = await checkConversationAssistantContext(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(queryFailure.ok).toBe(false);
+    if (!queryFailure.ok) expect(queryFailure.error.code).toBe('PERSISTENCE_ERROR');
+  });
+
   it('creates a session with first user and assistant turns using OpenRouter session id', async () => {
     const { deps, conversationRepository, privateRepository, llmClient, llmFactoryUserIds } =
       makeDeps();
@@ -189,6 +345,7 @@ describe('Conversation Assistant session use cases', () => {
     expect(conversationRepository.getAllTurns()).toHaveLength(2);
     expect(llmFactoryUserIds).toEqual([USER_ID]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
+    expect(llmClient.chatCalls[0]?.options.reasoning).toEqual({ enabled: true });
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages)).toContain('cache_control');
   });
 
@@ -210,6 +367,34 @@ describe('Conversation Assistant session use cases', () => {
 
     expect(result.ok).toBe(true);
     expect(conversationRepository.getAllTurns()[1]?.error?.code).toBe('LLM_ERROR');
+  });
+
+  it('persists assistant error turns when user LLM key lookup fails before sync generation', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'Summarize.',
+      },
+      {
+        ...deps,
+        llmClientFactory: {
+          createLlmClientForUser: () =>
+            Promise.resolve(err({ code: 'LLM_ERROR', message: 'OpenRouter key missing' })),
+        },
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(conversationRepository.getAllTurns()[1]?.error).toEqual({
+      code: 'LLM_ERROR',
+      message: 'OpenRouter key missing',
+    });
   });
 
   it('sends follow-up turns with unchanged transcript prefix', async () => {
@@ -238,6 +423,164 @@ describe('Conversation Assistant session use cases', () => {
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages[1])).toBe(
       JSON.stringify(llmClient.chatCalls[1]?.messages[1])
     );
+  });
+
+  it('streams follow-up turns and persists the final assistant turn', async () => {
+    const { deps, privateRepository, conversationRepository, llmClient } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    llmClient.setNextStreamEvents([
+      { type: 'delta', text: 'streamed ' },
+      { type: 'delta', text: 'answer' },
+      {
+        type: 'usage',
+        usage: { inputTokens: 12, outputTokens: 6, totalTokens: 18, costUsd: 0.002 },
+      },
+    ]);
+    const events: ConversationAssistantStreamEvent[] = [];
+
+    const result = await streamConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Stream this.' },
+      deps,
+      (event) => events.push(event)
+    );
+
+    expect(result.ok).toBe(true);
+    expect(events.map((event) => event.type)).toEqual([
+      'user_turn',
+      'assistant_delta',
+      'assistant_delta',
+      'usage',
+      'assistant_turn',
+      'done',
+    ]);
+    expect(llmClient.streamChatCalls[0]?.options.reasoning).toEqual({ enabled: true });
+    expect(result.ok ? result.value.map((turn) => turn.role) : []).toEqual(['user', 'assistant']);
+    expect(conversationRepository.getAllTurns().map((turn) => turn.role)).toEqual([
+      'user',
+      'assistant',
+    ]);
+    expect(conversationRepository.getAllTurns()[1]?.text).toBe('assistant answer');
+  });
+
+  it('streams partial deltas before persisting assistant error turns', async () => {
+    const { deps, privateRepository, conversationRepository, llmClient } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    llmClient.failNextStream('stream broke', [{ type: 'delta', text: 'partial' }]);
+    const events: ConversationAssistantStreamEvent[] = [];
+
+    const result = await streamConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Stream this.' },
+      deps,
+      (event) => events.push(event)
+    );
+
+    expect(result.ok).toBe(true);
+    expect(events.map((event) => event.type)).toEqual([
+      'user_turn',
+      'assistant_delta',
+      'error',
+      'assistant_turn',
+      'done',
+    ]);
+    expect(conversationRepository.getAllTurns()[1]?.error).toEqual({
+      code: 'LLM_ERROR',
+      message: 'stream broke',
+    });
+  });
+
+  it('persists streaming assistant errors when the user LLM key is unavailable', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const events: ConversationAssistantStreamEvent[] = [];
+
+    const result = await streamConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Stream this.' },
+      {
+        ...deps,
+        llmClientFactory: {
+          createLlmClientForUser: () =>
+            Promise.resolve(err({ code: 'LLM_ERROR', message: 'OpenRouter key is missing' })),
+        },
+      },
+      (event) => events.push(event)
+    );
+
+    expect(result.ok).toBe(true);
+    expect(events.map((event) => event.type)).toEqual([
+      'user_turn',
+      'error',
+      'assistant_turn',
+      'done',
+    ]);
+    expect(conversationRepository.getAllTurns()[1]?.error?.message).toBe(
+      'OpenRouter key is missing'
+    );
+  });
+
+  it('validates streaming input and session ownership before persisting turns', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const empty = await streamConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: '   ' },
+      deps,
+      vi.fn()
+    );
+    const foreign = await streamConversationAssistantTurn(
+      { userId: 'other-user', sessionId: created.value.session.id, question: 'Hello?' },
+      deps,
+      vi.fn()
+    );
+
+    expect(empty.ok).toBe(false);
+    if (!empty.ok) expect(empty.error.code).toBe('INVALID_REQUEST');
+    expect(foreign.ok).toBe(false);
+    if (!foreign.ok) expect(foreign.error.code).toBe('NOT_FOUND');
+    expect(conversationRepository.getAllTurns()).toHaveLength(0);
   });
 
   it('rejects group chats and empty transcript ranges', async () => {
@@ -419,7 +762,7 @@ describe('Conversation Assistant session use cases', () => {
     expect(nonCanonicalDate.ok).toBe(false);
     if (!nonCanonicalDate.ok) expect(nonCanonicalDate.error.code).toBe('INVALID_REQUEST');
 
-    const invalidLimit = await createConversationAssistantSession(
+    const ignoredLimit = await createConversationAssistantSession(
       {
         userId: USER_ID,
         chatId: CHAT_ID,
@@ -429,8 +772,7 @@ describe('Conversation Assistant session use cases', () => {
       },
       deps
     );
-    expect(invalidLimit.ok).toBe(false);
-    if (!invalidLimit.ok) expect(invalidLimit.error.code).toBe('INVALID_REQUEST');
+    expect(ignoredLimit.ok).toBe(true);
 
     const noMilliseconds = await createConversationAssistantSession(
       {
@@ -508,7 +850,7 @@ describe('Conversation Assistant session use cases', () => {
       {
         ...deps,
         llmClientFactory: {
-          createLlmClientForUser: () => llmClientWithoutChat,
+          createLlmClientForUser: () => Promise.resolve(ok(llmClientWithoutChat)),
         },
       }
     );
@@ -563,7 +905,7 @@ describe('Conversation Assistant session use cases', () => {
       {
         ...deps,
         llmClientFactory: {
-          createLlmClientForUser: () => rejectingClient,
+          createLlmClientForUser: () => Promise.resolve(ok(rejectingClient)),
         },
       }
     );

@@ -76,8 +76,10 @@ function createHookResult(
     loading: false,
     loadingTurns: false,
     creating: false,
+    checkingContext: false,
     sending: false,
     error: null,
+    largeContextWarning: null,
     selectSession: vi.fn(),
     selectChat: vi.fn(),
     setFromDateTimeLocal: vi.fn(),
@@ -85,6 +87,8 @@ function createHookResult(
     setFirstQuestion: vi.fn(),
     setFollowUpQuestion: vi.fn(),
     createSession: vi.fn(),
+    confirmLargeContextCreate: vi.fn(),
+    dismissLargeContextWarning: vi.fn(),
     sendFollowUp: vi.fn(),
     refresh: vi.fn(),
     ...overrides,
@@ -131,7 +135,7 @@ describe('WhatsAppConversationAssistantPage', () => {
             sessionId: 'session-1',
             userId: 'user-1',
             role: 'assistant',
-            text: 'The selected context shows agreement on Friday.',
+            text: 'The selected context shows agreement on **Friday**.\n\n- Bring docs',
             createdAt: '2026-06-21T11:02:00.000Z',
           },
         ],
@@ -141,7 +145,8 @@ describe('WhatsAppConversationAssistantPage', () => {
     render(<WhatsAppConversationAssistantPage />);
 
     expect(screen.getByText('What did we agree?')).toBeInTheDocument();
-    expect(screen.getByText('The selected context shows agreement on Friday.')).toBeInTheDocument();
+    expect(screen.getByText('Friday').tagName).toBe('STRONG');
+    expect(screen.getByText('Bring docs')).toBeInTheDocument();
     expect(screen.getByText('9 messages')).toBeInTheDocument();
     expect(screen.getByText('6 omitted')).toBeInTheDocument();
     expect(screen.getByText(/non-text 3/i)).toBeInTheDocument();
@@ -171,5 +176,31 @@ describe('WhatsAppConversationAssistantPage', () => {
 
     expect(createSession).toHaveBeenCalledTimes(1);
     expect(sendFollowUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders large-context confirmation actions', async () => {
+    const user = userEvent.setup();
+    const confirmLargeContextCreate = vi.fn();
+    const dismissLargeContextWarning = vi.fn();
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        largeContextWarning: {
+          messageCount: 5001,
+          warningThreshold: 5000,
+          requiresConfirmation: true,
+        },
+        confirmLargeContextCreate,
+        dismissLargeContextWarning,
+      })
+    );
+
+    render(<WhatsAppConversationAssistantPage />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('5,001 messages');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(confirmLargeContextCreate).toHaveBeenCalledTimes(1);
+    expect(dismissLargeContextWarning).toHaveBeenCalledTimes(1);
   });
 });

@@ -16,10 +16,11 @@ const mocks = vi.hoisted(() => ({
   getAccessToken: vi.fn(),
   listPrivateWhatsAppChats: vi.fn(),
   listConversationAssistantSessions: vi.fn(),
+  checkConversationAssistantContext: vi.fn(),
   createConversationAssistantSession: vi.fn(),
   getConversationAssistantSession: vi.fn(),
   listConversationAssistantTurns: vi.fn(),
-  sendConversationAssistantTurn: vi.fn(),
+  streamConversationAssistantTurn: vi.fn(),
 }));
 
 vi.mock('@/context', () => ({
@@ -34,10 +35,11 @@ vi.mock('@/services/whatsappApi', () => ({
 
 vi.mock('@/services/conversationAssistantApi', () => ({
   listConversationAssistantSessions: mocks.listConversationAssistantSessions,
+  checkConversationAssistantContext: mocks.checkConversationAssistantContext,
   createConversationAssistantSession: mocks.createConversationAssistantSession,
   getConversationAssistantSession: mocks.getConversationAssistantSession,
   listConversationAssistantTurns: mocks.listConversationAssistantTurns,
-  sendConversationAssistantTurn: mocks.sendConversationAssistantTurn,
+  streamConversationAssistantTurn: mocks.streamConversationAssistantTurn,
 }));
 
 import { useWhatsAppConversationAssistant } from '../useWhatsAppConversationAssistant.js';
@@ -138,14 +140,17 @@ function useAssistantWithLocationControls(): ReturnType<typeof useWhatsAppConver
 interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T) => void;
+  reject: (error: Error) => void;
 }
 
 function createDeferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 describe('useWhatsAppConversationAssistant', () => {
@@ -154,29 +159,48 @@ describe('useWhatsAppConversationAssistant', () => {
     mocks.getAccessToken.mockResolvedValue('tok');
     mocks.listPrivateWhatsAppChats.mockResolvedValue({ chats: [groupChat, directChat] });
     mocks.listConversationAssistantSessions.mockResolvedValue({ sessions: [session] });
+    mocks.checkConversationAssistantContext.mockResolvedValue({
+      messageCount: 42,
+      warningThreshold: 5000,
+      requiresConfirmation: false,
+    });
     mocks.getConversationAssistantSession.mockResolvedValue(session);
     mocks.listConversationAssistantTurns.mockResolvedValue({ turns });
     mocks.createConversationAssistantSession.mockResolvedValue(session);
-    mocks.sendConversationAssistantTurn.mockResolvedValue({
-      turns: [
-        {
-          id: 'turn-follow-user',
-          sessionId: session.id,
-          userId: 'user-1',
-          role: 'user',
-          text: 'Follow up?',
-          createdAt: '2026-06-21T11:06:00.000Z',
-        },
-        {
-          id: 'turn-follow-assistant',
-          sessionId: session.id,
-          userId: 'user-1',
-          role: 'assistant',
-          text: 'Follow-up answer.',
-          createdAt: '2026-06-21T11:07:00.000Z',
-        },
-      ],
-    });
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        streamSessionId: string,
+        request: { question: string },
+        onEvent: (event: unknown) => void
+      ) => {
+        onEvent({
+          type: 'user_turn',
+          turn: {
+            id: 'turn-follow-user',
+            sessionId: streamSessionId,
+            userId: 'user-1',
+            role: 'user',
+            text: request.question,
+            createdAt: '2026-06-21T11:06:00.000Z',
+          },
+        });
+        onEvent({ type: 'assistant_delta', text: 'Follow-up ' });
+        onEvent({ type: 'assistant_delta', text: 'answer.' });
+        onEvent({
+          type: 'assistant_turn',
+          turn: {
+            id: 'turn-follow-assistant',
+            sessionId: streamSessionId,
+            userId: 'user-1',
+            role: 'assistant',
+            text: 'Follow-up answer.',
+            createdAt: '2026-06-21T11:07:00.000Z',
+          },
+        });
+        onEvent({ type: 'done' });
+      }
+    );
   });
 
   it('loads direct chats, sessions, and selected session turns from the query string', async () => {
@@ -228,6 +252,11 @@ describe('useWhatsAppConversationAssistant', () => {
       await result.current.createSession();
     });
 
+    expect(mocks.checkConversationAssistantContext).toHaveBeenCalledWith('tok', {
+      chatId: directChat.id,
+      from: new Date('2026-06-20T09:00').toISOString(),
+      to: new Date('2026-06-21T10:00').toISOString(),
+    });
     expect(mocks.createConversationAssistantSession).toHaveBeenCalledWith('tok', {
       chatId: directChat.id,
       from: new Date('2026-06-20T09:00').toISOString(),
@@ -237,6 +266,52 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(result.current.sessions[0]).toEqual(createdSession);
     expect(result.current.selectedSession?.id).toBe(createdSession.id);
     expect(result.current.firstQuestion).toBe('');
+  });
+
+  it('requires confirmation before creating a session with a large context', async () => {
+    const createdSession: ConversationAssistantSession = {
+      ...session,
+      id: 'session-large',
+      title: 'Large context',
+    };
+    mocks.checkConversationAssistantContext.mockResolvedValue({
+      messageCount: 5001,
+      warningThreshold: 5000,
+      requiresConfirmation: true,
+    });
+    mocks.createConversationAssistantSession.mockResolvedValue(createdSession);
+    mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
+      Promise.resolve(sessionId === createdSession.id ? createdSession : session)
+    );
+
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedChatId).toBe(directChat.id);
+    });
+
+    await act(async () => {
+      await result.current.createSession();
+    });
+
+    expect(result.current.largeContextWarning).toEqual({
+      messageCount: 5001,
+      warningThreshold: 5000,
+      requiresConfirmation: true,
+    });
+    expect(mocks.createConversationAssistantSession).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.confirmLargeContextCreate();
+    });
+
+    expect(mocks.createConversationAssistantSession).toHaveBeenCalledTimes(1);
+    expect(result.current.largeContextWarning).toBeNull();
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(createdSession.id);
+    });
   });
 
   it('ignores duplicate create requests while creation is in flight', async () => {
@@ -283,17 +358,20 @@ describe('useWhatsAppConversationAssistant', () => {
       await result.current.sendFollowUp();
     });
 
-    expect(mocks.sendConversationAssistantTurn).toHaveBeenCalledWith('tok', session.id, {
-      question: 'Follow up?',
-    });
+    expect(mocks.streamConversationAssistantTurn).toHaveBeenCalledWith(
+      'tok',
+      session.id,
+      { question: 'Follow up?' },
+      expect.any(Function)
+    );
     expect(result.current.turns.at(-1)?.text).toBe('Follow-up answer.');
     expect(result.current.followUpQuestion).toBe('');
     expect(mocks.listConversationAssistantSessions).toHaveBeenCalledTimes(2);
   });
 
   it('ignores duplicate follow-up sends while a send is in flight', async () => {
-    const sendRequest = createDeferred<{ turns: ConversationAssistantTurn[] }>();
-    mocks.sendConversationAssistantTurn.mockReturnValue(sendRequest.promise);
+    const sendRequest = createDeferred<undefined>();
+    mocks.streamConversationAssistantTurn.mockReturnValue(sendRequest.promise);
 
     const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
       wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
@@ -313,11 +391,11 @@ describe('useWhatsAppConversationAssistant', () => {
     });
 
     await waitFor(() => {
-      expect(mocks.sendConversationAssistantTurn).toHaveBeenCalledTimes(1);
+      expect(mocks.streamConversationAssistantTurn).toHaveBeenCalledTimes(1);
     });
 
     await act(async () => {
-      sendRequest.resolve({ turns: [] });
+      sendRequest.resolve(undefined);
       await sendRequest.promise;
     });
   });
@@ -350,7 +428,8 @@ describe('useWhatsAppConversationAssistant', () => {
       title: 'Second context',
       transcriptSha256: 'def456',
     };
-    const sendRequest = createDeferred<{ turns: ConversationAssistantTurn[] }>();
+    const sendRequest = createDeferred<undefined>();
+    let streamEventHandler: ((event: unknown) => void) | undefined;
     mocks.listConversationAssistantSessions.mockResolvedValue({ sessions: [session, secondSession] });
     mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
       Promise.resolve(sessionId === secondSession.id ? secondSession : session)
@@ -358,7 +437,17 @@ describe('useWhatsAppConversationAssistant', () => {
     mocks.listConversationAssistantTurns.mockImplementation((_token: string, sessionId: string) =>
       Promise.resolve({ turns: sessionId === secondSession.id ? [] : turns })
     );
-    mocks.sendConversationAssistantTurn.mockReturnValue(sendRequest.promise);
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        _sessionId: string,
+        _request: { question: string },
+        onEvent: (event: unknown) => void
+      ) => {
+        streamEventHandler = onEvent;
+        return await sendRequest.promise;
+      }
+    );
 
     const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
       wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
@@ -386,18 +475,18 @@ describe('useWhatsAppConversationAssistant', () => {
     });
 
     await act(async () => {
-      sendRequest.resolve({
-        turns: [
-          {
-            id: 'turn-session-1-late',
-            sessionId: session.id,
-            userId: 'user-1',
-            role: 'assistant',
-            text: 'Late answer for session one.',
-            createdAt: '2026-06-21T11:08:00.000Z',
-          },
-        ],
+      streamEventHandler?.({
+        type: 'assistant_turn',
+        turn: {
+          id: 'turn-session-1-late',
+          sessionId: session.id,
+          userId: 'user-1',
+          role: 'assistant',
+          text: 'Late answer for session one.',
+          createdAt: '2026-06-21T11:08:00.000Z',
+        },
       });
+      sendRequest.resolve(undefined);
       await sendRequest.promise;
       await sendPromise;
     });
@@ -649,6 +738,7 @@ describe('useWhatsAppConversationAssistant', () => {
       title: 'Second context',
     };
     const createRequest = createDeferred<ConversationAssistantSession>();
+    createRequest.promise.catch(() => undefined);
     mocks.createConversationAssistantSession.mockReturnValue(createRequest.promise);
     mocks.listConversationAssistantSessions.mockResolvedValue({ sessions: [session, secondSession] });
     mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
@@ -692,6 +782,7 @@ describe('useWhatsAppConversationAssistant', () => {
       title: 'Second context',
     };
     const createRequest = createDeferred<ConversationAssistantSession>();
+    createRequest.promise.catch(() => undefined);
     mocks.createConversationAssistantSession.mockReturnValue(createRequest.promise);
     mocks.listConversationAssistantSessions.mockResolvedValue({ sessions: [session, secondSession] });
     mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
@@ -719,7 +810,7 @@ describe('useWhatsAppConversationAssistant', () => {
     });
 
     await act(async () => {
-      createRequest.resolve(Promise.reject(new Error('create failed')) as never);
+      createRequest.reject(new Error('create failed'));
       await createPromise;
     });
 
@@ -729,18 +820,27 @@ describe('useWhatsAppConversationAssistant', () => {
   });
 
   it('keeps successful follow-up turns when refreshing session summaries fails', async () => {
-    mocks.sendConversationAssistantTurn.mockResolvedValue({
-      turns: [
-        {
-          id: 'turn-follow-user',
-          sessionId: session.id,
-          userId: 'user-1',
-          role: 'user',
-          text: 'Follow up?',
-          createdAt: '2026-06-21T11:06:00.000Z',
-        },
-      ],
-    });
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        streamSessionId: string,
+        request: { question: string },
+        onEvent: (event: unknown) => void
+      ) => {
+        onEvent({
+          type: 'user_turn',
+          turn: {
+            id: 'turn-follow-user',
+            sessionId: streamSessionId,
+            userId: 'user-1',
+            role: 'user',
+            text: request.question,
+            createdAt: '2026-06-21T11:06:00.000Z',
+          },
+        });
+        onEvent({ type: 'done' });
+      }
+    );
     mocks.listConversationAssistantSessions
       .mockResolvedValueOnce({ sessions: [session] })
       .mockRejectedValueOnce(new Error('summary refresh failed'));
@@ -797,6 +897,11 @@ describe('useWhatsAppConversationAssistant', () => {
       id: 'chat-direct-2',
       displayName: 'Bob',
     };
+    mocks.checkConversationAssistantContext.mockResolvedValue({
+      messageCount: 5001,
+      warningThreshold: 5000,
+      requiresConfirmation: true,
+    });
     mocks.listPrivateWhatsAppChats
       .mockResolvedValueOnce({ chats: [directChat] })
       .mockResolvedValueOnce({ chats: [secondChat] });
@@ -810,10 +915,16 @@ describe('useWhatsAppConversationAssistant', () => {
     });
 
     await act(async () => {
+      await result.current.createSession();
+    });
+    expect(result.current.largeContextWarning?.messageCount).toBe(5001);
+
+    await act(async () => {
       await result.current.refresh();
     });
 
     expect(result.current.selectedChatId).toBe(secondChat.id);
+    expect(result.current.largeContextWarning).toBeNull();
   });
 
   it('does not let older session and chat refresh responses overwrite newer state', async () => {

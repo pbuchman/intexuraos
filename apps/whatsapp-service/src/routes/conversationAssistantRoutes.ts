@@ -3,6 +3,7 @@ import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import {
+  checkConversationAssistantContext,
   conversationAssistantRandomIds,
   conversationAssistantSystemClock,
   createConversationAssistantSession,
@@ -10,11 +11,14 @@ import {
   listConversationAssistantSessions,
   listConversationAssistantTurns,
   sendConversationAssistantTurn,
+  streamConversationAssistantTurn,
 } from '../domain/conversation-assistant/sessionUseCases.js';
 import type { ConversationAssistantDeps } from '../domain/conversation-assistant/ports.js';
 import type {
+  CheckConversationAssistantContextInput,
   ConversationAssistantError,
   ConversationAssistantSession,
+  ConversationAssistantStreamEvent,
   CreateConversationAssistantSessionInput,
   PublicConversationAssistantSession,
 } from '../domain/conversation-assistant/types.js';
@@ -27,6 +31,12 @@ interface CreateSessionBody {
   to: string;
   maxMessages?: number;
   question?: string;
+}
+
+interface CheckContextBody {
+  chatId: string;
+  from: string;
+  to: string;
 }
 
 interface SessionParams {
@@ -66,6 +76,54 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
     }
   );
 
+  fastify.post<{ Body: CheckContextBody }>(
+    '/conversation-assistant/context/check',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'checkWhatsAppConversationAssistantContext',
+        tags: ['whatsapp'],
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            chatId: { type: 'string', minLength: 1 },
+            from: { type: 'string', minLength: 1 },
+            to: { type: 'string', minLength: 1 },
+          },
+          required: ['chatId', 'from', 'to'],
+        },
+        response: routeResponseSchema(),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /whatsapp/conversation-assistant/context/check',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_check_context' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getConversationAssistantDeps(reply);
+      if (deps === null) return;
+
+      const input: CheckConversationAssistantContextInput = {
+        userId: user.userId,
+        chatId: request.body.chatId,
+        from: request.body.from,
+        to: request.body.to,
+      };
+      const result = await safeCall(() => checkConversationAssistantContext(input, deps));
+      if (!result.ok) {
+        return await sendConversationAssistantError(reply, result.error);
+      }
+      return await reply.ok(result.value);
+    }
+  );
+
   fastify.post<{ Body: CreateSessionBody }>(
     '/conversation-assistant/sessions',
     {
@@ -80,7 +138,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
             chatId: { type: 'string', minLength: 1 },
             from: { type: 'string', minLength: 1 },
             to: { type: 'string', minLength: 1 },
-            maxMessages: { type: 'integer', minimum: 1, maximum: 5000 },
+            maxMessages: { type: 'integer', minimum: 1 },
             question: { type: 'string' },
           },
           required: ['chatId', 'from', 'to'],
@@ -238,6 +296,66 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
     }
   );
 
+  fastify.post<{ Params: SessionParams; Body: SendTurnBody }>(
+    '/conversation-assistant/sessions/:sessionId/turns/stream',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'streamWhatsAppConversationAssistantTurn',
+        tags: ['whatsapp'],
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { question: { type: 'string' } },
+          required: ['question'],
+        },
+        response: streamResponseSchema(),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message:
+          'Received request to POST /whatsapp/conversation-assistant/sessions/:sessionId/turns/stream',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_stream_turn' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getConversationAssistantDeps(reply);
+      if (deps === null) return;
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+
+      const result = await safeCall(() =>
+        streamConversationAssistantTurn(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            question: request.body.question,
+          },
+          deps,
+          (event) => {
+            writeSseEvent(reply, event);
+          }
+        )
+      );
+      if (!result.ok) {
+        writeSseEvent(reply, { type: 'error', error: result.error });
+        writeSseEvent(reply, { type: 'done' });
+      }
+      reply.raw.end();
+    }
+  );
+
   done();
 };
 
@@ -296,6 +414,10 @@ async function safeCall<T>(
   }
 }
 
+function writeSseEvent(reply: FastifyReply, event: ConversationAssistantStreamEvent): void {
+  reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+}
+
 function routeResponseSchema(status = 200): Record<number, Record<string, unknown>> {
   return {
     [status]: {
@@ -310,6 +432,18 @@ function routeResponseSchema(status = 200): Record<number, Record<string, unknow
     400: errorResponse('Invalid request'),
     401: errorResponse('Unauthorized'),
     404: errorResponse('Not found'),
+    500: errorResponse('Internal error'),
+  };
+}
+
+function streamResponseSchema(): Record<number, Record<string, unknown>> {
+  return {
+    200: {
+      description: 'Conversation Assistant event stream',
+      type: 'string',
+    },
+    400: errorResponse('Invalid request'),
+    401: errorResponse('Unauthorized'),
     500: errorResponse('Internal error'),
   };
 }

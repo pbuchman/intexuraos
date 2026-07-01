@@ -38,8 +38,8 @@ describe('whatsapp-service OpenAPI contract', () => {
     webAgentUrl: 'https://web-agent.example.com',
     internalAuthToken: 'test-internal-auth-token',
     llmUsageServiceUrl: 'http://llm-usage.test',
-    openRouterAppApiKey: 'test-openrouter-key',
-    conversationAssistantModel: 'or:google/gemini-3.5-flash',
+    userServiceUrl: 'http://user-service.test',
+    conversationAssistantModel: 'or:minimax/minimax-m2.7',
     port: 8080,
     host: '0.0.0.0',
   };

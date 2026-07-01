@@ -239,6 +239,32 @@ describe('llmClientFactory', () => {
       );
     });
 
+    it('adds a throwing generateChatStream method for non-OpenRouter factory clients', async () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      let captured: unknown;
+      try {
+        await client.generateChatStream?.(
+          [{ role: 'user', content: 'hello' }],
+          { promptType: 'test-chat' },
+          vi.fn()
+        );
+      } catch (error) {
+        captured = error;
+      }
+
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const error = captured as IntexuraOSError;
+      expect(error.code).toBe('INVALID_REQUEST');
+      expect(error.message).toBe('Chat message streaming is only supported for OpenRouter clients');
+    });
+
     it('forwards ownerType to createClaudeGenerateClient when passed', async () => {
       const { createClaudeGenerateClient } = await import('../claudeGenerateClient.js');
 

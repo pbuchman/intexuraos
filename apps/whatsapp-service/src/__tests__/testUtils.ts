@@ -8,6 +8,7 @@ import { createHmac } from 'node:crypto';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { ok } from '@intexuraos/common-core';
 import {
   FakeConversationAssistantRepository,
   FakeEventPublisher,
@@ -110,8 +111,8 @@ export const testConfig: Config = {
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: 'test-internal-auth-token',
   llmUsageServiceUrl: 'http://llm-usage.test',
-  openRouterAppApiKey: 'test-openrouter-key',
-  conversationAssistantModel: 'or:google/gemini-3.5-flash',
+  userServiceUrl: 'http://user-service.test',
+  conversationAssistantModel: 'or:minimax/minimax-m2.7',
   port: 8080,
   host: '0.0.0.0',
 };
@@ -593,9 +594,9 @@ export function setupTestContext(): TestContext {
       privateWhatsAppRepository: context.privateWhatsAppRepository,
       conversationAssistantRepository: context.conversationAssistantRepository,
       llmClientFactory: {
-        createLlmClientForUser: () => context.llmClient,
+        createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
       },
-      conversationAssistantModel: 'or:google/gemini-3.5-flash',
+      conversationAssistantModel: 'or:minimax/minimax-m2.7',
     });
 
     clearJwksCache();
@@ -606,9 +607,9 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = testConfig.allowedWabaIds.join(',');
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
-    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = testConfig.openRouterAppApiKey;
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       testConfig.conversationAssistantModel;
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = testConfig.userServiceUrl;
 
     context.app = await buildServer(testConfig);
   });
@@ -623,8 +624,8 @@ export function setupTestContext(): TestContext {
     delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
-    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     delete process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
+    delete process.env['INTEXURAOS_USER_SERVICE_URL'];
   });
 
   return context;

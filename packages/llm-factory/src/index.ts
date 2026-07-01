@@ -17,7 +17,10 @@ export {
 } from './llmClientFactory.js';
 export type {
   GenerateChatOptions,
+  GenerateChatReasoningEffort,
+  GenerateChatReasoningOptions,
   GenerateChatResult,
+  GenerateChatStreamEvent,
   LlmChatMessage,
   LlmChatRole,
   LlmChatTextBlock,

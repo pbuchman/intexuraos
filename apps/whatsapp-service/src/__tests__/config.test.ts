@@ -12,6 +12,7 @@ describe('config validation', () => {
   let savedIntexMessageIngestTopic: string | undefined;
   let savedAudioStoredTopic: string | undefined;
   let savedLlmUsageServiceUrl: string | undefined;
+  let savedUserServiceUrl: string | undefined;
   let savedOpenRouterAppApiKey: string | undefined;
   let savedConversationAssistantModel: string | undefined;
 
@@ -25,6 +26,7 @@ describe('config validation', () => {
       process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'];
     savedAudioStoredTopic = process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
     savedLlmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
+    savedUserServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
     savedOpenRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     savedConversationAssistantModel =
       process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
@@ -73,6 +75,11 @@ describe('config validation', () => {
     } else {
       delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
     }
+    if (savedUserServiceUrl !== undefined) {
+      process.env['INTEXURAOS_USER_SERVICE_URL'] = savedUserServiceUrl;
+    } else {
+      delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    }
     if (savedOpenRouterAppApiKey !== undefined) {
       process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = savedOpenRouterAppApiKey;
     } else {
@@ -93,12 +100,15 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
+    delete process.env['INTEXURAOS_USER_SERVICE_URL'];
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_APP_SECRET');
     expect(missing).toContain('INTEXURAOS_WHATSAPP_WABA_ID');
     expect(missing).toContain('INTEXURAOS_LLM_USAGE_SERVICE_URL');
+    expect(missing).toContain('INTEXURAOS_USER_SERVICE_URL');
+    expect(missing).not.toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
   });
@@ -120,9 +130,10 @@ describe('config validation', () => {
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
-    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
+    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
-      'or:google/gemini-3.5-flash';
+      'or:minimax/minimax-m2.7';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
@@ -145,9 +156,10 @@ describe('config validation', () => {
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
-    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
+    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
-      'or:google/gemini-3.5-flash';
+      'or:minimax/minimax-m2.7';
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -167,6 +179,7 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
     delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
+    delete process.env['INTEXURAOS_USER_SERVICE_URL'];
 
     expect(() => loadConfig()).toThrow();
   });
@@ -188,14 +201,15 @@ describe('config validation', () => {
     process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
-    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-openrouter-key';
-    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
-      'or:google/gemini-3.5-flash';
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
+    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    delete process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
 
     const config = loadConfig();
     expect(config.allowedWabaIds).toEqual(['waba1', 'waba2']);
     expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
     expect(config.llmUsageServiceUrl).toBe('http://llm-usage.test');
-    expect(config.conversationAssistantModel).toBe('or:google/gemini-3.5-flash');
+    expect(config.userServiceUrl).toBe('http://user-service.test');
+    expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m2.7');
   });
 });

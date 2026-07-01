@@ -50,6 +50,19 @@ export interface CreateConversationAssistantSessionInput {
   question?: string;
 }
 
+export interface CheckConversationAssistantContextInput {
+  userId: string;
+  chatId: string;
+  from: string;
+  to: string;
+}
+
+export interface CheckConversationAssistantContextResult {
+  messageCount: number;
+  warningThreshold: number;
+  requiresConfirmation: boolean;
+}
+
 export interface SendConversationAssistantTurnInput {
   userId: string;
   sessionId: string;
@@ -78,6 +91,12 @@ export type ConversationAssistantResult<T> = import('@intexuraos/common-core').R
   ConversationAssistantError
 >;
 
-export const DEFAULT_CONVERSATION_ASSISTANT_MAX_MESSAGES = 2000;
-export const MIN_CONVERSATION_ASSISTANT_MAX_MESSAGES = 1;
-export const MAX_CONVERSATION_ASSISTANT_MAX_MESSAGES = 5000;
+export type ConversationAssistantStreamEvent =
+  | { type: 'user_turn'; turn: ConversationAssistantTurn }
+  | { type: 'assistant_delta'; text: string }
+  | { type: 'usage'; usage: GenerateChatResult['usage'] }
+  | { type: 'error'; error: ConversationAssistantError }
+  | { type: 'assistant_turn'; turn: ConversationAssistantTurn }
+  | { type: 'done' };
+
+export const CONVERSATION_ASSISTANT_LARGE_CONTEXT_WARNING_THRESHOLD = 5000;

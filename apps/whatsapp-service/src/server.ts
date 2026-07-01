@@ -116,7 +116,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
     llmUsageServiceUrl: config.llmUsageServiceUrl,
-    openRouterAppApiKey: config.openRouterAppApiKey,
+    userServiceUrl: config.userServiceUrl,
     conversationAssistantModel: config.conversationAssistantModel,
   };
   if (config.webhookProcessTopic !== undefined) {

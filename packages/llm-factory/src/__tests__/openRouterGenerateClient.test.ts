@@ -14,11 +14,13 @@ const mockUsageSink = new FakeUsageSink();
 
 const mockOrGenerate = vi.fn();
 const mockOrGenerateChat = vi.fn();
+const mockOrGenerateChatStream = vi.fn();
 
 vi.mock('@intexuraos/infra-openrouter', () => ({
   createOpenRouterClient: vi.fn(() => ({
     generate: mockOrGenerate,
     generateChat: mockOrGenerateChat,
+    generateChatStream: mockOrGenerateChatStream,
   })),
 }));
 
@@ -43,6 +45,8 @@ describe('createOpenRouterGenerateClient', () => {
     expect(typeof client.generate).toBe('function');
     expect(client.generateChat).toBeDefined();
     expect(typeof client.generateChat).toBe('function');
+    expect(client.generateChatStream).toBeDefined();
+    expect(typeof client.generateChatStream).toBe('function');
   });
 
   it('satisfies the LlmGenerateClient interface by generating successfully', async () => {
@@ -130,6 +134,57 @@ describe('createOpenRouterGenerateClient', () => {
       responseFormat: { type: 'text' },
       correlation: { sessionId: 'session-123' },
     });
+  });
+
+  it('forwards streaming chat messages, options, and event callback to OpenRouter', async () => {
+    const expectedResult = {
+      content: 'Stream reply',
+      usage: {
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        costUsd: 0.001,
+      },
+    };
+    mockOrGenerateChatStream.mockResolvedValue(ok(expectedResult));
+
+    const client = createOpenRouterGenerateClient(baseConfig);
+    const messages = [{ role: 'user' as const, content: 'What happened?' }];
+    const onEvent = vi.fn();
+
+    const generateChatStream = client.generateChatStream;
+    expect(generateChatStream).toBeDefined();
+    if (generateChatStream === undefined) {
+      throw new Error('generateChatStream should be defined for OpenRouter clients');
+    }
+
+    const result = await generateChatStream(
+      messages,
+      {
+        promptType: 'whatsapp-conversation-assistant',
+        sessionId: 'session-123',
+        temperature: 0.1,
+        reasoning: { enabled: true },
+        correlation: { sessionId: 'session-123' },
+      },
+      onEvent
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual(expectedResult);
+    }
+    expect(mockOrGenerateChatStream).toHaveBeenCalledWith(
+      messages,
+      {
+        promptType: 'whatsapp-conversation-assistant',
+        sessionId: 'session-123',
+        temperature: 0.1,
+        reasoning: { enabled: true },
+        correlation: { sessionId: 'session-123' },
+      },
+      onEvent
+    );
   });
 
   it('strips the or: prefix before passing model to createOpenRouterClient', async () => {

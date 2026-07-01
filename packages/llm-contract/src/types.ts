@@ -135,11 +135,28 @@ export interface LlmChatMessage {
   content: string | LlmChatTextBlock[];
 }
 
+export type GenerateChatReasoningEffort =
+  | 'max'
+  | 'xhigh'
+  | 'high'
+  | 'medium'
+  | 'low'
+  | 'minimal'
+  | 'none';
+
+export interface GenerateChatReasoningOptions {
+  enabled?: boolean;
+  effort?: GenerateChatReasoningEffort;
+  maxTokens?: number;
+  exclude?: boolean;
+}
+
 export interface GenerateChatOptions {
   promptType: string;
   sessionId?: string;
   temperature?: number;
   responseFormat?: { type: 'json_object' | 'text' };
+  reasoning?: GenerateChatReasoningOptions;
   correlation?: LLMCorrelationOptions;
 }
 
@@ -154,6 +171,10 @@ export interface GenerateChatResult {
     cacheWriteTokens?: number;
   };
 }
+
+export type GenerateChatStreamEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'usage'; usage: GenerateChatResult['usage'] };
 
 /**
  * Result from an image generation operation.

@@ -85,7 +85,6 @@ describe('projectPrivateConversationContext', () => {
         from: '2026-06-22T09:00:00.000Z',
         to: '2026-06-22T11:00:00.000Z',
       },
-      maxMessages: 10,
       messages: [
         message({ id: 'message-1', text: ' hello from private chat ' }),
         message({
@@ -160,9 +159,10 @@ describe('projectPrivateConversationContext', () => {
     });
     expect(result.messageCount).toBe(2);
     const expectedTranscript = [
-      '[2026-06-22T10:00:00.000Z] Alice: hello from private chat',
-      '[2026-06-22T10:05:00.000Z] You: voice transcript',
+      '[22 June] Alice: hello from private chat',
+      '[22 June] You: voice transcript',
     ].join('\n');
+    expect(expectedTranscript).not.toContain('T10:00:00');
     expect(result.transcriptSha256).toBe(
       createHash('sha256').update(expectedTranscript).digest('hex')
     );
@@ -171,7 +171,25 @@ describe('projectPrivateConversationContext', () => {
     expect(JSON.stringify(result)).not.toContain('mxc://matrix.example');
   });
 
-  it('counts over-limit messages after projecting the first maxMessages plus one repository result', () => {
+  it('does not truncate projected text messages when no max-message cap is provided', () => {
+    const result = projectPrivateConversationContext({
+      chat,
+      range: {
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+      messages: [
+        message({ id: 'message-1', text: 'first' }),
+        message({ id: 'message-2', matrixEventId: '$event-2', text: 'second' }),
+        message({ id: 'message-3', matrixEventId: '$event-3', text: 'third' }),
+      ],
+    });
+
+    expect(result.messages.map((item) => item.content)).toEqual(['first', 'second', 'third']);
+    expect(result.omitted.overLimit).toBe(0);
+  });
+
+  it('preserves explicit max-message caps for legacy context callers', () => {
     const result = projectPrivateConversationContext({
       chat,
       range: {
@@ -182,28 +200,36 @@ describe('projectPrivateConversationContext', () => {
       messages: [
         message({ id: 'message-1', text: 'first' }),
         message({ id: 'message-2', matrixEventId: '$event-2', text: 'second' }),
-        message({
-          id: 'message-media',
-          matrixEventId: '$event-media',
-          text: undefined,
-          messageType: 'image',
-          media: { mxcUri: 'mxc://matrix.example/after-limit-media' },
-        }),
         message({ id: 'message-3', matrixEventId: '$event-3', text: 'third' }),
+      ],
+    });
+
+    expect(result.messages.map((item) => item.content)).toEqual(['first']);
+    expect(result.omitted.overLimit).toBe(2);
+  });
+
+  it('counts completed transcriptions over an explicit max-message cap', () => {
+    const result = projectPrivateConversationContext({
+      chat,
+      range: {
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+      maxMessages: 1,
+      messages: [
+        message({ id: 'message-1', text: 'first' }),
         message({
-          id: 'message-4',
-          matrixEventId: '$event-4',
-          text: undefined,
+          id: 'message-2',
+          matrixEventId: '$event-2',
           messageType: 'audio',
-          transcription: { status: 'completed', text: 'fourth transcript' },
+          text: undefined,
+          transcription: { status: 'completed', text: 'second transcript' },
         }),
       ],
     });
 
-    expect(result.messages).toHaveLength(1);
-    expect(result.messages[0]?.content).toBe('first');
-    expect(result.omitted.mediaOnly).toBe(1);
-    expect(result.omitted.overLimit).toBe(3);
+    expect(result.messages.map((item) => item.content)).toEqual(['first']);
+    expect(result.omitted.overLimit).toBe(1);
   });
 
   it('falls back safely for empty completed transcripts and sparse chat metadata', () => {
@@ -217,7 +243,6 @@ describe('projectPrivateConversationContext', () => {
         from: '2026-06-22T09:00:00.000Z',
         to: '2026-06-22T11:00:00.000Z',
       },
-      maxMessages: 10,
       messages: [
         message({
           id: 'message-empty-transcript',
