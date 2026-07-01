@@ -33,6 +33,35 @@ describe('cleanup-intex-agent-test-conversations', () => {
     });
   });
 
+  it('uses the last explicit cleanup mode flag', () => {
+    expect(
+      parseArgs([
+        '--user-id',
+        'test-intex-agent-run-1',
+        '--run-id',
+        'run-1',
+        '--execute',
+        '--dry-run',
+      ])
+    ).toMatchObject({
+      dryRun: true,
+      execute: false,
+    });
+    expect(
+      parseArgs([
+        '--user-id',
+        'test-intex-agent-run-1',
+        '--run-id',
+        'run-1',
+        '--dry-run',
+        '--execute',
+      ])
+    ).toMatchObject({
+      dryRun: false,
+      execute: true,
+    });
+  });
+
   it('rejects product users and test users that do not exactly match the run id', () => {
     expect(() => validateCleanupRequest({ userId: 'auth0|real-user', runId: 'real' })).toThrow(
       'outside the allowed test-intex-agent namespace'

@@ -47,6 +47,7 @@ export function parseArgs(argv) {
       parsed.execute = true;
       parsed.dryRun = false;
     } else if (arg === '--dry-run') {
+      parsed.execute = false;
       parsed.dryRun = true;
     } else {
       throw new Error(`Unknown or incomplete argument: ${String(arg)}`);
