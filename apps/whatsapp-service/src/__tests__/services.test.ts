@@ -42,7 +42,7 @@ describe('whatsapp-service service wiring', () => {
       internalAuthToken: 'internal-token',
       llmUsageServiceUrl: 'https://llm-usage.test',
       userServiceUrl: 'https://user-service.test',
-      conversationAssistantModel: 'or:minimax/minimax-m2.7',
+      conversationAssistantModel: 'or:minimax/minimax-m3',
     });
 
     const result = await factory.createLlmClientForUser('user-123');
@@ -58,7 +58,7 @@ describe('whatsapp-service service wiring', () => {
     expect(mocks.createLlmClient).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: 'user-openrouter-key',
-        model: 'or:minimax/minimax-m2.7',
+        model: 'or:minimax/minimax-m3',
         userId: 'user-123',
         ownerType: 'user',
       })

@@ -42,7 +42,7 @@ const testConfig: Config = {
   internalAuthToken: INTERNAL_AUTH_TOKEN,
   llmUsageServiceUrl: 'http://llm-usage.test',
   userServiceUrl: 'http://user-service.test',
-  conversationAssistantModel: 'or:minimax/minimax-m2.7',
+  conversationAssistantModel: 'or:minimax/minimax-m3',
   port: 8080,
   host: '0.0.0.0',
 };

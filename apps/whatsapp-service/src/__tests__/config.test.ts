@@ -133,7 +133,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
     delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
-      'or:minimax/minimax-m2.7';
+      'or:minimax/minimax-m3';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
@@ -159,7 +159,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
     delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
-      'or:minimax/minimax-m2.7';
+      'or:minimax/minimax-m3';
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -210,6 +210,6 @@ describe('config validation', () => {
     expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
     expect(config.llmUsageServiceUrl).toBe('http://llm-usage.test');
     expect(config.userServiceUrl).toBe('http://user-service.test');
-    expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m2.7');
+    expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m3');
   });
 });

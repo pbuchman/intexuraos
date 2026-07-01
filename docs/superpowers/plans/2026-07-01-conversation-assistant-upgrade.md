@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Upgrade WhatsApp Conversation Assistant to use user OpenRouter keys, MiniMax M2.7 with reasoning, full context with a >5000 warning, streaming answers, markdown rendering, and bottom-follow timeline scrolling.
+**Goal:** Upgrade WhatsApp Conversation Assistant to use user OpenRouter keys, MiniMax M3 with reasoning, full context with a >5000 warning, streaming answers, markdown rendering, and bottom-follow timeline scrolling.
 
 **Architecture:** Add reasoning and streaming to the shared OpenRouter generate client, then consume it from the WhatsApp Conversation Assistant domain. The backend owns user-key resolution, transcript freezing, context checks, turn persistence, and SSE events. The web app owns preflight confirmation, stream parsing, draft answer replacement, markdown rendering, and scroll follow state.
 
@@ -11,8 +11,8 @@
 ## Global Constraints
 
 - Source spec: `docs/superpowers/specs/2026-07-01-conversation-assistant-upgrade-design.md`.
-- Conversation Assistant model default: `or:minimax/minimax-m2.7`.
-- OpenRouter raw model id: `minimax/minimax-m2.7`.
+- Conversation Assistant model default: `or:minimax/minimax-m3`.
+- OpenRouter raw model id: `minimax/minimax-m3`.
 - Reasoning option for all Conversation Assistant calls: `{ enabled: true }`.
 - Large-context warning threshold: `5000` raw messages.
 - Do not use `INTEXURAOS_OPENROUTER_APP_API_KEY` for Conversation Assistant.
@@ -143,14 +143,14 @@ it('forwards reasoning options to OpenRouter chat completions', async () => {
     })
     .reply(200, {
       id: 'cmpl-1',
-      model: 'minimax/minimax-m2.7',
+      model: 'minimax/minimax-m3',
       created: 1,
       object: 'chat.completion',
       choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5, cost: 0.001 },
     });
 
-  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m2.7' }));
+  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m3' }));
   const result = await client.generateChat([{ role: 'user', content: 'hello' }], {
     promptType: 'whatsapp-conversation-assistant',
     reasoning: { enabled: true },
@@ -191,7 +191,7 @@ it('streams chat completion deltas and final usage', async () => {
       { 'Content-Type': 'text/event-stream' }
     );
 
-  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m2.7' }));
+  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m3' }));
   const events: unknown[] = [];
   const result = await client.generateChatStream(
     [{ role: 'user', content: 'hello' }],
@@ -222,7 +222,7 @@ it('ignores streaming comments and buffers incomplete SSE frames', async () => {
     .post('/api/v1/chat/completions')
     .reply(200, body, { 'Content-Type': 'text/event-stream' });
 
-  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m2.7' }));
+  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m3' }));
   const result = await client.generateChatStream(
     [{ role: 'user', content: 'hello' }],
     { promptType: 'whatsapp-conversation-assistant', reasoning: { enabled: true } },
@@ -246,7 +246,7 @@ it('maps streaming provider error chunks to API errors', async () => {
       { 'Content-Type': 'text/event-stream' }
     );
 
-  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m2.7' }));
+  const client = createOpenRouterClient(makeConfig({ model: 'minimax/minimax-m3' }));
   const result = await client.generateChatStream(
     [{ role: 'user', content: 'hello' }],
     { promptType: 'whatsapp-conversation-assistant', reasoning: { enabled: true } },
@@ -549,7 +549,7 @@ In `apps/whatsapp-service/src/__tests__/config.test.ts`, update required env set
 Add expectation:
 
 ```typescript
-expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m2.7');
+expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m3');
 ```
 
 In a new or existing services test area, assert the Conversation Assistant factory fetches `openrouter` from user service and passes that key into `createLlmClient`.
@@ -578,7 +578,7 @@ In `apps/whatsapp-service/src/config.ts`:
 
 - add `userServiceUrl: z.string().url()`;
 - remove `openRouterAppApiKey`;
-- default `conversationAssistantModel` to `or:minimax/minimax-m2.7`;
+- default `conversationAssistantModel` to `or:minimax/minimax-m3`;
 - add `INTEXURAOS_USER_SERVICE_URL` to `loadConfig()` input and `validateConfigEnv()`;
 - remove `INTEXURAOS_OPENROUTER_APP_API_KEY` from `loadConfig()` input and `validateConfigEnv()`;
 - keep `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL` in required/configured env.
@@ -624,21 +624,21 @@ In `sessionUseCases.ts`, await the factory result before calling `generateChat` 
 In `ecosystem.config.cjs`, change the conversation assistant fallback to:
 
 ```javascript
-process.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL ?? 'or:minimax/minimax-m2.7'
+process.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL ?? 'or:minimax/minimax-m3'
 ```
 
 Remove `INTEXURAOS_OPENROUTER_APP_API_KEY` only from the whatsapp-service mapping if it is not used by other services.
 
 In `ecosystem.config.prod.cjs`:
 
-- change the Conversation Assistant fallback to `or:minimax/minimax-m2.7`;
+- change the Conversation Assistant fallback to `or:minimax/minimax-m3`;
 - remove `INTEXURAOS_OPENROUTER_APP_API_KEY` only from the WhatsApp service secret/env injection;
 - keep `INTEXURAOS_OPENROUTER_APP_API_KEY` for services that still use the app key outside Conversation Assistant.
 
 In `terraform/environments/dev/main.tf`, set:
 
 ```hcl
-INTEXURAOS_CONVERSATION_ASSISTANT_MODEL = "or:minimax/minimax-m2.7"
+INTEXURAOS_CONVERSATION_ASSISTANT_MODEL = "or:minimax/minimax-m3"
 ```
 
 Do not remove the shared OpenRouter app key secret from Terraform if other services still use it.

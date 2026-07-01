@@ -126,7 +126,7 @@ const configSchema = z.object({
   conversationAssistantModel: z
     .string()
     .min(1)
-    .default('or:minimax/minimax-m2.7'),
+    .default('or:minimax/minimax-m3'),
 
   /**
    * Server port.

@@ -112,7 +112,7 @@ export const testConfig: Config = {
   internalAuthToken: 'test-internal-auth-token',
   llmUsageServiceUrl: 'http://llm-usage.test',
   userServiceUrl: 'http://user-service.test',
-  conversationAssistantModel: 'or:minimax/minimax-m2.7',
+  conversationAssistantModel: 'or:minimax/minimax-m3',
   port: 8080,
   host: '0.0.0.0',
 };
@@ -596,7 +596,7 @@ export function setupTestContext(): TestContext {
       llmClientFactory: {
         createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
       },
-      conversationAssistantModel: 'or:minimax/minimax-m2.7',
+      conversationAssistantModel: 'or:minimax/minimax-m3',
     });
 
     clearJwksCache();
