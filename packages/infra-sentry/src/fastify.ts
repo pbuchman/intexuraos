@@ -67,6 +67,25 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
       return;
     }
 
+    if (fastifyError.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+      request.log.info({ err: error }, 'Request body too large');
+      await reply.status(413).send({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Request body too large',
+        },
+        diagnostics: {
+          requestId: 'requestId' in request ? request.requestId : '',
+          durationMs:
+            'startTime' in request && typeof request.startTime === 'number'
+              ? Date.now() - request.startTime
+              : 0,
+        },
+      });
+      return;
+    }
+
     // Handle validation errors
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (typeof error === 'object' && error !== null && 'validation' in error) {

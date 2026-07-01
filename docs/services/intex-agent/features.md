@@ -13,6 +13,17 @@ Intex Agent powers WhatsApp text conversations. It keeps a per-user session open
 - Create code tasks, defaulting to planning mode.
 - Save images, pasted text, and explicitly shared links to an external processing/storage endpoint.
 
+## Operator Testing
+
+Local and dev operators can run backend conversation checks through
+`POST /internal/intex-agent/test/conversation`. The endpoint uses internal auth,
+captures assistant replies instead of publishing WhatsApp messages, persists
+test-namespaced sessions/events for inspection, and replaces downstream tools
+with bounded mocks.
+
+The endpoint is for `test-intex-agent-<runId>` users only and is disabled in
+production. The `userId` must exactly equal `test-intex-agent-<runId>`.
+
 ## WhatsApp Session Continuity
 
 After a reply, the session returns to `waiting_for_user` instead of closing. Follow-up messages reuse the same session until the user starts a new session or the configured timeout expires. The session transcript includes prior user messages, assistant replies, clarification requests, and completed tool summaries.

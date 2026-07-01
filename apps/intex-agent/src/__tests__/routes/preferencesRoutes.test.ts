@@ -168,6 +168,11 @@ describe('preferences routes', () => {
       promptPreferencesRepository: createUnusedPromptPreferencesRepository(),
       externalSaveTester,
       incomingMessageHandler: new FakeIncomingMessageHandler(),
+      testConversationRunner: {
+        async run(): Promise<never> {
+          throw new Error('not used in preferences route tests');
+        },
+      },
     } satisfies ServiceContainer);
 
     app = await buildServer();
