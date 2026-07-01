@@ -66,6 +66,8 @@ import type {
   ThumbnailResult,
   TranscriptionState,
   UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageStoredMediaInput,
+  UpdatePrivateWhatsAppMessageStoredMediaResult,
   UpdatePrivateWhatsAppMessageTranscriptionInput,
   UploadResult,
   WebhookProcessEvent,
@@ -956,6 +958,88 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         : {}),
     });
     return Promise.resolve(ok(updated));
+  }
+
+  updateMessageStoredMedia(
+    input: UpdatePrivateWhatsAppMessageStoredMediaInput
+  ): Promise<Result<UpdatePrivateWhatsAppMessageStoredMediaResult, WhatsAppError>> {
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+    if (input.media.storageStatus !== 'stored' || input.media.gcsPath === undefined) {
+      return Promise.resolve(
+        err({
+          code: 'VALIDATION_ERROR',
+          message: 'Stored private WhatsApp media requires a storage status and GCS path',
+        })
+      );
+    }
+
+    const stored = Array.from(this.stored.values()).find(
+      (candidate) => this.toMessage(candidate).id === input.messageId
+    );
+    if (stored === undefined || stored.sourceAccountId !== input.sourceAccountId) {
+      return Promise.resolve(
+        err({ code: 'NOT_FOUND', message: 'Private WhatsApp message not found' })
+      );
+    }
+
+    const existingMedia = stored.message.media;
+    if (existingMedia === undefined) {
+      return Promise.resolve(
+        err({
+          code: 'VALIDATION_ERROR',
+          message: 'Private WhatsApp message does not contain media metadata',
+        })
+      );
+    }
+    if (existingMedia.mxcUri !== input.media.mxcUri) {
+      return Promise.resolve(
+        err({
+          code: 'VALIDATION_ERROR',
+          message: 'Stored private WhatsApp media does not match the message media id',
+        })
+      );
+    }
+
+    const chat = this.buildChats().get(`chat:${stored.sourceAccountId}:${stored.chat.matrixRoomId}`);
+    if (chat === undefined) {
+      return Promise.resolve(
+        err({ code: 'NOT_FOUND', message: 'Private WhatsApp message not found' })
+      );
+    }
+
+    if (existingMedia.gcsPath !== undefined) {
+      if (existingMedia.gcsPath === input.media.gcsPath) {
+        return Promise.resolve(
+          ok({
+            status: 'already_stored',
+            message: this.toMessage(stored),
+            chat,
+          })
+        );
+      }
+      return Promise.resolve(
+        err({
+          code: 'VALIDATION_ERROR',
+          message: 'Private WhatsApp message already references different stored media',
+        })
+      );
+    }
+
+    stored.message.media = {
+      ...existingMedia,
+      ...input.media,
+      storageStatus: 'stored',
+    };
+    return Promise.resolve(
+      ok({
+        status: 'updated',
+        message: this.toMessage(stored),
+        chat,
+      })
+    );
   }
 
   updateMessageTranscription(

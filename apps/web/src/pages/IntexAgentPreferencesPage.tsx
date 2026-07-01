@@ -273,28 +273,36 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">
-              Intex Agent Preferences
-            </h1>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
-              <span>Current version {String(current?.currentVersion ?? 0)}</span>
-              <span>Last updated {displayDate(current?.updatedAt)}</span>
-              <span>Updated by {actorLabel(current?.updatedBy ?? null)}</span>
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-6 border-b border-slate-200 pb-5 dark:border-slate-800">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                Intex Agent Preferences
+              </h1>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
+                  Current version {String(current?.currentVersion ?? 0)}
+                </span>
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
+                  Last updated {displayDate(current?.updatedAt)}
+                </span>
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
+                  Updated by {actorLabel(current?.updatedBy ?? null)}
+                </span>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                void refreshAll();
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 sm:w-auto dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              void refreshAll();
-            }}
-            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
         </div>
 
         {error !== null ? (
@@ -314,14 +322,16 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
             Loading preferences
           </div>
         ) : (
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
             <main className="space-y-6">
               <section className="space-y-3">
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-50">
                     Preference Rows
                   </h2>
-                  <span className="text-sm text-slate-500">{String(current?.items.length ?? 0)}/50 rows</span>
+                  <span className="text-sm text-slate-500">
+                    {String(current?.items.length ?? 0)}/50 rows
+                  </span>
                 </div>
 
                 <AddPreferenceForm
@@ -370,19 +380,6 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
                   </div>
                 )}
 
-                <AddPreferenceForm
-                  label="Add another preference"
-                  value={newText}
-                  validation={newTextValidation}
-                  pending={pending === 'add'}
-                  disabled={current === null || pending !== null}
-                  compact
-                  buttonLabel="Add below"
-                  onChange={setNewText}
-                  onSubmit={() => {
-                    void handleAdd();
-                  }}
-                />
               </section>
 
               <PromptPreview
@@ -391,7 +388,7 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
               />
             </main>
 
-            <aside className="space-y-4">
+            <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
               <section>
                 <h2 className="mb-3 text-lg font-semibold text-slate-950 dark:text-slate-50">
                   Versions
@@ -409,7 +406,7 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
                         onClick={() => {
                           void handleSelectVersion(version.version);
                         }}
-                        className="block w-full rounded-md border border-slate-200 p-3 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                        className="block w-full rounded-md border border-slate-200 bg-white p-3 text-left text-sm shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600 dark:hover:bg-slate-800"
                       >
                         <span className="font-medium text-slate-950 dark:text-slate-50">
                           Version {String(version.version)}
@@ -419,17 +416,17 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
                           {displayDate(version.createdAt)} · {actorLabel(version.createdBy)}
                         </span>
                         {version.changedItemId !== undefined ? (
-                          <span className="mt-1 block font-mono text-xs text-slate-500">
+                          <span className="mt-1 block break-all font-mono text-xs text-slate-500">
                             {version.changedItemId}
                           </span>
                         ) : null}
                         {version.previousText !== undefined ? (
-                          <span className="mt-2 block text-xs text-slate-500">
+                          <span className="mt-2 block break-words text-xs text-slate-500">
                             Previous: {version.previousText}
                           </span>
                         ) : null}
                         {version.nextText !== undefined ? (
-                          <span className="mt-1 block text-xs text-slate-500">
+                          <span className="mt-1 block break-words text-xs text-slate-500">
                             Next: {version.nextText}
                           </span>
                         ) : null}
@@ -499,8 +496,6 @@ interface AddPreferenceFormProps {
   validation: string | null;
   pending: boolean;
   disabled: boolean;
-  compact?: boolean;
-  buttonLabel?: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
 }
@@ -508,11 +503,11 @@ interface AddPreferenceFormProps {
 function AddPreferenceForm(props: AddPreferenceFormProps): React.JSX.Element {
   const canSubmit = !props.disabled && props.validation === null && props.value.trim() !== '';
   return (
-    <div className={props.compact === true ? 'rounded-md border border-slate-200 p-3 dark:border-slate-700' : ''}>
+    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
         {props.label}
         <textarea
-          className="mt-1 min-h-20 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+          className="mt-2 min-h-24 w-full resize-y rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900"
           value={props.value}
           maxLength={MAX_PREFERENCE_LENGTH}
           onChange={(event) => {
@@ -520,18 +515,18 @@ function AddPreferenceForm(props: AddPreferenceFormProps): React.JSX.Element {
           }}
         />
       </label>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-xs text-slate-500">
           {props.validation ?? `${String(props.value.trim().length)}/${String(MAX_PREFERENCE_LENGTH)}`}
         </span>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto dark:disabled:bg-slate-700"
           disabled={!canSubmit || props.pending}
           onClick={props.onSubmit}
         >
           {props.pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          {props.buttonLabel ?? 'Add preference'}
+          Add preference
         </button>
       </div>
     </div>
@@ -560,15 +555,15 @@ function PreferenceRow(props: PreferenceRowProps): React.JSX.Element {
     editedText.trim() === props.item.text ||
     props.pending !== null;
   return (
-    <article className="rounded-md border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+    <article className="rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-950 dark:text-slate-50">
             {String(props.ordinal)}.
           </div>
-          <div className="font-mono text-xs text-slate-500">{props.item.id}</div>
+          <div className="break-all font-mono text-xs text-slate-500">{props.item.id}</div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           {isEditing ? (
             <button
               type="button"
@@ -612,14 +607,14 @@ function PreferenceRow(props: PreferenceRowProps): React.JSX.Element {
               }}
             />
           </label>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs text-slate-500">
               {props.validation ?? `${String(editedText.trim().length)}/${String(MAX_PREFERENCE_LENGTH)}`}
             </span>
             <button
               type="button"
               aria-label={`Save ${props.item.id}`}
-              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto dark:disabled:bg-slate-700"
               disabled={saveDisabled}
               onClick={props.onSave}
             >
@@ -644,7 +639,7 @@ function PromptPreview(props: { title: string; block: string }): React.JSX.Eleme
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold text-slate-950 dark:text-slate-50">{props.title}</h2>
-      <pre className="max-h-96 overflow-auto rounded-md border border-slate-200 bg-slate-950 p-4 text-sm leading-6 text-slate-50 dark:border-slate-700">
+      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 border-l-4 border-l-cyan-400 bg-slate-50 p-4 text-sm leading-6 text-slate-800 shadow-sm dark:border-slate-700 dark:border-l-cyan-500 dark:bg-slate-900 dark:text-slate-100">
         {props.block.trim() === '' ? EMPTY_PROMPT_BLOCK : props.block}
       </pre>
     </section>

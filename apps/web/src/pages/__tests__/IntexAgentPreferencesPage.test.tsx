@@ -106,6 +106,21 @@ describe('IntexAgentPreferencesPage', () => {
     });
   });
 
+  it('uses a single add flow and a neutral wrapping prompt preview', async () => {
+    const { IntexAgentPreferencesPage } = await import('../IntexAgentPreferencesPage');
+    render(<IntexAgentPreferencesPage />);
+
+    await screen.findByText('Intex Agent Preferences');
+
+    expect(screen.getAllByLabelText(/new preference/i)).toHaveLength(1);
+    expect(screen.queryByLabelText(/add another preference/i)).not.toBeInTheDocument();
+
+    const promptPreview = screen.getByText(/User Preferences v1:/).closest('pre');
+    expect(promptPreview).not.toHaveClass('bg-slate-950');
+    expect(promptPreview).toHaveClass('whitespace-pre-wrap');
+    expect(promptPreview).toHaveClass('break-words');
+  });
+
   it('adds, edits, and deletes preference rows', async () => {
     const addedPreferences = {
       ...currentPreferences,

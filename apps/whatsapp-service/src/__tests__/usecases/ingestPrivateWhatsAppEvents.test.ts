@@ -29,6 +29,8 @@ import {
   type PrivateWhatsAppTranscriptionState,
   type StorePrivateWhatsAppMessageInput,
   type UpdatePrivateWhatsAppChatTranscriptionInput,
+  type UpdatePrivateWhatsAppMessageStoredMediaInput,
+  type UpdatePrivateWhatsAppMessageStoredMediaResult,
   type UpdatePrivateWhatsAppMessageTranscriptionInput,
   type UpsertPrivateWhatsAppAccountInput,
   type WebhookProcessEvent,
@@ -159,6 +161,14 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
     return Promise.resolve(
       err({ code: 'NOT_FOUND', message: 'Chat writes are not used by this fake' })
+    );
+  }
+
+  updateMessageStoredMedia(
+    _input: UpdatePrivateWhatsAppMessageStoredMediaInput
+  ): Promise<Result<UpdatePrivateWhatsAppMessageStoredMediaResult, WhatsAppError>> {
+    return Promise.resolve(
+      err({ code: 'NOT_FOUND', message: 'Stored media writes are not used by this fake' })
     );
   }
 

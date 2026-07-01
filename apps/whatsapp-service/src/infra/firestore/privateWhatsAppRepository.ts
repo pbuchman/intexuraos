@@ -29,6 +29,8 @@ import type {
   PrivateWhatsAppSenderDayQueryResult,
   StorePrivateWhatsAppMessageInput,
   UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageStoredMediaInput,
+  UpdatePrivateWhatsAppMessageStoredMediaResult,
   UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from '../../domain/whatsapp/index.js';
@@ -77,6 +79,7 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
     getMessageById,
     getChatById,
     updateChatTranscriptionSetting,
+    updateMessageStoredMedia,
     updateMessageTranscription,
     findMessages,
     findConversationContextMessages,
@@ -494,6 +497,119 @@ async function updateMessageTranscription(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to update private WhatsApp message transcription: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+async function updateMessageStoredMedia(
+  input: UpdatePrivateWhatsAppMessageStoredMediaInput
+): Promise<Result<UpdatePrivateWhatsAppMessageStoredMediaResult, WhatsAppError>> {
+  if (input.media.storageStatus !== 'stored' || input.media.gcsPath === undefined) {
+    return err({
+      code: 'VALIDATION_ERROR',
+      message: 'Stored private WhatsApp media requires a storage status and GCS path',
+    });
+  }
+
+  try {
+    const db = getFirestore();
+    const messageRef = db.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(input.messageId);
+    const outcome = await db.runTransaction(
+      async (
+        transaction
+      ): Promise<
+        | { status: 'not_found' }
+        | { status: 'validation_error'; message: string }
+        | UpdatePrivateWhatsAppMessageStoredMediaResult
+      > => {
+        const messageDoc = await transaction.get(messageRef);
+        if (!messageDoc.exists) {
+          return { status: 'not_found' };
+        }
+
+        const rawMessage = messageDoc.data() as Omit<PrivateWhatsAppMessage, 'id'> & { id?: string };
+        const existingMessage: PrivateWhatsAppMessage = {
+          ...rawMessage,
+          id: rawMessage.id ?? messageDoc.id,
+        };
+        if (existingMessage.sourceAccountId !== input.sourceAccountId) {
+          return { status: 'not_found' };
+        }
+        if (existingMessage.media === undefined) {
+          return {
+            status: 'validation_error',
+            message: 'Private WhatsApp message does not contain media metadata',
+          };
+        }
+        if (existingMessage.media.mxcUri !== input.media.mxcUri) {
+          return {
+            status: 'validation_error',
+            message: 'Stored private WhatsApp media does not match the message media id',
+          };
+        }
+
+        const chatRef = db.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(existingMessage.chatId);
+        const chatDoc = await transaction.get(chatRef);
+        if (!chatDoc.exists) {
+          return { status: 'not_found' };
+        }
+        const chat = normalizeChat(chatDoc.id, chatDoc.data());
+        if (chat.sourceAccountId !== input.sourceAccountId) {
+          return { status: 'not_found' };
+        }
+
+        if (existingMessage.media.gcsPath !== undefined) {
+          if (existingMessage.media.gcsPath === input.media.gcsPath) {
+            return {
+              status: 'already_stored',
+              message: existingMessage,
+              chat,
+            };
+          }
+          return {
+            status: 'validation_error',
+            message: 'Private WhatsApp message already references different stored media',
+          };
+        }
+
+        const media: PrivateWhatsAppMessage['media'] = {
+          ...existingMessage.media,
+          ...input.media,
+          storageStatus: 'stored',
+        };
+        const updatedMessage: PrivateWhatsAppMessage = {
+          ...existingMessage,
+          media,
+          schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
+        };
+        transaction.set(
+          messageRef,
+          {
+            media,
+            schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
+          },
+          { merge: true }
+        );
+
+        return {
+          status: 'updated',
+          message: updatedMessage,
+          chat,
+        };
+      }
+    );
+
+    if (outcome.status === 'not_found') {
+      return err({ code: 'NOT_FOUND', message: 'Private WhatsApp message not found' });
+    }
+    if (outcome.status === 'validation_error') {
+      return err({ code: 'VALIDATION_ERROR', message: outcome.message });
+    }
+    return ok(outcome);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to update private WhatsApp stored media: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
