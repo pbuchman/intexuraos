@@ -195,7 +195,7 @@ event: assistant_delta
 data: {"type":"assistant_delta","text":"partial text"}
 
 event: usage
-data: {"type":"usage","usage":{"promptTokens":1200,"completionTokens":300,"totalTokens":1500}}
+data: {"type":"usage","usage":{"inputTokens":1200,"outputTokens":300,"totalTokens":1500,"costUsd":0.0015}}
 
 event: assistant_turn
 data: {"type":"assistant_turn","turn":{"id":"whatsapp_conv_turn_assistant","sessionId":"whatsapp_conv_session_1","userId":"user_1","role":"assistant","text":"Final answer text","createdAt":"2026-07-01T10:00:05.000Z"}}

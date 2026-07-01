@@ -444,6 +444,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
       selectedSessionIdRef.current = session.id;
       if (firstQuestionToStream !== '') {
         skipNextSelectedSessionLoadRef.current = session.id;
+        setTurns([]);
       }
       setSessionParam(session.id);
       if (firstQuestionToStream !== '') {
