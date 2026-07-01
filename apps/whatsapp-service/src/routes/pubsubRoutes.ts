@@ -734,7 +734,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           }
 
           const privateMessage = privateMessageResult.value;
-          if (privateMessage?.userId !== eventData.userId) {
+          if (privateMessage === null) {
             request.log.warn(
               {
                 userId: eventData.userId,
@@ -742,6 +742,17 @@ export function createPubsubRoutes(): FastifyPluginCallback {
                 [SKIP_SENTRY_KEY]: true,
               },
               'Private WhatsApp audio message not found for transcription completion'
+            );
+            return await reply.ok({});
+          }
+          if (privateMessage.userId !== eventData.userId) {
+            request.log.warn(
+              {
+                userId: eventData.userId,
+                messageId: eventData.messageId,
+                storedUserId: privateMessage.userId,
+              },
+              'Private WhatsApp audio message user mismatch for transcription completion'
             );
             return await reply.ok({});
           }

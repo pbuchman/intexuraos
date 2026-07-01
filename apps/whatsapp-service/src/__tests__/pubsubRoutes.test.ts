@@ -1727,14 +1727,19 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(200);
       expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
       expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId: 'user-audio',
-          messageId: 'missing-audio-message',
-          [SKIP_SENTRY_KEY]: true,
-        }),
-        'Audio message not found for transcription completion'
+      const matchingWarnCalls = warnSpy.mock.calls.filter(
+        ([, message]) => message === 'Audio message not found for transcription completion'
       );
+      expect(matchingWarnCalls).toEqual([
+        [
+          expect.objectContaining({
+            userId: 'user-audio',
+            messageId: 'missing-audio-message',
+            [SKIP_SENTRY_KEY]: true,
+          }),
+          'Audio message not found for transcription completion',
+        ],
+      ]);
     });
 
     it('returns 400 when a completed transcription has no transcript text', async () => {
@@ -2205,13 +2210,64 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(200);
       expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
       expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId: 'user-private',
-          messageId: 'missing-private-message',
-          [SKIP_SENTRY_KEY]: true,
-        }),
-        'Private WhatsApp audio message not found for transcription completion'
+      const matchingWarnCalls = warnSpy.mock.calls.filter(
+        ([, message]) =>
+          message === 'Private WhatsApp audio message not found for transcription completion'
+      );
+      expect(matchingWarnCalls).toEqual([
+        [
+          expect.objectContaining({
+            userId: 'user-private',
+            messageId: 'missing-private-message',
+            [SKIP_SENTRY_KEY]: true,
+          }),
+          'Private WhatsApp audio message not found for transcription completion',
+        ],
+      ]);
+    });
+
+    it('acks private WhatsApp transcription completions for wrong-user messages without Sentry suppression', async () => {
+      const warnSpy = vi.spyOn(app.log, 'warn');
+      const messageId = await storePrivateAudioMessage({
+        matrixEventId: '$private-audio-wrong-user',
+        userId: 'other-user',
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageSource: 'private_whatsapp',
+        userId: 'user-private',
+        messageId,
+        jobId: 'job-private-wrong-user',
+        status: 'completed',
+        transcript: 'Private voice note.',
+        timestamp: '2026-06-28T10:04:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const matchingWarnCalls = warnSpy.mock.calls.filter(
+        ([, message]) =>
+          message === 'Private WhatsApp audio message user mismatch for transcription completion'
+      );
+      expect(matchingWarnCalls).toEqual([
+        [
+          expect.objectContaining({
+            userId: 'user-private',
+            messageId,
+            storedUserId: 'other-user',
+          }),
+          'Private WhatsApp audio message user mismatch for transcription completion',
+        ],
+      ]);
+      expect(matchingWarnCalls[0]?.[0]).not.toEqual(
+        expect.objectContaining({ [SKIP_SENTRY_KEY]: true })
       );
     });
 
