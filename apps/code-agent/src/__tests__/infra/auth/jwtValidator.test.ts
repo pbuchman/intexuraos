@@ -48,6 +48,24 @@ describe('createJwtValidator', () => {
       expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
     });
 
+    it('marks missing Authorization header warnings as skipped for Sentry', async () => {
+      const warn = vi.fn();
+      const validator = createJwtValidator(mockConfig, {
+        warn,
+        debug: vi.fn(),
+      } as unknown as Logger);
+      const request: TestRequest = { headers: {}, url: '/workers/status' };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
+
+      await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+      expect(warn).toHaveBeenCalledWith(
+        { url: '/workers/status', _skipSentry: true },
+        'Missing or invalid Authorization header'
+      );
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
+    });
+
     it('should return 401 when Authorization header does not start with Bearer', async () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = {

@@ -8,6 +8,8 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as jose from 'jose';
 import type { Logger } from 'pino';
 
+const SKIP_SENTRY_KEY = '_skipSentry';
+
 export interface JwtValidatorConfig {
   audience: string;
   issuer: string;
@@ -29,7 +31,10 @@ export function createE2eJwtValidator(
 
     // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
     if (authHeader === undefined || !authHeader.startsWith('Bearer ')) {
-      logger.warn({ url: request.url }, '[E2E] Missing or invalid Authorization header');
+      logger.warn(
+        { url: request.url, [SKIP_SENTRY_KEY]: true },
+        '[E2E] Missing or invalid Authorization header'
+      );
       await reply.fail('UNAUTHORIZED', 'Unauthorized');
       return;
     }
@@ -81,7 +86,10 @@ export function createJwtValidator(
 
     // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
     if (authHeader === undefined || !authHeader.startsWith('Bearer ')) {
-      logger.warn({ url: request.url }, 'Missing or invalid Authorization header');
+      logger.warn(
+        { url: request.url, [SKIP_SENTRY_KEY]: true },
+        'Missing or invalid Authorization header'
+      );
       await reply.fail('UNAUTHORIZED', 'Unauthorized');
       return;
     }
