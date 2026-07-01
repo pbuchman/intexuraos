@@ -21,6 +21,9 @@ local ROUTE_ALLOWED_SERVICE_ACCOUNTS = {
   ["/internal/whatsapp/private/media"] = {
     ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   },
+  ["/internal/whatsapp/private/media/backfill"] = {
+    ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
 }
 
 local ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS = {

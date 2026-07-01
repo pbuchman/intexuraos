@@ -298,6 +298,7 @@ describe('Hetzner nginx runtime config', () => {
     );
     expect(routeAllowlist).toContain('["/internal/whatsapp/private/events"]');
     expect(routeAllowlist).toContain('["/internal/whatsapp/private/media"]');
+    expect(routeAllowlist).toContain('["/internal/whatsapp/private/media/backfill"]');
     expect(routeAllowlist).toContain(
       'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
@@ -307,9 +308,13 @@ describe('Hetzner nginx runtime config', () => {
     );
     expect(hetznerMain).toContain('"/internal/whatsapp/private/events"');
     expect(hetznerMain).toContain('"/internal/whatsapp/private/media"');
+    expect(hetznerMain).toContain('"/internal/whatsapp/private/media/backfill"');
     expect(hetznerMain).toContain('"/internal/users/"');
     expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/events');
     expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/media');
+    expect(runbook).toContain(
+      'POST https://intexuraos.cloud/internal/whatsapp/private/media/backfill'
+    );
 
     const allowFunction = verifier.slice(
       verifier.indexOf('local function is_service_account_allowed'),
