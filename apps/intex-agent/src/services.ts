@@ -28,14 +28,23 @@ import {
 } from './domain/agent/toolExecutor.js';
 import {
   handleIncomingMessage,
+  type IdGenerator,
   type IntexAgentRunner,
   type IntexAgentRunnerResult,
 } from './domain/messages/handleIncomingMessage.js';
+import { runTestConversation, type TestConversationRunner } from './domain/testConversation/runTestConversation.js';
+import { createTestToolExecutor } from './domain/testConversation/testToolMocks.js';
+import type {
+  CapturedToolCall,
+  TestConversationResponse,
+} from './domain/testConversation/testConversationTypes.js';
 import { FirestorePreferencesRepository } from './infra/firestore/preferencesRepository.js';
 import { FirestorePromptPreferencesRepository } from './infra/firestore/promptPreferencesRepository.js';
 import { FirestoreSessionRepository } from './infra/firestore/sessionRepository.js';
 import { createExternalSaveClient } from './infra/http/externalSaveClient.js';
 import { createWhatsAppReplyPublisher } from './infra/pubsub/whatsappReplyPublisher.js';
+
+export type AgentRunnerFactory = typeof createIntexAgentRunner;
 
 export interface ServiceContainer {
   config: ServiceConfig;
@@ -44,6 +53,24 @@ export interface ServiceContainer {
   promptPreferencesRepository: PromptPreferencesRepository;
   externalSaveTester: ExternalSaveConnectionTestPort;
   incomingMessageHandler: IncomingMessageHandler;
+  testConversationRunner: TestConversationRunner;
+}
+
+export interface CreateTestConversationRunnerServiceInput {
+  config: ServiceConfig;
+  sessionRepository: SessionRepository;
+  promptPreferencesRepository: PromptPreferencesRepository;
+  logger: {
+    debug(value: Record<string, unknown>, message?: string): void;
+    info(value: Record<string, unknown>, message?: string): void;
+    warn(value: Record<string, unknown>, message?: string): void;
+    error(value: Record<string, unknown>, message?: string): void;
+  };
+  usageSink: HttpInternalAuthUsageSink;
+  createToolCallingClientFn?: typeof createToolCallingClient;
+  createLlmClientFn?: typeof createLlmClient;
+  createAgentRunnerFn?: AgentRunnerFactory;
+  ids?: IdGenerator;
 }
 
 let container: ServiceContainer | null = null;
@@ -212,6 +239,14 @@ export function initServices(config: ServiceConfig): void {
     },
   };
 
+  const testConversationRunner = createTestConversationRunnerService({
+    config,
+    sessionRepository,
+    promptPreferencesRepository,
+    logger,
+    usageSink,
+  });
+
   container = {
     config,
     sessionRepository,
@@ -219,6 +254,89 @@ export function initServices(config: ServiceConfig): void {
     promptPreferencesRepository,
     externalSaveTester,
     incomingMessageHandler,
+    testConversationRunner,
+  };
+}
+
+export function createTestConversationRunnerService(
+  deps: CreateTestConversationRunnerServiceInput
+): TestConversationRunner {
+  const createToolCallingClientFn = deps.createToolCallingClientFn ?? createToolCallingClient;
+  const createLlmClientFn = deps.createLlmClientFn ?? createLlmClient;
+  const createAgentRunnerFn = deps.createAgentRunnerFn ?? createIntexAgentRunner;
+
+  return {
+    async run(request): Promise<TestConversationResponse> {
+      const toolCalls: CapturedToolCall[] = [];
+      const testRunner: IntexAgentRunner = {
+        async executeConfirmed(
+          confirmedInput: Parameters<ReturnType<typeof createIntexAgentRunner>['executeConfirmed']>[0]
+        ): Promise<IntexAgentRunnerResult> {
+          const promptPreferences = await deps.promptPreferencesRepository.getCurrent(
+            confirmedInput.session.userId
+          );
+          return await createAgentRunnerFn({
+            client: {
+              run() {
+                return Promise.reject(
+                  new Error('Confirmed Intex Agent test execution must not invoke the LLM')
+                );
+              },
+            },
+            toolExecutor: createTestToolExecutor({ mocks: request.toolMocks, calls: toolCalls }),
+            webAppUrl: deps.config.webAppUrl,
+            userPreferences: promptPreferences.renderedPromptBlock,
+          }).executeConfirmed(confirmedInput);
+        },
+        async run(
+          runnerInput: Parameters<ReturnType<typeof createIntexAgentRunner>['run']>[0]
+        ): Promise<IntexAgentRunnerResult> {
+          const toolCallingClient = createToolCallingClientFn({
+            apiKey: deps.config.openRouterAppApiKey,
+            model: deps.config.model,
+            userId: runnerInput.session.userId,
+            logger: deps.logger,
+            usageSink: deps.usageSink,
+            ownerType: 'user',
+          });
+          const classifierClient = createLlmClientFn({
+            apiKey: deps.config.openRouterAppApiKey,
+            model: deps.config.model,
+            userId: runnerInput.session.userId,
+            logger: deps.logger,
+            usageSink: deps.usageSink,
+            ownerType: 'user',
+          });
+          const promptPreferences = await deps.promptPreferencesRepository.getCurrent(
+            runnerInput.session.userId
+          );
+          return await createAgentRunnerFn({
+            client: toolCallingClient,
+            responseRepairClient: classifierClient,
+            toolExecutor: createTestToolExecutor({ mocks: request.toolMocks, calls: toolCalls }),
+            intentClassifier: createLlmIntexAgentIntentClassifier({
+              client: classifierClient,
+              logger: deps.logger,
+            }),
+            webAppUrl: deps.config.webAppUrl,
+            userPreferences: promptPreferences.renderedPromptBlock,
+          }).run(runnerInput);
+        },
+      };
+
+      return await runTestConversation(request, {
+        sessionRepository: deps.sessionRepository,
+        runner: testRunner,
+        sessionTimeoutMs: deps.config.sessionTimeoutMs,
+        ids: deps.ids ?? {
+          sessionId: () => `intex_session_${randomUUID()}`,
+          eventId: () => `intex_event_${randomUUID()}`,
+          confirmationId: () => `intex_confirmation_${randomUUID()}`,
+        },
+        toolCalls,
+        logger: deps.logger,
+      });
+    },
   };
 }
 

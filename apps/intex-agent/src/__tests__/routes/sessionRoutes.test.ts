@@ -181,6 +181,11 @@ describe('intex-agent routes', () => {
         },
       },
       incomingMessageHandler,
+      testConversationRunner: {
+        async run(): Promise<never> {
+          throw new Error('not used in session route tests');
+        },
+      },
     } satisfies ServiceContainer);
 
     app = await buildServer();

@@ -15,6 +15,7 @@ import { internalRoutes } from './routes/internalRoutes.js';
 import { preferencesRoutes } from './routes/preferencesRoutes.js';
 import { promptPreferencesRoutes } from './routes/promptPreferencesRoutes.js';
 import { sessionRoutes } from './routes/sessionRoutes.js';
+import { testConversationRoutes } from './routes/testConversationRoutes.js';
 
 const SERVICE_NAME = 'intex-agent';
 const SERVICE_VERSION = '0.0.1';
@@ -106,6 +107,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(promptPreferencesRoutes);
   await app.register(preferencesRoutes);
   await app.register(internalRoutes);
+  await app.register(testConversationRoutes);
 
   app.get(
     '/openapi.json',

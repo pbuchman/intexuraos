@@ -133,6 +133,34 @@ describe('setupSentryErrorHandler', () => {
     expect(body.message).toBe('Rate limit exceeded');
   });
 
+  it('responds with 413 for Fastify body-limit parser errors without capturing to Sentry', async () => {
+    setupSentryErrorHandler(app);
+
+    app.addContentTypeParser(
+      'application/json',
+      { parseAs: 'string', bodyLimit: 8 },
+      (_request, body, done) => {
+        done(null, JSON.parse(body as string));
+      }
+    );
+    app.post('/test', async () => ({ ok: true }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/test',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ value: 'too large' }),
+    });
+
+    expect(response.statusCode).toBe(413);
+    const body = JSON.parse(response.body) as {
+      error: { code: string; message: string };
+    };
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(body.error.message).toBe('Request body too large');
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
   it('handles 404 routes without errors', async () => {
     setupSentryErrorHandler(app);
 
