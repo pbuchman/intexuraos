@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Button, ErrorBanner, Layout } from '@/components';
 import { PrivateWhatsAppImagePreview } from '@/components/whatsapp/PrivateWhatsAppImagePreview';
+import { PrivateWhatsAppMediaPlayer } from '@/components/whatsapp/PrivateWhatsAppMediaPlayer';
 import { usePrivateWhatsAppLog } from '@/hooks/usePrivateWhatsAppLog';
 import { formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
 import type {
@@ -107,6 +108,14 @@ function hasStoredImage(message: PrivateWhatsAppMessage): boolean {
   );
 }
 
+function hasStoredPlayableMedia(message: PrivateWhatsAppMessage): boolean {
+  return (
+    (message.messageType === 'audio' || message.messageType === 'video') &&
+    message.media?.storageStatus === 'stored' &&
+    message.media.hasMedia === true
+  );
+}
+
 function MessageTranscription({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element | null {
   const transcription =
     message.messageType === 'audio' || message.messageType === 'video'
@@ -160,6 +169,20 @@ function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JS
     return (
       <div className="space-y-3">
         <PrivateWhatsAppImagePreview message={message} />
+        {hasText ? (
+          <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
+            {message.text}
+          </p>
+        ) : null}
+        {transcription}
+      </div>
+    );
+  }
+
+  if (hasStoredPlayableMedia(message)) {
+    return (
+      <div className="space-y-3">
+        <PrivateWhatsAppMediaPlayer message={message} />
         {hasText ? (
           <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
             {message.text}
