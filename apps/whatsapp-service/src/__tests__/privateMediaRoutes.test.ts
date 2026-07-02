@@ -616,6 +616,191 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.body).not.toContain('rawMatrixEvent');
   });
 
+  it('returns owner-checked signed URLs for private audio originals', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-audio-original',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'audio',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/audio-original',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/audio-original.ogg',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: true;
+      data: { url: string; expiresAt: string };
+    };
+    expect(body.data).toStrictEqual({
+      url: expect.stringMatching(/^\/private\/media-access\?token=[A-Za-z0-9_-]+$/),
+      expiresAt: expect.any(String),
+    });
+    expect(Date.parse(body.data.expiresAt)).toBeGreaterThan(Date.now());
+    expect(body.data.url).not.toContain('whatsapp/private');
+    expect(body.data.url).not.toContain('audio-original.ogg');
+  });
+
+  it('redirects opaque public private video access tokens to storage signed URLs', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-video-access-route',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'video',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/video-access-route',
+          mimeType: 'video/mp4',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/video-access-route.mp4',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const publicResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(publicResponse.statusCode).toBe(200);
+    const publicBody = JSON.parse(publicResponse.body) as {
+      data: { url: string };
+    };
+
+    const accessResponse = await ctx.app.inject({
+      method: 'GET',
+      url: publicBody.data.url,
+    });
+
+    expect(accessResponse.statusCode).toBe(302);
+    expect(accessResponse.headers.location).toContain(
+      'whatsapp/private/user-123/message/video-access-route.mp4'
+    );
+  });
+
+  it('returns internal signed URLs for private audio and video originals after source account validation', async () => {
+    const audio = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-audio-internal',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'audio',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/audio-internal',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/audio-internal.ogg',
+        },
+      },
+    });
+    const video = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:02.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-video-internal',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'video',
+        eventTimestamp: '2026-06-26T10:00:01.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/video-internal',
+          mimeType: 'video/mp4',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/video-internal.mp4',
+        },
+      },
+    });
+    expect(audio.ok).toBe(true);
+    expect(video.ok).toBe(true);
+    if (!audio.ok || !video.ok) {
+      throw new Error('Failed to store private media messages');
+    }
+
+    const audioResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/internal/whatsapp/private/messages/${audio.value.messageId}/media?sourceAccountId=private-source-123`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+    const videoResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/internal/whatsapp/private/messages/${video.value.messageId}/media?sourceAccountId=private-source-123`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(audioResponse.statusCode).toBe(200);
+    expect(videoResponse.statusCode).toBe(200);
+    const audioBody = JSON.parse(audioResponse.body) as {
+      data: { url: string; media: { gcsPath: string; mimeType: string } };
+    };
+    const videoBody = JSON.parse(videoResponse.body) as {
+      data: { url: string; media: { gcsPath: string; mimeType: string } };
+    };
+    expect(audioBody.data.url).toContain('whatsapp/private/user-123/message/audio-internal.ogg');
+    expect(audioBody.data.media).toMatchObject({
+      gcsPath: 'whatsapp/private/user-123/message/audio-internal.ogg',
+      mimeType: 'audio/ogg',
+    });
+    expect(videoBody.data.url).toContain('whatsapp/private/user-123/message/video-internal.mp4');
+    expect(videoBody.data.media).toMatchObject({
+      gcsPath: 'whatsapp/private/user-123/message/video-internal.mp4',
+      mimeType: 'video/mp4',
+    });
+  });
+
   it('redirects opaque public private media access tokens to storage signed URLs', async () => {
     const token = await createToken({ sub: 'user-123' });
     const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
@@ -826,6 +1011,44 @@ describe('Private WhatsApp Media Routes', () => {
         rawMatrixEvent: {},
         media: {
           mxcUri: 'mxc://home-dev/image-no-original',
+        },
+      },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/messages/${stored.value.messageId}/media`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 404 when stored private audio media has no MIME type', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    const stored = await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'private-source-123',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: { matrixRoomId: '!room:home-dev', type: 'direct' },
+      message: {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$stored-audio-no-mime',
+        matrixSenderId: '@alice:home-dev',
+        senderKey: 'matrix:@alice:home-dev',
+        direction: 'incoming',
+        type: 'audio',
+        eventTimestamp: '2026-06-26T10:00:00.000Z',
+        rawMatrixEvent: {},
+        media: {
+          mxcUri: 'mxc://home-dev/audio-no-mime',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message/audio-no-mime.ogg',
         },
       },
     });

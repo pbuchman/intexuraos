@@ -3,16 +3,31 @@
  * @vitest-environment jsdom
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UsePrivateWhatsAppLogResult } from '@/hooks/usePrivateWhatsAppLog';
 
 const mockUsePrivateWhatsAppLog = vi.fn();
+const mockGetAccessToken = vi.fn<() => Promise<string>>();
+const mockGetPrivateWhatsAppMessageMediaUrl = vi.fn();
 
 vi.mock('@/hooks/usePrivateWhatsAppLog', () => ({
   usePrivateWhatsAppLog: (): UsePrivateWhatsAppLogResult => mockUsePrivateWhatsAppLog(),
+}));
+
+vi.mock('@/context', () => ({
+  useAuth: (): { getAccessToken: typeof mockGetAccessToken } => ({
+    getAccessToken: mockGetAccessToken,
+  }),
+}));
+
+vi.mock('@/services/whatsappApi', () => ({
+  getPrivateWhatsAppMessageMediaUrl: (
+    ...args: unknown[]
+  ): ReturnType<typeof mockGetPrivateWhatsAppMessageMediaUrl> =>
+    mockGetPrivateWhatsAppMessageMediaUrl(...args),
 }));
 
 vi.mock('@/components/whatsapp/PrivateWhatsAppImagePreview', () => ({
@@ -146,6 +161,13 @@ function createHookResult(
 
 describe('PrivateWhatsAppLogPage', () => {
   beforeEach(() => {
+    mockGetAccessToken.mockResolvedValue('access-token');
+    mockGetPrivateWhatsAppMessageMediaUrl.mockImplementation(
+      async (_token: string, messageId: string) => ({
+        url: `https://storage.example.com/${messageId}`,
+        expiresAt: '2026-06-22T09:30:00.000Z',
+      })
+    );
     mockUsePrivateWhatsAppLog.mockReturnValue(createHookResult());
   });
 
@@ -399,5 +421,90 @@ describe('PrivateWhatsAppLogPage', () => {
     expect(screen.getByText('Bring the documents tomorrow.')).toBeInTheDocument();
     expect(screen.getByText('Audio format was not supported')).toBeInTheDocument();
     expect(screen.getByText('The video says to bring the blue folder.')).toBeInTheDocument();
+  });
+
+  it('renders stored private audio and video players while preserving transcripts', async () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'audio-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/audio-completed',
+              mimeType: 'audio/ogg',
+              fileName: 'voice.ogg',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-audio-completed',
+              text: 'Audio transcript stays visible.',
+              completedAt: '2026-06-22T09:03:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:02:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:02:02.000Z',
+            ingestedAt: '2026-06-22T09:02:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'video-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'video',
+            media: {
+              mxcUri: 'mxc://home-dev/video-completed',
+              mimeType: 'video/mp4',
+              fileName: 'clip.mp4',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-video-completed',
+              text: 'Video transcript stays visible.',
+              completedAt: '2026-06-22T09:05:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:05:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:05:02.000Z',
+            ingestedAt: '2026-06-22T09:05:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    const audio = await screen.findByLabelText('Play voice.ogg');
+    const video = await screen.findByLabelText('Play clip.mp4');
+
+    expect(audio.tagName).toBe('AUDIO');
+    expect(audio).toHaveAttribute('controls');
+    expect(audio).toHaveAttribute('src', 'https://storage.example.com/audio-completed');
+    expect(video.tagName).toBe('VIDEO');
+    expect(video).toHaveAttribute('controls');
+    expect(video).toHaveAttribute('src', 'https://storage.example.com/video-completed');
+    expect(screen.getByText('Audio transcript stays visible.')).toBeInTheDocument();
+    expect(screen.getByText('Video transcript stays visible.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockGetPrivateWhatsAppMessageMediaUrl).toHaveBeenCalledWith(
+        'access-token',
+        'audio-completed'
+      );
+      expect(mockGetPrivateWhatsAppMessageMediaUrl).toHaveBeenCalledWith(
+        'access-token',
+        'video-completed'
+      );
+    });
   });
 });

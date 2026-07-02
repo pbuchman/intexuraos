@@ -85,6 +85,23 @@ function isPrivateImageMessage(message: PrivateWhatsAppMessage): boolean {
   return message.messageType === 'image';
 }
 
+function isPrivatePlayableOriginalMediaMessage(message: PrivateWhatsAppMessage): boolean {
+  const mimeType = message.media?.storedMimeType ?? message.media?.mimeType;
+  if (message.messageType === 'image') {
+    return true;
+  }
+  if (mimeType === undefined) {
+    return false;
+  }
+  if (message.messageType === 'audio') {
+    return isAudioMimeType(mimeType);
+  }
+  if (message.messageType === 'video') {
+    return isVideoMimeType(mimeType);
+  }
+  return false;
+}
+
 function getOriginalPath(message: PrivateWhatsAppMessage): string | undefined {
   return message.media?.gcsPath;
 }
@@ -204,15 +221,20 @@ async function getPrivateMessageForPublicUser(
   return message;
 }
 
-function getPrivateImageMediaPath(
+function getPrivateMediaPath(
   message: PrivateWhatsAppMessage,
   variant: 'original' | 'thumbnail'
 ): string | null {
-  if (!isPrivateImageMessage(message)) {
+  if (variant === 'thumbnail') {
+    if (!isPrivateImageMessage(message)) {
+      return null;
+    }
+    return getThumbnailPath(message) ?? null;
+  }
+  if (!isPrivatePlayableOriginalMediaMessage(message)) {
     return null;
   }
-  const gcsPath = variant === 'thumbnail' ? getThumbnailPath(message) : getOriginalPath(message);
-  return gcsPath ?? null;
+  return getOriginalPath(message) ?? null;
 }
 
 async function getSignedPrivateMediaUrlData(
@@ -223,7 +245,7 @@ async function getSignedPrivateMediaUrlData(
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; errorCode: 'NOT_FOUND' | 'DOWNSTREAM_ERROR'; message: string }
 > {
-  const gcsPath = getPrivateImageMediaPath(message, variant);
+  const gcsPath = getPrivateMediaPath(message, variant);
   if (gcsPath === null) {
     return {
       ok: false,
@@ -509,7 +531,7 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           user.userId,
           reply
         );
-        if (message === null || getPrivateImageMediaPath(message, 'original') === null) {
+        if (message === null || getPrivateMediaPath(message, 'original') === null) {
           if (message !== null) {
             await reply.fail('NOT_FOUND', 'Private WhatsApp message not found');
           }
@@ -580,7 +602,7 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           user.userId,
           reply
         );
-        if (message === null || getPrivateImageMediaPath(message, 'thumbnail') === null) {
+        if (message === null || getPrivateMediaPath(message, 'thumbnail') === null) {
           if (message !== null) {
             await reply.fail('NOT_FOUND', 'Private WhatsApp message not found');
           }
