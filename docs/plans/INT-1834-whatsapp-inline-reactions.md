@@ -265,6 +265,7 @@ it('finds private WhatsApp reactions for target message ids without exposing Mat
     })
   );
   expect(firstReactionResult.ok).toBe(true);
+  if (!firstReactionResult.ok) throw new Error('first reaction store failed');
 
   const secondReactionResult = await repository.storeIncomingMessage(
     createStoreInput({
@@ -289,6 +290,7 @@ it('finds private WhatsApp reactions for target message ids without exposing Mat
     })
   );
   expect(secondReactionResult.ok).toBe(true);
+  if (!secondReactionResult.ok) throw new Error('second reaction store failed');
 
   const reactions = await repository.findReactionsForMessageIds({
     sourceAccountId: target.sourceAccountId,
@@ -321,6 +323,9 @@ it('finds private WhatsApp reactions for target message ids without exposing Mat
   expect(summaries.map((summary) => summary.eventTimestamp)).toEqual(
     summaries.map((summary) => summary.eventTimestamp).sort()
   );
+  expect(reactions.value.attachedReactionMessageIds).toEqual(
+    expect.arrayContaining([firstReactionResult.value.messageId, secondReactionResult.value.messageId])
+  );
   expect(JSON.stringify(reactions.value)).not.toContain('$target-event');
 });
 ```
@@ -345,6 +350,7 @@ export interface PrivateWhatsAppReactionQueryInput {
 
 export interface PrivateWhatsAppReactionQueryResult {
   reactionsByMessageId: Record<string, PrivateWhatsAppReactionSummary[]>;
+  attachedReactionMessageIds: string[];
 }
 ```
 
@@ -356,7 +362,7 @@ findReactionsForMessageIds(
 ): Promise<Result<PrivateWhatsAppReactionQueryResult, WhatsAppError>>;
 ```
 
-Update test fakes to return `{ reactionsByMessageId: {} }`.
+Update test fakes to return `{ reactionsByMessageId: {}, attachedReactionMessageIds: [] }`.
 
 - [ ] **Step 3: Store deterministic target ids**
 
@@ -422,7 +428,7 @@ if (input.chatId !== undefined) {
 }
 ```
 
-For each legacy candidate, parse the raw Matrix relation with the same `m.annotation` rules as ingest, convert the target Matrix event id through the requested target map, and skip it if the row already has `reaction.targetMessageId` so it is not duplicated. Project each reaction with `toReactionSummary(message, normalizedTargetMessageId)` and group by the internal target message id. Sort each grouped summary array by `eventTimestamp` and then summary `id` for deterministic multi-reaction rendering.
+For each normalized or legacy reaction row that attaches to one of the requested targets, add the reaction message id to `attachedReactionMessageIds`. For each legacy candidate, parse the raw Matrix relation with the same `m.annotation` rules as ingest, convert the target Matrix event id through the requested target map, and skip it if the row already has `reaction.targetMessageId` so it is not duplicated. Project each reaction with `toReactionSummary(message, normalizedTargetMessageId)` and group by the internal target message id. Sort each grouped summary array by `eventTimestamp` and then summary `id` for deterministic multi-reaction rendering.
 
 - [ ] **Step 5: Add Firestore index migration**
 
@@ -466,6 +472,27 @@ export const indexes = [
       { fieldPath: '__name__', order: 'ASCENDING' },
     ],
   },
+  {
+    collectionGroup: 'whatsapp_private_messages',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'sourceAccountId', order: 'ASCENDING' },
+      { fieldPath: 'chatId', order: 'ASCENDING' },
+      { fieldPath: 'messageType', order: 'ASCENDING' },
+      { fieldPath: 'eventTimestamp', order: 'ASCENDING' },
+      { fieldPath: '__name__', order: 'ASCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'whatsapp_private_messages',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'sourceAccountId', order: 'ASCENDING' },
+      { fieldPath: 'messageType', order: 'ASCENDING' },
+      { fieldPath: 'eventTimestamp', order: 'ASCENDING' },
+      { fieldPath: '__name__', order: 'ASCENDING' },
+    ],
+  },
 ];
 
 export async function up(context) {
@@ -474,7 +501,7 @@ export async function up(context) {
 }
 ```
 
-Add a migration test matching the existing `117` and `118` index tests.
+Add a migration test matching the existing `117` and `118` index tests. Assert the migration includes both normalized `reaction.targetMessageId` indexes and the legacy reaction lookup indexes without `reaction.targetMessageId` for the `chatId` and sender/day query shapes.
 
 - [ ] **Step 6: Verify repository and migration tests**
 
@@ -527,6 +554,8 @@ Run: `pnpm --filter whatsapp-service test -- apps/whatsapp-service/src/__tests__
 
 Expected: FAIL because route responses do not enrich reactions.
 
+Add a second failing test for `GET /private/messages` with a sender/day query over the same fixture. Assert hydration is invoked for the sender/day response, the target row includes `reactions`, the attached reaction row is omitted when the target is present in the page, and `targetMatrixEventId`/`matrixEventId` are absent from the serialized response.
+
 - [ ] **Step 2: Add public projection types**
 
 In `privateReadRoutes.ts`, add:
@@ -546,11 +575,16 @@ interface PublicPrivateWhatsAppReaction {
 Extend `PublicPrivateWhatsAppMessage` with:
 
 ```ts
-reaction?: {
-  emoji: string;
-  targetMessageId: string;
+type PublicPrivateWhatsAppMessage = Omit<
+  PrivateWhatsAppMessage,
+  'matrixEventId' | 'rawMatrixEvent' | 'sourceAccountId' | 'reaction' | 'reactions'
+> & {
+  reaction?: {
+    emoji: string;
+    targetMessageId: string;
+  };
+  reactions?: PublicPrivateWhatsAppReaction[];
 };
-reactions?: PublicPrivateWhatsAppReaction[];
 ```
 
 - [ ] **Step 3: Hydrate inline reactions**
@@ -581,10 +615,10 @@ async function hydrateInlineReactions(input: {
   });
   if (!reactionsResult.ok) return err(reactionsResult.error);
 
-  const targetIds = new Set(targetMessageIds);
+  const attachedReactionIds = new Set(reactionsResult.value.attachedReactionMessageIds);
   return ok(
     input.messages
-      .filter((message) => message.messageType !== 'reaction' || !targetIds.has(message.reaction?.targetMessageId ?? ''))
+      .filter((message) => message.messageType !== 'reaction' || !attachedReactionIds.has(message.id))
       .map((message) => ({
         ...message,
         reactions: reactionsResult.value.reactionsByMessageId[message.id],
@@ -599,7 +633,7 @@ Import `ok`, `err`, and `Result` from `@intexuraos/common-core` if not already p
 
 In `GET /private/chats/:chatId/messages`, call the helper with `chatId: request.params.chatId` before `toPublicMessage`.
 
-In `GET /private/messages`, call the helper without `chatId`; the target ids from the page still constrain the reaction lookup.
+In `GET /private/messages`, call the helper without `chatId`; the target ids from the page still constrain the reaction lookup. Reuse the same `attachedReactionMessageIds` filtering path so raw-only legacy reaction rows are omitted from sender/day responses when their target is present in the page.
 
 If hydration fails, return `reply.fail('INTERNAL_ERROR', result.error.message)`.
 
