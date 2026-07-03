@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { pollUntilComplete, type PollingConfig } from '../polling.js';
 import type { SpeechTranscriptionPort } from '../providers/transcription-provider.js';
@@ -64,6 +64,10 @@ function makeApiCall(): { timestamp: string; operation: 'poll'; success: boolean
 }
 
 describe('pollUntilComplete', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('returns done when job completes on first poll', async () => {
     const provider = makeMockProvider([
       { ok: true, value: { status: 'done', apiCall: makeApiCall() } },
