@@ -1262,6 +1262,29 @@ describe('privateWhatsAppRepository', () => {
     expect(senderDay?.['messageCount']).toBe(1);
   });
 
+  it('returns the room chat id for a duplicate legacy message without a stored chat id', async () => {
+    const input = createStoreInput();
+    const messageId = deterministicId(input.sourceAccountId, input.message.matrixEventId);
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId).set({
+      id: messageId,
+      sourceAccountId: input.sourceAccountId,
+      matrixRoomId: input.message.matrixRoomId,
+      matrixEventId: input.message.matrixEventId,
+      text: 'legacy duplicate',
+    });
+
+    const result = await repository.storeIncomingMessage(input);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toEqual({
+      outcome: 'duplicate',
+      chatId: deterministicId(input.sourceAccountId, input.chat.matrixRoomId),
+      messageId,
+      matrixEventId: input.message.matrixEventId,
+    });
+  });
+
   it('increments one sender-day aggregate for multiple messages from the same sender and day', async () => {
     const first = await repository.storeIncomingMessage(createStoreInput());
     expect(first.ok).toBe(true);
@@ -1398,6 +1421,350 @@ describe('privateWhatsAppRepository', () => {
     const chat = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION)?.get(chatId);
     expect(chat?.['displayName']).toBe('Alice Cooper');
     expect(chat?.['lastEventAt']).toBe('2026-06-22T10:05:00.000Z');
+  });
+
+  it('reuses an existing direct chat when the same phone sender appears in a new Matrix room', async () => {
+    const firstInput = createStoreInput({
+      chat: {
+        matrixRoomId: '!old-room:matrix.example',
+        type: 'direct',
+        displayName: 'Marcinek',
+      },
+      message: {
+        ...createStoreInput().message,
+        matrixRoomId: '!old-room:matrix.example',
+        matrixEventId: '$old-room-event',
+        matrixSenderId: '@whatsapp_48123456789:matrix.example',
+        senderDisplayName: 'Marcinek',
+        senderPhoneNumber: '+48123456789',
+        senderPhoneNumberNormalized: '48123456789',
+        senderKey: 'phone:+48123456789',
+        eventTimestamp: '2026-06-22T10:00:00.000Z',
+      },
+    });
+    const firstResult = await repository.storeIncomingMessage(firstInput);
+    expect(firstResult.ok).toBe(true);
+    if (!firstResult.ok) throw new Error(firstResult.error.message);
+
+    const secondInput = createStoreInput({
+      chat: {
+        matrixRoomId: '!new-room:matrix.example',
+        type: 'direct',
+        displayName: 'Pawel M (WA)',
+      },
+      message: {
+        ...createStoreInput().message,
+        matrixRoomId: '!new-room:matrix.example',
+        matrixEventId: '$new-room-event',
+        matrixSenderId: '@whatsapp_48123456789:matrix.example',
+        senderDisplayName: 'Pawel M (WA)',
+        senderPhoneNumber: '+48123456789',
+        senderPhoneNumberNormalized: '48123456789',
+        senderKey: 'phone:+48123456789',
+        eventTimestamp: '2026-06-22T10:05:00.000Z',
+      },
+    });
+    const secondResult = await repository.storeIncomingMessage(secondInput);
+
+    expect(secondResult.ok).toBe(true);
+    if (!secondResult.ok) throw new Error(secondResult.error.message);
+    expect(secondResult.value.chatId).toBe(firstResult.value.chatId);
+
+    const chats = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION);
+    expect(chats?.size).toBe(1);
+    const chat = chats?.get(firstResult.value.chatId);
+    expect(chat).toMatchObject({
+      id: firstResult.value.chatId,
+      matrixRoomId: '!old-room:matrix.example',
+      matrixRoomIds: ['!old-room:matrix.example', '!new-room:matrix.example'],
+      displayName: 'Marcinek',
+      messageCount: 2,
+      participantKeys: ['phone:+48123456789'],
+    });
+  });
+
+  it('reuses a direct chat alias for outgoing messages from a linked Matrix room', async () => {
+    const oldRoomIncoming = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!old-room:matrix.example',
+          type: 'direct',
+          displayName: 'Marcinek',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!old-room:matrix.example',
+          matrixEventId: '$old-room-incoming',
+          matrixSenderId: '@whatsapp_48123456789:matrix.example',
+          senderDisplayName: 'Marcinek',
+          senderKey: 'phone:+48123456789',
+          eventTimestamp: '2026-06-22T10:00:00.000Z',
+        },
+      })
+    );
+    expect(oldRoomIncoming.ok).toBe(true);
+    if (!oldRoomIncoming.ok) throw new Error(oldRoomIncoming.error.message);
+
+    const newRoomIncoming = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!new-room:matrix.example',
+          type: 'direct',
+          displayName: 'Pawel M (WA)',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!new-room:matrix.example',
+          matrixEventId: '$new-room-incoming',
+          matrixSenderId: '@whatsapp_48123456789:matrix.example',
+          senderDisplayName: 'Pawel M (WA)',
+          senderKey: 'phone:+48123456789',
+          eventTimestamp: '2026-06-22T10:05:00.000Z',
+        },
+      })
+    );
+    expect(newRoomIncoming.ok).toBe(true);
+    if (!newRoomIncoming.ok) throw new Error(newRoomIncoming.error.message);
+
+    const {
+      senderPhoneNumber: _senderPhoneNumber,
+      senderPhoneNumberNormalized: _senderPhoneNumberNormalized,
+      ...outgoingMessageBase
+    } = createStoreInput().message;
+    const newRoomOutgoing = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!new-room:matrix.example',
+          type: 'direct',
+          displayName: 'Pawel M (WA)',
+        },
+        message: {
+          ...outgoingMessageBase,
+          matrixRoomId: '!new-room:matrix.example',
+          matrixEventId: '$new-room-outgoing',
+          matrixSenderId: '@pbuchman:matrix.example',
+          senderDisplayName: 'You',
+          senderKey: 'matrix:@pbuchman:matrix.example',
+          direction: 'outgoing',
+          text: 'reply from the new room',
+          eventTimestamp: '2026-06-22T10:06:00.000Z',
+        },
+      })
+    );
+
+    expect(newRoomOutgoing.ok).toBe(true);
+    if (!newRoomOutgoing.ok) throw new Error(newRoomOutgoing.error.message);
+    expect(newRoomOutgoing.value.chatId).toBe(oldRoomIncoming.value.chatId);
+
+    const chats = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION);
+    expect(chats?.size).toBe(1);
+    expect(chats?.get(oldRoomIncoming.value.chatId)?.['messageCount']).toBe(3);
+  });
+
+  it('uses a room chat id for an outgoing direct message when no linked alias exists', async () => {
+    const {
+      senderPhoneNumber: _senderPhoneNumber,
+      senderPhoneNumberNormalized: _senderPhoneNumberNormalized,
+      ...outgoingMessageBase
+    } = createStoreInput().message;
+    const result = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!outgoing-only-room:matrix.example',
+          type: 'direct',
+          displayName: 'Pawel M (WA)',
+        },
+        message: {
+          ...outgoingMessageBase,
+          matrixRoomId: '!outgoing-only-room:matrix.example',
+          matrixEventId: '$outgoing-only-event',
+          matrixSenderId: '@pbuchman:matrix.example',
+          senderDisplayName: 'You',
+          senderKey: 'matrix:@pbuchman:matrix.example',
+          direction: 'outgoing',
+          text: 'reply before any incoming alias',
+          eventTimestamp: '2026-06-22T10:06:00.000Z',
+        },
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.chatId).toBe(
+      deterministicId('pbuchman-private-whatsapp', '!outgoing-only-room:matrix.example')
+    );
+    const chats = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION);
+    expect(chats?.size).toBe(1);
+  });
+
+  it('chooses the strongest existing direct chat candidate for a repeated sender', async () => {
+    const sourceAccountId = 'pbuchman-private-whatsapp';
+    const senderKey = 'phone:+48123456789';
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('candidate-low').set({
+      id: 'candidate-low',
+      userId: 'user-123',
+      sourceAccountId,
+      matrixRoomId: '!low-room:matrix.example',
+      chatType: 'direct',
+      displayName: 'Low Candidate',
+      participantKeys: [senderKey],
+      participantCount: 1,
+      firstSeenAt: '2026-05-01T10:00:00.000Z',
+      lastEventAt: '2026-05-01T10:00:00.000Z',
+      schemaVersion: 2,
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('candidate-later').set({
+      id: 'candidate-later',
+      userId: 'user-123',
+      sourceAccountId,
+      matrixRoomId: '!later-room:matrix.example',
+      chatType: 'direct',
+      displayName: 'Later Candidate',
+      participantKeys: [senderKey],
+      participantCount: 1,
+      messageCount: 4,
+      firstSeenAt: '2026-06-01T10:00:00.000Z',
+      lastEventAt: '2026-06-01T10:00:00.000Z',
+      schemaVersion: 2,
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('candidate-earlier').set({
+      id: 'candidate-earlier',
+      userId: 'user-123',
+      sourceAccountId,
+      matrixRoomId: '!earlier-room:matrix.example',
+      chatType: 'direct',
+      displayName: 'Earlier Candidate',
+      participantKeys: [senderKey],
+      participantCount: 1,
+      messageCount: 4,
+      firstSeenAt: '2026-04-01T10:00:00.000Z',
+      lastEventAt: '2026-04-01T10:00:00.000Z',
+      schemaVersion: 2,
+    });
+
+    const result = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!fresh-room:matrix.example',
+          type: 'direct',
+          displayName: 'Fresh Sender (WA)',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!fresh-room:matrix.example',
+          matrixEventId: '$fresh-repeated-sender-event',
+          matrixSenderId: '@whatsapp_48123456789:matrix.example',
+          senderDisplayName: 'Fresh Sender (WA)',
+          senderKey,
+          eventTimestamp: '2026-06-22T10:10:00.000Z',
+        },
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.chatId).toBe('candidate-earlier');
+    const chats = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION);
+    expect(chats?.size).toBe(3);
+    expect(chats?.get('candidate-earlier')).toMatchObject({
+      displayName: 'Earlier Candidate',
+      matrixRoomIds: ['!earlier-room:matrix.example', '!fresh-room:matrix.example'],
+      messageCount: 5,
+    });
+  });
+
+  it('orders linked direct chat aliases when candidate metadata is sparse', async () => {
+    const sourceAccountId = 'pbuchman-private-whatsapp';
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('alias-a').set({
+      id: 'alias-a',
+      userId: 'user-123',
+      sourceAccountId,
+      matrixRoomId: '!primary-a:matrix.example',
+      matrixRoomIds: ['!alias-room:matrix.example'],
+      chatType: 'direct',
+      displayName: 'Alias A',
+      participantKeys: ['phone:+48123456789'],
+      participantCount: 1,
+      messageCount: 4,
+      lastEventAt: '2026-06-01T10:00:00.000Z',
+      schemaVersion: 2,
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('alias-b').set({
+      id: 'alias-b',
+      userId: 'user-123',
+      sourceAccountId,
+      matrixRoomId: '!primary-b:matrix.example',
+      matrixRoomIds: ['!alias-room:matrix.example'],
+      chatType: 'direct',
+      displayName: 'Alias B',
+      participantKeys: ['phone:+48123456789'],
+      participantCount: 1,
+      messageCount: 4,
+      firstSeenAt: '2026-04-01T10:00:00.000Z',
+      lastEventAt: '2026-06-01T10:00:00.000Z',
+      schemaVersion: 2,
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('alias-c').set({
+      id: 'alias-c',
+      userId: 'user-123',
+      sourceAccountId,
+      matrixRoomId: '!primary-c:matrix.example',
+      matrixRoomIds: ['!alias-room:matrix.example'],
+      chatType: 'direct',
+      displayName: 'Alias C',
+      participantKeys: ['phone:+48123456789'],
+      participantCount: 1,
+      firstSeenAt: '2026-03-01T10:00:00.000Z',
+      lastEventAt: '2026-06-01T10:00:00.000Z',
+      schemaVersion: 2,
+    });
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc('alias-d').set({
+      id: 'alias-d',
+      userId: 'user-123',
+      sourceAccountId,
+      matrixRoomId: '!primary-d:matrix.example',
+      matrixRoomIds: ['!alias-room:matrix.example'],
+      chatType: 'direct',
+      displayName: 'Alias D',
+      participantKeys: ['phone:+48123456789'],
+      participantCount: 1,
+      messageCount: 4,
+      lastEventAt: '2026-06-01T10:00:00.000Z',
+      schemaVersion: 2,
+    });
+
+    const {
+      senderPhoneNumber: _senderPhoneNumber,
+      senderPhoneNumberNormalized: _senderPhoneNumberNormalized,
+      ...outgoingMessageBase
+    } = createStoreInput().message;
+    const result = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!alias-room:matrix.example',
+          type: 'direct',
+          displayName: 'Alias Room',
+        },
+        message: {
+          ...outgoingMessageBase,
+          matrixRoomId: '!alias-room:matrix.example',
+          matrixEventId: '$alias-room-outgoing',
+          matrixSenderId: '@pbuchman:matrix.example',
+          senderDisplayName: 'You',
+          senderKey: 'matrix:@pbuchman:matrix.example',
+          direction: 'outgoing',
+          text: 'reply in linked alias room',
+          eventTimestamp: '2026-06-22T10:12:00.000Z',
+        },
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.chatId).toBe('alias-a');
+    const chats = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_CHATS_COLLECTION);
+    expect(chats?.size).toBe(4);
+    expect(chats?.get('alias-a')?.['messageCount']).toBe(5);
   });
 
   it('keeps the newer chat timestamp and lowers firstSeenAt when an older backfill event arrives later', async () => {

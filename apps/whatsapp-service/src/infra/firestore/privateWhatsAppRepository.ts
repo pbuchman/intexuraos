@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { FieldPath, getFirestore, type Query } from '@intexuraos/infra-firestore';
+import {
+  FieldPath,
+  getFirestore,
+  type Query,
+  type QueryDocumentSnapshot,
+} from '@intexuraos/infra-firestore';
 import type { WhatsAppError } from '../../domain/whatsapp/index.js';
 import {
   createPrivateWhatsAppChatId,
@@ -56,6 +61,12 @@ const PRIVATE_WHATSAPP_MESSAGE_TYPES = new Set<PrivateWhatsAppMessage['messageTy
   'redaction',
   'unknown',
 ]);
+type FirestoreClient = ReturnType<typeof getFirestore>;
+type FirestoreTransaction = Parameters<Parameters<FirestoreClient['runTransaction']>[0]>[0];
+
+interface PrivateChatResolution {
+  chatId: string;
+}
 
 export {
   createPrivateWhatsAppChatId,
@@ -285,7 +296,6 @@ async function storeIncomingMessage(
 ): Promise<Result<PrivateWhatsAppIngestOutcome, WhatsAppError>> {
   try {
     const db = getFirestore();
-    const chatId = createPrivateWhatsAppChatId(input.sourceAccountId, input.chat.matrixRoomId);
     const messageId = createPrivateWhatsAppMessageId(
       input.sourceAccountId,
       input.message.matrixEventId
@@ -298,7 +308,6 @@ async function storeIncomingMessage(
       senderKey,
       eventDayKey
     );
-    const chatRef = db.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(chatId);
     const messageRef = db.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId);
     const senderRef = db.collection(PRIVATE_WHATSAPP_SENDERS_COLLECTION).doc(senderId);
     const senderDayRef = db.collection(PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION).doc(senderDayId);
@@ -307,14 +316,22 @@ async function storeIncomingMessage(
     const outcome = await db.runTransaction(async (transaction) => {
       const existingMessage = await transaction.get(messageRef);
       if (existingMessage.exists) {
+        const existingData = existingMessage.data() as Partial<PrivateWhatsAppMessage> | undefined;
+        const existingChatId =
+          typeof existingData?.chatId === 'string'
+            ? existingData.chatId
+            : createPrivateWhatsAppChatId(input.sourceAccountId, input.chat.matrixRoomId);
         return {
           outcome: 'duplicate' as const,
-          chatId,
+          chatId: existingChatId,
           messageId,
           matrixEventId: input.message.matrixEventId,
         };
       }
 
+      const chatResolution = await resolveChatForStore(db, transaction, input, senderKey);
+      const chatId = chatResolution.chatId;
+      const chatRef = db.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(chatId);
       const existingChat = await transaction.get(chatRef);
       const existingSender = await transaction.get(senderRef);
       const existingSenderDay = await transaction.get(senderDayRef);
@@ -366,6 +383,84 @@ async function storeIncomingMessage(
       message: `Failed to store private WhatsApp message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
+}
+
+async function resolveChatForStore(
+  db: FirestoreClient,
+  transaction: FirestoreTransaction,
+  input: StorePrivateWhatsAppMessageInput,
+  senderKey: string
+): Promise<PrivateChatResolution> {
+  const roomChatId = createPrivateWhatsAppChatId(input.sourceAccountId, input.chat.matrixRoomId);
+  const roomChatRef = db.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(roomChatId);
+  const roomChatDoc = await transaction.get(roomChatRef);
+  if (roomChatDoc.exists) {
+    return { chatId: roomChatId };
+  }
+
+  if (input.chat.type !== 'direct') {
+    return { chatId: roomChatId };
+  }
+
+  const aliasSnapshot = await transaction.get(
+    db
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .where('sourceAccountId', '==', input.sourceAccountId)
+      .where('chatType', '==', 'direct')
+      .where('matrixRoomIds', 'array-contains', input.chat.matrixRoomId)
+      .limit(10)
+  );
+  const aliasChat = selectDirectChatCandidate(aliasSnapshot.docs);
+  if (aliasChat !== undefined) {
+    return { chatId: aliasChat.id };
+  }
+
+  if (input.message.direction !== 'incoming') {
+    return { chatId: roomChatId };
+  }
+
+  const senderSnapshot = await transaction.get(
+    db
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .where('sourceAccountId', '==', input.sourceAccountId)
+      .where('chatType', '==', 'direct')
+      .where('participantKeys', 'array-contains', senderKey)
+      .limit(10)
+  );
+  const senderChat = selectDirectChatCandidate(senderSnapshot.docs);
+  if (senderChat !== undefined) {
+    return { chatId: senderChat.id };
+  }
+
+  return { chatId: roomChatId };
+}
+
+function selectDirectChatCandidate(
+  docs: QueryDocumentSnapshot[]
+): QueryDocumentSnapshot | undefined {
+  const candidates = [...docs].sort(compareDirectChatCandidates);
+  return candidates[0];
+}
+
+function compareDirectChatCandidates(
+  left: QueryDocumentSnapshot,
+  right: QueryDocumentSnapshot
+): number {
+  const leftData = left.data() as Partial<PrivateWhatsAppChat>;
+  const rightData = right.data() as Partial<PrivateWhatsAppChat>;
+  const messageCountDifference =
+    (readOptionalNumber(rightData.messageCount) ?? 0) -
+    (readOptionalNumber(leftData.messageCount) ?? 0);
+  if (messageCountDifference !== 0) {
+    return messageCountDifference;
+  }
+  const firstSeenComparison = (leftData.firstSeenAt ?? '').localeCompare(
+    rightData.firstSeenAt ?? ''
+  );
+  if (firstSeenComparison !== 0) {
+    return firstSeenComparison;
+  }
+  return left.id.localeCompare(right.id);
 }
 
 async function getMessageById(
@@ -944,12 +1039,12 @@ function buildChat(
   const shouldApplyIncomingChatMetadata = isSameOrNewerChatEvent(
     existingChat,
     input.message.eventTimestamp
-  );
+  ) && isPrimaryChatMatrixRoom(existingChat, input.chat.matrixRoomId);
   const chat: PrivateWhatsAppChat = {
     id: chatId,
     userId: input.userId,
     sourceAccountId: input.sourceAccountId,
-    matrixRoomId: input.chat.matrixRoomId,
+    matrixRoomId: existingChat?.matrixRoomId ?? input.chat.matrixRoomId,
     chatType: selectChatType(existingChat, input.chat.type, shouldApplyIncomingChatMetadata),
     messageCount: (existingChat?.messageCount ?? 0) + 1,
     firstSeenAt: oldestTimestamp(existingChat?.firstSeenAt, input.message.eventTimestamp),
@@ -960,6 +1055,7 @@ function buildChat(
   const participantKeys = appendUnique(existingChat?.participantKeys ?? [], getSenderKey(input));
   chat.participantKeys = participantKeys;
   chat.participantCount = participantKeys.length;
+  chat.matrixRoomIds = appendUnique(getChatMatrixRoomIds(existingChat), input.chat.matrixRoomId);
 
   if (
     input.chat.displayName !== undefined &&
@@ -1008,6 +1104,16 @@ function selectChatType(
     return existingChat.chatType;
   }
   return nextChatType;
+}
+
+function isPrimaryChatMatrixRoom(
+  existingChat: PrivateWhatsAppChat | undefined,
+  matrixRoomId: string
+): boolean {
+  if (existingChat === undefined || existingChat.matrixRoomId === '') {
+    return true;
+  }
+  return existingChat.matrixRoomId === matrixRoomId;
 }
 
 function buildSender(
@@ -1214,6 +1320,7 @@ function normalizeChat(id: string, data: Record<string, unknown> | undefined): P
   if (typeof chat?.avatarMxcUri === 'string') {
     projected.avatarMxcUri = chat.avatarMxcUri;
   }
+  projected.matrixRoomIds = getChatMatrixRoomIds(chat);
   if (typeof chat?.messageCount === 'number') {
     projected.messageCount = chat.messageCount;
   }
@@ -1320,6 +1427,20 @@ function appendUnique(values: string[], nextValue: string): string[] {
     return values;
   }
   return [...values, nextValue];
+}
+
+function getChatMatrixRoomIds(chat: Partial<PrivateWhatsAppChat> | undefined): string[] {
+  const matrixRoomIds = Array.isArray(chat?.matrixRoomIds)
+    ? chat.matrixRoomIds.filter((matrixRoomId): matrixRoomId is string => typeof matrixRoomId === 'string')
+    : [];
+  if (typeof chat?.matrixRoomId !== 'string' || chat.matrixRoomId === '') {
+    return matrixRoomIds;
+  }
+  return appendUnique(matrixRoomIds, chat.matrixRoomId);
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function selectLatestString(
