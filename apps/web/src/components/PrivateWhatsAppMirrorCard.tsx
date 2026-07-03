@@ -118,12 +118,6 @@ export function PrivateWhatsAppMirrorCard({
                 +{account.phoneNumberNormalized}
               </dd>
             </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-slate-600 dark:text-slate-400">Source account</dt>
-              <dd className="break-all font-mono text-slate-900 dark:text-slate-100">
-                {account.sourceAccountId}
-              </dd>
-            </div>
             {account.lastEventAt !== undefined ? (
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-600 dark:text-slate-400">Last event</dt>
@@ -145,14 +139,6 @@ export function PrivateWhatsAppMirrorCard({
               <span className="font-medium text-slate-600 dark:text-slate-400">OIDC audience</span>
               <code className="break-all text-slate-900 dark:text-slate-100">
                 {OIDC_AUDIENCE}
-              </code>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-slate-600 dark:text-slate-400">
-                Source account
-              </span>
-              <code className="break-all text-slate-900 dark:text-slate-100">
-                {account.sourceAccountId}
               </code>
             </div>
           </div>

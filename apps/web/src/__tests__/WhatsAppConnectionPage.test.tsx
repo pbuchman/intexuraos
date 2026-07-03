@@ -77,7 +77,6 @@ describe('WhatsAppConnectionPage', () => {
       verifiedAt: '2026-06-22T00:00:00.000Z',
     });
     vi.mocked(services.getPrivateWhatsAppAccount).mockResolvedValue({
-      sourceAccountId: 'pbuchman-private-whatsapp',
       phoneNumberNormalized: '48123456789',
       displayName: '+48123456789',
       status: 'active',
@@ -89,9 +88,9 @@ describe('WhatsAppConnectionPage', () => {
     render(<WhatsAppConnectionPage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText('pbuchman-private-whatsapp').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: /disable private mirror/i })).toBeInTheDocument();
     });
-    expect(screen.getByText('Private WhatsApp Mirror')).toBeInTheDocument();
+    expect(screen.queryByText('pbuchman-private-whatsapp')).not.toBeInTheDocument();
     expect(screen.getByText('https://intexuraos.cloud/internal/whatsapp/private/events')).toBeInTheDocument();
   });
 
@@ -112,7 +111,6 @@ describe('WhatsAppConnectionPage', () => {
     const services = await import('@/services');
     vi.mocked(services.getWhatsAppStatus).mockResolvedValue(null);
     vi.mocked(services.getPrivateWhatsAppAccount).mockResolvedValue({
-      sourceAccountId: 'private-wa-existing-source',
       phoneNumberNormalized: '48123456789',
       displayName: '+48123456789',
       status: 'active',
@@ -124,8 +122,9 @@ describe('WhatsAppConnectionPage', () => {
     render(<WhatsAppConnectionPage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText('private-wa-existing-source').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: /disable private mirror/i })).toBeInTheDocument();
     });
+    expect(screen.queryByText('private-wa-existing-source')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /disable private mirror/i })).toBeInTheDocument();
     expect(screen.queryByText('Verify an assistant WhatsApp phone first.')).not.toBeInTheDocument();
   });

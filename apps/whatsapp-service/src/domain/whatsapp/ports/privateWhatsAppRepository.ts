@@ -14,6 +14,8 @@ import type {
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
+  PrivateWhatsAppReactionQueryInput,
+  PrivateWhatsAppReactionQueryResult,
   PrivateWhatsAppSenderQueryInput,
   PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppSenderDayQueryInput,
@@ -61,6 +63,9 @@ export interface PrivateWhatsAppRepository {
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>>;
+  findReactionsForMessageIds(
+    input: PrivateWhatsAppReactionQueryInput
+  ): Promise<Result<PrivateWhatsAppReactionQueryResult, WhatsAppError>>;
   findConversationContextMessages(
     input: PrivateConversationContextMessageQueryInput
   ): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>>;

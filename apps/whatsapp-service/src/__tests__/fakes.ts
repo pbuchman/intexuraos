@@ -52,6 +52,7 @@ import type {
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
+  PrivateWhatsAppReactionSummary,
   PrivateWhatsAppSender,
   PrivateWhatsAppSenderQueryInput,
   PrivateWhatsAppSenderQueryResult,
@@ -764,6 +765,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
   private failNextStoreError: WhatsAppError | null = null;
   private failNextDataQueryError: WhatsAppError | null = null;
   private failNextMessageLookupError: WhatsAppError | null = null;
+  private failNextReactionQueryError: WhatsAppError | null = null;
   private failNextChatTranscriptionUpdateError: WhatsAppError | null = null;
   private failNextConversationContextQueryError: WhatsAppError | null = null;
 
@@ -777,6 +779,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   failNextDataQuery(error: WhatsAppError): void {
     this.failNextDataQueryError = error;
+  }
+
+  failNextReactionQuery(error: WhatsAppError): void {
+    this.failNextReactionQueryError = error;
   }
 
   failNextMessageLookup(error: WhatsAppError): void {
@@ -1140,6 +1146,90 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     return Promise.resolve(ok(result));
   }
 
+  findReactionsForMessageIds(
+    input: Parameters<PrivateWhatsAppRepository['findReactionsForMessageIds']>[0]
+  ): ReturnType<PrivateWhatsAppRepository['findReactionsForMessageIds']> {
+    const reactionFailure = this.consumeReactionQueryFailure();
+    if (reactionFailure !== null) {
+      return Promise.resolve(err(reactionFailure));
+    }
+
+    const dataFailure = this.consumeDataQueryFailure();
+    if (dataFailure !== null) {
+      return Promise.resolve(err(dataFailure));
+    }
+
+    const failure = this.consumeFailure();
+    if (failure !== null) {
+      return Promise.resolve(err(failure));
+    }
+
+    const targetsByMatrixEventId = new Map(
+      input.targets.map((target) => [target.matrixEventId, target.messageId] as const)
+    );
+    const targetMessageIds = new Set(input.targets.map((target) => target.messageId));
+    const reactionsByMessageId: Record<string, PrivateWhatsAppReactionSummary[]> = {};
+    const attachedReactionMessageIds = new Set<string>();
+
+    for (const stored of this.stored.values()) {
+      if (stored.sourceAccountId !== input.sourceAccountId) {
+        continue;
+      }
+      const message = this.toMessage(stored);
+      if (input.chatId !== undefined && message.chatId !== input.chatId) {
+        continue;
+      }
+      if (message.messageType !== 'reaction') {
+        continue;
+      }
+
+      const normalizedReaction = message.reaction;
+      const legacyReaction =
+        normalizedReaction === undefined ? extractFakeLegacyReaction(message.rawMatrixEvent) : undefined;
+      const targetMessageId =
+        normalizedReaction?.targetMessageId ??
+        (legacyReaction === undefined
+          ? undefined
+          : targetsByMatrixEventId.get(legacyReaction.targetMatrixEventId));
+      const emoji = normalizedReaction?.emoji ?? legacyReaction?.emoji ?? message.text;
+      if (targetMessageId === undefined || !targetMessageIds.has(targetMessageId)) {
+        continue;
+      }
+      const normalizedEmoji = firstFakeNonEmpty(emoji);
+      if (normalizedEmoji === undefined) {
+        continue;
+      }
+
+      const summary: PrivateWhatsAppReactionSummary = {
+        id: message.id,
+        emoji: normalizedEmoji,
+        direction: message.direction,
+        eventTimestamp: message.eventTimestamp,
+        ...(message.senderKey !== undefined ? { senderKey: message.senderKey } : {}),
+        ...(message.senderDisplayName !== undefined
+          ? { senderDisplayName: message.senderDisplayName }
+          : {}),
+        ...(message.senderPhoneNumber !== undefined
+          ? { senderPhoneNumber: message.senderPhoneNumber }
+          : {}),
+      };
+      reactionsByMessageId[targetMessageId] = [
+        ...(reactionsByMessageId[targetMessageId] ?? []),
+        summary,
+      ].sort(compareFakeReactionSummaries);
+      attachedReactionMessageIds.add(message.id);
+    }
+
+    return Promise.resolve(
+      ok({
+        reactionsByMessageId,
+        attachedReactionMessageIds: [...attachedReactionMessageIds].sort((left, right) =>
+          left.localeCompare(right)
+        ),
+      })
+    );
+  }
+
   findConversationContextMessages(
     input: PrivateConversationContextMessageQueryInput
   ): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
@@ -1348,6 +1438,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     this.failNextStoreError = null;
     this.failNextDataQueryError = null;
     this.failNextMessageLookupError = null;
+    this.failNextReactionQueryError = null;
     this.failNextChatTranscriptionUpdateError = null;
     this.failNextConversationContextQueryError = null;
   }
@@ -1385,6 +1476,15 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     const error = this.failNextMessageLookupError;
     this.failNextMessageLookupError = null;
+    return error;
+  }
+
+  private consumeReactionQueryFailure(): WhatsAppError | null {
+    if (this.failNextReactionQueryError === null) {
+      return null;
+    }
+    const error = this.failNextReactionQueryError;
+    this.failNextReactionQueryError = null;
     return error;
   }
 
@@ -1451,6 +1551,13 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
     if (input.message.media !== undefined) {
       message.media = input.message.media;
+    }
+    if (input.message.reaction !== undefined) {
+      message.reaction = {
+        emoji: input.message.reaction.emoji,
+        targetMatrixEventId: input.message.reaction.targetMatrixEventId,
+        targetMessageId: `message:${input.sourceAccountId}:${input.message.reaction.targetMatrixEventId}`,
+      };
     }
     const transcription = this.messageTranscriptions.get(message.id);
     if (transcription !== undefined) {
@@ -1637,6 +1744,53 @@ interface FakePrivateWhatsAppCursor {
 
 function encodeFakePrivateWhatsAppCursor(sortValue: string, id: string): string {
   return Buffer.from(JSON.stringify({ sortValue, id })).toString('base64url');
+}
+
+function compareFakeReactionSummaries(
+  left: PrivateWhatsAppReactionSummary,
+  right: PrivateWhatsAppReactionSummary
+): number {
+  const timestampComparison = left.eventTimestamp.localeCompare(right.eventTimestamp);
+  return timestampComparison === 0 ? left.id.localeCompare(right.id) : timestampComparison;
+}
+
+function firstFakeNonEmpty(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
+
+function extractFakeLegacyReaction(
+  rawMatrixEvent: unknown
+): { emoji: string; targetMatrixEventId: string } | undefined {
+  if (!isFakeRecord(rawMatrixEvent)) {
+    return undefined;
+  }
+  const content = rawMatrixEvent['content'];
+  if (!isFakeRecord(content)) {
+    return undefined;
+  }
+  const relatesTo = content['m.relates_to'];
+  if (!isFakeRecord(relatesTo) || relatesTo['rel_type'] !== 'm.annotation') {
+    return undefined;
+  }
+
+  const targetMatrixEventId = firstFakeNonEmpty(asFakeOptionalString(relatesTo['event_id']));
+  const emoji = firstFakeNonEmpty(asFakeOptionalString(relatesTo['key']));
+  if (targetMatrixEventId === undefined || emoji === undefined) {
+    return undefined;
+  }
+  return { emoji, targetMatrixEventId };
+}
+
+function isFakeRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asFakeOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 function decodeFakePrivateWhatsAppCursor(

@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { ok } from '@intexuraos/common-core';
 
 const commonHttpState = vi.hoisted(() => ({
   logIncomingRequest: vi.fn(),
@@ -461,10 +462,10 @@ describe('Private WhatsApp Sync Routes', () => {
     };
     expect(body.success).toBe(true);
     expect(body.data).toMatchObject({
-      sourceAccountId: 'pbuchman-private-whatsapp',
       phoneNumberNormalized: '48123456789',
       status: 'active',
     });
+    expect(body.data).not.toHaveProperty('sourceAccountId');
     expect(body.data.userId).toBeUndefined();
   });
 
@@ -573,15 +574,15 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as {
       success: boolean;
-      data: { sourceAccountId: string; phoneNumberNormalized: string; status: string };
+      data: { sourceAccountId?: string; phoneNumberNormalized: string; status: string };
     };
     expect(body.success).toBe(true);
     expect(body.data).toMatchObject({
       phoneNumberNormalized: '48987654321',
       status: 'active',
     });
-    expect(body.data.sourceAccountId).toEqual(expect.any(String));
-    expect(body.data.sourceAccountId).not.toBe('');
+    expect(body.data.sourceAccountId).toBeUndefined();
+    expect(JSON.stringify(body.data)).not.toContain('sourceAccountId');
   });
 
   it('rejects private WhatsApp mirror enablement for phones not connected to the user', async () => {
@@ -1952,6 +1953,645 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(logged).not.toContain('hello from private whatsapp');
     expect(logged).not.toContain('+48123456789');
     expect(logged).not.toContain('phone:+48123456789');
+  });
+
+  it('returns private chat messages with inline reactions and without Matrix identifiers', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$target-event',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'original post',
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$reaction-event',
+            eventTimestamp: '2026-06-22T10:05:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$target-event',
+                  key: '👍',
+                },
+              },
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$second-event',
+            eventTimestamp: '2026-06-22T10:10:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'newer post',
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=10`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { emoji: string; senderDisplayName?: string; direction: string }[];
+        }[];
+      };
+    };
+    const target = body.data.messages.find((message) => message.text === 'original post');
+    expect(target).toMatchObject({
+      text: 'original post',
+      reactions: [
+        {
+          emoji: '👍',
+          senderDisplayName: 'Alice',
+          direction: 'incoming',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('returns sender private messages with inline reactions and omits attached reaction rows', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$sender-target-event',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'sender original post',
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$sender-reaction-event',
+            eventTimestamp: '2026-06-22T10:05:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$sender-reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$sender-target-event',
+                  key: '👍',
+                },
+              },
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$sender-second-event',
+            eventTimestamp: '2026-06-22T10:10:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'sender newer post',
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { emoji: string; senderDisplayName?: string; direction: string }[];
+        }[];
+      };
+    };
+    const target = body.data.messages.find((message) => message.text === 'sender original post');
+    expect(target).toMatchObject({
+      text: 'sender original post',
+      reactions: [
+        {
+          emoji: '👍',
+          senderDisplayName: 'Alice',
+          direction: 'incoming',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('returns standalone reaction rows when the target is outside the sender page', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$standalone-target-event',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'standalone target post',
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$standalone-reaction-event',
+            eventTimestamp: '2026-06-22T10:05:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+              reaction: {
+                emoji: '👍',
+                targetMatrixEventId: '$standalone-target-event',
+              },
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          messageType: string;
+          reaction?: { emoji: string; targetMessageId: string };
+        }[];
+      };
+    };
+    expect(body.data.messages).toMatchObject([
+      {
+        messageType: 'reaction',
+        reaction: {
+          emoji: '👍',
+        },
+      },
+    ]);
+    expect(body.data.messages[0]?.reaction?.targetMessageId).toContain('standalone-target-event');
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('suppresses raw-only legacy reaction rows when the target is outside the sender page', async () => {
+    const baseMessage: StorePrivateWhatsAppMessageInput['message'] = {
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$legacy-standalone-target-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      senderDisplayName: 'Alice',
+      senderPhoneNumber: '+48123456789',
+      senderPhoneNumberNormalized: '48123456789',
+      direction: 'incoming',
+      type: 'text',
+      text: 'legacy standalone target post',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$legacy-standalone-target-event',
+      },
+    };
+    await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-22T10:00:01.000Z',
+      chat: {
+        matrixRoomId: '!room:matrix.example',
+        type: 'direct',
+        displayName: 'Alice',
+      },
+      message: {
+        ...baseMessage,
+        matrixEventId: '$legacy-standalone-target-event',
+        eventTimestamp: '2026-06-22T10:00:00.000Z',
+        type: 'text',
+        text: 'legacy standalone target post',
+      },
+    });
+    await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-22T10:05:01.000Z',
+      chat: {
+        matrixRoomId: '!room:matrix.example',
+        type: 'direct',
+        displayName: 'Alice',
+      },
+      message: {
+        ...baseMessage,
+        matrixEventId: '$legacy-standalone-reaction-event',
+        eventTimestamp: '2026-06-22T10:05:00.000Z',
+        type: 'reaction',
+        text: '👍',
+        rawMatrixEvent: {
+          type: 'm.reaction',
+          event_id: '$legacy-standalone-reaction-event',
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$legacy-standalone-target-event',
+              key: '👍',
+            },
+          },
+        },
+      },
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: { messageType: string; reaction?: { emoji: string; targetMessageId: string } }[];
+      };
+    };
+    expect(body.data.messages).toEqual([]);
+    expect(JSON.stringify(body.data)).not.toContain('legacy-standalone-target-event');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('folds page-local raw-only legacy reactions when the repository only returns normalized reactions', async () => {
+    const baseMessage: StorePrivateWhatsAppMessageInput['message'] = {
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$fallback-inline-target-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      senderDisplayName: 'Alice',
+      senderPhoneNumber: '+48123456789',
+      senderPhoneNumberNormalized: '48123456789',
+      direction: 'incoming',
+      type: 'text',
+      text: 'fallback inline target post',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$fallback-inline-target-event',
+      },
+    };
+    const store = (
+      message: StorePrivateWhatsAppMessageInput['message']
+    ): ReturnType<typeof ctx.privateWhatsAppRepository.storeIncomingMessage> =>
+      ctx.privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: '2026-06-22T10:00:01.000Z',
+        chat: {
+          matrixRoomId: '!room:matrix.example',
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message,
+      });
+    await store(baseMessage);
+    await store({
+      ...baseMessage,
+      matrixEventId: '$fallback-inline-reaction',
+      type: 'reaction',
+      text: '💚',
+      eventTimestamp: '2026-06-22T10:05:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$fallback-inline-target-event',
+            key: '  💚  ',
+          },
+        },
+      },
+    });
+    const originalFindReactions =
+      ctx.privateWhatsAppRepository.findReactionsForMessageIds.bind(ctx.privateWhatsAppRepository);
+    ctx.privateWhatsAppRepository.findReactionsForMessageIds = ():
+      ReturnType<typeof ctx.privateWhatsAppRepository.findReactionsForMessageIds> =>
+      Promise.resolve(ok({ reactionsByMessageId: {}, attachedReactionMessageIds: [] }));
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    ctx.privateWhatsAppRepository.findReactionsForMessageIds = originalFindReactions;
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { id: string; emoji: string }[];
+        }[];
+      };
+    };
+    expect(body.data.messages).toHaveLength(1);
+    expect(body.data.messages[0]).toMatchObject({
+      text: 'fallback inline target post',
+      reactions: [
+        {
+          id: 'message:pbuchman-private-whatsapp:$fallback-inline-reaction',
+          emoji: '💚',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('folds page-local raw-only legacy reactions and suppresses malformed legacy rows', async () => {
+    const baseMessage: StorePrivateWhatsAppMessageInput['message'] = {
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$legacy-inline-target-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      senderDisplayName: 'Alice',
+      senderPhoneNumber: '+48123456789',
+      senderPhoneNumberNormalized: '48123456789',
+      direction: 'incoming',
+      type: 'text',
+      text: 'legacy inline target post',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$legacy-inline-target-event',
+      },
+    };
+    const store = (
+      message: StorePrivateWhatsAppMessageInput['message']
+    ): ReturnType<typeof ctx.privateWhatsAppRepository.storeIncomingMessage> =>
+      ctx.privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: '2026-06-22T10:00:01.000Z',
+        chat: {
+          matrixRoomId: '!room:matrix.example',
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message,
+      });
+    await store(baseMessage);
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-inline-reaction-b',
+      type: 'reaction',
+      text: '👋',
+      eventTimestamp: '2026-06-22T10:05:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$legacy-inline-target-event',
+            key: '👋',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-inline-reaction-c',
+      type: 'reaction',
+      text: '✅',
+      eventTimestamp: '2026-06-22T10:04:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$legacy-inline-target-event',
+            key: '✅',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-inline-reaction-a',
+      type: 'reaction',
+      text: '🔥',
+      eventTimestamp: '2026-06-22T10:05:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$legacy-inline-target-event',
+            key: '  🔥  ',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-raw',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:06:00.000Z',
+      rawMatrixEvent: 'not-an-event',
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-content',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:07:00.000Z',
+      rawMatrixEvent: { content: 'not-content' },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-relation',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:08:00.000Z',
+      rawMatrixEvent: { content: { 'm.relates_to': { rel_type: 'm.replace' } } },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-empty',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:09:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '   ',
+            key: '   ',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-non-string',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:10:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: 123,
+            key: 456,
+          },
+        },
+      },
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { id: string; emoji: string }[];
+        }[];
+      };
+    };
+    expect(body.data.messages).toHaveLength(1);
+    expect(body.data.messages[0]).toMatchObject({
+      text: 'legacy inline target post',
+      reactions: [
+        {
+          id: 'message:pbuchman-private-whatsapp:$legacy-inline-reaction-c',
+          emoji: '✅',
+        },
+        {
+          id: 'message:pbuchman-private-whatsapp:$legacy-inline-reaction-a',
+          emoji: '🔥',
+        },
+        {
+          id: 'message:pbuchman-private-whatsapp:$legacy-inline-reaction-b',
+          emoji: '👋',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('returns standard errors when inline reaction hydration fails for chat and sender reads', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+
+    ctx.privateWhatsAppRepository.failNextReactionQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated reaction hydration failure',
+    });
+    const chatMessagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=10`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    ctx.privateWhatsAppRepository.failNextReactionQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated reaction hydration failure',
+    });
+    const senderMessagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(chatMessagesResponse.statusCode).toBe(500);
+    expect(senderMessagesResponse.statusCode).toBe(500);
   });
 
   it('paginates public private WhatsApp messages and returns media metadata without text', async () => {

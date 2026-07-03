@@ -380,7 +380,7 @@ class FakeQuery {
       docs = docs.filter((doc) => {
         const data = doc.data();
         if (data === undefined) return false;
-        const fieldValue: unknown = data[filter.field];
+        const fieldValue: unknown = readFieldPath(data, filter.field);
         // For ordinal comparisons, normalize Timestamp/Date to millis so the
         // fake matches real Firestore semantics for time-based queries.
         const fieldMillis = getTimestampValue(fieldValue);
@@ -501,7 +501,7 @@ class FakeQuery {
     }
 
     const data = doc.data();
-    return data?.[field];
+    return typeof field === 'string' ? readFieldPath(data, field) : data?.[field];
   }
 
   private resolveStartAfterValues(): unknown[] | undefined {
@@ -524,12 +524,54 @@ class FakeQuery {
         if (isDocumentIdField(order.field)) {
           return snapshotLike.id;
         }
-        return data[order.field];
+        return typeof order.field === 'string'
+          ? readFieldPath(data, order.field)
+          : data[order.field];
       });
     }
 
     return this.startAfterValues ?? undefined;
   }
+}
+
+function readFieldPath(data: DocumentData | undefined, field: string): unknown {
+  if (data === undefined) {
+    return undefined;
+  }
+  if (Object.prototype.hasOwnProperty.call(data, field)) {
+    return data[field];
+  }
+  return splitFieldPath(field).reduce<unknown>((current, segment) => {
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !Object.prototype.hasOwnProperty.call(current, segment)
+    ) {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[segment];
+  }, data);
+}
+
+function splitFieldPath(field: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let inEscapedSegment = false;
+  for (const char of field) {
+    if (char === '`') {
+      inEscapedSegment = !inEscapedSegment;
+      continue;
+    }
+    if (char === '.' && !inEscapedSegment) {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  segments.push(current);
+  return segments;
 }
 
 /**

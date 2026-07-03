@@ -208,6 +208,16 @@ export interface PrivateWhatsAppTranscriptionState {
   completedAt?: string;
 }
 
+export interface PrivateWhatsAppReaction {
+  id: string;
+  emoji: string;
+  senderKey?: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  direction: 'incoming' | 'outgoing';
+  eventTimestamp: string;
+}
+
 export interface MediaUrlResponse {
   url: string;
   expiresAt: string;
@@ -254,6 +264,11 @@ export interface PrivateWhatsAppMessage {
   messageType: PrivateWhatsAppMessageType;
   text?: string;
   media?: PrivateWhatsAppMedia;
+  reaction?: {
+    emoji: string;
+    targetMessageId: string;
+  };
+  reactions?: PrivateWhatsAppReaction[];
   eventTimestamp: string;
   eventDayKey?: string;
   eventTimeZone?: string;
@@ -288,7 +303,6 @@ export interface PrivateWhatsAppSenderDay {
 export type PrivateWhatsAppAccountStatus = 'active' | 'disabled';
 
 export interface PrivateWhatsAppAccount {
-  sourceAccountId: string;
   phoneNumberNormalized: string;
   displayName: string;
   status: PrivateWhatsAppAccountStatus;

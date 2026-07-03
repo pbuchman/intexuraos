@@ -57,6 +57,10 @@ export interface IngestPrivateWhatsAppEventInput {
       storedSizeBytes?: number;
       storedAt?: string;
     };
+    reaction?: {
+      emoji: string;
+      targetMatrixEventId: string;
+    };
   };
   rawMatrixEvent: unknown;
 }
@@ -328,6 +332,11 @@ function parseMessage(
     message.media = media.media;
   }
 
+  const reaction = parseReaction(rawEvent, rawMessage);
+  if (reaction !== undefined) {
+    message.reaction = reaction;
+  }
+
   return { ok: true, message };
 }
 
@@ -402,6 +411,51 @@ function parseMedia(
     media.storedAt = storedAt;
   }
   return { ok: true, media };
+}
+
+function parseReaction(
+  rawEvent: Record<string, unknown>,
+  rawMessage: Record<string, unknown>
+): IngestPrivateWhatsAppEventInput['message']['reaction'] | undefined {
+  const explicitReaction = rawMessage['reaction'];
+  if (isRecord(explicitReaction)) {
+    const emoji = readOptionalString(explicitReaction, 'emoji');
+    const targetMatrixEventId = readOptionalString(explicitReaction, 'targetMatrixEventId');
+    if (
+      typeof emoji === 'string' &&
+      emoji.trim() !== '' &&
+      typeof targetMatrixEventId === 'string' &&
+      targetMatrixEventId.trim() !== ''
+    ) {
+      return { emoji, targetMatrixEventId };
+    }
+  }
+
+  const rawMatrixEvent = rawEvent['rawMatrixEvent'] ?? rawEvent;
+  if (!isRecord(rawMatrixEvent)) {
+    return undefined;
+  }
+  const content = rawMatrixEvent['content'];
+  if (!isRecord(content)) {
+    return undefined;
+  }
+  const relatesTo = content['m.relates_to'];
+  if (!isRecord(relatesTo)) {
+    return undefined;
+  }
+  const relType = readOptionalString(relatesTo, 'rel_type');
+  const targetMatrixEventId = readOptionalString(relatesTo, 'event_id');
+  const key = readOptionalString(relatesTo, 'key');
+  if (
+    relType !== 'm.annotation' ||
+    typeof targetMatrixEventId !== 'string' ||
+    targetMatrixEventId.trim() === '' ||
+    typeof key !== 'string' ||
+    key.trim() === ''
+  ) {
+    return undefined;
+  }
+  return { emoji: key, targetMatrixEventId };
 }
 
 function rejectEvent(matrixEventId: string, reason: string): RejectedEvent {
@@ -486,6 +540,9 @@ function toStoreInput(
   }
   if (event.message.media !== undefined) {
     storeInput.message.media = event.message.media;
+  }
+  if (event.message.reaction !== undefined) {
+    storeInput.message.reaction = event.message.reaction;
   }
 
   return storeInput;
