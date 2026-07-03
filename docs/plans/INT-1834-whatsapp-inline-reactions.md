@@ -14,7 +14,7 @@
 - Do not expose `matrixEventId`, `targetMatrixEventId`, `rawMatrixEvent`, or `matrixSenderId` through public web APIs.
 - Keep `sourceAccountId` server-side only on authenticated private WhatsApp read routes.
 - Preserve existing media, transcription, pagination, and day-filter behavior except for rendering attached reactions inline.
-- Reaction display is read-model enrichment; do not backfill existing documents unless implementation proves read-time normalization cannot cover a case.
+- Reaction display is read-model enrichment; do not backfill existing documents. Existing reaction rows that only have `rawMatrixEvent.content["m.relates_to"]` must be attached by read-time normalization and covered by tests.
 - Public Intex Agent assistant-message reaction handling is documented as a follow-up contract because it crosses WhatsApp webhook processing, `intex-agent` session events, and the Intex session web timeline.
 
 ---
@@ -230,11 +230,11 @@ Expected: PASS.
 
 **Interfaces:**
 - Consumes: stored `PrivateWhatsAppMessage.reaction.targetMessageId`.
-- Produces: `findReactionsForMessageIds({ sourceAccountId, chatId, targetMessageIds })`.
+- Produces: `findReactionsForMessageIds({ sourceAccountId, chatId, targets })`.
 
 - [ ] **Step 1: Add repository failing test**
 
-Add a test that stores a target text message and two reaction messages, then calls the new repository method:
+Add a test that stores a target text message, a newly normalized reaction message, and an existing-style reaction message that only has `rawMatrixEvent.content["m.relates_to"]`, then calls the new repository method:
 
 ```ts
 it('finds private WhatsApp reactions for target message ids without exposing Matrix ids', async () => {
@@ -249,7 +249,7 @@ it('finds private WhatsApp reactions for target message ids without exposing Mat
   expect(targetResult.ok).toBe(true);
   if (!targetResult.ok) throw new Error('target store failed');
 
-  const reactionResult = await repository.storeIncomingMessage(
+  const firstReactionResult = await repository.storeIncomingMessage(
     createStoreInput({
       message: {
         ...createStoreInput().message,
@@ -264,23 +264,63 @@ it('finds private WhatsApp reactions for target message ids without exposing Mat
       },
     })
   );
-  expect(reactionResult.ok).toBe(true);
+  expect(firstReactionResult.ok).toBe(true);
+
+  const secondReactionResult = await repository.storeIncomingMessage(
+    createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$legacy-reaction-event',
+        direction: 'incoming',
+        type: 'reaction',
+        text: '❤️',
+        rawMatrixEvent: {
+          type: 'm.reaction',
+          event_id: '$legacy-reaction-event',
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$target-event',
+              key: '❤️',
+            },
+          },
+        },
+      },
+    })
+  );
+  expect(secondReactionResult.ok).toBe(true);
 
   const reactions = await repository.findReactionsForMessageIds({
     sourceAccountId: target.sourceAccountId,
     chatId: targetResult.value.chatId,
-    targetMessageIds: [targetResult.value.messageId],
+    targets: [
+      {
+        messageId: targetResult.value.messageId,
+        matrixEventId: '$target-event',
+      },
+    ],
   });
 
   expect(reactions.ok).toBe(true);
   if (!reactions.ok) throw new Error('reaction query failed');
-  expect(reactions.value.reactionsByMessageId[targetResult.value.messageId]).toMatchObject([
+  const summaries = reactions.value.reactionsByMessageId[targetResult.value.messageId];
+  if (summaries === undefined) throw new Error('target reactions missing');
+  expect(summaries).toHaveLength(2);
+  expect(summaries).toMatchObject([
     {
       emoji: '👍',
       senderDisplayName: 'Alice',
       direction: 'incoming',
     },
+    {
+      emoji: '❤️',
+      senderDisplayName: 'Alice',
+      direction: 'incoming',
+    },
   ]);
+  expect(summaries.map((summary) => summary.eventTimestamp)).toEqual(
+    summaries.map((summary) => summary.eventTimestamp).sort()
+  );
   expect(JSON.stringify(reactions.value)).not.toContain('$target-event');
 });
 ```
@@ -297,7 +337,10 @@ In `PrivateWhatsApp.ts`, add:
 export interface PrivateWhatsAppReactionQueryInput {
   sourceAccountId: string;
   chatId?: string;
-  targetMessageIds: string[];
+  targets: Array<{
+    messageId: string;
+    matrixEventId: string;
+  }>;
 }
 
 export interface PrivateWhatsAppReactionQueryResult {
@@ -343,7 +386,12 @@ function chunkMessageIds(ids: string[]): string[][] {
 }
 ```
 
-Implement `findReactionsForMessageIds()` using:
+Implement `findReactionsForMessageIds()` with two read paths:
+
+1. Query normalized rows by stored `reaction.targetMessageId`.
+2. Query legacy reaction rows for the same source/chat and normalize `rawMatrixEvent.content["m.relates_to"]` in memory when the related Matrix event id matches one of the requested targets.
+
+The stored-field query uses:
 
 ```ts
 let query: Query = getFirestore()
@@ -359,7 +407,22 @@ if (input.chatId !== undefined) {
 }
 ```
 
-Project each reaction with `toReactionSummary(message)` and group by `message.reaction.targetMessageId`.
+The legacy query must not require a backfill:
+
+```ts
+let legacyQuery: Query = getFirestore()
+  .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+  .where('sourceAccountId', '==', input.sourceAccountId)
+  .where('messageType', '==', 'reaction')
+  .orderBy('eventTimestamp', 'asc')
+  .orderBy(FieldPath.documentId(), 'asc');
+
+if (input.chatId !== undefined) {
+  legacyQuery = legacyQuery.where('chatId', '==', input.chatId);
+}
+```
+
+For each legacy candidate, parse the raw Matrix relation with the same `m.annotation` rules as ingest, convert the target Matrix event id through the requested target map, and skip it if the row already has `reaction.targetMessageId` so it is not duplicated. Project each reaction with `toReactionSummary(message, normalizedTargetMessageId)` and group by the internal target message id. Sort each grouped summary array by `eventTimestamp` and then summary `id` for deterministic multi-reaction rendering.
 
 - [ ] **Step 5: Add Firestore index migration**
 
@@ -504,11 +567,17 @@ async function hydrateInlineReactions(input: {
     .filter((message) => message.messageType !== 'reaction')
     .map((message) => message.id);
   if (targetMessageIds.length === 0) return ok(input.messages);
+  const targets = input.messages
+    .filter((message) => message.messageType !== 'reaction')
+    .map((message) => ({
+      messageId: message.id,
+      matrixEventId: message.matrixEventId,
+    }));
 
   const reactionsResult = await getServices().privateWhatsAppRepository.findReactionsForMessageIds({
     sourceAccountId: input.sourceAccountId,
     ...(input.chatId !== undefined ? { chatId: input.chatId } : {}),
-    targetMessageIds,
+    targets,
   });
   if (!reactionsResult.ok) return err(reactionsResult.error);
 
@@ -691,13 +760,13 @@ Add:
 
 ```ts
 it('folds private WhatsApp reactions into the target transcript message', () => {
-  const target = createPrivateMessage({
+  const target = message({
     id: 'target-message',
     matrixEventId: '$target',
     text: 'See you at five',
     eventTimestamp: '2026-07-03T10:00:00.000Z',
   });
-  const reaction = createPrivateMessage({
+  const reaction = message({
     id: 'reaction-message',
     matrixEventId: '$reaction',
     messageType: 'reaction',
@@ -711,7 +780,7 @@ it('folds private WhatsApp reactions into the target transcript message', () => 
   });
 
   const context = projectPrivateConversationContext({
-    chat: createDirectChat(),
+    chat,
     range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
     messages: [target, reaction],
   });
@@ -720,6 +789,41 @@ it('folds private WhatsApp reactions into the target transcript message', () => 
   expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
     '[3 July] Alice: See you at five\n  Reactions: 👍 Alice'
   );
+});
+
+it('does not expose private reaction sender identifiers in transcript text', () => {
+  const target = message({
+    id: 'target-message',
+    matrixEventId: '$target',
+    text: 'See you at five',
+    eventTimestamp: '2026-07-03T10:00:00.000Z',
+  });
+  const reaction = message({
+    id: 'reaction-message',
+    matrixEventId: '$reaction',
+    messageType: 'reaction',
+    text: '👍',
+    senderDisplayName: undefined,
+    senderPhoneNumber: '+48123456789',
+    senderKey: 'phone:+48123456789',
+    eventTimestamp: '2026-07-03T10:05:00.000Z',
+    reaction: {
+      emoji: '👍',
+      targetMatrixEventId: '$target',
+      targetMessageId: 'target-message',
+    },
+  });
+
+  const context = projectPrivateConversationContext({
+    chat,
+    range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+    messages: [target, reaction],
+  });
+
+  const transcriptText = buildPrivateConversationTranscriptText(context.messages);
+  expect(transcriptText).toContain('Reactions: 👍 Unknown');
+  expect(transcriptText).not.toContain('+48123456789');
+  expect(transcriptText).not.toContain('phone:+48123456789');
 });
 ```
 
@@ -769,10 +873,12 @@ Update `buildPrivateConversationTranscriptText()`:
 function formatReactionSummary(reaction: PrivateWhatsAppReactionSummary): string {
   const sender = reaction.direction === 'outgoing'
     ? 'You'
-    : firstNonEmpty(reaction.senderDisplayName, reaction.senderPhoneNumber, reaction.senderKey) ?? 'Unknown';
+    : firstNonEmpty(reaction.senderDisplayName) ?? 'Unknown';
   return `${reaction.emoji} ${sender}`;
 }
 ```
+
+Do not fall back to `senderPhoneNumber` or `senderKey` here; existing transcript projection tests assert those private identifiers stay out of assistant context.
 
 Append a second line only when reactions exist:
 
