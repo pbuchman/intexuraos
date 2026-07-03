@@ -356,7 +356,7 @@ Add tests to `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/
 
 ```ts
 it('exports an owned session and turns as a PDF snapshot input', async () => {
-  const { deps, conversationRepository, privateRepository } = makeDeps();
+  const { deps, conversationRepository, pdfExporter, privateRepository } = makeDeps();
   await seedDirectMessage(privateRepository);
   const created = await createConversationAssistantSession(
     {
@@ -379,7 +379,7 @@ it('exports an owned session and turns as a PDF snapshot input', async () => {
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.value.contentType).toBe('application/pdf');
-  expect(deps.pdfExporter.exportCalls[0]).toMatchObject({
+  expect(pdfExporter.exportCalls[0]).toMatchObject({
     title: created.value.session.title,
     messageCounts: { included: 1, excluded: 0 },
     messages: [
@@ -471,7 +471,11 @@ export async function exportConversationAssistantSessionPdf(
     return err({ code: 'INTERNAL_ERROR', message: pdfResult.error.message });
   }
 
-  return ok(pdfResult.value);
+  const baseName = pdfResult.value.fileName.replace(/\.pdf$/i, '');
+  return ok({
+    ...pdfResult.value,
+    fileName: `${baseName}-${session.id}.pdf`,
+  });
 }
 ```
 
@@ -485,7 +489,7 @@ Add route tests in `apps/whatsapp-service/src/__tests__/conversationAssistantRou
 
 - authenticated export returns status `200`.
 - `content-type` contains `application/pdf`.
-- `content-disposition` contains `attachment`.
+- `content-disposition` contains `attachment` and a filename ending in `-${sessionId}.pdf`.
 - `cache-control` is `no-store`.
 - body starts with `%PDF-` or the fake exporter bytes.
 - unauthenticated export returns `401`.
@@ -562,7 +566,7 @@ import { createPdfConversationExporter } from '@intexuraos/infra-pdf-export';
 
 Add `pdfExporter?: import('@intexuraos/infra-pdf-export').PdfConversationExporter;` to `ServiceContainer`, set `pdfExporter: createPdfConversationExporter()` in `getServices()`, and include `pdfExporter: services.pdfExporter` in `getConversationAssistantDeps()` after checking it is configured.
 
-Update `apps/whatsapp-service/src/__tests__/fakes.ts` test services to include a fake PDF exporter with an `exportCalls` array and deterministic PDF bytes.
+Update `apps/whatsapp-service/src/__tests__/fakes.ts` test services to include a fake PDF exporter with an `exportCalls` array and deterministic PDF bytes. Ensure `makeDeps()` returns the fake as a separate `pdfExporter` property so tests can inspect `exportCalls` without accessing fake-only fields through the production `ConversationAssistantDeps` type.
 
 Run:
 
