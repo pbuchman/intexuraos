@@ -577,8 +577,17 @@ Extend `PublicPrivateWhatsAppMessage` with:
 ```ts
 type PublicPrivateWhatsAppMessage = Omit<
   PrivateWhatsAppMessage,
-  'matrixEventId' | 'rawMatrixEvent' | 'sourceAccountId' | 'reaction' | 'reactions'
+  | 'userId'
+  | 'sourceAccountId'
+  | 'rawMatrixEvent'
+  | 'matrixRoomId'
+  | 'matrixEventId'
+  | 'matrixSenderId'
+  | 'media'
+  | 'reaction'
+  | 'reactions'
 > & {
+  media?: PublicPrivateWhatsAppMedia;
   reaction?: {
     emoji: string;
     targetMessageId: string;
@@ -619,10 +628,10 @@ async function hydrateInlineReactions(input: {
   return ok(
     input.messages
       .filter((message) => message.messageType !== 'reaction' || !attachedReactionIds.has(message.id))
-      .map((message) => ({
-        ...message,
-        reactions: reactionsResult.value.reactionsByMessageId[message.id],
-      }))
+      .map((message) => {
+        const reactions = reactionsResult.value.reactionsByMessageId[message.id];
+        return reactions === undefined ? message : { ...message, reactions };
+      })
   );
 }
 ```
