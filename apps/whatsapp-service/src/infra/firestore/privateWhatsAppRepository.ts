@@ -68,6 +68,11 @@ interface PrivateChatResolution {
   chatId: string;
 }
 
+interface PrivateWhatsAppMessageDisplayNames {
+  senderDisplayName?: string;
+  chatDisplayName?: string;
+}
+
 export {
   createPrivateWhatsAppChatId,
   createPrivateWhatsAppMessageId,
@@ -337,19 +342,28 @@ async function storeIncomingMessage(
       const existingSenderDay = await transaction.get(senderDayRef);
       const existingAccount = await transaction.get(accountRef);
       const chat = buildChat(input, chatId, existingChat.data() as PrivateWhatsAppChat | undefined);
-      const message = buildMessage(input, chatId, messageId);
       const sender = buildSender(
         input,
         senderId,
         chatId,
-        existingSender.data() as PrivateWhatsAppSender | undefined
+        existingSender.data() as PrivateWhatsAppSender | undefined,
+        getDirectChatDisplayName(chat)
       );
       const senderDay = buildSenderDay(
         input,
         senderDayId,
         chatId,
-        existingSenderDay.data() as PrivateWhatsAppSenderDay | undefined
+        existingSenderDay.data() as PrivateWhatsAppSenderDay | undefined,
+        sender.senderDisplayName
       );
+      const messageDisplayNames: PrivateWhatsAppMessageDisplayNames = {};
+      if (sender.senderDisplayName !== undefined) {
+        messageDisplayNames.senderDisplayName = sender.senderDisplayName;
+      }
+      if (chat.displayName !== undefined) {
+        messageDisplayNames.chatDisplayName = chat.displayName;
+      }
+      const message = buildMessage(input, chatId, messageId, messageDisplayNames);
 
       transaction.set(chatRef, chat, { merge: true });
       transaction.set(messageRef, message);
@@ -970,10 +984,17 @@ async function rebuildAggregates(
         eventDayKey
       );
 
-      senders.set(senderId, buildSender(storeInput, senderId, chatId, senders.get(senderId)));
+      const sender = buildSender(storeInput, senderId, chatId, senders.get(senderId));
+      senders.set(senderId, sender);
       senderDays.set(
         senderDayId,
-        buildSenderDay(storeInput, senderDayId, chatId, senderDays.get(senderDayId))
+        buildSenderDay(
+          storeInput,
+          senderDayId,
+          chatId,
+          senderDays.get(senderDayId),
+          sender.senderDisplayName
+        )
       );
 
       const upgradeFields = buildMessageUpgradeFields(message, storeInput);
@@ -1116,11 +1137,16 @@ function isPrimaryChatMatrixRoom(
   return existingChat.matrixRoomId === matrixRoomId;
 }
 
+function getDirectChatDisplayName(chat: PrivateWhatsAppChat): string | undefined {
+  return chat.chatType === 'direct' ? chat.displayName : undefined;
+}
+
 function buildSender(
   input: StorePrivateWhatsAppMessageInput,
   senderId: string,
   chatId: string,
-  existingSender: PrivateWhatsAppSender | undefined
+  existingSender: PrivateWhatsAppSender | undefined,
+  canonicalDisplayName?: string
 ): PrivateWhatsAppSender {
   const now = new Date().toISOString();
   const senderKey = getSenderKey(input);
@@ -1137,11 +1163,12 @@ function buildSender(
     schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
   };
 
-  const senderDisplayName = selectLatestString(
+  const senderDisplayName = selectContactDisplayName(
     existingSender?.senderDisplayName,
     input.message.senderDisplayName,
     existingSender?.lastEventAt,
-    input.message.eventTimestamp
+    input.message.eventTimestamp,
+    canonicalDisplayName
   );
   if (senderDisplayName !== undefined) {
     sender.senderDisplayName = senderDisplayName;
@@ -1165,7 +1192,8 @@ function buildSenderDay(
   input: StorePrivateWhatsAppMessageInput,
   senderDayId: string,
   chatId: string,
-  existingSenderDay: PrivateWhatsAppSenderDay | undefined
+  existingSenderDay: PrivateWhatsAppSenderDay | undefined,
+  canonicalDisplayName?: string
 ): PrivateWhatsAppSenderDay {
   const now = new Date().toISOString();
   const senderDay: PrivateWhatsAppSenderDay = {
@@ -1189,11 +1217,12 @@ function buildSenderDay(
     schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
   };
 
-  const senderDisplayName = selectLatestString(
+  const senderDisplayName = selectContactDisplayName(
     existingSenderDay?.senderDisplayName,
     input.message.senderDisplayName,
     existingSenderDay?.lastEventAt,
-    input.message.eventTimestamp
+    input.message.eventTimestamp,
+    canonicalDisplayName
   );
   if (senderDisplayName !== undefined) {
     senderDay.senderDisplayName = senderDisplayName;
@@ -1461,6 +1490,45 @@ function selectLatestString(
   return isSameOrNewerTimestamp(existingTimestamp, nextTimestamp) ? nextValue : existingValue;
 }
 
+function selectContactDisplayName(
+  existingValue: string | undefined,
+  nextValue: string | undefined,
+  existingTimestamp: string | undefined,
+  nextTimestamp: string,
+  canonicalDisplayName?: string
+): string | undefined {
+  const latestValue = selectLatestString(existingValue, nextValue, existingTimestamp, nextTimestamp);
+  const stableCanonical = isStableContactDisplayName(canonicalDisplayName)
+    ? canonicalDisplayName
+    : undefined;
+  if (latestValue === undefined) {
+    return stableCanonical;
+  }
+  if (isBridgeGeneratedContactLabel(latestValue)) {
+    if (stableCanonical !== undefined) {
+      return stableCanonical;
+    }
+    if (isStableContactDisplayName(existingValue)) {
+      return existingValue;
+    }
+  }
+  return latestValue;
+}
+
+function isStableContactDisplayName(value: string | undefined): value is string {
+  return value !== undefined && value.trim() !== '' && !isBridgeGeneratedContactLabel(value);
+}
+
+function isBridgeGeneratedContactLabel(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.endsWith(' (WA)') || isPhoneLikeContactLabel(trimmed);
+}
+
+function isPhoneLikeContactLabel(value: string): boolean {
+  const digitCount = value.replace(/\D/g, '').length;
+  return digitCount >= 6 && /^[+\d\s().-]+$/.test(value);
+}
+
 function isSameOrNewerTimestamp(existingTimestamp: string, nextTimestamp: string): boolean {
   const existingMs = Date.parse(existingTimestamp);
   const nextMs = Date.parse(nextTimestamp);
@@ -1562,7 +1630,8 @@ function isSameOrNewerChatEvent(
 function buildMessage(
   input: StorePrivateWhatsAppMessageInput,
   chatId: string,
-  messageId: string
+  messageId: string,
+  displayNames: PrivateWhatsAppMessageDisplayNames = {}
 ): PrivateWhatsAppMessage {
   const message: PrivateWhatsAppMessage = {
     id: messageId,
@@ -1586,8 +1655,9 @@ function buildMessage(
     schemaVersion: PRIVATE_WHATSAPP_SCHEMA_VERSION,
   };
 
-  if (input.message.senderDisplayName !== undefined) {
-    message.senderDisplayName = input.message.senderDisplayName;
+  const senderDisplayName = displayNames.senderDisplayName ?? input.message.senderDisplayName;
+  if (senderDisplayName !== undefined) {
+    message.senderDisplayName = senderDisplayName;
   }
   if (input.message.senderPhoneNumber !== undefined) {
     message.senderPhoneNumber = input.message.senderPhoneNumber;
@@ -1596,8 +1666,9 @@ function buildMessage(
   if (senderPhoneNumberNormalized !== undefined) {
     message.senderPhoneNumberNormalized = senderPhoneNumberNormalized;
   }
-  if (input.chat.displayName !== undefined) {
-    message.chatDisplayName = input.chat.displayName;
+  const chatDisplayName = displayNames.chatDisplayName ?? input.chat.displayName;
+  if (chatDisplayName !== undefined) {
+    message.chatDisplayName = chatDisplayName;
   }
   if (input.message.text !== undefined) {
     message.text = input.message.text;
