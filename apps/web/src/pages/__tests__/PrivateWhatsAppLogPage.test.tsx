@@ -293,6 +293,7 @@ describe('PrivateWhatsAppLogPage', () => {
             chatId: 'chat-group',
             direction: 'incoming',
             messageType: 'reaction',
+            text: '👍',
             reaction: {
               emoji: '👍',
               targetMessageId: 'earlier-message',

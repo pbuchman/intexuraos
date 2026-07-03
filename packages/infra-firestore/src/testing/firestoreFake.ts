@@ -541,7 +541,7 @@ function readFieldPath(data: DocumentData | undefined, field: string): unknown {
   if (Object.prototype.hasOwnProperty.call(data, field)) {
     return data[field];
   }
-  return field.split('.').reduce<unknown>((current, segment) => {
+  return splitFieldPath(field).reduce<unknown>((current, segment) => {
     if (
       current === null ||
       typeof current !== 'object' ||
@@ -552,6 +552,26 @@ function readFieldPath(data: DocumentData | undefined, field: string): unknown {
     }
     return (current as Record<string, unknown>)[segment];
   }, data);
+}
+
+function splitFieldPath(field: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let inEscapedSegment = false;
+  for (const char of field) {
+    if (char === '`') {
+      inEscapedSegment = !inEscapedSegment;
+      continue;
+    }
+    if (char === '.' && !inEscapedSegment) {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  segments.push(current);
+  return segments;
 }
 
 /**

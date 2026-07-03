@@ -226,6 +226,14 @@ function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JS
     );
   }
 
+  if (message.messageType === 'reaction' && message.reaction !== undefined) {
+    return (
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        Reacted {message.reaction.emoji} to an earlier message
+      </p>
+    );
+  }
+
   if (hasText) {
     return (
       <div className="space-y-3">
@@ -234,14 +242,6 @@ function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JS
         </p>
         {transcription}
       </div>
-    );
-  }
-
-  if (message.messageType === 'reaction' && message.reaction !== undefined) {
-    return (
-      <p className="text-sm text-slate-600 dark:text-slate-300">
-        Reacted {message.reaction.emoji} to an earlier message
-      </p>
     );
   }
 

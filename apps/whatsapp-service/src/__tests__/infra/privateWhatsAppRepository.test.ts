@@ -1132,10 +1132,15 @@ describe('privateWhatsAppRepository', () => {
     if (!reactions.ok) throw new Error('reaction query failed');
     const summaries = reactions.value.reactionsByMessageId[targetResult.value.messageId];
     if (summaries === undefined) throw new Error('target reactions missing');
-    expect(summaries).toHaveLength(1);
+    expect(summaries).toHaveLength(2);
     expect(summaries).toMatchObject([
       {
         emoji: '👍',
+        senderDisplayName: 'Alice',
+        direction: 'incoming',
+      },
+      {
+        emoji: '❤️',
         senderDisplayName: 'Alice',
         direction: 'incoming',
       },
@@ -1146,9 +1151,11 @@ describe('privateWhatsAppRepository', () => {
         .sort()
     );
     expect(reactions.value.attachedReactionMessageIds).toEqual(
-      expect.arrayContaining([firstReactionResult.value.messageId])
+      expect.arrayContaining([
+        firstReactionResult.value.messageId,
+        secondReactionResult.value.messageId,
+      ])
     );
-    expect(reactions.value.attachedReactionMessageIds).not.toContain(secondReactionResult.value.messageId);
     expect(JSON.stringify(reactions.value)).not.toContain('$target-event');
   });
 
@@ -1261,6 +1268,29 @@ describe('privateWhatsAppRepository', () => {
       });
     await fakeFirestore
       .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('normalized-with-raw-target')
+      .set({
+        ...baseMalformedReaction,
+        id: 'normalized-with-raw-target',
+        matrixEventId: '$normalized-with-raw-target',
+        text: '💬',
+        reaction: {
+          emoji: '💬',
+          targetMatrixEventId: '$unscoped-target-event',
+          targetMessageId: 'unrelated-message',
+        },
+        rawMatrixEvent: {
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$unscoped-target-event',
+              key: '💬',
+            },
+          },
+        },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
       .doc('malformed-raw-event')
       .set({
         ...baseMalformedReaction,
@@ -1285,6 +1315,23 @@ describe('privateWhatsAppRepository', () => {
         id: 'malformed-relation',
         matrixEventId: '$malformed-relation',
         rawMatrixEvent: { content: { 'm.relates_to': 'not-relation' } },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('malformed-relation-with-target')
+      .set({
+        ...baseMalformedReaction,
+        id: 'malformed-relation-with-target',
+        matrixEventId: '$malformed-relation-with-target',
+        rawMatrixEvent: {
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.replace',
+              event_id: '$unscoped-target-event',
+              key: '❤️',
+            },
+          },
+        },
       });
     await fakeFirestore
       .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)

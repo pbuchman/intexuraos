@@ -35,6 +35,29 @@ export const indexes = [
       { fieldPath: '__name__', order: 'ASCENDING' },
     ],
   },
+  {
+    collectionGroup: 'whatsapp_private_messages',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'sourceAccountId', order: 'ASCENDING' },
+      { fieldPath: 'chatId', order: 'ASCENDING' },
+      { fieldPath: 'messageType', order: 'ASCENDING' },
+      { fieldPath: 'rawMatrixEvent.content.`m.relates_to`.event_id', order: 'ASCENDING' },
+      { fieldPath: 'eventTimestamp', order: 'ASCENDING' },
+      { fieldPath: '__name__', order: 'ASCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'whatsapp_private_messages',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'sourceAccountId', order: 'ASCENDING' },
+      { fieldPath: 'messageType', order: 'ASCENDING' },
+      { fieldPath: 'rawMatrixEvent.content.`m.relates_to`.event_id', order: 'ASCENDING' },
+      { fieldPath: 'eventTimestamp', order: 'ASCENDING' },
+      { fieldPath: '__name__', order: 'ASCENDING' },
+    ],
+  },
 ];
 
 export async function up(context) {

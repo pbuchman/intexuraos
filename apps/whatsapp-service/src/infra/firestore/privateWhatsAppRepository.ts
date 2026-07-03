@@ -55,6 +55,8 @@ export const PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION = 'whatsapp_private_sender_
 const PRIVATE_WHATSAPP_ACCOUNT_SCHEMA_VERSION = 1;
 const PRIVATE_WHATSAPP_SCHEMA_VERSION = 2;
 const PRIVATE_WHATSAPP_EVENT_TIME_ZONE = 'Europe/Warsaw';
+const LEGACY_REACTION_TARGET_MATRIX_EVENT_ID_FIELD =
+  'rawMatrixEvent.content.`m.relates_to`.event_id';
 const PRIVATE_WHATSAPP_MESSAGE_TYPES = new Set<PrivateWhatsAppMessage['messageType']>([
   'text',
   'image',
@@ -776,7 +778,12 @@ async function findReactionsForMessageIds(
         input.targets.map((target) => target.messageId)
       )
     );
+    const targetsByMatrixEventId = new Map<string, string>();
+    for (const target of input.targets) {
+      targetsByMatrixEventId.set(target.matrixEventId, target.messageId);
+    }
     const targetMessageIdSet = new Set(targetMessageIds);
+    const targetMatrixEventIds = [...targetsByMatrixEventId.keys()];
     const reactionsByMessageId = new Map<string, PrivateWhatsAppReactionSummary[]>();
     const attachedReactionMessageIds = new Set<string>();
 
@@ -809,6 +816,49 @@ async function findReactionsForMessageIds(
           message,
           targetMessageId,
           emoji: message.reaction?.emoji,
+        });
+      }
+    }
+
+    for (const chunk of chunkMessageIds(targetMatrixEventIds)) {
+      let query: Query = getFirestore()
+        .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+        .where('sourceAccountId', '==', input.sourceAccountId)
+        .where('messageType', '==', 'reaction')
+        .where(LEGACY_REACTION_TARGET_MATRIX_EVENT_ID_FIELD, 'in', chunk)
+        .orderBy('eventTimestamp', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc');
+
+      if (input.chatId !== undefined) {
+        query = query.where('chatId', '==', input.chatId);
+      }
+
+      const snapshot = await query.get();
+      for (const doc of snapshot.docs) {
+        const message = toPrivateWhatsAppMessage(doc);
+        const normalizedTargetMessageId =
+          message.reaction === undefined ? undefined : message.reaction.targetMessageId;
+        if (normalizedTargetMessageId !== undefined) {
+          continue;
+        }
+
+        const legacyReaction = extractLegacyReaction(message.rawMatrixEvent);
+        if (legacyReaction === undefined) {
+          continue;
+        }
+        const targetMessageId = targetsByMatrixEventId.get(legacyReaction.targetMatrixEventId);
+        /* v8 ignore start -- upstream: Firestore legacy target in-query guarantees requested Matrix event ids; guard protects corrupt snapshots @preserve */
+        if (targetMessageId === undefined) {
+          continue;
+        }
+        /* v8 ignore stop @preserve */
+
+        addReactionSummary({
+          reactionsByMessageId,
+          attachedReactionMessageIds,
+          message,
+          targetMessageId,
+          emoji: legacyReaction.emoji,
         });
       }
     }
@@ -1426,6 +1476,33 @@ function toReactionSummary(
   };
 }
 
+function extractLegacyReaction(
+  rawMatrixEvent: unknown
+): { emoji: string; targetMatrixEventId: string } | undefined {
+  /* v8 ignore start -- upstream: Firestore nested rawMatrixEvent target query cannot return non-record rawMatrixEvent parents @preserve */
+  if (!isRecord(rawMatrixEvent)) {
+    return undefined;
+  }
+  /* v8 ignore stop @preserve */
+  const content = rawMatrixEvent['content'];
+  /* v8 ignore start -- upstream: Firestore nested rawMatrixEvent target query cannot return non-record content parents @preserve */
+  if (!isRecord(content)) {
+    return undefined;
+  }
+  /* v8 ignore stop @preserve */
+  const relatesTo = content['m.relates_to'];
+  if (!isRecord(relatesTo) || relatesTo['rel_type'] !== 'm.annotation') {
+    return undefined;
+  }
+
+  const targetMatrixEventId = firstNonEmptyString(asOptionalString(relatesTo['event_id']));
+  const emoji = firstNonEmptyString(asOptionalString(relatesTo['key']));
+  if (targetMatrixEventId === undefined || emoji === undefined) {
+    return undefined;
+  }
+  return { emoji, targetMatrixEventId };
+}
+
 function compareReactionSummaries(
   left: PrivateWhatsAppReactionSummary,
   right: PrivateWhatsAppReactionSummary
@@ -1446,6 +1523,14 @@ function firstNonEmptyString(value: string | undefined): string | undefined {
     return undefined;
   }
   return value.trim() === '' ? undefined : value;
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /* v8 ignore start -- schema: defensive Firestore chat projection fallbacks are only partially reachable through sourceAccountId-filtered queries @preserve */
