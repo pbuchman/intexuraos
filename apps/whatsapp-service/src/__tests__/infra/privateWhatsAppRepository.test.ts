@@ -1056,6 +1056,341 @@ describe('privateWhatsAppRepository', () => {
     expect(result.value.messages[0]?.id).toBe(messageId);
   });
 
+  it('finds private WhatsApp reactions for target message ids without exposing Matrix ids', async () => {
+    const target = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$target-event',
+        text: 'original post',
+      },
+    });
+    const targetResult = await repository.storeIncomingMessage(target);
+    expect(targetResult.ok).toBe(true);
+    if (!targetResult.ok) throw new Error('target store failed');
+
+    const firstReactionResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$reaction-event',
+          direction: 'incoming',
+          type: 'reaction',
+          text: '👍',
+          reaction: {
+            emoji: '👍',
+            targetMatrixEventId: '$target-event',
+          },
+        },
+      })
+    );
+    expect(firstReactionResult.ok).toBe(true);
+    if (!firstReactionResult.ok) throw new Error('first reaction store failed');
+
+    const secondReactionResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$legacy-reaction-event',
+          direction: 'incoming',
+          type: 'reaction',
+          text: '❤️',
+          rawMatrixEvent: {
+            type: 'm.reaction',
+            event_id: '$legacy-reaction-event',
+            content: {
+              'm.relates_to': {
+                rel_type: 'm.annotation',
+                event_id: '$target-event',
+                key: '❤️',
+              },
+            },
+          },
+        },
+      })
+    );
+    expect(secondReactionResult.ok).toBe(true);
+    if (!secondReactionResult.ok) throw new Error('second reaction store failed');
+
+    const findReactionsForMessageIds = Reflect.get(repository, 'findReactionsForMessageIds');
+    expect(typeof findReactionsForMessageIds).toBe('function');
+    if (typeof findReactionsForMessageIds !== 'function') {
+      throw new Error('reaction query method missing');
+    }
+
+    const reactions = await findReactionsForMessageIds.call(repository, {
+      sourceAccountId: target.sourceAccountId,
+      chatId: targetResult.value.chatId,
+      targets: [
+        {
+          messageId: targetResult.value.messageId,
+          matrixEventId: '$target-event',
+        },
+      ],
+    });
+
+    expect(reactions.ok).toBe(true);
+    if (!reactions.ok) throw new Error('reaction query failed');
+    const summaries = reactions.value.reactionsByMessageId[targetResult.value.messageId];
+    if (summaries === undefined) throw new Error('target reactions missing');
+    expect(summaries).toHaveLength(1);
+    expect(summaries).toMatchObject([
+      {
+        emoji: '👍',
+        senderDisplayName: 'Alice',
+        direction: 'incoming',
+      },
+    ]);
+    expect(summaries.map((summary: { eventTimestamp: string }) => summary.eventTimestamp)).toEqual(
+      summaries
+        .map((summary: { eventTimestamp: string }) => summary.eventTimestamp)
+        .sort()
+    );
+    expect(reactions.value.attachedReactionMessageIds).toEqual(
+      expect.arrayContaining([firstReactionResult.value.messageId])
+    );
+    expect(reactions.value.attachedReactionMessageIds).not.toContain(secondReactionResult.value.messageId);
+    expect(JSON.stringify(reactions.value)).not.toContain('$target-event');
+  });
+
+  it('returns an empty private WhatsApp reaction result for empty target input', async () => {
+    const reactions = await repository.findReactionsForMessageIds({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      targets: [],
+    });
+
+    expect(reactions.ok).toBe(true);
+    if (!reactions.ok) throw new Error(reactions.error.message);
+    expect(reactions.value).toEqual({
+      reactionsByMessageId: {},
+      attachedReactionMessageIds: [],
+    });
+  });
+
+  it('finds private WhatsApp reactions without a chat scope and ignores malformed stored candidates', async () => {
+    const target = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$unscoped-target-event',
+        text: 'original post',
+      },
+    });
+    const targetResult = await repository.storeIncomingMessage(target);
+    expect(targetResult.ok).toBe(true);
+    if (!targetResult.ok) throw new Error('target store failed');
+
+    const normalizedReactionResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        message: {
+          ...createStoreInput().message,
+          matrixEventId: '$unscoped-reaction-event',
+          direction: 'outgoing',
+          type: 'reaction',
+          text: '👍',
+          reaction: {
+            emoji: '👍',
+            targetMatrixEventId: '$unscoped-target-event',
+          },
+        },
+      })
+    );
+    expect(normalizedReactionResult.ok).toBe(true);
+    if (!normalizedReactionResult.ok) throw new Error('normalized reaction store failed');
+    const normalizedReactionId = normalizedReactionResult.value.messageId;
+    const normalizedReactionRef = fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc(normalizedReactionId);
+    const normalizedReactionDoc = await normalizedReactionRef.get();
+    const { id: _id, ...normalizedWithoutEmbeddedId } =
+      normalizedReactionDoc.data() as Record<string, unknown>;
+    await normalizedReactionRef.set(normalizedWithoutEmbeddedId);
+
+    const baseMalformedReaction = {
+      chatId: targetResult.value.chatId,
+      userId: target.userId,
+      sourceAccountId: target.sourceAccountId,
+      matrixRoomId: target.message.matrixRoomId,
+      matrixEventId: '$malformed-reaction',
+      matrixSenderId: target.message.matrixSenderId,
+      direction: 'incoming',
+      messageType: 'reaction',
+      eventTimestamp: '2026-06-22T10:06:00.000Z',
+      receivedAt: '2026-06-22T10:06:01.000Z',
+      ingestedAt: '2026-06-22T10:06:01.000Z',
+      deliveryMode: 'live',
+      rawMatrixEvent: {},
+      schemaVersion: 2,
+    };
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('malformed-empty-summary')
+      .set({
+        ...baseMalformedReaction,
+        id: 'malformed-empty-summary',
+        matrixEventId: '$malformed-empty-summary',
+        text: '',
+        reaction: {
+          emoji: '',
+          targetMatrixEventId: '$unscoped-target-event',
+          targetMessageId: targetResult.value.messageId,
+        },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('malformed-missing-summary')
+      .set({
+        ...baseMalformedReaction,
+        id: 'malformed-missing-summary',
+        matrixEventId: '$malformed-missing-summary',
+        reaction: {
+          targetMatrixEventId: '$unscoped-target-event',
+          targetMessageId: targetResult.value.messageId,
+        },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('normalized-missing-target')
+      .set({
+        ...baseMalformedReaction,
+        id: 'normalized-missing-target',
+        matrixEventId: '$normalized-missing-target',
+        text: '👀',
+        reaction: {
+          emoji: '👀',
+          targetMatrixEventId: '$unscoped-target-event',
+        },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('malformed-raw-event')
+      .set({
+        ...baseMalformedReaction,
+        id: 'malformed-raw-event',
+        matrixEventId: '$malformed-raw-event',
+        rawMatrixEvent: 'not-an-event',
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('malformed-content')
+      .set({
+        ...baseMalformedReaction,
+        id: 'malformed-content',
+        matrixEventId: '$malformed-content',
+        rawMatrixEvent: { content: 'not-content' },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('malformed-relation')
+      .set({
+        ...baseMalformedReaction,
+        id: 'malformed-relation',
+        matrixEventId: '$malformed-relation',
+        rawMatrixEvent: { content: { 'm.relates_to': 'not-relation' } },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('malformed-missing-key')
+      .set({
+        ...baseMalformedReaction,
+        id: 'malformed-missing-key',
+        matrixEventId: '$malformed-missing-key',
+        rawMatrixEvent: {
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$unscoped-target-event',
+            },
+          },
+        },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('unmatched-legacy-target')
+      .set({
+        ...baseMalformedReaction,
+        id: 'unmatched-legacy-target',
+        matrixEventId: '$unmatched-legacy-target',
+        rawMatrixEvent: {
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$other-target-event',
+              key: '❤️',
+            },
+          },
+        },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('same-time-b-reaction')
+      .set({
+        ...baseMalformedReaction,
+        id: 'same-time-b-reaction',
+        matrixEventId: '$same-time-b-reaction',
+        text: '👋',
+        reaction: {
+          emoji: '👋',
+          targetMatrixEventId: '$unscoped-target-event',
+          targetMessageId: targetResult.value.messageId,
+        },
+      });
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc('same-time-a-reaction')
+      .set({
+        ...baseMalformedReaction,
+        id: 'same-time-a-reaction',
+        matrixEventId: '$same-time-a-reaction',
+        text: '🔥',
+        reaction: {
+          emoji: '🔥',
+          targetMatrixEventId: '$unscoped-target-event',
+          targetMessageId: targetResult.value.messageId,
+        },
+      });
+
+    const reactions = await repository.findReactionsForMessageIds({
+      sourceAccountId: target.sourceAccountId,
+      targets: [
+        {
+          messageId: targetResult.value.messageId,
+          matrixEventId: '$unscoped-target-event',
+        },
+      ],
+    });
+
+    expect(reactions.ok).toBe(true);
+    if (!reactions.ok) throw new Error(reactions.error.message);
+    expect(reactions.value.reactionsByMessageId[targetResult.value.messageId]).toEqual([
+      {
+        id: normalizedReactionId,
+        emoji: '👍',
+        direction: 'outgoing',
+        eventTimestamp: '2026-06-22T10:00:00.000Z',
+        senderKey: 'phone:+48123456789',
+        senderDisplayName: 'Alice',
+        senderPhoneNumber: '+48123456789',
+      },
+      {
+        id: 'same-time-a-reaction',
+        emoji: '🔥',
+        direction: 'incoming',
+        eventTimestamp: '2026-06-22T10:06:00.000Z',
+      },
+      {
+        id: 'same-time-b-reaction',
+        emoji: '👋',
+        direction: 'incoming',
+        eventTimestamp: '2026-06-22T10:06:00.000Z',
+      },
+    ]);
+    expect(reactions.value.attachedReactionMessageIds).toEqual([
+      normalizedReactionId,
+      'same-time-a-reaction',
+      'same-time-b-reaction',
+    ]);
+    expect(JSON.stringify(reactions.value)).not.toContain('$unscoped-target-event');
+  });
+
   it('updates private WhatsApp account ingest stats only for first-write messages', async () => {
     const accountResult = await repository.upsertAccount({
       userId: 'user-123',
@@ -1262,6 +1597,49 @@ describe('privateWhatsAppRepository', () => {
     expect(senderDay?.['messageCount']).toBe(1);
   });
 
+  it('returns duplicate for stored private WhatsApp reactions without losing target metadata', async () => {
+    const reactionInput = createStoreInput({
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$duplicate-reaction-event',
+        type: 'reaction',
+        text: '👍',
+        reaction: {
+          emoji: '👍',
+          targetMatrixEventId: '$duplicate-target-event',
+        },
+      },
+    });
+
+    const firstResult = await repository.storeIncomingMessage(reactionInput);
+    const duplicateResult = await repository.storeIncomingMessage(reactionInput);
+
+    expect(firstResult.ok).toBe(true);
+    expect(duplicateResult.ok).toBe(true);
+    if (!duplicateResult.ok) throw new Error(duplicateResult.error.message);
+    expect(duplicateResult.value.outcome).toBe('duplicate');
+
+    const messageId = deterministicId(
+      reactionInput.sourceAccountId,
+      reactionInput.message.matrixEventId
+    );
+    const message = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      ?.get(messageId);
+    expect(message).toMatchObject({
+      messageType: 'reaction',
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$duplicate-target-event',
+        targetMessageId: deterministicId(
+          reactionInput.sourceAccountId,
+          '$duplicate-target-event'
+        ),
+      },
+    });
+  });
+
   it('returns the room chat id for a duplicate legacy message without a stored chat id', async () => {
     const input = createStoreInput();
     const messageId = deterministicId(input.sourceAccountId, input.message.matrixEventId);
@@ -1394,6 +1772,67 @@ describe('privateWhatsAppRepository', () => {
     expect(sender?.['messageCount']).toBe(1);
     expect(senderDay?.['messageCount']).toBe(1);
     expect(senderDay?.['eventDayKey']).toBe('2026-06-23');
+  });
+
+  it('rebuilds sender aggregates from normalized private WhatsApp reaction rows', async () => {
+    const messageId = deterministicId('pbuchman-private-whatsapp', '$old-reaction-event');
+    await fakeFirestore.collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION).doc(messageId).set({
+      id: messageId,
+      chatId: deterministicId('pbuchman-private-whatsapp', '!reaction-room:home-dev'),
+      userId: 'user-123',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      matrixRoomId: '!reaction-room:home-dev',
+      matrixEventId: '$old-reaction-event',
+      matrixSenderId: '@whatsapp_48517277952:home-dev',
+      senderDisplayName: 'Monika',
+      direction: 'incoming',
+      messageType: 'reaction',
+      text: '👍',
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$old-target-event',
+        targetMessageId: deterministicId('pbuchman-private-whatsapp', '$old-target-event'),
+      },
+      eventTimestamp: '2026-06-22T22:30:00.000Z',
+      receivedAt: '2026-06-22T22:30:02.000Z',
+      ingestedAt: '2026-06-22T22:30:02.000Z',
+      deliveryMode: 'live',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$old-target-event',
+            key: '👍',
+          },
+        },
+      },
+    });
+
+    const rebuild = await repository.rebuildAggregates({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 100,
+    });
+
+    expect(rebuild.ok).toBe(true);
+    if (!rebuild.ok) throw new Error(rebuild.error.message);
+    expect(rebuild.value).toMatchObject({
+      scannedMessages: 1,
+      upgradedMessages: 1,
+      senderCount: 1,
+      senderDayCount: 1,
+    });
+
+    const senderDayId = deterministicId(
+      'pbuchman-private-whatsapp',
+      `phone:+48517277952\0${'2026-06-23'}`
+    );
+    const senderDay = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION)
+      ?.get(senderDayId);
+    expect(senderDay).toMatchObject({
+      messageTypeCounts: { reaction: 1 },
+    });
   });
 
   it('updates chat metadata when a later event arrives in the same room', async () => {

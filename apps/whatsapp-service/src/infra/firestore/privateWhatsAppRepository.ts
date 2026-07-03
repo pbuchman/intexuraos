@@ -39,7 +39,12 @@ import type {
   UpdatePrivateWhatsAppMessageTranscriptionInput,
   UpsertPrivateWhatsAppAccountInput,
 } from '../../domain/whatsapp/index.js';
-import type { PrivateConversationContextMessageQueryInput } from '../../domain/whatsapp/models/PrivateWhatsApp.js';
+import type {
+  PrivateConversationContextMessageQueryInput,
+  PrivateWhatsAppReactionQueryInput,
+  PrivateWhatsAppReactionQueryResult,
+  PrivateWhatsAppReactionSummary,
+} from '../../domain/whatsapp/models/PrivateWhatsApp.js';
 import type { PrivateWhatsAppRepository } from '../../domain/whatsapp/index.js';
 
 export const PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION = 'whatsapp_private_accounts';
@@ -93,6 +98,7 @@ export function createPrivateWhatsAppRepository(): PrivateWhatsAppRepository {
     updateMessageStoredMedia,
     updateMessageTranscription,
     findMessages,
+    findReactionsForMessageIds,
     findConversationContextMessages,
     findChats,
     findSenders,
@@ -757,6 +763,74 @@ async function findMessages(
   }
 }
 
+async function findReactionsForMessageIds(
+  input: PrivateWhatsAppReactionQueryInput
+): Promise<Result<PrivateWhatsAppReactionQueryResult, WhatsAppError>> {
+  try {
+    if (input.targets.length === 0) {
+      return ok({ reactionsByMessageId: {}, attachedReactionMessageIds: [] });
+    }
+
+    const targetMessageIds = Array.from(
+      new Set(
+        input.targets.map((target) => target.messageId)
+      )
+    );
+    const targetMessageIdSet = new Set(targetMessageIds);
+    const reactionsByMessageId = new Map<string, PrivateWhatsAppReactionSummary[]>();
+    const attachedReactionMessageIds = new Set<string>();
+
+    for (const chunk of chunkMessageIds(targetMessageIds)) {
+      let query: Query = getFirestore()
+        .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+        .where('sourceAccountId', '==', input.sourceAccountId)
+        .where('messageType', '==', 'reaction')
+        .where('reaction.targetMessageId', 'in', chunk)
+        .orderBy('eventTimestamp', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc');
+
+      if (input.chatId !== undefined) {
+        query = query.where('chatId', '==', input.chatId);
+      }
+
+      const snapshot = await query.get();
+      for (const doc of snapshot.docs) {
+        const message = toPrivateWhatsAppMessage(doc);
+        const targetMessageId = message.reaction?.targetMessageId;
+        /* v8 ignore start -- upstream: Firestore reaction.targetMessageId in-query only returns requested target ids; guard protects corrupt snapshots @preserve */
+        if (targetMessageId === undefined || !targetMessageIdSet.has(targetMessageId)) {
+          continue;
+        }
+        /* v8 ignore stop @preserve */
+
+        addReactionSummary({
+          reactionsByMessageId,
+          attachedReactionMessageIds,
+          message,
+          targetMessageId,
+          emoji: message.reaction?.emoji,
+        });
+      }
+    }
+
+    const result: PrivateWhatsAppReactionQueryResult = {
+      reactionsByMessageId: {},
+      attachedReactionMessageIds: [...attachedReactionMessageIds].sort((left, right) =>
+        left.localeCompare(right)
+      ),
+    };
+    for (const [messageId, summaries] of reactionsByMessageId.entries()) {
+      result.reactionsByMessageId[messageId] = [...summaries].sort(compareReactionSummaries);
+    }
+    return ok(result);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to query private WhatsApp reactions: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 async function findConversationContextMessages(
   input: PrivateConversationContextMessageQueryInput
 ): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
@@ -1250,6 +1324,12 @@ function toStoreInputFromMessage(message: PrivateWhatsAppMessage): StorePrivateW
   if (message.media !== undefined) {
     storeMessage.media = message.media;
   }
+  if (message.reaction !== undefined) {
+    storeMessage.reaction = {
+      emoji: message.reaction.emoji,
+      targetMatrixEventId: message.reaction.targetMatrixEventId,
+    };
+  }
 
   return {
     sourceAccountId: message.sourceAccountId,
@@ -1294,6 +1374,78 @@ function buildMessageUpgradeFields(
   }
 
   return Object.keys(fields).length === 0 ? undefined : fields;
+}
+
+function chunkMessageIds(ids: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += 30) {
+    chunks.push(ids.slice(index, index + 30));
+  }
+  return chunks;
+}
+
+function addReactionSummary(input: {
+  reactionsByMessageId: Map<string, PrivateWhatsAppReactionSummary[]>;
+  attachedReactionMessageIds: Set<string>;
+  message: PrivateWhatsAppMessage;
+  targetMessageId: string;
+  emoji: string | undefined;
+}): void {
+  const summary = toReactionSummary(input.message, input.emoji);
+  if (summary === undefined) {
+    return;
+  }
+
+  const existing = input.reactionsByMessageId.get(input.targetMessageId) ?? [];
+  existing.push(summary);
+  input.reactionsByMessageId.set(input.targetMessageId, existing);
+  input.attachedReactionMessageIds.add(input.message.id);
+}
+
+function toReactionSummary(
+  message: PrivateWhatsAppMessage,
+  emoji: string | undefined
+): PrivateWhatsAppReactionSummary | undefined {
+  const normalizedEmoji = firstNonEmptyString(emoji) ?? firstNonEmptyString(message.text);
+  if (normalizedEmoji === undefined) {
+    return undefined;
+  }
+
+  return {
+    id: message.id,
+    emoji: normalizedEmoji,
+    direction: message.direction,
+    eventTimestamp: message.eventTimestamp,
+    ...(message.senderKey !== undefined ? { senderKey: message.senderKey } : {}),
+    ...(message.senderDisplayName !== undefined
+      ? { senderDisplayName: message.senderDisplayName }
+      : {}),
+    ...(message.senderPhoneNumber !== undefined
+      ? { senderPhoneNumber: message.senderPhoneNumber }
+      : {}),
+  };
+}
+
+function compareReactionSummaries(
+  left: PrivateWhatsAppReactionSummary,
+  right: PrivateWhatsAppReactionSummary
+): number {
+  const timestampComparison = left.eventTimestamp.localeCompare(right.eventTimestamp);
+  return timestampComparison === 0 ? left.id.localeCompare(right.id) : timestampComparison;
+}
+
+function toPrivateWhatsAppMessage(
+  doc: QueryDocumentSnapshot
+): Omit<PrivateWhatsAppMessage, 'id'> & { id: string } {
+  const data = doc.data() as Omit<PrivateWhatsAppMessage, 'id'> & { id?: string };
+  return { ...data, id: data.id ?? doc.id };
+}
+
+function firstNonEmptyString(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value.trim() === '' ? undefined : value;
 }
 
 /* v8 ignore start -- schema: defensive Firestore chat projection fallbacks are only partially reachable through sourceAccountId-filtered queries @preserve */
@@ -1604,6 +1756,16 @@ function buildMessage(
   }
   if (input.message.media !== undefined) {
     message.media = input.message.media;
+  }
+  if (input.message.reaction !== undefined) {
+    message.reaction = {
+      emoji: input.message.reaction.emoji,
+      targetMatrixEventId: input.message.reaction.targetMatrixEventId,
+      targetMessageId: createPrivateWhatsAppMessageId(
+        input.sourceAccountId,
+        input.message.reaction.targetMatrixEventId
+      ),
+    };
   }
 
   return message;

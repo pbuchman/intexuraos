@@ -3,6 +3,7 @@ import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageDirection,
+  PrivateWhatsAppReactionSummary,
   PrivateWhatsAppMessageType,
 } from '../whatsapp/index.js';
 
@@ -14,6 +15,7 @@ export interface PrivateConversationContextMessage {
   messageType: PrivateWhatsAppMessageType;
   contentKind: 'text' | 'transcription';
   content: string;
+  reactions?: PrivateWhatsAppReactionSummary[];
 }
 
 export interface PrivateConversationContextResponse {
@@ -46,6 +48,16 @@ export interface ProjectPrivateConversationContextInput {
   totalMessageCount?: number;
 }
 
+interface PrivateWhatsAppTranscriptReaction {
+  emoji: string;
+  targetMatrixEventId?: string;
+  targetMessageId: string;
+}
+
+type PrivateWhatsAppMessageWithReaction = PrivateWhatsAppMessage & {
+  reaction?: PrivateWhatsAppTranscriptReaction;
+};
+
 const MEDIA_MESSAGE_TYPES = new Set<PrivateWhatsAppMessageType>(['image', 'audio', 'video', 'file', 'sticker']);
 
 export function projectPrivateConversationContext(
@@ -59,15 +71,56 @@ export function projectPrivateConversationContext(
     overLimit: 0,
   };
   const contextMessages: PrivateConversationContextMessage[] = [];
+  const targetsById = new Map(input.messages.map((message) => [message.id, message]));
+  const targetsByMatrixEventId = new Map(
+    input.messages
+      .filter((message) => message.matrixEventId.length > 0)
+      .map((message) => [message.matrixEventId, message])
+  );
+  const reactionsByTarget = new Map<string, PrivateWhatsAppReactionSummary[]>();
+  const attachedReactionIds = new Set<string>();
 
   for (const message of input.messages) {
+    if (message.messageType !== 'reaction') {
+      continue;
+    }
+    const reaction = normalizeTranscriptReaction(message, targetsByMatrixEventId);
+    if (reaction === undefined) {
+      continue;
+    }
+    const target = targetsById.get(reaction.targetMessageId);
+    if (target === undefined) {
+      continue;
+    }
+    attachedReactionIds.add(message.id);
+    const summaries = reactionsByTarget.get(target.id) ?? [];
+    summaries.push({
+      id: message.id,
+      emoji: reaction.emoji,
+      direction: message.direction,
+      eventTimestamp: message.eventTimestamp,
+      ...(message.senderKey !== undefined ? { senderKey: message.senderKey } : {}),
+      ...(message.senderDisplayName !== undefined
+        ? { senderDisplayName: message.senderDisplayName }
+        : {}),
+      ...(message.senderPhoneNumber !== undefined
+        ? { senderPhoneNumber: message.senderPhoneNumber }
+        : {}),
+    });
+    reactionsByTarget.set(target.id, summaries);
+  }
+
+  for (const message of input.messages) {
+    if (attachedReactionIds.has(message.id)) {
+      continue;
+    }
     const text = message.text?.trim();
     if (text !== undefined && text.length > 0) {
       if (hasReachedMaxMessages(contextMessages.length, input.maxMessages)) {
         omitted.overLimit += 1;
         continue;
       }
-      contextMessages.push(toContextMessage(message, 'text', text));
+      contextMessages.push(toContextMessage(message, 'text', text, reactionsByTarget.get(message.id)));
       continue;
     }
 
@@ -79,7 +132,9 @@ export function projectPrivateConversationContext(
           omitted.overLimit += 1;
           continue;
         }
-        contextMessages.push(toContextMessage(message, 'transcription', transcriptionText));
+        contextMessages.push(
+          toContextMessage(message, 'transcription', transcriptionText, reactionsByTarget.get(message.id))
+        );
         continue;
       }
     }
@@ -127,9 +182,10 @@ function toContextChat(chat: PrivateWhatsAppChat): PrivateConversationContextRes
 function toContextMessage(
   message: PrivateWhatsAppMessage,
   contentKind: PrivateConversationContextMessage['contentKind'],
-  content: string
+  content: string,
+  reactions: PrivateWhatsAppReactionSummary[] | undefined
 ): PrivateConversationContextMessage {
-  return {
+  const contextMessage: PrivateConversationContextMessage = {
     id: message.id,
     eventTimestamp: message.eventTimestamp,
     direction: message.direction,
@@ -138,6 +194,15 @@ function toContextMessage(
     contentKind,
     content,
   };
+  if (reactions !== undefined && reactions.length > 0) {
+    Object.defineProperty(contextMessage, 'reactions', {
+      value: reactions,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return contextMessage;
 }
 
 function speakerLabelFor(message: PrivateWhatsAppMessage): string {
@@ -155,15 +220,104 @@ export function buildPrivateConversationTranscriptText(
   messages: PrivateConversationContextMessage[]
 ): string {
   return messages
-    .map(
-      (message) =>
-        `[${formatTranscriptDateLabel(message.eventTimestamp)}] ${message.speakerLabel}: ${message.content}`
-    )
+    .map((message) => {
+      const reactionLine =
+        message.reactions === undefined || message.reactions.length === 0
+          ? ''
+          : `\n  Reactions: ${message.reactions.map(formatReactionSummary).join(', ')}`;
+      return `[${formatTranscriptDateLabel(message.eventTimestamp)}] ${message.speakerLabel}: ${message.content}${reactionLine}`;
+    })
     .join('\n');
+}
+
+function formatReactionSummary(reaction: PrivateWhatsAppReactionSummary): string {
+  const sender =
+    reaction.direction === 'outgoing' ? 'You' : firstNonEmpty(reaction.senderDisplayName) ?? 'Unknown';
+  return `${reaction.emoji} ${sender}`;
+}
+
+function normalizeTranscriptReaction(
+  message: PrivateWhatsAppMessage,
+  targetsByMatrixEventId: ReadonlyMap<string, PrivateWhatsAppMessage>
+): PrivateWhatsAppTranscriptReaction | undefined {
+  const normalizedReaction = (message as PrivateWhatsAppMessageWithReaction).reaction;
+  const normalizedEmoji = firstNonEmpty(normalizedReaction?.emoji);
+  if (normalizedEmoji !== undefined) {
+    const targetMessageId = firstNonEmpty(normalizedReaction?.targetMessageId);
+    if (targetMessageId !== undefined) {
+      return {
+        emoji: normalizedEmoji,
+        targetMessageId,
+        ...(normalizedReaction?.targetMatrixEventId !== undefined
+          ? { targetMatrixEventId: normalizedReaction.targetMatrixEventId }
+          : {}),
+      };
+    }
+    const targetMatrixEventId = firstNonEmpty(normalizedReaction?.targetMatrixEventId);
+    if (targetMatrixEventId === undefined) {
+      return undefined;
+    }
+    const target = targetsByMatrixEventId.get(targetMatrixEventId);
+    if (target === undefined) {
+      return undefined;
+    }
+    return {
+      emoji: normalizedEmoji,
+      targetMatrixEventId,
+      targetMessageId: target.id,
+    };
+  }
+
+  const legacyReaction = extractLegacyTranscriptReaction(message.rawMatrixEvent);
+  if (legacyReaction === undefined) {
+    return undefined;
+  }
+  const target = targetsByMatrixEventId.get(legacyReaction.targetMatrixEventId);
+  if (target === undefined) {
+    return undefined;
+  }
+  return {
+    emoji: legacyReaction.emoji,
+    targetMatrixEventId: legacyReaction.targetMatrixEventId,
+    targetMessageId: target.id,
+  };
+}
+
+function extractLegacyTranscriptReaction(
+  rawMatrixEvent: unknown
+): { emoji: string; targetMatrixEventId: string } | undefined {
+  if (!isRecord(rawMatrixEvent)) {
+    return undefined;
+  }
+  const content = rawMatrixEvent['content'];
+  if (!isRecord(content)) {
+    return undefined;
+  }
+  const relatesTo = content['m.relates_to'];
+  if (!isRecord(relatesTo)) {
+    return undefined;
+  }
+  if (relatesTo['rel_type'] !== 'm.annotation') {
+    return undefined;
+  }
+  const targetMatrixEventId = firstNonEmpty(asOptionalString(relatesTo['event_id']));
+  const emoji = firstNonEmpty(asOptionalString(relatesTo['key']));
+  if (targetMatrixEventId === undefined || emoji === undefined) {
+    return undefined;
+  }
+  return { emoji, targetMatrixEventId };
 }
 
 function hasReachedMaxMessages(currentLength: number, maxMessages: number | undefined): boolean {
   return maxMessages !== undefined && currentLength >= maxMessages;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 const ENGLISH_MONTHS = [

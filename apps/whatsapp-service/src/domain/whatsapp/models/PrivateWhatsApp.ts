@@ -37,6 +37,27 @@ export interface PrivateWhatsAppMediaInfo {
   storedAt?: string;
 }
 
+export interface PrivateWhatsAppReactionInfo {
+  emoji: string;
+  targetMatrixEventId: string;
+  targetMessageId: string;
+}
+
+export interface PrivateWhatsAppReactionInput {
+  emoji: string;
+  targetMatrixEventId: string;
+}
+
+export interface PrivateWhatsAppReactionSummary {
+  id: string;
+  emoji: string;
+  senderKey?: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  direction: PrivateWhatsAppMessageDirection;
+  eventTimestamp: string;
+}
+
 export interface PrivateWhatsAppTranscriptionError {
   code: string;
   message: string;
@@ -72,6 +93,7 @@ export interface PrivateWhatsAppMessageInput {
   type: PrivateWhatsAppMessageType;
   text?: string;
   media?: PrivateWhatsAppMediaInfo;
+  reaction?: PrivateWhatsAppReactionInput;
   eventTimestamp: string;
   eventDayKey?: string;
   eventTimeZone?: string;
@@ -152,6 +174,8 @@ export interface PrivateWhatsAppMessage {
   messageType: PrivateWhatsAppMessageType;
   text?: string;
   media?: PrivateWhatsAppMediaInfo;
+  reaction?: PrivateWhatsAppReactionInfo;
+  reactions?: PrivateWhatsAppReactionSummary[];
   eventTimestamp: string;
   eventDayKey?: string;
   eventTimeZone?: string;
@@ -246,6 +270,20 @@ export interface PrivateWhatsAppConversationContextMessageResult {
   messages: PrivateWhatsAppMessage[];
   totalCount: number;
   nextCursor?: string;
+}
+
+export interface PrivateWhatsAppReactionQueryInput {
+  sourceAccountId: string;
+  chatId?: string;
+  targets: {
+    messageId: string;
+    matrixEventId: string;
+  }[];
+}
+
+export interface PrivateWhatsAppReactionQueryResult {
+  reactionsByMessageId: Record<string, PrivateWhatsAppReactionSummary[]>;
+  attachedReactionMessageIds: string[];
 }
 
 export interface PrivateConversationContextRequest {

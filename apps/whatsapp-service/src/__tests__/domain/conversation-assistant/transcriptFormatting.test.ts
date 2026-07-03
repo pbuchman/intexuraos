@@ -20,16 +20,26 @@ const chat: PrivateWhatsAppChat = {
 };
 
 type MessageOverrides = Partial<
-  Omit<PrivateWhatsAppMessage, 'text' | 'senderDisplayName' | 'senderPhoneNumber' | 'senderKey'>
+  Omit<
+    PrivateWhatsAppMessage,
+    'text' | 'senderDisplayName' | 'senderPhoneNumber' | 'senderKey' | 'reaction'
+  >
 > & {
   text?: string | undefined;
   senderDisplayName?: string | undefined;
   senderPhoneNumber?: string | undefined;
   senderKey?: string | undefined;
+  reaction?: TranscriptReactionFixture | undefined;
 };
 
+interface TranscriptReactionFixture {
+  emoji: string;
+  targetMatrixEventId?: string;
+  targetMessageId?: string;
+}
+
 function message(overrides: MessageOverrides): PrivateWhatsAppMessage {
-  const { text, senderDisplayName, senderPhoneNumber, senderKey, ...rest } = overrides;
+  const { text, senderDisplayName, senderPhoneNumber, senderKey, reaction, ...rest } = overrides;
   const result: PrivateWhatsAppMessage = {
     id: 'message-1',
     chatId: 'chat-123',
@@ -76,6 +86,13 @@ function message(overrides: MessageOverrides): PrivateWhatsAppMessage {
     result.senderKey = senderKey;
   } else if (Object.hasOwn(overrides, 'senderKey')) {
     delete result.senderKey;
+  }
+  if (reaction !== undefined) {
+    (result as Omit<PrivateWhatsAppMessage, 'reaction'> & { reaction?: TranscriptReactionFixture }).reaction =
+      reaction;
+  } else if (Object.hasOwn(overrides, 'reaction')) {
+    delete (result as Omit<PrivateWhatsAppMessage, 'reaction'> & { reaction?: TranscriptReactionFixture })
+      .reaction;
   }
   return result;
 }
@@ -205,6 +222,261 @@ describe('projectPrivateConversationContext', () => {
     const transcriptText = buildPrivateConversationTranscriptText(result.messages);
     expect(transcriptText).toBe('[Unknown date] Alice: invalid timestamp text');
     expect(transcriptText).not.toContain('NaN');
+  });
+
+  it('folds private WhatsApp reactions into the target transcript message', () => {
+    const target = message({
+      id: 'target-message',
+      matrixEventId: '$target',
+      text: 'See you at five',
+      eventTimestamp: '2026-07-03T10:00:00.000Z',
+    });
+    const reaction = message({
+      id: 'reaction-message',
+      matrixEventId: '$reaction',
+      messageType: 'reaction',
+      text: '👍',
+      eventTimestamp: '2026-07-03T10:05:00.000Z',
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$target',
+        targetMessageId: 'target-message',
+      },
+    });
+
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      messages: [target, reaction],
+    });
+
+    expect(context.messages).toHaveLength(1);
+    expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
+      '[3 July] Alice: See you at five\n  Reactions: 👍 Alice'
+    );
+  });
+
+  it('does not expose private reaction sender identifiers in transcript text', () => {
+    const target = message({
+      id: 'target-message',
+      matrixEventId: '$target',
+      text: 'See you at five',
+      eventTimestamp: '2026-07-03T10:00:00.000Z',
+    });
+    const reaction = message({
+      id: 'reaction-message',
+      matrixEventId: '$reaction',
+      messageType: 'reaction',
+      text: '👍',
+      senderDisplayName: undefined,
+      senderPhoneNumber: '+48123456789',
+      senderKey: 'phone:+48123456789',
+      eventTimestamp: '2026-07-03T10:05:00.000Z',
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$target',
+        targetMessageId: 'target-message',
+      },
+    });
+
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      messages: [target, reaction],
+    });
+
+    const transcriptText = buildPrivateConversationTranscriptText(context.messages);
+    expect(transcriptText).toContain('Reactions: 👍 Unknown');
+    expect(transcriptText).not.toContain('+48123456789');
+    expect(transcriptText).not.toContain('phone:+48123456789');
+  });
+
+  it('folds legacy raw Matrix reactions into the target transcript message', () => {
+    const target = message({
+      id: 'target-message',
+      matrixEventId: '$target',
+      text: 'See you at five',
+      eventTimestamp: '2026-07-03T10:00:00.000Z',
+    });
+    const reaction = message({
+      id: 'legacy-reaction-message',
+      matrixEventId: '$legacy-reaction',
+      messageType: 'reaction',
+      text: '👍',
+      eventTimestamp: '2026-07-03T10:05:00.000Z',
+      rawMatrixEvent: {
+        type: 'm.reaction',
+        event_id: '$legacy-reaction',
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$target',
+            key: '👍',
+          },
+        },
+      },
+    });
+
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      messages: [target, reaction],
+    });
+
+    expect(context.messages).toHaveLength(1);
+    expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
+      '[3 July] Alice: See you at five\n  Reactions: 👍 Alice'
+    );
+  });
+
+  it('folds reactions resolved by Matrix target id and labels outgoing reactions as You', () => {
+    const target = message({
+      id: 'target-message',
+      matrixEventId: '$target',
+      text: 'See you at five',
+      eventTimestamp: '2026-07-03T10:00:00.000Z',
+    });
+    const reaction = message({
+      id: 'reaction-message',
+      matrixEventId: '$reaction',
+      messageType: 'reaction',
+      direction: 'outgoing',
+      text: '👍',
+      senderDisplayName: undefined,
+      senderPhoneNumber: undefined,
+      senderKey: undefined,
+      eventTimestamp: '2026-07-03T10:05:00.000Z',
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$target',
+      },
+    });
+
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      messages: [target, reaction],
+    });
+
+    expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
+      '[3 July] Alice: See you at five\n  Reactions: 👍 You'
+    );
+  });
+
+  it('ignores malformed or unresolved private WhatsApp reactions in transcript projection', () => {
+    const target = message({
+      id: 'target-message',
+      matrixEventId: '$target',
+      text: 'See you at five',
+      eventTimestamp: '2026-07-03T10:00:00.000Z',
+    });
+    const malformedReactions = [
+      message({
+        id: 'missing-normalized-target',
+        matrixEventId: '$missing-normalized-target',
+        messageType: 'reaction',
+        text: undefined,
+        reaction: {
+          emoji: '👍',
+        },
+      }),
+      message({
+        id: 'unresolved-normalized-target',
+        matrixEventId: '$unresolved-normalized-target',
+        messageType: 'reaction',
+        text: undefined,
+        reaction: {
+          emoji: '👍',
+          targetMatrixEventId: '$missing-target',
+        },
+      }),
+      message({
+        id: 'raw-not-record',
+        matrixEventId: '$raw-not-record',
+        messageType: 'reaction',
+        text: undefined,
+        rawMatrixEvent: 'not-an-event',
+      }),
+      message({
+        id: 'content-not-record',
+        matrixEventId: '$content-not-record',
+        messageType: 'reaction',
+        text: undefined,
+        rawMatrixEvent: { content: 'not-content' },
+      }),
+      message({
+        id: 'relation-not-record',
+        matrixEventId: '$relation-not-record',
+        messageType: 'reaction',
+        text: undefined,
+        rawMatrixEvent: { content: { 'm.relates_to': 'not-relation' } },
+      }),
+      message({
+        id: 'wrong-relation-type',
+        matrixEventId: '$wrong-relation-type',
+        messageType: 'reaction',
+        text: undefined,
+        rawMatrixEvent: {
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.reference',
+              event_id: '$target',
+              key: '👍',
+            },
+          },
+        },
+      }),
+      message({
+        id: 'missing-reaction-key',
+        matrixEventId: '$missing-reaction-key',
+        messageType: 'reaction',
+        text: undefined,
+        rawMatrixEvent: {
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$target',
+            },
+          },
+        },
+      }),
+      message({
+        id: 'unresolved-legacy-target',
+        matrixEventId: '$unresolved-legacy-target',
+        messageType: 'reaction',
+        text: undefined,
+        rawMatrixEvent: {
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$missing-target',
+              key: '👍',
+            },
+          },
+        },
+      }),
+      message({
+        id: 'unresolved-target-id',
+        matrixEventId: '$unresolved-target-id',
+        messageType: 'reaction',
+        text: undefined,
+        reaction: {
+          emoji: '👍',
+          targetMessageId: 'missing-target-message',
+        },
+      }),
+    ];
+
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      messages: [target, ...malformedReactions],
+    });
+
+    expect(context.messages).toHaveLength(1);
+    expect(context.messages[0]?.content).toBe('See you at five');
+    expect(context.omitted.nonText).toBe(malformedReactions.length);
+    expect(buildPrivateConversationTranscriptText(context.messages)).not.toContain('Reactions:');
   });
 
   it('preserves explicit max-message caps for legacy context callers', () => {

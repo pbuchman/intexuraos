@@ -138,7 +138,6 @@ describe('whatsappApi private read helpers', () => {
   it('enables the private mirror account with a selected phone number', async () => {
     const { apiRequest } = await import('../apiClient.js');
     vi.mocked(apiRequest).mockResolvedValue({
-      sourceAccountId: 'private-wa-test-user',
       phoneNumberNormalized: '48123456789',
       status: 'active',
     });

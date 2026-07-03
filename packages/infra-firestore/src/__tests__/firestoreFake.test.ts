@@ -362,6 +362,39 @@ describe('FakeFirestore', () => {
         expect(snapshot.size).toBe(3);
       });
 
+      it('filters nested dotted field paths with in operator', async () => {
+        await db
+          .collection('users')
+          .doc('user-1')
+          .set(
+            {
+              profile: {
+                teamId: 'alpha',
+              },
+            },
+            { merge: true }
+          );
+        await db
+          .collection('users')
+          .doc('user-2')
+          .set(
+            {
+              profile: {
+                teamId: 'beta',
+              },
+            },
+            { merge: true }
+          );
+
+        const snapshot = await db
+          .collection('users')
+          .where('profile.teamId', 'in', ['alpha'])
+          .orderBy('profile.teamId', 'asc')
+          .get();
+
+        expect(snapshot.docs.map((doc) => doc.id)).toEqual(['user-1']);
+      });
+
       it('in operator returns empty for no matches', async () => {
         const snapshot = await db
           .collection('users')

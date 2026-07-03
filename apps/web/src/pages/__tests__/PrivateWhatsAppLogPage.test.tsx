@@ -238,6 +238,84 @@ describe('PrivateWhatsAppLogPage', () => {
     expect(screen.queryByText(/utc-helper:/)).not.toBeInTheDocument();
   });
 
+  it('renders inline reactions', () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'msg-with-reaction',
+            chatId: 'chat-group',
+            chatDisplayName: 'Fishing Crew (WA)',
+            chatType: 'group',
+            senderKey: 'phone:+48123456789',
+            senderDisplayName: 'Monika (WA)',
+            senderPhoneNumber: '+48123456789',
+            direction: 'incoming',
+            messageType: 'text',
+            text: 'hello from the group',
+            reactions: [
+              {
+                id: 'reaction-1',
+                emoji: '👍',
+                senderDisplayName: 'Alice',
+                direction: 'incoming',
+                eventTimestamp: '2026-07-03T10:05:00.000Z',
+              },
+            ],
+            eventTimestamp: '2026-06-22T09:00:00.000Z',
+            eventDayKey: '2026-06-22',
+            eventTimeZone: 'Europe/Warsaw',
+            receivedAt: '2026-06-22T09:00:02.000Z',
+            ingestedAt: '2026-06-22T09:00:03.000Z',
+            deliveryMode: 'live',
+            schemaVersion: 2,
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('👍')).toBeInTheDocument();
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+  });
+
+  it('renders standalone reaction entries when the target message is outside the current page', () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'reaction-message',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'reaction',
+            reaction: {
+              emoji: '👍',
+              targetMessageId: 'earlier-message',
+            },
+            eventTimestamp: '2026-06-22T09:05:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:05:02.000Z',
+            ingestedAt: '2026-06-22T09:05:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Reacted 👍 to an earlier message')).toBeInTheDocument();
+  });
+
   it('renders stored private images with captions while old images stay placeholders', () => {
     mockUsePrivateWhatsAppLog.mockReturnValueOnce(
       createHookResult({

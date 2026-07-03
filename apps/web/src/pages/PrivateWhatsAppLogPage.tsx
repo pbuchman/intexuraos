@@ -21,6 +21,7 @@ import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageType,
+  PrivateWhatsAppReaction,
 } from '@/types';
 
 function getChatLabel(chat: PrivateWhatsAppChat | undefined, fallback?: string): string {
@@ -47,6 +48,13 @@ function getMessageSenderLabel(message: PrivateWhatsAppMessage): string {
     message.senderKey ??
     'Unknown sender'
   );
+}
+
+function getReactionSenderLabel(reaction: PrivateWhatsAppReaction): string {
+  if (reaction.direction === 'outgoing') {
+    return 'You';
+  }
+  return reaction.senderDisplayName ?? reaction.senderPhoneNumber ?? reaction.senderKey ?? 'Unknown sender';
 }
 
 function getDayKey(message: PrivateWhatsAppMessage): string {
@@ -161,6 +169,31 @@ function MessageTranscription({ message }: { message: PrivateWhatsAppMessage }):
   );
 }
 
+function MessageReactions({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element | null {
+  const reactions = message.reactions ?? [];
+  if (reactions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {reactions.map((reaction) => {
+        const senderLabel = getReactionSenderLabel(reaction);
+        return (
+          <span
+            key={reaction.id}
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            title={`${senderLabel} reacted at ${formatDateTimeCompact(reaction.eventTimestamp)}`}
+          >
+            <span aria-hidden="true">{reaction.emoji}</span>
+            <span className="truncate">{senderLabel}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element {
   const hasText = message.text !== undefined && message.text.trim() !== '';
   const transcription = <MessageTranscription message={message} />;
@@ -201,6 +234,14 @@ function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JS
         </p>
         {transcription}
       </div>
+    );
+  }
+
+  if (message.messageType === 'reaction' && message.reaction !== undefined) {
+    return (
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        Reacted {message.reaction.emoji} to an earlier message
+      </p>
     );
   }
 
@@ -556,6 +597,7 @@ export function PrivateWhatsAppLogPage(): React.JSX.Element {
                                 ) : null}
                               </div>
                               <MessageBody message={message} />
+                              <MessageReactions message={message} />
                             </div>
                           </article>
                         );

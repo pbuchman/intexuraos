@@ -188,6 +188,12 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
     return Promise.resolve(ok({ messages: [] }));
   }
 
+  findReactionsForMessageIds(
+    _input: Parameters<PrivateWhatsAppRepository['findReactionsForMessageIds']>[0]
+  ): ReturnType<PrivateWhatsAppRepository['findReactionsForMessageIds']> {
+    return Promise.resolve(ok({ reactionsByMessageId: {}, attachedReactionMessageIds: [] }));
+  }
+
   findConversationContextMessages(
     _input: PrivateConversationContextMessageQueryInput
   ): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
@@ -336,6 +342,156 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored[0]?.message.direction).toBe('outgoing');
     expect(repository.stored[0]?.message.senderDisplayName).toBe('You');
     expect(repository.stored[0]?.message.senderKey).toBe('matrix:@pbuchman:home-dev');
+  });
+
+  it('normalizes Matrix reaction target metadata for private WhatsApp events', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$target-event',
+                  key: '👍',
+                },
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      (repository.stored[0]?.message as { reaction?: { emoji: string; targetMatrixEventId: string } })
+        .reaction
+    ).toEqual({
+      emoji: '👍',
+      targetMatrixEventId: '$target-event',
+    });
+  });
+
+  it('normalizes explicit private reaction metadata and ignores malformed reaction relations', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$explicit-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+              reaction: {
+                emoji: '👍',
+                targetMatrixEventId: '$explicit-target-event',
+              },
+            },
+          }),
+          createEvent({
+            matrixEventId: '$empty-explicit-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+              reaction: {
+                emoji: '',
+                targetMatrixEventId: '$target-event',
+              },
+            },
+            rawMatrixEvent: 'not-a-record',
+          }),
+          createEvent({
+            matrixEventId: '$missing-content-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$missing-content-reaction-event',
+            },
+          }),
+          createEvent({
+            matrixEventId: '$missing-relates-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$missing-relates-reaction-event',
+              content: {},
+            },
+          }),
+          createEvent({
+            matrixEventId: '$wrong-reltype-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$wrong-reltype-reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.reference',
+                  event_id: '$target-event',
+                  key: '👍',
+                },
+              },
+            },
+          }),
+          createEvent({
+            matrixEventId: '$empty-key-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$empty-key-reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$target-event',
+                  key: '',
+                },
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(repository.stored).toHaveLength(6);
+    expect(repository.stored[0]?.message.reaction).toEqual({
+      emoji: '👍',
+      targetMatrixEventId: '$explicit-target-event',
+    });
+    expect(repository.stored.slice(1).map((stored) => stored.message.reaction)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 
   it('preserves stored private image media fields from the Matrix adapter', async () => {
