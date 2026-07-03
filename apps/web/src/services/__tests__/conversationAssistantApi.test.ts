@@ -2,16 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkConversationAssistantContext,
   createConversationAssistantSession,
+  exportConversationAssistantSessionPdf,
   getConversationAssistantSession,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
   sendConversationAssistantTurn,
   streamConversationAssistantTurn,
 } from '../conversationAssistantApi.js';
+import { ApiError } from '../apiClient.js';
 
-vi.mock('../apiClient.js', () => ({
-  apiRequest: vi.fn(),
-}));
+vi.mock('../apiClient.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../apiClient.js')>();
+  return {
+    ...actual,
+    apiRequest: vi.fn(),
+  };
+});
 
 vi.mock('../../config', () => ({
   config: {
@@ -197,5 +203,94 @@ describe('conversationAssistantApi', () => {
       'assistant_delta',
       'done',
     ]);
+  });
+
+  it('exports conversation assistant PDF with filename from content disposition', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('pdf-bytes', {
+          status: 200,
+          headers: {
+            'Content-Disposition': 'attachment; filename="alice-context.pdf"',
+            'Content-Type': 'application/pdf',
+          },
+        })
+      )
+    );
+
+    const result = await exportConversationAssistantSessionPdf(TOKEN, 'session/with spaces?');
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://wa.test/conversation-assistant/sessions/session%2Fwith%20spaces%3F/export.pdf',
+      expect.objectContaining({
+        method: 'GET',
+        cache: 'no-store',
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${TOKEN}`,
+        }),
+      })
+    );
+    expect(result.filename).toBe('alice-context.pdf');
+    expect(result.blob.type).toBe('application/pdf');
+    await expect(result.blob.text()).resolves.toBe('pdf-bytes');
+  });
+
+  it('exports conversation assistant PDF and throws ApiError for API envelopes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No export access',
+              details: { reason: 'policy' },
+            },
+          }),
+          {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
+      )
+    );
+
+    await expect(
+      exportConversationAssistantSessionPdf(TOKEN, 'session-1')
+    ).rejects.toMatchObject<ApiError>({
+      code: 'FORBIDDEN',
+      message: 'No export access',
+      status: 403,
+      details: { reason: 'policy' },
+    });
+  });
+
+  it('exports conversation assistant PDF with UTF-8 filename and fallback when missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(
+          new Response(new Blob(['pdf-bytes'], { type: 'application/pdf' }), {
+            status: 200,
+            headers: {
+              'Content-Disposition':
+                "attachment; filename*=UTF-8''alice%20context%20%E2%82%AC.pdf",
+            },
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(new Blob(['pdf-bytes'], { type: 'application/pdf' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/pdf' },
+          })
+        )
+    );
+
+    const utf8Result = await exportConversationAssistantSessionPdf(TOKEN, 'session-utf8');
+    const fallbackResult = await exportConversationAssistantSessionPdf(TOKEN, 'session-1');
+
+    expect(utf8Result.filename).toBe('alice context €.pdf');
+    expect(fallbackResult.filename).toBe('conversation-assistant-session-1.pdf');
   });
 });

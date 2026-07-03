@@ -5,7 +5,7 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConversationAssistantSession,
   ConversationAssistantTurn,
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   listConversationAssistantSessions: vi.fn(),
   checkConversationAssistantContext: vi.fn(),
   createConversationAssistantSession: vi.fn(),
+  exportConversationAssistantSessionPdf: vi.fn(),
   getConversationAssistantSession: vi.fn(),
   listConversationAssistantTurns: vi.fn(),
   streamConversationAssistantTurn: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('@/services/conversationAssistantApi', () => ({
   listConversationAssistantSessions: mocks.listConversationAssistantSessions,
   checkConversationAssistantContext: mocks.checkConversationAssistantContext,
   createConversationAssistantSession: mocks.createConversationAssistantSession,
+  exportConversationAssistantSessionPdf: mocks.exportConversationAssistantSessionPdf,
   getConversationAssistantSession: mocks.getConversationAssistantSession,
   listConversationAssistantTurns: mocks.listConversationAssistantTurns,
   streamConversationAssistantTurn: mocks.streamConversationAssistantTurn,
@@ -153,7 +155,33 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
+function mockBrowserDownloadApis(): {
+  createObjectURL: ReturnType<typeof vi.fn>;
+  revokeObjectURL: ReturnType<typeof vi.fn>;
+  anchorClickSpy: ReturnType<typeof vi.spyOn>;
+} {
+  const createObjectURL = vi.fn(() => 'blob:session-1');
+  const revokeObjectURL = vi.fn();
+  vi.stubGlobal(
+    'URL',
+    class extends URL {
+      static createObjectURL = createObjectURL;
+      static revokeObjectURL = revokeObjectURL;
+    }
+  );
+  const anchorClickSpy = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation((): void => undefined);
+
+  return { createObjectURL, revokeObjectURL, anchorClickSpy };
+}
+
 describe('useWhatsAppConversationAssistant', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAccessToken.mockResolvedValue('tok');
@@ -167,6 +195,10 @@ describe('useWhatsAppConversationAssistant', () => {
     mocks.getConversationAssistantSession.mockResolvedValue(session);
     mocks.listConversationAssistantTurns.mockResolvedValue({ turns });
     mocks.createConversationAssistantSession.mockResolvedValue(session);
+    mocks.exportConversationAssistantSessionPdf.mockResolvedValue({
+      blob: new Blob(['pdf-bytes'], { type: 'application/pdf' }),
+      filename: 'alice-context.pdf',
+    });
     mocks.streamConversationAssistantTurn.mockImplementation(
       async (
         _token: string,
@@ -1263,5 +1295,112 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(result.current.directChats).toEqual([latestChat]);
     expect(result.current.sessions).toEqual([latestSession]);
     expect(result.current.error).toBeNull();
+  });
+
+  it('exports selected session PDF through the service helper and browser download flow', async () => {
+    const { createObjectURL, revokeObjectURL, anchorClickSpy } = mockBrowserDownloadApis();
+    const createElementSpy = vi.spyOn(document, 'createElement');
+
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+
+    expect(result.current.exporting).toBe(false);
+
+    await act(async () => {
+      await result.current.exportSelectedSessionPdf();
+    });
+
+    expect(mocks.exportConversationAssistantSessionPdf).toHaveBeenCalledWith('tok', session.id);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(anchorClickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:session-1');
+
+    const anchor = createElementSpy.mock.results.find(
+      (entry) => entry.type === 'return' && entry.value instanceof HTMLAnchorElement
+    )?.value as HTMLAnchorElement | undefined;
+    expect(anchor).toBeDefined();
+    expect(anchor?.download).toBe('alice-context.pdf');
+    expect(anchor?.href).toBe('blob:session-1');
+    expect(document.body.contains(anchor ?? null)).toBe(false);
+    expect(result.current.exporting).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('does not export without a selected session and reports a helpful error', async () => {
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.directChats).toEqual([directChat]);
+    });
+
+    await act(async () => {
+      await result.current.exportSelectedSessionPdf();
+    });
+
+    expect(mocks.exportConversationAssistantSessionPdf).not.toHaveBeenCalled();
+    expect(result.current.error).toBe('Select an assistant session before exporting.');
+    expect(result.current.exporting).toBe(false);
+  });
+
+  it('prevents duplicate exports while an export is already in flight', async () => {
+    mockBrowserDownloadApis();
+    const exportRequest = createDeferred<{ blob: Blob; filename: string }>();
+    mocks.exportConversationAssistantSessionPdf.mockReturnValue(exportRequest.promise);
+
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+
+    let firstExport!: Promise<void>;
+    let secondExport!: Promise<void>;
+    act(() => {
+      firstExport = result.current.exportSelectedSessionPdf();
+      secondExport = result.current.exportSelectedSessionPdf();
+    });
+
+    await waitFor(() => {
+      expect(result.current.exporting).toBe(true);
+    });
+    expect(mocks.exportConversationAssistantSessionPdf).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      exportRequest.resolve({
+        blob: new Blob(['pdf-bytes'], { type: 'application/pdf' }),
+        filename: 'alice-context.pdf',
+      });
+      await Promise.all([firstExport, secondExport]);
+    });
+
+    expect(result.current.exporting).toBe(false);
+  });
+
+  it('clears exporting and surfaces API failures when PDF export fails', async () => {
+    mocks.exportConversationAssistantSessionPdf.mockRejectedValue(new Error('export failed'));
+
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+
+    await act(async () => {
+      await result.current.exportSelectedSessionPdf();
+    });
+
+    expect(result.current.exporting).toBe(false);
+    expect(result.current.error).toBe('export failed');
   });
 });
