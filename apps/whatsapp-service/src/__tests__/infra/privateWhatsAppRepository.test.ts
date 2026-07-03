@@ -1461,7 +1461,8 @@ describe('privateWhatsAppRepository', () => {
         senderPhoneNumber: '+48123456789',
         senderPhoneNumberNormalized: '48123456789',
         senderKey: 'phone:+48123456789',
-        eventTimestamp: '2026-06-22T10:05:00.000Z',
+        eventTimestamp: '2026-06-23T10:05:00.000Z',
+        eventDayKey: '2026-06-23',
       },
     });
     const secondResult = await repository.storeIncomingMessage(secondInput);
@@ -1481,6 +1482,149 @@ describe('privateWhatsAppRepository', () => {
       messageCount: 2,
       participantKeys: ['phone:+48123456789'],
     });
+
+    const data = fakeFirestore.getAllData();
+    const senderId = deterministicId('pbuchman-private-whatsapp', 'phone:+48123456789');
+    const senderDayId = deterministicId(
+      'pbuchman-private-whatsapp',
+      `phone:+48123456789\0${'2026-06-23'}`
+    );
+    const sender = data.get(PRIVATE_WHATSAPP_SENDERS_COLLECTION)?.get(senderId);
+    const senderDay = data.get(PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION)?.get(senderDayId);
+    expect(sender?.['senderDisplayName']).toBe('Marcinek');
+    expect(senderDay?.['senderDisplayName']).toBe('Marcinek');
+    const newRoomMessageId = deterministicId('pbuchman-private-whatsapp', '$new-room-event');
+    const newRoomMessage = data.get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)?.get(newRoomMessageId);
+    expect(newRoomMessage?.['senderDisplayName']).toBe('Marcinek');
+    expect(newRoomMessage?.['chatDisplayName']).toBe('Marcinek');
+  });
+
+  it('keeps a canonical direct sender label when a later alias uses a phone label', async () => {
+    const firstResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!old-karolina-room:matrix.example',
+          type: 'direct',
+          displayName: 'Karolina Buchman',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!old-karolina-room:matrix.example',
+          matrixEventId: '$old-karolina-event',
+          matrixSenderId: '@whatsapp_48000000002:matrix.example',
+          senderDisplayName: 'Karolina Buchman',
+          senderPhoneNumber: '+48000000002',
+          senderPhoneNumberNormalized: '48000000002',
+          senderKey: 'phone:+48000000002',
+          eventTimestamp: '2026-06-22T10:00:00.000Z',
+        },
+      })
+    );
+    expect(firstResult.ok).toBe(true);
+    if (!firstResult.ok) throw new Error(firstResult.error.message);
+
+    const secondResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!new-karolina-room:matrix.example',
+          type: 'direct',
+          displayName: '+48000000002',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!new-karolina-room:matrix.example',
+          matrixEventId: '$new-karolina-event',
+          matrixSenderId: '@whatsapp_48000000002:matrix.example',
+          senderDisplayName: '+48000000002',
+          senderPhoneNumber: '+48000000002',
+          senderPhoneNumberNormalized: '48000000002',
+          senderKey: 'phone:+48000000002',
+          eventTimestamp: '2026-06-23T10:05:00.000Z',
+          eventDayKey: '2026-06-23',
+        },
+      })
+    );
+
+    expect(secondResult.ok).toBe(true);
+    if (!secondResult.ok) throw new Error(secondResult.error.message);
+    expect(secondResult.value.chatId).toBe(firstResult.value.chatId);
+
+    const data = fakeFirestore.getAllData();
+    const senderId = deterministicId('pbuchman-private-whatsapp', 'phone:+48000000002');
+    const senderDayId = deterministicId(
+      'pbuchman-private-whatsapp',
+      `phone:+48000000002\0${'2026-06-23'}`
+    );
+    const messageId = deterministicId('pbuchman-private-whatsapp', '$new-karolina-event');
+    expect(data.get(PRIVATE_WHATSAPP_SENDERS_COLLECTION)?.get(senderId)?.['senderDisplayName']).toBe(
+      'Karolina Buchman'
+    );
+    expect(
+      data.get(PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION)?.get(senderDayId)?.['senderDisplayName']
+    ).toBe('Karolina Buchman');
+    expect(
+      data.get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)?.get(messageId)?.['senderDisplayName']
+    ).toBe('Karolina Buchman');
+  });
+
+  it('keeps a stable group sender label when a later member label is bridge-generated', async () => {
+    const firstResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!group-room:matrix.example',
+          type: 'group',
+          displayName: 'Fishing Crew',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!group-room:matrix.example',
+          matrixEventId: '$old-group-member-event',
+          matrixSenderId: '@whatsapp_48000000003:matrix.example',
+          senderDisplayName: 'Piotrek',
+          senderPhoneNumber: '+48000000003',
+          senderPhoneNumberNormalized: '48000000003',
+          senderKey: 'phone:+48000000003',
+          eventTimestamp: '2026-06-22T10:00:00.000Z',
+        },
+      })
+    );
+    expect(firstResult.ok).toBe(true);
+    if (!firstResult.ok) throw new Error(firstResult.error.message);
+
+    const secondResult = await repository.storeIncomingMessage(
+      createStoreInput({
+        chat: {
+          matrixRoomId: '!group-room:matrix.example',
+          type: 'group',
+          displayName: 'Fishing Crew',
+        },
+        message: {
+          ...createStoreInput().message,
+          matrixRoomId: '!group-room:matrix.example',
+          matrixEventId: '$new-group-member-event',
+          matrixSenderId: '@whatsapp_48000000003:matrix.example',
+          senderDisplayName: 'Piotrek (WA)',
+          senderPhoneNumber: '+48000000003',
+          senderPhoneNumberNormalized: '48000000003',
+          senderKey: 'phone:+48000000003',
+          eventTimestamp: '2026-06-23T10:05:00.000Z',
+          eventDayKey: '2026-06-23',
+        },
+      })
+    );
+
+    expect(secondResult.ok).toBe(true);
+    if (!secondResult.ok) throw new Error(secondResult.error.message);
+
+    const data = fakeFirestore.getAllData();
+    const senderId = deterministicId('pbuchman-private-whatsapp', 'phone:+48000000003');
+    const messageId = deterministicId('pbuchman-private-whatsapp', '$new-group-member-event');
+    expect(data.get(PRIVATE_WHATSAPP_SENDERS_COLLECTION)?.get(senderId)?.['senderDisplayName']).toBe(
+      'Piotrek'
+    );
+    expect(
+      data.get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)?.get(messageId)?.['senderDisplayName']
+    ).toBe('Piotrek');
   });
 
   it('reuses a direct chat alias for outgoing messages from a linked Matrix room', async () => {
