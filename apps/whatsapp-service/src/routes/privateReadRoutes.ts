@@ -426,6 +426,9 @@ async function hydrateInlineReactions(input: {
     if (message.messageType !== 'reaction' || message.reaction !== undefined) {
       continue;
     }
+    if (attachedReactionIds.has(message.id)) {
+      continue;
+    }
 
     const legacyReaction = extractLegacyReaction(message.rawMatrixEvent);
     const targetMessageId =

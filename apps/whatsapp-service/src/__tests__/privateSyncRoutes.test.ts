@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { ok } from '@intexuraos/common-core';
 
 const commonHttpState = vi.hoisted(() => ({
   logIncomingRequest: vi.fn(),
@@ -2278,6 +2279,97 @@ describe('Private WhatsApp Sync Routes', () => {
     };
     expect(body.data.messages).toEqual([]);
     expect(JSON.stringify(body.data)).not.toContain('legacy-standalone-target-event');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('folds page-local raw-only legacy reactions when the repository only returns normalized reactions', async () => {
+    const baseMessage: StorePrivateWhatsAppMessageInput['message'] = {
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$fallback-inline-target-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      senderDisplayName: 'Alice',
+      senderPhoneNumber: '+48123456789',
+      senderPhoneNumberNormalized: '48123456789',
+      direction: 'incoming',
+      type: 'text',
+      text: 'fallback inline target post',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$fallback-inline-target-event',
+      },
+    };
+    const store = (
+      message: StorePrivateWhatsAppMessageInput['message']
+    ): ReturnType<typeof ctx.privateWhatsAppRepository.storeIncomingMessage> =>
+      ctx.privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: '2026-06-22T10:00:01.000Z',
+        chat: {
+          matrixRoomId: '!room:matrix.example',
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message,
+      });
+    await store(baseMessage);
+    await store({
+      ...baseMessage,
+      matrixEventId: '$fallback-inline-reaction',
+      type: 'reaction',
+      text: '💚',
+      eventTimestamp: '2026-06-22T10:05:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$fallback-inline-target-event',
+            key: '  💚  ',
+          },
+        },
+      },
+    });
+    const originalFindReactions =
+      ctx.privateWhatsAppRepository.findReactionsForMessageIds.bind(ctx.privateWhatsAppRepository);
+    ctx.privateWhatsAppRepository.findReactionsForMessageIds = ():
+      ReturnType<typeof ctx.privateWhatsAppRepository.findReactionsForMessageIds> =>
+      Promise.resolve(ok({ reactionsByMessageId: {}, attachedReactionMessageIds: [] }));
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    ctx.privateWhatsAppRepository.findReactionsForMessageIds = originalFindReactions;
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { id: string; emoji: string }[];
+        }[];
+      };
+    };
+    expect(body.data.messages).toHaveLength(1);
+    expect(body.data.messages[0]).toMatchObject({
+      text: 'fallback inline target post',
+      reactions: [
+        {
+          id: 'message:pbuchman-private-whatsapp:$fallback-inline-reaction',
+          emoji: '💚',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
     expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
   });
 

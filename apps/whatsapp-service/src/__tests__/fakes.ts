@@ -1164,6 +1164,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       return Promise.resolve(err(failure));
     }
 
+    const targetsByMatrixEventId = new Map(
+      input.targets.map((target) => [target.matrixEventId, target.messageId] as const)
+    );
     const targetMessageIds = new Set(input.targets.map((target) => target.messageId));
     const reactionsByMessageId: Record<string, PrivateWhatsAppReactionSummary[]> = {};
     const attachedReactionMessageIds = new Set<string>();
@@ -1181,8 +1184,14 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       }
 
       const normalizedReaction = message.reaction;
-      const targetMessageId = normalizedReaction?.targetMessageId;
-      const emoji = normalizedReaction?.emoji ?? message.text;
+      const legacyReaction =
+        normalizedReaction === undefined ? extractFakeLegacyReaction(message.rawMatrixEvent) : undefined;
+      const targetMessageId =
+        normalizedReaction?.targetMessageId ??
+        (legacyReaction === undefined
+          ? undefined
+          : targetsByMatrixEventId.get(legacyReaction.targetMatrixEventId));
+      const emoji = normalizedReaction?.emoji ?? legacyReaction?.emoji ?? message.text;
       if (targetMessageId === undefined || !targetMessageIds.has(targetMessageId)) {
         continue;
       }
@@ -1751,6 +1760,37 @@ function firstFakeNonEmpty(value: string | undefined): string | undefined {
   }
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
+}
+
+function extractFakeLegacyReaction(
+  rawMatrixEvent: unknown
+): { emoji: string; targetMatrixEventId: string } | undefined {
+  if (!isFakeRecord(rawMatrixEvent)) {
+    return undefined;
+  }
+  const content = rawMatrixEvent['content'];
+  if (!isFakeRecord(content)) {
+    return undefined;
+  }
+  const relatesTo = content['m.relates_to'];
+  if (!isFakeRecord(relatesTo) || relatesTo['rel_type'] !== 'm.annotation') {
+    return undefined;
+  }
+
+  const targetMatrixEventId = firstFakeNonEmpty(asFakeOptionalString(relatesTo['event_id']));
+  const emoji = firstFakeNonEmpty(asFakeOptionalString(relatesTo['key']));
+  if (targetMatrixEventId === undefined || emoji === undefined) {
+    return undefined;
+  }
+  return { emoji, targetMatrixEventId };
+}
+
+function isFakeRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asFakeOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 function decodeFakePrivateWhatsAppCursor(
