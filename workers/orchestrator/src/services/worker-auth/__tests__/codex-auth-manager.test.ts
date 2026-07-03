@@ -141,6 +141,8 @@ describe('CodexAuthManager', () => {
       }),
       'Codex auth file not found'
     );
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).not.toHaveBeenCalled();
   });
 
   it('reports expired when ChatGPT access token is expired', () => {
