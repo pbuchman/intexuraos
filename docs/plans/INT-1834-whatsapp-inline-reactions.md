@@ -794,7 +794,7 @@ Expected: PASS.
 - Test: `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts`
 
 **Interfaces:**
-- Consumes: `PrivateWhatsAppMessage.reaction` and target messages in the selected private context range.
+- Consumes: `PrivateWhatsAppMessage.reaction`, legacy `rawMatrixEvent.content["m.relates_to"]` reaction metadata, and target messages in the selected private context range.
 - Produces: transcript lines that include reaction summaries on the target message, while attached reaction rows are omitted as standalone context messages.
 
 - [ ] **Step 1: Add transcript failing test**
@@ -868,6 +868,44 @@ it('does not expose private reaction sender identifiers in transcript text', () 
   expect(transcriptText).not.toContain('+48123456789');
   expect(transcriptText).not.toContain('phone:+48123456789');
 });
+
+it('folds legacy raw Matrix reactions into the target transcript message', () => {
+  const target = message({
+    id: 'target-message',
+    matrixEventId: '$target',
+    text: 'See you at five',
+    eventTimestamp: '2026-07-03T10:00:00.000Z',
+  });
+  const reaction = message({
+    id: 'legacy-reaction-message',
+    matrixEventId: '$legacy-reaction',
+    messageType: 'reaction',
+    text: '👍',
+    eventTimestamp: '2026-07-03T10:05:00.000Z',
+    rawMatrixEvent: {
+      type: 'm.reaction',
+      event_id: '$legacy-reaction',
+      content: {
+        'm.relates_to': {
+          rel_type: 'm.annotation',
+          event_id: '$target',
+          key: '👍',
+        },
+      },
+    },
+  });
+
+  const context = projectPrivateConversationContext({
+    chat,
+    range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+    messages: [target, reaction],
+  });
+
+  expect(context.messages).toHaveLength(1);
+  expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
+    '[3 July] Alice: See you at five\n  Reactions: 👍 Alice'
+  );
+});
 ```
 
 Run: `pnpm --filter whatsapp-service test -- apps/whatsapp-service/src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts -t "folds private WhatsApp reactions"`
@@ -882,20 +920,28 @@ Extend `PrivateConversationContextMessage` in `transcriptFormatting.ts`:
 reactions?: PrivateWhatsAppReactionSummary[];
 ```
 
-Before the projection loop, build a map of reaction summaries:
+Before the projection loop, build target lookups and a map of reaction summaries. Use normalized `message.reaction` when present; otherwise parse legacy raw Matrix reaction metadata from `rawMatrixEvent.content["m.relates_to"]`, require `rel_type: "m.annotation"`, convert the target Matrix event id to the target message id through the messages selected for context, and skip rows that do not resolve to a target in the selected range.
 
 ```ts
+const targetsById = new Map(input.messages.map((message) => [message.id, message]));
+const targetsByMatrixEventId = new Map(
+  input.messages
+    .filter((message) => message.matrixEventId !== undefined)
+    .map((message) => [message.matrixEventId, message])
+);
 const reactionsByTarget = new Map<string, PrivateWhatsAppReactionSummary[]>();
 const attachedReactionIds = new Set<string>();
 for (const message of input.messages) {
-  if (message.messageType !== 'reaction' || message.reaction === undefined) continue;
-  const target = input.messages.find((candidate) => candidate.id === message.reaction?.targetMessageId);
+  if (message.messageType !== 'reaction') continue;
+  const reaction = normalizeTranscriptReaction(message, targetsByMatrixEventId);
+  if (reaction === undefined) continue;
+  const target = targetsById.get(reaction.targetMessageId);
   if (target === undefined) continue;
   attachedReactionIds.add(message.id);
   const summaries = reactionsByTarget.get(target.id) ?? [];
   summaries.push({
     id: message.id,
-    emoji: message.reaction.emoji,
+    emoji: reaction.emoji,
     senderKey: message.senderKey,
     senderDisplayName: message.senderDisplayName,
     senderPhoneNumber: message.senderPhoneNumber,
@@ -905,6 +951,8 @@ for (const message of input.messages) {
   reactionsByTarget.set(target.id, summaries);
 }
 ```
+
+Add `normalizeTranscriptReaction()` in the same module. It should return `message.reaction` for newly normalized rows, and for raw-only legacy rows it should parse the Matrix relation shape with the same `m.annotation` rules used by ingest. It must return `undefined` unless the raw target Matrix event id maps to a selected target message. This keeps old reaction rows from appearing as standalone emoji context without adding a backfill or widening the Conversation Assistant API.
 
 Skip messages in `attachedReactionIds` during the main projection loop. Pass `reactionsByTarget.get(message.id)` into `toContextMessage()`.
 
@@ -962,5 +1010,5 @@ This should not block the private WhatsApp inline reaction work because it chang
 
 - Every private identifier from Matrix remains server-side.
 - The private log gets inline display without requiring a historical backfill.
-- Conversation Assistant handles private-context reactions by transcript projection, not by changing public assistant turn APIs.
+- Conversation Assistant handles normalized and raw-only legacy private-context reactions by transcript projection, not by changing public assistant turn APIs.
 - Public Intex Agent assistant-message reactions are documented as a separate cross-service follow-up because they require a new event contract.
