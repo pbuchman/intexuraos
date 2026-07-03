@@ -3,6 +3,7 @@ import type { Mock } from 'vitest';
 import * as fs from 'node:fs';
 import { CodexAuthManager } from '../codex-auth-manager.js';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -126,6 +127,20 @@ describe('CodexAuthManager', () => {
       refreshSupported: false,
       message: 'Codex auth file not found',
     });
+  });
+
+  it('suppresses missing auth file warning from Sentry while preserving the log', () => {
+    mockExistsSync.mockReturnValue(false);
+
+    manager.loadCredentials();
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/home/user/.code-orchestrator/codex-auth/auth.json',
+        [SKIP_SENTRY_KEY]: true,
+      }),
+      'Codex auth file not found'
+    );
   });
 
   it('reports expired when ChatGPT access token is expired', () => {
