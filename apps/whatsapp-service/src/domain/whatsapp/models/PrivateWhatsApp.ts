@@ -120,6 +120,7 @@ export interface PrivateWhatsAppChat {
   userId: string;
   sourceAccountId: string;
   matrixRoomId: string;
+  matrixRoomIds?: string[];
   chatType: PrivateWhatsAppChatType;
   displayName?: string;
   avatarMxcUri?: string;
