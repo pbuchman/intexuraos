@@ -12,6 +12,7 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type {
   AudioStoredEvent,
@@ -175,8 +176,15 @@ export async function transcribeAudio(
     if (pollResult.status === 'rejected') {
       const rawError = pollResult.error?.message ?? 'Job was rejected';
       const formattedError = formatSpeechmaticsError(rawError);
-      logger.error(
-        { event: 'job_rejected', userId, messageId, jobId, error: rawError },
+      logger.warn(
+        {
+          event: 'job_rejected',
+          userId,
+          messageId,
+          jobId,
+          error: rawError,
+          [SKIP_SENTRY_KEY]: true,
+        },
         'Transcription job was rejected'
       );
       await publishFailed(

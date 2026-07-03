@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { pollUntilComplete, type PollingConfig } from '../polling.js';
 import type { SpeechTranscriptionPort } from '../providers/transcription-provider.js';
 
@@ -118,6 +119,30 @@ describe('pollUntilComplete', () => {
       expect(result.error?.code).toBe('AUDIO_TOO_SHORT');
       expect(result.error?.message).toBe('Audio is too short');
     }
+  });
+
+  it('suppresses handled provider rejections from Sentry', async () => {
+    const provider = makeMockProvider([
+      {
+        ok: true,
+        value: {
+          status: 'rejected',
+          error: { code: 'JOB_REJECTED', message: 'No speech found for language identification' },
+          apiCall: makeApiCall(),
+        },
+      },
+    ]);
+
+    await pollUntilComplete(provider, 'job-123', fastConfig, mockLogger, noopSleep);
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'transcription_poll_rejected',
+        jobId: 'job-123',
+        [SKIP_SENTRY_KEY]: true,
+      }),
+      'Transcription job rejected'
+    );
   });
 
   it('returns timeout when max attempts exceeded', async () => {

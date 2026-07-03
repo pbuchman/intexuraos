@@ -2,6 +2,7 @@
  * Tests for the main transcription orchestration.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { transcribeAudio, type TranscriptionDeps } from '../main.js';
 import type {
   AudioStoredEvent,
@@ -277,6 +278,41 @@ describe('transcribeAudio', () => {
 
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.status).toBe('failed');
+    });
+
+    it('logs handled provider rejections as Sentry-suppressed warnings', async () => {
+      const provider = makeProvider(
+        ok({ jobId: 'job-123', apiCall: { timestamp: '', operation: 'submit', success: true } }),
+        [
+          ok({
+            status: 'rejected',
+            error: {
+              code: 'JOB_REJECTED',
+              message: 'No speech found for language identification',
+            },
+            apiCall: { timestamp: '', operation: 'poll', success: true },
+          }),
+        ],
+        ok({ text: '', apiCall: { timestamp: '', operation: 'fetch_result', success: true } })
+      );
+      deps.createProvider = vi.fn().mockReturnValue(provider);
+
+      await transcribeAudio(sampleEvent, deps, mockLogger);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'job_rejected',
+          userId: 'user-123',
+          messageId: 'msg-456',
+          jobId: 'job-123',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Transcription job was rejected'
+      );
+      expect(mockLogger.error).not.toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job_rejected' }),
+        'Transcription job was rejected'
+      );
     });
 
     it('publishes failed event when job is rejected without error details', async () => {
