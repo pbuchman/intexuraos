@@ -2341,6 +2341,45 @@ describe('drainTaskQueue', () => {
   });
 
   describe('fan-out check (INT-962)', () => {
+    it('dispatches planning execution follow-up as one task even when the issue has children', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-1841',
+        agentType: 'execution',
+        parentTaskId: 'task_planning',
+        followUpReason: 'execution_implement',
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-1841',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-1841',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+      expect(mockLinearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-123' }),
+      );
+    });
+
     it('triggers fan-out when parent has code-task children and returns dispatched', async () => {
       const task = createMockTask({ linearIssueId: 'INT-956', agentType: 'execution' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));

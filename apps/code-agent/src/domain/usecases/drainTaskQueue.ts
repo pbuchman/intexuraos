@@ -737,7 +737,8 @@ export async function drainTaskQueue(
     }
     // Step 4b: Fan-out check (INT-962) — if parent issue has children with code-task labels,
     // create separate child tasks instead of dispatching the parent.
-    if (shouldFanOut(hasChildren, linearIssueLabels) && task.linearIssueId !== undefined) {
+    const isPlanningExecutionFollowUp = task.parentTaskId !== undefined && task.followUpReason === 'execution_implement';
+    if (shouldFanOut(hasChildren, linearIssueLabels) && task.linearIssueId !== undefined && !isPlanningExecutionFollowUp) {
       logger.info({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out triggered: parent issue has code-task children');
 
       if (linearIssueUuid === undefined) {
