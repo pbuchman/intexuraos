@@ -10,23 +10,25 @@
 
 **Linear:** [INT-1844](https://linear.app/pbuchman/issue/INT-1844/allow-users-to-select-the-llm-for-whatsapp-conversation-assistance)
 **Plan document:** `docs/plans/INT-1844-conversation-assistant-model-selection.md`
-**External references checked on 2026-07-04:** [OpenRouter Models API](https://openrouter.ai/docs/guides/overview/models), [Claude Sonnet 5 on OpenRouter](https://openrouter.ai/anthropic/claude-sonnet-5), [Gemini 3.5 Flash on OpenRouter](https://openrouter.ai/google/gemini-3.5-flash)
+**External references checked on 2026-07-04:** [OpenRouter Models API](https://openrouter.ai/docs/guides/overview/models), [MiniMax M3 on OpenRouter](https://openrouter.ai/minimax/minimax-m3), [MiniMax API Overview](https://platform.minimax.io/docs/api-reference/api-overview), [Claude Sonnet 5 on OpenRouter](https://openrouter.ai/anthropic/claude-sonnet-5), [Gemini 3.5 Flash on OpenRouter](https://openrouter.ai/google/gemini-3.5-flash)
 
 ## Global Constraints
 
 - Planning artifact only; implementation must follow test-first development from `.claude/CLAUDE.md`.
 - The model choice is made from the user's perspective at the beginning of a new Conversation Assistant session.
 - The selected model is immutable for that session; follow-up turns and PDF export use the model stored on the session.
-- Default model remains current MiniMax: `or:minimax/minimax-m2.7`.
+- Default model is MiniMax M3: `or:minimax/minimax-m3`.
+- Any MiniMax M2.7 references in this plan are migration targets, historical-document cleanup items, or legacy-session compatibility notes; M2.7 is not a current default or selectable recommendation.
+- MiniMax M2.7 must not remain as an active default, allowlist recommendation, or user-facing current-model label anywhere in the repository. The implementation must migrate active M2.7 references to M3 across runtime config, tests, shared model catalogs, OpenRouter allowlists, web display names, and active documentation.
 - The initial curated selector must include at least:
-  - `or:minimax/minimax-m2.7` with label `MiniMax M2.7`
+  - `or:minimax/minimax-m3` with label `MiniMax M3`
   - `or:anthropic/claude-sonnet-5` with label `Claude Sonnet 5`
   - `or:google/gemini-3.5-flash` with label `Gemini 3.5 Flash Thinking`
-- The execution agent must re-check `https://openrouter.ai/api/v1/models` immediately before coding. On 2026-07-04 it returned `anthropic/claude-sonnet-5` and `google/gemini-3.5-flash`; it did not expose a separate Gemini 3.5 Thinking/Pro slug. If a separate current Gemini 3.5 Thinking slug exists at implementation time, add it to the same typed catalog instead of inventing an ID.
+- The execution agent must re-check `https://openrouter.ai/api/v1/models` immediately before coding. On 2026-07-04 it returned `minimax/minimax-m3`, `anthropic/claude-sonnet-5`, and `google/gemini-3.5-flash`; it did not expose a separate Gemini 3.5 Thinking/Pro slug. If a separate current Gemini 3.5 Thinking slug exists at implementation time, add it to the same typed catalog instead of inventing an ID.
 - Conversation Assistant continues to require the user's OpenRouter API key and must not add a platform-key fallback.
 - Conversation Assistant LLM calls continue to pass reasoning options. If model metadata requires per-model reasoning configuration, encode that in the dedicated model catalog.
 - PDF export must show the user-facing model name, not only a raw provider slug.
-- Existing sessions with older or missing model values must remain readable and exportable; fallback display text is the raw stored model or the default MiniMax label.
+- Existing sessions with older or missing model values must remain readable and exportable; fallback display text is the raw stored model or the default MiniMax M3 label.
 - Every HTTP endpoint touched must keep `logIncomingRequest()`.
 - No new Linear subtasks are required for this plan-doc task.
 - Before commit in implementation tasks, `pnpm run ci:tracked` must pass.
@@ -40,6 +42,8 @@
 - `packages/infra-pdf-export/src/conversationPdfExporter.ts` already prints `LLM model: <modelName>` and labels assistant turns as `LLM response (<modelName>)`.
 - `apps/web/src/pages/WhatsAppConversationAssistantPage.tsx` has a create panel with direct chat, range, and first-question controls, but no model selector.
 - `apps/web/src/types/index.ts` and `apps/web/src/services/conversationAssistantApi.ts` currently type `model` as `string` and do not expose model display names.
+- Repository audit on 2026-07-04 found active MiniMax M2.7 references in Conversation Assistant runtime defaults, OpenRouter allowlists, shared model display-name catalogs, tests, active service documentation, and historical implementation plans/specs.
+- `workers/orchestrator/src/services/isolation/types.ts` already uses direct MiniMax `MiniMax-M3` for the `minimax` worker type; the repository-wide upgrade task must preserve that and bring the remaining active OpenRouter/runtime references up to M3.
 
 ## Endpoint Changes
 
@@ -62,12 +66,12 @@ Add a dedicated Conversation Assistant model catalog to `packages/llm-contract/s
 The implementation should follow this shape:
 
 ```ts
-export type OpenRouterMiniMaxM27 = 'or:minimax/minimax-m2.7' & OpenRouterModelId;
+export type OpenRouterMiniMaxM3 = 'or:minimax/minimax-m3' & OpenRouterModelId;
 export type OpenRouterClaudeSonnet5 = 'or:anthropic/claude-sonnet-5' & OpenRouterModelId;
 export type OpenRouterGemini35Flash = 'or:google/gemini-3.5-flash' & OpenRouterModelId;
 
 export type ConversationAssistantModel =
-  | OpenRouterMiniMaxM27
+  | OpenRouterMiniMaxM3
   | OpenRouterClaudeSonnet5
   | OpenRouterGemini35Flash;
 
@@ -79,18 +83,18 @@ export interface ConversationAssistantModelOption {
 }
 
 export const ConversationAssistantModels = {
-  MiniMaxM27: createOpenRouterModelId('minimax/minimax-m2.7') as OpenRouterMiniMaxM27,
+  MiniMaxM3: createOpenRouterModelId('minimax/minimax-m3') as OpenRouterMiniMaxM3,
   ClaudeSonnet5: createOpenRouterModelId('anthropic/claude-sonnet-5') as OpenRouterClaudeSonnet5,
   Gemini35FlashThinking: createOpenRouterModelId('google/gemini-3.5-flash') as OpenRouterGemini35Flash,
 } as const;
 
 export const DEFAULT_CONVERSATION_ASSISTANT_MODEL =
-  ConversationAssistantModels.MiniMaxM27;
+  ConversationAssistantModels.MiniMaxM3;
 
 export const CONVERSATION_ASSISTANT_MODEL_OPTIONS: readonly ConversationAssistantModelOption[] = [
   {
-    id: ConversationAssistantModels.MiniMaxM27,
-    label: 'MiniMax M2.7',
+    id: ConversationAssistantModels.MiniMaxM3,
+    label: 'MiniMax M3',
     provider: 'MiniMax',
     supportsReasoning: true,
   },
@@ -124,7 +128,136 @@ export function getConversationAssistantModelDisplayName(model: string): string 
 
 If the execution-time OpenRouter catalog has a separate current Gemini 3.5 Thinking model, add it as another `ConversationAssistantModel` member, keep the same display-name/validation pattern, and include it in the web selector. Do not use an unverified OpenRouter slug.
 
-## Task 1: Add The Conversation Assistant Model Type
+## Task 1: Upgrade Repository-Wide MiniMax Defaults To M3
+
+**Files:**
+- Modify: `ecosystem.config.cjs`
+- Modify: `ecosystem.config.prod.cjs`
+- Modify: `terraform/environments/dev/main.tf`
+- Modify: `apps/whatsapp-service/src/config.ts`
+- Modify: `apps/whatsapp-service/src/__tests__/config.test.ts`
+- Modify: `apps/whatsapp-service/src/__tests__/openapi-contract.test.ts`
+- Modify: `apps/whatsapp-service/src/__tests__/pubsubRoutes.test.ts`
+- Modify: `apps/whatsapp-service/src/__tests__/services.test.ts`
+- Modify: `apps/whatsapp-service/src/__tests__/testUtils.ts`
+- Modify: `apps/web/src/utils/openRouterModelNames.ts`
+- Modify: `packages/llm-contract/src/supportedModels.ts`
+- Modify: `packages/llm-contract/src/__tests__/supportedModels.test.ts`
+- Modify: `packages/infra-openrouter/src/allowlist.ts`
+- Modify: `packages/infra-openrouter/src/defaultAllowlist.ts`
+- Modify: `packages/infra-openrouter/src/__tests__/allowlist.test.ts`
+- Modify: `packages/infra-openrouter/src/__tests__/client.test.ts`
+- Modify: `packages/infra-openrouter/src/__tests__/defaultAllowlist.test.ts`
+- Modify: `scripts/__tests__/ecosystem.prod.config.test.ts`
+- Modify active docs that describe current models, including `docs/services/code-worker/technical.md`, `docs/services/research-agent/technical.md`, and `docs/services/index.md`.
+- Review historical plan/spec hits under `docs/plans/` and `docs/superpowers/`; update reusable/current guidance to M3 and mark intentionally historical M2.7 references as superseded so no active guidance recommends M2.7.
+
+**Interfaces:**
+- Consumes: verified OpenRouter model slug `minimax/minimax-m3` and direct MiniMax model name `MiniMax-M3`.
+- Produces: repository-wide active defaults and allowlists that use MiniMax M3 instead of MiniMax M2.7.
+
+- [ ] **Step 1: Re-run the MiniMax model audit**
+
+Run:
+
+```bash
+rg -n -S "minimax/minimax-m2\.7|MiniMax M2\.7|MiniMax-M2\.7" \
+  --glob '!node_modules' \
+  --glob '!dist' \
+  --glob '!coverage' \
+  --glob '!pnpm-lock.yaml' \
+  --glob '!terraform/certs/**'
+```
+
+Expected: all active M2.7 hits are classified before editing. Historical docs may keep M2.7 only when they explicitly describe past work and include a supersession note pointing to MiniMax M3.
+
+- [ ] **Step 2: Verify current MiniMax M3 model IDs**
+
+Run:
+
+```bash
+node - <<'NODE'
+const https = require('https');
+https.get('https://openrouter.ai/api/v1/models', (res) => {
+  let body = '';
+  res.on('data', (chunk) => { body += chunk; });
+  res.on('end', () => {
+    const payload = JSON.parse(body);
+    const ids = new Set(payload.data.map((model) => model.id));
+    for (const id of ['minimax/minimax-m3', 'minimax/minimax-m2.7']) {
+      console.log(`${id}: ${ids.has(id) ? 'present' : 'missing'}`);
+    }
+  });
+}).on('error', (error) => {
+  console.error(error);
+  process.exit(1);
+});
+NODE
+```
+
+Expected: `minimax/minimax-m3` is present. If OpenRouter changes the slug, stop and update the plan with the verified current slug before coding.
+
+- [ ] **Step 3: Write failing M3 migration tests**
+
+Update tests first so they expect MiniMax M3:
+
+```ts
+expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m3');
+expect(ids).toContain('minimax/minimax-m3');
+expect(isDefaultEligibleModel('or:minimax/minimax-m3')).toBe(true);
+expect(DEFAULT_MODEL_DISPLAY_NAMES['or:minimax/minimax-m3']).toBe('MiniMax M3');
+```
+
+Also update production ecosystem tests to expect `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL` fallback `or:minimax/minimax-m3`.
+
+- [ ] **Step 4: Migrate active runtime and config defaults**
+
+Update all active Conversation Assistant defaults from `or:minimax/minimax-m2.7` to `or:minimax/minimax-m3` in:
+
+- `apps/whatsapp-service/src/config.ts`
+- `ecosystem.config.cjs`
+- `ecosystem.config.prod.cjs`
+- `terraform/environments/dev/main.tf`
+- WhatsApp service test utilities and tests that assert the default model.
+
+- [ ] **Step 5: Migrate shared OpenRouter allowlists and display names**
+
+Update active OpenRouter model catalogs from `minimax/minimax-m2.7` / `MiniMax M2.7` to `minimax/minimax-m3` / `MiniMax M3` in:
+
+- `packages/llm-contract/src/supportedModels.ts`
+- `packages/infra-openrouter/src/allowlist.ts`
+- `packages/infra-openrouter/src/defaultAllowlist.ts`
+- `apps/web/src/utils/openRouterModelNames.ts`
+
+Adjust context-length and pricing expectations only from verified catalog data. Do not invent price or context metadata.
+
+- [ ] **Step 6: Update active documentation**
+
+Update current service documentation so it describes MiniMax M3, not M2.7. Include at least:
+
+- `docs/services/code-worker/technical.md`
+- `docs/services/research-agent/technical.md`
+- `docs/services/index.md`
+
+For historical implementation plans/specs that mention M2.7, either update reusable snippets to M3 or add a one-line supersession note saying active implementations now use MiniMax M3.
+
+- [ ] **Step 7: Verify no active M2.7 guidance remains**
+
+Re-run the audit command from Step 1. Expected result: no active code/config/test/current-doc references still present M2.7 as the current MiniMax model. Any remaining M2.7 references must be explicitly historical or legacy-session compatibility notes.
+
+- [ ] **Step 8: Verify affected workspaces**
+
+Run:
+
+```bash
+pnpm run verify:workspace:tracked -- llm-contract
+pnpm run verify:workspace:tracked -- infra-openrouter
+pnpm run verify:workspace:tracked -- whatsapp-service
+```
+
+Expected: shared catalogs, OpenRouter allowlists, and WhatsApp service defaults all pass with MiniMax M3.
+
+## Task 2: Add The Conversation Assistant Model Type
 
 **Files:**
 - Modify: `packages/llm-contract/src/supportedModels.ts`
@@ -149,7 +282,7 @@ https.get('https://openrouter.ai/api/v1/models', (res) => {
     const payload = JSON.parse(body);
     const ids = new Set(payload.data.map((model) => model.id));
     for (const id of [
-      'minimax/minimax-m2.7',
+      'minimax/minimax-m3',
       'anthropic/claude-sonnet-5',
       'google/gemini-3.5-flash',
     ]) {
@@ -163,15 +296,15 @@ https.get('https://openrouter.ai/api/v1/models', (res) => {
 NODE
 ```
 
-Expected: all required IDs print `present`, or the implementer updates the Gemini entry only when OpenRouter exposes a verified newer Gemini 3.5 Thinking slug.
+Expected: all required IDs print `present`, or the implementer updates the MiniMax/Gemini entries only when OpenRouter exposes verified current replacement slugs.
 
 - [ ] **Step 2: Write failing contract tests**
 
 Add tests that assert:
 
 ```ts
-expect(DEFAULT_CONVERSATION_ASSISTANT_MODEL).toBe('or:minimax/minimax-m2.7');
-expect(isConversationAssistantModel('or:minimax/minimax-m2.7')).toBe(true);
+expect(DEFAULT_CONVERSATION_ASSISTANT_MODEL).toBe('or:minimax/minimax-m3');
+expect(isConversationAssistantModel('or:minimax/minimax-m3')).toBe(true);
 expect(isConversationAssistantModel('or:anthropic/claude-sonnet-5')).toBe(true);
 expect(isConversationAssistantModel('or:google/gemini-3.5-flash')).toBe(true);
 expect(isConversationAssistantModel('or:unknown/model')).toBe(false);
@@ -197,7 +330,7 @@ pnpm run verify:package-exports
 
 Expected: tests pass and package exports remain source-export compliant.
 
-## Task 2: Thread The Selected Model Through WhatsApp Service
+## Task 3: Thread The Selected Model Through WhatsApp Service
 
 **Files:**
 - Modify: `apps/whatsapp-service/src/domain/conversation-assistant/types.ts`
@@ -310,7 +443,7 @@ if (!isConversationAssistantModel(conversationAssistantModel)) {
 
 Update `apps/whatsapp-service/src/index.ts` so `validateRequiredEnv()` no longer requires `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL` before `loadConfig()` can apply the default.
 
-Add `apps/whatsapp-service/src/__tests__/config.test.ts` coverage for omitted env defaulting to MiniMax, blank env defaulting to MiniMax, and invalid configured defaults being rejected.
+Add `apps/whatsapp-service/src/__tests__/config.test.ts` coverage for omitted env defaulting to MiniMax M3, blank env defaulting to MiniMax M3, and invalid configured defaults being rejected.
 
 - [ ] **Step 6: Update service wiring**
 
@@ -349,7 +482,7 @@ Update `toPublicSession()` to add:
 modelDisplayName: getConversationAssistantModelDisplayName(session.model)
 ```
 
-Add route tests for missing model defaulting to MiniMax, selected model persistence, invalid model rejection, and public response `modelDisplayName`.
+Add route tests for missing model defaulting to MiniMax M3, selected model persistence, invalid model rejection, and public response `modelDisplayName`.
 
 - [ ] **Step 8: Preserve older persisted sessions**
 
@@ -373,7 +506,7 @@ pnpm run verify:workspace:tracked -- whatsapp-service
 
 Expected: all WhatsApp service tests, typecheck, lint, and coverage gates pass.
 
-## Task 3: Show The Selected Model In PDF Export
+## Task 4: Show The Selected Model In PDF Export
 
 **Files:**
 - Modify: `apps/whatsapp-service/src/domain/conversation-assistant/sessionUseCases.ts`
@@ -421,7 +554,7 @@ pnpm run verify:workspace:tracked -- infra-pdf-export
 
 Expected: all tests pass.
 
-## Task 4: Add The Web Model Selector And Metadata Display
+## Task 5: Add The Web Model Selector And Metadata Display
 
 **Files:**
 - Modify: `apps/web/src/types/index.ts`
@@ -525,13 +658,13 @@ pnpm run verify:workspace:tracked -- web
 
 Expected: web tests, typecheck, and lint pass.
 
-## Task 5: Final Verification
+## Task 6: Final Verification
 
 **Files:**
 - No new source files beyond the files listed above.
 
 **Interfaces:**
-- Consumes: completed tasks 1-4.
+- Consumes: completed tasks 1-5.
 - Produces: a verified implementation branch.
 
 - [ ] **Step 1: Run targeted verification**
@@ -540,6 +673,7 @@ Run:
 
 ```bash
 pnpm run verify:workspace:tracked -- llm-contract
+pnpm run verify:workspace:tracked -- infra-openrouter
 pnpm run verify:workspace:tracked -- whatsapp-service
 pnpm run verify:workspace:tracked -- infra-pdf-export
 pnpm run verify:workspace:tracked -- web
@@ -561,7 +695,8 @@ Expected: full tracked CI passes before commit.
 ## Acceptance Criteria
 
 - A user sees a model selector before creating a WhatsApp Conversation Assistant session.
-- MiniMax M2.7 is selected by default.
+- MiniMax M3 is selected by default.
+- Active repository defaults, OpenRouter allowlists, shared display names, tests, and current documentation use MiniMax M3 instead of MiniMax M2.7.
 - Claude Sonnet 5 and Gemini 3.5 Flash Thinking are selectable by name.
 - The backend rejects unsupported model IDs.
 - The selected model is stored on the session and used for all future turns in that session.
@@ -573,6 +708,6 @@ Expected: full tracked CI passes before commit.
 
 ## Self-Review
 
-- Spec coverage: The plan covers initial user selection, default MiniMax, Sonnet 5, Gemini 3.5 Flash Thinking, dedicated model type, backend model use, PDF export, and UI display.
+- Spec coverage: The plan covers repository-wide MiniMax M3 migration, initial user selection, default MiniMax M3, Sonnet 5, Gemini 3.5 Flash Thinking, dedicated model type, backend model use, PDF export, and UI display.
 - Placeholder scan: No implementation task relies on TBD behavior; the only conditional is explicit OpenRouter catalog verification for a separate Gemini thinking slug.
 - Type consistency: The same `ConversationAssistantModel` type is consumed by shared contract, backend request/session logic, and web request/session types.
