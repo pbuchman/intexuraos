@@ -746,7 +746,7 @@ expect(DistillationSchema.parse({
 
 In `apps/code-agent/src/__tests__/routes/code/schemas.test.ts`, add a route-schema test that verifies `executionMemoryContextSchema` memory-type fields (`matchedMemories` and `topCandidates`) accept `single_artifact_planning` and still accept `decomposition_pattern`. Keep `executionMemoryPostRunSchema` assertions scoped to the post-run fields it actually exposes; do not add a fake `memoryType` field to the post-run schema.
 
-In `workers/orchestrator/src/__tests__/create-task-request-schema.test.ts`, add a request-schema regression that parses a create-task payload with `executionMemoryContext.matchedMemories[].memoryType` and `executionMemoryContext.topCandidates[].memoryType` set to `single_artifact_planning`. Keep a second assertion for `decomposition_pattern` so historical memory rows remain dispatchable.
+In `workers/orchestrator/src/__tests__/create-task-request-schema.test.ts`, add a request-schema regression that parses a create-task payload with `executionMemoryContext.matchedMemories[].memoryType` set to `single_artifact_planning`. Keep a second assertion for `decomposition_pattern` so historical memory rows remain dispatchable. Do not add `topCandidates` to the orchestrator request-schema test because `toDispatchExecutionMemoryContext` does not forward that field to workers.
 
 - [ ] **Step 2: Run the focused failing tests**
 
@@ -815,7 +815,7 @@ In `apps/code-agent/src/routes/code/schemas.ts`, add `single_artifact_planning` 
 
 In `workers/orchestrator/src/types/execution-memory.ts`, add `single_artifact_planning` to the execution-memory type union used for dispatched task context. Retain `decomposition_pattern` so old stored memories and retrieved candidates remain valid.
 
-In `workers/orchestrator/src/types/schemas.ts`, add `single_artifact_planning` to the `executionMemoryContext` memory-type enum for both `matchedMemories` and `topCandidates`. Do not add any new post-run field; this change is only for the create-task request context that code-agent forwards to orchestrator.
+In `workers/orchestrator/src/types/schemas.ts`, add `single_artifact_planning` to the `executionMemoryContext.matchedMemories[].memoryType` enum. Retain `decomposition_pattern` so old stored memories and retrieved candidates remain valid. Do not add `topCandidates` to the orchestrator request schema unless the implementation also changes the code-agent dispatch type and `toDispatchExecutionMemoryContext` conversion to intentionally forward it.
 
 - [ ] **Step 6: Audit and remove unused complex-label exports only when safe**
 
