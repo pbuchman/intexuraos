@@ -10,7 +10,7 @@ export interface ConversationAssistantRepository {
   saveSession(session: ConversationAssistantSession): Promise<void>;
   getSessionById(sessionId: string): Promise<ConversationAssistantSession | null>;
   getSessionSnapshotById(
-    sessionId: string
+    input: { sessionId: string; userId: string }
   ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null>;
   listSessionsByUserId(userId: string): Promise<ConversationAssistantSession[]>;
   saveTurn(turn: ConversationAssistantTurn): Promise<void>;

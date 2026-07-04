@@ -95,6 +95,7 @@ import { randomUUID } from 'node:crypto';
 export class FakeConversationAssistantRepository implements ConversationAssistantRepository {
   private readonly sessions = new Map<string, ConversationAssistantSession>();
   private readonly turns = new Map<string, ConversationAssistantTurn>();
+  readonly snapshotRequests: { sessionId: string; userId: string }[] = [];
 
   saveSession(session: ConversationAssistantSession): Promise<void> {
     this.sessions.set(session.id, { ...session });
@@ -107,15 +108,16 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   }
 
   getSessionSnapshotById(
-    sessionId: string
+    input: { sessionId: string; userId: string }
   ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined) {
+    this.snapshotRequests.push(input);
+    const session = this.sessions.get(input.sessionId);
+    if (session === undefined || session.userId !== input.userId) {
       return Promise.resolve(null);
     }
     return Promise.resolve({
       session: { ...session },
-      turns: this.listTurnsForSnapshot(sessionId),
+      turns: this.listTurnsForSnapshot(input.sessionId),
     });
   }
 

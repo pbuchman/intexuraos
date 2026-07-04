@@ -752,6 +752,10 @@ describe('Conversation Assistant session use cases', () => {
     expect(foreign.ok).toBe(false);
     if (!foreign.ok) expect(foreign.error.code).toBe('NOT_FOUND');
     expect(pdfExporter.calls).toEqual([]);
+    expect(conversationRepository.snapshotRequests).toEqual([
+      { sessionId: 'missing', userId: USER_ID },
+      { sessionId: 'whatsapp_conv_session_test', userId: 'other-user' },
+    ]);
   });
 
   it('maps PDF rendering failures to internal errors', async () => {

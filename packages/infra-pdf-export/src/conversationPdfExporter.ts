@@ -48,11 +48,15 @@ function validateInput(input: PdfConversationExportInput): PdfExportError | null
   if (input.messageCounts.included < 0 || input.messageCounts.excluded < 0) {
     return { code: 'INVALID_INPUT', message: 'messageCounts cannot be negative' };
   }
+  if (input.messages.some((message) => message.text.trim().length === 0)) {
+    return { code: 'INVALID_INPUT', message: 'message text is required' };
+  }
   return null;
 }
 
 async function renderConversationPdf(input: PdfConversationExportInput): Promise<Buffer> {
-  const doc = new PDFDocument({ size: 'A4', margin: 48 });
+  const doc = new PDFDocument({ size: 'A4', margin: 36, compress: false });
+  const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const chunks: Buffer[] = [];
   doc.on('data', (chunk: Buffer) => {
     chunks.push(chunk);
@@ -64,7 +68,7 @@ async function renderConversationPdf(input: PdfConversationExportInput): Promise
     doc.on('error', reject);
   });
 
-  doc.font('Helvetica-Bold').fontSize(20).text(input.title, { width: 499 });
+  doc.font('Helvetica-Bold').fontSize(20).text(input.title, { width: textWidth });
   doc.moveDown(0.6);
   doc
     .font('Helvetica')
@@ -72,7 +76,7 @@ async function renderConversationPdf(input: PdfConversationExportInput): Promise
     .fillColor('#555555')
     .text(`Generated: ${input.generatedAt}`)
     .text(`Source range: ${input.sourceRange.from} to ${input.sourceRange.to}`)
-    .text(`Messages considered: ${String(input.messageCounts.included)}`)
+    .text(`Messages taken under consideration: ${String(input.messageCounts.included)}`)
     .text(`Messages excluded: ${String(input.messageCounts.excluded)}`);
 
   if (input.omittedBreakdown !== undefined) {
@@ -93,7 +97,7 @@ async function renderConversationPdf(input: PdfConversationExportInput): Promise
       .font('Helvetica')
       .fontSize(11)
       .fillColor('#111827')
-      .text(message.text, { width: 499, lineGap: 3 });
+      .text(message.text, { width: textWidth, lineGap: 3 });
     doc.moveDown(0.8);
   }
 

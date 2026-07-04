@@ -529,8 +529,8 @@ describe('Conversation Assistant routes', () => {
       saveSession: (session) => ctx.conversationAssistantRepository.saveSession(session),
       getSessionById: (sessionId) =>
         ctx.conversationAssistantRepository.getSessionById(sessionId),
-      getSessionSnapshotById: (sessionId) =>
-        ctx.conversationAssistantRepository.getSessionSnapshotById(sessionId),
+      getSessionSnapshotById: (input) =>
+        ctx.conversationAssistantRepository.getSessionSnapshotById(input),
       listSessionsByUserId: () => {
         throw new Error('list failed');
       },

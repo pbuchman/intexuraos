@@ -44,27 +44,31 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
     },
 
     async getSessionSnapshotById(
-      sessionId: string
+      input: { sessionId: string; userId: string }
     ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
       try {
         const db = getFirestore();
         const sessionRef = db
           .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
-          .doc(sessionId);
+          .doc(input.sessionId);
         return await db.runTransaction(async (transaction) => {
           const sessionDoc = await transaction.get(sessionRef);
           if (!sessionDoc.exists) {
             return null;
           }
+          const session = toSession(sessionDoc.id, sessionDoc.data());
+          if (session.userId !== input.userId) {
+            return null;
+          }
           const turnsSnapshot = await transaction.get(
             db
               .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
-              .where('sessionId', '==', sessionId)
+              .where('sessionId', '==', input.sessionId)
               .orderBy('createdAt', 'asc')
               .orderBy(FieldPath.documentId(), 'asc')
           );
           return {
-            session: toSession(sessionDoc.id, sessionDoc.data()),
+            session,
             turns: turnsSnapshot.docs.map((doc) => toTurn(doc.id, doc.data())),
           };
         });

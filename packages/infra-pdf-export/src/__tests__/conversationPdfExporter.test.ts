@@ -28,6 +28,13 @@ const validInput: PdfConversationExportInput = {
   ],
 };
 
+function extractPdfText(bytes: Buffer): string {
+  const raw = bytes.toString('latin1');
+  return Array.from(raw.matchAll(/<([0-9a-fA-F]+)>/g), ([, hex]) =>
+    Buffer.from(hex ?? '', 'hex').toString('latin1')
+  ).join('');
+}
+
 describe('createPdfConversationExporter', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -43,7 +50,13 @@ describe('createPdfConversationExporter', () => {
     expect(result.value.contentType).toBe('application/pdf');
     expect(result.value.fileName).toBe('alice-context.pdf');
     expect(result.value.bytes.subarray(0, 5).toString()).toBe('%PDF-');
-    expect(result.value.bytes.length).toBeGreaterThan(1000);
+    const pdfText = extractPdfText(result.value.bytes);
+    expect(pdfText).toContain('Alice context');
+    expect(pdfText).toContain('Messages taken under consideration: 9');
+    expect(pdfText).toContain('Messages excluded: 6');
+    expect(pdfText).toContain('Assistant answer with');
+    expect(pdfText).toContain('multiple lines.');
+    expect(pdfText).toContain('User line User line');
   });
 
   it('renders paginated PDFs and falls back when the sanitized filename is empty', async () => {
@@ -79,6 +92,11 @@ describe('createPdfConversationExporter', () => {
 
   it('rejects invalid input before rendering', async () => {
     const exporter = createPdfConversationExporter();
+    const firstMessage = validInput.messages[0] ?? {
+      role: 'user' as const,
+      createdAt: '2026-07-03T16:01:00.000Z',
+      text: 'fallback',
+    };
 
     const invalidInputs: PdfConversationExportInput[] = [
       { ...validInput, title: '   ' },
@@ -87,6 +105,7 @@ describe('createPdfConversationExporter', () => {
       { ...validInput, sourceRange: { from: validInput.sourceRange.from, to: '' } },
       { ...validInput, messageCounts: { included: -1, excluded: 0 } },
       { ...validInput, messageCounts: { included: 0, excluded: -1 } },
+      { ...validInput, messages: [{ ...firstMessage, text: '' }] },
     ];
 
     for (const input of invalidInputs) {

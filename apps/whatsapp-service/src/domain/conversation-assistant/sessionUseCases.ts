@@ -247,8 +247,11 @@ export async function exportConversationAssistantSessionPdf(
   input: ExportConversationAssistantPdfInput,
   deps: ConversationAssistantDeps
 ): Promise<ConversationAssistantResult<ExportConversationAssistantPdfResult>> {
-  const snapshot = await deps.repository.getSessionSnapshotById(input.sessionId);
-  if (snapshot === null || !isOwnedSession(snapshot.session, input.userId)) {
+  const snapshot = await deps.repository.getSessionSnapshotById({
+    sessionId: input.sessionId,
+    userId: input.userId,
+  });
+  if (snapshot === null) {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
   }
   const session = snapshot.session;
