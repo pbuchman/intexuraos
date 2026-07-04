@@ -38,6 +38,7 @@ Do not bypass Matrix by calling `POST /internal/intex-agent/messages` for the sc
 - `POST /internal/calendar/schedules/tick` in Calendar Agent, authenticated with `authenticateInternalScheduler`, claims and processes due schedules. The route must accept an empty body.
 - `GET /internal/whatsapp/private/matrix-delivery-status/:userId` in WhatsApp Service, authenticated with internal auth, reports whether the user has an active private Matrix account and outbound Matrix target configured.
 - `POST /internal/whatsapp/private/outbound-matrix-messages` in WhatsApp Service, authenticated with internal auth, resolves the user's private Matrix account and asks the Matrix adapter to send a user-authored message.
+- `GET /internal/matrix/outbound/readiness/:sourceAccountId/:target` in `tools/whatsapp-private-matrix-sync`, authenticated with an adapter-local token, checks whether the configured source account and outbound target mapping can deliver without sending a Matrix event.
 - `POST /internal/matrix/outbound/messages` in `tools/whatsapp-private-matrix-sync`, authenticated with an adapter-local token, sends a Matrix text event into the configured room.
 
 ### Modified
@@ -45,6 +46,7 @@ Do not bypass Matrix by calling `POST /internal/intex-agent/messages` for the sc
 - `/settings/calendar` web page to add the daily notification card and Matrix setup status.
 - `tools/whatsapp-private-matrix-sync` configuration and README to document outbound Matrix delivery.
 - Calendar Agent, WhatsApp Service, and deployment configuration for new service URLs and secrets.
+- Hetzner scheduler and internal route-owner Terraform so the production 15-minute tick reaches Calendar Agent through the public `intexuraos.cloud` route.
 
 ### Unchanged
 
@@ -136,6 +138,8 @@ Indexes:
 - `apps/whatsapp-service/src/domain/whatsapp/ports/matrixOutboundGateway.ts`
 - `apps/whatsapp-service/src/infra/http/matrixOutboundAdapterClient.ts`
 - `apps/whatsapp-service/src/routes/privateMatrixOutboundRoutes.ts`
+- `apps/whatsapp-service/src/routes/index.ts`
+- `apps/whatsapp-service/src/routes/routes.ts`
 - `apps/whatsapp-service/src/services.ts`
 - `apps/whatsapp-service/src/server.ts`
 - `apps/whatsapp-service/src/index.ts`
@@ -168,6 +172,13 @@ The Matrix adapter should load outbound target mappings from configuration on th
 
 Use an adapter-local secret such as `MATRIX_OUTBOUND_AUTH_TOKEN_FILE` and a mapping path such as `MATRIX_OUTBOUND_TARGETS_FILE`. The exact names can be adjusted during implementation if the adapter already has a stronger local convention, but they must be documented in the setup guide and wired through deployment configuration.
 
+The adapter readiness endpoint must use the same target resolution code as the send endpoint and return only configuration status, not credentials or room IDs. Expected responses:
+
+- `{ status: 'ready' }` when `sourceAccountId` exists and the requested target, currently `intex_agent`, maps to a sendable room.
+- `{ status: 'setup_required', reason }` when the source account is unknown, the target is missing, the mapping file is absent, or the Matrix client cannot be initialized.
+
+WhatsApp Service `GET /internal/whatsapp/private/matrix-delivery-status/:userId` must call this readiness endpoint after resolving the user's active private Matrix account. The Calendar settings card must treat readiness as deliverable only when the adapter returns `ready`, so the UI cannot claim delivery is configured based solely on a local private account record.
+
 ## Web Files
 
 - `apps/web/src/components/calendar/CalendarDailyNotificationCard.tsx`
@@ -194,7 +205,9 @@ The Calendar settings card must include:
   - `apps/whatsapp-service/src/index.ts`
   - `terraform/environments/dev/main.tf`
   - `ecosystem.config.cjs`
-- Add a Cloud Scheduler job that calls `POST /internal/calendar/schedules/tick` every 15 minutes with OIDC auth and no request body.
+- Add the Hetzner Cloud Scheduler job in `terraform/hetzner-prod/scheduler.tf` that calls `POST /internal/calendar/schedules/tick` every 15 minutes with OIDC auth and no request body.
+- Add `/internal/calendar/schedules/tick` to `terraform/hetzner-prod/main.tf` `internal_route_owners` with owner `calendar-agent`, so the public Hetzner route can forward to the service.
+- Keep `terraform/environments/dev/main.tf` updates scoped to env vars and retained GCP resources that are still owned by that root.
 - Verify the deployed route path before wiring Terraform. If the current public nginx/API route exposes Calendar Agent under `/api/calendar`, use that route and set the scheduler audience to the existing IntexuraOS domain convention.
 - Do not put Matrix adapter credentials in frontend-accessible configuration.
 
@@ -203,14 +216,19 @@ The Calendar settings card must include:
 - [ ] Add Matrix adapter outbound send tests and implementation.
   - [ ] Test missing auth returns unauthorized.
   - [ ] Test missing source account or target room mapping returns a setup-required response.
+  - [ ] Test readiness returns `ready` only when the source account and requested target resolve through the same mapping code used by send.
+  - [ ] Test readiness returns setup-required without sending any Matrix event when the mapping file, source account, or `intex_agent` target is missing.
   - [ ] Test successful send calls Matrix `PUT /_matrix/client/v3/rooms/{roomId}/send/m.room.message/{txnId}` with the expected text payload.
+  - [ ] Implement `GET /internal/matrix/outbound/readiness/:sourceAccountId/:target`.
   - [ ] Implement `POST /internal/matrix/outbound/messages` with request fields `sourceAccountId`, `target`, `text`, and optional idempotency key.
   - [ ] Return `{ status: 'sent', matrixEventId }` on success and `{ status: 'setup_required', reason }` for missing configuration.
 
 - [ ] Add WhatsApp Service private Matrix outbound gateway.
   - [ ] Add route tests for delivery status, missing private account, missing Matrix adapter configuration, and successful outbound send.
+  - [ ] Add route tests proving delivery status calls the Matrix adapter readiness endpoint and returns not-ready when `intex_agent` target mapping is absent.
   - [ ] Resolve the active private account through the existing private WhatsApp repository instead of reading another service's data directly.
   - [ ] Implement internal status and outbound message routes.
+  - [ ] Register the route in `apps/whatsapp-service/src/routes/index.ts` and document the new paths in `apps/whatsapp-service/src/routes/routes.ts`.
   - [ ] Add Matrix adapter client configuration and service wiring.
 
 - [ ] Add a typed WhatsApp Service internal client.
@@ -229,6 +247,7 @@ The Calendar settings card must include:
   - [ ] Add tests for authenticated GET and PUT.
   - [ ] Validate that enabled schedules require a valid `HH:mm` local time and IANA timezone.
   - [ ] Return delivery readiness from WhatsApp Service so the web card can show Matrix setup status.
+  - [ ] Register schedule routes and internal tick routes in `apps/calendar-agent/src/server.ts` and update OpenAPI tags if needed.
   - [ ] Keep schedule writes scoped to the authenticated user.
 
 - [ ] Add Calendar Agent internal scheduler tick.
@@ -247,7 +266,8 @@ The Calendar settings card must include:
 
 - [ ] Add infrastructure and docs.
   - [ ] Wire all new env vars in service entrypoints, Terraform, and local ecosystem config.
-  - [ ] Add the 15-minute Cloud Scheduler job with a bodyless request.
+  - [ ] Add the 15-minute Hetzner Cloud Scheduler job with a bodyless request in `terraform/hetzner-prod/scheduler.tf`.
+  - [ ] Add the Calendar Agent internal route owner mapping in `terraform/hetzner-prod/main.tf`.
   - [ ] Update `docs/setup/16-private-whatsapp-matrix-sync.md` and the Matrix adapter README with outbound setup steps, required secrets, room target mapping, and troubleshooting.
   - [ ] Document that scheduled notifications cannot deliver until the Matrix host exposes the outbound adapter and target mapping.
 
