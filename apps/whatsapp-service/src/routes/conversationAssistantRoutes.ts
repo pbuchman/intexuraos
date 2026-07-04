@@ -1,6 +1,10 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getErrorMessage } from '@intexuraos/common-core';
+import {
+  getConversationAssistantModelDisplayName,
+  type ConversationAssistantModel,
+} from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import {
   checkConversationAssistantContext,
@@ -30,6 +34,7 @@ interface CreateSessionBody {
   chatId: string;
   from: string;
   to: string;
+  model?: string;
   maxMessages?: number;
   question?: string;
 }
@@ -139,6 +144,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
             chatId: { type: 'string', minLength: 1 },
             from: { type: 'string', minLength: 1 },
             to: { type: 'string', minLength: 1 },
+            model: { type: 'string', minLength: 1 },
             maxMessages: { type: 'integer', minimum: 1 },
             question: { type: 'string' },
           },
@@ -167,6 +173,9 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
         from: request.body.from,
         to: request.body.to,
       };
+      if (request.body.model !== undefined) {
+        input.model = request.body.model as ConversationAssistantModel;
+      }
       if (request.body.maxMessages !== undefined) input.maxMessages = request.body.maxMessages;
       if (request.body.question !== undefined) input.question = request.body.question;
 
@@ -416,7 +425,7 @@ async function getConversationAssistantDeps(
     repository: services.conversationAssistantRepository,
     privateWhatsAppRepository: services.privateWhatsAppRepository,
     llmClientFactory: services.llmClientFactory,
-    model: services.conversationAssistantModel,
+    defaultModel: services.conversationAssistantModel,
     clock: conversationAssistantSystemClock,
     ids: conversationAssistantRandomIds,
   };
@@ -444,7 +453,10 @@ function toPublicSession(
   session: ConversationAssistantSession
 ): PublicConversationAssistantSession {
   const { transcriptText: _transcriptText, ...publicSession } = session;
-  return publicSession;
+  return {
+    ...publicSession,
+    modelDisplayName: getConversationAssistantModelDisplayName(session.model),
+  };
 }
 
 async function sendConversationAssistantError(

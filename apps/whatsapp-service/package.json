@@ -30,6 +30,7 @@
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/infra-whatsapp": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",

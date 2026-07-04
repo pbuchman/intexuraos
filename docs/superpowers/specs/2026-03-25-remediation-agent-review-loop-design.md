@@ -1,5 +1,7 @@
 # Remediation Agent & Review Loop Improvements — Design Spec
 
+> Historical note: The `MiniMax-M2.7` reference below describes the investigated run at that time. Active defaults now use MiniMax M3.
+
 **Date:** 2026-03-25
 **Service:** code-agent, orchestrator (prompt only)
 **Linear:** INT-1087

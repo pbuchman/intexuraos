@@ -1,5 +1,9 @@
 import { err, ok } from '@intexuraos/common-core';
 import type { GenerateResult, LlmGenerateClient } from '@intexuraos/llm-factory';
+import {
+  ConversationAssistantModels,
+  type ConversationAssistantModel,
+} from '@intexuraos/llm-contract';
 import { describe, expect, it, vi } from 'vitest';
 import {
   FakeConversationAssistantRepository,
@@ -41,13 +45,13 @@ function makeDeps(): {
   privateRepository: FakePrivateWhatsAppRepository;
   llmClient: FakeLlmGenerateClient;
   pdfExporter: FakePdfConversationExporter;
-  llmFactoryUserIds: string[];
+  llmFactoryCalls: { userId: string; model: string }[];
 } {
   const conversationRepository = new FakeConversationAssistantRepository();
   const privateRepository = new FakePrivateWhatsAppRepository();
   const llmClient = new FakeLlmGenerateClient();
   const pdfExporter = new FakePdfConversationExporter();
-  const llmFactoryUserIds: string[] = [];
+  const llmFactoryCalls: { userId: string; model: string }[] = [];
   const clock = { now: (): string => '2026-06-30T12:00:00.000Z' };
   const ids = {
     sessionId: (): string => 'whatsapp_conv_session_test',
@@ -64,15 +68,15 @@ function makeDeps(): {
       repository: conversationRepository,
       privateWhatsAppRepository: privateRepository,
       llmClientFactory: {
-        createLlmClientForUser(userId: string): ReturnType<
+        createLlmClientForUser(userId: string, model: string): ReturnType<
           ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']
         > {
-          llmFactoryUserIds.push(userId);
+          llmFactoryCalls.push({ userId, model });
           return Promise.resolve(ok(llmClient));
         },
       },
       pdfExporter,
-      model: 'or:google/gemini-3.5-flash',
+      defaultModel: ConversationAssistantModels.Gemini35FlashThinking,
       clock,
       ids,
     },
@@ -80,7 +84,7 @@ function makeDeps(): {
     privateRepository,
     llmClient,
     pdfExporter,
-    llmFactoryUserIds,
+    llmFactoryCalls,
   };
 }
 
@@ -210,6 +214,50 @@ describe('Conversation Assistant session use cases', () => {
     expect(result.value.session.transcriptText).toContain('We agreed to meet at 17:00.');
     expect(result.value.session.transcriptSha256).toBe(result.value.context.transcriptSha256);
     expect(conversationRepository.getAllSessions()).toHaveLength(1);
+  });
+
+  it('persists the selected Conversation Assistant model on session creation', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        model: 'or:anthropic/claude-sonnet-5' as ConversationAssistantModel,
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.model).toBe('or:anthropic/claude-sonnet-5');
+  });
+
+  it('rejects unsupported Conversation Assistant models', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        model: 'or:unknown/model' as ConversationAssistantModel,
+      },
+      deps
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'Unsupported Conversation Assistant model',
+      },
+    });
   });
 
   it('continues reading context pages until the selected range is exhausted', async () => {
@@ -373,7 +421,7 @@ describe('Conversation Assistant session use cases', () => {
   });
 
   it('creates a session with first user and assistant turns using OpenRouter session id', async () => {
-    const { deps, conversationRepository, privateRepository, llmClient, llmFactoryUserIds } =
+    const { deps, conversationRepository, privateRepository, llmClient, llmFactoryCalls } =
       makeDeps();
     await seedDirectMessage(privateRepository);
 
@@ -392,7 +440,9 @@ describe('Conversation Assistant session use cases', () => {
     if (!result.ok) return;
     expect(result.value.turns.map((turn) => turn.role)).toEqual(['user', 'assistant']);
     expect(conversationRepository.getAllTurns()).toHaveLength(2);
-    expect(llmFactoryUserIds).toEqual([USER_ID]);
+    expect(llmFactoryCalls).toEqual([
+      { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
+    ]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
     expect(llmClient.chatCalls[0]?.options.reasoning).toEqual({ enabled: true });
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages)).toContain('cache_control');
@@ -447,7 +497,7 @@ describe('Conversation Assistant session use cases', () => {
   });
 
   it('sends follow-up turns with unchanged transcript prefix', async () => {
-    const { deps, privateRepository, llmClient } = makeDeps();
+    const { deps, privateRepository, llmClient, llmFactoryCalls } = makeDeps();
     await seedDirectMessage(privateRepository);
     const created = await createConversationAssistantSession(
       {
@@ -455,6 +505,7 @@ describe('Conversation Assistant session use cases', () => {
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+        model: 'or:anthropic/claude-sonnet-5' as ConversationAssistantModel,
         question: 'What was agreed?',
       },
       deps
@@ -469,6 +520,10 @@ describe('Conversation Assistant session use cases', () => {
 
     expect(followUp.ok).toBe(true);
     expect(llmClient.chatCalls).toHaveLength(2);
+    expect(llmFactoryCalls).toEqual([
+      { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
+      { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
+    ]);
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages[1])).toBe(
       JSON.stringify(llmClient.chatCalls[1]?.messages[1])
     );
@@ -615,7 +670,7 @@ describe('Conversation Assistant session use cases', () => {
     expect(pdfExporter.calls).toEqual([
       {
         title: 'Alice context',
-        modelName: 'or:google/gemini-3.5-flash',
+        modelName: 'Gemini 3.5 Flash Thinking',
         initialPrompt: 'user question',
         generatedAt: '2026-06-30T12:00:00.000Z',
         sourceRange: {

@@ -207,7 +207,7 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 | `auto`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | None                     | —       |
 | `opus`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `opus`                   | high    |
 | `sonnet`          | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `sonnet`                 | —       |
-| `minimax`         | claude   | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`     | `MiniMax-M2.7`           | —       |
+| `minimax`         | claude   | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`     | `MiniMax-M3`             | —       |
 | `glm`             | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `glm-5`                  | —       |
 | `qwen`            | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `qwen3.5-plus`           | —       |
 | `kimi`            | claude   | `https://api.kimi.com/coding`                               | `KIMI_API_KEY`        | `kimi-for-coding`        | high    |

@@ -97,7 +97,7 @@ interface PdfExportError {
 const exporter = createPdfConversationExporter();
 const result = await exporter.exportConversation({
   title: 'Conversation with Alice',
-  modelName: 'openrouter/minimax-m2.7',
+  modelName: 'MiniMax M3',
   initialPrompt: 'Please summarize the appointment thread.',
   generatedAt: new Date().toISOString(),
   sourceRange: {

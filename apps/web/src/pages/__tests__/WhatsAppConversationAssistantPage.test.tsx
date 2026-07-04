@@ -5,6 +5,10 @@
 
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {
+  ConversationAssistantModels,
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+} from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UseWhatsAppConversationAssistantResult } from '@/hooks/useWhatsAppConversationAssistant';
 
@@ -38,6 +42,7 @@ function createHookResult(
           to: '2026-06-21T10:00:00.000Z',
         },
         model: 'or:google/gemini-3.5-flash',
+        modelDisplayName: 'Gemini 3.5 Flash Thinking',
         transcriptSha256: 'abc123',
         transcriptMessageCount: 9,
         omitted: {
@@ -69,6 +74,7 @@ function createHookResult(
       },
     ],
     selectedChatId: 'chat-direct',
+    selectedModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     fromDateTimeLocal: '2026-06-20T09:00',
     toDateTimeLocal: '2026-06-21T10:00',
     firstQuestion: '',
@@ -83,6 +89,7 @@ function createHookResult(
     largeContextWarning: null,
     selectSession: vi.fn(),
     selectChat: vi.fn(),
+    selectModel: vi.fn(),
     setFromDateTimeLocal: vi.fn(),
     setToDateTimeLocal: vi.fn(),
     setFirstQuestion: vi.fn(),
@@ -113,9 +120,22 @@ describe('WhatsAppConversationAssistantPage', () => {
     expect(screen.getByRole('heading', { name: 'Conversation Assistant' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Alice context/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Private direct chat')).toHaveValue('chat-direct');
+    expect(screen.getByLabelText('Model')).toHaveValue(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
     expect(screen.getByLabelText('From')).toHaveValue('2026-06-20T09:00');
     expect(screen.getByLabelText('To')).toHaveValue('2026-06-21T10:00');
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('updates the selected model through the creation selector', async () => {
+    const user = userEvent.setup();
+    const selectModel = vi.fn();
+    mockUseAssistant.mockReturnValue(createHookResult({ selectModel }));
+
+    render(<WhatsAppConversationAssistantPage />);
+
+    await user.selectOptions(screen.getByLabelText('Model'), ConversationAssistantModels.ClaudeSonnet5);
+
+    expect(selectModel).toHaveBeenCalledWith(ConversationAssistantModels.ClaudeSonnet5);
   });
 
   it('renders selected session timeline and source metadata', () => {
@@ -150,6 +170,7 @@ describe('WhatsAppConversationAssistantPage', () => {
     expect(screen.getByText('Friday').tagName).toBe('STRONG');
     expect(screen.getByText('Bring docs')).toBeInTheDocument();
     expect(screen.getByText('9 messages')).toBeInTheDocument();
+    expect(screen.getAllByText('Gemini 3.5 Flash Thinking').length).toBeGreaterThan(0);
     expect(screen.getByText('6 omitted')).toBeInTheDocument();
     expect(screen.getByText(/non-text 3/i)).toBeInTheDocument();
     expect(screen.getByText(/over limit 0/i)).toBeInTheDocument();

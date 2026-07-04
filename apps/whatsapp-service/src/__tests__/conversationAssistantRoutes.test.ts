@@ -1,6 +1,7 @@
 import { getServices, setServices } from '../services.js';
 import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 import type { ConversationAssistantRepository } from '../domain/conversation-assistant/ports.js';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 
 const USER_ID = 'user-123';
 const SOURCE_ACCOUNT_ID = 'source-123';
@@ -79,11 +80,56 @@ describe('Conversation Assistant routes', () => {
 
     expect(response.statusCode).toBe(201);
     const body = JSON.parse(response.body) as {
-      data: { session: { id: string; transcriptText?: string }; turns: unknown[] };
+      data: {
+        session: {
+          id: string;
+          transcriptText?: string;
+          model: string;
+          modelDisplayName: string;
+        };
+        turns: unknown[];
+      };
     };
     expect(body.data.session.transcriptText).toBeUndefined();
+    expect(body.data.session.model).toBe(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
+    expect(body.data.session.modelDisplayName).toBe('MiniMax M3');
     expect(JSON.stringify(body)).not.toContain('We agreed to meet');
     expect(body.data.turns).toEqual([]);
+  });
+
+  it('persists a selected model and returns its display name in public session DTOs', async () => {
+    const token = await seed();
+
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        model: 'or:anthropic/claude-sonnet-5',
+      },
+    });
+
+    expect(created.statusCode).toBe(201);
+    const createdBody = JSON.parse(created.body) as {
+      data: { session: { id: string; model: string; modelDisplayName: string } };
+    };
+    expect(createdBody.data.session.model).toBe('or:anthropic/claude-sonnet-5');
+    expect(createdBody.data.session.modelDisplayName).toBe('Claude Sonnet 5');
+
+    const fetched = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(fetched.statusCode).toBe(200);
+    expect(JSON.parse(fetched.body).data.session).toMatchObject({
+      model: 'or:anthropic/claude-sonnet-5',
+      modelDisplayName: 'Claude Sonnet 5',
+    });
   });
 
   it('creates first turns, lists sessions, and lists turns', async () => {
@@ -347,6 +393,28 @@ describe('Conversation Assistant routes', () => {
       headers: { authorization: `Bearer ${foreignToken}` },
     });
     expect(missing.statusCode).toBe(404);
+  });
+
+  it('rejects unsupported Conversation Assistant models at session creation', async () => {
+    const token = await seed();
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        model: 'or:unknown/model',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error).toMatchObject({
+      code: 'INVALID_REQUEST',
+      message: 'Unsupported Conversation Assistant model',
+    });
   });
 
   it('rejects unauthenticated, invalid, and misconfigured session requests', async () => {

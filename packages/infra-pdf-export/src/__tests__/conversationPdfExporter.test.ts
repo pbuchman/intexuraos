@@ -4,7 +4,7 @@ import type { PdfConversationExportInput } from '../types.js';
 
 const validInput: PdfConversationExportInput = {
   title: 'Alice context',
-  modelName: 'openrouter/minimax-m2.7',
+  modelName: 'MiniMax M3',
   initialPrompt: 'What happened?',
   generatedAt: '2026-07-03T16:00:00.000Z',
   sourceRange: {
@@ -133,7 +133,7 @@ describe('createPdfConversationExporter', () => {
     const input = {
       ...validInput,
       title: '# Decision **summary**',
-      modelName: 'openrouter/minimax-m2.7',
+      modelName: 'Claude Sonnet 5',
       initialPrompt: '- Please decide what to include.',
       messages: [
         {
@@ -174,9 +174,9 @@ describe('createPdfConversationExporter', () => {
     const readablePdfText = toReadablePdfText(extractPdfText(result.value.bytes));
     const normalizedPdfText = normalizePdfText(readablePdfText);
     expect(readablePdfText).toContain('Decision summary');
-    expect(readablePdfText).toContain('LLM model: openrouter/minimax-m2.7');
+    expect(readablePdfText).toContain('LLM model: Claude Sonnet 5');
     expect(readablePdfText).toContain('Initial prompt: Please decide what to include.');
-    expect(readablePdfText).toContain('LLM response (openrouter/minimax-m2.7)');
+    expect(readablePdfText).toContain('LLM response (Claude Sonnet 5)');
     expect(readablePdfText).toContain('Decision');
     expect(readablePdfText).toContain(
       'Include the timeline and evidence (https://example.test/evidence).'

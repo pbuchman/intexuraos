@@ -10,7 +10,7 @@ const OPENROUTER_MODEL_NAMES: Record<string, string> = {
   // Curated allowlist (allowlist.ts)
   'qwen/qwen3.5-plus-02-15': 'Qwen 3.5 Plus',
   'qwen/qwen3.5-flash-02-23': 'Qwen 3.5 Flash',
-  'minimax/minimax-m2.7': 'MiniMax M2.7',
+  'minimax/minimax-m3': 'MiniMax M3',
   'x-ai/grok-4.20-beta': 'Grok 4.20 Beta',
   'x-ai/grok-4.1-fast': 'Grok 4.1 Fast',
   'moonshotai/kimi-k2.5': 'Kimi K2.5',
@@ -23,7 +23,7 @@ const OPENROUTER_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5.4-mini': 'GPT-5.4 Mini',
   'xiaomi/mimo-v2.5-pro': 'MiMo V2.5 Pro',
   'z-ai/glm-5-turbo': 'GLM 5 Turbo',
-  // Default allowlist (defaultAllowlist.ts) — minimax/minimax-m2.7 shared above
+  // Default allowlist (defaultAllowlist.ts) — minimax/minimax-m3 shared above
   'google/gemma-4-31b-it': 'Gemma 4 31B IT',
   'qwen/qwen3.6-plus': 'Qwen 3.6 Plus',
   'nvidia/nemotron-3-super-120b-a12b': 'Nemotron 3 Super 120B',

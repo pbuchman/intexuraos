@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok } from '@intexuraos/common-core';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 
 const mocks = vi.hoisted(() => ({
   createUserServiceClient: vi.fn(),
@@ -42,10 +43,13 @@ describe('whatsapp-service service wiring', () => {
       internalAuthToken: 'internal-token',
       llmUsageServiceUrl: 'https://llm-usage.test',
       userServiceUrl: 'https://user-service.test',
-      conversationAssistantModel: 'or:minimax/minimax-m2.7',
+      conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     });
 
-    const result = await factory.createLlmClientForUser('user-123');
+    const result = await factory.createLlmClientForUser(
+      'user-123',
+      'or:anthropic/claude-sonnet-5'
+    );
 
     expect(result.ok).toBe(true);
     expect(mocks.createUserServiceClient).toHaveBeenCalledWith(
@@ -58,7 +62,7 @@ describe('whatsapp-service service wiring', () => {
     expect(mocks.createLlmClient).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: 'user-openrouter-key',
-        model: 'or:minimax/minimax-m2.7',
+        model: 'or:anthropic/claude-sonnet-5',
         userId: 'user-123',
         ownerType: 'user',
       })

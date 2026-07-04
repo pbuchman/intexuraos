@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Bot, Download, RefreshCw } from 'lucide-react';
+import { CONVERSATION_ASSISTANT_MODEL_OPTIONS, type ConversationAssistantModel } from '@intexuraos/llm-contract';
 import { Button, ErrorBanner, Layout, MarkdownContent } from '@/components';
 import { ConversationAssistantComposer } from '@/components/whatsapp/ConversationAssistantComposer';
 import { ConversationAssistantSessionRail } from '@/components/whatsapp/ConversationAssistantSessionRail';
@@ -24,16 +25,17 @@ function SessionMetadata({
 }): React.JSX.Element {
   if (session === undefined) {
     return (
-      <div className="grid grid-cols-1 gap-2 text-sm text-slate-500 dark:text-slate-400 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 text-sm text-slate-500 dark:text-slate-400 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No source range</div>
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No transcript</div>
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No omissions</div>
+        <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No model</div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
       <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
         <div className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Range</div>
         <div className="mt-1 text-sm text-slate-950 dark:text-slate-50">
@@ -56,6 +58,12 @@ function SessionMetadata({
         </div>
         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           Media {String(session.omitted.mediaOnly)} · pending {String(session.omitted.pendingTranscriptions)} · failed {String(session.omitted.failedTranscriptions)} · non-text {String(session.omitted.nonText)} · over limit {String(session.omitted.overLimit)}
+        </div>
+      </div>
+      <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+        <div className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Model</div>
+        <div className="mt-1 text-sm text-slate-950 dark:text-slate-50">
+          {session.modelDisplayName}
         </div>
       </div>
     </div>
@@ -158,7 +166,7 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
 
           <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(12rem,1.2fr)_minmax(10rem,0.8fr)_minmax(10rem,0.8fr)]">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(12rem,1.2fr)_minmax(12rem,0.9fr)_minmax(10rem,0.8fr)_minmax(10rem,0.8fr)]">
                 <label className="block">
                   <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
                     Private direct chat
@@ -173,6 +181,24 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
                     {assistant.directChats.map((chat) => (
                       <option key={chat.id} value={chat.id}>
                         {chat.displayName ?? chat.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+                    Model
+                  </span>
+                  <select
+                    value={assistant.selectedModel}
+                    onChange={(event): void => {
+                      assistant.selectModel(event.target.value as ConversationAssistantModel);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50"
+                  >
+                    {CONVERSATION_ASSISTANT_MODEL_OPTIONS.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
                       </option>
                     ))}
                   </select>

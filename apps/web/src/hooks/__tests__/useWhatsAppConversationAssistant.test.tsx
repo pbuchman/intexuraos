@@ -4,6 +4,10 @@
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react';
+import {
+  ConversationAssistantModels,
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+} from '@intexuraos/llm-contract';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -79,6 +83,7 @@ const session: ConversationAssistantSession = {
     to: '2026-06-21T10:00:00.000Z',
   },
   model: 'or:google/gemini-3.5-flash',
+  modelDisplayName: 'Gemini 3.5 Flash Thinking',
   transcriptSha256: 'abc123',
   transcriptMessageCount: 9,
   omitted: {
@@ -293,6 +298,7 @@ describe('useWhatsAppConversationAssistant', () => {
       chatId: directChat.id,
       from: new Date('2026-06-20T09:00').toISOString(),
       to: new Date('2026-06-21T10:00').toISOString(),
+      model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     });
     expect(mocks.streamConversationAssistantTurn).toHaveBeenCalledWith(
       'tok',
@@ -303,6 +309,46 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(result.current.sessions[0]).toEqual(createdSession);
     expect(result.current.selectedSession?.id).toBe(createdSession.id);
     expect(result.current.firstQuestion).toBe('');
+  });
+
+  it('sends the selected model when creating a session', async () => {
+    const createdSession: ConversationAssistantSession = {
+      ...session,
+      id: 'session-claude',
+      model: ConversationAssistantModels.ClaudeSonnet5,
+      modelDisplayName: 'Claude Sonnet 5',
+    };
+    mocks.createConversationAssistantSession.mockResolvedValue(createdSession);
+    mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
+      Promise.resolve(sessionId === createdSession.id ? createdSession : session)
+    );
+
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedChatId).toBe(directChat.id);
+    });
+
+    expect(result.current.selectedModel).toBe(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
+
+    act(() => {
+      result.current.selectModel(ConversationAssistantModels.ClaudeSonnet5);
+    });
+
+    expect(result.current.selectedModel).toBe(ConversationAssistantModels.ClaudeSonnet5);
+
+    await act(async () => {
+      await result.current.createSession();
+    });
+
+    expect(mocks.createConversationAssistantSession).toHaveBeenCalledWith('tok', {
+      chatId: directChat.id,
+      from: expect.any(String),
+      to: expect.any(String),
+      model: ConversationAssistantModels.ClaudeSonnet5,
+    });
   });
 
   it('keeps first-question streamed turns by suppressing the selected-session loader', async () => {

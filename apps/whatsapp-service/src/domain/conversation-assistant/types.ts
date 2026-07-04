@@ -1,4 +1,5 @@
 import type { GenerateChatResult } from '@intexuraos/llm-factory';
+import type { ConversationAssistantModel } from '@intexuraos/llm-contract';
 import type {
   PrivateConversationContextOmittedCounts,
   PrivateConversationContextResponse,
@@ -28,7 +29,9 @@ export interface ConversationAssistantSession {
 export type PublicConversationAssistantSession = Omit<
   ConversationAssistantSession,
   'transcriptText'
->;
+> & {
+  modelDisplayName: string;
+};
 
 export interface ConversationAssistantTurn {
   id: string;
@@ -46,6 +49,7 @@ export interface CreateConversationAssistantSessionInput {
   chatId: string;
   from: string;
   to: string;
+  model?: ConversationAssistantModel;
   maxMessages?: number;
   question?: string;
 }

@@ -362,7 +362,7 @@ Research Agent reports usage to `llm-usage-service` for all models it invokes. M
 
 **OpenRouter models** (15 curated models via allowlist):
 - Qwen 3.5 Plus, Qwen 3.5 Flash (Qwen)
-- MiniMax M2.7 (MiniMax)
+- MiniMax M3 (MiniMax)
 - Grok 4.20 Beta, Grok 4.1 Fast (xAI)
 - Kimi K2.5 (Moonshot)
 - Claude Sonnet 4.6, Claude Opus 4.6 (Anthropic via OpenRouter)

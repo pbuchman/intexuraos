@@ -1,5 +1,7 @@
 # Primary + Fallback Default LLM Model Selection Implementation Plan
 
+> Supersession note (2026-07-04): The active default-model catalogs now use MiniMax M3. Any MiniMax M2.7 references below are historical plan content only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Allow users to select a primary default LLM model and an optional fallback model (including OpenRouter models) for `generate()` calls across all services, with automatic retry on the fallback when the primary fails.

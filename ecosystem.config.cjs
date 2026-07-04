@@ -111,7 +111,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? 'whatsapp-webhook-process',
     INTEXURAOS_CONVERSATION_ASSISTANT_MODEL:
-      process.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL ?? 'or:minimax/minimax-m2.7',
+      process.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL ?? 'or:minimax/minimax-m3',
   },
   'code-agent': {
     INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/code',

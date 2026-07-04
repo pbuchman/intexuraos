@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { createHmac } from 'node:crypto';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { clearJwksCache } from '@intexuraos/common-http';
@@ -118,7 +119,7 @@ export const testConfig: Config = {
   internalAuthToken: 'test-internal-auth-token',
   llmUsageServiceUrl: 'http://llm-usage.test',
   userServiceUrl: 'http://user-service.test',
-  conversationAssistantModel: 'or:minimax/minimax-m2.7',
+  conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   port: 8080,
   host: '0.0.0.0',
 };
@@ -645,7 +646,7 @@ export function setupTestContext(): TestContext {
         createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
       },
       pdfConversationExporter: context.pdfConversationExporter,
-      conversationAssistantModel: 'or:minimax/minimax-m2.7',
+      conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     });
 
     clearJwksCache();

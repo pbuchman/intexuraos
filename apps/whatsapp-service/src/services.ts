@@ -3,6 +3,7 @@
  * Provides class-based adapters for domain use cases.
  */
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import type { ConversationAssistantModel } from '@intexuraos/llm-contract';
 import {
   MessageRepositoryAdapter,
   NotificationPreferencesRepositoryAdapter,
@@ -60,7 +61,7 @@ export interface ServiceConfig {
   internalAuthToken: string;
   llmUsageServiceUrl: string;
   userServiceUrl: string;
-  conversationAssistantModel: string;
+  conversationAssistantModel: ConversationAssistantModel;
 }
 
 function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
@@ -98,7 +99,7 @@ export interface ServiceContainer {
   conversationAssistantRepository?: ConversationAssistantRepository;
   llmClientFactory?: ConversationAssistantLlmClientFactory;
   pdfConversationExporter?: ConversationAssistantPdfExporter;
-  conversationAssistantModel?: string;
+  conversationAssistantModel?: ConversationAssistantModel;
 }
 
 let container: ServiceContainer | null = null;
@@ -172,7 +173,8 @@ export function createConversationAssistantLlmClientFactory(
   });
   return {
     async createLlmClientForUser(
-      userId: string
+      userId: string,
+      model: string
     ): ReturnType<ConversationAssistantLlmClientFactory['createLlmClientForUser']> {
       const keysResult = await userServiceClient.getApiKeys(userId);
       if (!keysResult.ok) {
@@ -187,7 +189,7 @@ export function createConversationAssistantLlmClientFactory(
       }
       return ok(createLlmClient({
         apiKey: openRouterKey,
-        model: config.conversationAssistantModel as never,
+        model: model as never,
         userId,
         logger: createAppLogger({ name: 'whatsapp-conversation-assistant-llm' }),
         usageSink,

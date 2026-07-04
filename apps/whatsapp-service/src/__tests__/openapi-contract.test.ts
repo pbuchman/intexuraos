@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import type { Config } from '../config.js';
 
@@ -39,7 +40,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     internalAuthToken: 'test-internal-auth-token',
     llmUsageServiceUrl: 'http://llm-usage.test',
     userServiceUrl: 'http://user-service.test',
-    conversationAssistantModel: 'or:minimax/minimax-m2.7',
+    conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     port: 8080,
     host: '0.0.0.0',
   };

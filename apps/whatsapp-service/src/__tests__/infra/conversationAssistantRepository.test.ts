@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import {
   createConversationAssistantRepository,
   WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION,
@@ -148,7 +149,7 @@ describe('conversationAssistantRepository', () => {
       chatId: '',
       status: 'archived',
       range: { from: '', to: '' },
-      model: '',
+      model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       transcriptSha256: '',
       transcriptMessageCount: 0,
       transcriptText: '',
@@ -159,6 +160,28 @@ describe('conversationAssistantRepository', () => {
       chatDisplayName: 'Alice',
       lastTurnAt: '2026-06-30T10:03:00.000Z',
     });
+  });
+
+  it('preserves unknown legacy models while defaulting missing model values', async () => {
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc('whatsapp_conv_session_missing_model')
+      .set({
+        userId: 'user-123',
+      });
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc('whatsapp_conv_session_legacy_model')
+      .set({
+        userId: 'user-123',
+        model: 'legacy/model',
+      });
+
+    const missingModel = await repository.getSessionById('whatsapp_conv_session_missing_model');
+    const legacyModel = await repository.getSessionById('whatsapp_conv_session_legacy_model');
+
+    expect(missingModel?.model).toBe(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
+    expect(legacyModel?.model).toBe('legacy/model');
   });
 
   it('hydrates assistant turn defaults and optional metadata', async () => {

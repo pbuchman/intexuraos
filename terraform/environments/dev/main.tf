@@ -268,7 +268,7 @@ locals {
 
   hetzner_runtime_env_vars = {
     INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL  = "${local.public_origin}/api/code"
-    INTEXURAOS_CONVERSATION_ASSISTANT_MODEL = "or:minimax/minimax-m2.7"
+    INTEXURAOS_CONVERSATION_ASSISTANT_MODEL = "or:minimax/minimax-m3"
     INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH = "development"
     INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY  = "pbuchman/intexuraos"
     INTEXURAOS_WEB_APP_URL                  = local.public_origin

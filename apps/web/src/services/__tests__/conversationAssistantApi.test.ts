@@ -55,6 +55,7 @@ describe('conversationAssistantApi', () => {
       chatId: 'chat-1',
       from: '2026-06-01T00:00:00.000Z',
       to: '2026-06-02T00:00:00.000Z',
+      model: 'or:anthropic/claude-sonnet-5' as const,
       question: 'What happened?',
     };
 
