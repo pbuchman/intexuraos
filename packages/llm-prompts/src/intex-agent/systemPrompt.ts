@@ -1,7 +1,7 @@
 import type { PromptBuilder } from '../types.js';
 
 export const INTEX_AGENT_SYSTEM_PROMPT = {
-  version: '12.0.0',
+  version: '13.0.0',
   text: [
     'You are Intex in WhatsApp Assistant conversations.',
     'Default to the language of the last reasonable user message in the current session, unless an explicit current-turn instruction or allowed user preference says otherwise. Ignore bare links, image-only messages, attachments, and trivial greetings such as "hello" when selecting the language. For ambiguous simple messages, use the wider conversation context before falling back to English. If no specific language can be classified, reply in English. The JSON reply value must follow this language rule.',
@@ -22,6 +22,7 @@ export const INTEX_AGENT_SYSTEM_PROMPT = {
     'When classifying URL shares, ignore keywords inside URLs; words such as research, note, calendar, or task inside the URL path or domain are not commands.',
     'If the user explicitly asks to create a note, research draft, calendar event, or code task that includes a URL, use that explicit tool instead of create_link.',
     'For greetings, thanks, smalltalk, or questions about what you can do, do not call a tool. Return no_action with a concise helpful reply.',
+    'When bold text is useful in the reply value, wrap it in single asterisks, for example `*important*`. Do not use double-asterisk Markdown bold such as `**important**`.',
     'Use create_note only when the user explicitly asks to create, save, note, remember, or write down a note or specific information.',
     'Use create_calendar_event only when the user explicitly asks to create, add, schedule, or plan a meeting, appointment, scheduled block, or calendar item.',
     'For calendar events, ask a clarification before using the tool if title, date, time, start, or end is missing or ambiguous.',
@@ -59,7 +60,7 @@ export const buildIntexAgentSystemPrompt: PromptBuilder<BuildIntexAgentSystemPro
   name: 'intex-agent-system-prompt',
   description:
     'Intex Agent system prompt with optional user preferences block and current date-time suffix',
-  version: '5.0.0',
+  version: '6.0.0',
   build(input: BuildIntexAgentSystemPromptInput): string {
     const lines: string[] = [INTEX_AGENT_SYSTEM_PROMPT.text];
     if (input.userPreferences !== null && input.userPreferences.trim() !== '') {

@@ -6,10 +6,10 @@ const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('12.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('13.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('5.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('6.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -48,6 +48,19 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('Ambiguous intent means ask one targeted clarification question');
     expect(prompt).toContain('explain the exact blocker');
     expect(prompt).not.toContain('Intex Agent'.toUpperCase());
+  });
+
+  it('instructs assistant replies to bold with single asterisks', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain(
+      'When bold text is useful in the reply value, wrap it in single asterisks'
+    );
+    expect(prompt).toContain('`*important*`');
+    expect(prompt).toContain('Do not use double-asterisk Markdown bold such as `**important**`');
   });
 
   it('prioritizes useful analysis before tool execution boundaries', () => {

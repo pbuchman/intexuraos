@@ -91,7 +91,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('12.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('13.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -100,6 +100,9 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain('Code tasks default to planning mode');
     expect(client.calls[0]?.systemPrompt).toContain('execution');
     expect(client.calls[0]?.systemPrompt).toContain('Return no_action');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'When bold text is useful in the reply value, wrap it in single asterisks'
+    );
     expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
     expect(client.calls[0]?.systemPrompt).toContain('answer whether existing events are present');
     expect(client.calls[0]?.systemPrompt).toContain('For "next week", use the next calendar week after the current week');
@@ -1213,7 +1216,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('12.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('13.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
