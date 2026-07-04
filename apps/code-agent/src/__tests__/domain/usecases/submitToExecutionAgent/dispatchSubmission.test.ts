@@ -18,13 +18,6 @@ import {
   type DispatchSubmissionDeps,
 } from '../../../../domain/usecases/submitToExecutionAgent/dispatchSubmission.js';
 import type { PreparedSubmission } from '../../../../domain/usecases/submitToExecutionAgent/prepareSubmission.js';
-import { fanOutChildTasks } from '../../../../domain/usecases/fanOutChildTasks.js';
-
-vi.mock('../../../../domain/usecases/fanOutChildTasks.js', () => ({
-  fanOutChildTasks: vi.fn(),
-}));
-
-const mockFanOutChildTasks = vi.mocked(fanOutChildTasks);
 
 describe('dispatchSubmission', () => {
   const userId = 'user_123';
@@ -133,17 +126,24 @@ describe('dispatchSubmission', () => {
     expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
   });
 
-  it('dispatches a single execution task and does not call fanOutChildTasks', async () => {
-    mockCodeTaskRepo.create.mockImplementation((input: { id: string }) =>
-      Promise.resolve(ok({ ...makeTask(), id: input.id, agentType: 'execution' })),
+  it('dispatches a single execution task for the original issue', async () => {
+    mockCodeTaskRepo.create.mockImplementation((input: Partial<CodeTask>) =>
+      Promise.resolve(ok({ ...makeTask(), ...input, id: input.id ?? 'task_execution', agentType: 'execution' })),
     );
     mockTaskEnqueueService.enqueue.mockResolvedValue(ok({ taskId: 'ignored', queuePosition: 1 }));
 
     const result = await dispatchSubmission(createDeps(), createPrepared());
 
     expect(result.ok).toBe(true);
-    expect(mockFanOutChildTasks).not.toHaveBeenCalled();
     if (!result.ok) return;
+    expect(mockCodeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'execution',
+      linearIssueId,
+      parentTaskId: 'task_planning',
+      followUpReason: 'execution_implement',
+    }));
+    expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
     expect(result.value).not.toHaveProperty('childTaskIds');
   });
 

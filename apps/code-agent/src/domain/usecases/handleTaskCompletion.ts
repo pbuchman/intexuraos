@@ -82,6 +82,7 @@ export type TaskCompleteWebhookBody = {
     rebaseResult?: 'success' | 'conflict' | 'skipped';
     comment_replied?: boolean;
     planning_outcome_label?: 'planned' | 'unclear';
+    planning_has_plan_doc?: '0' | '1';
     planning_superpowers_writing_plans_used?: '0' | '1';
     planning_linear_url?: string;
     planning_is_complex?: '0' | '1';

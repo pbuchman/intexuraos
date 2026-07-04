@@ -945,10 +945,11 @@ describe('submitToExecutionAgent', () => {
 
     it('EXECUTION_AGENT_PROMPT mentions reading comments newest first', () => {
       expect(EXECUTION_AGENT_PROMPT).toContain('comments (newest first)');
+      expect(EXECUTION_AGENT_PROMPT).toContain('referenced plan document if present');
       expect(EXECUTION_AGENT_PROMPT).toContain('one branch and one PR');
       expect(EXECUTION_AGENT_PROMPT).toContain('internal subagents');
       expect(EXECUTION_AGENT_PROMPT).toContain('do not create Linear child issues');
-      expect(EXECUTION_AGENT_PROMPT).toContain('do not split the work into multiple code tasks');
+      expect(EXECUTION_AGENT_PROMPT).toContain('split the plan into multiple code tasks');
     });
 
     it('does not copy legacy action fields from original task to execution task', async () => {

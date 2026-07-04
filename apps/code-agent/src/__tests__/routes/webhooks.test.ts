@@ -1146,6 +1146,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         result: {
           summary: 'Created planning issue and plan PR',
           planning_outcome_label: 'planned' as const,
+          planning_has_plan_doc: '1' as const,
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
@@ -1175,6 +1176,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('planned');
       expect(getResult.value.result?.planning_outcome_label).toBe('planned');
+      expect(getResult.value.result?.planning_has_plan_doc).toBe('1');
       expect(getResult.value.result?.planning_linear_url).toContain('/INT-123');
     });
 
