@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { WorkerAuthManager, WorkerAuthState } from './types.js';
 import type { CodexAuthRefresher } from './codex-auth-refresher.js';
 
@@ -61,7 +62,10 @@ export class CodexAuthManager implements WorkerAuthManager {
         refreshSupported: false,
         message: 'Codex auth file not found',
       });
-      this.logger.warn({ path: this.config.authPath }, 'Codex auth file not found');
+      this.logger.warn(
+        { path: this.config.authPath, [SKIP_SENTRY_KEY]: true },
+        'Codex auth file not found'
+      );
       return false;
     }
 

@@ -3,6 +3,7 @@
 `@intexuraos/infra-pdf-export` renders already-authorized, already-redacted conversation snapshots into PDF files.
 
 Consumers provide the title, source range, message counts, optional omitted-message breakdown, and chronological user/assistant messages. The package returns PDF bytes, an `application/pdf` content type, and a sanitized full filename including the `.pdf` extension.
+It embeds Noto Sans fonts for conversation text that needs Unicode glyph coverage.
 
 ## Exported API
 
@@ -36,13 +37,7 @@ interface PdfConversationExportInput {
   generatedAt: string;
   sourceRange: { from: string; to: string };
   messageCounts: { included: number; excluded: number };
-  omittedBreakdown?: {
-    mediaOnly: number;
-    failedTranscriptions: number;
-    pendingTranscriptions: number;
-    nonText: number;
-    overLimit: number;
-  };
+  omittedBreakdown?: Record<string, number>;
   messages: {
     role: 'user' | 'assistant';
     createdAt: string;
@@ -51,8 +46,9 @@ interface PdfConversationExportInput {
 }
 ```
 
-- `title`, `generatedAt`, `sourceRange.from`, and `sourceRange.to` must be non-empty after trimming.
-- `messageCounts.included` and `messageCounts.excluded` must be zero or positive.
+- `title` must be non-empty after trimming.
+- `generatedAt`, `sourceRange`, and `messageCounts` should describe the already-selected export snapshot.
+- `omittedBreakdown` keys are formatted into readable labels in the rendered PDF.
 - Each message must have non-empty `text`; empty transcripts should be filtered or represented by the caller before export.
 - `messages` must be in the display order the PDF should use.
 
@@ -68,7 +64,7 @@ interface PdfConversationExportResult {
 }
 ```
 
-`bytes` contains the rendered PDF. `fileName` is a sanitized lowercase filename derived from `title`, includes the `.pdf` extension, is capped to the exporter filename limit, and falls back to `conversation-assistant-export.pdf` when the sanitized title is empty.
+`bytes` contains the rendered PDF. `fileName` is a sanitized lowercase filename derived from `title`, includes the `.pdf` extension, and falls back to `conversation-export.pdf` when the sanitized title is empty.
 
 ## Errors
 

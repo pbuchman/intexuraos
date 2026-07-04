@@ -265,7 +265,13 @@ export async function exportConversationAssistantSessionPdf(
     const roleComparison = turnRoleSortValue(a.role) - turnRoleSortValue(b.role);
     return roleComparison === 0 ? a.id.localeCompare(b.id) : roleComparison;
   });
-  const omittedBreakdown = session.omitted;
+  const omittedBreakdown = {
+    mediaOnly: session.omitted.mediaOnly,
+    failedTranscriptions: session.omitted.failedTranscriptions,
+    pendingTranscriptions: session.omitted.pendingTranscriptions,
+    nonText: session.omitted.nonText,
+    overLimit: session.omitted.overLimit,
+  };
   const excluded =
     omittedBreakdown.mediaOnly +
     omittedBreakdown.failedTranscriptions +

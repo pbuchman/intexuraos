@@ -2,7 +2,7 @@ export type {
   PdfConversationMessageRole,
   PdfConversationExportInput,
   PdfConversationExportResult,
-  PdfConversationExporter,
   PdfExportError,
+  PdfConversationExporter,
 } from './types.js';
 export { createPdfConversationExporter } from './conversationPdfExporter.js';

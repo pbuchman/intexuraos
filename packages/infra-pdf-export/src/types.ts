@@ -7,13 +7,7 @@ export interface PdfConversationExportInput {
   generatedAt: string;
   sourceRange: { from: string; to: string };
   messageCounts: { included: number; excluded: number };
-  omittedBreakdown?: {
-    mediaOnly: number;
-    failedTranscriptions: number;
-    pendingTranscriptions: number;
-    nonText: number;
-    overLimit: number;
-  };
+  omittedBreakdown?: Record<string, number>;
   messages: {
     role: PdfConversationMessageRole;
     createdAt: string;
@@ -23,7 +17,6 @@ export interface PdfConversationExportInput {
 
 export interface PdfConversationExportResult {
   bytes: Buffer;
-  /** Sanitized full filename including the `.pdf` extension. */
   fileName: string;
   contentType: 'application/pdf';
 }

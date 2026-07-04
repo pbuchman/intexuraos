@@ -14,6 +14,7 @@
     "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
+    "@expo-google-fonts/noto-sans": "0.4.2",
     "@intexuraos/common-core": "workspace:*",
     "pdfkit": "^0.19.1"
   },
