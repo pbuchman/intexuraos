@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { NavItem } from './navItems.js';
 
@@ -9,13 +9,8 @@ interface CollapsibleNavSectionProps {
   isOpen: boolean;
   onToggle: (next: boolean) => void;
   isCollapsed: boolean;
-  isActive: boolean;
   /** Path used for `end` matching on each sub-item (the root path of the section). */
   rootPath?: string;
-  /** When true, navigate to the first item on open. Defaults to true. */
-  navigateOnOpen?: boolean;
-  /** Optional fallback path to navigate to when items[0] is missing. */
-  navigateFallback?: string;
   /** When true, every sub-item uses `end` exact-match. Defaults to false. */
   exactMatchAllItems?: boolean;
 }
@@ -27,27 +22,16 @@ export function CollapsibleNavSection({
   isOpen,
   onToggle,
   isCollapsed,
-  isActive,
   rootPath,
-  navigateOnOpen = true,
-  navigateFallback,
   exactMatchAllItems = false,
 }: CollapsibleNavSectionProps): React.JSX.Element {
-  const navigate = useNavigate();
   return (
     <div className="pt-2">
       <button
         onClick={(): void => {
-          if (!isOpen && navigateOnOpen) {
-            void navigate(items[0]?.to ?? navigateFallback ?? '/');
-          }
           onToggle(!isOpen);
         }}
-        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-          isActive
-            ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-        }`}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
       >
         <Icon className="h-5 w-5 shrink-0" />
         {!isCollapsed ? (

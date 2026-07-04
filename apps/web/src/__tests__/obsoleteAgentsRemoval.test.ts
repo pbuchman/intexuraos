@@ -103,7 +103,7 @@ describe('obsolete web agent removal', () => {
     }
 
     expect(appSource).not.toContain(['path="/', 'inbox', '"'].join(''));
-    expect(appSource).toContain('to="/whatsapp/sessions"');
+    expect(appSource).toContain('to="/intex-agent/sessions"');
     expect(sidebarSource).not.toContain(['to="/', 'inbox', '"'].join(''));
 
     expect(manifest.services.map((service) => service.name)).not.toEqual(

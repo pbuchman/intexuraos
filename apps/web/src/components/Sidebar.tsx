@@ -1,4 +1,3 @@
-import { useLocation } from 'react-router-dom';
 import {
   Bookmark,
   BookOpenText,
@@ -6,12 +5,10 @@ import {
   Code2,
   LayoutList,
   MessageSquare,
-  Newspaper,
   PenTool,
   Settings,
   Sparkles,
   StickyNote,
-  Swords,
   TrendingUp,
 } from 'lucide-react';
 import { CollapseToggle } from './sidebar/CollapseToggle.js';
@@ -33,7 +30,6 @@ import {
 import { useSidebarState } from './sidebar/useSidebarState.js';
 
 export function Sidebar(): React.JSX.Element {
-  const location = useLocation();
   const s = useSidebarState();
 
   return (
@@ -47,21 +43,19 @@ export function Sidebar(): React.JSX.Element {
         <MobileCloseButton onClose={(): void => { s.setIsMobileOpen(false); }} />
 
         <nav ref={s.navRef} className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
-          <TopLevelNavLink to="/code-tasks" label="Battlefield" icon={Swords} isCollapsed={s.isCollapsed} />
-          <TopLevelNavLink to="/notifications/digests" label="Digests" icon={Newspaper} isCollapsed={s.isCollapsed} />
-          <CollapsibleNavSection label="Fishing Assistant" icon={BookOpenText} items={fishingAssistantItems} isOpen={s.isFishingAssistantOpen} onToggle={s.setIsFishingAssistantOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/fishing-assistant')} navigateFallback="/fishing-assistant/digests" />
-          <CollapsibleNavSection label="Hellscript" icon={PenTool} items={hellscriptItems} rootPath="/hellscript" isOpen={s.isHellscriptOpen} onToggle={s.setIsHellscriptOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/hellscript')} navigateFallback="/hellscript" />
-          <CollapsibleNavSection label="Code Tasks" icon={Code2} items={codeTasksItems} isOpen={s.isCodeTasksOpen} onToggle={s.setIsCodeTasksOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/code-tasks') && location.pathname !== '/code-tasks'} navigateFallback="/code-tasks/new" />
-          <CollapsibleNavSection label="LLM Usage" icon={TrendingUp} items={llmUsageItems} rootPath="/llm-usage" isOpen={s.isLlmUsageOpen} onToggle={s.setIsLlmUsageOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/llm-usage')} navigateFallback="/llm-usage" />
-          <CollapsibleNavSection label="Research Studio" icon={Sparkles} items={researchAgentItems} rootPath="/research" isOpen={s.isResearchAgentOpen} onToggle={s.setIsResearchAgentOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/research')} navigateFallback="/research" />
-          <CollapsibleNavSection label="Linear" icon={LayoutList} items={linearItems} rootPath="/linear" isOpen={s.isLinearOpen} onToggle={s.setIsLinearOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/linear')} navigateFallback="/linear" />
+          <CollapsibleNavSection label="Intex Agent" icon={Sparkles} items={intexAgentItems} rootPath="/intex-agent" isOpen={s.isIntexAgentOpen} onToggle={s.setIsIntexAgentOpen} isCollapsed={s.isCollapsed} />
+          <CollapsibleNavSection label="Code Tasks" icon={Code2} items={codeTasksItems} rootPath="/code-tasks" isOpen={s.isCodeTasksOpen} onToggle={s.setIsCodeTasksOpen} isCollapsed={s.isCollapsed} />
+          <CollapsibleNavSection label="Fishing Assistant" icon={BookOpenText} items={fishingAssistantItems} isOpen={s.isFishingAssistantOpen} onToggle={s.setIsFishingAssistantOpen} isCollapsed={s.isCollapsed} />
+          <CollapsibleNavSection label="Hellscript" icon={PenTool} items={hellscriptItems} rootPath="/hellscript" isOpen={s.isHellscriptOpen} onToggle={s.setIsHellscriptOpen} isCollapsed={s.isCollapsed} />
+          <CollapsibleNavSection label="LLM Usage" icon={TrendingUp} items={llmUsageItems} rootPath="/llm-usage" isOpen={s.isLlmUsageOpen} onToggle={s.setIsLlmUsageOpen} isCollapsed={s.isCollapsed} />
+          <CollapsibleNavSection label="Research Studio" icon={Sparkles} items={researchAgentItems} rootPath="/research" isOpen={s.isResearchAgentOpen} onToggle={s.setIsResearchAgentOpen} isCollapsed={s.isCollapsed} />
+          <CollapsibleNavSection label="Linear" icon={LayoutList} items={linearItems} rootPath="/linear" isOpen={s.isLinearOpen} onToggle={s.setIsLinearOpen} isCollapsed={s.isCollapsed} />
           <TopLevelNavLink to="/calendar" label="Calendar" icon={Calendar} isCollapsed={s.isCollapsed} />
           <TopLevelNavLink to="/my-bookmarks" label="Bookmarks" icon={Bookmark} isCollapsed={s.isCollapsed} />
-          <CollapsibleNavSection label="WhatsApp" icon={MessageSquare} items={whatsappItems} rootPath="/whatsapp" isOpen={s.isWhatsAppOpen} onToggle={s.setIsWhatsAppOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/whatsapp') || location.pathname === '/notes'} navigateFallback="/whatsapp/assistant" />
+          <CollapsibleNavSection label="WhatsApp" icon={MessageSquare} items={whatsappItems} rootPath="/whatsapp" isOpen={s.isWhatsAppOpen} onToggle={s.setIsWhatsAppOpen} isCollapsed={s.isCollapsed} />
           <NotificationsSection isOpen={s.isNotificationsOpen} onToggle={s.setIsNotificationsOpen} isCollapsed={s.isCollapsed} savedFilters={s.savedFilters} />
           <TopLevelNavLink to="/my-notes" label="Notes" icon={StickyNote} isCollapsed={s.isCollapsed} />
-          <CollapsibleNavSection label="Intex Agent" icon={Sparkles} items={intexAgentItems} rootPath="/intex-agent" isOpen={s.isIntexAgentOpen} onToggle={s.setIsIntexAgentOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/intex-agent')} navigateFallback="/intex-agent/config" />
-          <CollapsibleNavSection label="Settings" icon={Settings} items={settingsItems} isOpen={s.isSettingsOpen} onToggle={s.setIsSettingsOpen} isCollapsed={s.isCollapsed} isActive={location.pathname.startsWith('/settings')} navigateOnOpen={false} exactMatchAllItems />
+          <CollapsibleNavSection label="Settings" icon={Settings} items={settingsItems} isOpen={s.isSettingsOpen} onToggle={s.setIsSettingsOpen} isCollapsed={s.isCollapsed} exactMatchAllItems />
         </nav>
 
         <CollapseToggle

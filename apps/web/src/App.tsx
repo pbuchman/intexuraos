@@ -208,7 +208,7 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/whatsapp/sessions" replace />;
+    return <Navigate to="/intex-agent/sessions" replace />;
   }
 
   return <>{children}</>;
@@ -226,7 +226,7 @@ function HomeRoute(): React.JSX.Element {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/whatsapp/sessions" replace />;
+    return <Navigate to="/intex-agent/sessions" replace />;
   }
 
   return <HomePage />;
@@ -307,7 +307,6 @@ function AppRoutes(): React.JSX.Element {
           {/* Feature routes */}
           <Route path="/share-target" element={<ShareTargetPage />} />
           <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
-          <Route path="/whatsapp/sessions" element={<IntexAgentSessionsPage />} />
           <Route path="/whatsapp/private" element={<PrivateWhatsAppLogPage />} />
           <Route path="/whatsapp/conversation-assistant" element={<WhatsAppConversationAssistantPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
@@ -329,6 +328,7 @@ function AppRoutes(): React.JSX.Element {
           />
           <Route path="/notifications/digests" element={<NotificationDigestsPage />} />
           {/* Intex Agent routes */}
+          <Route path="/intex-agent/sessions" element={<IntexAgentSessionsPage />} />
           <Route path="/intex-agent/config" element={<IntexAgentConfigPage />} />
           <Route path="/intex-agent/preferences" element={<IntexAgentPreferencesPage />} />
           {/* Fishing Assistant routes */}
@@ -351,6 +351,7 @@ function AppRoutes(): React.JSX.Element {
         {/* Redirects for old URLs (backward compatibility) */}
         <Route path="/notion" element={<Navigate to="/settings/notion" replace />} />
         <Route path="/whatsapp" element={<Navigate to="/whatsapp/assistant" replace />} />
+        <Route path="/whatsapp/sessions" element={<Navigate to="/intex-agent/sessions" replace />} />
         <Route path="/notes" element={<Navigate to="/whatsapp/assistant" replace />} />
         <Route path="/whatsapp-notes" element={<Navigate to="/whatsapp/assistant" replace />} />
         <Route path="/mobile-notifications" element={<Navigate to="/settings/mobile" replace />} />
@@ -360,7 +361,7 @@ function AppRoutes(): React.JSX.Element {
         />
         <Route path="/settings/workers" element={<Navigate to="/settings/code" replace />} />
         {/* 404 fallback */}
-        <Route path="*" element={<Navigate to="/whatsapp/sessions" replace />} />
+        <Route path="*" element={<Navigate to="/intex-agent/sessions" replace />} />
       </Routes>
     </Suspense>
   );
