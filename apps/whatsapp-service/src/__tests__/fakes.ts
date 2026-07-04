@@ -106,6 +106,19 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     return Promise.resolve(session === undefined ? null : { ...session });
   }
 
+  getSessionSnapshotById(
+    sessionId: string
+  ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve({
+      session: { ...session },
+      turns: this.listTurnsForSnapshot(sessionId),
+    });
+  }
+
   listSessionsByUserId(userId: string): Promise<ConversationAssistantSession[]> {
     const sessions = Array.from(this.sessions.values())
       .filter((session) => session.userId === userId)
@@ -123,6 +136,10 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   }
 
   listTurnsBySessionId(sessionId: string): Promise<ConversationAssistantTurn[]> {
+    return Promise.resolve(this.listTurnsForSnapshot(sessionId));
+  }
+
+  private listTurnsForSnapshot(sessionId: string): ConversationAssistantTurn[] {
     const turns = Array.from(this.turns.values())
       .filter((turn) => turn.sessionId === sessionId)
       .sort((a, b) => {
@@ -130,7 +147,7 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
         return createdComparison === 0 ? a.id.localeCompare(b.id) : createdComparison;
       })
       .map((turn) => ({ ...turn }));
-    return Promise.resolve(turns);
+    return turns;
   }
 
   getAllSessions(): ConversationAssistantSession[] {

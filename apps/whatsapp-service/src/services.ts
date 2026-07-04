@@ -18,6 +18,7 @@ import { createWebAgentLinkPreviewClient } from './infra/linkpreview/webAgentLin
 import { createLlmClient } from '@intexuraos/llm-factory';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { createPdfConversationExporter } from '@intexuraos/infra-pdf-export';
 import { err, ok } from '@intexuraos/common-core';
 import type {
   EventPublisherPort,
@@ -38,6 +39,7 @@ import type {
   ConversationAssistantLlmClientFactory,
   ConversationAssistantRepository,
 } from './domain/conversation-assistant/ports.js';
+import type { PdfConversationExporter } from '@intexuraos/infra-pdf-export';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
 import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
 import { createConversationAssistantRepository } from './infra/firestore/conversationAssistantRepository.js';
@@ -95,6 +97,7 @@ export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
   conversationAssistantRepository?: ConversationAssistantRepository;
   llmClientFactory?: ConversationAssistantLlmClientFactory;
+  pdfConversationExporter?: PdfConversationExporter;
   conversationAssistantModel?: string;
 }
 
@@ -145,6 +148,7 @@ export function getServices(): ServiceContainer {
     }),
     conversationAssistantRepository: createConversationAssistantRepository(),
     llmClientFactory: createConversationAssistantLlmClientFactory(serviceConfig),
+    pdfConversationExporter: createPdfConversationExporter(),
     conversationAssistantModel: serviceConfig.conversationAssistantModel,
   };
   return container;

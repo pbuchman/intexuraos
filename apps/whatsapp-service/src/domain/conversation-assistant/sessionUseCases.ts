@@ -19,6 +19,8 @@ import type {
   ConversationAssistantTurn,
   CreateConversationAssistantSessionInput,
   CreateConversationAssistantSessionResult,
+  ExportConversationAssistantPdfInput,
+  ExportConversationAssistantPdfResult,
   SendConversationAssistantTurnInput,
 } from './types.js';
 import {
@@ -239,6 +241,59 @@ export async function listConversationAssistantTurns(
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
   }
   return ok(await deps.repository.listTurnsBySessionId(input.sessionId));
+}
+
+export async function exportConversationAssistantSessionPdf(
+  input: ExportConversationAssistantPdfInput,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<ExportConversationAssistantPdfResult>> {
+  const snapshot = await deps.repository.getSessionSnapshotById(input.sessionId);
+  if (snapshot === null || !isOwnedSession(snapshot.session, input.userId)) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  const session = snapshot.session;
+
+  const turns = snapshot.turns;
+  const orderedTurns = [...turns].sort((a, b) => {
+    const createdComparison = a.createdAt.localeCompare(b.createdAt);
+    if (createdComparison !== 0) {
+      return createdComparison;
+    }
+    const roleComparison = turnRoleSortValue(a.role) - turnRoleSortValue(b.role);
+    return roleComparison === 0 ? a.id.localeCompare(b.id) : roleComparison;
+  });
+  const omittedBreakdown = session.omitted;
+  const excluded =
+    omittedBreakdown.mediaOnly +
+    omittedBreakdown.failedTranscriptions +
+    omittedBreakdown.pendingTranscriptions +
+    omittedBreakdown.nonText +
+    omittedBreakdown.overLimit;
+
+  const exportResult = await deps.pdfExporter.exportConversation({
+    title: session.title,
+    generatedAt: deps.clock.now(),
+    sourceRange: session.range,
+    messageCounts: {
+      included: session.transcriptMessageCount,
+      excluded,
+    },
+    omittedBreakdown,
+    messages: orderedTurns.map((turn) => ({
+      role: turn.role,
+      createdAt: turn.createdAt,
+      text: turn.text,
+    })),
+  });
+
+  if (!exportResult.ok) {
+    return err({ code: 'INTERNAL_ERROR', message: exportResult.error.message });
+  }
+
+  return ok({
+    ...exportResult.value,
+    fileName: appendSessionIdToPdfFileName(exportResult.value.fileName, session.id),
+  });
 }
 
 async function appendQuestionAndAssistantTurn(
@@ -484,4 +539,14 @@ function isOwnedSession(
   userId: string
 ): session is ConversationAssistantSession {
   return session !== null && session.userId === userId;
+}
+
+function appendSessionIdToPdfFileName(fileName: string, sessionId: string): string {
+  const baseName = fileName.endsWith('.pdf') ? fileName.slice(0, -4) : fileName;
+  const normalizedBaseName = baseName.trim().length > 0 ? baseName.trim() : 'conversation-assistant-export';
+  return `${normalizedBaseName}-${sessionId}.pdf`;
+}
+
+function turnRoleSortValue(role: ConversationAssistantTurn['role']): number {
+  return role === 'user' ? 0 : 1;
 }

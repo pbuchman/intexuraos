@@ -1,4 +1,5 @@
 import type { GenerateChatResult } from '@intexuraos/llm-factory';
+import type { PdfConversationExportResult } from '@intexuraos/infra-pdf-export';
 import type {
   PrivateConversationContextOmittedCounts,
   PrivateConversationContextResponse,
@@ -69,11 +70,18 @@ export interface SendConversationAssistantTurnInput {
   question: string;
 }
 
+export interface ExportConversationAssistantPdfInput {
+  userId: string;
+  sessionId: string;
+}
+
 export interface CreateConversationAssistantSessionResult {
   session: ConversationAssistantSession;
   turns: ConversationAssistantTurn[];
   context: PrivateConversationContextResponse;
 }
+
+export type ExportConversationAssistantPdfResult = PdfConversationExportResult;
 
 export interface ConversationAssistantError {
   code:

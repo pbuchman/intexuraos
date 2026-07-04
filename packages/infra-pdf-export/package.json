@@ -1,0 +1,23 @@
+{
+  "name": "@intexuraos/infra-pdf-export",
+  "version": "3.8.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "pdfkit": "^0.19.1"
+  },
+  "devDependencies": {
+    "@types/pdfkit": "^0.17.6"
+  }
+}

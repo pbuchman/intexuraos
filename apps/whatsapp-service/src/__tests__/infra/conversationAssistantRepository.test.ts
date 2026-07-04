@@ -93,6 +93,20 @@ describe('conversationAssistantRepository', () => {
     expect(storedDoc.data()?.['role']).toBe('assistant');
   });
 
+  it('loads a session snapshot with turns from one repository call', async () => {
+    await repository.saveSession(makeSession());
+    await repository.saveTurn(makeTurn({ id: 'turn-2', role: 'assistant', createdAt: '2026-06-30T10:02:00.000Z' }));
+    await repository.saveTurn(makeTurn({ id: 'turn-1', role: 'user', createdAt: '2026-06-30T10:01:00.000Z' }));
+    await repository.saveTurn(makeTurn({ id: 'foreign-turn', sessionId: 'other-session' }));
+
+    const snapshot = await repository.getSessionSnapshotById('whatsapp_conv_session_1');
+    const missing = await repository.getSessionSnapshotById('missing');
+
+    expect(snapshot?.session.id).toBe('whatsapp_conv_session_1');
+    expect(snapshot?.turns.map((turn) => turn.id)).toEqual(['turn-1', 'turn-2']);
+    expect(missing).toBeNull();
+  });
+
   it('returns null for missing sessions and hydrates defensive defaults', async () => {
     const missing = await repository.getSessionById('whatsapp_conv_session_missing');
     expect(missing).toBeNull();

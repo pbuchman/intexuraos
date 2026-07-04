@@ -7,6 +7,7 @@ import {
   conversationAssistantRandomIds,
   conversationAssistantSystemClock,
   createConversationAssistantSession,
+  exportConversationAssistantSessionPdf,
   getConversationAssistantSession,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
@@ -215,6 +216,46 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
   );
 
   fastify.get<{ Params: SessionParams }>(
+    '/conversation-assistant/sessions/:sessionId/export.pdf',
+    {
+      schema: {
+        operationId: 'exportWhatsAppConversationAssistantSessionPdf',
+        tags: ['whatsapp'],
+        response: pdfExportResponseSchema(),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message:
+          'Received request to GET /whatsapp/conversation-assistant/sessions/:sessionId/export.pdf',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_export_pdf' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      const deps = await getConversationAssistantDeps(reply);
+      if (deps === null) return;
+
+      const result = await safeCall(() =>
+        exportConversationAssistantSessionPdf(
+          { userId: user.userId, sessionId: request.params.sessionId },
+          deps
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantError(reply, result.error);
+      }
+
+      reply
+        .header('Content-Type', result.value.contentType)
+        .header('Content-Disposition', `attachment; filename="${result.value.fileName}"`)
+        .header('Cache-Control', 'no-store');
+      // @allow-raw-send: Conversation Assistant PDF export returns binary PDF bytes
+      return await reply.send(result.value.bytes);
+    }
+  );
+
+  fastify.get<{ Params: SessionParams }>(
     '/conversation-assistant/sessions/:sessionId/turns',
     {
       schema: {
@@ -366,6 +407,7 @@ async function getConversationAssistantDeps(
   if (
     services.conversationAssistantRepository === undefined ||
     services.llmClientFactory === undefined ||
+    services.pdfConversationExporter === undefined ||
     services.conversationAssistantModel === undefined
   ) {
     await reply.fail('INTERNAL_ERROR', 'Conversation Assistant services are not configured');
@@ -375,6 +417,7 @@ async function getConversationAssistantDeps(
     repository: services.conversationAssistantRepository,
     privateWhatsAppRepository: services.privateWhatsAppRepository,
     llmClientFactory: services.llmClientFactory,
+    pdfExporter: services.pdfConversationExporter,
     model: services.conversationAssistantModel,
     clock: conversationAssistantSystemClock,
     ids: conversationAssistantRandomIds,
@@ -444,6 +487,23 @@ function streamResponseSchema(): Record<number, Record<string, unknown>> {
     },
     400: errorResponse('Invalid request'),
     401: errorResponse('Unauthorized'),
+    500: errorResponse('Internal error'),
+  };
+}
+
+function pdfExportResponseSchema(): Record<number, Record<string, unknown>> {
+  return {
+    200: {
+      description: 'Conversation Assistant PDF export',
+      type: 'string',
+      content: {
+        'application/pdf': {
+          schema: { type: 'string', format: 'binary' },
+        },
+      },
+    },
+    401: errorResponse('Unauthorized'),
+    404: errorResponse('Not found'),
     500: errorResponse('Internal error'),
   };
 }

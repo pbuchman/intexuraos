@@ -43,6 +43,38 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
       }
     },
 
+    async getSessionSnapshotById(
+      sessionId: string
+    ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
+      try {
+        const db = getFirestore();
+        const sessionRef = db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(sessionId);
+        return await db.runTransaction(async (transaction) => {
+          const sessionDoc = await transaction.get(sessionRef);
+          if (!sessionDoc.exists) {
+            return null;
+          }
+          const turnsSnapshot = await transaction.get(
+            db
+              .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
+              .where('sessionId', '==', sessionId)
+              .orderBy('createdAt', 'asc')
+              .orderBy(FieldPath.documentId(), 'asc')
+          );
+          return {
+            session: toSession(sessionDoc.id, sessionDoc.data()),
+            turns: turnsSnapshot.docs.map((doc) => toTurn(doc.id, doc.data())),
+          };
+        });
+      } catch (error) {
+        throw new Error(
+          `Failed to load Conversation Assistant session snapshot: ${getErrorMessage(error)}`
+        );
+      }
+    },
+
     async listSessionsByUserId(userId: string): Promise<ConversationAssistantSession[]> {
       try {
         const snapshot = await getFirestore()
