@@ -381,12 +381,13 @@ const [markTodo, parentLabels] = await Promise.all([
   linearAgentClient.updateIssueMetadata({
     userId: task.userId,
     issueId: originalIssueUuid,
-    assigneeId: null,
     addLabels: ['code-task'],
     removeLabels: ['unclear', 'planning-task', 'complex-task'],
   }),
 ]);
 ```
+
+Do not pass `assigneeId` in this metadata update; assignment is user-controlled and must be preserved.
 
 After those succeed, add the planning PR comment for every planned outcome when `planning_pr_url` or `prUrl` is present:
 
