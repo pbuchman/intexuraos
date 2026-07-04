@@ -157,7 +157,7 @@ Add this test in `packages/llm-prompts/src/intex-agent/__tests__/runnerOutputRep
 Run:
 
 ```bash
-pnpm test -- packages/llm-prompts/src/intex-agent/__tests__/systemPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputRepairPrompt.test.ts
+pnpm exec vitest run packages/llm-prompts/src/intex-agent/__tests__/systemPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputRepairPrompt.test.ts
 ```
 
 Expected before implementation: the new `toContain` assertions fail.
@@ -190,7 +190,7 @@ expect(intexAgentRunnerOutputRepairPrompt.version).toBe('3.0.0');
 Run:
 
 ```bash
-pnpm test -- packages/llm-prompts/src/intex-agent/__tests__/systemPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputRepairPrompt.test.ts
+pnpm exec vitest run packages/llm-prompts/src/intex-agent/__tests__/systemPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputRepairPrompt.test.ts
 ```
 
 Expected after implementation: all targeted prompt tests pass.
@@ -285,7 +285,7 @@ For tests where the classifier exposes a tool, update the expectation to `requir
 Run:
 
 ```bash
-pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/intexAgentRunner.test.ts
+pnpm --filter @intexuraos/intex-agent exec vitest run src/__tests__/domain/intexAgentRunner.test.ts
 ```
 
 Expected after implementation: runner tests pass.
@@ -403,7 +403,7 @@ Do not apply this salvage path when tools were exposed. A tool-intent `completed
 Run:
 
 ```bash
-pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/intexAgentRunner.test.ts
+pnpm --filter @intexuraos/intex-agent exec vitest run src/__tests__/domain/intexAgentRunner.test.ts
 ```
 
 Expected after implementation: runner tests pass, including the direct-answer regression.
@@ -520,7 +520,7 @@ Add this test in the same file:
 Run:
 
 ```bash
-pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/handleIncomingMessage.test.ts
+pnpm --filter @intexuraos/intex-agent exec vitest run src/__tests__/domain/handleIncomingMessage.test.ts
 ```
 
 Expected after implementation: session tests pass.
@@ -541,7 +541,7 @@ Expected after implementation: session tests pass.
 Run:
 
 ```bash
-pnpm test -- packages/llm-prompts/src/intex-agent/__tests__/systemPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputRepairPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputSchemas.test.ts packages/llm-prompts/src/intex-agent/__tests__/intentClassifierPrompt.test.ts
+pnpm exec vitest run packages/llm-prompts/src/intex-agent/__tests__/systemPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputRepairPrompt.test.ts packages/llm-prompts/src/intex-agent/__tests__/runnerOutputSchemas.test.ts packages/llm-prompts/src/intex-agent/__tests__/intentClassifierPrompt.test.ts
 ```
 
 Expected: all targeted prompt tests pass.
@@ -551,7 +551,7 @@ Expected: all targeted prompt tests pass.
 Run:
 
 ```bash
-pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/intexAgentRunner.test.ts src/__tests__/domain/handleIncomingMessage.test.ts src/__tests__/domain/intentClassifier.test.ts
+pnpm --filter @intexuraos/intex-agent exec vitest run src/__tests__/domain/intexAgentRunner.test.ts src/__tests__/domain/handleIncomingMessage.test.ts src/__tests__/domain/intentClassifier.test.ts
 ```
 
 Expected: all targeted Intex Agent tests pass.
