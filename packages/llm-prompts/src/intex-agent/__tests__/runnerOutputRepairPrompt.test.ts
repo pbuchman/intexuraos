@@ -3,7 +3,7 @@ import { intexAgentRunnerOutputRepairPrompt } from '../runnerOutputRepairPrompt.
 
 describe('intexAgentRunnerOutputRepairPrompt', () => {
   it('exposes the schema-changing major version', () => {
-    expect(intexAgentRunnerOutputRepairPrompt.version).toBe('2.0.0');
+    expect(intexAgentRunnerOutputRepairPrompt.version).toBe('3.0.0');
   });
 
   it('wraps original context and invalid output as data-only repair material', () => {
@@ -24,6 +24,22 @@ describe('intexAgentRunnerOutputRepairPrompt', () => {
     expect(prompt).toContain('"blockerReason"');
     expect(prompt).toContain('"suggestedNextStep"');
     expect(prompt).toContain('"clarification"');
+  });
+
+  it('repairs protocol labels toward useful conversation or concrete clarification', () => {
+    const prompt = intexAgentRunnerOutputRepairPrompt.build({
+      systemPrompt: 'SYSTEM_PROMPT',
+      messages: [{ role: 'user', content: 'Please answer the earlier question directly.' }],
+      invalidResponse:
+        '{"outcome":"completed","reply":"Here is the answer.","toolName":"create_note"}',
+      errorMessage: 'completed output has no matching tool execution',
+    });
+
+    expect(prompt).toContain('Use no_action for direct conversational answers.');
+    expect(prompt).toContain('Use completed only when a tool actually succeeded.');
+    expect(prompt).toContain(
+      'For explicit supported tool requests, return needs_clarification only for concrete missing fields; do not ask a generic question when the requested action is clear.'
+    );
   });
 
   it('truncates oversized context and invalid-response previews', () => {
