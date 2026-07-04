@@ -80,8 +80,12 @@
 
 ### Cleanup and memory summaries
 
+- Modify: `apps/code-agent/src/domain/models/codeTask.ts`
+- Modify: `apps/code-agent/src/domain/models/executionMemory.ts`
 - Modify: `apps/code-agent/src/domain/usecases/executionMemory/shared.ts`
 - Modify: `apps/code-agent/src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts`
+- Modify: `apps/code-agent/src/routes/code/schemas.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/code/schemas.test.ts`
 - Modify: `apps/code-agent/src/domain/utils/labelUtils.ts` if `hasComplexTaskLabel` becomes unused by code-agent after the execution-submission cleanup
 - Modify: `packages/linear-domain/src/labels.ts` only if `rg "hasComplexTaskLabel"` proves no remaining package or app imports it after code-agent cleanup
 
@@ -635,14 +639,20 @@ Expected: PASS.
 ## Task 5: Remove Planning Subtask Telemetry From New Summaries
 
 **Files:**
+- Modify: `apps/code-agent/src/domain/models/codeTask.ts`
+- Modify: `apps/code-agent/src/domain/models/executionMemory.ts`
 - Modify: `apps/code-agent/src/domain/usecases/executionMemory/shared.ts`
 - Modify: `apps/code-agent/src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts`
+- Modify: `apps/code-agent/src/routes/code/schemas.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/code/schemas.test.ts`
 - Modify: `apps/code-agent/src/domain/utils/labelUtils.ts` if complex-label re-export is unused
 - Modify: `packages/linear-domain/src/labels.ts` and `packages/linear-domain/src/__tests__/labels.test.ts` only if no callers remain after code-agent cleanup
 
 **Interfaces:**
 - Consumes: historical task results that may still contain complex/subtask fields.
 - Produces: execution memory summaries that describe single-artifact planning without encouraging future complex planning.
+- Adds `planning_has_plan_doc` to the code-agent `TaskResult` model so planning completion results can be read from stored code-agent tasks without strict TypeScript failures.
+- Adds `single_artifact_planning` to the code-agent execution-memory type, distillation schema block, and route response schema, while keeping `decomposition_pattern` accepted for historical rows and retrieved memories.
 
 - [ ] **Step 1: Write failing memory summary tests**
 
@@ -662,8 +672,71 @@ expect(prompt).toContain('How was the original issue prepared for one execution 
 expect(prompt).toContain('single_artifact_planning');
 expect(prompt).not.toContain('DECOMPOSITION PATTERNS');
 expect(prompt).not.toContain('How was the issue broken into subtasks?');
-expect(prompt).not.toContain('decomposition_pattern');
+expect(prompt).not.toContain('- "decomposition_pattern": How complex issues should be broken into subtasks');
 ```
+
+- [ ] **Step 1a: Write failing TaskResult and memory contract tests**
+
+In `apps/code-agent/src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts`, add schema/model-facing expectations that fail before the contract is expanded:
+
+```typescript
+const planningTask = createTask({
+  agentType: 'planning',
+  status: 'planned',
+  result: {
+    summary: 'planned single artifact',
+    planning_outcome_label: 'planned',
+    planning_has_plan_doc: '1',
+  },
+});
+
+const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+  task: planningTask,
+  logs: [{ text: 'log line' }],
+  turnMetrics: [],
+  issueContext: { description: 'Linear issue', comments: [] },
+});
+
+expect(prompt).toContain('Plan document present: yes');
+
+expect(DistillationSchema.parse({
+  decision: 'create',
+  evidenceSummary: 'Single-artifact plan captured',
+  memories: [{
+    memoryType: 'single_artifact_planning',
+    title: 'Single plan artifact',
+    appliesWhen: 'Planning must produce one execution task',
+    action: 'Keep one original issue, one plan document, and one implementation PR',
+    avoid: 'Creating Linear subtasks or multiple code tasks',
+    verification: 'Check the planned issue has one execution task',
+    evidenceSummary: 'Plan used a single-artifact handoff',
+    retrievalText: 'single artifact planning handoff',
+    keywords: ['planning'],
+    componentHints: ['code-agent'],
+    confidence: 0.9,
+  }],
+}).memories[0]?.memoryType).toBe('single_artifact_planning');
+
+expect(DistillationSchema.parse({
+  decision: 'create',
+  evidenceSummary: 'Historical decomposition memory',
+  memories: [{
+    memoryType: 'decomposition_pattern',
+    title: 'Historical decomposition',
+    appliesWhen: 'Old stored memory is retrieved',
+    action: 'Accept it for backward compatibility',
+    avoid: 'Rejecting historical rows during validation',
+    verification: 'Schema parse succeeds',
+    evidenceSummary: 'Existing rows may still use this type',
+    retrievalText: 'historical decomposition pattern',
+    keywords: ['historical'],
+    componentHints: ['code-agent'],
+    confidence: 0.8,
+  }],
+}).memories[0]?.memoryType).toBe('decomposition_pattern');
+```
+
+In `apps/code-agent/src/__tests__/routes/code/schemas.test.ts`, add a route-schema test that verifies `executionMemoryContextSchema` and `executionMemoryPostRunSchema` accept `single_artifact_planning` and still accept `decomposition_pattern`.
 
 - [ ] **Step 2: Run the focused failing tests**
 
@@ -671,9 +744,10 @@ Run:
 
 ```bash
 pnpm --filter code-agent test -- src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts -t "Planning"
+pnpm --filter code-agent test -- src/__tests__/routes/code/schemas.test.ts -t "executionMemory"
 ```
 
-Expected: FAIL because current summary code still calculates subtask count and reports `COMPLEX`.
+Expected: FAIL because current summary code still calculates subtask count and reports `COMPLEX`, `TaskResult` does not declare `planning_has_plan_doc`, and memory schemas do not yet allow `single_artifact_planning`.
 
 - [ ] **Step 3: Update `executionMemory/shared.ts`**
 
@@ -701,7 +775,32 @@ In the same file, update `renderPlanningDistillationPrompt` so the distillation 
 
 Replace `decomposition_pattern` memory examples with `single_artifact_planning` examples. Keep reading historical fields only in places needed for old task display.
 
-- [ ] **Step 4: Audit and remove unused complex-label exports only when safe**
+- [ ] **Step 4: Update model, schema, and API contracts**
+
+In `apps/code-agent/src/domain/models/codeTask.ts`, add the planning result field emitted by the orchestrator callback:
+
+```typescript
+planning_has_plan_doc?: '0' | '1';
+```
+
+In `apps/code-agent/src/domain/models/executionMemory.ts`, add the new memory type but do not remove the historical type:
+
+```typescript
+export type ExecutionMemoryType =
+  | 'implementation_pattern'
+  | 'verification_pattern'
+  | 'pitfall_pattern'
+  | 'single_artifact_planning'
+  | 'decomposition_pattern'
+  | 'planning_decision'
+  | 'review_finding';
+```
+
+In `apps/code-agent/src/domain/usecases/executionMemory/shared.ts`, update both `DistillationSchema` and `DISTILLATION_SCHEMA_BLOCK` so new distiller output may use `single_artifact_planning`. Keep `decomposition_pattern` in the enum and schema text for historical stored rows and retrieved memories, but remove it from the planning-specific prompt guidance so new planning memories prefer `single_artifact_planning`.
+
+In `apps/code-agent/src/routes/code/schemas.ts`, add `single_artifact_planning` to every execution-memory `memoryType` response enum that currently exposes `decomposition_pattern`, while retaining `decomposition_pattern` for existing stored memories.
+
+- [ ] **Step 5: Audit and remove unused complex-label exports only when safe**
 
 Run:
 
@@ -711,12 +810,13 @@ rg -n "hasComplexTaskLabel|complex-task" apps/code-agent/src workers/orchestrato
 
 If `hasComplexTaskLabel` is unused after Tasks 1-4, remove the code-agent re-export from `apps/code-agent/src/domain/utils/labelUtils.ts`. If `packages/linear-domain` still exposes it as public API with tests, leave it in place and add no migration.
 
-- [ ] **Step 5: Run memory tests**
+- [ ] **Step 6: Run memory and schema tests**
 
 Run:
 
 ```bash
 pnpm --filter code-agent test -- src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts
+pnpm --filter code-agent test -- src/__tests__/routes/code/schemas.test.ts
 ```
 
 Expected: PASS.
@@ -732,7 +832,7 @@ pnpm --filter orchestrator test -- src/services/__tests__/system-prompt.test.ts 
 - [ ] Run focused code-agent planning and execution tests:
 
 ```bash
-pnpm --filter code-agent test -- src/__tests__/routes/webhooks.test.ts src/__tests__/domain/usecases/submitToExecutionAgent.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/prepareSubmission.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts src/__tests__/routes/codeRoutes.branches.test.ts src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts
+pnpm --filter code-agent test -- src/__tests__/routes/webhooks.test.ts src/__tests__/domain/usecases/submitToExecutionAgent.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/prepareSubmission.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts src/__tests__/routes/codeRoutes.branches.test.ts src/__tests__/routes/code/schemas.test.ts src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts
 ```
 
 - [ ] Run downstream contract tests:
@@ -763,5 +863,6 @@ Expected: all commands PASS.
 - Submit-to-execution server, internal client, and web response contracts no longer expose planning child-task fan-out fields or `complex_task_no_qualifying_children`.
 - Planning webhook schema/tests match the actual `/internal/webhooks/task-complete` HMAC callback and the new no-complex/subtask planning result shape.
 - Execution memory distillation describes single-artifact planning patterns and no longer asks for subtask decomposition memories.
+- Code-agent `TaskResult`, execution-memory model, distillation schema, and code route schemas accept `planning_has_plan_doc` and `single_artifact_planning` while retaining historical `decomposition_pattern` compatibility.
 - The execution prompt and generic execution task prompt explicitly state that subagents are internal delegation inside one branch and one PR.
 - Focused tests and `pnpm run ci:tracked` pass.
