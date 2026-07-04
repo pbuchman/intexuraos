@@ -736,7 +736,7 @@ expect(DistillationSchema.parse({
 }).memories[0]?.memoryType).toBe('decomposition_pattern');
 ```
 
-In `apps/code-agent/src/__tests__/routes/code/schemas.test.ts`, add a route-schema test that verifies `executionMemoryContextSchema` and `executionMemoryPostRunSchema` accept `single_artifact_planning` and still accept `decomposition_pattern`.
+In `apps/code-agent/src/__tests__/routes/code/schemas.test.ts`, add a route-schema test that verifies `executionMemoryContextSchema` memory-type fields (`matchedMemories` and `topCandidates`) accept `single_artifact_planning` and still accept `decomposition_pattern`. Keep `executionMemoryPostRunSchema` assertions scoped to the post-run fields it actually exposes; do not add a fake `memoryType` field to the post-run schema.
 
 - [ ] **Step 2: Run the focused failing tests**
 
