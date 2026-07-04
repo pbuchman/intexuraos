@@ -63,7 +63,7 @@ describe('CollapsibleNavSection', () => {
     expect(screen.queryByRole('link', { name: /new/i })).not.toBeInTheDocument();
   });
 
-  it('hides sub-items when sidebar is collapsed', () => {
+  it('hides sub-items before interaction when sidebar is collapsed', () => {
     render(
       <MemoryRouter>
         <CollapsibleNavSection
@@ -79,6 +79,34 @@ describe('CollapsibleNavSection', () => {
     );
 
     expect(screen.queryByRole('link', { name: /new/i })).not.toBeInTheDocument();
+  });
+
+  it('requests sidebar expansion when opening a collapsed top-level section', () => {
+    const onToggle = vi.fn();
+    const onCollapsedOpen = vi.fn();
+
+    render(
+      <MemoryRouter initialEntries={['/current']}>
+        <CollapsibleNavSection
+          label="Foo"
+          icon={Settings}
+          items={items}
+          isOpen={false}
+          onToggle={onToggle}
+          onCollapsedOpen={onCollapsedOpen}
+          isCollapsed={true}
+          rootPath="/foo"
+        />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    const trigger = screen.getByRole('button');
+    fireEvent.click(trigger);
+
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(onCollapsedOpen).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('location')).toHaveTextContent('/current');
   });
 
   it('expands without navigating when opening a top-level section', () => {

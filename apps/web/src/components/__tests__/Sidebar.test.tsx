@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from '../Sidebar.js';
 
@@ -23,6 +23,7 @@ vi.mock('@/services/mobileNotificationsApi', () => ({
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockGetAccessToken.mockResolvedValue('test-token');
   });
 
@@ -90,6 +91,45 @@ describe('Sidebar', () => {
     expect(
       mobileTrigger.compareDocumentPosition(digestsLink) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it('opens Mobile sub-items from the mobile drawer when the persisted sidebar is collapsed', () => {
+    localStorage.setItem('sidebar-collapsed', 'true');
+
+    render(
+      <MemoryRouter initialEntries={['/calendar']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^mobile$/i }));
+
+    expect(screen.getByRole('link', { name: /digests/i })).toHaveAttribute(
+      'href',
+      '/notifications/digests'
+    );
+  });
+
+  it('opens Code Tasks sub-items from the collapsed desktop sidebar without navigation', () => {
+    localStorage.setItem('sidebar-collapsed', 'true');
+
+    render(
+      <MemoryRouter initialEntries={['/calendar']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /code tasks/i }));
+
+    expect(screen.getByRole('link', { name: /^battlefield$/i })).toHaveAttribute(
+      'href',
+      '/code-tasks'
+    );
+    expect(screen.getByRole('link', { name: /^calendar$/i })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
   });
 
   it('marks only the matching Code Tasks sub-item active on deep links', () => {

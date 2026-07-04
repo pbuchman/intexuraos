@@ -8,6 +8,7 @@ interface CollapsibleNavSectionProps {
   items: NavItem[];
   isOpen: boolean;
   onToggle: (next: boolean) => void;
+  onCollapsedOpen?: () => void;
   isCollapsed: boolean;
   /** Path used for `end` matching on each sub-item (the root path of the section). */
   rootPath?: string;
@@ -21,6 +22,7 @@ export function CollapsibleNavSection({
   items,
   isOpen,
   onToggle,
+  onCollapsedOpen,
   isCollapsed,
   rootPath,
   exactMatchAllItems = false,
@@ -28,7 +30,13 @@ export function CollapsibleNavSection({
   return (
     <div className="pt-2">
       <button
+        aria-label={label}
         onClick={(): void => {
+          if (isCollapsed) {
+            onToggle(true);
+            onCollapsedOpen?.();
+            return;
+          }
           onToggle(!isOpen);
         }}
         className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
