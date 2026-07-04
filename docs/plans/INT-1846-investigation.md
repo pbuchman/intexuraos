@@ -121,12 +121,14 @@ There is also one design defect:
 - Modify `workers/orchestrator/src/__tests__/services/task-dispatcher/webhook-callbacks.test.ts`: callback result includes `{ attempted: false, reason: "not_required" }`.
 - Modify `apps/code-agent/src/domain/models/codeTask.ts`: replace string rebase result, add durable merge-ready result fields.
 - Modify `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts`: persist merge-ready evidence from review/remediation/pull_request completion.
+- Modify `apps/code-agent/src/infra/firestore/codeTaskRepositoryWithGroupUpdates.ts`: refresh cached group summaries on result-only merge-ready evidence updates.
 - Modify `apps/code-agent/src/routes/webhookRouteSchemas.ts`, `apps/code-agent/src/routes/code/schemas.ts`, `apps/code-agent/src/routes/code/task-routes.ts`, `apps/code-agent/src/routes/code/issueGroupRoutes.ts`, `apps/code-agent/src/routes/code/responseFormatters.ts`: update schemas/types/serialization.
 - Modify `apps/code-agent/src/infra/firestore/taskGroupSummary/serializer.ts`: summarize latest durable merge-ready evidence.
 - Modify `apps/code-agent/src/domain/models/taskGroupSummary.ts`: add merge-ready evidence fields.
 - Modify `apps/code-agent/src/domain/issueGrouping/deriveAggregateStatusFromSummary.ts`: unlock `needs-action` from durable merge-ready evidence.
 - Modify `apps/code-agent/src/domain/issueGrouping/types.ts` and `apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts`: expose and use merge-ready evidence in live grouping.
 - Modify matching tests under `apps/code-agent/src/__tests__/domain/issueGrouping/`, `apps/code-agent/src/__tests__/infra/firestore/taskGroupSummary/`, and `apps/code-agent/src/__tests__/routes/webhooks.test.ts`.
+- Create `apps/code-agent/src/__tests__/infra/firestore/codeTaskRepositoryWithGroupUpdates.test.ts`: regression coverage for result-only merge-ready evidence refreshing cached summaries.
 - Modify `apps/web/src/types/index.ts` and `apps/web/src/types/issueGroups.ts`: align frontend types to object rebase result and merge-ready fields.
 
 ---
@@ -571,8 +573,10 @@ Expected: PASS after updating affected fixtures.
 - Modify: `apps/code-agent/src/domain/models/codeTask.ts`
 - Modify: `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts`
 - Modify: `apps/code-agent/src/domain/services/onReviewSkippedCallback.ts`
+- Modify: `apps/code-agent/src/infra/firestore/codeTaskRepositoryWithGroupUpdates.ts`
 - Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 - Modify: `apps/code-agent/src/__tests__/domain/services/onReviewSkippedCallback.test.ts` if this file exists; otherwise add coverage in the existing service test file.
+- Create: `apps/code-agent/src/__tests__/infra/firestore/codeTaskRepositoryWithGroupUpdates.test.ts`
 
 **Interfaces:**
 - Produces on task result:
@@ -630,6 +634,39 @@ it('persists merge-ready evidence for pull_request no-change completion with cle
 });
 ```
 
+Add a cached-summary propagation regression test for the repository decorator:
+
+```typescript
+it('refreshes group summaries when merge-ready evidence changes without a status change', async () => {
+  const oldTask = makeTask({
+    id: 'task-review',
+    status: 'reviewed',
+    agentType: 'review',
+    result: { needs_remediation: '0' },
+  });
+  const newTask = {
+    ...oldTask,
+    result: {
+      ...oldTask.result,
+      merge_ready: '1',
+      merge_ready_reason: 'review_no_remediation',
+    },
+  };
+  const inner = makeRepository({
+    findById: async () => ok(oldTask),
+    update: async () => ok(newTask),
+  });
+  const groupSummaryRepo = makeGroupSummaryRepo();
+  const repo = withGroupUpdates(inner, groupSummaryRepo, mockLogger as never);
+
+  await repo.update(oldTask.id, { result: newTask.result });
+
+  expect(groupSummaryRepo.updateAfterStatusChange).toHaveBeenCalledWith(oldTask, newTask);
+});
+```
+
+This test must fail before the decorator change because `withGroupUpdates()` currently only refreshes summaries when `input.status !== undefined`, which leaves cached `latestMergeReadyEvidence` stale after result-only `merge_ready` writes.
+
 - [ ] **Step 2: Add `pull_request_outcome_label` to the completion contract**
 
 In `workers/orchestrator/src/services/completion-verifier/contracts.ts`, add a required enum field to `pull_request.fields` before `comment_replied`:
@@ -680,6 +717,24 @@ Add to the `TaskResult` interface and all local `result` type blocks that enumer
 ```
 
 - [ ] **Step 4: Implement merge-ready evidence persistence**
+
+First update the group-summary write-through decorator so result-only durable evidence writes refresh cached summaries:
+
+```typescript
+function hasMergeReadyEvidenceChange(input: CodeTaskUpdate): boolean {
+  return input.result?.merge_ready !== undefined || input.result?.merge_ready_reason !== undefined;
+}
+```
+
+In `withGroupUpdates().update()`, make the refresh decision include result-only merge-ready changes:
+
+```typescript
+const shouldUpdateGroupSummary =
+  options?.transaction === undefined &&
+  (input.status !== undefined || hasMergeReadyEvidenceChange(input));
+```
+
+Keep the existing `findById()` before update and `updateAfterStatusChange(oldTask, newTask)` path for this case. The method name is status-oriented, but the behavior already recomputes the summary from old/new task state; using it for merge-ready result changes keeps cached `latestMergeReadyEvidence` synchronized after review, remediation, pull_request, and skipped-review evidence writes.
 
 In `handleTaskCompletion.ts`, make `applyReadyToMergeLabel()` return the computed source:
 
@@ -739,6 +794,8 @@ await codeTaskRepo.update(origin.id, {
 
 Keep this update deterministic: do not call `recomputeWithLabels` until the origin task update has completed, or explicitly recompute from task documents after the write. The current cached-summary path updates label flags on the existing summary, so a fire-and-forget write can leave `latestMergeReadyEvidence` without the `review_skipped` evidence. Add a focused skipped-review callback test that asserts the origin task stores `merge_ready_reason: 'review_skipped'` before the summary recomputation path reads merge-ready evidence.
 
+Because `withGroupUpdates()` now refreshes summaries on result-only merge-ready changes, this skipped-review path can rely on the awaited origin-task update to refresh cached `latestMergeReadyEvidence` before `recomputeWithLabels()` applies label flags. If the implementation instead chooses an explicit recompute-from-tasks call, add an equivalent test proving `latestMergeReadyEvidence` is true after the skipped-review callback completes.
+
 - [ ] **Step 6: Run focused tests**
 
 Run:
@@ -746,6 +803,7 @@ Run:
 ```bash
 pnpm --filter @intexuraos/orchestrator test src/services/__tests__/system-prompt.test.ts src/__tests__/services/completion-verifier/block-parser.test.ts -- --run -t "PULL_REQUEST_AGENT_FINAL|pull_request"
 pnpm --filter @intexuraos/code-agent test src/__tests__/routes/webhooks.test.ts -- --run -t "merge-ready evidence|ready-to-merge label|pull_request no-change"
+pnpm --filter @intexuraos/code-agent test src/__tests__/infra/firestore/codeTaskRepositoryWithGroupUpdates.test.ts -- --run -t "merge-ready evidence"
 ```
 
 Expected: PASS.
