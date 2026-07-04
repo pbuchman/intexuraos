@@ -528,7 +528,7 @@ export const rebaseResultSchema = {
         success: { type: 'boolean' },
         conflictFiles: { type: 'array', items: { type: 'string' } },
       },
-      required: ['attempted', 'success', 'conflictFiles'],
+      required: ['attempted', 'success'],
       additionalProperties: false,
     },
     {
@@ -545,7 +545,15 @@ Use this schema for every `result.rebaseResult` occurrence in:
 - `apps/code-agent/src/routes/code/schemas.ts`
 - `apps/code-agent/src/routes/code/task-routes.ts`
 
-The legacy string branch keeps old documents/API clients from breaking while new writes use the object.
+The attempted-object branch must keep `conflictFiles` optional because current orchestrator output already omits it when no files are present; the parser normalizes absent `conflictFiles` to `[]`. The legacy string branch keeps old documents/API clients from breaking while new writes use the object.
+
+Add route/schema compatibility tests for all attempted object shapes:
+
+```typescript
+{ attempted: true, success: true }
+{ attempted: true, success: false }
+{ attempted: true, success: false, conflictFiles: ['apps/web/src/App.tsx'] }
+```
 
 - [ ] **Step 5: Run focused code-agent tests**
 
