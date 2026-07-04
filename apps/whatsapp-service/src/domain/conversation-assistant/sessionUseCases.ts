@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { GenerateChatResult, LLMError } from '@intexuraos/llm-factory';
 import {
+  getConversationAssistantModelDisplayName,
+  isConversationAssistantModel,
+} from '@intexuraos/llm-contract';
+import {
   WHATSAPP_CONVERSATION_ASSISTANT_PROMPT,
   buildWhatsAppConversationAssistantMessages,
 } from '@intexuraos/llm-prompts';
@@ -48,6 +52,14 @@ export async function createConversationAssistantSession(
     return err(validation);
   }
 
+  const selectedModel = input.model ?? deps.defaultModel;
+  if (!isConversationAssistantModel(selectedModel)) {
+    return err({
+      code: 'INVALID_REQUEST',
+      message: 'Unsupported Conversation Assistant model',
+    });
+  }
+
   const chatLoadResult = await loadOwnedDirectChat(input, deps);
   if (!chatLoadResult.ok) {
     return chatLoadResult;
@@ -91,7 +103,7 @@ export async function createConversationAssistantSession(
     chatId: input.chatId,
     status: 'active',
     range: { from: input.from, to: input.to },
-    model: deps.model,
+    model: selectedModel,
     transcriptSha256: context.transcriptSha256,
     transcriptMessageCount: context.messageCount,
     transcriptText: buildPrivateConversationTranscriptText(context.messages),
@@ -289,7 +301,7 @@ export async function exportConversationAssistantSessionPdf(
 
   const exportResult = await deps.pdfExporter.exportConversation({
     title: session.title,
-    modelName: session.model,
+    modelName: getConversationAssistantModelDisplayName(session.model),
     initialPrompt,
     generatedAt: deps.clock.now(),
     sourceRange: session.range,
@@ -470,7 +482,10 @@ async function callConversationAssistantModel(
   deps: ConversationAssistantDeps
 ): Promise<Result<GenerateChatResult, LLMError> | undefined> {
   try {
-    const llmClientResult = await deps.llmClientFactory.createLlmClientForUser(session.userId);
+    const llmClientResult = await deps.llmClientFactory.createLlmClientForUser(
+      session.userId,
+      session.model
+    );
     if (!llmClientResult.ok) {
       return err({ code: 'API_ERROR', message: llmClientResult.error.message });
     }
@@ -497,7 +512,10 @@ async function callConversationAssistantModelStream(
   onEvent: (event: ConversationAssistantStreamEvent) => void
 ): Promise<Result<GenerateChatResult, LLMError> | undefined> {
   try {
-    const llmClientResult = await deps.llmClientFactory.createLlmClientForUser(session.userId);
+    const llmClientResult = await deps.llmClientFactory.createLlmClientForUser(
+      session.userId,
+      session.model
+    );
     if (!llmClientResult.ok) {
       return err({ code: 'API_ERROR', message: llmClientResult.error.message });
     }

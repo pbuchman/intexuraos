@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
+import {
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+  type ConversationAssistantModel,
+} from '@intexuraos/llm-contract';
 import { useAuth } from '@/context';
 import {
   checkConversationAssistantContext,
@@ -55,6 +59,7 @@ export interface UseWhatsAppConversationAssistantResult {
   turns: ConversationAssistantTurn[];
   directChats: PrivateWhatsAppChat[];
   selectedChatId: string | undefined;
+  selectedModel: ConversationAssistantModel;
   fromDateTimeLocal: string;
   toDateTimeLocal: string;
   firstQuestion: string;
@@ -69,6 +74,7 @@ export interface UseWhatsAppConversationAssistantResult {
   largeContextWarning: ConversationAssistantContextCheckResponse | null;
   selectSession: (sessionId: string) => void;
   selectChat: (chatId: string) => void;
+  selectModel: (model: ConversationAssistantModel) => void;
   setFromDateTimeLocal: (value: string) => void;
   setToDateTimeLocal: (value: string) => void;
   setFirstQuestion: (value: string) => void;
@@ -125,6 +131,9 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
   const [turns, setTurns] = useState<ConversationAssistantTurn[]>([]);
   const [directChats, setDirectChats] = useState<PrivateWhatsAppChat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | undefined>(undefined);
+  const [selectedModel, setSelectedModel] = useState<ConversationAssistantModel>(
+    DEFAULT_CONVERSATION_ASSISTANT_MODEL
+  );
   const [fromDateTimeLocal, setFromDateTimeLocalState] = useState(defaultRange.from);
   const [toDateTimeLocal, setToDateTimeLocalState] = useState(defaultRange.to);
   const [firstQuestion, setFirstQuestionState] = useState('');
@@ -300,6 +309,11 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
   const selectChat = useCallback((chatId: string): void => {
     setPendingLargeContext(null);
     setSelectedChatId(chatId);
+  }, []);
+
+  const selectModel = useCallback((model: ConversationAssistantModel): void => {
+    setPendingLargeContext(null);
+    setSelectedModel(model);
   }, []);
 
   const setFromDateTimeLocal = useCallback((value: string): void => {
@@ -483,6 +497,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
         chatId: selectedChatId,
         from: fromDateTimeLocalValue(fromDateTimeLocal),
         to: fromDateTimeLocalValue(toDateTimeLocal),
+        model: selectedModel,
       };
       const check = await checkConversationAssistantContext(token, {
         chatId: request.chatId,
@@ -518,6 +533,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     fromDateTimeLocal,
     getAccessToken,
     selectedChatId,
+    selectedModel,
     toDateTimeLocal,
   ]);
 
@@ -625,6 +641,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     turns,
     directChats,
     selectedChatId,
+    selectedModel,
     fromDateTimeLocal,
     toDateTimeLocal,
     firstQuestion,
@@ -639,6 +656,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     largeContextWarning: pendingLargeContext?.check ?? null,
     selectSession,
     selectChat,
+    selectModel,
     setFromDateTimeLocal,
     setToDateTimeLocal,
     setFirstQuestion,

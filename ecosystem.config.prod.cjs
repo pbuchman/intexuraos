@@ -272,7 +272,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
     INTEXURAOS_CONVERSATION_ASSISTANT_MODEL:
-      envValue('INTEXURAOS_CONVERSATION_ASSISTANT_MODEL') ?? 'or:minimax/minimax-m2.7',
+      envValue('INTEXURAOS_CONVERSATION_ASSISTANT_MODEL') ?? 'or:minimax/minimax-m3',
   },
   'mobile-notifications-service': {
     INTEXURAOS_DIGEST_LLM_MODEL:

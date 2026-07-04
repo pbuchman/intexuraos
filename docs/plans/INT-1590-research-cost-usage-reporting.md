@@ -1,5 +1,7 @@
 # Research Cost and LLM Usage Reporting Fix Implementation Plan
 
+> Historical note: The MiniMax M2.7 identifiers below are production evidence captured at the time of investigation. Active defaults now use MiniMax M3.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make research pages and LLM usage reports use authoritative billed usage data, including prompt types and image-generation costs.

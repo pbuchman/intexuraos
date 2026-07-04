@@ -25,7 +25,7 @@ describe('defaultAllowlist', () => {
       const ids = DEFAULT_OPENROUTER_ALLOWED_MODELS.map((m) => m.id);
       expect(ids).toContain('google/gemma-4-31b-it:free');
       expect(ids).toContain('google/gemma-4-31b-it');
-      expect(ids).toContain('minimax/minimax-m2.7');
+      expect(ids).toContain('minimax/minimax-m3');
       expect(ids).toContain('qwen/qwen3.6-plus');
       expect(ids).toContain('nvidia/nemotron-3-super-120b-a12b:free');
     });
@@ -42,7 +42,7 @@ describe('defaultAllowlist', () => {
     it('returns true for allowed model IDs', () => {
       expect(isDefaultAllowedModel('google/gemma-4-31b-it:free')).toBe(true);
       expect(isDefaultAllowedModel('google/gemma-4-31b-it')).toBe(true);
-      expect(isDefaultAllowedModel('minimax/minimax-m2.7')).toBe(true);
+      expect(isDefaultAllowedModel('minimax/minimax-m3')).toBe(true);
       expect(isDefaultAllowedModel('qwen/qwen3.6-plus')).toBe(true);
       expect(isDefaultAllowedModel('nvidia/nemotron-3-super-120b-a12b:free')).toBe(true);
     });

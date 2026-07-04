@@ -55,8 +55,8 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
   },
   // MiniMax
   {
-    id: 'minimax/minimax-m2.7',
-    name: 'MiniMax M2.7',
+    id: 'minimax/minimax-m3',
+    name: 'MiniMax M3',
     provider: 'MiniMax',
     contextLength: 205_000,
     promptPerToken: '0.0000003',

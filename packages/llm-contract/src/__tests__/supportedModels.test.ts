@@ -17,6 +17,12 @@ import {
   DEFAULT_OPENROUTER_MODELS,
   isDefaultEligibleModel,
   DEFAULT_MODEL_DISPLAY_NAMES,
+  ConversationAssistantModels,
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+  CONVERSATION_ASSISTANT_MODEL_OPTIONS,
+  CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES,
+  isConversationAssistantModel,
+  getConversationAssistantModelDisplayName,
   type LLMModel,
   type ResearchModel,
   type ImageModel,
@@ -24,6 +30,7 @@ import {
   type FastModel,
   type DefaultEligibleModel,
   type DefaultOpenRouterModel,
+  type ConversationAssistantModelOption,
 } from '../supportedModels.js';
 
 describe('OpenRouter model helpers', () => {
@@ -329,7 +336,7 @@ describe('DefaultEligibleModel', () => {
       expect(ids).toContain('google/gemma-4-31b-it:free');
       expect(ids).toContain('google/gemma-4-31b-it');
       expect(ids).toContain('google/gemini-3-flash-preview');
-      expect(ids).toContain('minimax/minimax-m2.7');
+      expect(ids).toContain('minimax/minimax-m3');
       expect(ids).toContain('qwen/qwen3.6-plus');
       expect(ids).toContain('nvidia/nemotron-3-super-120b-a12b:free');
     });
@@ -356,7 +363,7 @@ describe('DefaultEligibleModel', () => {
       expect(isDefaultEligibleModel('or:google/gemma-4-31b-it:free')).toBe(true);
       expect(isDefaultEligibleModel('or:google/gemma-4-31b-it')).toBe(true);
       expect(isDefaultEligibleModel('or:google/gemini-3-flash-preview')).toBe(true);
-      expect(isDefaultEligibleModel('or:minimax/minimax-m2.7')).toBe(true);
+      expect(isDefaultEligibleModel('or:minimax/minimax-m3')).toBe(true);
       expect(isDefaultEligibleModel('or:qwen/qwen3.6-plus')).toBe(true);
       expect(isDefaultEligibleModel('or:nvidia/nemotron-3-super-120b-a12b:free')).toBe(true);
     });
@@ -414,7 +421,7 @@ describe('DefaultEligibleModel', () => {
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemini-3-flash-preview']).toBe(
         'Gemini 3 Flash Preview'
       );
-      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:minimax/minimax-m2.7']).toBe('MiniMax M2.7');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:minimax/minimax-m3']).toBe('MiniMax M3');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:qwen/qwen3.6-plus']).toBe('Qwen 3.6 Plus');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:nvidia/nemotron-3-super-120b-a12b:free']).toBe(
         'Nemotron 3 Super 120B'
@@ -423,6 +430,96 @@ describe('DefaultEligibleModel', () => {
 
     it('has exactly 10 entries (4 fast + 6 OpenRouter)', () => {
       expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(10);
+    });
+  });
+});
+
+describe('ConversationAssistantModel', () => {
+  describe('ConversationAssistantModels', () => {
+    it('exposes the expected typed model ids', () => {
+      expect(ConversationAssistantModels.MiniMaxM3).toBe('or:minimax/minimax-m3');
+      expect(ConversationAssistantModels.ClaudeSonnet5).toBe('or:anthropic/claude-sonnet-5');
+      expect(ConversationAssistantModels.Gemini35FlashThinking).toBe('or:google/gemini-3.5-flash');
+    });
+  });
+
+  describe('CONVERSATION_ASSISTANT_MODEL_OPTIONS', () => {
+    it('contains exactly the curated Conversation Assistant models', () => {
+      expect(CONVERSATION_ASSISTANT_MODEL_OPTIONS).toHaveLength(3);
+    });
+
+    it('contains the expected labels and providers', () => {
+      expect(CONVERSATION_ASSISTANT_MODEL_OPTIONS).toEqual([
+        {
+          id: ConversationAssistantModels.MiniMaxM3,
+          label: 'MiniMax M3',
+          provider: 'MiniMax',
+          supportsReasoning: true,
+        },
+        {
+          id: ConversationAssistantModels.ClaudeSonnet5,
+          label: 'Claude Sonnet 5',
+          provider: 'Anthropic',
+          supportsReasoning: true,
+        },
+        {
+          id: ConversationAssistantModels.Gemini35FlashThinking,
+          label: 'Gemini 3.5 Flash Thinking',
+          provider: 'Google',
+          supportsReasoning: true,
+        },
+      ] satisfies readonly ConversationAssistantModelOption[]);
+    });
+  });
+
+  describe('DEFAULT_CONVERSATION_ASSISTANT_MODEL', () => {
+    it('defaults to MiniMax M3', () => {
+      expect(DEFAULT_CONVERSATION_ASSISTANT_MODEL).toBe('or:minimax/minimax-m3');
+    });
+  });
+
+  describe('isConversationAssistantModel', () => {
+    it('accepts each curated model id', () => {
+      expect(isConversationAssistantModel('or:minimax/minimax-m3')).toBe(true);
+      expect(isConversationAssistantModel('or:anthropic/claude-sonnet-5')).toBe(true);
+      expect(isConversationAssistantModel('or:google/gemini-3.5-flash')).toBe(true);
+    });
+
+    it('rejects unknown model ids', () => {
+      expect(isConversationAssistantModel('or:unknown/model')).toBe(false);
+      expect(isConversationAssistantModel('')).toBe(false);
+    });
+  });
+
+  describe('display names', () => {
+    it('contains display names for each curated model', () => {
+      expect(CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES).toEqual({
+        'or:minimax/minimax-m3': 'MiniMax M3',
+        'or:anthropic/claude-sonnet-5': 'Claude Sonnet 5',
+        'or:google/gemini-3.5-flash': 'Gemini 3.5 Flash Thinking',
+      });
+    });
+
+    it('returns the display name for curated models and raw text for unknown values', () => {
+      expect(getConversationAssistantModelDisplayName('or:anthropic/claude-sonnet-5')).toBe(
+        'Claude Sonnet 5'
+      );
+      expect(getConversationAssistantModelDisplayName('legacy/model')).toBe('legacy/model');
+    });
+
+    it('falls back to the model id when the display-name map is missing a curated entry', () => {
+      const displayNames = CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES as Record<
+        string,
+        string | undefined
+      >;
+      const model = ConversationAssistantModels.MiniMaxM3;
+      const original = displayNames[model];
+      displayNames[model] = undefined;
+      try {
+        expect(getConversationAssistantModelDisplayName(model)).toBe(model);
+      } finally {
+        displayNames[model] = original;
+      }
     });
   });
 });

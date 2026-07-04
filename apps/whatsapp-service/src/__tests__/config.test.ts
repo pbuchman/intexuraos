@@ -109,6 +109,7 @@ describe('config validation', () => {
     expect(missing).toContain('INTEXURAOS_LLM_USAGE_SERVICE_URL');
     expect(missing).toContain('INTEXURAOS_USER_SERVICE_URL');
     expect(missing).not.toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
+    expect(missing).not.toContain('INTEXURAOS_CONVERSATION_ASSISTANT_MODEL');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
   });
@@ -133,7 +134,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
     delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
-      'or:minimax/minimax-m2.7';
+      'or:minimax/minimax-m3';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
@@ -159,7 +160,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
     delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
-      'or:minimax/minimax-m2.7';
+      'or:minimax/minimax-m3';
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -210,6 +211,53 @@ describe('config validation', () => {
     expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
     expect(config.llmUsageServiceUrl).toBe('http://llm-usage.test');
     expect(config.userServiceUrl).toBe('http://user-service.test');
-    expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m2.7');
+    expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m3');
+  });
+
+  it('loadConfig defaults blank Conversation Assistant model env to MiniMax M3', async () => {
+    const { loadConfig } = await import('../config.js');
+
+    process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'] = 'test';
+    process.env['INTEXURAOS_WHATSAPP_APP_SECRET'] = 'test';
+    process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = 'test';
+    process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = 'waba1';
+    process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = '123';
+    process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'] = 'test-bucket';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test-cleanup';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test-cleanup-sub';
+    process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'] = 'test-intex-message-ingest';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test-audio-stored';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] = '   ';
+
+    const config = loadConfig();
+    expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m3');
+  });
+
+  it('loadConfig rejects unsupported configured Conversation Assistant models', async () => {
+    const { loadConfig } = await import('../config.js');
+
+    process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'] = 'test';
+    process.env['INTEXURAOS_WHATSAPP_APP_SECRET'] = 'test';
+    process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = 'test';
+    process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = 'waba1';
+    process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = '123';
+    process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'] = 'test-bucket';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test-cleanup';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test-cleanup-sub';
+    process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'] = 'test-intex-message-ingest';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test-audio-stored';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
+    process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] = 'or:unknown/model';
+
+    expect(() => loadConfig()).toThrow('Unsupported Conversation Assistant model configured');
   });
 });

@@ -1,5 +1,6 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import { FieldPath, getFirestore } from '@intexuraos/infra-firestore';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import type { ConversationAssistantRepository } from '../../domain/conversation-assistant/ports.js';
 import type {
   ConversationAssistantSession,
@@ -134,7 +135,10 @@ function toSession(
     chatId: session?.chatId ?? '',
     status: session?.status === 'archived' ? 'archived' : 'active',
     range: session?.range ?? { from: '', to: '' },
-    model: session?.model ?? '',
+    model:
+      typeof session?.model === 'string' && session.model.length > 0
+        ? session.model
+        : DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     transcriptSha256: session?.transcriptSha256 ?? '',
     transcriptMessageCount: session?.transcriptMessageCount ?? 0,
     transcriptText: session?.transcriptText ?? '',

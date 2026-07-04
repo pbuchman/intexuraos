@@ -2,6 +2,10 @@
  * Configuration module for whatsapp-service.
  * Validates required environment variables using Zod.
  */
+import {
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+  isConversationAssistantModel,
+} from '@intexuraos/llm-contract';
 import { z } from 'zod';
 
 /**
@@ -126,7 +130,8 @@ const configSchema = z.object({
   conversationAssistantModel: z
     .string()
     .min(1)
-    .default('or:minimax/minimax-m2.7'),
+    .refine(isConversationAssistantModel, 'Unsupported Conversation Assistant model configured')
+    .default(DEFAULT_CONVERSATION_ASSISTANT_MODEL),
 
   /**
    * Server port.
@@ -146,6 +151,9 @@ export type Config = z.infer<typeof configSchema>;
  * Throws if required variables are missing or invalid.
  */
 export function loadConfig(): Config {
+  const conversationAssistantModelEnv =
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL']?.trim();
+
   return configSchema.parse({
     verifyToken: process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'],
     appSecret: process.env['INTEXURAOS_WHATSAPP_APP_SECRET'],
@@ -160,7 +168,10 @@ export function loadConfig(): Config {
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'],
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'],
-    conversationAssistantModel: process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'],
+    conversationAssistantModel:
+      conversationAssistantModelEnv === undefined || conversationAssistantModelEnv === ''
+        ? undefined
+        : conversationAssistantModelEnv,
     intexMessageIngestTopic: process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'],
     audioStoredTopic: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'],
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
@@ -191,7 +202,6 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_LLM_USAGE_SERVICE_URL',
     'INTEXURAOS_USER_SERVICE_URL',
-    'INTEXURAOS_CONVERSATION_ASSISTANT_MODEL',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

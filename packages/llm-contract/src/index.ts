@@ -45,6 +45,12 @@ export {
   isDefaultEligibleModel,
   DEFAULT_OPENROUTER_MODELS,
   DEFAULT_MODEL_DISPLAY_NAMES,
+  ConversationAssistantModels,
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+  CONVERSATION_ASSISTANT_MODEL_OPTIONS,
+  CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES,
+  isConversationAssistantModel,
+  getConversationAssistantModelDisplayName,
   OpenRouterToolCallingModels,
 } from './supportedModels.js';
 
@@ -58,7 +64,12 @@ export type {
   GenericModel,
   DefaultEligibleModel,
   DefaultOpenRouterModel,
+  ConversationAssistantModel,
+  ConversationAssistantModelOption,
   OpenRouterGemini3FlashPreview,
+  OpenRouterMiniMaxM3,
+  OpenRouterClaudeSonnet5,
+  OpenRouterGemini35Flash,
   OpenRouterToolCallingModel,
   // Individual model types
   Gemini25Pro,

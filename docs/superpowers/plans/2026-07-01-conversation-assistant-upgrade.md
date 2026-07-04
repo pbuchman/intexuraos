@@ -1,5 +1,7 @@
 # Conversation Assistant Upgrade Implementation Plan
 
+> Supersession note (2026-07-04): Active runtime defaults and allowlists now use MiniMax M3. Any MiniMax M2.7 references below are historical plan content only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Upgrade WhatsApp Conversation Assistant to use user OpenRouter keys, MiniMax M2.7 with reasoning, full context with a >5000 warning, streaming answers, markdown rendering, and bottom-follow timeline scrolling.

@@ -1,5 +1,5 @@
 import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
-import type { LlmProvider } from '@intexuraos/llm-contract';
+import type { ConversationAssistantModel, LlmProvider } from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
  */
@@ -364,7 +364,8 @@ export interface ConversationAssistantSession {
     from: string;
     to: string;
   };
-  model: string;
+  model: ConversationAssistantModel | string;
+  modelDisplayName: string;
   transcriptSha256: string;
   transcriptMessageCount: number;
   omitted: ConversationAssistantOmittedCounts;
@@ -417,6 +418,7 @@ export interface CreateConversationAssistantSessionRequest {
   chatId: string;
   from: string;
   to: string;
+  model?: ConversationAssistantModel;
   question?: string;
 }
 

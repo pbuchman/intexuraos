@@ -48,7 +48,7 @@ describe('allowlist', () => {
       expect(byId('x-ai/grok-4.20-beta')?.contextLength).toBe(2_000_000);
       expect(byId('x-ai/grok-4.1-fast')?.contextLength).toBe(2_000_000);
       // MiniMax: 205K
-      expect(byId('minimax/minimax-m2.7')?.contextLength).toBe(205_000);
+      expect(byId('minimax/minimax-m3')?.contextLength).toBe(205_000);
       // Z.ai: 203K
       expect(byId('z-ai/glm-5-turbo')?.contextLength).toBe(203_000);
       // Moonshot: 262K

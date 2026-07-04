@@ -1,4 +1,4 @@
-import { Clock, MessageSquare } from 'lucide-react';
+import { Bot, Clock, MessageSquare } from 'lucide-react';
 import type { ConversationAssistantSession } from '@/types';
 import { formatDateTimeCompact } from '@/utils/dateFormat';
 
@@ -56,6 +56,10 @@ export function ConversationAssistantSessionRail({
               <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                 <Clock className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{formatRange(session)}</span>
+              </span>
+              <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                <Bot className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{session.modelDisplayName}</span>
               </span>
               {session.lastTurnAt !== undefined ? (
                 <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">

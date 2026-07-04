@@ -4,6 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
@@ -42,7 +43,7 @@ const testConfig: Config = {
   internalAuthToken: INTERNAL_AUTH_TOKEN,
   llmUsageServiceUrl: 'http://llm-usage.test',
   userServiceUrl: 'http://user-service.test',
-  conversationAssistantModel: 'or:minimax/minimax-m2.7',
+  conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   port: 8080,
   host: '0.0.0.0',
 };

@@ -1,5 +1,7 @@
 # INT-1011: OpenRouter Backend Infrastructure (Phase A) — Implementation Plan
 
+> Supersession note (2026-07-04): The active OpenRouter allowlists now use MiniMax M3. Any MiniMax M2.7 references below remain as historical implementation-plan context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add OpenRouter as the 5th LLM provider in the backend — type system, infra package, adapter, API key storage, pricing, schema, and curated model allowlist — with zero user-visible changes.

@@ -267,7 +267,7 @@ export const DEFAULT_OPENROUTER_MODELS: readonly DefaultOpenRouterModel[] = [
   { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (Free)', provider: 'Google' },
   { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT', provider: 'Google' },
   { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', provider: 'Google' },
-  { id: 'minimax/minimax-m2.7', name: 'MiniMax M2.7', provider: 'MiniMax' },
+  { id: 'minimax/minimax-m3', name: 'MiniMax M3', provider: 'MiniMax' },
   { id: 'qwen/qwen3.6-plus', name: 'Qwen 3.6 Plus', provider: 'Qwen' },
   {
     id: 'nvidia/nemotron-3-super-120b-a12b:free',
@@ -299,6 +299,76 @@ export const DEFAULT_MODEL_DISPLAY_NAMES: Record<string, string> = {
   ...FAST_MODEL_DISPLAY_NAMES,
   ...Object.fromEntries(DEFAULT_OPENROUTER_MODELS.map((m) => [`or:${m.id}`, m.name])),
 };
+
+// =============================================================================
+// Conversation Assistant Models
+// =============================================================================
+
+export type OpenRouterMiniMaxM3 = 'or:minimax/minimax-m3' & OpenRouterModelId;
+export type OpenRouterClaudeSonnet5 = 'or:anthropic/claude-sonnet-5' & OpenRouterModelId;
+export type OpenRouterGemini35Flash = 'or:google/gemini-3.5-flash' & OpenRouterModelId;
+
+export type ConversationAssistantModel =
+  | OpenRouterMiniMaxM3
+  | OpenRouterClaudeSonnet5
+  | OpenRouterGemini35Flash;
+
+export interface ConversationAssistantModelOption {
+  id: ConversationAssistantModel;
+  label: string;
+  provider: string;
+  supportsReasoning: boolean;
+}
+
+export const ConversationAssistantModels = {
+  MiniMaxM3: createOpenRouterModelId('minimax/minimax-m3') as OpenRouterMiniMaxM3,
+  ClaudeSonnet5: createOpenRouterModelId('anthropic/claude-sonnet-5') as OpenRouterClaudeSonnet5,
+  Gemini35FlashThinking: createOpenRouterModelId(
+    'google/gemini-3.5-flash'
+  ) as OpenRouterGemini35Flash,
+} as const;
+
+export const DEFAULT_CONVERSATION_ASSISTANT_MODEL = ConversationAssistantModels.MiniMaxM3;
+
+export const CONVERSATION_ASSISTANT_MODEL_OPTIONS: readonly ConversationAssistantModelOption[] = [
+  {
+    id: ConversationAssistantModels.MiniMaxM3,
+    label: 'MiniMax M3',
+    provider: 'MiniMax',
+    supportsReasoning: true,
+  },
+  {
+    id: ConversationAssistantModels.ClaudeSonnet5,
+    label: 'Claude Sonnet 5',
+    provider: 'Anthropic',
+    supportsReasoning: true,
+  },
+  {
+    id: ConversationAssistantModels.Gemini35FlashThinking,
+    label: 'Gemini 3.5 Flash Thinking',
+    provider: 'Google',
+    supportsReasoning: true,
+  },
+] as const;
+
+const CONVERSATION_ASSISTANT_MODEL_IDS: ReadonlySet<string> = new Set(
+  CONVERSATION_ASSISTANT_MODEL_OPTIONS.map((option) => option.id)
+);
+
+export const CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    CONVERSATION_ASSISTANT_MODEL_OPTIONS.map((option) => [option.id, option.label])
+  );
+
+export function isConversationAssistantModel(model: string): model is ConversationAssistantModel {
+  return CONVERSATION_ASSISTANT_MODEL_IDS.has(model);
+}
+
+export function getConversationAssistantModelDisplayName(model: string): string {
+  return isConversationAssistantModel(model)
+    ? (CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES[model] ?? model)
+    : model;
+}
 
 /**
  * Get provider for a model.

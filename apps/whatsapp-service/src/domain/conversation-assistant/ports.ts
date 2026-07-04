@@ -1,4 +1,5 @@
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { ConversationAssistantModel } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import type {
   ConversationAssistantResult,
@@ -29,7 +30,10 @@ export interface ConversationAssistantIdGenerator {
 }
 
 export interface ConversationAssistantLlmClientFactory {
-  createLlmClientForUser(userId: string): Promise<ConversationAssistantResult<LlmGenerateClient>>;
+  createLlmClientForUser(
+    userId: string,
+    model: ConversationAssistantModel | string
+  ): Promise<ConversationAssistantResult<LlmGenerateClient>>;
 }
 
 export interface ConversationAssistantPdfExportInput {
@@ -62,7 +66,7 @@ export interface ConversationAssistantDeps {
   privateWhatsAppRepository: import('../whatsapp/index.js').PrivateWhatsAppRepository;
   llmClientFactory: ConversationAssistantLlmClientFactory;
   pdfExporter?: ConversationAssistantPdfExporter;
-  model: string;
+  defaultModel: ConversationAssistantModel;
   clock: ConversationAssistantClock;
   ids: ConversationAssistantIdGenerator;
 }

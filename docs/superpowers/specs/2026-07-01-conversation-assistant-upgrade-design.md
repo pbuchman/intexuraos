@@ -1,5 +1,7 @@
 # Conversation Assistant Upgrade Design
 
+> Supersession note (2026-07-04): Active Conversation Assistant implementations now use MiniMax M3. Any MiniMax M2.7 references below are historical design context only.
+
 ## Goal
 
 Upgrade WhatsApp Conversation Assistant so it uses each user's OpenRouter key, runs MiniMax with reasoning enabled, preserves full selected context unless the user confirms a very large range, streams answers into the UI, renders assistant markdown, and keeps the timeline scrolled correctly while respecting manual scrolling.

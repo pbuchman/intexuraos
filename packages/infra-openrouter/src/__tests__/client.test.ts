@@ -867,7 +867,7 @@ describe('createOpenRouterClient', () => {
         })
         .reply(200, {
           id: 'test-id',
-          model: 'minimax/minimax-m2.7',
+          model: 'minimax/minimax-m3',
           created: Date.now(),
           object: 'chat.completion',
           choices: [
@@ -882,7 +882,7 @@ describe('createOpenRouterClient', () => {
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
-        model: 'minimax/minimax-m2.7',
+        model: 'minimax/minimax-m3',
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
@@ -932,7 +932,7 @@ describe('createOpenRouterClient', () => {
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
-        model: 'minimax/minimax-m2.7',
+        model: 'minimax/minimax-m3',
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
@@ -980,7 +980,7 @@ describe('createOpenRouterClient', () => {
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
-        model: 'minimax/minimax-m2.7',
+        model: 'minimax/minimax-m3',
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
@@ -1003,7 +1003,7 @@ describe('createOpenRouterClient', () => {
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
-        model: 'minimax/minimax-m2.7',
+        model: 'minimax/minimax-m3',
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
@@ -1039,7 +1039,7 @@ describe('createOpenRouterClient', () => {
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
-        model: 'minimax/minimax-m2.7',
+        model: 'minimax/minimax-m3',
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,

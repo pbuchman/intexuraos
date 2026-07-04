@@ -1,5 +1,7 @@
 # OpenRouter Model Grouping in LLM Usage Reports
 
+> Supersession note (2026-07-04): Active OpenRouter display-name mappings now use MiniMax M3. Any MiniMax M2.7 references below are historical plan content only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add "OpenRouter Model" as a new group-by option on the LLM Usage page, showing a breakdown per OpenRouter model with friendly names from the allowlist.
