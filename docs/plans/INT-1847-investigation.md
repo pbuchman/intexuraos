@@ -224,14 +224,10 @@ pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/promptPrefere
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 1**
+- [ ] **Step 5: Do not commit yet**
 
-Run:
-
-```bash
-git add apps/intex-agent/src/domain/preferences/promptPreferences.ts apps/intex-agent/src/__tests__/domain/promptPreferences.test.ts
-git commit -m "fix: expose prompt preference write version to agent"
-```
+Leave the Task 1 files unstaged or staged locally as preferred, but do not create a commit
+until Task 5 has completed `pnpm run ci:tracked`.
 
 ### Task 2: Wire Version-Bearing Context Into Intex Agent Runner Services
 
@@ -382,14 +378,10 @@ pnpm --filter @intexuraos/intex-agent test -- src/__tests__/services.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 2**
+- [ ] **Step 5: Do not commit yet**
 
-Run:
-
-```bash
-git add apps/intex-agent/src/services.ts apps/intex-agent/src/__tests__/services.test.ts
-git commit -m "fix: pass prompt preference version context to runner"
-```
+Leave the Task 2 files unstaged or staged locally as preferred, but do not create a commit
+until Task 5 has completed `pnpm run ci:tracked`.
 
 ### Task 3: Refresh And Retry Safe Add Preference Version Conflicts
 
@@ -583,14 +575,10 @@ pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/toolExecutor.
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 3**
+- [ ] **Step 6: Do not commit yet**
 
-Run:
-
-```bash
-git add apps/intex-agent/src/domain/agent/toolExecutor.ts apps/intex-agent/src/__tests__/domain/toolExecutor.test.ts
-git commit -m "fix: retry add preference after stale version"
-```
+Leave the Task 3 files unstaged or staged locally as preferred, but do not create a commit
+until Task 5 has completed `pnpm run ci:tracked`.
 
 ### Task 4: Improve Remaining Preference Version Conflict Reply And Metadata
 
@@ -703,14 +691,10 @@ pnpm --filter @intexuraos/intex-agent test -- src/__tests__/domain/intexAgentRun
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 4**
+- [ ] **Step 5: Do not commit yet**
 
-Run:
-
-```bash
-git add apps/intex-agent/src/domain/agent/intexAgentRunner.ts apps/intex-agent/src/__tests__/domain/intexAgentRunner.test.ts
-git commit -m "fix: clarify prompt preference version conflicts"
-```
+Leave the Task 4 files unstaged or staged locally as preferred, but do not create a commit
+until Task 5 has completed `pnpm run ci:tracked`.
 
 ### Task 5: Final Verification
 
@@ -764,13 +748,13 @@ Expected:
 
 - No matches. Do not add raw OAuth provider IDs or raw WhatsApp message IDs to tests.
 
-- [ ] **Step 5: Commit final verification notes if any files changed**
+- [ ] **Step 5: Commit after the full commit gate passes**
 
-If verification required any code changes, commit them:
+After `pnpm run ci:tracked` passes, create the implementation commit:
 
 ```bash
 git add apps/intex-agent/src packages/llm-prompts/src
-git commit -m "test: cover prompt preference version conflicts"
+git commit -m "fix: handle empty versioned prompt preferences"
 ```
 
-If no files changed after Task 4, do not create an empty commit.
+If `pnpm run ci:tracked` fails, fix the failure and rerun it before committing.
