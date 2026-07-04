@@ -325,9 +325,6 @@ export function createCodeAgentServiceClient(
         if (serverCode === 'active_task_exists') {
           return err({ code: 'ACTIVE_TASK_EXISTS', message: errorMessage });
         }
-        if (serverCode === 'complex_task_no_qualifying_children') {
-          return err({ code: 'COMPLEX_TASK_NO_QUALIFYING_CHILDREN', message: errorMessage });
-        }
         return err({
           code: 'ALREADY_IMPLEMENTED',
           message: errorMessage,

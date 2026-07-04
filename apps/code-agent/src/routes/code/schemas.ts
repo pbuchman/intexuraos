@@ -69,7 +69,7 @@ const executionMemoryContextSchema = {
         properties: {
           memoryId: { type: 'string' },
           title: { type: 'string' },
-          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'single_artifact_planning', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
           score: { type: 'number' },
           appliesWhen: { type: 'string' },
           action: { type: 'string' },
@@ -87,7 +87,7 @@ const executionMemoryContextSchema = {
         properties: {
           memoryId: { type: 'string' },
           title: { type: 'string' },
-          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'single_artifact_planning', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
           vectorScore: { type: 'number' },
           rerankScore: { type: 'number' },
           componentOverlap: { type: 'number' },

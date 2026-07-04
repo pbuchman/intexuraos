@@ -338,9 +338,14 @@ export async function handleTaskCompletion(
           return { ok: false, message: 'Planning enforcement requires original linearIssueId' };
         }
 
+        let planningPrUrl = '';
         if (outcome === 'planned') {
-          const prUrl = planningResult.planning_pr_url ?? planningResult.prUrl;
-          if (!prUrl) {
+          if (planningResult.planning_pr_url !== undefined && planningResult.planning_pr_url !== '') {
+            planningPrUrl = planningResult.planning_pr_url;
+          } else if (planningResult.prUrl !== undefined && planningResult.prUrl !== '') {
+            planningPrUrl = planningResult.prUrl;
+          }
+          if (!planningPrUrl) {
             return {
               ok: false,
               message: 'Planning enforcement requires a PR URL for planned outcomes — all planned tasks must produce an evidence PR',
@@ -360,9 +365,6 @@ export async function handleTaskCompletion(
         const originalIssueUuid = originalIssue.id;
 
         if (outcome === 'planned') {
-          const isComplex = planningResult.planning_is_complex === '1';
-
-          // Normalize original issue: state → todo, labels based on complexity
           const [markTodo, parentLabels] = await Promise.all([
             linearAgentClient.updateIssueState({
               userId: task.userId,
@@ -372,8 +374,8 @@ export async function handleTaskCompletion(
             linearAgentClient.updateIssueMetadata({
               userId: task.userId,
               issueId: originalIssueUuid,
-              addLabels: isComplex ? ['complex-task'] : [],
-              removeLabels: isComplex ? ['unclear', 'code-task', 'planning-task'] : ['unclear', 'complex-task', 'planning-task'],
+              addLabels: ['code-task'],
+              removeLabels: ['unclear', 'planning-task', 'complex-task'],
             }),
           ]);
           if (!markTodo.ok) {
@@ -383,138 +385,13 @@ export async function handleTaskCompletion(
             return { ok: false, message: `Failed to normalize original issue labels: ${parentLabels.error.message}` };
           }
 
-          if (isComplex) {
-            /* v8 ignore start -- ts-type: planning_subtask_urls ?? '' fallback unreachable — webhook payload always sets the field on complex-path success @preserve */
-            const subtaskUrls = (planningResult.planning_subtask_urls ?? '')
-            /* v8 ignore stop @preserve */
-              .split(',')
-              .map((s) => s.trim())
-              .filter((s) => s !== '');
-
-            if (subtaskUrls.length > 0 && subtaskUrls.length >= originalIssue.childCount) {
-              for (const url of subtaskUrls) {
-                const identifier = parseLinearIdentifierFromUrl(url);
-                if (identifier === null) {
-                  return { ok: false, message: `Invalid subtask URL: ${url}` };
-                }
-
-                const subtaskValidation = await linearAgentClient.validateIssue({
-                  userId: task.userId,
-                  identifier,
-                });
-                if (!subtaskValidation.ok) {
-                  return { ok: false, message: `Failed to validate subtask ${identifier}: ${subtaskValidation.error.message}` };
-                }
-
-                const subtask = subtaskValidation.value;
-                if (subtask.parentId !== originalIssueUuid) {
-                  return { ok: false, message: `Subtask ${subtask.identifier} is not a direct child of the input issue — task rejected` };
-                }
-
-                const normalizeState = await linearAgentClient.updateIssueState({
-                  userId: task.userId,
-                  issueId: subtask.id,
-                  state: 'todo',
-                });
-                if (!normalizeState.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${subtask.identifier} state: ${normalizeState.error.message}` };
-                }
-
-                const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
-                  userId: task.userId,
-                  issueId: subtask.id,
-                  assigneeId: null,
-                  removeLabels: ['complex-task', 'unclear', 'planning-task'],
-                  addLabels: ['code-task'],
-                });
-                if (!normalizeMetadata.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${subtask.identifier} metadata: ${normalizeMetadata.error.message}` };
-                }
-              }
-
-              /* v8 ignore start -- ts-type: planning_pr_url ?? '' fallback unreachable in complex-success branch — webhook always sets pr_url after planning PR creation @preserve */
-              const planningPrUrl = planningResult.planning_pr_url ?? '';
-              /* v8 ignore stop @preserve */
-              if (planningPrUrl !== '') {
-                const prComment = await linearAgentClient.addComment({
-                  userId: task.userId,
-                  issueId: originalIssueUuid,
-                  body: `Planning PR: ${planningPrUrl}`,
-                });
-                if (!prComment.ok) {
-                  return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
-                }
-              }
-            } else {
-              const reason =
-                subtaskUrls.length === 0
-                  ? 'no subtask URLs provided'
-                  : `partial URL extraction (${String(subtaskUrls.length)} URLs < ${String(originalIssue.childCount)} children)`;
-              requestLog.warn(
-                { taskId, linearIssueId: task.linearIssueId, subtaskUrlCount: subtaskUrls.length, childCount: originalIssue.childCount },
-                `Complex planning: ${reason} — falling back to fetchDirectChildrenLive`
-              );
-
-              const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
-                userId: task.userId,
-                issueId: originalIssueUuid,
-              });
-              if (!directChildrenResult.ok) {
-                return { ok: false, message: `Failed to fetch live direct children: ${directChildrenResult.error.message}` };
-              }
-
-              const directChildren = directChildrenResult.value.filter(
-                (child) => child.parentId === originalIssueUuid
-              );
-
-              for (const child of directChildren) {
-                const normalizeState = await linearAgentClient.updateIssueState({
-                  userId: task.userId,
-                  issueId: child.id,
-                  state: 'todo',
-                });
-                if (!normalizeState.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} state: ${normalizeState.error.message}` };
-                }
-
-                const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
-                  userId: task.userId,
-                  issueId: child.id,
-                  assigneeId: null,
-                  removeLabels: ['complex-task', 'unclear', 'planning-task'],
-                  addLabels: ['code-task'],
-                });
-                if (!normalizeMetadata.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} metadata: ${normalizeMetadata.error.message}` };
-                }
-              }
-
-              /* v8 ignore start -- ts-type: planning_pr_url ?? '' fallback unreachable in complex-fallback branch (live-fetch path) — webhook always sets pr_url after planning PR creation @preserve */
-              const planningPrUrl = planningResult.planning_pr_url ?? '';
-              /* v8 ignore stop @preserve */
-              if (planningPrUrl !== '') {
-                const prComment = await linearAgentClient.addComment({
-                  userId: task.userId,
-                  issueId: originalIssueUuid,
-                  body: `Planning PR: ${planningPrUrl}`,
-                });
-                if (!prComment.ok) {
-                  return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
-                }
-              }
-            }
-          } else {
-            // LAST: stamp code-task on parent — proof of successful processing
-            const stampCodeTask = await linearAgentClient.updateIssueMetadata({
-              userId: task.userId,
-              issueId: originalIssueUuid,
-              assigneeId: null,
-              addLabels: ['code-task'],
-              removeLabels: ['unclear', 'planning-task'],
-            });
-            if (!stampCodeTask.ok) {
-              return { ok: false, message: `Failed to add code-task label to original issue: ${stampCodeTask.error.message}` };
-            }
+          const prComment = await linearAgentClient.addComment({
+            userId: task.userId,
+            issueId: originalIssueUuid,
+            body: `Planning PR: ${planningPrUrl}`,
+          });
+          if (!prComment.ok) {
+            return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
           }
 
           return { ok: true };

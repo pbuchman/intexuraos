@@ -21,13 +21,6 @@ import {
   EXECUTION_AGENT_PROMPT,
   type SubmitToExecutionAgentDeps,
 } from '../../../domain/usecases/submitToExecutionAgent.js';
-import { fanOutChildTasks } from '../../../domain/usecases/fanOutChildTasks.js';
-
-vi.mock('../../../domain/usecases/fanOutChildTasks.js', () => ({
-  fanOutChildTasks: vi.fn(),
-}));
-
-const mockFanOutChildTasks = vi.mocked(fanOutChildTasks);
 
 describe('submitToExecutionAgent', () => {
   let mockLogger: Logger;
@@ -952,6 +945,10 @@ describe('submitToExecutionAgent', () => {
 
     it('EXECUTION_AGENT_PROMPT mentions reading comments newest first', () => {
       expect(EXECUTION_AGENT_PROMPT).toContain('comments (newest first)');
+      expect(EXECUTION_AGENT_PROMPT).toContain('one branch and one PR');
+      expect(EXECUTION_AGENT_PROMPT).toContain('internal subagents');
+      expect(EXECUTION_AGENT_PROMPT).toContain('do not create Linear child issues');
+      expect(EXECUTION_AGENT_PROMPT).toContain('do not split the work into multiple code tasks');
     });
 
     it('does not copy legacy action fields from original task to execution task', async () => {
@@ -1048,305 +1045,32 @@ describe('submitToExecutionAgent', () => {
       expect(mockGitHubPRClient.mergePullRequest).not.toHaveBeenCalled();
     });
 
-    it('merges plan PR before fan-out for complex tasks', async () => {
+    it('merges plan PR before creating the single execution task when stale complex-task label exists', async () => {
       setupHappyPathMocks({
         result: {
           branch: 'plan/my-feature',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
         },
       });
-      // Override to complex-task label
       mockLinearAgentClient.validateIssue.mockResolvedValue(
         ok({
           id: 'uuid-parent-123',
           identifier: linearIssueId,
           title: 'Complex Feature',
           url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
-          labels: ['complex-task'],
+          labels: ['code-task', 'complex-task'],
           childCount: 3,
           parentId: null,
         })
-      );
-      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
-        ok([
-          {
-            id: 'child-uuid-1',
-            identifier: 'INT-101',
-            url: 'https://linear.app/pbuchman/issue/INT-101',
-            parentId: 'uuid-parent-123',
-            labels: ['code-task'],
-            assigneeId: null,
-            state: 'Backlog',
-          },
-        ]),
-      );
-      mockFanOutChildTasks.mockResolvedValue(
-        ok({ childTaskIds: ['child_1', 'child_2'], primaryChildTaskId: 'child_1', primaryChildIssueId: 'INT-101' })
       );
 
       const result = await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       expect(result.ok).toBe(true);
-      // Verify merge happened before any task creation
       expect(mockGitHubPRClient.mergePullRequest).toHaveBeenCalled();
-    });
-  });
-
-  describe('complex-task fan-out', () => {
-    function setupComplexTaskMocks(taskOverrides: Partial<CodeTask> = {}): CodeTask {
-      const mockTask = setupHappyPathMocks(taskOverrides);
-      // Override validateIssue to return complex-task label instead of code-task
-      mockLinearAgentClient.validateIssue.mockResolvedValue(
-        ok({
-          id: 'uuid-parent-123',
-          identifier: linearIssueId,
-          title: 'Complex Feature',
-          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
-          labels: ['complex-task'],
-          childCount: 3,
-          parentId: null,
-        })
-      );
-      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
-        ok([
-          {
-            id: 'child-uuid-1',
-            identifier: 'INT-101',
-            url: 'https://linear.app/pbuchman/issue/INT-101',
-            parentId: 'uuid-parent-123',
-            labels: ['code-task'],
-            assigneeId: null,
-            state: 'Backlog',
-          },
-          {
-            id: 'child-uuid-2',
-            identifier: 'INT-102',
-            url: 'https://linear.app/pbuchman/issue/INT-102',
-            parentId: 'uuid-parent-123',
-            labels: ['code-task'],
-            assigneeId: null,
-            state: 'Backlog',
-          },
-        ])
-      );
-      return mockTask;
-    }
-
-    it('uses live direct children and does not create a parent execution task for complex issues', async () => {
-      setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        ok({
-          childTaskIds: ['task_child_1', 'task_child_2'],
-          primaryChildTaskId: 'task_child_1',
-          primaryChildIssueId: 'INT-101',
-        })
-      );
-
-      const result = await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.childTaskIds).toEqual(['task_child_1', 'task_child_2']);
-        expect(result.value.codeTaskId).toBe('task_child_1');
-        expect(result.value.implementationOf).toBe(originalTaskId);
-      }
-      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
-      expect(mockLinearAgentClient.fetchDirectChildrenLive).toHaveBeenCalledWith({
-        userId,
-        issueId: 'uuid-parent-123',
-      });
-      expect(mockFanOutChildTasks).toHaveBeenCalledWith(
-        expect.objectContaining({
-          logger: expect.anything(),
-          codeTaskRepo: expect.anything(),
-          taskEnqueueService: expect.anything(),
-          orchestratorSecret: 'test-orchestrator-secret',
-        }),
-        expect.objectContaining({
-          planningTask: expect.objectContaining({ id: originalTaskId }),
-          childIssues: expect.arrayContaining([
-            expect.objectContaining({ identifier: 'INT-101' }),
-            expect.objectContaining({ identifier: 'INT-102' }),
-          ]),
-        })
-      );
-    });
-
-    it('returns complex_task_no_qualifying_children and keeps parent unlocked when no live code-task children exist', async () => {
-      setupComplexTaskMocks();
-      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(ok([]));
-
-      const result = await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('complex_task_no_qualifying_children');
-      }
-      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
-        originalTaskId,
-        expect.objectContaining({ implementationTaskId: expect.any(String) })
-      );
-      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
-      expect(mockFanOutChildTasks).not.toHaveBeenCalled();
-    });
-
-    it('returns internal_error when live direct-child lookup fails', async () => {
-      setupComplexTaskMocks();
-      mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
-        err({ code: 'UNAVAILABLE', message: 'children unavailable' }),
-      );
-
-      const result = await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toEqual({
-          code: 'internal_error',
-          message: 'Failed to fetch child issues for complex implementation',
-        });
-      }
-    });
-
-    it('maps fanOutChildTasks no_qualifying_children to complex_task_no_qualifying_children', async () => {
-      setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        err({ code: 'no_qualifying_children', message: 'No direct children with code-task label found' }),
-      );
-
-      const result = await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toEqual({
-          code: 'complex_task_no_qualifying_children',
-          message: 'No direct children with code-task label found',
-        });
-      }
-    });
-
-    it('maps fanOutChildTasks queue_full to queue_full', async () => {
-      setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        err({ code: 'queue_full', message: 'Queue is full' }),
-      );
-
-      const result = await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toEqual({
-          code: 'queue_full',
-          message: 'Queue is full',
-        });
-      }
-    });
-
-    it('returns internal_error when fanOutChildTasks fails unexpectedly', async () => {
-      setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        err({ code: 'internal_error', message: 'fan-out exploded' }),
-      );
-
-      const result = await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toEqual({
-          code: 'internal_error',
-          message: 'Fan-out failed: fan-out exploded',
-        });
-      }
-    });
-
-    it('does not call single enqueue directly for complex tasks (fan-out handles batch enqueue)', async () => {
-      setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        ok({
-          childTaskIds: ['task_child_1'],
-          primaryChildTaskId: 'task_child_1',
-          primaryChildIssueId: 'INT-101',
-        })
-      );
-
-      await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      // The parent task should NOT be enqueued — only children are enqueued by fanOutChildTasks
-      expect(mockTaskEnqueueService.enqueue).not.toHaveBeenCalled();
-    });
-
-    it('still updates Linear issue state and adds comment for complex tasks', async () => {
-      setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        ok({
-          childTaskIds: ['task_child_1'],
-          primaryChildTaskId: 'task_child_1',
-          primaryChildIssueId: 'INT-101',
-        })
-      );
-
-      await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(mockLinearAgentClient.updateIssueState).toHaveBeenCalledWith({
-        userId,
-        issueId: linearIssueId,
-        state: 'in_progress',
-      });
-      expect(mockLinearAgentClient.addComment).toHaveBeenCalled();
-    });
-
-    it('logs warnings when parent Linear updates fail after successful fan-out', async () => {
-      setupComplexTaskMocks();
-      mockFanOutChildTasks.mockResolvedValue(
-        ok({
-          childTaskIds: ['task_child_1'],
-          primaryChildTaskId: 'task_child_1',
-          primaryChildIssueId: 'INT-101',
-        }),
-      );
-      mockLinearAgentClient.updateIssueState.mockResolvedValueOnce(
-        err({ code: 'UNAVAILABLE', message: 'state failed' }),
-      );
-      mockLinearAgentClient.addComment.mockResolvedValueOnce(
-        err({ code: 'UNAVAILABLE', message: 'comment failed' }),
-      );
-
-      const result = await submitToExecutionAgent(createDeps(), {
-        originalTaskId,
-        userId,
-      });
-
-      expect(result.ok).toBe(true);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ linearIssueId, error: { code: 'UNAVAILABLE', message: 'state failed' } }),
-        'Failed to update parent Linear issue to In Progress for complex execution',
-      );
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ linearIssueId, error: { code: 'UNAVAILABLE', message: 'comment failed' } }),
-        'Failed to add complex Execution Agent start comment to parent Linear issue',
+      expect(mockLinearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ linearIssueId }),
       );
     });
   });

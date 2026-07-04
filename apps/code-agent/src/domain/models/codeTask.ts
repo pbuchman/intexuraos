@@ -76,6 +76,7 @@ export interface TaskResult {
   planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
   planning_subtask_urls?: string;
+  planning_has_plan_doc?: '0' | '1';
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented' | 'already_completed';

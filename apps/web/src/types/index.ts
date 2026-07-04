@@ -1134,7 +1134,7 @@ export interface CodeTaskDispatchStatus {
 export interface CodeTaskExecutionMemoryMatch {
   memoryId: string;
   title: string;
-  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern' | 'decomposition_pattern' | 'planning_decision' | 'review_finding';
+  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern' | 'single_artifact_planning' | 'decomposition_pattern' | 'planning_decision' | 'review_finding';
   score: number;
   appliesWhen: string;
   action: string;
@@ -1313,7 +1313,6 @@ export interface StartImplementationResponse {
   resourceUrl: string;
   workerLocation: string;
   implementationOf: string;
-  childTaskIds?: string[];
 }
 
 /**

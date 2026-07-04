@@ -64,8 +64,8 @@ describe('system-prompt', () => {
     expect(result).toContain('NO IMPLEMENTATION CODING IS ALLOWED');
     expect(result).toContain('docs/plans/');
     expect(result).toContain('superpowers:writing-plans');
-    expect(result).toContain('Parallel work breakdown');
-    expect(result).toContain('service/package');
+    expect(result).toContain('Single Planning Artifact');
+    expect(result).toContain('Do NOT create Linear child issues');
     expect(result).toContain('PLANNING_AGENT_FINAL:');
     expect(result).toContain('Plan document: docs/plans/<file>.md');
   });
@@ -74,20 +74,18 @@ describe('system-prompt', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('archive its current content by adding a Linear comment');
-    // Archive instruction appears in both Planning Contract and Simple vs Complex sections
-    const firstArchive = result.indexOf('archive its current content');
-    const secondArchive = result.indexOf('archive its current content', firstArchive + 1);
-    expect(secondArchive).toBeGreaterThan(firstArchive);
+    expect(result).toContain('archive its current content');
   });
 
-  it('enforces strict parallel work breakdown rules for complex tasks', () => {
+  it('planning prompt forbids Linear subtasks and complex planning output', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('STRICT REQUIREMENT');
-    expect(result).toContain('strict requirement for the agent executing the plan');
-    expect(result).toContain('ALL subissues MUST be executable in parallel');
-    expect(result).toContain('MUST NOT create any dependencies between issues');
-    expect(result).toContain('input/output boundaries');
+    expect(result).toContain('Single Planning Artifact');
+    expect(result).toContain('Do NOT create Linear child issues');
+    expect(result).toContain('delegate consecutive plan tasks to internal subagents');
+    expect(result).not.toContain('**COMPLEX task');
+    expect(result).not.toContain('Subtask URLs:');
+    expect(result).not.toContain('Parallel breakdown proof:');
   });
 
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
@@ -103,11 +101,11 @@ describe('system-prompt', () => {
     expect(result).toContain('MUST be empty for successfully planned outcomes');
   });
 
-  it('requires proof of parallel breakdown showing boundaries for complex outcomes', () => {
+  it('planning complexity judgment only allows SIMPLE or PLAN-DOC', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('show service boundaries and contracts between subissues');
-    expect(result).toContain('agents can work on each subissue independently');
+    expect(result).toContain('- Decision: <SIMPLE|PLAN-DOC>');
+    expect(result).not.toContain('- Decision: <SIMPLE|PLAN-DOC|COMPLEX>');
   });
 
   it('requires complexity judgment before any changes in planning prompt', () => {
@@ -117,21 +115,21 @@ describe('system-prompt', () => {
       '### Complexity Judgment (MANDATORY — NON-NEGOTIABLE, after Reading section above)'
     );
     expect(result).toContain('COMPLEXITY_JUDGMENT:');
-    expect(result).toContain('- Decision: <SIMPLE|PLAN-DOC|COMPLEX>');
+    expect(result).toContain('- Decision: <SIMPLE|PLAN-DOC>');
     expect(result).toContain(
       'Do NOT edit the issue, create subtasks, write docs, or open PRs until this block is output'
     );
 
-    // Complexity Judgment section must appear BEFORE Simple vs Complex
+    // Complexity Judgment section must appear BEFORE Single Planning Artifact
     const judgmentIdx = result.indexOf('### Complexity Judgment');
-    const simpleComplexIdx = result.indexOf('### Simple vs Complex');
-    expect(judgmentIdx).toBeLessThan(simpleComplexIdx);
+    const artifactIdx = result.indexOf('### Single Planning Artifact');
+    expect(judgmentIdx).toBeLessThan(artifactIdx);
   });
 
-  it('includes the PLAN-DOC tier section in the planning prompt', () => {
+  it('includes the PLAN-DOC shape in the planning prompt', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('PLAN-DOC task (no subtasks, but needs a plan document)');
+    expect(result).toContain('**PLAN-DOC task:**');
   });
 
   it('includes the Self-Verification section in the planning prompt', () => {
@@ -155,23 +153,21 @@ describe('system-prompt', () => {
   it('includes the strengthened SIMPLE guardrail text in the planning prompt', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('3+ implementation steps');
+    expect(result).toContain('implementation has 3+ steps');
   });
 
-  it('places PLAN-DOC section between SIMPLE and COMPLEX sections', () => {
+  it('places PLAN-DOC after SIMPLE in the single planning artifact section', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     const simpleIdx = result.indexOf('**SIMPLE task:**');
     const planDocIdx = result.indexOf('**PLAN-DOC task');
-    const complexIdx = result.indexOf('**COMPLEX task');
     expect(simpleIdx).toBeLessThan(planDocIdx);
-    expect(planDocIdx).toBeLessThan(complexIdx);
   });
 
-  it('includes the updated COMPLEX header with descriptive text', () => {
+  it('planning prompt explicitly forbids multiple implementation PRs', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('subtasks + plan doc + PR, all together');
+    expect(result).toContain('Do NOT plan multiple implementation PRs');
   });
 
   it('includes PR Description Format in planning prompt with Linear link, task URL, worker type, and model', () => {
@@ -370,6 +366,15 @@ describe('system-prompt', () => {
 
     expect(result).toContain('mcp__linear__save_comment');
     expect(result).not.toContain('mcp__linear__create_comment');
+  });
+
+  it('execution prompt says the worker owns one plan delivery and delegates internally', () => {
+    const result = executionPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('one execution branch and one implementation PR');
+    expect(result).toContain('delegate consecutive plan tasks to internal subagents');
+    expect(result).toContain('Do NOT create Linear child issues');
+    expect(result).toContain('Do NOT split the plan into multiple code tasks');
   });
 
   it('pull request prompt renders linearIssueTitle in PR Description when provided', () => {
@@ -1266,12 +1271,12 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 7.0.1', () => {
-    expect(planningPrompt.version).toBe('7.0.1');
+  it('planning prompt version is 8.0.0', () => {
+    expect(planningPrompt.version).toBe('8.0.0');
   });
 
-  it('execution prompt version is 10.0.0', () => {
-    expect(executionPrompt.version).toBe('10.0.0');
+  it('execution prompt version is 11.0.0', () => {
+    expect(executionPrompt.version).toBe('11.0.0');
   });
 
   it('remediation prompt version is 4.0.1', () => {

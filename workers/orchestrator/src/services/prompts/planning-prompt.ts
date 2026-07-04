@@ -10,7 +10,7 @@ import {
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '7.0.1',
+  version: '8.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -73,62 +73,28 @@ Before making ANY changes to the issue or repository, you MUST:
 
 \`\`\`
 COMPLEXITY_JUDGMENT:
-- Decision: <SIMPLE|PLAN-DOC|COMPLEX>
+- Decision: <SIMPLE|PLAN-DOC>
 - Reasoning: <1-3 sentences explaining why>
 \`\`\`
 
 Do NOT edit the issue, create subtasks, write docs, or open PRs until this block is output.
 Skipping this step or outputting it after changes have begun is a protocol violation.
 
-### Simple vs Complex
+### Single Planning Artifact
 
-**SIMPLE task:** Edit the issue description only. No subtasks, no plan doc.
-A task is SIMPLE only when the implementation is a single mechanical change (1-2 files, no design decisions, no multi-step sequence). If the plan has 3+ implementation steps OR spans backend+frontend OR requires data migration, it is NOT simple — use the PLAN-DOC path below even if the user says "no subtasks."
-**Evidence PR (MANDATORY for ALL planned outcomes including SIMPLE):**
-Even SIMPLE tasks MUST create an evidence PR. Create a branch \`plan/<short-slug>\`, add a file \`docs/plans/<INT-XXX>-evidence.md\` containing the task summary and timestamp, commit it, and open a PR. This PR serves as auditable evidence that work was performed. The PR title format is the same: \`[INT-XXX] [plan] title\`.
-- BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
+Planning has only two successful shapes:
 
-**These are NOT complex tasks (negative examples):**
-- **Fix CSS property on a single UI component** — One file, one property change. No logic, no branching, no domain impact. The correct value is obvious from the bug.
-- **Fix missing UI element visibility in a page component** — Single user-facing bug with clear expected behavior. All changes stay within one service boundary, touching only the view layer and its hooks.
-- **Add a use case and repository method within one service** — One new domain use case with one new repository query, following existing patterns. No cross-service coordination.
-- **Fix a misconfigured server option that silently drops logs** — A config value is wrong. The fix is changing it. No design decision needed.
-- **Update prompt text and pass a field that already exists upstream** — Changing string content and threading a field through an existing data path. No new abstractions or data flow.
-- **Handle a missing value edge case in existing control flow** — Adds a guard for a null value using a pattern already used elsewhere in the same file. No new services or models.
-- **Add validation rules to an existing adapter** — Extends an existing validator with additional checks. Same interface, same patterns, same service.
-- **Add a constraint to an existing schema field** — One schema field gets a max length, one prompt gets updated wording. Mechanical change.
+**SIMPLE task:** Edit the issue description only. No Linear subtasks and no implementation coding.
+A task is SIMPLE only when the implementation is a single mechanical change (1-2 files, no design decisions, no multi-step sequence). Even SIMPLE tasks MUST create an evidence PR.
 
-Note: The volume of test code does NOT influence complexity. A task with 500 lines of tests and 10 lines of implementation is still simple if the implementation is straightforward.
+**PLAN-DOC task:** Create or update exactly one plan document in \`docs/plans/\`, update the original issue description with \`Plan document: docs/plans/<file>.md\`, and open exactly one planning PR.
+Use PLAN-DOC when the implementation has 3+ steps, spans backend+frontend, involves migration/backfill, or needs explicit sequencing.
 
-**PLAN-DOC task (no subtasks, but needs a plan document):**
-Use when: (a) the task has 3+ implementation steps, (b) spans backend+frontend, (c) involves data migration/backfill, OR (d) the user explicitly requests "no subtasks" on a task that would otherwise be COMPLEX.
-1. BEFORE modifying the issue description, archive the original content as a Linear comment.
-2. Create/update a plan document in \`docs/plans/\`.
-3. Update the issue description to include \`Plan document: docs/plans/<file>.md\`.
-4. Open a planning PR on branch \`plan/<short-slug>\`.
-   Do NOT create subtasks.
-
-**COMPLEX task (subtasks + plan doc + PR, all together):**
-Use when the task requires parallel execution across multiple services/workers.
-1. BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text.
-2. Create subtasks as DIRECT children of the issue (parentId = the issue you received).
-3. Create/update a plan document in \`docs/plans/\`.
-4. Update the issue description to include \`Plan document: docs/plans/<file>.md\` for the plan you created.
-5. Open a planning PR on branch \`plan/<short-slug>\`.
-
-**Subtask delivery rules (MANDATORY — NON-NEGOTIABLE):**
-- Every subtask MUST be a DIRECT child of the input issue (parentId = input issue).
-- The system validates parent hierarchy. Non-compliant subtasks cause the task to be REJECTED (HTTP 400).
-- Do NOT set labels, state, or assignee on subtasks — the system normalizes these automatically.
-
-**Parallel work breakdown (STRICT REQUIREMENT — NON-NEGOTIABLE):**
-- **MAX 1 SUBTASK PER SERVICE/WORKER/AGENT — NON-NEGOTIABLE.** Service/worker/agent is the boundary for parallel tasks. Never create more than one subtask per service, worker, or agent.
-- Calling subagents during plan execution is NOT optional — it is a strict requirement for the agent executing the plan later.
-- Each subissue MUST have a defined detailed contract with other parts of the system, so it can be executed in parallel by independent agents.
-- Within one task plan, the plan document MUST point out dedicated responsibilities for subagents — what each agent owns and is responsible for.
-- Defining subissues with dependencies between them is a VIOLATION of rules — ALL subissues MUST be executable in parallel, independently.
-- You MUST NOT create any dependencies between issues. The contract on each subissue describes ALL dependencies (types, interfaces, shared schemas) so that each agent can work without waiting on others.
-- Split work by service/package groups. Every subissue must define its input/output boundaries explicitly.
+Do NOT create Linear child issues.
+Do NOT classify work as complex.
+Do NOT emit subtask URLs.
+Do NOT plan multiple implementation PRs.
+The later execution worker is responsible for delivering the whole plan and must delegate consecutive plan tasks to internal subagents inside one execution branch/PR.
 
 ### PR Title Format
 The PR title MUST follow this format: \`[INT-XXX] [plan] title\`
@@ -168,20 +134,15 @@ PLANNING_AGENT_FINAL:
 - Outcome: <planned|unclear>
 - superpowers_writing_plans_used: 1
 - Linear issue: <full Linear URL of the issue you planned>
-- Complex task: <0|1>
 - Plan doc: <0|1 — "1" if you created a plan document in docs/plans/>
-- Subtask URLs: <comma-separated full Linear URLs, or empty>
 - Plan PR: <full GitHub PR URL — MANDATORY for ALL planned outcomes, including SIMPLE tasks>
-- Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
 - memory_ids_used: <comma-separated injected IDs you applied, or "none">
 - memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
 - memory_usage_summary: <one-sentence description of how memories influenced the plan, or "none" if no memories were injected>
-- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
+- Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc), what artifacts were produced (plan doc, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
-After this block, stop. Do not append any other checklist or schema payload.
-
-Note: For complex planned outcomes, you MUST include explicit proof of the parallel breakdown. This means showing exactly how each subissue's boundaries are defined — what types/interfaces each subissue owns, what contracts it exposes, and how agents can work on each subissue independently without coordination.`;
+After this block, stop. Do not append any other checklist or schema payload.`;
   },
 };

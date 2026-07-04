@@ -8,12 +8,11 @@ import {
   normalizeLabel,
   hasCodeTaskLabel,
   hasPlanningTaskLabel,
-  hasComplexTaskLabel,
 } from '@intexuraos/linear-domain';
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import type { WorkerType } from '../models/codeTask.js';
 
-export { hasCodeTaskLabel, hasPlanningTaskLabel, hasComplexTaskLabel };
+export { hasCodeTaskLabel, hasPlanningTaskLabel };
 
 export function hasUnclearLabel(labels: string[]): boolean {
   return labels.some((label) => normalizeLabel(label) === 'unclear');
