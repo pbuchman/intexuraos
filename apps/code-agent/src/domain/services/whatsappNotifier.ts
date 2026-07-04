@@ -86,7 +86,7 @@ export interface WhatsAppNotifier {
 
   /**
    * Send notification when a resumed session completes successfully.
-   * Distinct from notifyTaskComplete — uses 🔁 emoji and Gemini-extracted summary.
+   * Distinct from notifyTaskComplete — uses resumed-session status copy.
    *
    * @param userId - User ID to send notification to
    * @param task - Completed task with result (summary may be Gemini-extracted)
@@ -108,6 +108,20 @@ export interface WhatsAppNotifier {
   notifyDesignComplete(
     userId: string,
     task: CodeTask
+  ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when a pull request is ready for user approval and deployment.
+   *
+   * @param userId - User ID to send notification to
+   * @param task - Task associated with the ready-to-merge PR
+   * @param info - Pull request CTA details
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskReadyForMerge(
+    userId: string,
+    task: CodeTask,
+    info: { prUrl: string; linearIssueId?: string }
   ): Promise<Result<void, NotificationError>>;
 
   /**

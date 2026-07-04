@@ -411,6 +411,19 @@ describe('POST /internal/webhooks/task-complete', () => {
     gitHubPRClient: GitHubPRClient;
     userServiceClient: UserServiceClient;
   } {
+    const pullRequestDetails = {
+      number: 42,
+      title: 'Test PR',
+      body: null,
+      state: 'open' as const,
+      authorLogin: 'test-user',
+      baseBranch: 'development',
+      headBranch: 'task_existing_pr_branch',
+      mergeable: true,
+      mergeableState: 'clean',
+      headSha: 'abc123',
+      createdAt: '2026-04-01T09:00:00Z',
+    };
     const gitHubPRClient = {
       postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
       updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
@@ -421,7 +434,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
       ),
       listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
-      getPullRequestDetails: vi.fn().mockResolvedValue(ok(null)),
+      getPullRequestDetails: vi.fn().mockResolvedValue(ok(pullRequestDetails)),
       mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
       getCombinedCheckStatus: vi.fn().mockResolvedValue(ok({ state: 'success' })),
       listAllOpenPullRequests: vi.fn().mockResolvedValue(ok([])),
@@ -4355,6 +4368,7 @@ describe('POST /internal/webhooks/task-complete', () => {
     it('adds ready-to-merge label when origin task is an execution task', async () => {
       await createOriginTask({ traceId: 'trace_label_execution', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_execution_review' });
+      const { gitHubPRClient } = installPRNotificationServices();
       const payload = makeLabelPayload(reviewTask.id);
 
       const response = await sendLabelPayload(payload);
@@ -4367,6 +4381,25 @@ describe('POST /internal/webhooks/task-complete', () => {
         issueId: 'linear-issue-uuid',
         addLabels: ['ready-to-merge'],
       });
+      expect(gitHubPRClient.getPullRequestDetails).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+      );
+      const readyNotification = mockWhatsAppPublisher.publishSendMessage.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.important === true);
+      expect(readyNotification).toEqual(expect.objectContaining({
+        userId: 'user-123',
+        important: true,
+        ctaUrl: {
+          displayText: 'View pull request',
+          url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      }));
+      expect(readyNotification?.message).toContain('Waiting for your approval and deployment.');
+      expect(readyNotification?.message).not.toContain('All good');
     });
 
     it('walks past pull_request task to find planning origin and does NOT set ready-to-implement', async () => {
@@ -4581,7 +4614,124 @@ describe('POST /internal/webhooks/task-complete', () => {
           (call) => Array.isArray(call[0].addLabels) && call[0].addLabels.includes('ready-to-merge'),
         );
         expect(readyToMergeCalls).toHaveLength(0);
+        const readyNotifications = mockWhatsAppPublisher.publishSendMessage.mock.calls
+          .map((call) => call[0])
+          .filter((call) => call.important === true);
+        expect(readyNotifications).toHaveLength(0);
       });
+    });
+
+    it('does not send ready-to-merge WhatsApp when the PR is not mergeable', async () => {
+      await createOriginTask({ traceId: 'trace_label_not_mergeable', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_not_mergeable_review' });
+      const { gitHubPRClient } = installPRNotificationServices();
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValueOnce(
+        ok({
+          number: 42,
+          title: 'Test PR',
+          body: null,
+          state: 'open',
+          authorLogin: 'test-user',
+          baseBranch: 'development',
+          headBranch: 'task_existing_pr_branch',
+          mergeable: true,
+          mergeableState: 'clean',
+          headSha: 'abc123',
+          createdAt: '2026-04-01T09:00:00Z',
+        }),
+      ).mockResolvedValueOnce(
+        ok({
+          number: 42,
+          title: 'Test PR',
+          body: null,
+          state: 'open',
+          authorLogin: 'test-user',
+          baseBranch: 'development',
+          headBranch: 'task_existing_pr_branch',
+          mergeable: false,
+          mergeableState: 'dirty',
+          headSha: 'abc123',
+          createdAt: '2026-04-01T09:00:00Z',
+        }),
+      );
+
+      const response = await sendLabelPayload(makeLabelPayload(reviewTask.id));
+
+      expect(response.statusCode).toBe(200);
+      const readyNotifications = mockWhatsAppPublisher.publishSendMessage.mock.calls
+        .map((call) => call[0])
+        .filter((call) => call.important === true);
+      expect(readyNotifications).toHaveLength(0);
+    });
+
+    it('does not send ready-to-merge WhatsApp when GitHub mergeability is unknown', async () => {
+      await createOriginTask({ traceId: 'trace_label_unknown_mergeability', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_unknown_mergeability_review' });
+      const { gitHubPRClient } = installPRNotificationServices();
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValueOnce(
+        ok({
+          number: 42,
+          title: 'Test PR',
+          body: null,
+          state: 'open',
+          authorLogin: 'test-user',
+          baseBranch: 'development',
+          headBranch: 'task_existing_pr_branch',
+          mergeable: true,
+          mergeableState: 'clean',
+          headSha: 'abc123',
+          createdAt: '2026-04-01T09:00:00Z',
+        }),
+      ).mockResolvedValueOnce(
+        ok({
+          number: 42,
+          title: 'Test PR',
+          body: null,
+          state: 'open',
+          authorLogin: 'test-user',
+          baseBranch: 'development',
+          headBranch: 'task_existing_pr_branch',
+          mergeable: null,
+          mergeableState: 'unknown',
+          headSha: 'abc123',
+          createdAt: '2026-04-01T09:00:00Z',
+        }),
+      );
+
+      const response = await sendLabelPayload(makeLabelPayload(reviewTask.id));
+
+      expect(response.statusCode).toBe(200);
+      const readyNotifications = mockWhatsAppPublisher.publishSendMessage.mock.calls
+        .map((call) => call[0])
+        .filter((call) => call.important === true);
+      expect(readyNotifications).toHaveLength(0);
+    });
+
+    it('does not send ready-to-merge WhatsApp when the label already exists', async () => {
+      await createOriginTask({ traceId: 'trace_label_already_present', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_already_present_review' });
+      installPRNotificationServices();
+
+      const { linearAgentClient: lac } = getServices();
+      vi.mocked(lac.validateIssue).mockResolvedValueOnce(
+        ok({
+          id: 'linear-issue-uuid',
+          identifier: 'INT-500',
+          title: 'Test issue',
+          url: 'https://linear.app/test/issue/INT-500',
+          labels: ['ready-to-merge'],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+
+      const response = await sendLabelPayload(makeLabelPayload(reviewTask.id));
+
+      expect(response.statusCode).toBe(200);
+      const readyNotifications = mockWhatsAppPublisher.publishSendMessage.mock.calls
+        .map((call) => call[0])
+        .filter((call) => call.important === true);
+      expect(readyNotifications).toHaveLength(0);
     });
 
     it('logs warning and succeeds when findOriginTaskByPR returns error', async () => {
@@ -4933,6 +5083,33 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       const payload = makeLabelPayload(reviewTask.id);
       const response = await sendLabelPayload(payload);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
+        'user-123',
+        'INT-500',
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'ready-to-merge' }),
+        ]),
+        expect.any(String),
+      );
+    });
+
+    it('recomputes group summary when ready-to-merge notification throws after label set', async () => {
+      await createOriginTask({ traceId: 'trace_label_notify_throw', agentType: 'execution' });
+      const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_notify_throw_review' });
+      const { gitHubPRClient } = installPRNotificationServices();
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockRejectedValue(new Error('GitHub unavailable'));
+
+      const mockRecomputeWithLabels = vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        ...getServices(),
+        groupSummaryRepo: {
+          recomputeWithLabels: mockRecomputeWithLabels,
+        } as never,
+      });
+
+      const response = await sendLabelPayload(makeLabelPayload(reviewTask.id));
 
       expect(response.statusCode).toBe(200);
       expect(mockRecomputeWithLabels).toHaveBeenCalledWith(
@@ -7353,13 +7530,17 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const params = publishCall?.[0] as { userId: string; message: string; ctaUrl?: { displayText: string; url: string } } | undefined;
     expect(params?.userId).toBe('user-123');
     expect(params?.message).toContain('✅');
-    expect(params?.message).toContain('fix/login-bug');
+    expect(params?.message).toContain('Task completed.');
+    expect(params?.message).not.toContain('fix/login-bug');
+    expect(params?.message).not.toContain('Fixed login redirect handling');
     expect(params?.message).not.toContain('PR:');
+    expect(params?.message).not.toContain('Branch:');
+    expect(params?.message).not.toContain('Commits:');
     expect(params?.ctaUrl).toEqual({
       displayText: 'View pull request',
       url: 'https://github.com/pbuchman/intexuraos/pull/123',
     });
-    expect(params?.message).toContain('Fixed login redirect handling');
+    expect((publishCall?.[0] as { important?: boolean } | undefined)?.important).toBe(false);
   });
 
   it('sends WhatsApp notification on task failure', async () => {

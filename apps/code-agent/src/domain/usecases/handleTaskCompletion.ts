@@ -53,6 +53,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { loadConfig } from '../../config.js';
+import type { CodeTask } from '../models/codeTask.js';
 import { parseLinearIdentifierFromUrl } from '../utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 import { drainTaskQueue } from './drainTaskQueue.js';
@@ -61,6 +62,7 @@ import { deletePRTaskLock } from '../utils/prTaskLock.js';
 import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
 import { resolveCompletedTaskStatus } from '../utils/resolveCompletedTaskStatus.js';
 import { validatePrUrl } from '../utils/validatePrUrl.js';
+import { notifyTaskReadyForMergeIfEligible } from '../services/readyToMergeNotification.js';
 import {
   flushPendingTaskLogLines,
   recordRemediationDecision,
@@ -229,6 +231,7 @@ export async function handleTaskCompletion(
           const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
           let targetLinearIssueId: string | undefined;
           let targetUserId: string | undefined;
+          let targetTask: CodeTask = task;
           let label: string | undefined;
           let source: string | undefined;
 
@@ -246,6 +249,7 @@ export async function handleTaskCompletion(
             } else {
               targetLinearIssueId = originResult.value.linearIssueId;
               targetUserId = originResult.value.userId;
+              targetTask = originResult.value;
               label = 'ready-to-merge';
               source = 'origin';
             }
@@ -276,6 +280,7 @@ export async function handleTaskCompletion(
               identifier: targetLinearIssueId,
             });
             if (issueValidation.ok) {
+              const readyToMergeAlreadyPresent = issueValidation.value.labels.includes('ready-to-merge');
               const labelResult = await linearAgentClient.updateIssueMetadata({
                 userId: targetUserId!,
                 issueId: issueValidation.value.id,
@@ -288,6 +293,34 @@ export async function handleTaskCompletion(
                 } else {
                   requestLog.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
                     'Set review-outcome label');
+
+                  if (label === 'ready-to-merge' && !readyToMergeAlreadyPresent) {
+                    const notificationPrUrl = result?.prUrl ?? targetTask.result?.prUrl ?? task.result?.prUrl;
+                    try {
+                      await notifyTaskReadyForMergeIfEligible(
+                        {
+                          gitHubPRClient,
+                          whatsappNotifier,
+                          resolveGitHubToken: async (userId: string) =>
+                            await fetchGitHubToken(userServiceClient, userId, logger),
+                          logger: requestLog,
+                        },
+                        {
+                          task: targetTask,
+                          userId: targetUserId!,
+                          linearIssueId: targetLinearIssueId,
+                          repository: task.repository,
+                          prNumber,
+                          ...(notificationPrUrl !== undefined && { prUrl: notificationPrUrl }),
+                        },
+                      );
+                    } catch (notificationError: unknown) {
+                      requestLog.warn(
+                        { error: notificationError, taskId, prNumber, linearIssueId: targetLinearIssueId },
+                        'Review-pass ready-to-merge notification failed (best-effort)',
+                      );
+                    }
+                  }
 
                   // Best-effort: recompute group summary with the new label so
                   // cached aggregateStatus reflects the actionable state.
