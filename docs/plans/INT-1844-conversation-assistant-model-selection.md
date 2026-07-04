@@ -203,9 +203,12 @@ Expected: tests pass and package exports remain source-export compliant.
 - Modify: `apps/whatsapp-service/src/domain/conversation-assistant/types.ts`
 - Modify: `apps/whatsapp-service/src/domain/conversation-assistant/ports.ts`
 - Modify: `apps/whatsapp-service/src/domain/conversation-assistant/sessionUseCases.ts`
+- Modify: `apps/whatsapp-service/src/config.ts`
+- Modify: `apps/whatsapp-service/src/index.ts`
 - Modify: `apps/whatsapp-service/src/routes/conversationAssistantRoutes.ts`
 - Modify: `apps/whatsapp-service/src/services.ts`
 - Modify: `apps/whatsapp-service/src/infra/firestore/conversationAssistantRepository.ts`
+- Modify: `apps/whatsapp-service/src/__tests__/config.test.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/sessionUseCases.test.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/conversationAssistantRoutes.test.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/infra/conversationAssistantRepository.test.ts`
@@ -290,7 +293,26 @@ const llmClientResult = await deps.llmClientFactory.createLlmClientForUser(
 
 Then use the returned client exactly as today.
 
-- [ ] **Step 5: Update service wiring**
+- [ ] **Step 5: Update config defaulting and startup validation**
+
+In `apps/whatsapp-service/src/config.ts`, make `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL` optional for normal startup and default `loadConfig().conversationAssistantModel` to `DEFAULT_CONVERSATION_ASSISTANT_MODEL` when it is omitted or blank.
+
+Keep early validation for configured values:
+
+```ts
+const conversationAssistantModel =
+  env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL?.trim() ||
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL;
+if (!isConversationAssistantModel(conversationAssistantModel)) {
+  throw new Error('Unsupported Conversation Assistant model configured');
+}
+```
+
+Update `apps/whatsapp-service/src/index.ts` so `validateRequiredEnv()` no longer requires `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL` before `loadConfig()` can apply the default.
+
+Add `apps/whatsapp-service/src/__tests__/config.test.ts` coverage for omitted env defaulting to MiniMax, blank env defaulting to MiniMax, and invalid configured defaults being rejected.
+
+- [ ] **Step 6: Update service wiring**
 
 In `createConversationAssistantLlmClientFactory()`:
 
@@ -311,7 +333,7 @@ async createLlmClientForUser(userId, model) {
 
 The default env var can remain for deployment override, but load/validation should default to `DEFAULT_CONVERSATION_ASSISTANT_MODEL` and reject invalid configured defaults early.
 
-- [ ] **Step 6: Update routes and public session projection**
+- [ ] **Step 7: Update routes and public session projection**
 
 Add `model` to `CreateSessionBody` schema as an optional string.
 
@@ -329,7 +351,7 @@ modelDisplayName: getConversationAssistantModelDisplayName(session.model)
 
 Add route tests for missing model defaulting to MiniMax, selected model persistence, invalid model rejection, and public response `modelDisplayName`.
 
-- [ ] **Step 7: Preserve older persisted sessions**
+- [ ] **Step 8: Preserve older persisted sessions**
 
 In `toSession()`, keep the existing fallback behavior but prefer:
 
@@ -341,7 +363,7 @@ model: typeof session?.model === 'string' && session.model.length > 0
 
 Add repository hydration tests for missing `model` and unknown legacy `model` values.
 
-- [ ] **Step 8: Verify WhatsApp service**
+- [ ] **Step 9: Verify WhatsApp service**
 
 Run:
 
