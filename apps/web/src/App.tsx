@@ -257,7 +257,7 @@ function LlmUsageViewPageKeyed(): React.JSX.Element {
   return <LlmUsageViewPage key={eventId} />;
 }
 
-function AppRoutes(): React.JSX.Element {
+export function AppRoutes(): React.JSX.Element {
   return (
     <Suspense fallback={<FullPageSpinner />}>
       <Routes>
