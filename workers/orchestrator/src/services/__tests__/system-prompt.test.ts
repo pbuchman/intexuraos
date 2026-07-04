@@ -141,6 +141,9 @@ describe('system-prompt', () => {
   it('planning prompt requires evidence PR for SIMPLE tasks', () => {
     const result = planningPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
     expect(result).toContain('evidence PR');
+    expect(result).toContain('docs/plans/');
+    expect(result).toContain('records the SIMPLE decision');
+    expect(result).toContain('so the planned outcome has a PR URL');
     expect(result).not.toContain('No subtasks, no plan doc, no PR');
   });
 

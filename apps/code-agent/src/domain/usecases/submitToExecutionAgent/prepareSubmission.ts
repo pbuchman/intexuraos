@@ -31,7 +31,7 @@ export interface PrepareSubmissionDeps {
 }
 
 /**
- * Everything the dispatch phase needs to enqueue a task or fan-out.
+ * Everything the dispatch phase needs to enqueue one execution task.
  */
 export interface PreparedSubmission {
   planningTask: CodeTask;

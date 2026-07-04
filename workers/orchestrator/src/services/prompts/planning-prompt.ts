@@ -84,8 +84,8 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 
 Planning has only two successful shapes:
 
-**SIMPLE task:** Edit the issue description only. No Linear subtasks and no implementation coding.
-A task is SIMPLE only when the implementation is a single mechanical change (1-2 files, no design decisions, no multi-step sequence). Even SIMPLE tasks MUST create an evidence PR.
+**SIMPLE task:** Edit the issue description only and open exactly one evidence PR containing a note under \`docs/plans/\` that records the SIMPLE decision and issue-description update. No Linear subtasks and no implementation coding.
+A task is SIMPLE only when the implementation is a single mechanical change (1-2 files, no design decisions, no multi-step sequence). Even SIMPLE tasks MUST create this evidence PR so the planned outcome has a PR URL.
 
 **PLAN-DOC task:** Create or update exactly one plan document in \`docs/plans/\`, update the original issue description with \`Plan document: docs/plans/<file>.md\`, and open exactly one planning PR.
 Use PLAN-DOC when the implementation has 3+ steps, spans backend+frontend, involves migration/backfill, or needs explicit sequencing.
