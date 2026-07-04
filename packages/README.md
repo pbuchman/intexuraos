@@ -19,6 +19,7 @@ apps/*
   ├── @intexuraos/infra-gpt                (OpenAI GPT API client)
   ├── @intexuraos/infra-notion             (Notion client & connection repository)
   ├── @intexuraos/infra-openrouter         (OpenAI-compatible client for the OpenRouter aggregator)
+  ├── @intexuraos/infra-pdf-export         (PDF conversation export renderer)
   ├── @intexuraos/infra-perplexity         (Perplexity AI API client)
   ├── @intexuraos/infra-pubsub             (Cloud Pub/Sub publishers)
   ├── @intexuraos/infra-sentry             (Sentry error tracking & logger factory)
@@ -58,6 +59,7 @@ apps/*
 | [`infra-gpt`](../docs/packages/infra-gpt/README.md)               | OpenAI GPT API client                                  | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
 | [`infra-notion`](../docs/packages/infra-notion/README.md)         | Notion client & connection repository                  | `common-core`                                                            |
 | [`infra-openrouter`](../docs/packages/infra-openrouter/README.md) | OpenAI-compatible client for the OpenRouter aggregator | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
+| [`infra-pdf-export`](../docs/packages/infra-pdf-export/README.md) | PDF conversation export renderer                       | `common-core`                                                            |
 | [`infra-perplexity`](../docs/packages/infra-perplexity/README.md) | Perplexity AI API client                               | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
 | [`infra-pubsub`](../docs/packages/infra-pubsub/README.md)         | Cloud Pub/Sub publishers                               | `common-core`                                                            |
 | [`infra-sentry`](../docs/packages/infra-sentry/README.md)         | Sentry error tracking & logger factory                 | `common-core`                                                            |
@@ -135,6 +137,7 @@ Enforced by `pnpm run verify:boundaries`:
 - `infra-gpt` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-notion` → imports from `common-core`
 - `infra-openrouter` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
+- `infra-pdf-export` → imports from `common-core`
 - `infra-perplexity` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-pubsub` → imports from `common-core`
 - `infra-sentry` → imports from `common-core`
