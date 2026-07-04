@@ -91,7 +91,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('13.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('14.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -127,7 +127,7 @@ describe('createIntexAgentRunner', () => {
       { role: 'user', content: 'remember the door code' },
     ]);
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
-    expect(client.calls[0]?.toolChoice).toBe('auto');
+    expect(client.calls[0]?.toolChoice).toBe('required');
     expect(client.calls[0]?.promptType).toBe(INTEX_AGENT_RUNNER_PROMPT_TYPE);
   });
 
@@ -795,14 +795,9 @@ describe('createIntexAgentRunner', () => {
     const client = new FakeToolCallingClient([
       ok(toolResult({ outcome: 'no_action', reply: 'We can keep discussing it.' })),
     ]);
-    const intentClassifier: IntexAgentIntentClassifier = {
-      async classify() {
-        return { kind: 'no_action', reason: 'conversation' };
-      },
-    };
     const runner = createIntexAgentRunner({
       client,
-      intentClassifier,
+      intentClassifier: conversationIntentClassifier(),
       toolExecutor: fakeToolExecutor(),
     });
 
@@ -819,6 +814,67 @@ describe('createIntexAgentRunner', () => {
     });
     expect(client.calls[0]?.tools).toEqual([]);
     expect(client.calls[0]?.toolChoice).toBe('auto');
+  });
+
+  it('preserves a direct answer when the model labels a conversation reply as completed', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'The answer is already in the first turn: use the narrower fallback.',
+          summary: 'Answered the direct follow-up.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: conversationIntentClassifier(),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Answer the question from the first turn.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'The answer is already in the first turn: use the narrower fallback.',
+      summary: 'Answered the direct follow-up.',
+    });
+    expect(client.calls[0]?.tools).toEqual([]);
+  });
+
+  it('preserves a direct answer without a summary when a conversation reply is mislabeled as completed', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Use the direct answer instead of asking what to do.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: conversationIntentClassifier(),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Answer directly.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'Use the direct answer instead of asking what to do.',
+    });
   });
 
   it('preserves unsupported responses with exact blocker metadata', async () => {
@@ -1216,7 +1272,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('13.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('14.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -2832,6 +2888,44 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('requires a tool call for explicit code-task intents before producing a reply', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_code_task',
+      args: {
+        prompt: 'Investigate why direct WhatsApp requests fall back to generic clarification.',
+        taskMode: 'planning',
+        workerType: 'codex-xhigh',
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Prepared the code task.',
+          toolName: 'create_code_task',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_code_task']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message:
+        'Create a code task to investigate why direct WhatsApp requests fall back to generic clarification.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_code_task',
+    });
+    expect(client.calls[0]?.toolChoice).toBe('required');
+  });
+
   it('omits optional calendar confirmation fields when they are absent', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: 'create_calendar_event',
@@ -2911,7 +3005,11 @@ describe('createIntexAgentRunner', () => {
         })
       ),
     ]);
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+    });
 
     await expect(
       runner.run({
@@ -3754,6 +3852,14 @@ function toolIntentClassifier(allowedToolNames: IntexAgentToolName[]): IntexAgen
   return {
     async classify(): ReturnType<IntexAgentIntentClassifier['classify']> {
       return { kind: 'tool', allowedToolNames };
+    },
+  };
+}
+
+function conversationIntentClassifier(): IntexAgentIntentClassifier {
+  return {
+    async classify(): ReturnType<IntexAgentIntentClassifier['classify']> {
+      return { kind: 'no_action', reason: 'conversation' };
     },
   };
 }

@@ -1597,6 +1597,90 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe('Co mam z tym zrobić?');
   });
 
+  it('publishes the direct answer instead of generic Polish fallback when runner normalizes a conversation label mistake', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-prior',
+      text: 'Jaki jest właściwy następny krok?',
+      sourceType: 'whatsapp_text',
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'no_action',
+        reply: 'Właściwy następny krok to utworzyć zadanie programistyczne z opisem problemu.',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-answer',
+        text: 'Odpowiedz na pytanie z pierwszej wiadomości.',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'agent_fallback')).toEqual([]);
+    expect(eventPayloads(repo, 'clarification_requested')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(
+      'Właściwy następny krok to utworzyć zadanie programistyczne z opisem problemu.'
+    );
+    expect(replies.messages[0]?.message).not.toBe('Co mam z tym zrobić?');
+  });
+
+  it('publishes a code-task confirmation instead of generic fallback for a direct code-task request', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_confirmation',
+        reply: [
+          'Czy utworzyć zadanie programistyczne?',
+          '',
+          'Polecenie: Investigate direct WhatsApp request fallback.',
+          'Tryb: execution',
+          'Typ workera: codex-xhigh',
+        ].join('\n'),
+        toolName: 'create_code_task',
+        toolArgs: {
+          prompt: 'Investigate direct WhatsApp request fallback.',
+          taskMode: 'execution',
+          workerType: 'codex-xhigh',
+        },
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-code-task',
+        text: 'Utwórz code task execution: investigate direct WhatsApp request fallback.',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'agent_fallback')).toEqual([]);
+    expect(eventPayloads(repo, 'clarification_requested')).toEqual([]);
+    expect(eventPayloads(repo, 'confirmation_requested')[0]).toMatchObject({
+      toolName: 'create_code_task',
+      toolArgs: {
+        prompt: 'Investigate direct WhatsApp request fallback.',
+        taskMode: 'execution',
+        workerType: 'codex-xhigh',
+      },
+    });
+    expect(replies.messages[0]?.message).toContain('Czy utworzyć zadanie programistyczne?');
+    expect(replies.messages[0]?.message).not.toBe('Co mam z tym zrobić?');
+  });
+
   it('keeps a prompt-preference session clarifiable on an ordinary correction without generic unsupported', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([

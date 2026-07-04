@@ -24,7 +24,7 @@ export const intexAgentRunnerOutputRepairPrompt: PromptBuilder<
 > = {
   name: 'intex-agent-runner-output-repair',
   description: 'Repairs invalid Intex Agent runner JSON output',
-  version: '2.0.0',
+  version: '3.0.0',
   build(
     input: IntexAgentRunnerOutputRepairPromptInput,
     deps?: IntexAgentRunnerOutputRepairPromptDeps
@@ -70,6 +70,10 @@ Return only a valid JSON object matching the runner output schema:
   "isRetryable": "optional deterministic retryability flag",
   "attemptedAction": "optional bounded action summary"
 }
+
+Use no_action for direct conversational answers.
+Use completed only when a tool actually succeeded.
+For explicit supported tool requests, return needs_clarification only for concrete missing fields; do not ask a generic question when the requested action is clear.
 
 For unsupported, include blockerReason and suggestedNextStep. For missing details, ambiguous intent, ambiguous preference target, or insufficient context, use needs_clarification rather than unsupported.
 

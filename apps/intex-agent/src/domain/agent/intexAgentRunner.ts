@@ -349,6 +349,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         (tool) =>
           intent.kind === 'tool' && intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
       );
+      const exposedToolNames = tools.map((tool) => tool.name as IntexAgentToolName);
       const systemPrompt = buildIntexAgentSystemPrompt.build({
         currentDateTime: input.currentDateTime,
         userPreferences: config.userPreferences ?? null,
@@ -358,7 +359,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         systemPrompt,
         messages,
         tools,
-        toolChoice: 'auto',
+        toolChoice: exposedToolNames.length > 0 ? 'required' : 'auto',
         promptType: INTEX_AGENT_RUNNER_PROMPT_TYPE,
         maxIterations: 5,
       });
@@ -373,6 +374,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           repairClient: config.responseRepairClient,
           systemPrompt,
           messages,
+          intent,
+          exposedToolNames,
         },
         toolExecutions,
         config.webAppUrl ?? DEFAULT_WEB_APP_URL,
@@ -563,6 +566,8 @@ interface RunnerOutputValidationInput {
   repairClient: StructuredClient | undefined;
   systemPrompt: string;
   messages: ToolCallingMessage[];
+  intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
+  exposedToolNames: IntexAgentToolName[];
 }
 
 async function parseRunnerContent(
@@ -627,6 +632,17 @@ async function parseRunnerContent(
           : {}),
       };
     case 'completed': {
+      if (
+        toolExecution === undefined &&
+        input.exposedToolNames.length === 0 &&
+        isConversationIntent(input.intent)
+      ) {
+        return {
+          outcome: 'no_action',
+          reply: parsed.reply,
+          ...(parsed.summary !== undefined ? { summary: parsed.summary } : {}),
+        };
+      }
       if (toolExecution?.toolName !== parsed.toolName) {
         return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch');
       }
@@ -653,6 +669,12 @@ async function parseRunnerContent(
       };
     }
   }
+}
+
+function isConversationIntent(
+  intent: IntexAgentIntentClassification | IntexAgentIntentDecision
+): boolean {
+  return intent.kind === 'no_action' && intent.reason === 'conversation';
 }
 
 async function validateRunnerOutput(
