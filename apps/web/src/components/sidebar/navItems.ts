@@ -3,6 +3,7 @@ import {
   Bot,
   Calendar,
   Clock,
+  Crosshair,
   DollarSign,
   FileText,
   GitBranch,
@@ -41,7 +42,6 @@ export const settingsItems: NavItem[] = [
 
 export const whatsappItems: NavItem[] = [
   { to: '/whatsapp/assistant', label: 'Assistant', icon: MessageCircle },
-  { to: '/whatsapp/sessions', label: 'Sessions', icon: Clock },
   { to: '/whatsapp/private', label: 'Private', icon: MessagesSquare },
   { to: '/whatsapp/conversation-assistant', label: 'Conversation Assistant', icon: Bot },
 ];
@@ -59,6 +59,7 @@ export const hellscriptItems: NavItem[] = [
 ];
 
 export const codeTasksItems: NavItem[] = [
+  { to: '/code-tasks', label: 'Battlefield', icon: Crosshair },
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
   { to: '/code-tasks/ask-agent', label: 'Ask Agent', icon: Bot },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
@@ -83,8 +84,8 @@ export const fishingAssistantItems: NavItem[] = [
 ];
 
 export const intexAgentItems: NavItem[] = [
+  { to: '/intex-agent/sessions', label: 'Sessions', icon: List },
   { to: '/intex-agent/preferences', label: 'Preferences', icon: SettingsIcon },
-  { to: '/whatsapp/sessions', label: 'Sessions', icon: List },
 ];
 
 /**

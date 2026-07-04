@@ -118,9 +118,9 @@ export function useSidebarState(): SidebarState {
     }
   }, [location.pathname]);
 
-  // Auto-expand code tasks when on code-tasks sub-pages (excludes Battlefield)
+  // Auto-expand code tasks when on Battlefield or code-tasks sub-pages.
   useEffect(() => {
-    if (location.pathname.startsWith('/code-tasks') && location.pathname !== '/code-tasks') {
+    if (location.pathname.startsWith('/code-tasks')) {
       setIsCodeTasksOpen(true);
     }
   }, [location.pathname]);
