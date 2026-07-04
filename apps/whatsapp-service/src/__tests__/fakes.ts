@@ -95,6 +95,7 @@ import { randomUUID } from 'node:crypto';
 export class FakeConversationAssistantRepository implements ConversationAssistantRepository {
   private readonly sessions = new Map<string, ConversationAssistantSession>();
   private readonly turns = new Map<string, ConversationAssistantTurn>();
+  readonly snapshotRequests: { sessionId: string; userId: string }[] = [];
 
   saveSession(session: ConversationAssistantSession): Promise<void> {
     this.sessions.set(session.id, { ...session });
@@ -104,6 +105,20 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   getSessionById(sessionId: string): Promise<ConversationAssistantSession | null> {
     const session = this.sessions.get(sessionId);
     return Promise.resolve(session === undefined ? null : { ...session });
+  }
+
+  getSessionSnapshotById(
+    input: { sessionId: string; userId: string }
+  ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
+    this.snapshotRequests.push(input);
+    const session = this.sessions.get(input.sessionId);
+    if (session === undefined || session.userId !== input.userId) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve({
+      session: { ...session },
+      turns: this.listTurnsForSnapshot(input.sessionId, input.userId),
+    });
   }
 
   listSessionsByUserId(userId: string): Promise<ConversationAssistantSession[]> {
@@ -123,14 +138,22 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   }
 
   listTurnsBySessionId(sessionId: string): Promise<ConversationAssistantTurn[]> {
+    return Promise.resolve(this.listTurnsForSnapshot(sessionId));
+  }
+
+  private listTurnsForSnapshot(
+    sessionId: string,
+    userId?: string
+  ): ConversationAssistantTurn[] {
     const turns = Array.from(this.turns.values())
       .filter((turn) => turn.sessionId === sessionId)
+      .filter((turn) => userId === undefined || turn.userId === userId)
       .sort((a, b) => {
         const createdComparison = a.createdAt.localeCompare(b.createdAt);
         return createdComparison === 0 ? a.id.localeCompare(b.id) : createdComparison;
       })
       .map((turn) => ({ ...turn }));
-    return Promise.resolve(turns);
+    return turns;
   }
 
   getAllSessions(): ConversationAssistantSession[] {

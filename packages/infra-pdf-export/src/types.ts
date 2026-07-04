@@ -4,6 +4,8 @@ export type PdfConversationMessageRole = 'user' | 'assistant';
 
 export interface PdfConversationExportInput {
   title: string;
+  modelName: string;
+  initialPrompt: string;
   generatedAt: string;
   sourceRange: { from: string; to: string };
   messageCounts: { included: number; excluded: number };
@@ -17,6 +19,7 @@ export interface PdfConversationExportInput {
 
 export interface PdfConversationExportResult {
   bytes: Buffer;
+  /** Sanitized full filename including the `.pdf` extension. */
   fileName: string;
   contentType: 'application/pdf';
 }

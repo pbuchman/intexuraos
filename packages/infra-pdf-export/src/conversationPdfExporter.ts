@@ -16,6 +16,7 @@ const STANDARD_REGULAR_FONT = 'Helvetica';
 const STANDARD_BOLD_FONT = 'Helvetica-Bold';
 const UNICODE_REGULAR_FONT = 'NotoSansRegular';
 const UNICODE_BOLD_FONT = 'NotoSansBold';
+const FALLBACK_FILE_NAME = 'conversation-export';
 const require = createRequire(import.meta.url);
 const REGULAR_FONT_PATH =
   require.resolve('@expo-google-fonts/noto-sans/400Regular/NotoSans_400Regular.ttf');
@@ -51,6 +52,41 @@ function validateInput(input: PdfConversationExportInput): PdfExportError | null
     return {
       code: 'INVALID_INPUT',
       message: 'Conversation export title cannot be empty',
+    };
+  }
+
+  if (input.modelName.trim().length === 0) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export modelName cannot be empty',
+    };
+  }
+
+  if (input.initialPrompt.trim().length === 0) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export initialPrompt cannot be empty',
+    };
+  }
+
+  if (input.generatedAt.trim().length === 0) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export generatedAt cannot be empty',
+    };
+  }
+
+  if (input.sourceRange.from.trim().length === 0 || input.sourceRange.to.trim().length === 0) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export source range cannot be empty',
+    };
+  }
+
+  if (input.messageCounts.included < 0 || input.messageCounts.excluded < 0) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export message counts cannot be negative',
     };
   }
 
@@ -95,10 +131,11 @@ function registerConversationFonts(doc: PDFKit.PDFDocument): void {
 
 function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportInput): void {
   const contentWidth = getContentWidth(doc);
+  const titleText = toPlainPdfText(input.title) || FALLBACK_FILE_NAME;
 
-  doc.info.Title = input.title;
-  doc.font(fontForText(input.title, 'bold')).fontSize(20).fillColor('#111827');
-  doc.text(input.title, {
+  doc.info.Title = titleText;
+  doc.font(fontForText(titleText, 'bold')).fontSize(20).fillColor('#111827');
+  doc.text(titleText, {
     width: contentWidth,
     align: 'left',
   });
@@ -110,6 +147,10 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
     width: contentWidth,
     align: 'left',
   });
+
+  doc.moveDown(0.35);
+  drawMetadataLine(doc, contentWidth, 'LLM model', input.modelName);
+  drawMetadataLine(doc, contentWidth, 'Initial prompt', toPlainPdfText(input.initialPrompt));
 
   doc.moveDown(0.9);
   drawDivider(doc, contentWidth);
@@ -141,7 +182,7 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
   doc.moveDown(0.9);
 
   for (const message of input.messages) {
-    drawMessage(doc, contentWidth, message.role, message.createdAt, message.text);
+    drawMessage(doc, contentWidth, message.role, message.createdAt, message.text, input.modelName);
   }
 }
 
@@ -182,16 +223,18 @@ function drawMessage(
   contentWidth: number,
   role: 'user' | 'assistant',
   createdAt: string,
-  text: string
+  text: string,
+  modelName: string
 ): void {
-  const roleLabel = role === 'user' ? 'User' : 'Assistant';
+  const roleLabel = getMessageRoleLabel(role, modelName);
   const headerText = `${roleLabel}  ${createdAt}`;
+  const plainText = toPlainPdfText(text);
   const headerFont = fontForText(headerText, 'bold');
-  const textFont = fontForText(text, 'regular');
+  const textFont = fontForText(plainText, 'regular');
   doc.font(headerFont).fontSize(11);
   const headerHeight = doc.heightOfString(headerText, { width: contentWidth });
   doc.font(textFont).fontSize(10.5);
-  const textHeight = doc.heightOfString(text, { width: contentWidth });
+  const textHeight = doc.heightOfString(plainText, { width: contentWidth });
   const minimumHeight = headerHeight + textHeight + SECTION_GAP;
   ensureSpace(doc, minimumHeight);
 
@@ -206,12 +249,63 @@ function drawMessage(
 
   doc.moveDown(0.2);
   doc.font(textFont).fontSize(10.5).fillColor('#111827');
-  doc.text(text, {
+  doc.text(plainText, {
     width: contentWidth,
     lineGap: 2,
   });
 
   doc.moveDown(0.8);
+}
+
+function getMessageRoleLabel(role: 'user' | 'assistant', modelName: string): string {
+  return role === 'assistant' ? `LLM response (${modelName})` : 'User';
+}
+
+function toPlainPdfText(text: string): string {
+  const inlineCleaned = text
+    .replace(/\r\n/g, '\n')
+    .replace(/^```[A-Za-z0-9_-]*\s*$/gm, '')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1');
+
+  return inlineCleaned
+    .split('\n')
+    .map(cleanMarkdownLine)
+    .filter((line) => line !== null)
+    .join('\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function cleanMarkdownLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(trimmed)) {
+    return null;
+  }
+
+  if (/^\|?.+\|.+\|?$/.test(trimmed)) {
+    return trimmed
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((cell) => cell.trim())
+      .filter((cell) => cell.length > 0)
+      .join(' ');
+  }
+
+  return line
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^>\s?/, '')
+    .replace(/^\s{0,3}[-*+]\s+\[[ xX]\]\s+/, '')
+    .replace(/^\s{0,3}[-*+]\s+/, '')
+    .replace(/^\s{0,3}\d+[.)]\s+/, '');
 }
 
 function drawDivider(doc: PDFKit.PDFDocument, contentWidth: number): void {
@@ -255,8 +349,8 @@ function fontForText(text: string, weight: 'regular' | 'bold'): string {
 }
 
 function createBaseFileName(title: string): string {
-  const sanitizedTitle = sanitizeTitle(title);
-  return sanitizedTitle.length > 0 ? sanitizedTitle : 'conversation-export';
+  const sanitizedTitle = sanitizeTitle(toPlainPdfText(title));
+  return sanitizedTitle.length > 0 ? sanitizedTitle : FALLBACK_FILE_NAME;
 }
 
 function sanitizeTitle(title: string): string {
@@ -264,7 +358,9 @@ function sanitizeTitle(title: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    .replace(/-+$/g, '');
 }
 
 function formatBreakdownLabel(key: string): string {
