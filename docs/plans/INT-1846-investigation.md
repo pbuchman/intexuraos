@@ -28,7 +28,7 @@ The investigation used a broad cutoff of `2026-07-02T00:00:00.000Z` because the 
 
 ### Data Sources Checked
 
-- Linear issue `INT-1846`: issue description only; there were no comments.
+- Linear issue `INT-1846`: issue description plus all comments, including the archived original request and planning PR link.
 - Firestore `code_tasks`: 111 recent updated docs scanned, 95 archived tasks in scope.
 - Firestore `code_tasks/{taskId}/log_lines` and `code_tasks/{taskId}/logs`: all 95 archived tasks scanned for `rebase`.
 - GitHub PR API via `gh`: issue comments, inline review comments, reviews, and PR state for PRs #2279 through #2298.
@@ -780,6 +780,20 @@ it('does not return needs-action from durable merge-ready evidence when remediat
     }),
   ).not.toBe('needs-action');
 });
+
+it('returns needs-action for skipped-review evidence on the completed execution task', () => {
+  expect(
+    deriveAggregateStatusFromSummary({
+      ...base,
+      hasCompletedExecution: true,
+      hasPrUrl: true,
+      hasMergeReadyLabel: false,
+      latestReviewNeedsRemediation: false,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_skipped',
+    }),
+  ).toBe('needs-action');
+});
 ```
 
 - [ ] **Step 2: Write failing live grouping tests**
@@ -859,6 +873,41 @@ it('shows actionable merge step from pull_request no-changes clean-rebase eviden
   expect(groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge')?.state).toBe('actionable');
   expect(groups[0]?.pipeline.pr?.status).toBe('mergeable');
 });
+
+it('shows actionable merge step from skipped-review evidence stored on the origin execution task', () => {
+  const tasks: SerializedTask[] = [
+    makeTask({
+      id: 'task-exec',
+      linearIssueId: 'INT-1846',
+      agentType: 'execution',
+      status: 'implemented',
+      createdAt: '2026-07-04T10:00:00.000Z',
+      updatedAt: '2026-07-04T10:10:00.000Z',
+      prNumber: 1846,
+      result: {
+        prUrl: 'https://github.com/owner/repo/pull/1846',
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+      linearIssue: {
+        identifier: 'INT-1846',
+        title: 'Test',
+        state: { name: 'In Review', type: 'started' },
+        priority: 2,
+        assignee: null,
+        labels: [{ name: 'code-task' }],
+        url: 'https://linear.app/INT-1846',
+        commentCount: 0,
+        lastCommentAt: null,
+      },
+    }),
+  ];
+
+  const groups = groupByLinearIssue(tasks);
+
+  expect(groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge')?.state).toBe('actionable');
+  expect(groups[0]?.pipeline.pr?.status).toBe('mergeable');
+});
 ```
 
 - [ ] **Step 3: Update summary model and serializer**
@@ -889,7 +938,7 @@ function getMergeReadyReason(task: CodeTask): string | null {
 }
 ```
 
-When creating, status-changing, or recomputing summaries, track the latest non-archived task with `merge_ready === "1"` and set:
+When creating, status-changing, or recomputing summaries, track the latest non-archived task with `merge_ready === "1"` across review, pull_request, remediation, and execution tasks. The execution-task path is required for `merge_ready_reason: "review_skipped"` because skipped-review evidence is persisted on the origin execution task. Set:
 
 ```typescript
 latestMergeReadyEvidence = latestMergeReadyReason !== null;
@@ -901,12 +950,22 @@ In `GroupSummaryFields`, add:
 
 ```typescript
 latestMergeReadyEvidence?: boolean;
+latestMergeReadyReason?: string | null;
 ```
 
 Replace the merge case with:
 
 ```typescript
 const hasMergeReadiness = (fields.hasMergeReadyLabel ?? false) || fields.latestMergeReadyEvidence === true;
+if (
+  fields.hasCompletedExecution &&
+  fields.hasPrUrl &&
+  fields.latestMergeReadyEvidence === true &&
+  fields.latestReviewNeedsRemediation !== true
+) {
+  return 'needs-action';
+}
+
 if (
   fields.hasPrUrl &&
   fields.latestReviewNeedsRemediation !== true &&
@@ -937,6 +996,7 @@ if (
   !steps.some((s) => s.agentType === 'merge') &&
   (
     hasDurableMergeReadyEvidence(reviewEntry?.task) ||
+    hasDurableMergeReadyEvidence(stepMap.get('execution')?.task) ||
     hasDurableMergeReadyEvidence(stepMap.get('pull_request')?.task) ||
     hasDurableMergeReadyEvidence(stepMap.get('remediation')?.task)
   )
@@ -949,7 +1009,7 @@ if (
 }
 ```
 
-Keep this after the existing label and remediation paths so existing tests continue to document current behavior.
+Keep this after the existing label and remediation paths so existing tests continue to document current behavior. Treat durable merge-ready evidence as the same exception as `ready-to-merge` in any completed-execution active gate; otherwise summary-derived `review_skipped` evidence can be preempted before the merge-ready branch.
 
 - [ ] **Step 6: Run focused grouping tests**
 
