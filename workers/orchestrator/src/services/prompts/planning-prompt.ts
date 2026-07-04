@@ -135,7 +135,7 @@ PLANNING_AGENT_FINAL:
 - superpowers_writing_plans_used: 1
 - Linear issue: <full Linear URL of the issue you planned>
 - Plan doc: <0|1 — "1" if you created a plan document in docs/plans/>
-- Plan PR: <full GitHub PR URL — MANDATORY for ALL planned outcomes, including SIMPLE tasks>
+- Plan PR: <full GitHub PR URL for planned outcomes, including SIMPLE tasks; empty for unclear outcomes>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
 - memory_ids_used: <comma-separated injected IDs you applied, or "none">
 - memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">

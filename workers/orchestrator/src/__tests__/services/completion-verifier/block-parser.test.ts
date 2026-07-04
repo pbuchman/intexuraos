@@ -769,6 +769,47 @@ describe('coerceFields', () => {
     expect(data['parallel_breakdown_proof']).toBe('historical field');
   });
 
+  it('allows unclear planning outcomes to leave Plan PR empty', () => {
+    const record = {
+      outcome: 'unclear',
+      superpowers_writing_plans_used: '1',
+      linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+      plan_doc: '0',
+      plan_pr: '',
+      clarification_message: 'Need acceptance criteria',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'none',
+      memory_usage_summary: 'none',
+      summary: 'unclear',
+    };
+
+    const { data, missingRequired } = coerceFields(record, AGENT_CONTRACTS.planning);
+
+    expect(missingRequired).not.toContain('plan_pr');
+    expect(missingRequired).toEqual([]);
+    expect(data['outcome']).toBe('unclear');
+    expect(data['plan_pr']).toBe('');
+  });
+
+  it('requires Plan PR for planned planning outcomes', () => {
+    const record = {
+      outcome: 'planned',
+      superpowers_writing_plans_used: '1',
+      linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+      plan_doc: '0',
+      plan_pr: '',
+      clarification_message: '',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'none',
+      memory_usage_summary: 'none',
+      summary: 'planned',
+    };
+
+    const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.planning);
+
+    expect(missingRequired).toContain('plan_pr');
+  });
+
   it('coerces empty, false, and malformed legacy planning fields', () => {
     const baseRecord = {
       outcome: 'planned',

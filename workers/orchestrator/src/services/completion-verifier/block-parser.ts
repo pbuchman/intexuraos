@@ -321,6 +321,26 @@ export function coerceFields(
     return emptyAliases(field).includes(raw.trim());
   };
 
+  const allowsEmptyRequiredField = (field: FieldSpec): boolean => {
+    if (
+      field.name === 'pr' &&
+      (contract.marker === 'EXECUTION_AGENT_FINAL:' || contract.marker === 'SENTRY_AGENT_FINAL:') &&
+      (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'failed'
+    ) {
+      return true;
+    }
+
+    if (
+      field.name === 'plan_pr' &&
+      contract.marker === 'PLANNING_AGENT_FINAL:' &&
+      (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'unclear'
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
   for (const field of contract.fields) {
     const { raw } = rawFor(field);
 
@@ -340,20 +360,7 @@ export function coerceFields(
           data[field.name] = '';
       }
       if (field.required) {
-        // Exception: execution.pr may be empty when outcome='failed'. Both
-        // `outcome` (canonical) and `Outcome` (Title Case alias) keys are
-        // covered by dedicated tests in block-parser.test.ts. The final
-        // `?? ''` is a type-safety fallback for the branch where the record
-        // has neither key — that path is unreachable in practice (the
-        // execution contract requires `outcome`, so such a block already
-        // failed the `outcome` required check above), but retained as a
-        // defensive comparison against the empty string that yields `false`.
-        if (
-          field.name === 'pr' &&
-          (contract.marker === 'EXECUTION_AGENT_FINAL:' ||
-            contract.marker === 'SENTRY_AGENT_FINAL:') &&
-          (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'failed'
-        ) {
+        if (allowsEmptyRequiredField(field)) {
           continue;
         }
         missingRequired.push(field.name);

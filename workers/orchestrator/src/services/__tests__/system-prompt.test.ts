@@ -91,7 +91,9 @@ describe('system-prompt', () => {
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
     const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('MANDATORY for ALL planned outcomes, including SIMPLE tasks');
+    expect(result).toContain(
+      'planned outcomes, including SIMPLE tasks; empty for unclear outcomes'
+    );
   });
 
   it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
