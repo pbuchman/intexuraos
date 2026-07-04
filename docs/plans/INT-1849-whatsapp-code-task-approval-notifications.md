@@ -40,8 +40,9 @@ Expected edits:
 - `apps/code-agent/src/infra/services/whatsappNotifierImpl.ts`
 - `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts`
 - `apps/code-agent/src/domain/services/onReviewSkippedCallback.ts`
+- `apps/code-agent/src/services.ts`
 - `apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts`
-- `apps/code-agent/src/__tests__/domain/usecases/webhooks.test.ts`
+- `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 - `apps/code-agent/src/__tests__/domain/services/onReviewSkippedCallback.test.ts`
 
 Optional new helper, only if it reduces duplication between completion and skipped-review paths:
@@ -71,7 +72,8 @@ Then update `whatsappNotifierImpl.ts`:
   - If there is a PR CTA, the CTA button carries the PR navigation instead of the body describing changes.
 - `formatResumedCompletionMessage` should state that the resumed task completed, without summary details.
 - `formatDesignCompleteMessage` should use status copy like `Plan is ready for implementation.` and keep the implement prompt/button behavior.
-- Keep `important: true` only for states that require user action or already behave as action-required. Do not introduce important progress/start messages.
+- Ordinary task-complete and resumed-complete sends must be non-important. Remove their current `important: true` values and update existing tests that asserted completion notifications were important.
+- Keep `important: true` only for states that require user action or already behave as action-required, such as the new merge-ready approval/deployment notification. Do not introduce important progress/start messages.
 
 ### 2. Add a dedicated ready-to-merge WhatsApp notification
 
@@ -137,6 +139,13 @@ Update `webhooks.test.ts` to cover:
 
 `onReviewSkippedCallback.ts` can also create the ready-to-merge state when automated review is skipped. Add the same notification gate there, preferably through a shared helper used by both this service and `handleTaskCompletion.ts`.
 
+Add the dependency wiring required for that gate:
+
+- Extend `OnReviewSkippedDeps` with the dependencies needed by the shared ready-to-merge notifier helper, including `gitHubPRClient`, `whatsappNotifier`, and a token/user resolver such as `resolveOAuthToken` or a narrower function that loads GitHub PR details for `origin.userId`.
+- Use `origin.userId` as the notification target user and token owner for skipped-review PR checks.
+- Update `apps/code-agent/src/services.ts` so `createOnReviewSkippedCallback` receives `gitHubPRClient`, `whatsappNotifier`, and token/user resolution wiring from the existing `userServiceClient`/`fetchGitHubToken` composition.
+- Keep the callback best-effort: dependency, GitHub details, mergeability, and notification failures should log and skip the WhatsApp ready-to-merge send without preventing the existing label, automation log, and group summary work.
+
 Update `onReviewSkippedCallback.test.ts` to cover:
 
 - Execution-origin PR, newly applied label, open PR, and `mergeable: true` sends the ready-to-merge WhatsApp message.
@@ -150,7 +159,7 @@ Run focused tests while implementing:
 
 ```bash
 pnpm --filter code-agent test -- apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts
-pnpm --filter code-agent test -- apps/code-agent/src/__tests__/domain/usecases/webhooks.test.ts
+pnpm --filter code-agent test -- apps/code-agent/src/__tests__/routes/webhooks.test.ts
 pnpm --filter code-agent test -- apps/code-agent/src/__tests__/domain/services/onReviewSkippedCallback.test.ts
 ```
 
@@ -164,6 +173,7 @@ pnpm run ci:tracked
 ## Acceptance Criteria
 
 - WhatsApp task-complete, resumed-complete, and design-complete messages no longer include code-task change lists, branch names, commit counts, or `result.summary` text.
+- WhatsApp task-complete and resumed-complete sends are non-important; the merge-ready approval/deployment notification remains important.
 - The plan-ready WhatsApp message states that the plan is ready for implementation.
 - The merge-ready WhatsApp message says the PR is waiting for user approval and deployment.
 - The merge-ready WhatsApp message is important and uses a violet/purple marker rather than a green OK/check marker.
