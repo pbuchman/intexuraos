@@ -44,11 +44,13 @@ describe('createPdfConversationExporter', () => {
     expect(result.value.contentType).toBe('application/pdf');
     expect(result.value.fileName).toBe('alice-context.pdf');
     expect(result.value.bytes.subarray(0, 5).toString('utf8')).toBe('%PDF-');
+    expect(extractMediaBoxes(result.value.bytes)).toContain('0 0 595.28 841.89');
 
     const pdfText = extractPdfText(result.value.bytes);
     const readablePdfText = toReadablePdfText(pdfText);
     const normalizedPdfText = normalizePdfText(readablePdfText);
     expect(readablePdfText).toContain('Alice context');
+    expect(readablePdfText).toContain('Generated at 2026-07-03T16:00:00.000Z');
     expect(readablePdfText).toContain('2026-06-30T00:00:00.000Z to 2026-07-01T00:00:00.000Z');
     expect(readablePdfText).toContain('Messages taken under consideration: 47');
     expect(readablePdfText).toContain('Messages excluded: 23');
@@ -294,4 +296,11 @@ function normalizePdfText(text: string): string {
 
 function toReadablePdfText(text: string): string {
   return text.replace(/\0/g, '');
+}
+
+function extractMediaBoxes(bytes: Buffer): string[] {
+  const source = bytes.toString('latin1');
+  return [...source.matchAll(/\/MediaBox\s*\[([^\]]+)\]/g)].map((match) =>
+    String(match[1]).replace(/\s+/g, ' ').trim()
+  );
 }
