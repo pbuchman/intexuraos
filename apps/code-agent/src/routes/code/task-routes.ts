@@ -1052,7 +1052,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   resourceUrl: { type: 'string' },
                   workerLocation: { type: 'string' },
                   implementationOf: { type: 'string' },
-                  childTaskIds: { type: 'array', items: { type: 'string' } },
                 },
               },
             },
@@ -1113,8 +1112,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'no_linear_issue':
           case 'label_not_ready':
             return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
-          case 'complex_task_no_qualifying_children':
-            return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
@@ -2844,7 +2841,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     resourceUrl: { type: 'string' },
                     workerLocation: { type: 'string' },
                     implementationOf: { type: 'string' },
-                    childTaskIds: { type: 'array', items: { type: 'string' } },
                   },
                 },
               },
@@ -2974,8 +2970,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             case 'no_linear_issue':
             case 'label_not_ready':
               return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
-            case 'complex_task_no_qualifying_children':
-              return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
             case 'worker_not_configured':
               return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
             case 'already_implemented':

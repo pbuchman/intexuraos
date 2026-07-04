@@ -14,6 +14,24 @@ import { extractAssistantText } from './ndjson-extractor.js';
  */
 const normalizeKeyName = (key: string): string => key.toLowerCase().replace(/[\s_]+/g, '');
 
+type LegacyPlanningFieldSpec = FieldSpec & { alias: readonly string[] };
+
+const LEGACY_PLANNING_FIELDS: readonly LegacyPlanningFieldSpec[] = [
+  { name: 'complex_task', alias: ['Complex task'], kind: 'bool01', required: false },
+  {
+    name: 'subtask_urls',
+    alias: ['Subtask URLs'],
+    kind: 'csv',
+    required: false,
+  },
+  {
+    name: 'parallel_breakdown_proof',
+    alias: ['Parallel breakdown proof'],
+    kind: 'string',
+    required: false,
+  },
+];
+
 const KNOWN_KEY_NORMALIZED: ReadonlySet<string> = ((): ReadonlySet<string> => {
   const set = new Set<string>();
   for (const contract of Object.values(AGENT_CONTRACTS)) {
@@ -22,6 +40,12 @@ const KNOWN_KEY_NORMALIZED: ReadonlySet<string> = ((): ReadonlySet<string> => {
       for (const alias of field.alias ?? []) {
         set.add(normalizeKeyName(alias));
       }
+    }
+  }
+  for (const field of LEGACY_PLANNING_FIELDS) {
+    set.add(normalizeKeyName(field.name));
+    for (const alias of field.alias) {
+      set.add(normalizeKeyName(alias));
     }
   }
   return set;
@@ -297,6 +321,26 @@ export function coerceFields(
     return emptyAliases(field).includes(raw.trim());
   };
 
+  const allowsEmptyRequiredField = (field: FieldSpec): boolean => {
+    if (
+      field.name === 'pr' &&
+      (contract.marker === 'EXECUTION_AGENT_FINAL:' || contract.marker === 'SENTRY_AGENT_FINAL:') &&
+      (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'failed'
+    ) {
+      return true;
+    }
+
+    if (
+      field.name === 'plan_pr' &&
+      contract.marker === 'PLANNING_AGENT_FINAL:' &&
+      (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'unclear'
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
   for (const field of contract.fields) {
     const { raw } = rawFor(field);
 
@@ -316,20 +360,7 @@ export function coerceFields(
           data[field.name] = '';
       }
       if (field.required) {
-        // Exception: execution.pr may be empty when outcome='failed'. Both
-        // `outcome` (canonical) and `Outcome` (Title Case alias) keys are
-        // covered by dedicated tests in block-parser.test.ts. The final
-        // `?? ''` is a type-safety fallback for the branch where the record
-        // has neither key — that path is unreachable in practice (the
-        // execution contract requires `outcome`, so such a block already
-        // failed the `outcome` required check above), but retained as a
-        // defensive comparison against the empty string that yields `false`.
-        if (
-          field.name === 'pr' &&
-          (contract.marker === 'EXECUTION_AGENT_FINAL:' ||
-            contract.marker === 'SENTRY_AGENT_FINAL:') &&
-          (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'failed'
-        ) {
+        if (allowsEmptyRequiredField(field)) {
           continue;
         }
         missingRequired.push(field.name);
@@ -407,11 +438,46 @@ export function coerceFields(
     }
   }
 
+  if (contract.marker === 'PLANNING_AGENT_FINAL:') {
+    for (const field of LEGACY_PLANNING_FIELDS) {
+      const { raw } = rawFor(field);
+      if (raw === undefined) continue;
+      if (isEmpty(field, raw)) {
+        data[field.name] = field.kind === 'csv' ? [] : field.kind === 'bool01' ? null : '';
+        continue;
+      }
+      const trimmed = raw.trim();
+      switch (field.kind) {
+        case 'bool01': {
+          const lower = trimmed.toLowerCase();
+          if (BOOL_TRUE.has(lower)) data[field.name] = true;
+          else if (BOOL_FALSE.has(lower)) data[field.name] = false;
+          else data[field.name] = null;
+          break;
+        }
+        case 'csv':
+          data[field.name] = trimmed
+            .split(',')
+            .map((part) => part.trim())
+            .filter((part) => part !== '');
+          break;
+        default:
+          data[field.name] = trimmed;
+      }
+    }
+  }
+
   // Note keys in record but not in contract → unknown-key warning, not an error.
   const knownNames = new Set<string>();
   for (const f of contract.fields) {
     knownNames.add(f.name);
     for (const a of f.alias ?? []) knownNames.add(a);
+  }
+  if (contract.marker === 'PLANNING_AGENT_FINAL:') {
+    for (const f of LEGACY_PLANNING_FIELDS) {
+      knownNames.add(f.name);
+      for (const a of f.alias) knownNames.add(a);
+    }
   }
   for (const key of Object.keys(record)) {
     if (!knownNames.has(key)) {

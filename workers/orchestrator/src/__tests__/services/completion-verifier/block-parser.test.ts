@@ -739,6 +739,123 @@ describe('coerceFields', () => {
     expect(data['linear_issue']).toBe('');
   });
 
+  it('coerces legacy planning fields without requiring them in the new contract', () => {
+    const record = {
+      outcome: 'planned',
+      superpowers_writing_plans_used: '1',
+      linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+      plan_doc: '1',
+      plan_pr: 'https://github.com/pbuchman/intexuraos/pull/1',
+      clarification_message: '',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'none',
+      memory_usage_summary: 'none',
+      summary: 'planned',
+      complex_task: 'true',
+      subtask_urls:
+        'https://linear.app/pbuchman/issue/INT-1/a, https://linear.app/pbuchman/issue/INT-2/b',
+      parallel_breakdown_proof: 'historical field',
+    };
+
+    const { data, missingRequired, warnings } = coerceFields(record, AGENT_CONTRACTS.planning);
+
+    expect(missingRequired).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(data['complex_task']).toBe(true);
+    expect(data['subtask_urls']).toEqual([
+      'https://linear.app/pbuchman/issue/INT-1/a',
+      'https://linear.app/pbuchman/issue/INT-2/b',
+    ]);
+    expect(data['parallel_breakdown_proof']).toBe('historical field');
+  });
+
+  it('allows unclear planning outcomes to leave Plan PR empty', () => {
+    const record = {
+      outcome: 'unclear',
+      superpowers_writing_plans_used: '1',
+      linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+      plan_doc: '0',
+      plan_pr: '',
+      clarification_message: 'Need acceptance criteria',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'none',
+      memory_usage_summary: 'none',
+      summary: 'unclear',
+    };
+
+    const { data, missingRequired } = coerceFields(record, AGENT_CONTRACTS.planning);
+
+    expect(missingRequired).not.toContain('plan_pr');
+    expect(missingRequired).toEqual([]);
+    expect(data['outcome']).toBe('unclear');
+    expect(data['plan_pr']).toBe('');
+  });
+
+  it('requires Plan PR for planned planning outcomes', () => {
+    const record = {
+      outcome: 'planned',
+      superpowers_writing_plans_used: '1',
+      linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+      plan_doc: '0',
+      plan_pr: '',
+      clarification_message: '',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'none',
+      memory_usage_summary: 'none',
+      summary: 'planned',
+    };
+
+    const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.planning);
+
+    expect(missingRequired).toContain('plan_pr');
+  });
+
+  it('coerces empty, false, and malformed legacy planning fields', () => {
+    const baseRecord = {
+      outcome: 'planned',
+      superpowers_writing_plans_used: '1',
+      linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+      plan_doc: '1',
+      plan_pr: 'https://github.com/pbuchman/intexuraos/pull/1',
+      clarification_message: '',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'none',
+      memory_usage_summary: 'none',
+      summary: 'planned',
+    };
+
+    const empty = coerceFields(
+      {
+        ...baseRecord,
+        complex_task: '',
+        subtask_urls: '',
+        parallel_breakdown_proof: '',
+      },
+      AGENT_CONTRACTS.planning
+    );
+    expect(empty.data['complex_task']).toBeNull();
+    expect(empty.data['subtask_urls']).toEqual([]);
+    expect(empty.data['parallel_breakdown_proof']).toBe('');
+
+    const falseValue = coerceFields(
+      {
+        ...baseRecord,
+        complex_task: 'false',
+      },
+      AGENT_CONTRACTS.planning
+    );
+    expect(falseValue.data['complex_task']).toBe(false);
+
+    const malformed = coerceFields(
+      {
+        ...baseRecord,
+        complex_task: 'not-bool',
+      },
+      AGENT_CONTRACTS.planning
+    );
+    expect(malformed.data['complex_task']).toBeNull();
+  });
+
   it('[INT-1470 coverage] reports required enum in missingRequired when value is unknown', () => {
     // execution.outcome is a required enum. A value outside {implemented,
     // already_completed, failed} must push into missingRequired (not just warn).

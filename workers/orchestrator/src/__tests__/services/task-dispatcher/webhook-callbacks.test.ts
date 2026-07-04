@@ -156,9 +156,7 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
         summary: 'Planned it',
         superpowers_writing_plans_used: true,
         linear_issue: 'https://linear.app/x',
-        complex_task: true,
         plan_doc: true,
-        subtask_urls: ['https://linear.app/y'],
         plan_pr: 'https://github.com/pr/1',
         clarification_message: '',
       }),
@@ -171,6 +169,30 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
     expect(result.planning_pr_url).toBe('https://github.com/pr/1');
   });
 
+  it('maps planning results without complex or subtask fields', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        outcome: 'planned',
+        superpowers_writing_plans_used: true,
+        linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+        plan_doc: true,
+        plan_pr: 'https://github.com/pbuchman/intexuraos/pull/1',
+        clarification_message: '',
+        summary: 'done',
+      }),
+      'planning'
+    );
+
+    expect(result.planning_outcome_label).toBe('planned');
+    expect(result.planning_has_plan_doc).toBe('1');
+    expect(result.planning_pr_url).toBe('https://github.com/pbuchman/intexuraos/pull/1');
+    expect(result.planning_is_complex).toBeUndefined();
+    expect(result.planning_subtask_urls).toBeUndefined();
+  });
+
   it('records planning flag as "0" when not-used and skips empty plan_pr', () => {
     const task = makeTask();
     const result = buildResultFromVerification(
@@ -181,9 +203,7 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
         summary: 'Planned it',
         superpowers_writing_plans_used: false,
         linear_issue: 'https://linear.app/x',
-        complex_task: false,
         plan_doc: false,
-        subtask_urls: [],
         plan_pr: '',
         clarification_message: 'why',
       }),

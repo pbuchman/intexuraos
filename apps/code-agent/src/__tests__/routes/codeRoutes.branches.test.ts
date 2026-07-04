@@ -1079,24 +1079,6 @@ describe('codeRoutes branch coverage', () => {
       expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
     });
 
-    it('returns 409 for complex_task_no_qualifying_children error', async () => {
-      mockedSubmitToExecutionAgent.mockResolvedValue(err({
-        code: 'complex_task_no_qualifying_children',
-        message: 'Complex task has no direct child issues with code-task label',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/submit-phase2',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: { taskId: 'task-123', userId: 'test-user-id' },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('CONFLICT');
-    });
-
     it('returns 409 for already_implemented error', async () => {
       mockedSubmitToExecutionAgent.mockResolvedValue(err({
         code: 'already_implemented',
@@ -1442,24 +1424,6 @@ describe('codeRoutes branch coverage', () => {
 
       const body = JSON.parse(response.body);
       expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
-    });
-
-    it('returns 409 for complex_task_no_qualifying_children', async () => {
-      mockedSubmitToExecutionAgent.mockResolvedValue(err({
-        code: 'complex_task_no_qualifying_children',
-        message: 'Complex task has no direct child issues with code-task label',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/tasks/task-123/implement',
-        headers: { authorization: 'Bearer test-token' },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('CONFLICT');
     });
 
     it('returns 409 for already_implemented', async () => {

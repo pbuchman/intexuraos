@@ -25,8 +25,7 @@ export const taskCompleteWebhookSchema = {
           // --- Fields used in handler logic (strictly validated) ---
           comment_replied: { type: 'boolean' },
           planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
-          planning_is_complex: { type: 'string', enum: ['0', '1'] },
-          planning_subtask_urls: { type: 'string' },
+          planning_has_plan_doc: { type: 'string', enum: ['0', '1'] },
           planning_pr_url: { type: 'string' },
           planning_unclear_clarification: { type: 'string' },
           execution_linear_issue_url: { type: 'string' },

@@ -98,6 +98,59 @@ describe('routes/code/schemas', () => {
     expect(validate({ status: 'not-a-status' })).toBe(false);
   });
 
+  it('executionMemoryContextSchema accepts single-artifact and historical planning memory types', () => {
+    const validate = ajv.compile(executionMemoryContextSchema);
+    const context = {
+      status: 'matched',
+      matchedMemories: [
+        {
+          memoryId: 'mem_single',
+          title: 'Single plan artifact',
+          memoryType: 'single_artifact_planning',
+          score: 0.91,
+          appliesWhen: 'Planning must produce one execution task',
+          action: 'Keep one issue, one plan document, and one implementation task',
+          avoid: 'Creating Linear subtasks',
+          verification: 'Check the planned issue has one execution task',
+        },
+        {
+          memoryId: 'mem_decomp',
+          title: 'Historical decomposition',
+          memoryType: 'decomposition_pattern',
+          score: 0.82,
+          appliesWhen: 'Old stored memory is retrieved',
+          action: 'Accept for compatibility',
+          avoid: 'Rejecting historical rows',
+          verification: 'Schema parse succeeds',
+        },
+      ],
+      topCandidates: [
+        {
+          memoryId: 'mem_single',
+          title: 'Single plan artifact',
+          memoryType: 'single_artifact_planning',
+          vectorScore: 0.88,
+          rerankScore: 0.86,
+          componentOverlap: 0.5,
+          effectiveness: 0.7,
+          passedThreshold: true,
+        },
+        {
+          memoryId: 'mem_decomp',
+          title: 'Historical decomposition',
+          memoryType: 'decomposition_pattern',
+          vectorScore: 0.77,
+          rerankScore: 0.75,
+          componentOverlap: 0.4,
+          effectiveness: 0.6,
+          passedThreshold: true,
+        },
+      ],
+    };
+
+    expect(validate(context)).toBe(true);
+  });
+
   it('executionMemoryPostRunSchema restricts skipReason to the enum', () => {
     const validate = ajv.compile(executionMemoryPostRunSchema);
     expect(

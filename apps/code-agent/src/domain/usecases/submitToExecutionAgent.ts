@@ -4,8 +4,8 @@
  * Thin facade that wires together the two phases of the workflow:
  *   1. prepareSubmission — gather context, validate, compute effective worker
  *      type, and merge the plan PR.
- *   2. dispatchSubmission — create + enqueue the execution task, or fan out to
- *      children for complex parents.
+ *   2. dispatchSubmission — create + enqueue one execution task for the
+ *      original planned issue.
  *
  * Public types, the EXECUTION_AGENT_PROMPT constant, and the top-level deps
  * shape are re-exported here so callers outside this module do not need to

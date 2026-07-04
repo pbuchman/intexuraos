@@ -167,9 +167,7 @@ export function buildResultFromVerification(
     base.planning_superpowers_writing_plans_used =
       boolToBoolZeroOne(data['superpowers_writing_plans_used']) ?? '0';
     base.planning_linear_url = toStringOr(data['linear_issue']);
-    base.planning_is_complex = boolToBoolZeroOne(data['complex_task']) ?? '0';
     base.planning_has_plan_doc = boolToBoolZeroOne(data['plan_doc']) ?? '0';
-    base.planning_subtask_urls = arrayToCsv(data['subtask_urls']);
     const planPr = toStringOr(data['plan_pr']);
     if (planPr !== '') {
       base.planning_pr_url = planPr;

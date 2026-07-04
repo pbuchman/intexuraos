@@ -43,7 +43,8 @@ describe('contracts — canonical field table', () => {
       expect(requiredNames).toContain('summary');
       if (agent === 'planning') {
         expect(requiredNames).toContain('linear_issue');
-        expect(c.fields.map((f) => f.name)).toContain('parallel_breakdown_proof');
+        expect(c.fields.map((f) => f.name)).toContain('plan_doc');
+        expect(c.fields.map((f) => f.name)).toContain('plan_pr');
         expect(c.fields.map((f) => f.name)).toContain('clarification_message');
       } else if (agent === 'pull_request') {
         const linearIssueField = c.fields.find((f) => f.name === 'linear_issue');
@@ -130,6 +131,17 @@ describe('contracts — canonical field table', () => {
     expect(pr.fields.find((f) => f.name === 'total_pr_comments_posted')?.alias).toContain(
       'Total PR comments posted'
     );
+  });
+
+  it('planning contract no longer requires complex or subtask fields', () => {
+    const fieldNames = AGENT_CONTRACTS.planning.fields.map((field) => field.name);
+
+    expect(fieldNames).toContain('outcome');
+    expect(fieldNames).toContain('plan_doc');
+    expect(fieldNames).toContain('plan_pr');
+    expect(fieldNames).not.toContain('complex_task');
+    expect(fieldNames).not.toContain('subtask_urls');
+    expect(fieldNames).not.toContain('parallel_breakdown_proof');
   });
 });
 
