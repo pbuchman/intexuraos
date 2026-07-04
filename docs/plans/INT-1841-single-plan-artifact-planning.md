@@ -27,8 +27,8 @@
 | Service | Method | Path | Change |
 | --- | --- | --- | --- |
 | `workers/orchestrator` | internal callback payload | existing code-task completion callback | Planning final block no longer emits `Complex task`, `Subtask URLs`, or `Parallel breakdown proof`; webhook result mapping stops populating planning subtask fields for new completions. |
-| `apps/code-agent` | internal webhook | existing task completion webhook | Planned outcomes always normalize the original issue to `code-task` and ignore legacy complex/subtask result fields. |
-| `apps/code-agent` | submit execution | existing execution submission endpoint | Starting execution from a plan always enqueues one execution task for the original issue. |
+| `apps/code-agent` | internal webhook | existing task completion webhook | Planned outcomes always normalize the original issue to `code-task`; webhook schemas accept the new planning callback shape without requiring complex/subtask fields and enforcement ignores legacy complex/subtask result fields. |
+| `apps/code-agent` | submit execution | existing execution submission endpoint | Starting execution from a plan always enqueues one execution task for the original issue, and route/client/web response contracts no longer expose child-task fan-out fields for this path. |
 
 ### Created
 
@@ -64,6 +64,7 @@
 ### Code-agent planning enforcement and execution submission
 
 - Modify: `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts`
+- Modify: `apps/code-agent/src/routes/webhookRouteSchemas.ts`
 - Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 - Modify: `apps/code-agent/src/domain/usecases/submitToExecutionAgent/prepareSubmission.ts`
 - Modify: `apps/code-agent/src/domain/usecases/submitToExecutionAgent/dispatchSubmission.ts`
@@ -73,6 +74,9 @@
 - Modify: `apps/code-agent/src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts`
 - Modify: `apps/code-agent/src/routes/code/task-routes.ts`
 - Modify: `apps/code-agent/src/__tests__/routes/codeRoutes.branches.test.ts`
+- Modify: `packages/internal-clients/src/code-agent/client.ts`
+- Modify: `packages/internal-clients/src/code-agent/__tests__/client.test.ts`
+- Modify: `apps/web/src/types/index.ts`
 
 ### Cleanup and memory summaries
 
@@ -182,8 +186,11 @@ Add or update tests in `workers/orchestrator/src/__tests__/services/task-dispatc
 
 ```typescript
 it('maps planning results without complex or subtask fields', () => {
-  const result = buildResultFromVerificationData(
-    {
+  const task = makeTask();
+  const result = buildResultFromVerification(
+    task,
+    undefined,
+    parsedVerdict({
       outcome: 'planned',
       superpowers_writing_plans_used: true,
       linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
@@ -191,7 +198,7 @@ it('maps planning results without complex or subtask fields', () => {
       plan_pr: 'https://github.com/pbuchman/intexuraos/pull/1',
       clarification_message: '',
       summary: 'done',
-    },
+    }),
     'planning'
   );
 
@@ -280,6 +287,7 @@ Expected: PASS.
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts`
+- Modify: `apps/code-agent/src/routes/webhookRouteSchemas.ts`
 - Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 
 **Interfaces:**
@@ -311,10 +319,15 @@ it('planned completion ignores legacy complex/subtask fields and stamps only the
     },
   };
 
+  const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
   const response = await app.inject({
     method: 'POST',
-    url: '/internal/tasks/callback',
-    headers: internalAuthHeaders,
+    url: '/internal/webhooks/task-complete',
+    headers: {
+      'x-internal-auth': 'test-internal-token',
+      'x-request-timestamp': timestamp,
+      'x-request-signature': signature,
+    },
     payload,
   });
 
@@ -328,7 +341,7 @@ it('planned completion ignores legacy complex/subtask fields and stamps only the
 });
 ```
 
-Adapt helper names to the local test fixtures already used in that file; keep the assertion shape unchanged.
+Generate `timestamp` and `signature` with the local `generateWebhookSignature(payload, 'test-webhook-secret')` helper before `app.inject`. Adapt helper names to the local test fixtures already used in that file; keep the assertion shape unchanged.
 
 - [ ] **Step 2: Run the focused failing test**
 
@@ -341,6 +354,8 @@ pnpm --filter code-agent test -- src/__tests__/routes/webhooks.test.ts -t "plann
 Expected: FAIL because current enforcement branches on `planning_is_complex === '1'` and touches child issues.
 
 - [ ] **Step 3: Replace complex enforcement with one parent normalization path**
+
+In `apps/code-agent/src/routes/webhookRouteSchemas.ts`, stop requiring `planning_is_complex` and `planning_subtask_urls` in the planning callback result schema. Keep accepting those keys as optional legacy fields if doing so is simpler for historical callback compatibility, but the new schema contract must validate payloads that only include `planning_outcome_label`, `planning_has_plan_doc`, `planning_pr_url`, and clarification/result summary fields.
 
 In `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts`, inside `enforcePlanningOutcome` for `outcome === 'planned'`, remove:
 
@@ -435,8 +450,13 @@ it('ignores complex-task label when the planned issue is ready for one execution
 
   expect(result.ok).toBe(true);
   if (!result.ok) return;
-  expect(result.value.complex).toBeUndefined();
   expect(fakeLinearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+  expect(result.value).toEqual({
+    planningTask: expect.objectContaining({ id: 'task_plan' }),
+    userId: 'user_1',
+    linearIssueId: 'INT-1841',
+    effectiveWorkerType: expect.any(String),
+  });
 });
 ```
 
@@ -449,7 +469,7 @@ it('dispatches a single execution task and does not call fanOutChildTasks', asyn
   expect(result.ok).toBe(true);
   expect(mockFanOutChildTasks).not.toHaveBeenCalled();
   if (!result.ok) return;
-  expect(result.value.childTaskIds).toBeUndefined();
+  expect(result.value).not.toHaveProperty('childTaskIds');
 });
 ```
 
@@ -524,12 +544,17 @@ In `apps/code-agent/src/domain/usecases/submitToExecutionAgent/types.ts`, remove
 
 In `apps/code-agent/src/routes/code/task-routes.ts` and `apps/code-agent/src/__tests__/routes/codeRoutes.branches.test.ts`, remove submit-to-execution response branches that only map `complex_task_no_qualifying_children`. Keep direct code-task fan-out route behavior if those branches are shared with direct dispatch.
 
+In `packages/internal-clients/src/code-agent/client.ts` and `packages/internal-clients/src/code-agent/__tests__/client.test.ts`, remove the client-side mapping and assertions for `complex_task_no_qualifying_children` after the server no longer returns it for submit-to-execution. Preserve generic unknown-code handling.
+
+In `apps/web/src/types/index.ts`, remove `childTaskIds` from `StartImplementationResponse` so the web contract matches the single execution task response.
+
 - [ ] **Step 6: Run submit-to-execution tests**
 
 Run:
 
 ```bash
 pnpm --filter code-agent test -- src/__tests__/domain/usecases/submitToExecutionAgent.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/prepareSubmission.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts src/__tests__/routes/codeRoutes.branches.test.ts
+pnpm --filter @intexuraos/internal-clients test -- src/code-agent/__tests__/client.test.ts
 ```
 
 Expected: PASS with old fan-out expectations removed or rewritten to assert single execution task creation.
@@ -629,6 +654,17 @@ expect(memory.content).not.toContain('Planning subtask count:');
 expect(memory.content).not.toContain('Complexity classification: COMPLEX');
 ```
 
+Add or update prompt-rendering expectations for `renderPlanningDistillationPrompt`:
+
+```typescript
+expect(prompt).toContain('SINGLE-ARTIFACT PLANNING PATTERNS');
+expect(prompt).toContain('How was the original issue prepared for one execution task?');
+expect(prompt).toContain('single_artifact_planning');
+expect(prompt).not.toContain('DECOMPOSITION PATTERNS');
+expect(prompt).not.toContain('How was the issue broken into subtasks?');
+expect(prompt).not.toContain('decomposition_pattern');
+```
+
 - [ ] **Step 2: Run the focused failing tests**
 
 Run:
@@ -656,7 +692,14 @@ with:
 `Plan document present: ${task.result?.planning_has_plan_doc === '1' ? 'yes' : 'no'}`,
 ```
 
-Keep reading historical fields only in places needed for old task display.
+In the same file, update `renderPlanningDistillationPrompt` so the distillation instructions describe single-artifact planning instead of subtask decomposition:
+
+```typescript
+'1. SINGLE-ARTIFACT PLANNING PATTERNS: How was the original issue prepared for one execution task?',
+'What plan-document structure, label normalization, or execution-handoff guidance made the plan implementable without Linear subtasks?',
+```
+
+Replace `decomposition_pattern` memory examples with `single_artifact_planning` examples. Keep reading historical fields only in places needed for old task display.
 
 - [ ] **Step 4: Audit and remove unused complex-label exports only when safe**
 
@@ -692,11 +735,20 @@ pnpm --filter orchestrator test -- src/services/__tests__/system-prompt.test.ts 
 pnpm --filter code-agent test -- src/__tests__/routes/webhooks.test.ts src/__tests__/domain/usecases/submitToExecutionAgent.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/prepareSubmission.test.ts src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts src/__tests__/routes/codeRoutes.branches.test.ts src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts
 ```
 
+- [ ] Run downstream contract tests:
+
+```bash
+pnpm --filter @intexuraos/internal-clients test -- src/code-agent/__tests__/client.test.ts
+pnpm --filter @intexuraos/web typecheck
+```
+
 - [ ] Run workspace verification:
 
 ```bash
 pnpm run verify:workspace:tracked -- orchestrator
 pnpm run verify:workspace:tracked -- code-agent
+pnpm run verify:workspace:tracked -- web
+pnpm run verify:workspace:tracked -- internal-clients
 pnpm run ci:tracked
 ```
 
@@ -708,5 +760,8 @@ Expected: all commands PASS.
 - The planning final block no longer contains complex/subtask fields.
 - Planned completions always mark the original issue with `code-task` and remove `planning-task`, `unclear`, and `complex-task`.
 - Submit-to-execution from a plan creates one execution task for the original issue, even if a stale `complex-task` label exists.
+- Submit-to-execution server, internal client, and web response contracts no longer expose planning child-task fan-out fields or `complex_task_no_qualifying_children`.
+- Planning webhook schema/tests match the actual `/internal/webhooks/task-complete` HMAC callback and the new no-complex/subtask planning result shape.
+- Execution memory distillation describes single-artifact planning patterns and no longer asks for subtask decomposition memories.
 - The execution prompt and generic execution task prompt explicitly state that subagents are internal delegation inside one branch and one PR.
 - Focused tests and `pnpm run ci:tracked` pass.
