@@ -20,6 +20,7 @@ import type {
   ExternalSaveConnectionTestPort,
   IntexAgentExternalSavePreferences,
 } from './domain/preferences/types.js';
+import { renderPromptPreferenceAgentContext } from './domain/preferences/promptPreferences.js';
 import { createIntexAgentRunner } from './domain/agent/intexAgentRunner.js';
 import { createLlmIntexAgentIntentClassifier } from './domain/agent/intentClassifier.js';
 import {
@@ -168,7 +169,7 @@ export function initServices(config: ServiceConfig): void {
         },
         toolExecutor,
         webAppUrl: config.webAppUrl,
-        userPreferences: promptPreferences.renderedPromptBlock,
+        userPreferences: renderPromptPreferenceAgentContext(promptPreferences),
       }).executeConfirmed(input);
     },
     async run(
@@ -215,7 +216,7 @@ export function initServices(config: ServiceConfig): void {
         toolExecutor,
         intentClassifier: createLlmIntexAgentIntentClassifier({ client: classifierClient, logger }),
         webAppUrl: config.webAppUrl,
-        userPreferences: promptPreferences.renderedPromptBlock,
+        userPreferences: renderPromptPreferenceAgentContext(promptPreferences),
       }).run(input);
     },
   };
@@ -285,7 +286,7 @@ export function createTestConversationRunnerService(
             },
             toolExecutor: createTestToolExecutor({ mocks: request.toolMocks, calls: toolCalls }),
             webAppUrl: deps.config.webAppUrl,
-            userPreferences: promptPreferences.renderedPromptBlock,
+            userPreferences: renderPromptPreferenceAgentContext(promptPreferences),
           }).executeConfirmed(confirmedInput);
         },
         async run(
@@ -319,7 +320,7 @@ export function createTestConversationRunnerService(
               logger: deps.logger,
             }),
             webAppUrl: deps.config.webAppUrl,
-            userPreferences: promptPreferences.renderedPromptBlock,
+            userPreferences: renderPromptPreferenceAgentContext(promptPreferences),
           }).run(runnerInput);
         },
       };

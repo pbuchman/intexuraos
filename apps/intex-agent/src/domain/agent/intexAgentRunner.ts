@@ -107,6 +107,11 @@ const EXTERNAL_SAVE_FAILURE_SUFFIX: LocalizedText = {
   pl: '. Sprawdź konfigurację zewnętrznego systemu i spróbuj ponownie.',
 };
 
+const PREFERENCE_VERSION_CONFLICT_REPLIES: LocalizedText = {
+  en: 'Your instruction memory changed before I could save that. Send the request again so I can use the latest version.',
+  pl: 'Pamięć instrukcji zmieniła się przed zapisem. Wyślij prośbę ponownie, żebym użył najnowszej wersji.',
+};
+
 const CLASSIFIER_UNSUPPORTED_REPLIES: Record<
   IntexAgentReplyLanguage,
   ClassifierUnsupportedReplyMap
@@ -398,6 +403,14 @@ function toolFailureMetadata(
     return {
       errorCategory: 'configuration',
       isRetryable: false,
+      attemptedAction: toolName,
+    };
+  }
+
+  if (isPreferenceToolName(toolName) && isPreferenceVersionConflictMessage(errorMessage)) {
+    return {
+      errorCategory: 'version_conflict',
+      isRetryable: true,
       attemptedAction: toolName,
     };
   }
@@ -901,6 +914,10 @@ function buildConfirmedExecutionFailureReply(
     return buildExternalSaveFailureReply(errorMessage, replyLanguage);
   }
 
+  if (isPreferenceToolName(toolName) && isPreferenceVersionConflictMessage(errorMessage)) {
+    return PREFERENCE_VERSION_CONFLICT_REPLIES[replyLanguage];
+  }
+
   const detail = normalizeExternalSaveFailureDetail(errorMessage);
   return `${GENERIC_EXECUTION_FAILURE_PREFIX[replyLanguage]}${detail}${GENERIC_EXECUTION_FAILURE_SUFFIX[replyLanguage]}`;
 }
@@ -1217,6 +1234,10 @@ function isPreferenceToolName(toolName: IntexAgentToolName): boolean {
     toolName === 'update_user_preference' ||
     toolName === 'delete_user_preference'
   );
+}
+
+function isPreferenceVersionConflictMessage(errorMessage: string): boolean {
+  return /^Expected preference version \d+, but current version is \d+$/u.test(errorMessage.trim());
 }
 
 function readRawString(record: Record<string, unknown>, key: string): string | undefined {

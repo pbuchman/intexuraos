@@ -5,7 +5,11 @@ import {
   type CreateTestConversationRunnerServiceInput,
 } from '../services.js';
 import { INTEX_AGENT_MODEL } from '../domain/agent/systemPrompt.js';
-import { emptyPromptPreferences } from '../domain/preferences/promptPreferences.js';
+import {
+  addPromptPreferenceItem,
+  deletePromptPreferenceItem,
+  emptyPromptPreferences,
+} from '../domain/preferences/promptPreferences.js';
 import type {
   IntexAgentRunner,
   IntexAgentRunnerResult,
@@ -96,7 +100,10 @@ describe('createTestConversationRunnerService', () => {
     expect(createAgentRunnerFn).toHaveBeenCalledWith(
       expect.objectContaining({
         toolExecutor: expect.anything(),
-        userPreferences: 'rendered test preferences',
+        userPreferences: [
+          'rendered test preferences',
+          'Use expectedVersion 0 for preference mutation tools.',
+        ].join('\n'),
       })
     );
     expect(result.toolCalls).toEqual([
@@ -209,6 +216,56 @@ describe('createTestConversationRunnerService', () => {
     expect(first.eventsBySessionId[first.finalSessionId ?? '']?.[0]?.id).toMatch(/^intex_event_/u);
     expect(second.eventsBySessionId[second.finalSessionId ?? '']?.[0]?.id).toMatch(/^intex_event_/u);
   });
+
+  it('passes an empty-but-versioned preference context to the runner', async () => {
+    const repository = new MemorySessionRepository();
+    const added = addPromptPreferenceItem(emptyPromptPreferences('user-versioned-empty'), {
+      id: 'pref_focus',
+      text: 'Prefer concise replies.',
+      now: '2026-07-04T10:00:00.000Z',
+      updatedBy: { actor: 'web_ui', userId: 'user-versioned-empty' },
+    });
+    const deleted = deletePromptPreferenceItem(added.current, {
+      itemId: 'pref_focus',
+      now: '2026-07-04T10:01:00.000Z',
+      updatedBy: { actor: 'web_ui', userId: 'user-versioned-empty' },
+    });
+    const createAgentRunnerFn: AgentRunnerFactory = vi.fn((): IntexAgentRunner => ({
+      async run(): Promise<IntexAgentRunnerResult> {
+        return { outcome: 'no_action', reply: 'Ready.' };
+      },
+      async executeConfirmed(): Promise<IntexAgentRunnerResult> {
+        throw new Error('not used');
+      },
+    }));
+
+    const runner = createTestConversationRunnerService({
+      config: testConfig(),
+      sessionRepository: repository,
+      promptPreferencesRepository: promptPreferencesRepositoryWithCurrent(deleted.current),
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
+      createLlmClientFn: vi.fn(() => fakeStructuredClient()),
+      createAgentRunnerFn,
+      ids: fixedTestIds(),
+    });
+
+    await runner.run({
+      ...testRequest('versioned-empty'),
+      userId: 'user-versioned-empty',
+    });
+
+    expect(createAgentRunnerFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userPreferences: [
+          'User Preferences v2:',
+          'No active preference rows are currently defined.',
+          'Use expectedVersion 2 for add_user_preference.',
+        ].join('\n'),
+      })
+    );
+  });
 });
 
 function testRequest(runId: string): Parameters<ReturnType<typeof createTestConversationRunnerService>['run']>[0] {
@@ -249,6 +306,31 @@ function promptPreferencesRepository(
     async getCurrent(userId: string): Promise<ReturnType<typeof emptyPromptPreferences>> {
       calls.push(userId);
       return { ...emptyPromptPreferences(userId), renderedPromptBlock: 'rendered test preferences' };
+    },
+    async listVersions(): Promise<[]> {
+      return [];
+    },
+    async getVersion(): Promise<null> {
+      return null;
+    },
+    async addItem(): Promise<never> {
+      throw new Error('not used');
+    },
+    async updateItem(): Promise<never> {
+      throw new Error('not used');
+    },
+    async deleteItem(): Promise<never> {
+      throw new Error('not used');
+    },
+  };
+}
+
+function promptPreferencesRepositoryWithCurrent(
+  current: ReturnType<typeof emptyPromptPreferences>
+): CreateTestConversationRunnerServiceInput['promptPreferencesRepository'] {
+  return {
+    async getCurrent(): Promise<ReturnType<typeof emptyPromptPreferences>> {
+      return current;
     },
     async listVersions(): Promise<[]> {
       return [];
