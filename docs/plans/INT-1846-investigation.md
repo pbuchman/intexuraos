@@ -92,7 +92,7 @@ There is also one design defect:
 ### Modified
 
 - `POST /internal/webhooks/task-complete`: accept object-shaped `result.rebaseResult` and new result merge-ready fields.
-- `PATCH /code/internal/code-tasks/:taskId`: accept object-shaped `result.rebaseResult` for the legacy worker callback path if still exercised.
+- `PATCH /internal/code-tasks/:taskId` (publicly routed as `/api/code/internal/code-tasks/:taskId`): accept object-shaped `result.rebaseResult` for the legacy worker callback path if still exercised.
 - `GET /code/tasks`, `GET /code/tasks/:id`, `GET /code/issue-groups`: return object-shaped `result.rebaseResult` and merge-ready evidence fields.
 
 ### Created
@@ -645,6 +645,14 @@ if (pullRequestOutcome === 'commits_pushed' || pullRequestOutcome === 'no_change
 }
 ```
 
+In `workers/orchestrator/src/types/task.ts`, add the producer-side field before mapping it in `webhook-callbacks.ts`:
+
+```typescript
+pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+```
+
+Add a focused `buildResultFromVerification` or webhook-callbacks test proving the parsed pull-request final block sets `pull_request_outcome_label` on the outbound webhook result without a type escape.
+
 In both pull request prompts, add the final block line:
 
 ```markdown
@@ -712,16 +720,16 @@ Import `isRebaseClean` and `parseCodeTaskRebaseResult` from `@intexuraos/code-ta
 In `onReviewSkippedCallback.ts`, after successful label write and before recompute, update the origin task:
 
 ```typescript
-void codeTaskRepo.update(origin.id, {
+await codeTaskRepo.update(origin.id, {
   result: {
     ...(origin.result ?? {}),
     merge_ready: '1',
     merge_ready_reason: 'review_skipped',
   },
-}).catch((updateErr: unknown) => {
-  logger.warn({ error: updateErr, taskId: origin.id }, 'Failed to persist skipped-review merge-ready evidence');
 });
 ```
+
+Keep this update deterministic: do not call `recomputeWithLabels` until the origin task update has completed, or explicitly recompute from task documents after the write. The current cached-summary path updates label flags on the existing summary, so a fire-and-forget write can leave `latestMergeReadyEvidence` without the `review_skipped` evidence. Add a focused skipped-review callback test that asserts the origin task stores `merge_ready_reason: 'review_skipped'` before the summary recomputation path reads merge-ready evidence.
 
 - [ ] **Step 6: Run focused tests**
 
