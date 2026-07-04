@@ -9,13 +9,22 @@ import {
 import {
   checkConversationAssistantContext,
   createConversationAssistantSession,
+  exportConversationAssistantSessionPdf,
   getConversationAssistantSession,
   listConversationAssistantTurns,
   sendConversationAssistantTurn,
   streamConversationAssistantTurn,
 } from '../../../domain/conversation-assistant/sessionUseCases.js';
-import type { ConversationAssistantDeps } from '../../../domain/conversation-assistant/ports.js';
-import type { ConversationAssistantStreamEvent } from '../../../domain/conversation-assistant/types.js';
+import type {
+  ConversationAssistantDeps,
+  ConversationAssistantPdfExporter,
+  ConversationAssistantPdfExportError,
+  ConversationAssistantPdfExportInput,
+} from '../../../domain/conversation-assistant/ports.js';
+import type {
+  ConversationAssistantStreamEvent,
+  ExportConversationAssistantPdfResult,
+} from '../../../domain/conversation-assistant/types.js';
 import type {
   PrivateWhatsAppMessage,
   PrivateConversationContextMessageQueryInput,
@@ -31,11 +40,13 @@ function makeDeps(): {
   conversationRepository: FakeConversationAssistantRepository;
   privateRepository: FakePrivateWhatsAppRepository;
   llmClient: FakeLlmGenerateClient;
+  pdfExporter: FakePdfConversationExporter;
   llmFactoryUserIds: string[];
 } {
   const conversationRepository = new FakeConversationAssistantRepository();
   const privateRepository = new FakePrivateWhatsAppRepository();
   const llmClient = new FakeLlmGenerateClient();
+  const pdfExporter = new FakePdfConversationExporter();
   const llmFactoryUserIds: string[] = [];
   const clock = { now: (): string => '2026-06-30T12:00:00.000Z' };
   const ids = {
@@ -60,6 +71,7 @@ function makeDeps(): {
           return Promise.resolve(ok(llmClient));
         },
       },
+      pdfExporter,
       model: 'or:google/gemini-3.5-flash',
       clock,
       ids,
@@ -67,8 +79,45 @@ function makeDeps(): {
     conversationRepository,
     privateRepository,
     llmClient,
+    pdfExporter,
     llmFactoryUserIds,
   };
+}
+
+class FakePdfConversationExporter implements ConversationAssistantPdfExporter {
+  readonly calls: ConversationAssistantPdfExportInput[] = [];
+  private nextResult: import('@intexuraos/common-core').Result<
+    ExportConversationAssistantPdfResult,
+    ConversationAssistantPdfExportError
+  > = ok({
+    bytes: Buffer.from('%PDF-test'),
+    fileName: 'alice-context.pdf',
+    contentType: 'application/pdf',
+  });
+
+  exportConversation(
+    input: ConversationAssistantPdfExportInput
+  ): Promise<
+    import('@intexuraos/common-core').Result<
+      ExportConversationAssistantPdfResult,
+      ConversationAssistantPdfExportError
+    >
+  > {
+    this.calls.push(input);
+    return Promise.resolve(this.nextResult);
+  }
+
+  failNext(message = 'render failed'): void {
+    this.nextResult = err({ message });
+  }
+
+  setFileName(fileName: string): void {
+    this.nextResult = ok({
+      bytes: Buffer.from('%PDF-test'),
+      fileName,
+      contentType: 'application/pdf',
+    });
+  }
 }
 
 async function seedDirectMessage(
@@ -508,6 +557,326 @@ describe('Conversation Assistant session use cases', () => {
       code: 'LLM_ERROR',
       message: 'stream broke',
     });
+  });
+
+  it('exports an owned session PDF with mapped counts and chronological turns', async () => {
+    const { deps, conversationRepository, pdfExporter } = makeDeps();
+    await conversationRepository.saveSession({
+      id: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      chatId: CHAT_ID,
+      status: 'active',
+      range: {
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      model: 'or:google/gemini-3.5-flash',
+      transcriptSha256: 'abc123',
+      transcriptMessageCount: 7,
+      transcriptText: 'frozen transcript',
+      omitted: {
+        mediaOnly: 2,
+        failedTranscriptions: 1,
+        pendingTranscriptions: 3,
+        nonText: 4,
+        overLimit: 5,
+      },
+      title: 'Alice context',
+      createdAt: '2026-06-30T12:00:00.000Z',
+      updatedAt: '2026-06-30T12:00:00.000Z',
+    });
+    await conversationRepository.saveTurn({
+      id: 'turn-b',
+      sessionId: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      role: 'assistant',
+      text: 'assistant answer',
+      createdAt: '2026-06-30T12:02:00.000Z',
+    });
+    await conversationRepository.saveTurn({
+      id: 'turn-a',
+      sessionId: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      role: 'user',
+      text: 'user question',
+      createdAt: '2026-06-30T12:01:00.000Z',
+    });
+
+    const result = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.contentType).toBe('application/pdf');
+    expect(result.value.bytes.toString()).toBe('%PDF-test');
+    expect(result.value.fileName).toBe('alice-context-whatsapp_conv_session_test.pdf');
+    expect(pdfExporter.calls).toEqual([
+      {
+        title: 'Alice context',
+        modelName: 'or:google/gemini-3.5-flash',
+        initialPrompt: 'user question',
+        generatedAt: '2026-06-30T12:00:00.000Z',
+        sourceRange: {
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+        messageCounts: { included: 7, excluded: 15 },
+        omittedBreakdown: {
+          mediaOnly: 2,
+          failedTranscriptions: 1,
+          pendingTranscriptions: 3,
+          nonText: 4,
+          overLimit: 5,
+        },
+        messages: [
+          {
+            role: 'user',
+            createdAt: '2026-06-30T12:01:00.000Z',
+            text: 'user question',
+          },
+          {
+            role: 'assistant',
+            createdAt: '2026-06-30T12:02:00.000Z',
+            text: 'assistant answer',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('orders equal-timestamp PDF export turns by conversation role and same-role id', async () => {
+    const { deps, conversationRepository, pdfExporter } = makeDeps();
+    pdfExporter.setFileName('custom-base');
+    await conversationRepository.saveSession({
+      id: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      chatId: CHAT_ID,
+      status: 'active',
+      range: {
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      model: 'or:google/gemini-3.5-flash',
+      transcriptSha256: 'abc123',
+      transcriptMessageCount: 4,
+      transcriptText: 'frozen transcript',
+      omitted: {
+        mediaOnly: 0,
+        failedTranscriptions: 0,
+        pendingTranscriptions: 0,
+        nonText: 0,
+        overLimit: 0,
+      },
+      title: 'Alice context',
+      createdAt: '2026-06-30T12:00:00.000Z',
+      updatedAt: '2026-06-30T12:00:00.000Z',
+    });
+    for (const turn of [
+      { id: 'turn-z', role: 'assistant' as const, text: 'assistant same time' },
+      { id: 'turn-b', role: 'user' as const, text: 'user b' },
+      { id: 'turn-a', role: 'user' as const, text: 'user a' },
+      { id: 'turn-future', role: 'assistant' as const, text: 'assistant future' },
+    ]) {
+      await conversationRepository.saveTurn({
+        id: turn.id,
+        sessionId: 'whatsapp_conv_session_test',
+        userId: USER_ID,
+        role: turn.role,
+        text: turn.text,
+        createdAt:
+          turn.id === 'turn-future'
+            ? '2026-06-30T12:01:00.000Z'
+            : '2026-06-30T12:00:00.000Z',
+      });
+    }
+
+    const result = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.fileName).toBe('custom-base-whatsapp_conv_session_test.pdf');
+    expect(pdfExporter.calls[0]?.messages.map((message) => message.text)).toEqual([
+      'user a',
+      'user b',
+      'assistant same time',
+      'assistant future',
+    ]);
+
+    pdfExporter.setFileName('   ');
+    const fallback = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
+      deps
+    );
+    expect(fallback.ok).toBe(true);
+    if (fallback.ok) {
+      expect(fallback.value.fileName).toBe(
+        'conversation-assistant-export-whatsapp_conv_session_test.pdf'
+      );
+    }
+  });
+
+  it('rejects missing and foreign PDF export sessions without calling the exporter', async () => {
+    const { deps, conversationRepository, pdfExporter } = makeDeps();
+    await conversationRepository.saveSession({
+      id: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      chatId: CHAT_ID,
+      status: 'active',
+      range: {
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      model: 'or:google/gemini-3.5-flash',
+      transcriptSha256: 'abc123',
+      transcriptMessageCount: 1,
+      transcriptText: 'frozen transcript',
+      omitted: {
+        mediaOnly: 0,
+        failedTranscriptions: 0,
+        pendingTranscriptions: 0,
+        nonText: 0,
+        overLimit: 0,
+      },
+      title: 'Alice context',
+      createdAt: '2026-06-30T12:00:00.000Z',
+      updatedAt: '2026-06-30T12:00:00.000Z',
+    });
+
+    const missing = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId: 'missing' },
+      deps
+    );
+    const foreign = await exportConversationAssistantSessionPdf(
+      { userId: 'other-user', sessionId: 'whatsapp_conv_session_test' },
+      deps
+    );
+
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.error.code).toBe('NOT_FOUND');
+    expect(foreign.ok).toBe(false);
+    if (!foreign.ok) expect(foreign.error.code).toBe('NOT_FOUND');
+    expect(pdfExporter.calls).toEqual([]);
+    expect(conversationRepository.snapshotRequests).toEqual([
+      { sessionId: 'missing', userId: USER_ID },
+      { sessionId: 'whatsapp_conv_session_test', userId: 'other-user' },
+    ]);
+  });
+
+  it('rejects PDF export when the session has no initial user prompt', async () => {
+    const { deps, conversationRepository, pdfExporter } = makeDeps();
+    await conversationRepository.saveSession({
+      id: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      chatId: CHAT_ID,
+      status: 'active',
+      range: {
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      model: 'or:google/gemini-3.5-flash',
+      transcriptSha256: 'abc123',
+      transcriptMessageCount: 1,
+      transcriptText: 'frozen transcript',
+      omitted: {
+        mediaOnly: 0,
+        failedTranscriptions: 0,
+        pendingTranscriptions: 0,
+        nonText: 0,
+        overLimit: 0,
+      },
+      title: 'Alice context',
+      createdAt: '2026-06-30T12:00:00.000Z',
+      updatedAt: '2026-06-30T12:00:00.000Z',
+    });
+    await conversationRepository.saveTurn({
+      id: 'turn-assistant',
+      sessionId: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      role: 'assistant',
+      text: 'assistant answer',
+      createdAt: '2026-06-30T12:02:00.000Z',
+    });
+
+    const result = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
+      deps
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('EMPTY_TRANSCRIPT');
+    }
+    expect(pdfExporter.calls).toEqual([]);
+  });
+
+  it('rejects PDF export when the exporter dependency is missing', async () => {
+    const { deps } = makeDeps();
+    const { pdfExporter: _pdfExporter, ...depsWithoutPdfExporter } = deps;
+
+    const result = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
+      depsWithoutPdfExporter
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Conversation Assistant PDF exporter is not configured',
+      });
+    }
+  });
+
+  it('maps PDF rendering failures to internal errors', async () => {
+    const { deps, conversationRepository, pdfExporter } = makeDeps();
+    pdfExporter.failNext('pdf failed');
+    await conversationRepository.saveSession({
+      id: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      chatId: CHAT_ID,
+      status: 'active',
+      range: {
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      model: 'or:google/gemini-3.5-flash',
+      transcriptSha256: 'abc123',
+      transcriptMessageCount: 1,
+      transcriptText: 'frozen transcript',
+      omitted: {
+        mediaOnly: 0,
+        failedTranscriptions: 0,
+        pendingTranscriptions: 0,
+        nonText: 0,
+        overLimit: 0,
+      },
+      title: 'Alice context',
+      createdAt: '2026-06-30T12:00:00.000Z',
+      updatedAt: '2026-06-30T12:00:00.000Z',
+    });
+    await conversationRepository.saveTurn({
+      id: 'turn-user',
+      sessionId: 'whatsapp_conv_session_test',
+      userId: USER_ID,
+      role: 'user',
+      text: 'user question',
+      createdAt: '2026-06-30T12:01:00.000Z',
+    });
+
+    const result = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
+      deps
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({ code: 'INTERNAL_ERROR', message: 'pdf failed' });
+    }
   });
 
   it('persists streaming assistant errors when the user LLM key is unavailable', async () => {

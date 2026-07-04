@@ -127,6 +127,161 @@ describe('Conversation Assistant routes', () => {
     expect(JSON.parse(turns.body).data.turns).toHaveLength(2);
   });
 
+  it('does not require the PDF exporter for non-export Conversation Assistant routes', async () => {
+    const token = await seed();
+    const { pdfConversationExporter: _pdfConversationExporter, ...servicesWithoutPdfExporter } =
+      getServices();
+    setServices(servicesWithoutPdfExporter);
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('exports a PDF snapshot with binary headers and a session-scoped filename', async () => {
+    const token = await seed();
+
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'What was agreed?',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const createdBody = JSON.parse(created.body) as { data: { session: { id: string } } };
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}/export.pdf`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toBe('application/pdf');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['content-disposition']).toBe(
+      `attachment; filename="alice-context-${createdBody.data.session.id}.pdf"`
+    );
+    expect(response.body).toBe('%PDF-test');
+    expect(ctx.pdfConversationExporter.calls).toHaveLength(1);
+    expect(ctx.pdfConversationExporter.calls[0]?.messages.map((message) => message.role)).toEqual([
+      'user',
+      'assistant',
+    ]);
+    expect(ctx.pdfConversationExporter.calls[0]?.messageCounts).toEqual({
+      included: 1,
+      excluded: 0,
+    });
+  });
+
+  it('rejects unauthenticated, missing, and foreign PDF export requests', async () => {
+    const token = await seed();
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'What was agreed?',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const createdBody = JSON.parse(created.body) as { data: { session: { id: string } } };
+
+    const unauthenticated = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}/export.pdf`,
+    });
+    const missing = await ctx.app.inject({
+      method: 'GET',
+      url: '/conversation-assistant/sessions/whatsapp_conv_session_missing/export.pdf',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const foreignToken = await createToken({ sub: 'other-user' });
+    const foreign = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}/export.pdf`,
+      headers: { authorization: `Bearer ${foreignToken}` },
+    });
+
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(missing.statusCode).toBe(404);
+    expect(foreign.statusCode).toBe(404);
+  });
+
+  it('maps PDF exporter failures to internal errors', async () => {
+    const token = await seed();
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'What was agreed?',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const createdBody = JSON.parse(created.body) as { data: { session: { id: string } } };
+    ctx.pdfConversationExporter.failNext('pdf render failed');
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}/export.pdf`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(JSON.parse(response.body).error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'pdf render failed',
+    });
+  });
+
+  it('requires the PDF exporter for PDF export requests', async () => {
+    const token = await seed();
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'What was agreed?',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const createdBody = JSON.parse(created.body) as { data: { session: { id: string } } };
+    const { pdfConversationExporter: _pdfConversationExporter, ...servicesWithoutPdfExporter } =
+      getServices();
+    setServices(servicesWithoutPdfExporter);
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}/export.pdf`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(JSON.parse(response.body).error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Conversation Assistant services are not configured',
+    });
+  });
+
   it('checks selected context size before creating a session', async () => {
     const token = await seed();
 
@@ -353,6 +508,7 @@ describe('Conversation Assistant routes', () => {
       { method: 'POST' as const, url: '/conversation-assistant/sessions', payload: {} },
       { method: 'POST' as const, url: '/conversation-assistant/context/check', payload: {} },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing' },
+      { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/export.pdf' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/turns' },
       {
         method: 'POST' as const,
@@ -393,6 +549,7 @@ describe('Conversation Assistant routes', () => {
         },
       },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing' },
+      { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/export.pdf' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/turns' },
       {
         method: 'POST' as const,
@@ -421,6 +578,8 @@ describe('Conversation Assistant routes', () => {
       saveSession: (session) => ctx.conversationAssistantRepository.saveSession(session),
       getSessionById: (sessionId) =>
         ctx.conversationAssistantRepository.getSessionById(sessionId),
+      getSessionSnapshotById: (input) =>
+        ctx.conversationAssistantRepository.getSessionSnapshotById(input),
       listSessionsByUserId: () => {
         throw new Error('list failed');
       },

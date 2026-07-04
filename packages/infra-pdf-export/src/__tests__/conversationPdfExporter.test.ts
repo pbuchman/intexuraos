@@ -1,5 +1,33 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPdfConversationExporter } from '../conversationPdfExporter.js';
+import type { PdfConversationExportInput } from '../types.js';
+
+const validInput: PdfConversationExportInput = {
+  title: 'Alice context',
+  modelName: 'openrouter/minimax-m2.7',
+  initialPrompt: 'What happened?',
+  generatedAt: '2026-07-03T16:00:00.000Z',
+  sourceRange: {
+    from: '2026-06-30T00:00:00.000Z',
+    to: '2026-07-01T00:00:00.000Z',
+  },
+  messageCounts: { included: 47, excluded: 23 },
+  omittedBreakdown: {
+    mediaOnly: 2,
+    failedTranscriptions: 1,
+    pendingTranscriptions: 0,
+    nonText: 3,
+    overLimit: 0,
+  },
+  messages: [
+    { role: 'user', createdAt: '2026-07-03T16:01:00.000Z', text: 'User line '.repeat(120) },
+    {
+      role: 'assistant',
+      createdAt: '2026-07-03T16:02:00.000Z',
+      text: 'Assistant answer with\nmultiple lines.',
+    },
+  ],
+};
 
 afterEach(() => {
   vi.resetModules();
@@ -9,32 +37,8 @@ afterEach(() => {
 describe('createPdfConversationExporter', () => {
   it('renders an A4 PDF conversation snapshot without truncating messages', async () => {
     const exporter = createPdfConversationExporter();
-    const longUserText = 'User line '.repeat(120);
 
-    const result = await exporter.exportConversation({
-      title: 'Alice context',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 47, excluded: 23 },
-      omittedBreakdown: {
-        mediaOnly: 2,
-        failedTranscriptions: 1,
-        pendingTranscriptions: 0,
-        nonText: 3,
-        overLimit: 0,
-      },
-      messages: [
-        { role: 'user', createdAt: '2026-07-03T16:01:00.000Z', text: longUserText },
-        {
-          role: 'assistant',
-          createdAt: '2026-07-03T16:02:00.000Z',
-          text: 'Assistant answer with\nmultiple lines.',
-        },
-      ],
-    });
+    const result = await exporter.exportConversation(validInput);
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -57,60 +61,35 @@ describe('createPdfConversationExporter', () => {
     expect(readablePdfText).toContain('Media Only');
     expect(readablePdfText).toContain('Failed Transcriptions');
     expect(normalizedPdfText).toContain(normalizePdfText('Assistant answer with\nmultiple lines.'));
-    expect(normalizedPdfText).toContain(normalizePdfText(longUserText));
+    expect(normalizedPdfText).toContain(normalizePdfText(validInput.messages[0]?.text ?? ''));
   });
 
-  it('rejects empty titles and empty message text', async () => {
+  it('rejects invalid input before rendering', async () => {
     const exporter = createPdfConversationExporter();
+    const firstMessage = validInput.messages[0] ?? {
+      role: 'user' as const,
+      createdAt: '2026-07-03T16:01:00.000Z',
+      text: 'fallback',
+    };
 
-    const emptyTitleResult = await exporter.exportConversation({
-      title: ' ',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 0, excluded: 0 },
-      messages: [{ role: 'user', createdAt: '2026-07-03T16:01:00.000Z', text: '' }],
-    });
+    const invalidInputs: PdfConversationExportInput[] = [
+      { ...validInput, title: '   ' },
+      { ...validInput, modelName: '   ' },
+      { ...validInput, initialPrompt: '   ' },
+      { ...validInput, generatedAt: '   ' },
+      { ...validInput, sourceRange: { from: '', to: validInput.sourceRange.to } },
+      { ...validInput, sourceRange: { from: validInput.sourceRange.from, to: '' } },
+      { ...validInput, messageCounts: { included: -1, excluded: 0 } },
+      { ...validInput, messageCounts: { included: 0, excluded: -1 } },
+      { ...validInput, messages: [{ ...firstMessage, text: '' }] },
+    ];
 
-    expect(emptyTitleResult.ok).toBe(false);
-    if (!emptyTitleResult.ok) {
-      expect(emptyTitleResult.error.code).toBe('INVALID_INPUT');
-      expect(emptyTitleResult.error.message).toContain('title cannot be empty');
-    }
-
-    const emptyMessageResult = await exporter.exportConversation({
-      title: 'Alice context',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 1, excluded: 0 },
-      messages: [{ role: 'user', createdAt: '2026-07-03T16:01:00.000Z', text: '' }],
-    });
-
-    expect(emptyMessageResult.ok).toBe(false);
-    if (!emptyMessageResult.ok) {
-      expect(emptyMessageResult.error.code).toBe('INVALID_INPUT');
-      expect(emptyMessageResult.error.message).toContain('empty text');
-    }
-
-    const symbolTitleResult = await exporter.exportConversation({
-      title: '!!!',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 1, excluded: 0 },
-      messages: [{ role: 'user', createdAt: '2026-07-03T16:01:00.000Z', text: 'hello' }],
-    });
-
-    expect(symbolTitleResult.ok).toBe(true);
-    if (symbolTitleResult.ok) {
-      expect(symbolTitleResult.value.fileName).toBe('conversation-export.pdf');
+    for (const input of invalidInputs) {
+      const result = await exporter.exportConversation(input);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_INPUT');
+      }
     }
   });
 
@@ -118,13 +97,8 @@ describe('createPdfConversationExporter', () => {
     const exporter = createPdfConversationExporter();
 
     const result = await exporter.exportConversation({
+      ...validInput,
       title: 'Что решили?',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 1, excluded: 0 },
       messages: [{ role: 'user', createdAt: '2026-07-03T16:01:00.000Z', text: 'hello' }],
     });
 
@@ -137,26 +111,111 @@ describe('createPdfConversationExporter', () => {
     expect(result.value.bytes.toString('latin1')).toContain('NotoSans');
   });
 
+  it('uses the fallback title when markdown cleanup removes the provided title', async () => {
+    const exporter = createPdfConversationExporter();
+
+    const result = await exporter.exportConversation({
+      ...validInput,
+      title: '```',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.fileName).toBe('conversation-export.pdf');
+    expect(toReadablePdfText(extractPdfText(result.value.bytes))).toContain('conversation-export');
+  });
+
+  it('renders model attribution, initial prompt, and markdown answers as plain text', async () => {
+    const exporter = createPdfConversationExporter();
+    const input = {
+      ...validInput,
+      title: '# Decision **summary**',
+      modelName: 'openrouter/minimax-m2.7',
+      initialPrompt: '- Please decide what to include.',
+      messages: [
+        {
+          role: 'user' as const,
+          createdAt: '2026-07-03T16:01:00.000Z',
+          text: 'Please decide what to include.',
+        },
+        {
+          role: 'assistant' as const,
+          createdAt: '2026-07-03T16:02:00.000Z',
+          text: [
+            '# Decision',
+            '',
+            '**Include** the timeline and [evidence](https://example.test/evidence).',
+            '',
+            '- First action',
+            '- [ ] Follow up',
+            '| Owner | Task |',
+            '| --- | --- |',
+            '| Alice | Prepare docs |',
+            '![chart](https://example.test/chart.png)',
+            '',
+            '```text',
+            'Keep this raw line',
+            '```',
+          ].join('\n'),
+        },
+      ],
+    } as PdfConversationExportInput;
+
+    const result = await exporter.exportConversation(input);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const readablePdfText = toReadablePdfText(extractPdfText(result.value.bytes));
+    const normalizedPdfText = normalizePdfText(readablePdfText);
+    expect(readablePdfText).toContain('Decision summary');
+    expect(readablePdfText).toContain('LLM model: openrouter/minimax-m2.7');
+    expect(readablePdfText).toContain('Initial prompt: Please decide what to include.');
+    expect(readablePdfText).toContain('LLM response (openrouter/minimax-m2.7)');
+    expect(readablePdfText).toContain('Decision');
+    expect(readablePdfText).toContain(
+      'Include the timeline and evidence (https://example.test/evidence).'
+    );
+    expect(readablePdfText).toContain('First action');
+    expect(readablePdfText).toContain('Follow up');
+    expect(normalizedPdfText).toContain(normalizePdfText('Owner Task\nAlice Prepare docs'));
+    expect(readablePdfText).toContain('chart (https://example.test/chart.png)');
+    expect(readablePdfText).toContain('Keep this raw line');
+    expect(readablePdfText).not.toContain('# Decision **summary**');
+    expect(readablePdfText).not.toContain('# Decision');
+    expect(readablePdfText).not.toContain('**Include**');
+    expect(readablePdfText).not.toContain('- First action');
+    expect(readablePdfText).not.toContain('- [ ] Follow up');
+    expect(readablePdfText).not.toContain('| --- | --- |');
+    expect(readablePdfText).not.toContain('![chart]');
+    expect(readablePdfText).not.toContain('[evidence]');
+    expect(readablePdfText).not.toContain('```');
+  });
+
   it('renders page breaks without an omitted breakdown', async () => {
     const exporter = createPdfConversationExporter();
     const finalMessageText = 'Final page message survives pagination.';
 
     const result = await exporter.exportConversation({
-      title: 'Paged context',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
+      title: validInput.title,
+      modelName: validInput.modelName,
+      initialPrompt: validInput.initialPrompt,
+      generatedAt: validInput.generatedAt,
+      sourceRange: validInput.sourceRange,
       messageCounts: { included: 81, excluded: 0 },
       messages: [
         ...Array.from({ length: 80 }, (_, index) => ({
           role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
           createdAt: `2026-07-03T16:${String(index).padStart(2, '0')}:00.000Z`,
-          text: `Message ${index} `.repeat(40),
+          text: `Message ${String(index)} `.repeat(40),
         })),
         {
-          role: 'assistant',
+          role: 'assistant' as const,
           createdAt: '2026-07-03T17:30:00.000Z',
           text: finalMessageText,
         },
@@ -178,13 +237,8 @@ describe('createPdfConversationExporter', () => {
     const multilingualText = 'Zażółć gęślą jaźń. Árvíztűrő tükörfúrógép. Кириллица.';
 
     const result = await exporter.exportConversation({
+      ...validInput,
       title: 'Łódź context',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 1, excluded: 0 },
       messages: [{ role: 'user', createdAt: '2026-07-03T16:01:00.000Z', text: multilingualText }],
     });
 
@@ -209,26 +263,12 @@ describe('createPdfConversationExporter', () => {
       await import('../conversationPdfExporter.js');
     const exporter = createBrokenExporter();
 
-    const result = await exporter.exportConversation({
-      title: 'Alice context',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 1, excluded: 0 },
-      messages: [
-        {
-          role: 'user',
-          createdAt: '2026-07-03T16:01:00.000Z',
-          text: 'hello',
-        },
-      ],
-    });
+    const result = await exporter.exportConversation(validInput);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('RENDER_FAILED');
+      expect(result.error.message).toBe('render broke');
     }
   });
 
@@ -244,22 +284,7 @@ describe('createPdfConversationExporter', () => {
       await import('../conversationPdfExporter.js');
     const exporter = createBrokenExporter();
 
-    const result = await exporter.exportConversation({
-      title: 'Alice context',
-      generatedAt: '2026-07-03T16:00:00.000Z',
-      sourceRange: {
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-      },
-      messageCounts: { included: 1, excluded: 0 },
-      messages: [
-        {
-          role: 'user',
-          createdAt: '2026-07-03T16:01:00.000Z',
-          text: 'hello',
-        },
-      ],
-    });
+    const result = await exporter.exportConversation(validInput);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

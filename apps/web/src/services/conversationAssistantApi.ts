@@ -2,6 +2,7 @@ import { config } from '@/config';
 import type {
   ConversationAssistantContextCheckRequest,
   ConversationAssistantContextCheckResponse,
+  ConversationAssistantPdfDownload,
   ConversationAssistantSession,
   ConversationAssistantStreamEvent,
   ConversationAssistantTurn,
@@ -27,6 +28,23 @@ interface CreateConversationAssistantSessionResponse {
 
 function getSessionPath(sessionId: string): string {
   return `${CONVERSATION_ASSISTANT_SESSIONS_PATH}/${encodeURIComponent(sessionId)}`;
+}
+
+function parseAttachmentFilename(contentDisposition: string | null): string | null {
+  if (contentDisposition === null) return null;
+
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+  if (utf8Match?.[1] !== undefined) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const filenameMatch = /filename="([^"]+)"|filename=([^;]+)/i.exec(contentDisposition);
+  const filename = filenameMatch?.[1] ?? filenameMatch?.[2]?.trim();
+  return filename === undefined || filename === '' ? null : filename;
 }
 
 export async function listConversationAssistantSessions(
@@ -91,6 +109,34 @@ export async function listConversationAssistantTurns(
     `${getSessionPath(sessionId)}/turns`,
     accessToken
   );
+}
+
+export async function exportConversationAssistantSessionPdf(
+  accessToken: string,
+  sessionId: string
+): Promise<ConversationAssistantPdfDownload> {
+  const response = await fetch(
+    `${config.whatsappServiceUrl}${getSessionPath(sessionId)}/export.pdf`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Request-Id': newRequestId(),
+      },
+      cache: 'no-store',
+    }
+  );
+
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename:
+      parseAttachmentFilename(response.headers.get('Content-Disposition')) ??
+      `conversation-assistant-${sessionId}.pdf`,
+  };
 }
 
 export async function streamConversationAssistantTurn(

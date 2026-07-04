@@ -396,6 +396,11 @@ export interface ConversationAssistantTurnsResponse {
   turns: ConversationAssistantTurn[];
 }
 
+export interface ConversationAssistantPdfDownload {
+  blob: Blob;
+  filename: string;
+}
+
 export interface ConversationAssistantContextCheckRequest {
   chatId: string;
   from: string;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { Bot, RefreshCw } from 'lucide-react';
+import { Bot, Download, RefreshCw } from 'lucide-react';
 import { Button, ErrorBanner, Layout, MarkdownContent } from '@/components';
 import { ConversationAssistantComposer } from '@/components/whatsapp/ConversationAssistantComposer';
 import { ConversationAssistantSessionRail } from '@/components/whatsapp/ConversationAssistantSessionRail';
@@ -64,6 +64,11 @@ function SessionMetadata({
 
 export function WhatsAppConversationAssistantPage(): React.JSX.Element {
   const assistant = useWhatsAppConversationAssistant();
+  const canExportSelectedSession =
+    assistant.selectedSession !== undefined &&
+    assistant.turns.length > 0 &&
+    !assistant.sending &&
+    !assistant.exporting;
   const selectedSessionId = assistant.selectedSessionId;
   const turnsScrollRef = useRef<HTMLDivElement | null>(null);
   const followTurnsRef = useRef(true);
@@ -112,18 +117,33 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
               Analyze a frozen private direct-chat range and continue autosaved assistant sessions.
             </p>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(): void => {
-              void assistant.refresh();
-            }}
-            isLoading={assistant.loading}
-            loadingText="Refreshing"
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(): void => {
+                void assistant.exportSelectedSessionPdf();
+              }}
+              isLoading={assistant.exporting}
+              loadingText="Exporting"
+              disabled={!canExportSelectedSession}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export PDF
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(): void => {
+                void assistant.refresh();
+              }}
+              isLoading={assistant.loading}
+              loadingText="Refreshing"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
         </header>
 
         <ErrorBanner message={assistant.error} />

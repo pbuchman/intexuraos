@@ -78,6 +78,7 @@ function createHookResult(
     creating: false,
     checkingContext: false,
     sending: false,
+    exporting: false,
     error: null,
     largeContextWarning: null,
     selectSession: vi.fn(),
@@ -90,6 +91,7 @@ function createHookResult(
     confirmLargeContextCreate: vi.fn(),
     dismissLargeContextWarning: vi.fn(),
     sendFollowUp: vi.fn(),
+    exportSelectedSessionPdf: vi.fn(),
     refresh: vi.fn(),
     ...overrides,
   };
@@ -226,6 +228,95 @@ describe('WhatsAppConversationAssistantPage', () => {
 
     expect(createSession).toHaveBeenCalledTimes(1);
     expect(sendFollowUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables Export PDF when no selected session is loaded', () => {
+    render(<WhatsAppConversationAssistantPage />);
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled();
+  });
+
+  it('disables Export PDF until the selected session has completed turns', () => {
+    const result = createHookResult();
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSession: result.sessions[0],
+        turns: [],
+      })
+    );
+
+    render(<WhatsAppConversationAssistantPage />);
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled();
+  });
+
+  it('disables Export PDF while a follow-up send is in progress', () => {
+    const result = createHookResult();
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSession: result.sessions[0],
+        sending: true,
+        turns: [
+          {
+            id: 'turn-user',
+            sessionId: 'session-1',
+            userId: 'user-1',
+            role: 'user',
+            text: 'What did we agree?',
+            createdAt: '2026-06-21T11:01:00.000Z',
+          },
+        ],
+      })
+    );
+
+    render(<WhatsAppConversationAssistantPage />);
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeDisabled();
+  });
+
+  it('exports selected session through the hook action', async () => {
+    const user = userEvent.setup();
+    const exportSelectedSessionPdf = vi.fn();
+    const result = createHookResult();
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSession: result.sessions[0],
+        turns: [
+          {
+            id: 'turn-user',
+            sessionId: 'session-1',
+            userId: 'user-1',
+            role: 'user',
+            text: 'What did we agree?',
+            createdAt: '2026-06-21T11:01:00.000Z',
+          },
+        ],
+        exportSelectedSessionPdf,
+      })
+    );
+
+    render(<WhatsAppConversationAssistantPage />);
+
+    const exportButton = screen.getByRole('button', { name: 'Export PDF' });
+    expect(exportButton).toBeEnabled();
+
+    await user.click(exportButton);
+
+    expect(exportSelectedSessionPdf).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Exporting state while a PDF export is in flight', () => {
+    const result = createHookResult();
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSession: result.sessions[0],
+        exporting: true,
+      })
+    );
+
+    render(<WhatsAppConversationAssistantPage />);
+
+    expect(screen.getByRole('button', { name: 'Exporting' })).toBeDisabled();
   });
 
   it('renders large-context confirmation actions', async () => {

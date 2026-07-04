@@ -7,12 +7,12 @@ describe('migration 119 - private WhatsApp reaction target index', () => {
     expect(metadata).toMatchObject({
       id: '119',
       name: 'private-whatsapp-reaction-target-index',
-      description: 'Private WhatsApp reaction lookup by target message id',
+      description: 'Private WhatsApp reaction lookup and Conversation Assistant turn snapshots',
       createdAt: '2026-07-03',
     });
   });
 
-  it('defines normalized private WhatsApp reaction lookup indexes', () => {
+  it('defines normalized private WhatsApp reaction lookup and assistant turn indexes', () => {
     expect(indexes).toEqual([
       {
         collectionGroup: 'whatsapp_private_messages',
@@ -57,6 +57,16 @@ describe('migration 119 - private WhatsApp reaction target index', () => {
           { fieldPath: 'messageType', order: 'ASCENDING' },
           { fieldPath: 'rawMatrixEvent.content.`m.relates_to`.event_id', order: 'ASCENDING' },
           { fieldPath: 'eventTimestamp', order: 'ASCENDING' },
+          { fieldPath: '__name__', order: 'ASCENDING' },
+        ],
+      },
+      {
+        collectionGroup: 'whatsapp_conversation_assistant_turns',
+        queryScope: 'COLLECTION',
+        fields: [
+          { fieldPath: 'sessionId', order: 'ASCENDING' },
+          { fieldPath: 'userId', order: 'ASCENDING' },
+          { fieldPath: 'createdAt', order: 'ASCENDING' },
           { fieldPath: '__name__', order: 'ASCENDING' },
         ],
       },

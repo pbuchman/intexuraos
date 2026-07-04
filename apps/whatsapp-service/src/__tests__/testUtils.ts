@@ -9,6 +9,12 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { ok } from '@intexuraos/common-core';
+import type {
+  ConversationAssistantPdfExporter,
+  ConversationAssistantPdfExportError,
+  ConversationAssistantPdfExportInput,
+} from '../domain/conversation-assistant/ports.js';
+import type { ExportConversationAssistantPdfResult } from '../domain/conversation-assistant/types.js';
 import {
   FakeConversationAssistantRepository,
   FakeEventPublisher,
@@ -116,6 +122,45 @@ export const testConfig: Config = {
   port: 8080,
   host: '0.0.0.0',
 };
+
+export class FakePdfConversationExporter implements ConversationAssistantPdfExporter {
+  readonly calls: ConversationAssistantPdfExportInput[] = [];
+  private nextResult: import('@intexuraos/common-core').Result<
+    ExportConversationAssistantPdfResult,
+    ConversationAssistantPdfExportError
+  > = ok({
+    bytes: Buffer.from('%PDF-test'),
+    fileName: 'alice-context.pdf',
+    contentType: 'application/pdf',
+  });
+
+  exportConversation(
+    input: ConversationAssistantPdfExportInput
+  ): Promise<
+    import('@intexuraos/common-core').Result<
+      ExportConversationAssistantPdfResult,
+      ConversationAssistantPdfExportError
+    >
+  > {
+    this.calls.push(input);
+    return Promise.resolve(this.nextResult);
+  }
+
+  failNext(message = 'render failed'): void {
+    this.nextResult = {
+      ok: false,
+      error: { message },
+    };
+  }
+
+  setFileName(fileName: string): void {
+    this.nextResult = ok({
+      bytes: Buffer.from('%PDF-test'),
+      fileName,
+      contentType: 'application/pdf',
+    });
+  }
+}
 
 /**
  * Create a valid HMAC-SHA256 signature for a payload.
@@ -529,6 +574,7 @@ export interface TestContext {
   linkPreviewFetcher: FakeLinkPreviewFetcherPort;
   conversationAssistantRepository: FakeConversationAssistantRepository;
   llmClient: FakeLlmGenerateClient;
+  pdfConversationExporter: FakePdfConversationExporter;
 }
 
 /**
@@ -552,6 +598,7 @@ export function setupTestContext(): TestContext {
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
     conversationAssistantRepository: null as unknown as FakeConversationAssistantRepository,
     llmClient: null as unknown as FakeLlmGenerateClient,
+    pdfConversationExporter: null as unknown as FakePdfConversationExporter,
   };
 
   beforeAll(async () => {
@@ -577,6 +624,7 @@ export function setupTestContext(): TestContext {
     context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
     context.conversationAssistantRepository = new FakeConversationAssistantRepository();
     context.llmClient = new FakeLlmGenerateClient();
+    context.pdfConversationExporter = new FakePdfConversationExporter();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
@@ -596,6 +644,7 @@ export function setupTestContext(): TestContext {
       llmClientFactory: {
         createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
       },
+      pdfConversationExporter: context.pdfConversationExporter,
       conversationAssistantModel: 'or:minimax/minimax-m2.7',
     });
 

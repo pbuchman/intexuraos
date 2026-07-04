@@ -69,10 +69,21 @@ export interface SendConversationAssistantTurnInput {
   question: string;
 }
 
+export interface ExportConversationAssistantPdfInput {
+  userId: string;
+  sessionId: string;
+}
+
 export interface CreateConversationAssistantSessionResult {
   session: ConversationAssistantSession;
   turns: ConversationAssistantTurn[];
   context: PrivateConversationContextResponse;
+}
+
+export interface ExportConversationAssistantPdfResult {
+  bytes: Buffer;
+  fileName: string;
+  contentType: 'application/pdf';
 }
 
 export interface ConversationAssistantError {

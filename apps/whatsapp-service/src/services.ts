@@ -18,6 +18,7 @@ import { createWebAgentLinkPreviewClient } from './infra/linkpreview/webAgentLin
 import { createLlmClient } from '@intexuraos/llm-factory';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { createPdfConversationExporter } from '@intexuraos/infra-pdf-export';
 import { err, ok } from '@intexuraos/common-core';
 import type {
   EventPublisherPort,
@@ -36,6 +37,7 @@ import type {
 } from './domain/whatsapp/index.js';
 import type {
   ConversationAssistantLlmClientFactory,
+  ConversationAssistantPdfExporter,
   ConversationAssistantRepository,
 } from './domain/conversation-assistant/ports.js';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
@@ -95,6 +97,7 @@ export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
   conversationAssistantRepository?: ConversationAssistantRepository;
   llmClientFactory?: ConversationAssistantLlmClientFactory;
+  pdfConversationExporter?: ConversationAssistantPdfExporter;
   conversationAssistantModel?: string;
 }
 
@@ -145,6 +148,7 @@ export function getServices(): ServiceContainer {
     }),
     conversationAssistantRepository: createConversationAssistantRepository(),
     llmClientFactory: createConversationAssistantLlmClientFactory(serviceConfig),
+    pdfConversationExporter: createConversationAssistantPdfExporter(),
     conversationAssistantModel: serviceConfig.conversationAssistantModel,
   };
   return container;
@@ -189,6 +193,21 @@ export function createConversationAssistantLlmClientFactory(
         usageSink,
         ownerType: 'user',
       }));
+    },
+  };
+}
+
+export function createConversationAssistantPdfExporter(): ConversationAssistantPdfExporter {
+  const exporter = createPdfConversationExporter();
+  return {
+    async exportConversation(
+      input
+    ): ReturnType<ConversationAssistantPdfExporter['exportConversation']> {
+      const result = await exporter.exportConversation(input);
+      if (!result.ok) {
+        return err({ message: result.error.message });
+      }
+      return ok(result.value);
     },
   };
 }

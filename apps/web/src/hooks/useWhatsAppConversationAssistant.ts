@@ -5,6 +5,7 @@ import { useAuth } from '@/context';
 import {
   checkConversationAssistantContext,
   createConversationAssistantSession,
+  exportConversationAssistantSessionPdf,
   getConversationAssistantSession,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
@@ -63,6 +64,7 @@ export interface UseWhatsAppConversationAssistantResult {
   creating: boolean;
   checkingContext: boolean;
   sending: boolean;
+  exporting: boolean;
   error: string | null;
   largeContextWarning: ConversationAssistantContextCheckResponse | null;
   selectSession: (sessionId: string) => void;
@@ -75,6 +77,7 @@ export interface UseWhatsAppConversationAssistantResult {
   confirmLargeContextCreate: () => Promise<void>;
   dismissLargeContextWarning: () => void;
   sendFollowUp: () => Promise<void>;
+  exportSelectedSessionPdf: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -107,6 +110,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
   const sessionListRequestIdRef = useRef(0);
   const sendRequestIdRef = useRef(0);
   const sendInFlightRef = useRef(false);
+  const exportInFlightRef = useRef(false);
   const turnsRequestIdRef = useRef(0);
   const skipNextSelectedSessionLoadRef = useRef<string | undefined>(undefined);
 
@@ -130,6 +134,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
   const [creating, setCreating] = useState(false);
   const [checkingContext, setCheckingContext] = useState(false);
   const [sending, setSending] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingLargeContext, setPendingLargeContext] =
     useState<PendingLargeContextCreate | null>(null);
@@ -578,6 +583,41 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     }
   }, [followUpQuestion, getAccessToken, streamQuestionIntoSession]);
 
+  const exportSelectedSessionPdf = useCallback(async (): Promise<void> => {
+    if (exportInFlightRef.current) return;
+
+    const session = selectedSession;
+    if (session === undefined) {
+      setError('Select an assistant session before exporting.');
+      return;
+    }
+
+    exportInFlightRef.current = true;
+    setExporting(true);
+    setError(null);
+
+    try {
+      const token = await getAccessToken();
+      const download = await exportConversationAssistantSessionPdf(token, session.id);
+      const url = URL.createObjectURL(download.blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = download.filename;
+      document.body.append(anchor);
+      try {
+        anchor.click();
+      } finally {
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to export assistant session'));
+    } finally {
+      exportInFlightRef.current = false;
+      setExporting(false);
+    }
+  }, [getAccessToken, selectedSession]);
+
   return {
     sessions,
     selectedSessionId,
@@ -594,6 +634,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     creating,
     checkingContext,
     sending,
+    exporting,
     error,
     largeContextWarning: pendingLargeContext?.check ?? null,
     selectSession,
@@ -606,6 +647,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     confirmLargeContextCreate,
     dismissLargeContextWarning,
     sendFollowUp,
+    exportSelectedSessionPdf,
     refresh,
   };
 }
