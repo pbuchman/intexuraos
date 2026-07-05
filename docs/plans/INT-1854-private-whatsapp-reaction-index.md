@@ -382,15 +382,14 @@ Open the private WhatsApp messages view, select a conversation, and wait for mes
 
 Expected: the selected conversation renders messages; the backend does not return `Failed to query private WhatsApp reactions`.
 
-- [ ] **Step 3: Check logs when `gcloud` is available**
+- [ ] **Step 3: Check production `whatsapp-service` logs**
 
 Run:
 
 ```bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="whatsapp-service" AND textPayload:"Failed to query private WhatsApp reactions"' \
-  --project=intexuraos-dev-pbuchman \
-  --limit=20 \
-  --format=json
+HETZNER_PROD_HOST="${HETZNER_PROD_HOST:-162.55.210.48}"
+ssh "deploy@${HETZNER_PROD_HOST}" \
+  'pm2 logs whatsapp-service --lines 200 --nostream | grep -F "Failed to query private WhatsApp reactions" || true'
 ```
 
 Expected: no new matching failures after the index finishes building and the conversation view is retried.
