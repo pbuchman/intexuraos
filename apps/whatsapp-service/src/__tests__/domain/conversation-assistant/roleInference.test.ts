@@ -135,6 +135,9 @@ describe('inferConversationAssistantRoleLabel', () => {
       'Marketing Consultant'
     );
     expect(normalizeConversationAssistantRoleLabel('Policy Advisor')).toBe('Policy Advisor');
+    expect(normalizeConversationAssistantRoleLabel('driver')).toBe('Driver');
+    expect(normalizeConversationAssistantRoleLabel('Drone Engineer')).toBe('Drone Engineer');
+    expect(normalizeConversationAssistantRoleLabel('Drama Teacher')).toBe('Drama Teacher');
     expect(normalizeConversationAssistantRoleLabel('tax advisor/consultant')).toBe(
       'Tax Advisor/Consultant'
     );

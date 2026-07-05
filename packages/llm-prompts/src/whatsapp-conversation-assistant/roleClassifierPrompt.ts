@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { PromptBuilder } from '../shared/types.js';
 
 export const CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT = {
-  version: '1.1.0',
+  version: '1.1.1',
   promptType: 'whatsapp-conversation-assistant-role-classifier',
 } as const;
 
@@ -12,7 +12,7 @@ const ROLE_LABEL_HAS_LETTER_PATTERN = /\p{L}/u;
 const ROLE_LABEL_REPEATED_PUNCTUATION_PATTERN = /[.&'/-]{2,}/u;
 const ROLE_LABEL_WORD_PATTERN = /\p{L}[\p{L}\p{N}]*/gu;
 const ROLE_LABEL_MAX_WORDS = 3;
-const ROLE_LABEL_PERSONAL_TITLE_PATTERN = /\b(?:dr|mr|mrs|ms|prof)\.?\s*\p{L}/iu;
+const ROLE_LABEL_PERSONAL_TITLE_PATTERN = /\b(?:dr|mr|mrs|ms|prof)(?:\.|\s+)\s*\p{L}/iu;
 const ROLE_LABEL_COMMON_SINGLE_NAME_PATTERN =
   /^(?:alex|alice|anna|ben|charles|david|emma|jane|john|julia|maria|michael|natalie|oliver|piotr|priya|robert|sarah|sophia|thomas|william)$/iu;
 const ROLE_LABEL_ORGANIZATION_PATTERN =
@@ -73,7 +73,7 @@ export const conversationAssistantRoleClassifierPrompt: PromptBuilder<Conversati
   {
     name: 'whatsapp-conversation-assistant-role-classifier',
     description: 'Infers the expert role label to display for a WhatsApp assistant session',
-    version: '1.1.0',
+    version: '1.1.1',
     build(input: ConversationAssistantRoleClassifierPromptInput): string {
       return [
         'Infer the professional or expert role label that should be displayed for an assistant session.',

@@ -11,7 +11,7 @@ export const DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL = 'Assistant';
 const MIN_ROLE_CONFIDENCE = 0.6;
 const ROLE_LABEL_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} .&'/-]{0,38}[\p{L}\p{N}]$/u;
 const HAS_LETTER_PATTERN = /\p{L}/u;
-const PERSONAL_TITLE_PATTERN = /\b(?:dr|mr|mrs|ms|prof)\.?\s*\p{L}/iu;
+const PERSONAL_TITLE_PATTERN = /\b(?:dr|mr|mrs|ms|prof)(?:\.|\s+)\s*\p{L}/iu;
 const COMMON_PERSON_NAME_PATTERN =
   /^(?:alex|alice|anna|ben|charles|david|emma|jane|john|julia|maria|michael|natalie|oliver|piotr|priya|robert|sarah|sophia|thomas|william)\s+\p{L}[\p{L}'-]*$/iu;
 const ORGANIZATION_PATTERN =

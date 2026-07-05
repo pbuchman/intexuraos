@@ -8,7 +8,7 @@ import {
 
 describe('conversation assistant role classifier prompt', () => {
   it('exposes semver prompt metadata and a dedicated prompt type', () => {
-    expect(CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT.version).toBe('1.1.0');
+    expect(CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT.version).toBe('1.1.1');
     expect(CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT.promptType).toBe(
       'whatsapp-conversation-assistant-role-classifier'
     );
@@ -91,6 +91,21 @@ describe('conversation assistant role classifier prompt', () => {
       roleLabel: 'Policy Advisor',
       confidence: 0.91,
       rationale: 'The user asks about policy.',
+    });
+    const validDriver = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Driver',
+      confidence: 0.91,
+      rationale: 'The user asks about professional driving.',
+    });
+    const validDroneEngineer = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Drone Engineer',
+      confidence: 0.91,
+      rationale: 'The user asks about drone engineering.',
+    });
+    const validDramaTeacher = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Drama Teacher',
+      confidence: 0.91,
+      rationale: 'The user asks about drama instruction.',
     });
     const invalid = conversationAssistantRoleClassificationSchema.safeParse({
       roleLabel: 'Employment Lawyer',
@@ -216,6 +231,9 @@ describe('conversation assistant role classifier prompt', () => {
     expect(validSecurityAnalyst.success).toBe(true);
     expect(validMarketingConsultant.success).toBe(true);
     expect(validPolicyAdvisor.success).toBe(true);
+    expect(validDriver.success).toBe(true);
+    expect(validDroneEngineer.success).toBe(true);
+    expect(validDramaTeacher.success).toBe(true);
     expect(invalid.success).toBe(false);
     expect(markdown.success).toBe(false);
     expect(personalTitle.success).toBe(false);
