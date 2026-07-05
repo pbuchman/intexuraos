@@ -1,5 +1,5 @@
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { ConversationAssistantModel } from '@intexuraos/llm-contract';
+import type { ConversationAssistantDateRange, ConversationAssistantModel } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import type {
   ConversationAssistantResult,
@@ -41,8 +41,8 @@ export interface ConversationAssistantPdfExportInput {
   modelName: string;
   initialPrompt: string;
   generatedAt: string;
-  sourceRange: { from: string; to: string };
-  effectiveRange: { from: string; to: string };
+  sourceRange: ConversationAssistantDateRange;
+  effectiveRange: ConversationAssistantDateRange;
   messageCounts: { included: number; excluded: number };
   omittedBreakdown?: Record<string, number>;
   messages: {

@@ -1,7 +1,10 @@
 import { getServices, setServices } from '../services.js';
 import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 import type { ConversationAssistantRepository } from '../domain/conversation-assistant/ports.js';
-import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+  type ConversationAssistantDateRange,
+} from '@intexuraos/llm-contract';
 
 const USER_ID = 'user-123';
 const SOURCE_ACCOUNT_ID = 'source-123';
@@ -95,7 +98,7 @@ describe('Conversation Assistant routes', () => {
       data: {
         session: {
           id: string;
-          effectiveRange: { from: string; to: string };
+          effectiveRange: ConversationAssistantDateRange;
           transcriptText?: string;
           model: string;
           modelDisplayName: string;
@@ -175,7 +178,7 @@ describe('Conversation Assistant routes', () => {
       data: {
         session: {
           id: string;
-          effectiveRange: { from: string; to: string };
+          effectiveRange: ConversationAssistantDateRange;
           transcriptText?: string;
         };
         turns: { role: string }[];

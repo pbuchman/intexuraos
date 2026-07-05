@@ -13,6 +13,7 @@ export type {
   LlmChatRole,
   LlmChatTextBlock,
   LlmChatMessage,
+  ConversationAssistantDateRange,
   GenerateChatReasoningEffort,
   GenerateChatReasoningOptions,
   GenerateChatOptions,

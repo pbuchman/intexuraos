@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { ConversationAssistantDateRange } from '@intexuraos/llm-contract';
 import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppMessage,
@@ -28,7 +29,7 @@ export interface PrivateConversationContextResponse {
     lastEventAt: string;
     messageCount: number;
   };
-  range: { from: string; to: string };
+  range: ConversationAssistantDateRange;
   messages: PrivateConversationContextMessage[];
   omitted: {
     mediaOnly: number;
@@ -43,7 +44,7 @@ export interface PrivateConversationContextResponse {
 
 export interface ProjectPrivateConversationContextInput {
   chat: PrivateWhatsAppChat;
-  range: { from: string; to: string };
+  range: ConversationAssistantDateRange;
   messages: PrivateWhatsAppMessage[];
   maxMessages?: number;
   totalMessageCount?: number;

@@ -135,6 +135,11 @@ export interface LlmChatMessage {
   content: string | LlmChatTextBlock[];
 }
 
+export interface ConversationAssistantDateRange {
+  from: string;
+  to: string;
+}
+
 export type GenerateChatReasoningEffort =
   | 'max'
   | 'xhigh'

@@ -1,4 +1,4 @@
-import type { LlmChatMessage } from '@intexuraos/llm-contract';
+import type { ConversationAssistantDateRange, LlmChatMessage } from '@intexuraos/llm-contract';
 
 export const WHATSAPP_CONVERSATION_ASSISTANT_PROMPT = {
   version: '3.0.0',
@@ -8,8 +8,8 @@ export const WHATSAPP_CONVERSATION_ASSISTANT_PROMPT = {
 export interface WhatsAppConversationAssistantPromptInput {
   transcriptText: string;
   chatDisplayName?: string;
-  range: { from: string; to: string };
-  effectiveRange: { from: string; to: string };
+  range: ConversationAssistantDateRange;
+  effectiveRange: ConversationAssistantDateRange;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
   question: string;
 }

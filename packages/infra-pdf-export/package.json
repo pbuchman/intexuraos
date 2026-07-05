@@ -16,6 +16,7 @@
   "dependencies": {
     "@expo-google-fonts/noto-sans": "0.4.2",
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
     "pdfkit": "^0.19.1"
   },
   "devDependencies": {

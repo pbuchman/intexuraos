@@ -1,8 +1,9 @@
 import { Bot, Clock, MessageSquare } from 'lucide-react';
+import type { ConversationAssistantDateRange } from '@intexuraos/llm-contract';
 import type { ConversationAssistantSession } from '@/types';
 import { formatDateTime, formatDateTimeCompact } from '@/utils/dateFormat';
 
-function formatRange(range: { from: string; to: string }): string {
+function formatRange(range: ConversationAssistantDateRange): string {
   return `${formatDateTime(range.from)} - ${formatDateTime(range.to)}`;
 }
 
