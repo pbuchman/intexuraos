@@ -280,7 +280,7 @@ Create `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/roleIn
 
 ```ts
 import { err, ok } from '@intexuraos/common-core';
-import type { GenerateResult, LlmGenerateClient, LLMError } from '@intexuraos/llm-factory';
+import type { LlmGenerateClient, LLMError } from '@intexuraos/llm-factory';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
@@ -367,6 +367,7 @@ describe('inferConversationAssistantRoleLabel', () => {
     expect(normalizeConversationAssistantRoleLabel('Marine Surveyor')).toBe('Marine Surveyor');
     expect(normalizeConversationAssistantRoleLabel('Data Scientist')).toBe('Data Scientist');
     expect(normalizeConversationAssistantRoleLabel('Tax Advisor')).toBe('Tax Advisor');
+    expect(normalizeConversationAssistantRoleLabel('Alice Smith')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('Dr. Alice Smith')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('123')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('Acme Legal Group')).toBe('Assistant');
@@ -407,6 +408,7 @@ const MIN_ROLE_CONFIDENCE = 0.6;
 const ROLE_LABEL_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} .&'/-]{0,38}[\p{L}\p{N}]$/u;
 const HAS_LETTER_PATTERN = /\p{L}/u;
 const PERSONAL_TITLE_PATTERN = /^(?:dr|mr|mrs|ms|prof)\.?\s+\p{L}/iu;
+const COMMON_PERSON_NAME_PATTERN = /^(?:alice|jane|john|maria|michael|piotr|robert|sarah)\s+\p{L}[\p{L}'-]*$/iu;
 const ORGANIZATION_PATTERN = /\b(?:inc|llc|ltd|corp(?:oration)?|company|group|clinic|hospital|firm|partners|associates)\b/iu;
 const CREDENTIAL_PATTERN = /\b(?:licensed|certified|registered|accredited|phd|m\.?d\.?|esq\.?)\b/iu;
 
@@ -451,6 +453,7 @@ export function normalizeConversationAssistantRoleLabel(label: string): string {
     !ROLE_LABEL_PATTERN.test(collapsed)
     || !HAS_LETTER_PATTERN.test(collapsed)
     || PERSONAL_TITLE_PATTERN.test(collapsed)
+    || COMMON_PERSON_NAME_PATTERN.test(collapsed)
     || ORGANIZATION_PATTERN.test(collapsed)
     || CREDENTIAL_PATTERN.test(collapsed)
   ) {
@@ -586,6 +589,8 @@ it('falls back to Assistant when role classification returns invalid content', a
 ```
 
 If `FakeLlmGenerateClient` does not currently support queued `generate()` responses separately from chat responses, add minimal queue helpers in `apps/whatsapp-service/src/__tests__/fakes.ts` before these tests.
+
+Also update existing `llmFactoryCalls` assertions affected by the new classifier call. Session creation with an initial question should expect two selected-model factory calls (one classifier call and one answer-generation call), and create-plus-follow-up flows should expect three selected-model factory calls.
 
 - [ ] **Step 6: Verify backend role inference**
 
