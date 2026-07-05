@@ -13,6 +13,7 @@ import { registerHealthCheck, secretsHealthCheck } from '@intexuraos/http-server
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { calendarRoutes } from './routes/calendarRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
+import { internalScheduleRoutes } from './routes/internalScheduleRoutes.js';
 
 const SERVICE_NAME = 'calendar-agent';
 const SERVICE_VERSION = '0.0.4';
@@ -23,6 +24,7 @@ const REQUIRED_SECRETS = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_WHATSAPP_SERVICE_URL',
 ];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
@@ -131,6 +133,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       tags: [
         { name: 'system', description: 'System endpoints (health, docs)' },
         { name: 'calendar', description: 'Calendar event operations' },
+        { name: 'internal', description: 'Internal service operations' },
       ],
     },
   };
@@ -169,6 +172,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(calendarRoutes);
   await app.register(internalRoutes);
+  await app.register(internalScheduleRoutes);
 
   app.get(
     '/openapi.json',

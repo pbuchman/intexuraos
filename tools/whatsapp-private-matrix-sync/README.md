@@ -54,6 +54,8 @@ The adapter requires:
 - `MATRIX_HOMESERVER_URL`
 - `MATRIX_USER_ID`
 - `MATRIX_ACCESS_TOKEN_FILE`
+- `MATRIX_OUTBOUND_AUTH_TOKEN_FILE`
+- `MATRIX_OUTBOUND_TARGETS_FILE`
 - `INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL`
 - `INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_URL`
 - `INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_BACKFILL_URL` (optional, defaults from the events URL)
@@ -64,6 +66,60 @@ The adapter requires:
 - `SOURCE_WHATSAPP_PHONE_NUMBER`
 - `MATRIX_BRIDGE_BOT_USERS` (comma-separated Matrix user IDs to ignore)
 - `WHATSAPP_SYNC_STATE_FILE`
+
+`MATRIX_OUTBOUND_AUTH_TOKEN_FILE` is an adapter-local bearer token used by trusted callers on the Matrix host for outbound readiness and send requests. `MATRIX_OUTBOUND_TARGETS_FILE` points to a JSON mapping from `sourceAccountId` and logical target name to a Matrix room id, for example:
+
+```json
+{
+  "pbuchman-private-whatsapp": {
+    "intex_agent": "!roomid:home-dev"
+  }
+}
+```
+
+## Outbound Matrix Delivery
+
+The adapter now exposes two adapter-local outbound endpoints:
+
+- `GET /internal/matrix/outbound/readiness/:sourceAccountId/:target`
+- `POST /internal/matrix/outbound/messages`
+
+Both endpoints require `Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>`.
+
+Readiness returns only configuration state:
+
+- `{ "status": "ready" }`
+- `{ "status": "setup_required", "reason": "..." }`
+
+Send expects:
+
+```json
+{
+  "sourceAccountId": "pbuchman-private-whatsapp",
+  "target": "intex_agent",
+  "text": "new session: Send me events that they have in the calendar in the next 24 hours.",
+  "idempotencyKey": "calendar-daily-lookahead-2026-07-04"
+}
+```
+
+`text` is the raw Matrix message body. Calendar schedules keep the user prompt as
+`Send me events that they have in the calendar in the next 24 hours.` and
+`whatsapp-service` applies the `new session:` command prefix when
+`startNewSession` is requested.
+
+On success it sends a Matrix `m.room.message` with `PUT /_matrix/client/v3/rooms/{roomId}/send/m.room.message/{txnId}` and returns `{ "status": "sent", "matrixEventId": "$..." }`.
+
+## Troubleshooting
+
+- `401 unauthorized`: the caller token does not match `MATRIX_OUTBOUND_AUTH_TOKEN_FILE`, or the file is missing/empty.
+- `setup_required` with `missing_matrix_outbound_targets`: `MATRIX_OUTBOUND_TARGETS_FILE` is unset, unreadable, or missing on disk.
+- `setup_required` with `missing_matrix_outbound_source_account`: the file does not contain the requested `sourceAccountId`.
+- `setup_required` with `missing_matrix_outbound_target`: the source account exists, but the requested logical target such as `intex_agent` is not mapped.
+- `setup_required` with `missing_matrix_access_token` or `missing_matrix_homeserver_url`: the adapter cannot initialize a sendable Matrix client for outbound delivery.
+
+## Scheduled Delivery Caveat
+
+Scheduled calendar notifications depend on the outbound adapter setup above. The IntexuraOS UI can only report delivery as ready after the Matrix host has all three pieces in place: the Matrix access token, the outbound auth token file, and the outbound targets mapping file. Without that host-side setup, scheduled notification saves can succeed while delivery remains `setup_required`.
 
 ## Development
 

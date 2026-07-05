@@ -8,6 +8,7 @@ import { eventUpdateRoutes } from './eventUpdateRoutes.js';
 import { eventDeleteRoutes } from './eventDeleteRoutes.js';
 import { freeBusyRoutes } from './freeBusyRoutes.js';
 import { failedEventRoutes } from './failedEventRoutes.js';
+import { scheduleRoutes } from './scheduleRoutes.js';
 
 export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   void fastify.register(eventQueryRoutes);
@@ -16,5 +17,6 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   void fastify.register(eventDeleteRoutes);
   void fastify.register(freeBusyRoutes);
   void fastify.register(failedEventRoutes);
+  void fastify.register(scheduleRoutes);
   done();
 };

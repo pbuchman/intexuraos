@@ -25,6 +25,8 @@ import type {
   UpdateCalendarPreviewInput,
 } from './models.js';
 import type { CalendarError } from './errors.js';
+import type { CalendarScheduleRepository } from './schedules/scheduleRepository.js';
+import type { WhatsAppScheduleClient } from './schedules/types.js';
 
 export type { UserServiceClient, OAuthTokenResult, ExtractedCalendarEvent };
 
@@ -140,3 +142,5 @@ export interface CalendarPreviewRepository {
   /** Delete a preview by actionId */
   delete(actionId: string): Promise<Result<void, CalendarError>>;
 }
+
+export type { CalendarScheduleRepository, WhatsAppScheduleClient };

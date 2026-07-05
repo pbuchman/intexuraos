@@ -23,6 +23,17 @@ import type {
   CalendarPreviewRepository,
   CreateCalendarPreviewInput,
   UpdateCalendarPreviewInput,
+  CalendarSchedule,
+  CalendarScheduleRun,
+  ClaimedCalendarSchedule,
+  CalendarScheduleTaskType,
+  CalendarScheduleRepository,
+  ClaimDueSchedulesInput,
+  MarkRunSentInput,
+  MarkRunFailedInput,
+  MatrixDeliveryStatus,
+  OutboundMatrixMessageResult,
+  WhatsAppScheduleClient,
 } from '../domain/index.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LLMError } from '@intexuraos/llm-contract';
@@ -602,5 +613,198 @@ export class FakeCalendarPreviewRepository implements CalendarPreviewRepository 
       return err({ code: 'NOT_FOUND', message: 'Calendar preview not found' });
     }
     return ok(undefined);
+  }
+}
+
+export class FakeCalendarScheduleRepository implements CalendarScheduleRepository {
+  private schedules = new Map<string, CalendarSchedule>();
+  private runs = new Map<string, CalendarScheduleRun>();
+  readonly claimDueSchedulesCalls: ClaimDueSchedulesInput[] = [];
+  readonly markRunSentCalls: MarkRunSentInput[] = [];
+  readonly markRunFailedCalls: MarkRunFailedInput[] = [];
+
+  private claimDueSchedulesResult: Result<ClaimedCalendarSchedule[], CalendarError> | null = null;
+  private upsertResult: Result<CalendarSchedule, CalendarError> | null = null;
+  private getByUserAndTaskTypeResult: Result<CalendarSchedule | null, CalendarError> | null = null;
+  private markRunSentResult: Result<void, CalendarError> | null = null;
+  private markRunFailedResult: Result<void, CalendarError> | null = null;
+
+  setClaimDueSchedulesResult(result: Result<ClaimedCalendarSchedule[], CalendarError>): void {
+    this.claimDueSchedulesResult = result;
+  }
+
+  setUpsertResult(result: Result<CalendarSchedule, CalendarError>): void {
+    this.upsertResult = result;
+  }
+
+  setGetByUserAndTaskTypeResult(result: Result<CalendarSchedule | null, CalendarError>): void {
+    this.getByUserAndTaskTypeResult = result;
+  }
+
+  setMarkRunSentResult(result: Result<void, CalendarError>): void {
+    this.markRunSentResult = result;
+  }
+
+  setMarkRunFailedResult(result: Result<void, CalendarError>): void {
+    this.markRunFailedResult = result;
+  }
+
+  seedSchedule(schedule: CalendarSchedule): void {
+    this.schedules.set(schedule.id, schedule);
+  }
+
+  seedRun(run: CalendarScheduleRun): void {
+    this.runs.set(run.id, run);
+  }
+
+  getSchedule(id: string): CalendarSchedule | undefined {
+    return this.schedules.get(id);
+  }
+
+  getRun(id: string): CalendarScheduleRun | undefined {
+    return this.runs.get(id);
+  }
+
+  reset(): void {
+    this.schedules.clear();
+    this.runs.clear();
+    this.claimDueSchedulesCalls.length = 0;
+    this.markRunSentCalls.length = 0;
+    this.markRunFailedCalls.length = 0;
+    this.claimDueSchedulesResult = null;
+    this.upsertResult = null;
+    this.getByUserAndTaskTypeResult = null;
+    this.markRunSentResult = null;
+    this.markRunFailedResult = null;
+  }
+
+  async upsert(schedule: CalendarSchedule): Promise<Result<CalendarSchedule, CalendarError>> {
+    if (this.upsertResult !== null) {
+      return this.upsertResult;
+    }
+    this.schedules.set(schedule.id, schedule);
+    return ok(schedule);
+  }
+
+  async getByUserAndTaskType(
+    userId: string,
+    taskType: CalendarScheduleTaskType
+  ): Promise<Result<CalendarSchedule | null, CalendarError>> {
+    if (this.getByUserAndTaskTypeResult !== null) {
+      return this.getByUserAndTaskTypeResult;
+    }
+    for (const schedule of this.schedules.values()) {
+      if (schedule.userId === userId && schedule.taskType === taskType) {
+        return ok(schedule);
+      }
+    }
+    return ok(null);
+  }
+
+  async claimDueSchedules(
+    input: ClaimDueSchedulesInput
+  ): Promise<Result<ClaimedCalendarSchedule[], CalendarError>> {
+    this.claimDueSchedulesCalls.push(input);
+    if (this.claimDueSchedulesResult !== null) {
+      return this.claimDueSchedulesResult;
+    }
+    return ok([]);
+  }
+
+  async markRunSent(input: MarkRunSentInput): Promise<Result<void, CalendarError>> {
+    this.markRunSentCalls.push(input);
+    if (this.markRunSentResult !== null) {
+      return this.markRunSentResult;
+    }
+    const existingSchedule = this.schedules.get(input.scheduleId);
+    if (existingSchedule !== undefined) {
+      const { lease: _lease, ...scheduleWithoutLease } = existingSchedule;
+      this.schedules.set(input.scheduleId, {
+        ...scheduleWithoutLease,
+        lastRunAt: input.finishedAt,
+        lastRunLocalDate: input.localDate,
+        nextRunAt: input.nextRunAt,
+      });
+    }
+    const runId = `${input.scheduleId}_${input.localDate}`;
+    this.runs.set(runId, {
+      id: runId,
+      scheduleId: input.scheduleId,
+      userId: input.userId,
+      taskType: input.taskType,
+      localDate: input.localDate,
+      scheduledFor: input.scheduledFor,
+      startedAt: input.startedAt,
+      finishedAt: input.finishedAt,
+      matrixEventId: input.matrixEventId,
+      status: 'sent',
+    });
+    return ok(undefined);
+  }
+
+  async markRunFailed(input: MarkRunFailedInput): Promise<Result<void, CalendarError>> {
+    this.markRunFailedCalls.push(input);
+    if (this.markRunFailedResult !== null) {
+      return this.markRunFailedResult;
+    }
+    const existingSchedule = this.schedules.get(input.scheduleId);
+    if (existingSchedule !== undefined) {
+      const { lease: _lease, ...scheduleWithoutLease } = existingSchedule;
+      this.schedules.set(input.scheduleId, {
+        ...scheduleWithoutLease,
+        nextRunAt: input.nextRunAt,
+      });
+    }
+    const runId = `${input.scheduleId}_${input.localDate}`;
+    this.runs.set(runId, {
+      id: runId,
+      scheduleId: input.scheduleId,
+      userId: input.userId,
+      taskType: input.taskType,
+      localDate: input.localDate,
+      scheduledFor: input.scheduledFor,
+      startedAt: input.startedAt,
+      finishedAt: input.finishedAt,
+      error: input.error,
+      retryable: input.retryable,
+      status: 'failed',
+    });
+    return ok(undefined);
+  }
+}
+
+export class FakeWhatsAppScheduleClient implements WhatsAppScheduleClient {
+  readonly getMatrixDeliveryStatusCalls: string[] = [];
+  readonly sendOutboundMatrixMessageCalls: Parameters<
+    WhatsAppScheduleClient['sendOutboundMatrixMessage']
+  >[0][] = [];
+
+  private getMatrixDeliveryStatusResult: Result<MatrixDeliveryStatus> | null = null;
+  private sendOutboundMatrixMessageResult: Result<OutboundMatrixMessageResult> | null = null;
+
+  setMatrixDeliveryStatusResult(result: Result<MatrixDeliveryStatus>): void {
+    this.getMatrixDeliveryStatusResult = result;
+  }
+
+  setSendOutboundMatrixMessageResult(result: Result<OutboundMatrixMessageResult>): void {
+    this.sendOutboundMatrixMessageResult = result;
+  }
+
+  async getMatrixDeliveryStatus(userId: string): Promise<Result<MatrixDeliveryStatus>> {
+    this.getMatrixDeliveryStatusCalls.push(userId);
+    if (this.getMatrixDeliveryStatusResult !== null) {
+      return this.getMatrixDeliveryStatusResult;
+    }
+    return ok({ status: 'ready' });
+  }
+
+  async sendOutboundMatrixMessage(
+    input: Parameters<WhatsAppScheduleClient['sendOutboundMatrixMessage']>[0]
+  ): Promise<Result<OutboundMatrixMessageResult>> {
+    this.sendOutboundMatrixMessageCalls.push(input);
+    if (this.sendOutboundMatrixMessageResult !== null) {
+      return this.sendOutboundMatrixMessageResult;
+    }
+    return ok({ status: 'sent', matrixEventId: '$event-123' });
   }
 }

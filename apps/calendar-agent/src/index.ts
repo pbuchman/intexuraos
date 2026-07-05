@@ -15,6 +15,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
 ];
 
@@ -33,11 +34,13 @@ initSentry({
 
 async function main(): Promise<void> {
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
+  const whatsappServiceUrl = process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
   const usageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
 
   initServices({
     userServiceUrl,
+    whatsappServiceUrl,
     internalAuthToken,
     llmUsageServiceUrl: usageServiceUrl,
   });

@@ -44,6 +44,8 @@ describe('whatsapp-service service wiring', () => {
       llmUsageServiceUrl: 'https://llm-usage.test',
       userServiceUrl: 'https://user-service.test',
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+      matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.test',
+      matrixOutboundAdapterAuthToken: 'matrix-adapter-token',
     });
 
     const result = await factory.createLlmClientForUser(

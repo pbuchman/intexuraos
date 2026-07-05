@@ -783,6 +783,27 @@ export interface GoogleCalendarStatus {
   updatedAt: string | null;
 }
 
+export type CalendarDailyNotificationDeliveryStatus = 'ready' | 'setup_required' | 'error';
+
+export interface CalendarDailyNotificationDeliveryReadiness {
+  status: CalendarDailyNotificationDeliveryStatus;
+  reason?: string;
+  message?: string;
+}
+
+export interface CalendarDailyNotificationSchedule {
+  enabled: boolean;
+  localTime: string;
+  timeZone?: string;
+  nextRunAt?: string;
+  lastRunAt?: string;
+}
+
+export interface CalendarDailyNotificationSettings {
+  schedule: CalendarDailyNotificationSchedule;
+  delivery: CalendarDailyNotificationDeliveryReadiness;
+}
+
 /**
  * Google Calendar OAuth initiate response
  */

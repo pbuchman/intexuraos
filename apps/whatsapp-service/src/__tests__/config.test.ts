@@ -13,6 +13,8 @@ describe('config validation', () => {
   let savedAudioStoredTopic: string | undefined;
   let savedLlmUsageServiceUrl: string | undefined;
   let savedUserServiceUrl: string | undefined;
+  let savedMatrixOutboundAdapterUrl: string | undefined;
+  let savedMatrixOutboundAdapterAuthToken: string | undefined;
   let savedOpenRouterAppApiKey: string | undefined;
   let savedConversationAssistantModel: string | undefined;
 
@@ -27,6 +29,9 @@ describe('config validation', () => {
     savedAudioStoredTopic = process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
     savedLlmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
     savedUserServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
+    savedMatrixOutboundAdapterUrl = process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'];
+    savedMatrixOutboundAdapterAuthToken =
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
     savedOpenRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     savedConversationAssistantModel =
       process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
@@ -80,6 +85,17 @@ describe('config validation', () => {
     } else {
       delete process.env['INTEXURAOS_USER_SERVICE_URL'];
     }
+    if (savedMatrixOutboundAdapterUrl !== undefined) {
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = savedMatrixOutboundAdapterUrl;
+    } else {
+      delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'];
+    }
+    if (savedMatrixOutboundAdapterAuthToken !== undefined) {
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] =
+        savedMatrixOutboundAdapterAuthToken;
+    } else {
+      delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
+    }
     if (savedOpenRouterAppApiKey !== undefined) {
       process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = savedOpenRouterAppApiKey;
     } else {
@@ -101,6 +117,8 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'];
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -108,6 +126,8 @@ describe('config validation', () => {
     expect(missing).toContain('INTEXURAOS_WHATSAPP_WABA_ID');
     expect(missing).toContain('INTEXURAOS_LLM_USAGE_SERVICE_URL');
     expect(missing).toContain('INTEXURAOS_USER_SERVICE_URL');
+    expect(missing).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL');
+    expect(missing).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
     expect(missing).not.toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
     expect(missing).not.toContain('INTEXURAOS_CONVERSATION_ASSISTANT_MODEL');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
@@ -132,6 +152,8 @@ describe('config validation', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'http://matrix-adapter.test';
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-adapter-token';
     delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       'or:minimax/minimax-m3';
@@ -158,6 +180,8 @@ describe('config validation', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'http://matrix-adapter.test';
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-adapter-token';
     delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       'or:minimax/minimax-m3';

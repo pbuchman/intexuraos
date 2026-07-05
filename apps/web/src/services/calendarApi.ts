@@ -1,6 +1,10 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { CalendarEvent, FailedCalendarEvent } from '@/types';
+import type {
+  CalendarDailyNotificationSettings,
+  CalendarEvent,
+  FailedCalendarEvent,
+} from '@/types';
 
 export interface ListCalendarEventsFilters {
   timeMin?: string;
@@ -84,5 +88,33 @@ export async function retryFailedEvent(
     `/failed-events/${id}/retry`,
     accessToken,
     { method: 'POST' }
+  );
+}
+
+export interface UpdateCalendarDailyNotificationRequest {
+  enabled: boolean;
+  localTime: string;
+  timeZone: string;
+}
+
+export async function getCalendarDailyNotificationSettings(
+  accessToken: string
+): Promise<CalendarDailyNotificationSettings> {
+  return await apiRequest<CalendarDailyNotificationSettings>(
+    config.calendarAgentUrl,
+    '/schedules/calendar-daily-lookahead',
+    accessToken
+  );
+}
+
+export async function updateCalendarDailyNotificationSettings(
+  accessToken: string,
+  request: UpdateCalendarDailyNotificationRequest
+): Promise<CalendarDailyNotificationSettings> {
+  return await apiRequest<CalendarDailyNotificationSettings>(
+    config.calendarAgentUrl,
+    '/schedules/calendar-daily-lookahead',
+    accessToken,
+    { method: 'PUT', body: request }
   );
 }

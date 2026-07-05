@@ -36,6 +36,36 @@ export type {
   CalendarPreviewRepository,
 } from './ports.js';
 
+export type {
+  CalendarSchedule,
+  CalendarScheduleRun,
+  CalendarScheduleStatus,
+  CalendarScheduleTaskType,
+  ClaimedCalendarSchedule,
+  MatrixDeliveryStatus,
+  OutboundMatrixMessageResult,
+  WhatsAppScheduleClient,
+} from './schedules/types.js';
+export type {
+  CalendarScheduleRepository,
+  ClaimDueSchedulesInput,
+  MarkRunSentInput,
+  MarkRunFailedInput,
+} from './schedules/scheduleRepository.js';
+export {
+  CALENDAR_DAILY_LOOKAHEAD_PROMPT,
+  CALENDAR_DAILY_LOOKAHEAD_TASK_TYPE,
+} from './schedules/types.js';
+export {
+  validateScheduleCadence,
+  getLocalDateInTimeZone,
+  calculateNextScheduleRunAt,
+  calculateNextDailyRunAfterLocalDate,
+} from './schedules/scheduleTime.js';
+export { getDailyLookaheadSchedule } from './schedules/getDailyLookaheadSchedule.js';
+export { upsertDailyLookaheadSchedule } from './schedules/upsertDailyLookaheadSchedule.js';
+export { runDueSchedules } from './schedules/runDueSchedules.js';
+
 export {
   listEvents,
   type ListEventsRequest,

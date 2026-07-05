@@ -20,6 +20,7 @@ import {
   FakeConversationAssistantRepository,
   FakeEventPublisher,
   FakeLlmGenerateClient,
+  FakeMatrixOutboundGateway,
   FakePrivateWhatsAppRepository,
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
@@ -571,6 +572,7 @@ export interface TestContext {
   phoneVerificationRepository: FakePhoneVerificationRepository;
   notificationPreferencesRepository: FakeNotificationPreferencesRepository;
   privateWhatsAppRepository: FakePrivateWhatsAppRepository;
+  matrixOutboundGateway: FakeMatrixOutboundGateway;
   messageSender: FakeMessageSender;
   linkPreviewFetcher: FakeLinkPreviewFetcherPort;
   conversationAssistantRepository: FakeConversationAssistantRepository;
@@ -595,6 +597,7 @@ export function setupTestContext(): TestContext {
     notificationPreferencesRepository:
       null as unknown as FakeNotificationPreferencesRepository,
     privateWhatsAppRepository: null as unknown as FakePrivateWhatsAppRepository,
+    matrixOutboundGateway: null as unknown as FakeMatrixOutboundGateway,
     messageSender: null as unknown as FakeMessageSender,
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
     conversationAssistantRepository: null as unknown as FakeConversationAssistantRepository,
@@ -621,6 +624,7 @@ export function setupTestContext(): TestContext {
     context.phoneVerificationRepository = new FakePhoneVerificationRepository();
     context.notificationPreferencesRepository = new FakeNotificationPreferencesRepository();
     context.privateWhatsAppRepository = new FakePrivateWhatsAppRepository();
+    context.matrixOutboundGateway = new FakeMatrixOutboundGateway();
     context.messageSender = new FakeMessageSender();
     context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
     context.conversationAssistantRepository = new FakeConversationAssistantRepository();
@@ -641,6 +645,7 @@ export function setupTestContext(): TestContext {
       phoneVerificationRepository: context.phoneVerificationRepository,
       notificationPreferencesRepository: context.notificationPreferencesRepository,
       privateWhatsAppRepository: context.privateWhatsAppRepository,
+      matrixOutboundGateway: context.matrixOutboundGateway,
       conversationAssistantRepository: context.conversationAssistantRepository,
       llmClientFactory: {
         createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
@@ -660,6 +665,8 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       testConfig.conversationAssistantModel;
     process.env['INTEXURAOS_USER_SERVICE_URL'] = testConfig.userServiceUrl;
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'http://matrix-adapter.test';
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-adapter-token';
 
     context.app = await buildServer(testConfig);
   });
@@ -676,6 +683,8 @@ export function setupTestContext(): TestContext {
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
     delete process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'];
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
   });
 
   return context;

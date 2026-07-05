@@ -118,6 +118,10 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     llmUsageServiceUrl: config.llmUsageServiceUrl,
     userServiceUrl: config.userServiceUrl,
     conversationAssistantModel: config.conversationAssistantModel,
+    matrixOutboundAdapterBaseUrl:
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] ?? '',
+    matrixOutboundAdapterAuthToken:
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] ?? '',
   };
   if (config.webhookProcessTopic !== undefined) {
     (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =

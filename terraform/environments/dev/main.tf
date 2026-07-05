@@ -298,6 +298,8 @@ locals {
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
     "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
+    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",
+    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
     "INTEXURAOS_OPENAI_APP_API_KEY",
     "INTEXURAOS_OPENROUTER_APP_API_KEY",
     "INTEXURAOS_ORCHESTRATOR_SECRET",
@@ -491,6 +493,9 @@ module "secret_manager" {
     "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for transcription Cloud Function"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
+    # Private Matrix outbound adapter
+    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL"        = "Base URL for the external WhatsApp private Matrix outbound adapter"
+    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN" = "Auth token for WhatsApp private Matrix outbound adapter"
     # Firebase configuration for web app
     "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
     "INTEXURAOS_FIREBASE_API_KEY"     = "Firebase API key (public, but managed as secret)"
