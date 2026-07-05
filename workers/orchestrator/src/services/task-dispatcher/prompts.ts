@@ -39,7 +39,7 @@ export interface MissingFieldsPromptInput {
 export const missingFieldsPrompt: PromptBuilder<MissingFieldsPromptInput> = {
   name: 'missing-fields-resume',
   description: 'Auto-continue prompt asking the agent to re-emit missing deliverable fields',
-  version: '1.0.0',
+  version: '1.0.1',
 
   build(input: MissingFieldsPromptInput): string {
     const { agentType, missingFields, rawLogs } = input;
