@@ -157,15 +157,16 @@ describe('WhatsAppNotifier', () => {
           message: expect.stringContaining('✅ Fix login bug'),
           ctaUrl: { displayText: 'View pull request', url: 'https://github.com/pbuchman/intexuraos/pull/123' },
           correlationId: 'trace-123',
-          important: true,
         })
       );
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('PR:');
-      expect(callArgs.message).toContain('Branch: fix/login-bug');
-      expect(callArgs.message).toContain('Commits: 3');
-      expect(callArgs.message).toContain('Fixed login redirect handling');
+      expect(callArgs.message).not.toContain('Branch:');
+      expect(callArgs.message).not.toContain('Commits:');
+      expect(callArgs.message).not.toContain('Fixed login redirect handling');
+      expect(callArgs.message).toContain('Task completed.');
+      expect(callArgs.important).toBe(false);
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View pull request',
         url: 'https://github.com/pbuchman/intexuraos/pull/123',
@@ -187,8 +188,9 @@ describe('WhatsAppNotifier', () => {
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('PR:');
-      expect(callArgs.message).toContain('Branch: fix/login-bug');
-      expect(callArgs.message).toContain('Commits: 3');
+      expect(callArgs.message).not.toContain('Branch:');
+      expect(callArgs.message).not.toContain('Commits:');
+      expect(callArgs.message).not.toContain('Fixed login redirect handling');
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
@@ -354,7 +356,7 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyTaskComplete('user-123', task);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
-      expect(callArgs.message).toBe('✅ Fix login bug');
+      expect(callArgs.message).toBe('✅ Fix login bug\n\nTask completed.');
       expect(callArgs.message).not.toContain('Branch:');
       expect(callArgs.message).not.toContain('Commits:');
       expect(callArgs.ctaUrl).toEqual({
@@ -379,7 +381,8 @@ describe('WhatsAppNotifier', () => {
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('✅ INT-124 | Analyze auth flow');
-      expect(callArgs.message).toContain('Analyzed the feature request');
+      expect(callArgs.message).toContain('Task completed.');
+      expect(callArgs.message).not.toContain('Analyzed the feature request');
       expect(callArgs.message).not.toContain('Branch:');
       expect(callArgs.message).not.toContain('Commits:');
       expect(callArgs.message).not.toContain('PR:');
@@ -404,8 +407,8 @@ describe('WhatsAppNotifier', () => {
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('✅ INT-125 | Quick fix');
       expect(callArgs.message).not.toContain('PR:');
-      expect(callArgs.message).toContain('Branch: fix/quick');
-      expect(callArgs.message).toContain('Commits: 1');
+      expect(callArgs.message).not.toContain('Branch:');
+      expect(callArgs.message).not.toContain('Commits:');
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View pull request',
         url: 'https://github.com/org/repo/pull/99',
@@ -593,7 +596,7 @@ describe('WhatsAppNotifier', () => {
           displayText: 'View progress',
           url: 'https://intexuraos.cloud/#/code-tasks/task-123',
         },
-        important: true,
+        important: false,
       });
     });
 
@@ -1022,6 +1025,9 @@ describe('WhatsAppNotifier', () => {
           important: true,
         })
       );
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Plan is ready for implementation.');
+      expect(callArgs.message).not.toContain('Design plan with implementation steps.');
     });
 
     it('includes button prompt in message when buttons are sent', async () => {
@@ -1056,7 +1062,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('Fix login bug'); // default task title
     });
 
-    it('uses default summary when result has no summary', async () => {
+    it('uses status-only plan-ready copy when result has no summary', async () => {
       // Construct result without summary to test the fallback path
       const mockResult: TaskResult = { branch: 'fix/login-bug', commits: 3 };
       const task = createMockTask({
@@ -1070,10 +1076,12 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyDesignComplete('user-123', task);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
-      expect(callArgs.message).toContain('Design completed and ready for implementation.');
+      expect(callArgs.message).toContain('Plan is ready for implementation.');
+      expect(callArgs.message).not.toContain('Branch:');
+      expect(callArgs.message).not.toContain('Commits:');
     });
 
-    it('uses default summary when result is undefined', async () => {
+    it('uses status-only plan-ready copy when result is undefined', async () => {
       // createMockTask doesn't set result by default, so it's naturally absent
       const task = createMockTask({
         linearIssueTitle: 'Add dark mode',
@@ -1085,7 +1093,7 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyDesignComplete('user-123', task);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
-      expect(callArgs.message).toContain('Design completed and ready for implementation.');
+      expect(callArgs.message).toContain('Plan is ready for implementation.');
     });
 
     it('falls back to sending without buttons when PUBLISH_FAILED', async () => {
@@ -1110,6 +1118,7 @@ describe('WhatsAppNotifier', () => {
       const fallbackArgs = getPublishSendMessageMock().mock.calls[1]?.[0] as { message: string; buttons?: unknown };
       expect(fallbackArgs.message).toContain('Open the web app to start Phase 2.');
       expect(fallbackArgs.message).not.toContain('Click the button below');
+      expect(fallbackArgs.message).not.toContain('Plan ready.');
       expect(fallbackArgs.buttons).toBeUndefined();
     });
 
@@ -1294,8 +1303,9 @@ describe('WhatsAppNotifier', () => {
       expect(params.userId).toBe('user-123');
       expect(params.message).toContain('🔁');
       expect(params.message).toContain('Fix token refresh');
-      // INT-1418: resumed-task completion is marked important
-      expect(params.important).toBe(true);
+      expect(params.message).toContain('Resumed task completed.');
+      expect(params.message).not.toContain('Claude updated the token refresh logic');
+      expect(params.important).toBe(false);
     });
 
     it('includes PR URL in message and ctaUrl when present', async () => {
@@ -1320,7 +1330,7 @@ describe('WhatsAppNotifier', () => {
       });
     });
 
-    it('includes summary in message when present', async () => {
+    it('omits summary in message when present', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix bug',
         result: createMockResult({
@@ -1335,7 +1345,8 @@ describe('WhatsAppNotifier', () => {
 
       const publishCall = getPublishSendMessageMock().mock.calls[0];
       const params = publishCall?.[0] as { message: string };
-      expect(params.message).toContain('The bug was fixed and tests pass.');
+      expect(params.message).toContain('Resumed task completed.');
+      expect(params.message).not.toContain('The bug was fixed and tests pass.');
     });
 
     it('omits summary when result has no summary field but passes ctaUrl', async () => {
@@ -1358,6 +1369,8 @@ describe('WhatsAppNotifier', () => {
       const params = publishCall?.[0] as { message: string; ctaUrl?: { displayText: string; url: string } };
       expect(params.message).toContain('🔁 Fix login');
       expect(params.message).not.toContain('PR:');
+      expect(params.message).not.toContain('Branch:');
+      expect(params.message).not.toContain('Commits:');
       expect(params.ctaUrl).toEqual({
         displayText: 'View pull request',
         url: 'https://github.com/test/repo/pull/9',
@@ -1433,6 +1446,84 @@ describe('WhatsAppNotifier', () => {
       );
 
       const result = await notifier.notifyResumedTaskComplete('user-123', task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
+
+  describe('notifyTaskReadyForMerge', () => {
+    it('sends important violet approval notification with PR CTA', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-1849',
+        linearIssueTitle: 'Optimize WhatsApp notifications',
+        result: createMockResult({
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/2303',
+          summary: 'Implemented notification details.',
+        }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskReadyForMerge('user-123', task, {
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/2303',
+        linearIssueId: 'INT-1849',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(getPublishSendMessageMock()).toHaveBeenCalledWith({
+        userId: 'user-123',
+        message: expect.stringContaining('🟣 INT-1849 | Optimize WhatsApp notifications'),
+        ctaUrl: {
+          displayText: 'View pull request',
+          url: 'https://github.com/pbuchman/intexuraos/pull/2303',
+        },
+        correlationId: 'trace-123',
+        important: true,
+      });
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Waiting for your approval and deployment.');
+      expect(callArgs.message).not.toContain('Branch:');
+      expect(callArgs.message).not.toContain('Commits:');
+      expect(callArgs.message).not.toContain('Implemented notification details.');
+      expect(callArgs.message).not.toContain('✅');
+    });
+
+    it('uses info.linearIssueId when the task does not have one', async () => {
+      const task = createMockTask({
+        prompt: 'Finalize merge flow',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskReadyForMerge('user-123', task, {
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        linearIssueId: 'INT-999',
+      });
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
+      expect(callArgs.message).toContain('🟣 INT-999 | Finalize merge flow');
+    });
+
+    it('returns err on publish failure', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Optimize WhatsApp notifications',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyTaskReadyForMerge('user-123', task, {
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/2303',
+      });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

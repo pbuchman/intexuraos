@@ -1,32 +1,17 @@
-/**
- * Tests for `onReviewSkippedCallback.ts` — the factory that creates the
- * `onReviewSkipped` callback for `UnifiedEvaluatorDeps`.
- *
- * The callback fires when LLM triage skips a PR review (e.g. documentation-only
- * change). It finds the origin task, validates it is an execution (not planning)
- * task, sets the `ready-to-merge` label on the Linear issue, records an
- * automation log entry, and recomputes the group summary.
- *
- * Tests cover each distinct code path:
- *  1. originResult.ok === false          → skip (debug log)
- *  2. originResult.value === null        → skip (debug log)
- *  3. origin.linearIssueId === undefined → skip (debug log)
- *  4. origin.agentType === 'planning'    → skip (info log)
- *  5. !issueValidation.ok                → warn and return
- *  6. labelResult.value.droppedLabels.length > 0 → warn and return
- *  7. Success                             → log + automation log + group summary recompute
- *  8. updateIssueMetadata returns error  → warn and return
- *  9. Unexpected error in try/catch       → warn and return
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ok, err, type Logger } from '@intexuraos/common-core';
-import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
-import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { err, ok, type Logger } from '@intexuraos/common-core';
 import type { AutomationLog } from '../../../domain/ports/automationLog.js';
+import type {
+  GitHubPRClient,
+  GitHubPullRequestDetails,
+} from '../../../domain/ports/gitHubPRClient.js';
+import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroupSummaryRepository.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import { createOnReviewSkippedCallback } from '../../../domain/services/onReviewSkippedCallback.js';
+import { notifyTaskReadyForMergeIfEligible } from '../../../domain/services/readyToMergeNotification.js';
+import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -50,12 +35,47 @@ function createFakeCodeTask(overrides: Partial<CodeTask> = {}): CodeTask {
   } as CodeTask;
 }
 
+function createPullRequestDetails(
+  overrides: Partial<GitHubPullRequestDetails> = {},
+): GitHubPullRequestDetails {
+  return {
+    number: 42,
+    title: 'Test PR',
+    body: null,
+    state: 'open',
+    authorLogin: 'octocat',
+    baseBranch: 'development',
+    headBranch: 'feature/test',
+    mergeable: true,
+    mergeableState: 'clean',
+    headSha: 'abc123',
+    createdAt: '2026-07-04T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('onReviewSkipped callback branches', () => {
   let mockCodeTaskRepo: CodeTaskRepository;
   let mockLinearAgentClient: LinearAgentClient;
+  let mockGitHubPRClient: Pick<GitHubPRClient, 'getPullRequestDetails'>;
+  let mockWhatsAppNotifier: Pick<WhatsAppNotifier, 'notifyTaskReadyForMerge'>;
   let mockAutomationLog: AutomationLog;
   let mockGroupSummaryRepo: TaskGroupSummaryRepository;
+  let resolveGitHubToken: Mock<(userId: string) => Promise<string | null>>;
   let logger: Logger;
+
+  function createCallback(): ReturnType<typeof createOnReviewSkippedCallback> {
+    return createOnReviewSkippedCallback({
+      codeTaskRepo: mockCodeTaskRepo,
+      linearAgentClient: mockLinearAgentClient,
+      gitHubPRClient: mockGitHubPRClient,
+      whatsappNotifier: mockWhatsAppNotifier,
+      resolveGitHubToken: async (userId: string) => await resolveGitHubToken(userId),
+      automationLog: mockAutomationLog,
+      groupSummaryRepo: mockGroupSummaryRepo,
+      logger,
+    });
+  }
 
   beforeEach(() => {
     logger = createFakeLogger();
@@ -69,6 +89,16 @@ describe('onReviewSkipped callback branches', () => {
       updateIssueMetadata: vi.fn(),
     } as unknown as LinearAgentClient;
 
+    mockGitHubPRClient = {
+      getPullRequestDetails: vi.fn().mockResolvedValue(ok(createPullRequestDetails())),
+    };
+
+    mockWhatsAppNotifier = {
+      notifyTaskReadyForMerge: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+
+    resolveGitHubToken = vi.fn<(userId: string) => Promise<string | null>>().mockResolvedValue('github-token');
+
     mockAutomationLog = {
       record: vi.fn().mockResolvedValue(undefined),
     } as unknown as AutomationLog;
@@ -78,20 +108,12 @@ describe('onReviewSkipped callback branches', () => {
     } as unknown as TaskGroupSummaryRepository;
   });
 
-  // --- Branch 1: originResult.ok === false ---
-
   it('skips when findOriginTaskByPR returns error', async () => {
-    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' }));
+    mockCodeTaskRepo.findOriginTaskByPR = vi
+      .fn()
+      .mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' }));
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
     expect(logger.debug).toHaveBeenCalledWith(
       { repository: 'pbuchman/intexuraos', prNumber: 42 },
@@ -99,21 +121,11 @@ describe('onReviewSkipped callback branches', () => {
     );
     expect(mockLinearAgentClient.validateIssue).not.toHaveBeenCalled();
   });
-
-  // --- Branch 2: originResult.value === null ---
 
   it('skips when findOriginTaskByPR returns null', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(ok(null));
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
     expect(logger.debug).toHaveBeenCalledWith(
       { repository: 'pbuchman/intexuraos', prNumber: 42 },
@@ -122,21 +134,13 @@ describe('onReviewSkipped callback branches', () => {
     expect(mockLinearAgentClient.validateIssue).not.toHaveBeenCalled();
   });
 
-  // --- Branch 3: origin.linearIssueId === undefined ---
-
   it('skips when origin task has no Linear issue ID', async () => {
-    const { linearIssueId: _omit, ...taskWithoutLinearIssue } = createFakeCodeTask({});
-    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(ok(taskWithoutLinearIssue as CodeTask));
+    const { linearIssueId: _omit, ...taskWithoutLinearIssue } = createFakeCodeTask();
+    mockCodeTaskRepo.findOriginTaskByPR = vi
+      .fn()
+      .mockResolvedValue(ok(taskWithoutLinearIssue as CodeTask));
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
     expect(logger.debug).toHaveBeenCalledWith(
       { repository: 'pbuchman/intexuraos', prNumber: 42 },
@@ -145,49 +149,30 @@ describe('onReviewSkipped callback branches', () => {
     expect(mockLinearAgentClient.validateIssue).not.toHaveBeenCalled();
   });
 
-  // --- Branch 4: origin.agentType === 'planning' ---
-
   it('skips when origin is a planning task', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
       ok(createFakeCodeTask({ agentType: 'planning', linearIssueId: 'INT-123' })),
     );
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({ linearIssueId: 'INT-123' }),
       expect.stringContaining('planning-origin task'),
     );
     expect(mockLinearAgentClient.validateIssue).not.toHaveBeenCalled();
+    expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
   });
-
-  // --- Branch 5: !issueValidation.ok ---
 
   it('warns and returns when validateIssue fails', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
-      ok(createFakeCodeTask({ agentType: 'execution', linearIssueId: 'INT-123' })),
+      ok(createFakeCodeTask({ linearIssueId: 'INT-123' })),
     );
-    mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
-      err({ code: 'NOT_FOUND', message: 'Issue not found' }),
-    );
+    mockLinearAgentClient.validateIssue = vi
+      .fn()
+      .mockResolvedValue(err({ code: 'NOT_FOUND', message: 'Issue not found' }));
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ linearIssueId: 'INT-123' }),
@@ -196,169 +181,359 @@ describe('onReviewSkipped callback branches', () => {
     expect(mockLinearAgentClient.updateIssueMetadata).not.toHaveBeenCalled();
   });
 
-  // --- Branch 6: droppedLabels.length > 0 ---
-
-  it('warns and returns when ready-to-merge label not found in Linear team', async () => {
+  it('warns and returns when ready-to-merge label is dropped', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
-      ok(createFakeCodeTask({ agentType: 'execution', linearIssueId: 'INT-123' })),
+      ok(createFakeCodeTask({ linearIssueId: 'INT-123' })),
     );
     mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
-      ok({ id: 'linear-id-123', identifier: 'INT-123', title: 'Test', url: 'https://linear.app/INT-123', labels: [] }),
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: [],
+      }),
     );
-    mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
-      ok({ droppedLabels: ['ready-to-merge'] }),
-    );
+    mockLinearAgentClient.updateIssueMetadata = vi
+      .fn()
+      .mockResolvedValue(ok({ droppedLabels: ['ready-to-merge'] }));
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ linearIssueId: 'INT-123', droppedLabels: ['ready-to-merge'] }),
+      expect.objectContaining({
+        linearIssueId: 'INT-123',
+        droppedLabels: ['ready-to-merge'],
+      }),
       expect.stringContaining('ready-to-merge label not found'),
     );
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
     expect(mockGroupSummaryRepo.recomputeWithLabels).not.toHaveBeenCalled();
+    expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
   });
 
-  // --- Branch 7: Success ---
-
-  it('sets label, records automation log, and recomputes group summary on success', async () => {
-    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
-      ok(createFakeCodeTask({ agentType: 'execution', linearIssueId: 'INT-123', userId: 'user-1' })),
-    );
+  it('sets label, sends ready notification, records automation log, and recomputes group summary on success', async () => {
+    const origin = createFakeCodeTask({
+      linearIssueId: 'INT-123',
+      userId: 'user-1',
+      result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42' },
+    });
+    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(ok(origin));
     mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
-      ok({ id: 'linear-id-123', identifier: 'INT-123', title: 'Test', url: 'https://linear.app/INT-123', labels: ['bug'] }),
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: ['bug'],
+      }),
     );
     mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
       ok({ droppedLabels: [] }),
     );
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
-
-    // Verify label was set
     expect(mockLinearAgentClient.updateIssueMetadata).toHaveBeenCalledWith({
       userId: 'user-1',
       issueId: 'linear-id-123',
       addLabels: ['ready-to-merge'],
     });
-
-    // Verify success log
+    expect(resolveGitHubToken).toHaveBeenCalledWith('user-1');
+    expect(mockGitHubPRClient.getPullRequestDetails).toHaveBeenCalledWith(
+      'github-token',
+      'pbuchman',
+      'intexuraos',
+      42,
+    );
+    expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).toHaveBeenCalledWith(
+      'user-1',
+      origin,
+      {
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        linearIssueId: 'INT-123',
+      },
+    );
     expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ repository: 'pbuchman/intexuraos', prNumber: 42, linearIssueId: 'INT-123' }),
+      expect.objectContaining({
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        linearIssueId: 'INT-123',
+      }),
       expect.stringContaining('Set ready-to-merge label'),
     );
-
-    // Verify automation log recorded (best-effort, fire-and-forget)
     expect(mockAutomationLog.record).toHaveBeenCalledWith(
       { repository: 'pbuchman/intexuraos', prNumber: 42 },
       expect.objectContaining({ type: 'remediation_decision', signal: '0' }),
     );
-
-    // Verify group summary recomputed with updated labels
     expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith(
       'user-1',
       'INT-123',
-      expect.arrayContaining([{ id: '', name: 'bug' }, { id: '', name: 'ready-to-merge' }]),
+      expect.arrayContaining([
+        { id: '', name: 'bug' },
+        { id: '', name: 'ready-to-merge' },
+      ]),
       expect.any(String),
     );
   });
 
-  // --- Branch 7b: Success (ready-to-merge already present — no duplicate) ---
-
-  it('does not duplicate ready-to-merge label when already present on success', async () => {
+  it('does not duplicate ready-to-merge label or notification when the label already exists', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
-      ok(createFakeCodeTask({ agentType: 'execution', linearIssueId: 'INT-123', userId: 'user-1' })),
+      ok(
+        createFakeCodeTask({
+          linearIssueId: 'INT-123',
+          userId: 'user-1',
+          result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42' },
+        }),
+      ),
     );
     mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
-      ok({ id: 'linear-id-123', identifier: 'INT-123', title: 'Test', url: 'https://linear.app/INT-123', labels: ['ready-to-merge'] }),
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: ['ready-to-merge'],
+      }),
     );
     mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
       ok({ droppedLabels: [] }),
     );
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
-
-    // Verify group summary recomputed WITHOUT duplicating ready-to-merge
+    expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
     expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalledWith(
       'user-1',
       'INT-123',
-      [{ id: '', name: 'ready-to-merge' }], // no duplicate
+      [{ id: '', name: 'ready-to-merge' }],
       expect.any(String),
     );
   });
 
-  // --- Branch 8: updateIssueMetadata returns error ---
+  it('skips ready notification when the PR is not mergeable but still records label side effects', async () => {
+    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
+      ok(
+        createFakeCodeTask({
+          linearIssueId: 'INT-123',
+          userId: 'user-1',
+          result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42' },
+        }),
+      ),
+    );
+    mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: [],
+      }),
+    );
+    mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
+      ok({ droppedLabels: [] }),
+    );
+    mockGitHubPRClient.getPullRequestDetails = vi
+      .fn()
+      .mockResolvedValue(ok(createPullRequestDetails({ mergeable: false, mergeableState: 'dirty' })));
+
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+
+    expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
+    expect(mockAutomationLog.record).toHaveBeenCalled();
+    expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalled();
+  });
+
+  it('keeps label, automation log, and group summary behavior when loading PR details fails', async () => {
+    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
+      ok(
+        createFakeCodeTask({
+          linearIssueId: 'INT-123',
+          userId: 'user-1',
+          result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42' },
+        }),
+      ),
+    );
+    mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: [],
+      }),
+    );
+    mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
+      ok({ droppedLabels: [] }),
+    );
+    mockGitHubPRClient.getPullRequestDetails = vi
+      .fn()
+      .mockResolvedValue(err({ code: 'API_ERROR', message: 'GitHub unavailable' }));
+
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+
+    expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
+    expect(mockAutomationLog.record).toHaveBeenCalled();
+    expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalled();
+  });
+
+  it('keeps label, automation log, and group summary behavior when ready notification fails', async () => {
+    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
+      ok(
+        createFakeCodeTask({
+          linearIssueId: 'INT-123',
+          userId: 'user-1',
+          result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42' },
+        }),
+      ),
+    );
+    mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: [],
+      }),
+    );
+    mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
+      ok({ droppedLabels: [] }),
+    );
+    mockWhatsAppNotifier.notifyTaskReadyForMerge = vi
+      .fn()
+      .mockResolvedValue(err({ code: 'notification_failed', message: 'publish failed' }));
+
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+
+    expect(mockAutomationLog.record).toHaveBeenCalled();
+    expect(mockGroupSummaryRepo.recomputeWithLabels).toHaveBeenCalled();
+  });
 
   it('warns when updateIssueMetadata returns error', async () => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
-      ok(createFakeCodeTask({ agentType: 'execution', linearIssueId: 'INT-123' })),
+      ok(createFakeCodeTask({ linearIssueId: 'INT-123' })),
     );
     mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
-      ok({ id: 'linear-id-123', identifier: 'INT-123', title: 'Test', url: 'https://linear.app/INT-123', labels: [] }),
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: [],
+      }),
     );
-    mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
-      err({ code: 'UNAVAILABLE', message: 'Service unavailable' }),
-    );
+    mockLinearAgentClient.updateIssueMetadata = vi
+      .fn()
+      .mockResolvedValue(err({ code: 'UNAVAILABLE', message: 'Service unavailable' }));
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    await callback({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ linearIssueId: 'INT-123' }),
       expect.stringContaining('Failed to set ready-to-merge label'),
     );
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
+    expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
   });
 
-  // --- Branch 9: outer try-catch handles unexpected errors ---
-
   it('catches and logs unexpected errors without throwing', async () => {
-    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockRejectedValue(new Error('database connection lost'));
+    mockCodeTaskRepo.findOriginTaskByPR = vi
+      .fn()
+      .mockRejectedValue(new Error('database connection lost'));
 
-    const callback = createOnReviewSkippedCallback({
-      codeTaskRepo: mockCodeTaskRepo,
-      linearAgentClient: mockLinearAgentClient,
-      automationLog: mockAutomationLog,
-      groupSummaryRepo: mockGroupSummaryRepo,
-      logger,
-    });
-
-    // Should not throw
-    await expect(callback({ repository: 'pbuchman/intexuraos', prNumber: 42 })).resolves.not.toThrow();
+    await expect(
+      createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 }),
+    ).resolves.not.toThrow();
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ repository: 'pbuchman/intexuraos', prNumber: 42 }),
       expect.stringContaining('onReviewSkipped failed'),
+    );
+  });
+});
+
+describe('notifyTaskReadyForMergeIfEligible', () => {
+  let logger: Logger;
+  let gitHubPRClient: Pick<GitHubPRClient, 'getPullRequestDetails'>;
+  let whatsappNotifier: Pick<WhatsAppNotifier, 'notifyTaskReadyForMerge'>;
+  let resolveGitHubToken: Mock<(userId: string) => Promise<string | null>>;
+  let task: CodeTask;
+
+  beforeEach(() => {
+    logger = createFakeLogger();
+    gitHubPRClient = {
+      getPullRequestDetails: vi.fn().mockResolvedValue(ok(createPullRequestDetails())),
+    };
+    whatsappNotifier = {
+      notifyTaskReadyForMerge: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+    resolveGitHubToken = vi.fn<(userId: string) => Promise<string | null>>().mockResolvedValue('github-token');
+    task = createFakeCodeTask({ linearIssueId: 'INT-123' });
+  });
+
+  async function notify(overrides: Parameters<typeof notifyTaskReadyForMergeIfEligible>[1]): Promise<void> {
+    await notifyTaskReadyForMergeIfEligible(
+      {
+        gitHubPRClient,
+        whatsappNotifier,
+        resolveGitHubToken: async (userId: string) => await resolveGitHubToken(userId),
+        logger,
+      },
+      overrides,
+    );
+  }
+
+  it('skips when no target user is available', async () => {
+    await notify({ task, repository: 'pbuchman/intexuraos', prNumber: 42 });
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-1', userId: undefined }),
+      expect.stringContaining('no target user'),
+    );
+    expect(gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
+    expect(whatsappNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
+  });
+
+  it('skips when no PR number is available', async () => {
+    await notify({ task, repository: 'pbuchman/intexuraos', userId: 'user-1' });
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-1', prNumber: undefined }),
+      expect.stringContaining('no PR number'),
+    );
+    expect(gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
+    expect(whatsappNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
+  });
+
+  it('skips when repository cannot be parsed', async () => {
+    await notify({ task, repository: 'not-a-repo', prNumber: 42, userId: 'user-1' });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: 'not-a-repo', prNumber: 42 }),
+      expect.stringContaining('invalid repository'),
+    );
+    expect(gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
+    expect(whatsappNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
+  });
+
+  it('skips when an explicit PR URL is empty', async () => {
+    await notify({ task, repository: 'pbuchman/intexuraos', prNumber: 42, userId: 'user-1', prUrl: '' });
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: 'pbuchman/intexuraos', prNumber: 42 }),
+      expect.stringContaining('no PR URL'),
+    );
+    expect(gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
+    expect(whatsappNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
+  });
+
+  it('sends ready notification without linearIssueId when none is provided', async () => {
+    await notify({ task, repository: 'pbuchman/intexuraos', prNumber: 42, userId: 'user-1' });
+
+    expect(whatsappNotifier.notifyTaskReadyForMerge).toHaveBeenCalledWith(
+      'user-1',
+      task,
+      { prUrl: 'https://github.com/pbuchman/intexuraos/pull/42' },
     );
   });
 });

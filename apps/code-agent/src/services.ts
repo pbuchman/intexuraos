@@ -154,7 +154,16 @@ export function initServices(config: ServiceConfig): void {
       return resolvedUser.userId;
     },
     allowedBots: ALLOWED_BOTS, codeTaskRepo: repos.codeTaskRepo,
-    onReviewSkipped: createOnReviewSkippedCallback({ codeTaskRepo: repos.codeTaskRepo, linearAgentClient, automationLog, groupSummaryRepo: repos.groupSummaryRepo, logger }),
+    onReviewSkipped: createOnReviewSkippedCallback({
+      codeTaskRepo: repos.codeTaskRepo,
+      linearAgentClient,
+      gitHubPRClient,
+      whatsappNotifier,
+      resolveGitHubToken: async (userId: string) => await fetchGitHubToken(userServiceClient, userId, logger),
+      automationLog,
+      groupSummaryRepo: repos.groupSummaryRepo,
+      logger,
+    }),
     onUnauthorizedSender: createUnauthorizedSenderCommentHandler({ gitHubPRClient, userServiceClient, logger }),
   });
 
