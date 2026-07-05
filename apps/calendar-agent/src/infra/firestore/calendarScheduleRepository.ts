@@ -30,15 +30,7 @@ function toCalendarError(error: unknown, message: string): CalendarError {
   };
 }
 
-function toSchedule(
-  id: string,
-  data: Record<string, unknown> | undefined
-): CalendarSchedule | null {
-  /* v8 ignore start -- schema: Firestore document data cannot be undefined after caller existence checks; fallback is defensive for malformed adapters @preserve */
-  if (data === undefined) {
-    return null;
-  }
-  /* v8 ignore stop @preserve */
+function toSchedule(id: string, data: Record<string, unknown>): CalendarSchedule {
   const cadence = data['cadence'];
   const cadenceData =
     typeof cadence === 'object' && cadence !== null ? (cadence as Record<string, unknown>) : {};
@@ -99,12 +91,7 @@ function toRun(id: string, input: Omit<CalendarScheduleRun, 'id'>): CalendarSche
   return { id, ...input };
 }
 
-function isTerminalRunForLocalDate(data: Record<string, unknown> | undefined): boolean {
-  /* v8 ignore start -- schema: Firestore DocumentSnapshot.exists=true should provide run data; fallback permits retry instead of incorrectly terminal-skipping malformed adapter data @preserve */
-  if (data === undefined) {
-    return false;
-  }
-  /* v8 ignore stop @preserve */
+function isTerminalRunForLocalDate(data: Record<string, unknown>): boolean {
   if (data['status'] === 'sent') {
     return true;
   }
@@ -133,7 +120,7 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
           updatedAt: now,
         };
         await docRef.set(next, { merge: true });
-        return ok(toSchedule(schedule.id, next) as CalendarSchedule);
+        return ok(toSchedule(schedule.id, next));
       } catch (error) {
         return { ok: false, error: toCalendarError(error, 'Failed to upsert calendar schedule') };
       }
@@ -189,11 +176,6 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
 
         for (const doc of snapshot.docs) {
           const schedule = toSchedule(doc.id, doc.data() as Record<string, unknown>);
-          /* v8 ignore start -- upstream: query snapshots only include existing docs with data; null guard is defensive for adapter corruption @preserve */
-          if (schedule === null) {
-            continue;
-          }
-          /* v8 ignore stop @preserve */
           /* v8 ignore start -- source-map: branch coverage false positive misattributed to Firestore transaction callback alignment @preserve */
           const claim = await db.runTransaction(
             async (
@@ -212,7 +194,7 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
                 freshSnapshot.data() as Record<string, unknown>
               );
               /* v8 ignore start -- upstream: transaction race guard for schedules changed after the due-query snapshot @preserve */
-              if (freshSchedule?.status !== 'active') {
+              if (freshSchedule.status !== 'active') {
                 return null;
               }
               if (freshSchedule.nextRunAt > input.now) {
@@ -236,7 +218,7 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
 
               if (
                 existingRun.exists &&
-                isTerminalRunForLocalDate(existingRun.data() as Record<string, unknown> | undefined)
+                isTerminalRunForLocalDate(existingRun.data() as Record<string, unknown>)
               ) {
                 transaction.update(scheduleRef, {
                   nextRunAt: calculateNextDailyRunAfterLocalDate(

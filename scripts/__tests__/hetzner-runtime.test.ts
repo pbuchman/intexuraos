@@ -987,15 +987,25 @@ describe('Hetzner secret loader', () => {
   it('writes private Matrix outbound adapter config for Hetzner prod', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
+    const setupDoc = readRequired(
+      resolve(repoRoot, 'docs/setup/16-private-whatsapp-matrix-sync.md')
+    );
 
-    expect(script).toContain(
+    expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL');
+    expect(script).not.toContain(
       'write_env_line "${output_path}" "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL" "http://localhost:8099"'
     );
-    expect(terraform).toContain(
+    expect(terraform).not.toContain(
       'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL  = "http://localhost:8099"'
+    );
+    expect(terraform).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",');
+    expect(terraform).toContain(
+      '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL"        = "Base URL for the external WhatsApp private Matrix outbound adapter"'
     );
     expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
     expect(terraform).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",');
+    expect(setupDoc).toContain('Store `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` in Secret Manager');
+    expect(setupDoc).toContain('Do not point this value at `localhost`');
   });
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {

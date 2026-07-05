@@ -269,7 +269,6 @@ locals {
   hetzner_runtime_env_vars = {
     INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL  = "${local.public_origin}/api/code"
     INTEXURAOS_CONVERSATION_ASSISTANT_MODEL = "or:minimax/minimax-m3"
-    INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL  = "http://localhost:8099"
     INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH = "development"
     INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY  = "pbuchman/intexuraos"
     INTEXURAOS_WEB_APP_URL                  = local.public_origin
@@ -299,6 +298,7 @@ locals {
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
     "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
+    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
     "INTEXURAOS_OPENAI_APP_API_KEY",
     "INTEXURAOS_OPENROUTER_APP_API_KEY",
@@ -494,6 +494,7 @@ module "secret_manager" {
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Private Matrix outbound adapter
+    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL"        = "Base URL for the external WhatsApp private Matrix outbound adapter"
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN" = "Auth token for WhatsApp private Matrix outbound adapter"
     # Firebase configuration for web app
     "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
