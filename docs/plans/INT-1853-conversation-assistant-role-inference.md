@@ -21,8 +21,8 @@
 - Do not use a hardcoded classifier model. Use the selected Conversation Assistant session model (`input.model ?? deps.defaultModel`) through `ConversationAssistantLlmClientFactory`.
 - If the classifier LLM call fails, returns malformed JSON, returns schema-invalid JSON, fails repair, returns a low-confidence role, or returns an unsafe/invalid label, store `Assistant` and continue session creation.
 - The classifier must allow arbitrary professions and expert roles, not a fixed enum.
-- The classifier must reject names, organizations, credential claims, markdown, punctuation-heavy labels, and labels longer than 40 characters.
-- The classifier normalizer must deterministically reject numeric-only labels and schema-valid unsafe labels that contain personal names, organization/company names, or credential claims such as licensed/certified/PhD/MD.
+- The classifier must reject personal-title/name outputs, organizations, credential claims, markdown, punctuation-heavy labels, and labels longer than 40 characters.
+- The classifier normalizer must deterministically reject numeric-only labels and schema-valid unsafe labels that contain personal-title markers, organization/company names, or credential claims such as licensed/certified/PhD/MD.
 - Add or update prompt metadata with semver versions for every prompt touched.
 - Existing persisted sessions without `assistantRoleLabel` must hydrate as `Assistant`; no Firestore migration is required.
 - Every HTTP endpoint touched must keep `logIncomingRequest()`.
@@ -95,7 +95,7 @@ Accept labels only after normalization:
 - Convert short labels to title case, preserving common separators like spaces, `/`, `-`, and `&`.
 - Require at least one letter.
 - Allow letters, numbers, spaces, apostrophes, hyphens, slashes, ampersands, and periods.
-- Reject markdown/control characters, numeric-only labels, labels ending with punctuation, personal-name patterns, organization/company names, and credential claims.
+- Reject markdown/control characters, numeric-only labels, labels ending with punctuation, labels prefixed with personal titles, organization/company names, and credential claims. Do not reject title-cased multi-word profession labels solely because they look like two capitalized words.
 - Use `Assistant` when confidence is below `0.6`.
 
 ## Task 1: Add Role Classifier Prompt And Schema
@@ -363,9 +363,12 @@ describe('inferConversationAssistantRoleLabel', () => {
 
   it('normalizes and rejects unsafe labels', () => {
     expect(normalizeConversationAssistantRoleLabel('  software engineer  ')).toBe('Software Engineer');
+    expect(normalizeConversationAssistantRoleLabel('Employment Lawyer')).toBe('Employment Lawyer');
+    expect(normalizeConversationAssistantRoleLabel('Marine Surveyor')).toBe('Marine Surveyor');
+    expect(normalizeConversationAssistantRoleLabel('Data Scientist')).toBe('Data Scientist');
+    expect(normalizeConversationAssistantRoleLabel('Tax Advisor')).toBe('Tax Advisor');
     expect(normalizeConversationAssistantRoleLabel('Dr. Alice Smith')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('123')).toBe('Assistant');
-    expect(normalizeConversationAssistantRoleLabel('Alice Smith')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('Acme Legal Group')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('Licensed Psychologist')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('Certified Tax Advisor')).toBe('Assistant');
@@ -404,7 +407,6 @@ const MIN_ROLE_CONFIDENCE = 0.6;
 const ROLE_LABEL_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} .&'/-]{0,38}[\p{L}\p{N}]$/u;
 const HAS_LETTER_PATTERN = /\p{L}/u;
 const PERSONAL_TITLE_PATTERN = /^(?:dr|mr|mrs|ms|prof)\.?\s+\p{L}/iu;
-const PERSON_NAME_PATTERN = /^\p{Lu}\p{L}+(?:[-']\p{Lu}\p{L}+)?\s+\p{Lu}\p{L}+(?:[-']\p{Lu}\p{L}+)?$/u;
 const ORGANIZATION_PATTERN = /\b(?:inc|llc|ltd|corp(?:oration)?|company|group|clinic|hospital|firm|partners|associates)\b/iu;
 const CREDENTIAL_PATTERN = /\b(?:licensed|certified|registered|accredited|phd|m\.?d\.?|esq\.?)\b/iu;
 
@@ -449,7 +451,6 @@ export function normalizeConversationAssistantRoleLabel(label: string): string {
     !ROLE_LABEL_PATTERN.test(collapsed)
     || !HAS_LETTER_PATTERN.test(collapsed)
     || PERSONAL_TITLE_PATTERN.test(collapsed)
-    || PERSON_NAME_PATTERN.test(collapsed)
     || ORGANIZATION_PATTERN.test(collapsed)
     || CREDENTIAL_PATTERN.test(collapsed)
   ) {
