@@ -1846,6 +1846,13 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                         ciFailed: { type: 'boolean', nullable: true },
                         partialWork: { type: 'boolean', nullable: true },
                         rebaseResult: nullableRebaseResultSchema,
+                        pull_request_outcome_label: { type: 'string', enum: ['commits_pushed', 'no_changes_needed'], nullable: true },
+                        merge_ready: { type: 'string', enum: ['1'], nullable: true },
+                        merge_ready_reason: {
+                          type: 'string',
+                          enum: ['review_no_remediation', 'pull_request_no_changes_rebase_clean', 'remediation_already_completed', 'review_skipped'],
+                          nullable: true,
+                        },
                         review_comments_posted: { type: 'string', nullable: true },
                         review_types: { type: 'string', nullable: true },
                         requirements_tracker_updated: { type: 'string', nullable: true },
