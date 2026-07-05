@@ -19,6 +19,7 @@ function makeSession(overrides: Partial<ConversationAssistantSession> = {}): Con
     chatDisplayName: 'Alice',
     status: 'active',
     range: { from: '2026-06-30T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
+    effectiveRange: { from: '2026-06-30T10:00:00.000Z', to: '2026-06-30T10:00:00.000Z' },
     model: 'or:google/gemini-3.5-flash',
     transcriptSha256: 'hash',
     transcriptMessageCount: 1,
@@ -149,6 +150,7 @@ describe('conversationAssistantRepository', () => {
       chatId: '',
       status: 'archived',
       range: { from: '', to: '' },
+      effectiveRange: { from: '', to: '' },
       model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       transcriptSha256: '',
       transcriptMessageCount: 0,
@@ -182,6 +184,24 @@ describe('conversationAssistantRepository', () => {
 
     expect(missingModel?.model).toBe(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
     expect(legacyModel?.model).toBe('legacy/model');
+  });
+
+  it('hydrates legacy sessions without effectiveRange by falling back to range', async () => {
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc('whatsapp_conv_session_legacy_range')
+      .set({
+        userId: 'user-123',
+        chatId: 'chat-123',
+        range: { from: '2026-06-30T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
+      });
+
+    const loaded = await repository.getSessionById('whatsapp_conv_session_legacy_range');
+
+    expect(loaded?.effectiveRange).toEqual({
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
   });
 
   it('hydrates assistant turn defaults and optional metadata', async () => {

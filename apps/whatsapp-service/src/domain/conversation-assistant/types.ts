@@ -15,6 +15,7 @@ export interface ConversationAssistantSession {
   chatDisplayName?: string;
   status: ConversationAssistantSessionStatus;
   range: { from: string; to: string };
+  effectiveRange: { from: string; to: string };
   model: string;
   transcriptSha256: string;
   transcriptMessageCount: number;
