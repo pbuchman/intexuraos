@@ -238,7 +238,7 @@ describe('isRebaseClean', () => {
 Run:
 
 ```bash
-pnpm --filter @intexuraos/code-task-domain test src/__tests__/rebaseResult.test.ts -- --run
+pnpm --filter @intexuraos/code-task-domain exec vitest run src/__tests__/rebaseResult.test.ts
 ```
 
 Expected: FAIL with missing `../rebaseResult.js`.
@@ -306,7 +306,7 @@ export {
 Run:
 
 ```bash
-pnpm --filter @intexuraos/code-task-domain test src/__tests__/rebaseResult.test.ts -- --run
+pnpm --filter @intexuraos/code-task-domain exec vitest run src/__tests__/rebaseResult.test.ts
 ```
 
 Expected: PASS.
