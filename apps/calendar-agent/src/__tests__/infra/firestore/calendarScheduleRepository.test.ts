@@ -171,6 +171,48 @@ describe('calendarScheduleRepository', () => {
     }
   });
 
+  it('normalizes malformed due schedule identity and retry fields defensively', async () => {
+    const repository = createCalendarScheduleRepository();
+    fakeFirestore.seedCollection('calendar_schedules', [
+      {
+        id: 'malformed_due_calendar_daily_lookahead',
+        data: {
+          userId: 123,
+          taskType: 'calendar_daily_lookahead',
+          status: 'active',
+          cadence: { localTime: '09:15', timeZone: 'America/New_York' },
+          payload: {
+            prompt: 'Send me events that they have in the calendar in the next 24 hours.',
+          },
+          nextRunAt: '2026-07-04T13:15:00.000Z',
+          retryRun: {
+            localDate: false,
+            scheduledFor: 456,
+          },
+        },
+      },
+    ]);
+
+    const claim = await repository.claimDueSchedules({
+      now: '2026-07-04T13:15:00.000Z',
+      limit: 10,
+      leaseOwnerId: 'worker-a',
+      leaseDurationMs: 60_000,
+    });
+
+    expect(claim.ok).toBe(true);
+    if (claim.ok) {
+      expect(claim.value[0]?.schedule).toMatchObject({
+        id: 'malformed_due_calendar_daily_lookahead',
+        userId: '',
+        retryRun: {
+          localDate: '',
+          scheduledFor: '',
+        },
+      });
+    }
+  });
+
   it('does not claim schedules that became inactive or not yet due before the transaction', async () => {
     const repository = createCalendarScheduleRepository();
     fakeFirestore.seedCollection('calendar_schedules', [

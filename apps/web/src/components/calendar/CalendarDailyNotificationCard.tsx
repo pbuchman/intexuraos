@@ -68,7 +68,7 @@ export function CalendarDailyNotificationCard({
         setSettings(response);
         setEnabled(response.schedule.enabled);
         setLocalTime(response.schedule.localTime);
-        setTimeZone(response.schedule.timeZone);
+        setTimeZone(response.schedule.timeZone ?? browserTimeZone());
       } catch (e) {
         if (!active) return;
         setError(e instanceof ApiError ? e.message : 'Failed to load daily notification settings');
@@ -102,7 +102,7 @@ export function CalendarDailyNotificationCard({
       setSettings(response);
       setEnabled(response.schedule.enabled);
       setLocalTime(response.schedule.localTime);
-      setTimeZone(response.schedule.timeZone);
+      setTimeZone(response.schedule.timeZone ?? timeZone);
       setSaved(true);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to save daily notification settings');

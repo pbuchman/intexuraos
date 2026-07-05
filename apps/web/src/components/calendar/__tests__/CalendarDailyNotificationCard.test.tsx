@@ -19,7 +19,7 @@ function settings(overrides = {}): {
   schedule: {
     enabled: boolean;
     localTime: string;
-    timeZone: string;
+    timeZone?: string;
     nextRunAt?: string;
   };
   delivery: {
@@ -103,6 +103,42 @@ describe('CalendarDailyNotificationCard', () => {
     });
     expect(await screen.findByText('Saved')).toBeInTheDocument();
     expect(screen.getByText('Matrix delivery is ready')).toBeInTheDocument();
+  });
+
+  it('keeps the browser timezone when unsaved schedule settings omit timezone', async () => {
+    const resolvedOptions = vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions');
+    resolvedOptions.mockReturnValue({
+      locale: 'en-US',
+      calendar: 'gregory',
+      numberingSystem: 'latn',
+      timeZone: 'America/New_York',
+    });
+    vi.mocked(getCalendarDailyNotificationSettings).mockResolvedValue(
+      settings({
+        schedule: {
+          enabled: false,
+          localTime: '08:00',
+        },
+        delivery: { status: 'ready' },
+      })
+    );
+    const user = userEvent.setup();
+
+    render(<CalendarDailyNotificationCard getAccessToken={getAccessToken} />);
+
+    await user.click(
+      await screen.findByRole('checkbox', { name: /send a once-daily lookahead prompt/i })
+    );
+    await user.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(updateCalendarDailyNotificationSettings).toHaveBeenCalledWith('token', {
+        enabled: true,
+        localTime: '08:00',
+        timeZone: 'America/New_York',
+      });
+    });
+    resolvedOptions.mockRestore();
   });
 
   it('shows API errors', async () => {

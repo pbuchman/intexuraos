@@ -53,7 +53,6 @@ function toSchedule(
     typeof retryRun === 'object' && retryRun !== null
       ? (retryRun as Record<string, unknown>)
       : null;
-  /* v8 ignore start -- schema: Firestore schedule documents cannot have non-string queried fields after repository query validation; fallbacks are defensive for malformed adapters @preserve */
   return {
     id,
     userId: typeof data['userId'] === 'string' ? data['userId'] : '',
@@ -94,7 +93,6 @@ function toSchedule(
       : {}),
     schemaVersion: 1,
   };
-  /* v8 ignore stop @preserve */
 }
 
 function toRun(id: string, input: Omit<CalendarScheduleRun, 'id'>): CalendarScheduleRun {

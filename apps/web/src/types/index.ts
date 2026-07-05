@@ -794,7 +794,7 @@ export interface CalendarDailyNotificationDeliveryReadiness {
 export interface CalendarDailyNotificationSchedule {
   enabled: boolean;
   localTime: string;
-  timeZone: string;
+  timeZone?: string;
   nextRunAt?: string;
   lastRunAt?: string;
 }

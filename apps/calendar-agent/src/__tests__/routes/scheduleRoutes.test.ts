@@ -130,7 +130,6 @@ describe('scheduleRoutes', () => {
       schedule: {
         enabled: false,
         localTime: '08:00',
-        timeZone: 'UTC',
       },
       delivery: { status: 'ready' },
     });

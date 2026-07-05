@@ -16,7 +16,7 @@ interface CalendarDailyLookaheadSettingsResponse {
   schedule: {
     enabled: boolean;
     localTime: string;
-    timeZone: string;
+    timeZone?: string;
     nextRunAt?: string;
     lastRunAt?: string;
   };
@@ -32,7 +32,6 @@ function toSettingsResponse(input: {
       schedule: {
         enabled: false,
         localTime: '08:00',
-        timeZone: 'UTC',
       },
       delivery: input.delivery,
     };
