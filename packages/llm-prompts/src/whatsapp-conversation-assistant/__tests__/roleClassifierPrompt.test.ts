@@ -198,6 +198,11 @@ describe('conversation assistant role classifier prompt', () => {
       confidence: 0.91,
       rationale: 'The user asks about legal options.',
     });
+    const tooManyWords = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Customer Success Support Engineer',
+      confidence: 0.91,
+      rationale: 'The user asks about technical customer support.',
+    });
 
     expect(valid.success).toBe(true);
     expect(validClinicRole.success).toBe(true);
@@ -232,6 +237,7 @@ describe('conversation assistant role classifier prompt', () => {
     expect(repeatedSlashes.success).toBe(false);
     expect(repeatedHyphens.success).toBe(false);
     expect(trailingPunctuation.success).toBe(false);
+    expect(tooManyWords.success).toBe(false);
   });
 
   it('builds a repair prompt from invalid raw output and schema details', () => {

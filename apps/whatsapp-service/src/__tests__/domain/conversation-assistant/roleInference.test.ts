@@ -161,6 +161,9 @@ describe('inferConversationAssistantRoleLabel', () => {
     expect(normalizeConversationAssistantRoleLabel('Certified Tax Advisor')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('Jane Doe, PhD')).toBe('Assistant');
     expect(normalizeConversationAssistantRoleLabel('**Lawyer**')).toBe('Assistant');
+    expect(normalizeConversationAssistantRoleLabel('Customer Success Support Engineer')).toBe(
+      'Assistant'
+    );
     expect(normalizeConversationAssistantRoleLabel('Assistant')).toBe('Assistant');
   });
 });

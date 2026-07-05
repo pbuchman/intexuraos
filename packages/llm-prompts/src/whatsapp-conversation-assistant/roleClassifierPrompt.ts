@@ -10,6 +10,8 @@ export const CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT = {
 const ROLE_LABEL_SAFE_CHARACTERS_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} .&'/-]{0,38}[\p{L}\p{N}]$/u;
 const ROLE_LABEL_HAS_LETTER_PATTERN = /\p{L}/u;
 const ROLE_LABEL_REPEATED_PUNCTUATION_PATTERN = /[.&'/-]{2,}/u;
+const ROLE_LABEL_WORD_PATTERN = /\p{L}[\p{L}\p{N}]*/gu;
+const ROLE_LABEL_MAX_WORDS = 3;
 const ROLE_LABEL_PERSONAL_TITLE_PATTERN = /\b(?:dr|mr|mrs|ms|prof)\.?\s*\p{L}/iu;
 const ROLE_LABEL_COMMON_SINGLE_NAME_PATTERN =
   /^(?:alex|alice|anna|ben|charles|david|emma|jane|john|julia|maria|michael|natalie|oliver|piotr|priya|robert|sarah|sophia|thomas|william)$/iu;
@@ -17,6 +19,10 @@ const ROLE_LABEL_ORGANIZATION_PATTERN =
   /(?:\b(?:acme|amazon|apple|contoso|google|intexuraos|meta|microsoft|openai|stripe|tesla)\b|\b(?:inc|llc|ltd|corp(?:oration)?|company|group|clinic|hospital|firm|partners|associates|team)\b$)/iu;
 const ROLE_LABEL_CREDENTIAL_PATTERN =
   /\b(?:licensed|certified|registered|accredited|phd|m\.?d\.?|esq\.?)\b/iu;
+
+function countRoleLabelWords(label: string): number {
+  return Array.from(label.matchAll(ROLE_LABEL_WORD_PATTERN)).length;
+}
 
 export const conversationAssistantRoleClassificationSchema = z
   .object({
@@ -34,6 +40,9 @@ export const conversationAssistantRoleClassificationSchema = z
       })
       .refine((label) => !ROLE_LABEL_REPEATED_PUNCTUATION_PATTERN.test(label), {
         message: 'roleLabel must not be punctuation-heavy',
+      })
+      .refine((label) => countRoleLabelWords(label) <= ROLE_LABEL_MAX_WORDS, {
+        message: 'roleLabel must be at most three words',
       })
       .refine((label) => !ROLE_LABEL_PERSONAL_TITLE_PATTERN.test(label), {
         message: 'roleLabel must not contain a personal title',

@@ -18,6 +18,7 @@ const ORGANIZATION_PATTERN =
   /(?:\b(?:acme|amazon|apple|contoso|google|intexuraos|meta|microsoft|openai|stripe|tesla)\b|\b(?:inc|llc|ltd|corp(?:oration)?|company|group|clinic|hospital|firm|partners|associates|team)\b$)/iu;
 const CREDENTIAL_PATTERN = /\b(?:licensed|certified|registered|accredited|phd|m\.?d\.?|esq\.?)\b/iu;
 const ROLE_LABEL_WORD_PATTERN = /\p{L}[\p{L}\p{N}]*/gu;
+const ROLE_LABEL_MAX_WORDS = 3;
 
 export interface InferConversationAssistantRoleLabelInput {
   initialQuestion: string | undefined;
@@ -59,6 +60,7 @@ export function normalizeConversationAssistantRoleLabel(label: string): string {
   if (
     !ROLE_LABEL_PATTERN.test(collapsed) ||
     !HAS_LETTER_PATTERN.test(collapsed) ||
+    countRoleLabelWords(collapsed) > ROLE_LABEL_MAX_WORDS ||
     PERSONAL_TITLE_PATTERN.test(collapsed) ||
     COMMON_PERSON_NAME_PATTERN.test(collapsed) ||
     ORGANIZATION_PATTERN.test(collapsed) ||
@@ -71,4 +73,8 @@ export function normalizeConversationAssistantRoleLabel(label: string): string {
     ROLE_LABEL_WORD_PATTERN,
     (word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1).toLowerCase()}`
   );
+}
+
+function countRoleLabelWords(label: string): number {
+  return Array.from(label.matchAll(ROLE_LABEL_WORD_PATTERN)).length;
 }
