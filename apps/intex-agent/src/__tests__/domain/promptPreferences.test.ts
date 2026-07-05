@@ -7,6 +7,7 @@ import {
   deletePromptPreferenceItem,
   emptyPromptPreferences,
   normalizePromptPreferenceText,
+  renderPromptPreferenceAgentContext,
   renderPromptPreferenceBlock,
   updatePromptPreferenceItem,
 } from '../../domain/preferences/promptPreferences.js';
@@ -48,6 +49,50 @@ describe('prompt preferences domain', () => {
         'User Preferences v3:',
         '1. (id: pref_abc123) "When I ask to invite Jakub, invite jakub@gmail.com."',
         '2. (id: pref_def456) "When I ask about a decision, be helpful but criticize my choices."',
+      ].join('\n')
+    );
+  });
+
+  it('omits agent preference context for a never-initialized empty aggregate', () => {
+    expect(renderPromptPreferenceAgentContext(emptyPromptPreferences('user-1'))).toBeNull();
+  });
+
+  it('renders non-empty agent preference context with the current expected version', () => {
+    const added = addPromptPreferenceItem(emptyPromptPreferences('user-1'), {
+      id: 'pref_focus',
+      text: 'Prefer concise replies.',
+      now: '2026-07-04T10:00:00.000Z',
+      updatedBy: webActor,
+    });
+
+    expect(renderPromptPreferenceAgentContext(added.current)).toBe(
+      [
+        'User Preferences v1:',
+        '1. (id: pref_focus) "Prefer concise replies."',
+        'Use expectedVersion 1 for preference mutation tools.',
+      ].join('\n')
+    );
+  });
+
+  it('renders empty-but-versioned agent preference context with the current expected version', () => {
+    const added = addPromptPreferenceItem(emptyPromptPreferences('user-1'), {
+      id: 'pref_focus',
+      text: 'Prefer concise replies.',
+      now: '2026-07-04T10:00:00.000Z',
+      updatedBy: webActor,
+    });
+    const deleted = deletePromptPreferenceItem(added.current, {
+      itemId: 'pref_focus',
+      now: '2026-07-04T10:01:00.000Z',
+      updatedBy: webActor,
+    });
+
+    expect(deleted.current.renderedPromptBlock).toBe('');
+    expect(renderPromptPreferenceAgentContext(deleted.current)).toBe(
+      [
+        'User Preferences v2:',
+        'No active preference rows are currently defined.',
+        'Use expectedVersion 2 for add_user_preference.',
       ].join('\n')
     );
   });

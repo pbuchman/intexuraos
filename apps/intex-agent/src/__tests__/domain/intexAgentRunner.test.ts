@@ -2767,6 +2767,39 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('explains confirmed preference version conflicts with retryable metadata', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        updateUserPreference: async (): Promise<string> => {
+          throw new Error('Expected preference version 0, but current version is 2');
+        },
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        toolName: 'update_user_preference',
+        toolArgs: {
+          itemId: 'pref_morning',
+          text: 'Prefer concise morning summaries.',
+          expectedVersion: 0,
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'tool_failed',
+      reply:
+        'Your instruction memory changed before I could save that. Send the request again so I can use the latest version.',
+      toolName: 'update_user_preference',
+      error: 'Expected preference version 0, but current version is 2',
+      errorCategory: 'version_conflict',
+      isRetryable: true,
+      attemptedAction: 'update_user_preference',
+    });
+  });
+
   it('marks confirmed transient tool failures as retryable', async () => {
     const runner = createIntexAgentRunner({
       client: new FakeToolCallingClient([]),

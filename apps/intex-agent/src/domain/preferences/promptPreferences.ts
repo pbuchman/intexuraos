@@ -154,6 +154,28 @@ export function renderPromptPreferenceBlock(
   return block;
 }
 
+export function renderPromptPreferenceAgentContext(
+  preferences: IntexAgentPromptPreferences
+): string | null {
+  const renderedPromptBlock = preferences.renderedPromptBlock.trim();
+  if (renderedPromptBlock !== '') {
+    return [
+      renderedPromptBlock,
+      `Use expectedVersion ${String(preferences.currentVersion)} for preference mutation tools.`,
+    ].join('\n');
+  }
+
+  if (preferences.createdAt === null && preferences.currentVersion === 0) {
+    return null;
+  }
+
+  return [
+    `User Preferences v${String(preferences.currentVersion)}:`,
+    'No active preference rows are currently defined.',
+    `Use expectedVersion ${String(preferences.currentVersion)} for add_user_preference.`,
+  ].join('\n');
+}
+
 export function addPromptPreferenceItem(
   current: IntexAgentPromptPreferences,
   input: AddPromptPreferenceItemInput

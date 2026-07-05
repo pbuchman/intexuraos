@@ -13,6 +13,7 @@ import type { PromptPreferencesRepository } from '../../domain/ports/promptPrefe
 import {
   addPromptPreferenceItem,
   deletePromptPreferenceItem,
+  assertExpectedPromptPreferenceVersion,
   emptyPromptPreferences,
   updatePromptPreferenceItem,
   type IntexAgentPromptPreferenceVersion,
@@ -809,6 +810,149 @@ describe('createIntexAgentToolExecutor', () => {
     });
   });
 
+  it('retries addUserPreference once after refreshing a version-conflicted empty aggregate', async () => {
+    const promptPreferencesRepository = new FakePromptPreferencesRepository();
+    promptPreferencesRepository.replaceCurrent(createVersionedEmptyCurrent());
+    const executor = createIntexAgentToolExecutor(
+      createExecutorDeps({ promptPreferencesRepository })
+    );
+
+    const result = await executor.addUserPreference({
+      text: 'Prefer concise replies.',
+      expectedVersion: 0,
+    });
+
+    expect(promptPreferencesRepository.calls).toEqual([
+      {
+        method: 'addItem',
+        input: {
+          userId: 'user-1',
+          text: 'Prefer concise replies.',
+          expectedVersion: 0,
+          updatedBy: {
+            actor: 'agent_tool',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            messageId: 'wamid-1',
+          },
+        },
+      },
+      { method: 'getCurrent', userId: 'user-1' },
+      {
+        method: 'addItem',
+        input: {
+          userId: 'user-1',
+          text: 'Prefer concise replies.',
+          expectedVersion: 2,
+          updatedBy: {
+            actor: 'agent_tool',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            messageId: 'wamid-1',
+          },
+        },
+      },
+    ]);
+    expect(JSON.parse(result)).toMatchObject({
+      status: 'completed',
+      currentVersion: 3,
+      changedItemId: 'pref_1',
+    });
+  });
+
+  it('does not retry addUserPreference when the add failure is not a version conflict', async () => {
+    const promptPreferencesRepository = new FakePromptPreferencesRepository();
+    promptPreferencesRepository.failNextAddWith(new Error('storage unavailable'));
+    const executor = createIntexAgentToolExecutor(
+      createExecutorDeps({ promptPreferencesRepository })
+    );
+
+    await expect(
+      executor.addUserPreference({
+        text: 'Prefer concise replies.',
+        expectedVersion: 0,
+      })
+    ).rejects.toThrow('storage unavailable');
+    expect(promptPreferencesRepository.calls).toEqual([
+      {
+        method: 'addItem',
+        input: {
+          userId: 'user-1',
+          text: 'Prefer concise replies.',
+          expectedVersion: 0,
+          updatedBy: {
+            actor: 'agent_tool',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            messageId: 'wamid-1',
+          },
+        },
+      },
+    ]);
+  });
+
+  it('does not retry stale updateUserPreference or deleteUserPreference conflicts', async () => {
+    const updatePromptPreferencesRepository = new FakePromptPreferencesRepository();
+    updatePromptPreferencesRepository.replaceCurrent(createVersionedEmptyCurrent());
+    const updateExecutor = createIntexAgentToolExecutor(
+      createExecutorDeps({ promptPreferencesRepository: updatePromptPreferencesRepository })
+    );
+
+    await expect(
+      updateExecutor.updateUserPreference({
+        itemId: 'pref_1',
+        text: 'Prefer medium-length replies.',
+        expectedVersion: 1,
+      })
+    ).rejects.toThrow('Expected preference version 1, but current version is 2');
+    expect(updatePromptPreferencesRepository.calls).toEqual([
+      {
+        method: 'updateItem',
+        input: {
+          userId: 'user-1',
+          itemId: 'pref_1',
+          text: 'Prefer medium-length replies.',
+          expectedVersion: 1,
+          updatedBy: {
+            actor: 'agent_tool',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            messageId: 'wamid-1',
+          },
+        },
+      },
+    ]);
+
+    const deletePromptPreferencesRepository = new FakePromptPreferencesRepository();
+    deletePromptPreferencesRepository.replaceCurrent(createVersionedEmptyCurrent());
+    const deleteExecutor = createIntexAgentToolExecutor(
+      createExecutorDeps({ promptPreferencesRepository: deletePromptPreferencesRepository })
+    );
+
+    await expect(
+      deleteExecutor.deleteUserPreference({
+        itemId: 'pref_1',
+        expectedVersion: 1,
+      })
+    ).rejects.toThrow('Expected preference version 1, but current version is 2');
+    expect(deletePromptPreferencesRepository.calls).toEqual([
+      {
+        method: 'deleteItem',
+        input: {
+          userId: 'user-1',
+          itemId: 'pref_1',
+          expectedVersion: 1,
+          updatedBy: {
+            actor: 'agent_tool',
+            userId: 'user-1',
+            sessionId: 'session-1',
+            messageId: 'wamid-1',
+          },
+        },
+      },
+    ]);
+  });
+
   it('throws when an internal tool client returns a failure', async () => {
     const notesClient = new FakeNotesClient();
     notesClient.result = err(new Error('notes-agent unavailable'));
@@ -952,6 +1096,15 @@ class FakePromptPreferencesRepository implements PromptPreferencesRepository {
   private versions: IntexAgentPromptPreferenceVersion[] = [];
   private idCounter = 0;
   private timeCounter = 0;
+  private nextAddError: Error | null = null;
+
+  replaceCurrent(current: IntexAgentPromptPreferences): void {
+    this.current = current;
+  }
+
+  failNextAddWith(error: Error): void {
+    this.nextAddError = error;
+  }
 
   seed(userId: string, input: { id: string; text: string }): void {
     const result = addPromptPreferenceItem(emptyPromptPreferences(userId), {
@@ -981,6 +1134,12 @@ class FakePromptPreferencesRepository implements PromptPreferencesRepository {
     input: Parameters<PromptPreferencesRepository['addItem']>[0]
   ): Promise<IntexAgentPromptPreferences> {
     this.calls.push({ method: 'addItem', input });
+    if (this.nextAddError !== null) {
+      const error = this.nextAddError;
+      this.nextAddError = null;
+      throw error;
+    }
+    assertExpectedPromptPreferenceVersion(this.current, input.expectedVersion);
     const result = addPromptPreferenceItem(this.current, {
       id: `pref_${String(++this.idCounter)}`,
       text: input.text,
@@ -996,6 +1155,7 @@ class FakePromptPreferencesRepository implements PromptPreferencesRepository {
     input: Parameters<PromptPreferencesRepository['updateItem']>[0]
   ): Promise<IntexAgentPromptPreferences> {
     this.calls.push({ method: 'updateItem', input });
+    assertExpectedPromptPreferenceVersion(this.current, input.expectedVersion);
     const result = updatePromptPreferenceItem(this.current, {
       itemId: input.itemId,
       text: input.text,
@@ -1011,6 +1171,7 @@ class FakePromptPreferencesRepository implements PromptPreferencesRepository {
     input: Parameters<PromptPreferencesRepository['deleteItem']>[0]
   ): Promise<IntexAgentPromptPreferences> {
     this.calls.push({ method: 'deleteItem', input });
+    assertExpectedPromptPreferenceVersion(this.current, input.expectedVersion);
     const result = deletePromptPreferenceItem(this.current, {
       itemId: input.itemId,
       now: this.nextTime(),
@@ -1025,6 +1186,20 @@ class FakePromptPreferencesRepository implements PromptPreferencesRepository {
     this.timeCounter += 1;
     return `2026-06-28T10:0${String(this.timeCounter)}:00.000Z`;
   }
+}
+
+function createVersionedEmptyCurrent(): IntexAgentPromptPreferences {
+  const added = addPromptPreferenceItem(emptyPromptPreferences('user-1'), {
+    id: 'pref_1',
+    text: 'Prefer concise replies.',
+    now: '2026-06-28T10:00:00.000Z',
+    updatedBy: { actor: 'web_ui', userId: 'user-1' },
+  });
+  return deletePromptPreferenceItem(added.current, {
+    itemId: 'pref_1',
+    now: '2026-06-28T10:01:00.000Z',
+    updatedBy: { actor: 'web_ui', userId: 'user-1' },
+  }).current;
 }
 
 function event(id: string, summary: string, startDateTime: string): CalendarQueryEvent {

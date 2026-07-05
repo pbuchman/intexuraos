@@ -23,7 +23,10 @@ import type {
   IntexAgentToolExecutor,
 } from './toolDefinitions.js';
 import type { PromptPreferencesRepository } from '../ports/promptPreferencesRepository.js';
-import type { IntexAgentPromptPreferences } from '../preferences/promptPreferences.js';
+import {
+  PromptPreferencesError,
+  type IntexAgentPromptPreferences,
+} from '../preferences/promptPreferences.js';
 
 export interface NotesToolClient {
   createNote(input: CreateNoteRequest): Promise<Result<ServiceFeedback>>;
@@ -257,12 +260,26 @@ export function createIntexAgentToolExecutor(
     },
 
     async addUserPreference(args: AddUserPreferenceToolArgs): Promise<string> {
-      const preferences = await deps.promptPreferencesRepository.addItem({
-        userId: deps.userId,
-        text: args.text,
-        expectedVersion: args.expectedVersion,
-        updatedBy: preferenceToolActor(deps),
-      });
+      let preferences: IntexAgentPromptPreferences;
+      try {
+        preferences = await deps.promptPreferencesRepository.addItem({
+          userId: deps.userId,
+          text: args.text,
+          expectedVersion: args.expectedVersion,
+          updatedBy: preferenceToolActor(deps),
+        });
+      } catch (error: unknown) {
+        if (!isPromptPreferenceVersionConflict(error)) {
+          throw error;
+        }
+        const current = await deps.promptPreferencesRepository.getCurrent(deps.userId);
+        preferences = await deps.promptPreferencesRepository.addItem({
+          userId: deps.userId,
+          text: args.text,
+          expectedVersion: current.currentVersion,
+          updatedBy: preferenceToolActor(deps),
+        });
+      }
       return JSON.stringify(
         toPromptPreferenceToolResult(preferences, preferences.items.at(-1)?.id)
       );
@@ -300,6 +317,10 @@ function preferenceToolActor(
     sessionId: deps.sessionId,
     messageId: deps.messageId,
   };
+}
+
+function isPromptPreferenceVersionConflict(error: unknown): error is PromptPreferencesError {
+  return error instanceof PromptPreferencesError && error.code === 'VERSION_CONFLICT';
 }
 
 function toPromptPreferenceToolResult(
