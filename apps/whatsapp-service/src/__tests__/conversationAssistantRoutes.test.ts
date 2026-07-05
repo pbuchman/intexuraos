@@ -100,6 +100,7 @@ describe('Conversation Assistant routes', () => {
           id: string;
           effectiveRange: ConversationAssistantDateRange;
           transcriptText?: string;
+          assistantRoleLabel: string;
           model: string;
           modelDisplayName: string;
         };
@@ -107,6 +108,7 @@ describe('Conversation Assistant routes', () => {
       };
     };
     expect(body.data.session.transcriptText).toBeUndefined();
+    expect(body.data.session.assistantRoleLabel).toBe('Assistant');
     expect(body.data.session.effectiveRange).toEqual({
       from: '2026-06-30T10:00:00.000Z',
       to: '2026-06-30T10:00:00.000Z',
@@ -114,6 +116,7 @@ describe('Conversation Assistant routes', () => {
     expect(body.data.session.model).toBe(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
     expect(body.data.session.modelDisplayName).toBe('MiniMax M3');
     expect(JSON.stringify(body)).not.toContain('We agreed to meet');
+    expect(JSON.stringify(body)).not.toContain('transcriptText');
     expect(body.data.turns).toEqual([]);
   });
 
@@ -223,6 +226,37 @@ describe('Conversation Assistant routes', () => {
     });
     expect(JSON.parse(fetched.body).data.session.transcriptText).toBeUndefined();
     expect(JSON.parse(turns.body).data.turns).toHaveLength(2);
+  });
+
+  it('returns the inferred assistant role label in the created public session DTO', async () => {
+    const token = await seed();
+    ctx.llmClient.queueGenerateResult({
+      ok: true,
+      value: {
+        content:
+          '{"roleLabel":"lawyer","confidence":0.93,"rationale":"The question requests legal advice."}',
+        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7, costUsd: 0.001 },
+      },
+    });
+
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'Can you review this contract?',
+      },
+    });
+
+    expect(created.statusCode).toBe(201);
+    const createdBody = JSON.parse(created.body) as {
+      data: { session: { assistantRoleLabel: string } };
+    };
+    expect(createdBody.data.session.assistantRoleLabel).toBe('Lawyer');
+    expect(JSON.stringify(createdBody)).not.toContain('transcriptText');
   });
 
   it('does not require the PDF exporter for non-export Conversation Assistant routes', async () => {

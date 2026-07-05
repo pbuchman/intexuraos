@@ -72,9 +72,14 @@ export function ConversationAssistantSessionRail({
                   <span className="block truncate">{formatRange(session.effectiveRange)}</span>
                 </span>
               </span>
-              <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <Bot className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{session.modelDisplayName}</span>
+              <span className="mt-1 flex min-w-0 items-start gap-1 text-xs text-slate-500 dark:text-slate-400">
+                <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-slate-600 dark:text-slate-300">
+                    {session.assistantRoleLabel}
+                  </span>
+                  <span className="block truncate">{session.modelDisplayName}</span>
+                </span>
               </span>
               {session.lastTurnAt !== undefined ? (
                 <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">

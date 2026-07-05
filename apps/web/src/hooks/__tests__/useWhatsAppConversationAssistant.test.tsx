@@ -88,6 +88,7 @@ const session: ConversationAssistantSession = {
   },
   model: 'or:google/gemini-3.5-flash',
   modelDisplayName: 'Gemini 3.5 Flash Thinking',
+  assistantRoleLabel: 'Psychologist',
   transcriptSha256: 'abc123',
   transcriptMessageCount: 9,
   omitted: {

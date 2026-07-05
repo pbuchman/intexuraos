@@ -10,6 +10,7 @@ import type {
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../../domain/conversation-assistant/types.js';
+import { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL } from '../../domain/conversation-assistant/types.js';
 
 function makeSession(overrides: Partial<ConversationAssistantSession> = {}): ConversationAssistantSession {
   return {
@@ -24,6 +25,7 @@ function makeSession(overrides: Partial<ConversationAssistantSession> = {}): Con
     transcriptSha256: 'hash',
     transcriptMessageCount: 1,
     transcriptText: '[2026-06-30T10:00:00.000Z] Alice: hello',
+    assistantRoleLabel: 'Doctor',
     omitted: { mediaOnly: 0, failedTranscriptions: 0, pendingTranscriptions: 0, nonText: 0, overLimit: 0 },
     title: 'Question',
     createdAt: '2026-06-30T10:00:00.000Z',
@@ -144,6 +146,7 @@ describe('conversationAssistantRepository', () => {
 
     expect(empty?.chatDisplayName).toBeUndefined();
     expect(empty?.lastTurnAt).toBeUndefined();
+    expect(empty?.assistantRoleLabel).toBe(DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL);
     expect(loaded).toEqual({
       id: 'whatsapp_conv_session_partial',
       userId: '',
@@ -155,6 +158,7 @@ describe('conversationAssistantRepository', () => {
       transcriptSha256: '',
       transcriptMessageCount: 0,
       transcriptText: '',
+      assistantRoleLabel: DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
       omitted: { mediaOnly: 0, failedTranscriptions: 0, pendingTranscriptions: 0, nonText: 0, overLimit: 0 },
       title: '',
       createdAt: '',

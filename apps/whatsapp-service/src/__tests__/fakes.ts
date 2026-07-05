@@ -13,6 +13,7 @@ import type {
   GenerateChatOptions,
   GenerateChatResult,
   GenerateChatStreamEvent,
+  GenerateOptions,
   GenerateResult,
   LlmChatMessage,
   LlmGenerateClient,
@@ -206,6 +207,7 @@ export class FakeMatrixOutboundGateway implements MatrixOutboundGateway {
 }
 
 export class FakeLlmGenerateClient implements LlmGenerateClient {
+  private nextGenerateResults: Result<GenerateResult, LLMError>[] = [];
   private nextChatResult: Result<GenerateChatResult, LLMError> = ok({
     content: 'assistant answer',
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
@@ -215,15 +217,18 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
   });
   private nextStreamEvents: GenerateChatStreamEvent[] = [];
+  readonly generateCalls: { prompt: string; options: GenerateOptions }[] = [];
   readonly chatCalls: { messages: LlmChatMessage[]; options: GenerateChatOptions }[] = [];
   readonly streamChatCalls: { messages: LlmChatMessage[]; options: GenerateChatOptions }[] = [];
 
-  generate(): Promise<Result<GenerateResult, LLMError>> {
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>> {
+    this.generateCalls.push({ prompt, options });
     return Promise.resolve(
-      ok({
-        content: 'assistant answer',
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
-      })
+      this.nextGenerateResults.shift() ??
+        ok({
+          content: 'assistant answer',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        })
     );
   }
 
@@ -253,6 +258,10 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
 
   failNextChat(message = 'model failed'): void {
     this.nextChatResult = err({ code: 'API_ERROR', message });
+  }
+
+  queueGenerateResult(result: Result<GenerateResult, LLMError>): void {
+    this.nextGenerateResults.push(result);
   }
 
   failNextStream(message = 'stream failed', events: GenerateChatStreamEvent[] = []): void {

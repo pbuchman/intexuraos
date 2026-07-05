@@ -34,6 +34,7 @@
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
     "fastify": "catalog:",
     "libphonenumber-js": "^1.12.33",
     "pino": "catalog:",

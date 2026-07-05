@@ -26,9 +26,10 @@ import type {
   ConversationAssistantPdfExportError,
   ConversationAssistantPdfExportInput,
 } from '../../../domain/conversation-assistant/ports.js';
-import type {
-  ConversationAssistantStreamEvent,
-  ExportConversationAssistantPdfResult,
+import {
+  DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
+  type ConversationAssistantStreamEvent,
+  type ExportConversationAssistantPdfResult,
 } from '../../../domain/conversation-assistant/types.js';
 import type {
   PrivateWhatsAppMessage,
@@ -232,9 +233,53 @@ describe('Conversation Assistant session use cases', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.turns).toEqual([]);
+    expect(result.value.session.assistantRoleLabel).toBe(
+      DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL
+    );
     expect(result.value.session.transcriptText).toContain('We agreed to meet at 17:00.');
     expect(result.value.session.transcriptSha256).toBe(result.value.context.transcriptSha256);
     expect(conversationRepository.getAllSessions()).toHaveLength(1);
+  });
+
+  it('persists an inferred assistant role label using the selected model and initial question only', async () => {
+    const { deps, conversationRepository, privateRepository, llmClient, llmFactoryCalls } =
+      makeDeps();
+    await seedDirectMessage(privateRepository);
+    llmClient.queueGenerateResult(
+      ok({
+        content:
+          '{"roleLabel":"employment lawyer","confidence":0.93,"rationale":"The user asks whether they can sue an employer."}',
+        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7, costUsd: 0.001 },
+      })
+    );
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        model: 'or:anthropic/claude-sonnet-5' as ConversationAssistantModel,
+        question: 'Can I sue my employer?',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.assistantRoleLabel).toBe('Employment Lawyer');
+    expect(conversationRepository.getAllSessions()[0]?.assistantRoleLabel).toBe(
+      'Employment Lawyer'
+    );
+    expect(llmFactoryCalls).toEqual([
+      { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
+      { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
+    ]);
+    expect(llmClient.generateCalls[0]?.options.promptType).toBe(
+      'whatsapp-conversation-assistant-role-classifier'
+    );
+    expect(llmClient.generateCalls[0]?.prompt).toContain('Can I sue my employer?');
+    expect(llmClient.generateCalls[0]?.prompt).not.toContain('We agreed to meet at 17:00.');
   });
 
   it('persists selected and effective transcript ranges from included messages', async () => {
@@ -532,6 +577,7 @@ describe('Conversation Assistant session use cases', () => {
     expect(conversationRepository.getAllTurns()).toHaveLength(2);
     expect(llmFactoryCalls).toEqual([
       { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
+      { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
     ]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
     expect(llmClient.chatCalls[0]?.options.reasoning).toEqual({ enabled: true });
@@ -614,6 +660,7 @@ describe('Conversation Assistant session use cases', () => {
     expect(followUp.ok).toBe(true);
     expect(llmClient.chatCalls).toHaveLength(2);
     expect(llmFactoryCalls).toEqual([
+      { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
       { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
       { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
     ]);
@@ -726,6 +773,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 7,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
       omitted: {
         mediaOnly: 2,
         failedTranscriptions: 1,
@@ -768,6 +816,7 @@ describe('Conversation Assistant session use cases', () => {
       {
         title: 'Alice context',
         modelName: 'Gemini 3.5 Flash Thinking',
+        assistantRoleLabel: 'Assistant',
         initialPrompt: 'user question',
         generatedAt: '2026-06-30T12:00:00.000Z',
         sourceRange: {
@@ -822,6 +871,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 4,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,
@@ -907,6 +957,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 1,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,
@@ -958,6 +1009,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 1,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,
@@ -1028,6 +1080,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 1,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,

@@ -4,6 +4,7 @@ import type { GenerateChatResult, LLMError } from '@intexuraos/llm-factory';
 import {
   getConversationAssistantModelDisplayName,
   isConversationAssistantModel,
+  type ConversationAssistantModel,
 } from '@intexuraos/llm-contract';
 import {
   WHATSAPP_CONVERSATION_ASSISTANT_PROMPT,
@@ -13,6 +14,10 @@ import {
   buildPrivateConversationTranscriptText,
   projectPrivateConversationContext,
 } from './transcriptFormatting.js';
+import {
+  DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
+  inferConversationAssistantRoleLabel,
+} from './roleInference.js';
 import type { ConversationAssistantDeps } from './ports.js';
 import type {
   CheckConversationAssistantContextInput,
@@ -109,9 +114,19 @@ export async function createConversationAssistantSession(
     return err({ code: 'EMPTY_TRANSCRIPT', message: 'Selected range contains no textual messages' });
   }
 
+  const sessionId = deps.ids.sessionId();
+  const question = input.question?.trim();
+  const assistantRoleLabel = await inferAssistantRoleLabel({
+    userId: input.userId,
+    model: selectedModel,
+    question,
+    sessionId,
+    deps,
+  });
+
   const now = deps.clock.now();
   const session: ConversationAssistantSession = {
-    id: deps.ids.sessionId(),
+    id: sessionId,
     userId: input.userId,
     chatId: input.chatId,
     status: 'active',
@@ -124,6 +139,7 @@ export async function createConversationAssistantSession(
     transcriptSha256: context.transcriptSha256,
     transcriptMessageCount: context.messageCount,
     transcriptText: buildPrivateConversationTranscriptText(context.messages),
+    assistantRoleLabel,
     omitted: context.omitted,
     title: deriveTitle(chatLoadResult.value.chat.displayName, input.from, input.to, input.question),
     createdAt: now,
@@ -136,7 +152,6 @@ export async function createConversationAssistantSession(
   await deps.repository.saveSession(session);
 
   const turns: ConversationAssistantTurn[] = [];
-  const question = input.question?.trim();
   if (question !== undefined && question.length > 0) {
     const turnResult = await appendQuestionAndAssistantTurn({ session, question }, deps);
     turns.push(...turnResult.turns);
@@ -319,6 +334,7 @@ export async function exportConversationAssistantSessionPdf(
   const exportResult = await deps.pdfExporter.exportConversation({
     title: session.title,
     modelName: getConversationAssistantModelDisplayName(session.model),
+    assistantRoleLabel: session.assistantRoleLabel,
     initialPrompt,
     generatedAt: deps.clock.now(),
     sourceRange: session.range,
@@ -364,6 +380,37 @@ async function appendQuestionAndAssistantTurn(
   await persistAssistantTurnAndTouchSession(input.session, assistantTurn, deps);
 
   return { turns: [userTurn, assistantTurn] };
+}
+
+async function inferAssistantRoleLabel(input: {
+  userId: string;
+  model: ConversationAssistantModel;
+  question: string | undefined;
+  sessionId: string;
+  deps: ConversationAssistantDeps;
+}): Promise<string> {
+  if (input.question === undefined || input.question.length === 0) {
+    return DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL;
+  }
+
+  try {
+    const llmClientResult = await input.deps.llmClientFactory.createLlmClientForUser(
+      input.userId,
+      input.model
+    );
+    if (!llmClientResult.ok) {
+      return DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL;
+    }
+
+    return await inferConversationAssistantRoleLabel({
+      initialQuestion: input.question,
+      client: llmClientResult.value,
+      model: input.model,
+      sessionId: input.sessionId,
+    });
+  } catch {
+    return DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL;
+  }
 }
 
 async function loadOwnedDirectChat(

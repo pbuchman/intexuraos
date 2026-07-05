@@ -6,6 +6,7 @@ export type PdfConversationMessageRole = 'user' | 'assistant';
 export interface PdfConversationExportInput {
   title: string;
   modelName: string;
+  assistantRoleLabel: string;
   initialPrompt: string;
   generatedAt: string;
   sourceRange: ConversationAssistantDateRange;

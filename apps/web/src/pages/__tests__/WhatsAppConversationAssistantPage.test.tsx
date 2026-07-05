@@ -45,6 +45,7 @@ function createHookResult(
     },
     model: 'or:google/gemini-3.5-flash',
     modelDisplayName: 'Gemini 3.5 Flash Thinking',
+    assistantRoleLabel: 'Psychologist',
     transcriptSha256: 'abc123',
     transcriptMessageCount: 9,
     omitted: {
@@ -127,6 +128,7 @@ describe('WhatsAppConversationAssistantPage', () => {
     expect(screen.getByLabelText('Model')).toHaveValue(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
     expect(screen.getByLabelText('From')).toHaveValue('2026-06-20T09:00');
     expect(screen.getByLabelText('To')).toHaveValue('2026-06-21T10:00');
+    expect(screen.getByText('No role')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 
@@ -175,6 +177,8 @@ describe('WhatsAppConversationAssistantPage', () => {
     expect(screen.getByText('Bring docs')).toBeInTheDocument();
     expect(screen.getByText('9 messages')).toBeInTheDocument();
     expect(screen.getAllByText('Gemini 3.5 Flash Thinking').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Psychologist').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Assistant')).not.toBeInTheDocument();
     expect(screen.getByText('6 omitted')).toBeInTheDocument();
     expect(screen.getByText(/non-text 3/i)).toBeInTheDocument();
     expect(screen.getByText(/over limit 0/i)).toBeInTheDocument();

@@ -4,6 +4,9 @@ import type {
   PrivateConversationContextOmittedCounts,
   PrivateConversationContextResponse,
 } from '../whatsapp/models/PrivateWhatsApp.js';
+import { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL } from './roleInference.js';
+
+export { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL };
 
 export type ConversationAssistantSessionStatus = 'active' | 'archived';
 export type ConversationAssistantTurnRole = 'user' | 'assistant';
@@ -20,6 +23,7 @@ export interface ConversationAssistantSession {
   transcriptSha256: string;
   transcriptMessageCount: number;
   transcriptText: string;
+  assistantRoleLabel: string;
   omitted: PrivateConversationContextOmittedCounts;
   title: string;
   createdAt: string;

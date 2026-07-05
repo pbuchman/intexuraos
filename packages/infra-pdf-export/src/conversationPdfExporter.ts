@@ -62,6 +62,13 @@ function validateInput(input: PdfConversationExportInput): PdfExportError | null
     };
   }
 
+  if (input.assistantRoleLabel.trim().length === 0) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export assistantRoleLabel cannot be empty',
+    };
+  }
+
   if (input.initialPrompt.trim().length === 0) {
     return {
       code: 'INVALID_INPUT',
@@ -160,6 +167,7 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
 
   doc.moveDown(0.35);
   drawMetadataLine(doc, contentWidth, 'LLM model', input.modelName);
+  drawMetadataLine(doc, contentWidth, 'Assistant role', input.assistantRoleLabel);
   drawMetadataLine(doc, contentWidth, 'Initial prompt', toPlainPdfText(input.initialPrompt));
 
   doc.moveDown(0.9);
@@ -198,7 +206,15 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
   doc.moveDown(0.9);
 
   for (const message of input.messages) {
-    drawMessage(doc, contentWidth, message.role, message.createdAt, message.text, input.modelName);
+    drawMessage(
+      doc,
+      contentWidth,
+      message.role,
+      message.createdAt,
+      message.text,
+      input.modelName,
+      input.assistantRoleLabel
+    );
   }
 }
 
@@ -240,9 +256,10 @@ function drawMessage(
   role: 'user' | 'assistant',
   createdAt: string,
   text: string,
-  modelName: string
+  modelName: string,
+  assistantRoleLabel: string
 ): void {
-  const roleLabel = getMessageRoleLabel(role, modelName);
+  const roleLabel = getMessageRoleLabel(role, modelName, assistantRoleLabel);
   const headerText = `${roleLabel}  ${createdAt}`;
   const plainText = toPlainPdfText(text);
   const headerFont = fontForText(headerText, 'bold');
@@ -273,8 +290,12 @@ function drawMessage(
   doc.moveDown(0.8);
 }
 
-function getMessageRoleLabel(role: 'user' | 'assistant', modelName: string): string {
-  return role === 'assistant' ? `LLM response (${modelName})` : 'User';
+function getMessageRoleLabel(
+  role: 'user' | 'assistant',
+  modelName: string,
+  assistantRoleLabel: string
+): string {
+  return role === 'assistant' ? `${assistantRoleLabel} (${modelName})` : 'User';
 }
 
 function toPlainPdfText(text: string): string {

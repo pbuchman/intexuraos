@@ -35,20 +35,23 @@ describe('conversationAssistantApi', () => {
 
   it('lists conversation assistant sessions from the WhatsApp service base URL', async () => {
     const { apiRequest } = await import('../apiClient.js');
-    vi.mocked(apiRequest).mockResolvedValue({ sessions: [] });
+    vi.mocked(apiRequest).mockResolvedValue({
+      sessions: [{ id: 'session-1', assistantRoleLabel: 'Psychologist' }],
+    });
 
-    await listConversationAssistantSessions(TOKEN);
+    const result = await listConversationAssistantSessions(TOKEN);
 
     expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
       'https://wa.test',
       '/conversation-assistant/sessions',
       TOKEN
     );
+    expect(result.sessions[0]?.assistantRoleLabel).toBe('Psychologist');
   });
 
   it('creates a conversation assistant session with a POST body', async () => {
     const { apiRequest } = await import('../apiClient.js');
-    const session = { id: 'session-1' };
+    const session = { id: 'session-1', assistantRoleLabel: 'Psychologist' };
     vi.mocked(apiRequest).mockResolvedValue({ session, turns: [] });
 
     const request = {
@@ -103,7 +106,7 @@ describe('conversationAssistantApi', () => {
 
   it('loads a single conversation assistant session with URL-encoded session ids', async () => {
     const { apiRequest } = await import('../apiClient.js');
-    const session = { id: 'session/with spaces?' };
+    const session = { id: 'session/with spaces?', assistantRoleLabel: 'Psychologist' };
     vi.mocked(apiRequest).mockResolvedValue({ session });
 
     const result = await getConversationAssistantSession(TOKEN, 'session/with spaces?');
@@ -114,6 +117,7 @@ describe('conversationAssistantApi', () => {
       TOKEN
     );
     expect(result).toEqual(session);
+    expect(result.assistantRoleLabel).toBe('Psychologist');
   });
 
   it('lists conversation assistant turns with URL-encoded session ids', async () => {
