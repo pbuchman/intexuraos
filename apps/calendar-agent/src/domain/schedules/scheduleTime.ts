@@ -70,12 +70,41 @@ function getZonedParts(instantIso: string, timeZone: string): ZonedParts {
   /* v8 ignore stop @preserve */
 }
 
+function getComparableLocalMs(parts: ZonedParts): number {
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0, 0);
+}
+
+function getNextValidUtcIsoForLocalDateTime(
+  desiredLocalMs: number,
+  candidateMs: number,
+  timeZone: string
+): string {
+  for (let probeMs = candidateMs - 36 * 60 * 60 * 1000; ; probeMs += 60 * 1000) {
+    const probeLocalMs = getComparableLocalMs(
+      getZonedParts(new Date(probeMs).toISOString(), timeZone)
+    );
+    if (probeLocalMs >= desiredLocalMs) {
+      return new Date(probeMs).toISOString();
+    }
+  }
+}
+
 function getUtcIsoForLocalDateTime(localDate: string, localTime: string, timeZone: string): string {
   const dateParts = parseIsoDate(localDate);
   const timeParts = parseLocalTime(localTime);
   if (timeParts === null) {
     throw new Error(`Invalid local time: ${localTime}`);
   }
+
+  const desiredLocalMs = Date.UTC(
+    dateParts.year,
+    dateParts.month - 1,
+    dateParts.day,
+    timeParts.hour,
+    timeParts.minute,
+    0,
+    0
+  );
 
   let candidateMs = Date.UTC(
     dateParts.year,
@@ -89,32 +118,15 @@ function getUtcIsoForLocalDateTime(localDate: string, localTime: string, timeZon
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const zoned = getZonedParts(new Date(candidateMs).toISOString(), timeZone);
-    const desiredMinutes = Date.UTC(
-      dateParts.year,
-      dateParts.month - 1,
-      dateParts.day,
-      timeParts.hour,
-      timeParts.minute,
-      0,
-      0
-    );
-    const actualMinutes = Date.UTC(
-      zoned.year,
-      zoned.month - 1,
-      zoned.day,
-      zoned.hour,
-      zoned.minute,
-      0,
-      0
-    );
-    const diffMs = desiredMinutes - actualMinutes;
+    const actualLocalMs = getComparableLocalMs(zoned);
+    const diffMs = desiredLocalMs - actualLocalMs;
     if (diffMs === 0) {
       return new Date(candidateMs).toISOString();
     }
     candidateMs += diffMs;
   }
 
-  return new Date(candidateMs).toISOString();
+  return getNextValidUtcIsoForLocalDateTime(desiredLocalMs, candidateMs, timeZone);
 }
 
 function addDays(localDate: string, days: number): string {

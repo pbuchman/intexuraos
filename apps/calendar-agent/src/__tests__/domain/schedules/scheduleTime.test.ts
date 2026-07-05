@@ -96,6 +96,26 @@ describe('scheduleTime', () => {
     ).toBe('2026-07-05T13:15:00.000Z');
   });
 
+  it('advances nonexistent spring-forward local times to the next valid instant', () => {
+    const result = calculateNextScheduleRunAt({
+      localTime: '02:30',
+      timeZone: 'America/New_York',
+      now: '2026-03-08T05:00:00.000Z',
+    });
+
+    expect(result).toBe('2026-03-08T07:00:00.000Z');
+  });
+
+  it('uses the first matching instant for overlapping fall-back local times', () => {
+    const result = calculateNextScheduleRunAt({
+      localTime: '01:30',
+      timeZone: 'America/New_York',
+      now: '2026-11-01T04:00:00.000Z',
+    });
+
+    expect(result).toBe('2026-11-01T05:30:00.000Z');
+  });
+
   it('throws when next-run calculation receives an invalid local time', () => {
     expect(() =>
       calculateNextScheduleRunAt({
