@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Preserve durable merge-ready evidence for no-remediation PR review outcomes, including "rebase not required" pull-request tasks, so Code Tasks Battlefield can show the Violet merge action without relying only on the transient Linear `ready-to-merge` label.
+**Goal:** Preserve durable merge-ready evidence for no-remediation PR review outcomes, reviewer "Remediation not required" tracking-comment decisions, and "rebase not required" pull-request tasks, so Code Tasks Battlefield can show the Violet merge action without relying only on the transient Linear `ready-to-merge` label.
 
-**Architecture:** The fix adds a shared structured rebase-result contract, stores an explicit merge-ready evidence signal on task results, and teaches group summaries plus live grouping to unlock merge action from that durable signal. The existing Linear label remains supported, but it stops being the only source of truth for merge readiness because it is removed on PR close/merge and cannot support archived evidence reconstruction.
+**Architecture:** The fix adds a shared structured rebase-result contract, stores explicit merge-ready evidence on task results for review, skipped-review, remediation, and pull_request paths, and teaches group summaries plus live grouping to unlock merge action from that durable signal. The existing Linear label and PR automation tracking comment remain supported visibility surfaces, but neither is the only source of truth because labels are removed on PR close/merge and tracking-comment text is not currently persisted into task/group state.
 
 **Tech Stack:** TypeScript, Fastify JSON schemas, Firestore task documents, `@intexuraos/code-task-domain`, orchestrator completion parsing, code-agent task grouping, React web task types.
 
@@ -32,7 +32,8 @@ The investigation used a broad cutoff of `2026-07-02T00:00:00.000Z` because the 
 - Firestore `code_tasks`: 111 recent updated docs scanned, 95 archived tasks in scope.
 - Firestore `code_tasks/{taskId}/log_lines` and `code_tasks/{taskId}/logs`: all 95 archived tasks scanned for `rebase`.
 - GitHub PR API via `gh`: issue comments, inline review comments, reviews, and PR state for PRs #2279 through #2298.
-- Repository code paths for review outcome labeling, task result schemas, rebase-result parsing, group summary derivation, and UI task group status.
+- PR automation tracking-comment rendering: `remediation_decision` with `required: false` renders as "Remediation not required" in the single managed PR comment, not as a separate PR comment.
+- Repository code paths for review outcome labeling, skipped-review callbacks, task result schemas, rebase-result parsing, group summary derivation, and UI task group status.
 
 Cloud Logging was not available from this worker because `gcloud` is not installed in the container. Firestore, GitHub, and retained task logs were available and sufficient for code-root-cause analysis.
 
@@ -57,9 +58,11 @@ Merged PRs in the archived window with `needs_remediation: "0"` review evidence:
 
 The exact phrase "rebase is not required" was not found in retained GitHub PR comments, reviews, inline comments, `log_lines`, or raw `logs` for archived tasks in the window. The only recent PR comments containing "rebase" were on PR #2290, and GitHub reports PR #2290 was closed without merge, so it does not meet the user's proof criterion.
 
+Additional PR feedback clarified that the requested evidence was in PR comments, specifically the per-PR automation tracking comment updated by the reviewer decision path. The relevant message is the reviewer/orchestrator decision that a review is not required, rendered as "Remediation not required" in the managed tracking comment. It is not a separate top-level comment and it is not a remediation task result.
+
 ### Evidence Problem
 
-There are two concrete evidence defects:
+There are three concrete evidence defects:
 
 1. `rebaseResult` is incompatible across producer and consumer.
    - Orchestrator `workers/orchestrator/src/types/task.ts` defines `rebaseResult` as an object: `{ attempted: boolean; success: boolean; conflictFiles?: string[] }`.
@@ -71,9 +74,15 @@ There are two concrete evidence defects:
    - A "rebase not required" state is naturally represented as `{"attempted": false}` or equivalent, but that currently becomes `undefined`.
    - Result: the exact evidence the user mentioned cannot survive into Firestore, group summaries, or Battlefield.
 
+3. Reviewer skipped-review decisions are visible only in the PR automation tracking comment and transient label state.
+   - `createOnReviewSkippedCallback()` records `automationLog.record(... { type: "remediation_decision", required: false, source: "review_result", signal: "0" })`.
+   - `automationCommentRenderer.ts` renders that event as "Remediation not required" in the managed PR tracking comment.
+   - The same callback sets `ready-to-merge` and recomputes labels, but it does not store durable `merge_ready` evidence on the origin execution task.
+   - Result: a PR can be ready in GitHub and visibly marked "Remediation not required" in its tracking comment while Battlefield has no durable evidence to reconstruct the Violet merge action if the label is absent, stale, or later removed.
+
 There is also one design defect:
 
-3. Merge readiness is derived from a transient Linear label instead of durable task evidence.
+4. Merge readiness is derived from a transient Linear label instead of durable task evidence.
    - `deriveAggregateStatusFromSummary()` returns merge `needs-action` only when `hasPrUrl`, `latestReviewNeedsRemediation !== true`, and `hasMergeReadyLabel === true`.
    - `derivePipeline()` adds the merge step for normal review pass only when the hydrated Linear issue still has `ready-to-merge`.
    - `handlePrClose()` removes `ready-to-merge` on PR close/merge and recomputes the group summary with empty labels.
@@ -84,6 +93,7 @@ There is also one design defect:
 - Store structured rebase evidence instead of converting it back to the old string enum.
 - Treat `attempted: false` as clean evidence named `not_required`, not as absent evidence.
 - Add a durable merge-ready evidence field to task results and summaries so Battlefield can unlock merge action from stored task state.
+- Treat reviewer "Remediation not required" tracking-comment decisions as skipped-review merge-ready evidence (`merge_ready_reason: "review_skipped"`) stored on the origin execution task.
 - Keep Linear `ready-to-merge` as an external label and display hint, but stop making it the only merge-ready source of truth.
 - Keep plan-origin review PR behavior unchanged unless an execution, pull_request, or remediation task later supplies merge-ready evidence for the execution PR.
 
@@ -123,12 +133,13 @@ There is also one design defect:
 - Modify `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts`: persist merge-ready evidence from review/remediation/pull_request completion.
 - Modify `apps/code-agent/src/infra/firestore/codeTaskRepositoryWithGroupUpdates.ts`: refresh cached group summaries on result-only merge-ready evidence updates.
 - Modify `apps/code-agent/src/routes/webhookRouteSchemas.ts`, `apps/code-agent/src/routes/code/schemas.ts`, `apps/code-agent/src/routes/code/task-routes.ts`, `apps/code-agent/src/routes/code/issueGroupRoutes.ts`, `apps/code-agent/src/routes/code/responseFormatters.ts`: update schemas/types/serialization.
-- Modify `apps/code-agent/src/infra/firestore/taskGroupSummary/serializer.ts`: summarize latest durable merge-ready evidence.
-- Modify `apps/code-agent/src/domain/models/taskGroupSummary.ts`: add merge-ready evidence fields.
-- Modify `apps/code-agent/src/domain/issueGrouping/deriveAggregateStatusFromSummary.ts`: unlock `needs-action` from durable merge-ready evidence.
+- Modify `apps/code-agent/src/infra/firestore/taskGroupSummary/serializer.ts`: summarize latest durable merge-ready evidence and representative terminal PR state.
+- Modify `apps/code-agent/src/domain/models/taskGroupSummary.ts`: add merge-ready evidence fields and representative `prMergedAt`/`prClosedAt` fields.
+- Modify `apps/code-agent/src/domain/issueGrouping/deriveAggregateStatusFromSummary.ts`: unlock `needs-action` from durable merge-ready evidence while preserving terminal PR guards.
 - Modify `apps/code-agent/src/domain/issueGrouping/types.ts` and `apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts`: expose and use merge-ready evidence in live grouping.
 - Modify matching tests under `apps/code-agent/src/__tests__/domain/issueGrouping/`, `apps/code-agent/src/__tests__/infra/firestore/taskGroupSummary/`, and `apps/code-agent/src/__tests__/routes/webhooks.test.ts`.
-- Create `apps/code-agent/src/__tests__/infra/firestore/codeTaskRepositoryWithGroupUpdates.test.ts`: regression coverage for result-only merge-ready evidence refreshing cached summaries.
+- Modify `apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts`: assert terminal PR updates cannot leave cached summaries mergeable from durable evidence.
+- Modify `apps/code-agent/src/__tests__/infra/repositories/codeTaskRepositoryWithGroupUpdates.test.ts`: regression coverage for result-only merge-ready evidence refreshing cached summaries.
 - Modify `apps/web/src/types/index.ts` and `apps/web/src/types/issueGroups.ts`: align frontend types to object rebase result and merge-ready fields.
 
 ---
@@ -576,7 +587,7 @@ Expected: PASS after updating affected fixtures.
 - Modify: `apps/code-agent/src/infra/firestore/codeTaskRepositoryWithGroupUpdates.ts`
 - Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 - Modify: `apps/code-agent/src/__tests__/domain/services/onReviewSkippedCallback.test.ts` if this file exists; otherwise add coverage in the existing service test file.
-- Create: `apps/code-agent/src/__tests__/infra/firestore/codeTaskRepositoryWithGroupUpdates.test.ts`
+- Modify: `apps/code-agent/src/__tests__/infra/repositories/codeTaskRepositoryWithGroupUpdates.test.ts`
 
 **Interfaces:**
 - Produces on task result:
@@ -721,7 +732,7 @@ Add to the `TaskResult` interface and all local `result` type blocks that enumer
 First update the group-summary write-through decorator so result-only durable evidence writes refresh cached summaries:
 
 ```typescript
-function hasMergeReadyEvidenceChange(input: CodeTaskUpdate): boolean {
+function hasMergeReadyEvidenceChange(input: UpdateTaskInput): boolean {
   return input.result?.merge_ready !== undefined || input.result?.merge_ready_reason !== undefined;
 }
 ```
@@ -778,7 +789,9 @@ if (
 
 Import `isRebaseClean` and `parseCodeTaskRebaseResult` from `@intexuraos/code-task-domain`.
 
-- [ ] **Step 5: Preserve skipped-review evidence**
+- [ ] **Step 5: Preserve reviewer tracking-comment skipped-review evidence**
+
+This is the path clarified by the PR feedback: the reviewer/orchestrator decides no review is required, records a `remediation_decision` event with `required: false`, and the managed PR automation tracking comment renders "Remediation not required". Persist that reviewer decision as durable task evidence; do not search for or create a separate comment.
 
 In `onReviewSkippedCallback.ts`, after successful label write and before recompute, update the origin task:
 
@@ -796,6 +809,22 @@ Keep this update deterministic: do not call `recomputeWithLabels` until the orig
 
 Because `withGroupUpdates()` now refreshes summaries on result-only merge-ready changes, this skipped-review path can rely on the awaited origin-task update to refresh cached `latestMergeReadyEvidence` before `recomputeWithLabels()` applies label flags. If the implementation instead chooses an explicit recompute-from-tasks call, add an equivalent test proving `latestMergeReadyEvidence` is true after the skipped-review callback completes.
 
+Keep the existing automation log behavior and add/extend a test that proves the same callback still records:
+
+```typescript
+expect(mockAutomationLog.record).toHaveBeenCalledWith(
+  { repository: 'pbuchman/intexuraos', prNumber: 42 },
+  expect.objectContaining({
+    type: 'remediation_decision',
+    required: false,
+    source: 'review_result',
+    signal: '0',
+  }),
+);
+```
+
+This preserves the tracking-comment message for users while adding the durable `merge_ready` state Battlefield needs.
+
 - [ ] **Step 6: Run focused tests**
 
 Run:
@@ -803,7 +832,7 @@ Run:
 ```bash
 pnpm --filter @intexuraos/orchestrator test src/services/__tests__/system-prompt.test.ts src/__tests__/services/completion-verifier/block-parser.test.ts -- --run -t "PULL_REQUEST_AGENT_FINAL|pull_request"
 pnpm --filter @intexuraos/code-agent test src/__tests__/routes/webhooks.test.ts -- --run -t "merge-ready evidence|ready-to-merge label|pull_request no-change"
-pnpm --filter @intexuraos/code-agent test src/__tests__/infra/firestore/codeTaskRepositoryWithGroupUpdates.test.ts -- --run -t "merge-ready evidence"
+pnpm --filter @intexuraos/code-agent test src/__tests__/infra/repositories/codeTaskRepositoryWithGroupUpdates.test.ts -- --run -t "merge-ready evidence"
 ```
 
 Expected: PASS.
@@ -819,10 +848,12 @@ Expected: PASS.
 - Modify: `apps/code-agent/src/__tests__/domain/issueGrouping/deriveAggregateStatusFromSummary.test.ts`
 - Modify: `apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts`
 - Modify: `apps/code-agent/src/__tests__/infra/firestore/taskGroupSummary/serializer.test.ts`
+- Modify: `apps/code-agent/src/__tests__/infra/repositories/codeTaskRepositoryWithGroupUpdates.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts`
 
 **Interfaces:**
 - Consumes: task result `merge_ready === "1"` and `merge_ready_reason`
-- Produces: `TaskGroupSummary.latestMergeReadyEvidence: boolean` and optional `latestMergeReadyReason`
+- Produces: `TaskGroupSummary.latestMergeReadyEvidence: boolean`, optional `latestMergeReadyReason`, and representative `prMergedAt`/`prClosedAt` terminal guards
 
 - [ ] **Step 1: Write failing aggregate-status tests**
 
@@ -855,18 +886,47 @@ it('does not return needs-action from durable merge-ready evidence when remediat
   ).not.toBe('needs-action');
 });
 
-it('returns needs-action for skipped-review evidence on the completed execution task', () => {
+it('returns needs-action for skipped-review evidence with no review result yet', () => {
+  expect(
+    deriveAggregateStatusFromSummary({
+      ...base,
+      hasCompletedExecutionAgent: true,
+      hasCompletedExecution: true,
+      hasPrUrl: true,
+      hasMergeReadyLabel: false,
+      latestReviewNeedsRemediation: null,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_skipped',
+    }),
+  ).toBe('needs-action');
+});
+
+it('does not return needs-action from durable merge-ready evidence after PR merge', () => {
   expect(
     deriveAggregateStatusFromSummary({
       ...base,
       hasCompletedExecution: true,
       hasPrUrl: true,
-      hasMergeReadyLabel: false,
-      latestReviewNeedsRemediation: false,
+      latestReviewNeedsRemediation: null,
       latestMergeReadyEvidence: true,
       latestMergeReadyReason: 'review_skipped',
+      prMergedAt: '2026-07-04T12:00:00.000Z',
     }),
-  ).toBe('needs-action');
+  ).not.toBe('needs-action');
+});
+
+it('does not return needs-action from durable merge-ready evidence after PR close without merge', () => {
+  expect(
+    deriveAggregateStatusFromSummary({
+      ...base,
+      hasCompletedExecution: true,
+      hasPrUrl: true,
+      latestReviewNeedsRemediation: false,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_no_remediation',
+      prClosedAt: '2026-07-04T12:00:00.000Z',
+    }),
+  ).not.toBe('needs-action');
 });
 ```
 
@@ -982,6 +1042,57 @@ it('shows actionable merge step from skipped-review evidence stored on the origi
   expect(groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge')?.state).toBe('actionable');
   expect(groups[0]?.pipeline.pr?.status).toBe('mergeable');
 });
+
+it('does not show merge step from skipped-review durable evidence after the PR merged', () => {
+  const tasks: SerializedTask[] = [
+    makeTask({
+      id: 'task-exec',
+      linearIssueId: 'INT-1846',
+      agentType: 'execution',
+      status: 'implemented',
+      createdAt: '2026-07-04T10:00:00.000Z',
+      updatedAt: '2026-07-04T10:10:00.000Z',
+      prNumber: 1846,
+      prMergedAt: '2026-07-04T12:00:00.000Z',
+      result: {
+        prUrl: 'https://github.com/owner/repo/pull/1846',
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+    }),
+  ];
+
+  const groups = groupByLinearIssue(tasks);
+
+  expect(groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+  expect(groups[0]?.pipeline.pr?.status).toBe('merged');
+});
+
+it('does not show merge step from durable review evidence after the PR closed without merge', () => {
+  const tasks: SerializedTask[] = [
+    makeTask({
+      id: 'task-review',
+      linearIssueId: 'INT-1846',
+      agentType: 'review',
+      status: 'reviewed',
+      createdAt: '2026-07-04T10:00:00.000Z',
+      updatedAt: '2026-07-04T10:10:00.000Z',
+      prNumber: 1846,
+      prClosedAt: '2026-07-04T12:00:00.000Z',
+      result: {
+        prUrl: 'https://github.com/owner/repo/pull/1846',
+        needs_remediation: '0',
+        merge_ready: '1',
+        merge_ready_reason: 'review_no_remediation',
+      },
+    }),
+  ];
+
+  const groups = groupByLinearIssue(tasks);
+
+  expect(groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+  expect(groups[0]?.pipeline.pr?.status).toBe('closed');
+});
 ```
 
 - [ ] **Step 3: Update summary model and serializer**
@@ -991,6 +1102,8 @@ In `TaskGroupSummary`, add:
 ```typescript
   latestMergeReadyEvidence: boolean;
   latestMergeReadyReason: string | null;
+  prMergedAt: Timestamp | null;
+  prClosedAt: Timestamp | null;
 ```
 
 In `docToSummary()`, default legacy docs:
@@ -1000,23 +1113,70 @@ latestMergeReadyEvidence: data['latestMergeReadyEvidence'] === true,
 latestMergeReadyReason: data['latestMergeReadyReason'] !== undefined && data['latestMergeReadyReason'] !== null
   ? String(data['latestMergeReadyReason'])
   : null,
+prMergedAt: data['prMergedAt'] !== undefined && data['prMergedAt'] !== null
+  ? toTimestamp(data['prMergedAt'])
+  : null,
+prClosedAt: data['prClosedAt'] !== undefined && data['prClosedAt'] !== null
+  ? toTimestamp(data['prClosedAt'])
+  : null,
 ```
 
 Add helper in serializer:
 
 ```typescript
+function isPrTerminal(task: CodeTask): boolean {
+  return task.prMergedAt !== undefined || task.prClosedAt !== undefined;
+}
+
 function getMergeReadyReason(task: CodeTask): string | null {
-  return task.result?.merge_ready === '1' && task.result.merge_ready_reason !== undefined
+  return task.status !== 'archived' &&
+    !isPrTerminal(task) &&
+    task.result?.merge_ready === '1' &&
+    task.result.merge_ready_reason !== undefined
     ? task.result.merge_ready_reason
     : null;
 }
 ```
 
-When creating, status-changing, or recomputing summaries, track the latest non-archived task with `merge_ready === "1"` across review, pull_request, remediation, and execution tasks. The execution-task path is required for `merge_ready_reason: "review_skipped"` because skipped-review evidence is persisted on the origin execution task. Set:
+When creating, status-changing, or recomputing summaries, track the latest non-archived, non-terminal task with `merge_ready === "1"` across review, pull_request, remediation, and execution tasks. The execution-task path is required for `merge_ready_reason: "review_skipped"` because skipped-review evidence is persisted on the origin execution task. Set:
 
 ```typescript
 latestMergeReadyEvidence = latestMergeReadyReason !== null;
 ```
+
+Also track representative PR terminal state in the summary from the same non-archived PR owner used for `prNumber`. Select that owner with the same rule as live grouping: newest non-archived task with `result.prUrl` by `updatedAt` descending, so a merged plan PR does not suppress an open execution PR for the same Linear issue.
+
+```typescript
+prMergedAt = prOwnerTask?.prMergedAt !== undefined ? toTimestamp(prOwnerTask.prMergedAt) : null;
+prClosedAt = prOwnerTask?.prClosedAt !== undefined ? toTimestamp(prOwnerTask.prClosedAt) : null;
+```
+
+Update `withGroupUpdates().update()` so cached summaries refresh when either durable merge-ready evidence or representative PR terminal state changes:
+
+```typescript
+function hasGroupSummaryRelevantResultChange(input: UpdateTaskInput): boolean {
+  return input.result?.merge_ready !== undefined || input.result?.merge_ready_reason !== undefined;
+}
+
+function hasGroupSummaryRelevantPrTerminalChange(input: UpdateTaskInput): boolean {
+  return input.prMergedAt !== undefined || input.prClosedAt !== undefined;
+}
+
+const shouldUpdateGroupSummary =
+  options?.transaction === undefined &&
+  (
+    input.status !== undefined ||
+    hasGroupSummaryRelevantResultChange(input) ||
+    hasGroupSummaryRelevantPrTerminalChange(input)
+  );
+```
+
+Add regression tests proving:
+
+- result-only `merge_ready` updates refresh cached `latestMergeReadyEvidence`;
+- `prMergedAt` updates refresh cached summaries and suppress merge-ready `needs-action`;
+- `prClosedAt` updates refresh cached summaries and suppress merge-ready `needs-action`.
+- sibling plan/execution PR summaries keep the open execution PR as representative even when the older plan PR is merged.
 
 - [ ] **Step 4: Update aggregate derivation**
 
@@ -1025,16 +1185,34 @@ In `GroupSummaryFields`, add:
 ```typescript
 latestMergeReadyEvidence?: boolean;
 latestMergeReadyReason?: string | null;
+prMergedAt?: unknown;
+prClosedAt?: unknown;
 ```
 
-Replace the merge case with:
+Replace the existing execution-agent active gate and merge case with:
 
 ```typescript
+const hasDurableMergeReady = fields.latestMergeReadyEvidence === true;
 const hasMergeReadiness = (fields.hasMergeReadyLabel ?? false) || fields.latestMergeReadyEvidence === true;
+const isPrTerminal = fields.prMergedAt !== undefined && fields.prMergedAt !== null
+  || fields.prClosedAt !== undefined && fields.prClosedAt !== null;
+
+// Active gate exception: skipped-review evidence has no review task, so
+// latestReviewNeedsRemediation is null. Durable merge-ready evidence must bypass
+// the same active gate as the ready-to-merge label.
+if (
+  fields.hasCompletedExecutionAgent &&
+  fields.latestReviewNeedsRemediation !== false &&
+  !hasMergeReadiness
+) {
+  return 'active';
+}
+
 if (
   fields.hasCompletedExecution &&
   fields.hasPrUrl &&
-  fields.latestMergeReadyEvidence === true &&
+  hasDurableMergeReady &&
+  !isPrTerminal &&
   fields.latestReviewNeedsRemediation !== true
 ) {
   return 'needs-action';
@@ -1042,6 +1220,7 @@ if (
 
 if (
   fields.hasPrUrl &&
+  !isPrTerminal &&
   fields.latestReviewNeedsRemediation !== true &&
   hasMergeReadiness
 ) {
@@ -1057,7 +1236,10 @@ In `derivePipeline()`, add:
 
 ```typescript
 function hasDurableMergeReadyEvidence(task: SerializedTask | undefined): boolean {
-  return task?.result?.merge_ready === '1';
+  return task !== undefined &&
+    task.result?.merge_ready === '1' &&
+    task.prMergedAt === undefined &&
+    task.prClosedAt === undefined;
 }
 ```
 
@@ -1090,7 +1272,7 @@ Keep this after the existing label and remediation paths so existing tests conti
 Run:
 
 ```bash
-pnpm --filter @intexuraos/code-agent test src/__tests__/domain/issueGrouping/deriveAggregateStatusFromSummary.test.ts src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts src/__tests__/infra/firestore/taskGroupSummary/serializer.test.ts -- --run
+pnpm --filter @intexuraos/code-agent test src/__tests__/domain/issueGrouping/deriveAggregateStatusFromSummary.test.ts src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts src/__tests__/infra/firestore/taskGroupSummary/serializer.test.ts src/__tests__/infra/repositories/codeTaskRepositoryWithGroupUpdates.test.ts src/__tests__/domain/useCases/handlePrClose.test.ts -- --run
 ```
 
 Expected: PASS.
@@ -1150,10 +1332,23 @@ Verify the task document stores:
 
 Verify the issue group API returns `pipeline.pr.status === "mergeable"` and a merge action while the PR is open, then returns `merged` after PR merge and `handlePrClose` sets `prMergedAt`.
 
+Also create or use a reviewer skipped-review case where the managed PR automation tracking comment contains "Remediation not required". Verify the origin execution task stores:
+
+```json
+{
+  "result": {
+    "merge_ready": "1",
+    "merge_ready_reason": "review_skipped"
+  }
+}
+```
+
+Verify the issue group API returns the Violet merge action while the PR is open without requiring a separate PR comment, then suppresses the action after either `prMergedAt` or `prClosedAt` is populated.
+
 ---
 
 ## Self-Review
 
-- Spec coverage: The plan covers identifying recent archived tasks, states that exact rebase wording was not found, explains the evidence failure, and prepares a fix plan with concrete files/tests.
+- Spec coverage: The plan covers identifying recent archived tasks, incorporates the clarified reviewer tracking-comment evidence path, states that exact rebase wording was not found, explains the evidence failure, and prepares a fix plan with concrete files/tests.
 - Placeholder scan: No `TBD`, `TODO`, or open-ended "add tests" steps remain.
 - Type consistency: `CodeTaskRebaseResult`, `merge_ready`, `merge_ready_reason`, and `pull_request_outcome_label` are named consistently across tasks.
