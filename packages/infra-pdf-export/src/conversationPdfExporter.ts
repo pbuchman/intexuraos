@@ -83,6 +83,16 @@ function validateInput(input: PdfConversationExportInput): PdfExportError | null
     };
   }
 
+  if (
+    input.effectiveRange.from.trim().length === 0 ||
+    input.effectiveRange.to.trim().length === 0
+  ) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export effective range cannot be empty',
+    };
+  }
+
   if (input.messageCounts.included < 0 || input.messageCounts.excluded < 0) {
     return {
       code: 'INVALID_INPUT',
@@ -159,8 +169,14 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
   drawMetadataLine(
     doc,
     contentWidth,
-    'Source range',
+    'Information range',
     `${input.sourceRange.from} to ${input.sourceRange.to}`
+  );
+  drawMetadataLine(
+    doc,
+    contentWidth,
+    'Effective range',
+    `${input.effectiveRange.from} to ${input.effectiveRange.to}`
   );
   drawMetadataLine(
     doc,

@@ -276,6 +276,14 @@ describe('Conversation Assistant routes', () => {
       included: 1,
       excluded: 0,
     });
+    expect(ctx.pdfConversationExporter.calls[0]?.sourceRange).toEqual({
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+    expect(ctx.pdfConversationExporter.calls[0]?.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:00:00.000Z',
+    });
   });
 
   it('rejects unauthenticated, missing, and foreign PDF export requests', async () => {

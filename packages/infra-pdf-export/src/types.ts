@@ -8,6 +8,7 @@ export interface PdfConversationExportInput {
   initialPrompt: string;
   generatedAt: string;
   sourceRange: { from: string; to: string };
+  effectiveRange: { from: string; to: string };
   messageCounts: { included: number; excluded: number };
   omittedBreakdown?: Record<string, number>;
   messages: {

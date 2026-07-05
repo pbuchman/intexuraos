@@ -774,6 +774,10 @@ describe('Conversation Assistant session use cases', () => {
           from: '2026-06-30T00:00:00.000Z',
           to: '2026-07-01T00:00:00.000Z',
         },
+        effectiveRange: {
+          from: '2026-06-30T10:00:00.000Z',
+          to: '2026-06-30T10:30:00.000Z',
+        },
         messageCounts: { included: 7, excluded: 15 },
         omittedBreakdown: {
           mediaOnly: 2,
@@ -862,6 +866,14 @@ describe('Conversation Assistant session use cases', () => {
       'assistant same time',
       'assistant future',
     ]);
+    expect(pdfExporter.calls[0]?.sourceRange).toEqual({
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+    expect(pdfExporter.calls[0]?.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:30:00.000Z',
+    });
 
     pdfExporter.setFileName('   ');
     const fallback = await exportConversationAssistantSessionPdf(

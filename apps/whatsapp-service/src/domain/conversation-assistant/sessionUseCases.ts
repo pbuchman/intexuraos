@@ -322,6 +322,7 @@ export async function exportConversationAssistantSessionPdf(
     initialPrompt,
     generatedAt: deps.clock.now(),
     sourceRange: session.range,
+    effectiveRange: session.effectiveRange,
     messageCounts: {
       included: session.transcriptMessageCount,
       excluded,
