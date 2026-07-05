@@ -535,6 +535,9 @@ describe('Conversation Assistant session use cases', () => {
     ]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
     expect(llmClient.chatCalls[0]?.options.reasoning).toEqual({ enabled: true });
+    const firstPrompt = JSON.stringify(llmClient.chatCalls[0]?.messages[1]);
+    expect(firstPrompt).toContain('Information range: 30 June 2026 to 1 July 2026');
+    expect(firstPrompt).toContain('Effective range: 30 June 2026 to 30 June 2026');
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages)).toContain('cache_control');
   });
 

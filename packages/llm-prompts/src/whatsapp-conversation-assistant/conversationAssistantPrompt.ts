@@ -1,7 +1,7 @@
 import type { LlmChatMessage } from '@intexuraos/llm-contract';
 
 export const WHATSAPP_CONVERSATION_ASSISTANT_PROMPT = {
-  version: '2.0.0',
+  version: '3.0.0',
   promptType: 'whatsapp-conversation-assistant',
 } as const;
 
@@ -9,6 +9,7 @@ export interface WhatsAppConversationAssistantPromptInput {
   transcriptText: string;
   chatDisplayName?: string;
   range: { from: string; to: string };
+  effectiveRange: { from: string; to: string };
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
   question: string;
 }
@@ -27,7 +28,7 @@ export function buildWhatsAppConversationAssistantMessages(
             'Answer only from the supplied WhatsApp transcript and prior user and assistant turns.',
             'Adapt your role and tone to the user need: you may reason like a psychologist, analyst, or lawyer when that framing is useful.',
             'Distinguish facts, inference, uncertainty, and missing evidence.',
-            'When citing timing, cite only the day and month, not exact times.',
+            'When citing timing, cite only the day, month, and year, not exact times.',
             'Do not output raw ISO timestamps, bracketed timestamp IDs, or second-level timestamp citations.',
             'If evidence is missing, say so directly.',
             'Do not invent events, motives, dates, promises, advice, or media contents.',
@@ -42,7 +43,13 @@ export function buildWhatsAppConversationAssistantMessages(
       content: [
         {
           type: 'text',
-          text: `Conversation: ${input.chatDisplayName ?? 'selected WhatsApp chat'}\nRange: ${formatPromptDateLabel(input.range.from)} to ${formatPromptDateLabel(input.range.to)}\n\nTranscript follows:`,
+          text: [
+            `Conversation: ${input.chatDisplayName ?? 'selected WhatsApp chat'}`,
+            `Information range: ${formatPromptDateLabel(input.range.from)} to ${formatPromptDateLabel(input.range.to)}`,
+            `Effective range: ${formatPromptDateLabel(input.effectiveRange.from)} to ${formatPromptDateLabel(input.effectiveRange.to)}`,
+            '',
+            'Transcript follows:',
+          ].join('\n'),
         },
         {
           type: 'text',
@@ -83,5 +90,5 @@ function formatPromptDateLabel(value: string): string {
   if (month === undefined) {
     return 'Unknown date';
   }
-  return `${String(date.getUTCDate())} ${month}`;
+  return `${String(date.getUTCDate())} ${month} ${String(date.getUTCFullYear())}`;
 }

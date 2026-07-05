@@ -408,6 +408,7 @@ async function buildPromptInputAfterUserTurn(
   const promptInput: Parameters<typeof buildWhatsAppConversationAssistantMessages>[0] = {
     transcriptText: input.session.transcriptText,
     range: input.session.range,
+    effectiveRange: input.session.effectiveRange,
     priorTurns: priorTurns.slice(0, -1),
     question: input.question,
   };

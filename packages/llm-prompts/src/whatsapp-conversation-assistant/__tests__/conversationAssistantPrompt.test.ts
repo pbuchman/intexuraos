@@ -6,7 +6,7 @@ import {
 
 describe('WHATSAPP_CONVERSATION_ASSISTANT_PROMPT', () => {
   it('has the exact metadata required by the contract', () => {
-    expect(WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.version).toBe('2.0.0');
+    expect(WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.version).toBe('3.0.0');
     expect(WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.promptType).toBe(
       'whatsapp-conversation-assistant'
     );
@@ -19,6 +19,10 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
       transcriptText: '[1 June] You: Hello',
       chatDisplayName: 'Taylor',
       range: { from: '2026-06-01T00:00:00.000Z', to: '2026-06-02T00:00:00.000Z' },
+      effectiveRange: {
+        from: '2026-06-01T10:00:00.000Z',
+        to: '2026-06-01T11:00:00.000Z',
+      },
       priorTurns: [
         { role: 'user', text: 'Summarize the conversation.' },
         { role: 'assistant', text: 'You discussed travel plans.' },
@@ -53,7 +57,8 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
       },
     ]);
     expect(JSON.stringify(messages)).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
-    expect(JSON.stringify(messages)).toContain('Range: 1 June to 2 June');
+    expect(JSON.stringify(messages)).toContain('Information range: 1 June 2026 to 2 June 2026');
+    expect(JSON.stringify(messages)).toContain('Effective range: 1 June 2026 to 1 June 2026');
 
     expect(messages[2]).toEqual({ role: 'user', content: 'Summarize the conversation.' });
     expect(messages[3]).toEqual({ role: 'assistant', content: 'You discussed travel plans.' });
@@ -64,6 +69,10 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
     const messages = buildWhatsAppConversationAssistantMessages({
       transcriptText: 'Transcript',
       range: { from: '2026-06-01T00:00:00.000Z', to: '2026-06-02T00:00:00.000Z' },
+      effectiveRange: {
+        from: '2026-06-01T10:00:00.000Z',
+        to: '2026-06-01T11:00:00.000Z',
+      },
       priorTurns: [{ role: 'assistant', text: 'Earlier answer' }],
       question: 'What is missing?',
     });
@@ -75,11 +84,16 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
     const messages = buildWhatsAppConversationAssistantMessages({
       transcriptText: 'Transcript',
       range: { from: 'not-a-date', to: '2026-06-02T00:00:00.000Z' },
+      effectiveRange: {
+        from: 'not-a-date',
+        to: '2026-06-01T11:00:00.000Z',
+      },
       priorTurns: [],
       question: 'What happened?',
     });
 
-    expect(JSON.stringify(messages)).toContain('Range: Unknown date to 2 June');
+    expect(JSON.stringify(messages)).toContain('Information range: Unknown date to 2 June 2026');
+    expect(JSON.stringify(messages)).toContain('Effective range: Unknown date to 1 June 2026');
     expect(JSON.stringify(messages)).not.toContain('NaN');
   });
 
@@ -87,6 +101,10 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
     const messages = buildWhatsAppConversationAssistantMessages({
       transcriptText: 'Transcript',
       range: { from: '2026-06-01T00:00:00.000Z', to: '2026-06-02T00:00:00.000Z' },
+      effectiveRange: {
+        from: '2026-06-01T10:00:00.000Z',
+        to: '2026-06-01T11:00:00.000Z',
+      },
       priorTurns: [],
       question: 'What happened?',
     });
@@ -108,6 +126,10 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
     const messages = buildWhatsAppConversationAssistantMessages({
       transcriptText: 'Transcript',
       range: { from: '2026-06-01T00:00:00.000Z', to: '2026-06-02T00:00:00.000Z' },
+      effectiveRange: {
+        from: '2026-06-01T10:00:00.000Z',
+        to: '2026-06-01T11:00:00.000Z',
+      },
       priorTurns: [],
       question: 'What happened?',
     });
@@ -122,7 +144,7 @@ describe('buildWhatsAppConversationAssistantMessages', () => {
       expect(combinedText).toContain('lawyer');
       expect(combinedText).toContain('If evidence is missing');
       expect(combinedText).toContain('Do not output raw ISO timestamps');
-      expect(combinedText).toContain('day and month');
+      expect(combinedText).toContain('day, month, and year');
       expect(combinedText).toContain('Do not invent');
       expect(combinedText).toContain('Do not use web search');
       expect(combinedText).toContain('Do not claim access to omitted media');
