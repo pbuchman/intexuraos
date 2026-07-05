@@ -349,9 +349,11 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
                         : 'mr-auto border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
                     }`}
                   >
-                    <div className="mb-1 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                      <span>{isUser ? 'You' : assistantRoleLabel}</span>
-                      <span>{formatDateTimeCompact(turn.createdAt)}</span>
+                    <div className="mb-1 flex flex-wrap items-start justify-between gap-x-3 gap-y-1 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+                      <span className="min-w-0 flex-1 break-words">
+                        {isUser ? 'You' : assistantRoleLabel}
+                      </span>
+                      <span className="shrink-0">{formatDateTimeCompact(turn.createdAt)}</span>
                     </div>
                     {isUser ? (
                       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-950 dark:text-slate-50">
