@@ -703,6 +703,7 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
                       properties: {
                         id: { type: 'string' },
                         eventTimestamp: { type: 'string' },
+                        importedAt: { type: 'string' },
                         direction: { type: 'string', enum: ['incoming', 'outgoing'] },
                         speakerLabel: { type: 'string' },
                         messageType: { type: 'string' },
@@ -712,6 +713,7 @@ export const privateSyncRoutes: FastifyPluginCallback = (fastify, _opts, done) =
                       required: [
                         'id',
                         'eventTimestamp',
+                        'importedAt',
                         'direction',
                         'speakerLabel',
                         'messageType',

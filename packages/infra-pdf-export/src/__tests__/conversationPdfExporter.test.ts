@@ -11,6 +11,10 @@ const validInput: PdfConversationExportInput = {
     from: '2026-06-30T00:00:00.000Z',
     to: '2026-07-01T00:00:00.000Z',
   },
+  effectiveRange: {
+    from: '2026-06-30T10:00:00.000Z',
+    to: '2026-06-30T10:45:00.000Z',
+  },
   messageCounts: { included: 47, excluded: 23 },
   omittedBreakdown: {
     mediaOnly: 2,
@@ -55,7 +59,12 @@ describe('createPdfConversationExporter', () => {
     const normalizedPdfText = normalizePdfText(readablePdfText);
     expect(readablePdfText).toContain('Alice context');
     expect(readablePdfText).toContain('Generated at 2026-07-03T16:00:00.000Z');
-    expect(readablePdfText).toContain('2026-06-30T00:00:00.000Z to 2026-07-01T00:00:00.000Z');
+    expect(readablePdfText).toContain(
+      'Information range: 2026-06-30T00:00:00.000Z to 2026-07-01T00:00:00.000Z'
+    );
+    expect(readablePdfText).toContain(
+      'Effective range: 2026-06-30T10:00:00.000Z to 2026-06-30T10:45:00.000Z'
+    );
     expect(readablePdfText).toContain('Messages taken under consideration: 47');
     expect(readablePdfText).toContain('Messages excluded: 23');
     expect(readablePdfText).toContain('Media Only');
@@ -79,6 +88,8 @@ describe('createPdfConversationExporter', () => {
       { ...validInput, generatedAt: '   ' },
       { ...validInput, sourceRange: { from: '', to: validInput.sourceRange.to } },
       { ...validInput, sourceRange: { from: validInput.sourceRange.from, to: '' } },
+      { ...validInput, effectiveRange: { from: '', to: validInput.effectiveRange.to } },
+      { ...validInput, effectiveRange: { from: validInput.effectiveRange.from, to: '' } },
       { ...validInput, messageCounts: { included: -1, excluded: 0 } },
       { ...validInput, messageCounts: { included: 0, excluded: -1 } },
       { ...validInput, messages: [{ ...firstMessage, text: '' }] },
@@ -207,6 +218,7 @@ describe('createPdfConversationExporter', () => {
       initialPrompt: validInput.initialPrompt,
       generatedAt: validInput.generatedAt,
       sourceRange: validInput.sourceRange,
+      effectiveRange: validInput.effectiveRange,
       messageCounts: { included: 81, excluded: 0 },
       messages: [
         ...Array.from({ length: 80 }, (_, index) => ({

@@ -82,6 +82,10 @@ const session: ConversationAssistantSession = {
     from: '2026-06-20T09:00:00.000Z',
     to: '2026-06-21T10:00:00.000Z',
   },
+  effectiveRange: {
+    from: '2026-06-20T09:00:00.000Z',
+    to: '2026-06-21T10:00:00.000Z',
+  },
   model: 'or:google/gemini-3.5-flash',
   modelDisplayName: 'Gemini 3.5 Flash Thinking',
   transcriptSha256: 'abc123',

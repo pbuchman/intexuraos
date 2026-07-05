@@ -13,6 +13,7 @@ import {
 import {
   checkConversationAssistantContext,
   createConversationAssistantSession,
+  deriveEffectiveRange,
   exportConversationAssistantSessionPdf,
   getConversationAssistantSession,
   listConversationAssistantTurns,
@@ -126,10 +127,18 @@ class FakePdfConversationExporter implements ConversationAssistantPdfExporter {
 
 async function seedDirectMessage(
   repository: FakePrivateWhatsAppRepository,
-  options: { displayName?: string | undefined; text?: string; type?: 'text' | 'image' } = {}
+  options: {
+    displayName?: string | undefined;
+    eventTimestamp?: string;
+    matrixEventId?: string;
+    receivedAt?: string;
+    text?: string;
+    type?: 'text' | 'image';
+  } = {}
 ): Promise<void> {
   const hasDisplayName = Object.hasOwn(options, 'displayName');
   const displayName = hasDisplayName ? options.displayName : 'Alice';
+  const eventTimestamp = options.eventTimestamp ?? '2026-06-30T10:00:00.000Z';
   repository.setAccount({
     id: USER_ID,
     userId: USER_ID,
@@ -145,16 +154,16 @@ async function seedDirectMessage(
     sourceAccountId: SOURCE_ACCOUNT_ID,
     userId: USER_ID,
     deliveryMode: 'backfill',
-    receivedAt: '2026-06-30T10:00:00.000Z',
+    receivedAt: options.receivedAt ?? eventTimestamp,
     chat: { matrixRoomId: '!direct', type: 'direct' },
     message: {
       matrixRoomId: '!direct',
-      matrixEventId: '$event-1',
+      matrixEventId: options.matrixEventId ?? '$event-1',
       matrixSenderId: '@alice:matrix.example',
       senderKey: 'phone:+48111111111',
       direction: 'incoming',
       type: options.type ?? 'text',
-      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      eventTimestamp,
       rawMatrixEvent: { type: 'm.room.message' },
     },
   };
@@ -194,6 +203,18 @@ function makeTranscriptMessage(index: number): PrivateWhatsAppMessage {
 }
 
 describe('Conversation Assistant session use cases', () => {
+  it('falls back to the selected range when no projected messages are available', () => {
+    expect(
+      deriveEffectiveRange([], {
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      })
+    ).toEqual({
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+  });
+
   it('creates a shell session with frozen transcript text and no turns', async () => {
     const { deps, conversationRepository, privateRepository } = makeDeps();
     await seedDirectMessage(privateRepository);
@@ -214,6 +235,75 @@ describe('Conversation Assistant session use cases', () => {
     expect(result.value.session.transcriptText).toContain('We agreed to meet at 17:00.');
     expect(result.value.session.transcriptSha256).toBe(result.value.context.transcriptSha256);
     expect(conversationRepository.getAllSessions()).toHaveLength(1);
+  });
+
+  it('persists selected and effective transcript ranges from included messages', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      matrixEventId: '$event-1',
+      text: 'First included message.',
+    });
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T10:05:00.000Z',
+      matrixEventId: '$event-2',
+      text: 'Last included message.',
+    });
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.range).toEqual({
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+    expect(result.value.session.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:05:00.000Z',
+    });
+  });
+
+  it('uses the last included prompt message for effectiveRange when maxMessages truncates context', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      matrixEventId: '$event-1',
+      text: 'First included message.',
+    });
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T10:05:00.000Z',
+      matrixEventId: '$event-2',
+      text: 'Truncated message.',
+    });
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        maxMessages: 1,
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.transcriptMessageCount).toBe(1);
+    expect(result.value.session.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:00:00.000Z',
+    });
+    expect(result.value.session.omitted.overLimit).toBeGreaterThan(0);
   });
 
   it('persists the selected Conversation Assistant model on session creation', async () => {
@@ -445,6 +535,9 @@ describe('Conversation Assistant session use cases', () => {
     ]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
     expect(llmClient.chatCalls[0]?.options.reasoning).toEqual({ enabled: true });
+    const firstPrompt = JSON.stringify(llmClient.chatCalls[0]?.messages[1]);
+    expect(firstPrompt).toContain('Information range: 30 June 2026 to 1 July 2026');
+    expect(firstPrompt).toContain('Effective range: 30 June 2026 to 30 June 2026');
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages)).toContain('cache_control');
   });
 
@@ -625,6 +718,10 @@ describe('Conversation Assistant session use cases', () => {
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
       },
+      effectiveRange: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-06-30T10:30:00.000Z',
+      },
       model: 'or:google/gemini-3.5-flash',
       transcriptSha256: 'abc123',
       transcriptMessageCount: 7,
@@ -677,6 +774,10 @@ describe('Conversation Assistant session use cases', () => {
           from: '2026-06-30T00:00:00.000Z',
           to: '2026-07-01T00:00:00.000Z',
         },
+        effectiveRange: {
+          from: '2026-06-30T10:00:00.000Z',
+          to: '2026-06-30T10:30:00.000Z',
+        },
         messageCounts: { included: 7, excluded: 15 },
         omittedBreakdown: {
           mediaOnly: 2,
@@ -712,6 +813,10 @@ describe('Conversation Assistant session use cases', () => {
       range: {
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+      },
+      effectiveRange: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-06-30T10:30:00.000Z',
       },
       model: 'or:google/gemini-3.5-flash',
       transcriptSha256: 'abc123',
@@ -761,6 +866,14 @@ describe('Conversation Assistant session use cases', () => {
       'assistant same time',
       'assistant future',
     ]);
+    expect(pdfExporter.calls[0]?.sourceRange).toEqual({
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+    expect(pdfExporter.calls[0]?.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:30:00.000Z',
+    });
 
     pdfExporter.setFileName('   ');
     const fallback = await exportConversationAssistantSessionPdf(
@@ -785,6 +898,10 @@ describe('Conversation Assistant session use cases', () => {
       range: {
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+      },
+      effectiveRange: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-06-30T10:30:00.000Z',
       },
       model: 'or:google/gemini-3.5-flash',
       transcriptSha256: 'abc123',
@@ -832,6 +949,10 @@ describe('Conversation Assistant session use cases', () => {
       range: {
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+      },
+      effectiveRange: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-06-30T10:30:00.000Z',
       },
       model: 'or:google/gemini-3.5-flash',
       transcriptSha256: 'abc123',
@@ -898,6 +1019,10 @@ describe('Conversation Assistant session use cases', () => {
       range: {
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+      },
+      effectiveRange: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-06-30T10:30:00.000Z',
       },
       model: 'or:google/gemini-3.5-flash',
       transcriptSha256: 'abc123',

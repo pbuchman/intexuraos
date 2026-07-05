@@ -297,6 +297,7 @@ export interface PrivateConversationContextRequest {
 export interface PrivateConversationContextMessage {
   id: string;
   eventTimestamp: string;
+  importedAt: string;
   direction: PrivateWhatsAppMessageDirection;
   speakerLabel: string;
   messageType: PrivateWhatsAppMessageType;

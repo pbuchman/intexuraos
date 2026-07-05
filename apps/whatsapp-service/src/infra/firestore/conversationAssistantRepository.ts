@@ -129,12 +129,14 @@ function toSession(
   data: Record<string, unknown> | undefined
 ): ConversationAssistantSession {
   const session = data as Partial<ConversationAssistantSession> | undefined;
+  const range = session?.range ?? { from: '', to: '' };
   const projected: ConversationAssistantSession = {
     id,
     userId: session?.userId ?? '',
     chatId: session?.chatId ?? '',
     status: session?.status === 'archived' ? 'archived' : 'active',
-    range: session?.range ?? { from: '', to: '' },
+    range,
+    effectiveRange: session?.effectiveRange ?? range,
     model:
       typeof session?.model === 'string' && session.model.length > 0
         ? session.model

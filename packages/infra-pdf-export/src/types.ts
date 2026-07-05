@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { ConversationAssistantDateRange } from '@intexuraos/llm-contract';
 
 export type PdfConversationMessageRole = 'user' | 'assistant';
 
@@ -7,7 +8,8 @@ export interface PdfConversationExportInput {
   modelName: string;
   initialPrompt: string;
   generatedAt: string;
-  sourceRange: { from: string; to: string };
+  sourceRange: ConversationAssistantDateRange;
+  effectiveRange: ConversationAssistantDateRange;
   messageCounts: { included: number; excluded: number };
   omittedBreakdown?: Record<string, number>;
   messages: {

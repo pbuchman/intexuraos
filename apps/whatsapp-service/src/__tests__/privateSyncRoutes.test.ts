@@ -3140,6 +3140,8 @@ describe('Private WhatsApp Sync Routes', () => {
       (message) => message.matrixEventId === '$event-audio'
     );
     if (audioMessage === undefined) throw new Error('Expected audio message');
+    const textMessage = audioMessagesResult.value.messages.find((message) => message.matrixEventId === '$event-1');
+    if (textMessage === undefined) throw new Error('Expected text message');
     await ctx.privateWhatsAppRepository.updateMessageTranscription({
       userId: 'user-123',
       messageId: audioMessage.id,
@@ -3172,6 +3174,8 @@ describe('Private WhatsApp Sync Routes', () => {
         chat: { id: string; displayName?: string; chatType: string; messageCount: number };
         messages: {
           id: string;
+          eventTimestamp: string;
+          importedAt: string;
           speakerLabel: string;
           contentKind: string;
           content: string;
@@ -3192,13 +3196,19 @@ describe('Private WhatsApp Sync Routes', () => {
       chatType: 'direct',
       messageCount: 2,
     });
+    expect(body.data.messages[0]).toMatchObject({
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      importedAt: textMessage.ingestedAt,
+    });
     expect(body.data.messages).toEqual([
       expect.objectContaining({
+        importedAt: textMessage.ingestedAt,
         speakerLabel: 'Alice',
         contentKind: 'text',
         content: 'hello from private whatsapp',
       }),
       expect.objectContaining({
+        importedAt: audioMessage.ingestedAt,
         speakerLabel: 'You',
         contentKind: 'transcription',
         content: 'Transcribed private voice note',

@@ -1,5 +1,5 @@
 import type { GenerateChatResult } from '@intexuraos/llm-factory';
-import type { ConversationAssistantModel } from '@intexuraos/llm-contract';
+import type { ConversationAssistantDateRange, ConversationAssistantModel } from '@intexuraos/llm-contract';
 import type {
   PrivateConversationContextOmittedCounts,
   PrivateConversationContextResponse,
@@ -14,7 +14,8 @@ export interface ConversationAssistantSession {
   chatId: string;
   chatDisplayName?: string;
   status: ConversationAssistantSessionStatus;
-  range: { from: string; to: string };
+  range: ConversationAssistantDateRange;
+  effectiveRange: ConversationAssistantDateRange;
   model: string;
   transcriptSha256: string;
   transcriptMessageCount: number;

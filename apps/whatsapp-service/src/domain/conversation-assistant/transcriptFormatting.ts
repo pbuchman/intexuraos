@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { ConversationAssistantDateRange } from '@intexuraos/llm-contract';
 import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppMessage,
@@ -10,6 +11,7 @@ import type {
 export interface PrivateConversationContextMessage {
   id: string;
   eventTimestamp: string;
+  importedAt: string;
   direction: PrivateWhatsAppMessageDirection;
   speakerLabel: string;
   messageType: PrivateWhatsAppMessageType;
@@ -27,7 +29,7 @@ export interface PrivateConversationContextResponse {
     lastEventAt: string;
     messageCount: number;
   };
-  range: { from: string; to: string };
+  range: ConversationAssistantDateRange;
   messages: PrivateConversationContextMessage[];
   omitted: {
     mediaOnly: number;
@@ -42,7 +44,7 @@ export interface PrivateConversationContextResponse {
 
 export interface ProjectPrivateConversationContextInput {
   chat: PrivateWhatsAppChat;
-  range: { from: string; to: string };
+  range: ConversationAssistantDateRange;
   messages: PrivateWhatsAppMessage[];
   maxMessages?: number;
   totalMessageCount?: number;
@@ -188,6 +190,7 @@ function toContextMessage(
   const contextMessage: PrivateConversationContextMessage = {
     id: message.id,
     eventTimestamp: message.eventTimestamp,
+    importedAt: message.ingestedAt,
     direction: message.direction,
     speakerLabel: speakerLabelFor(message),
     messageType: message.messageType,
@@ -225,7 +228,7 @@ export function buildPrivateConversationTranscriptText(
         message.reactions === undefined || message.reactions.length === 0
           ? ''
           : `\n  Reactions: ${message.reactions.map(formatReactionSummary).join(', ')}`;
-      return `[${formatTranscriptDateLabel(message.eventTimestamp)}] ${message.speakerLabel}: ${message.content}${reactionLine}`;
+      return `[Sent ${formatTranscriptDateLabel(message.eventTimestamp)}; imported ${formatTranscriptDateLabel(message.importedAt)}] ${message.speakerLabel}: ${message.content}${reactionLine}`;
     })
     .join('\n');
 }
@@ -341,5 +344,5 @@ function formatTranscriptDateLabel(value: string): string {
   if (month === undefined) {
     return 'Unknown date';
   }
-  return `${String(date.getUTCDate())} ${month}`;
+  return `${String(date.getUTCDate())} ${month} ${String(date.getUTCFullYear())}`;
 }

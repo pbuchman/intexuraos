@@ -1,7 +1,10 @@
 import { getServices, setServices } from '../services.js';
 import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 import type { ConversationAssistantRepository } from '../domain/conversation-assistant/ports.js';
-import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+  type ConversationAssistantDateRange,
+} from '@intexuraos/llm-contract';
 
 const USER_ID = 'user-123';
 const SOURCE_ACCOUNT_ID = 'source-123';
@@ -30,6 +33,32 @@ function parseSseEvents(body: string): { event: string; data: unknown }[] {
 describe('Conversation Assistant routes', () => {
   const ctx = setupTestContext();
 
+  async function storeMessage(input: {
+    eventTimestamp: string;
+    matrixEventId: string;
+    text: string;
+  }): Promise<void> {
+    await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: SOURCE_ACCOUNT_ID,
+      userId: USER_ID,
+      deliveryMode: 'backfill',
+      receivedAt: input.eventTimestamp,
+      chat: { matrixRoomId: '!direct', type: 'direct', displayName: 'Alice' },
+      message: {
+        matrixRoomId: '!direct',
+        matrixEventId: input.matrixEventId,
+        matrixSenderId: '@alice:matrix.example',
+        senderDisplayName: 'Alice',
+        senderKey: 'phone:+48111111111',
+        direction: 'incoming',
+        type: 'text',
+        text: input.text,
+        eventTimestamp: input.eventTimestamp,
+        rawMatrixEvent: {},
+      },
+    });
+  }
+
   async function seed(): Promise<string> {
     ctx.privateWhatsAppRepository.setAccount({
       id: USER_ID,
@@ -42,24 +71,10 @@ describe('Conversation Assistant routes', () => {
       updatedAt: '2026-06-30T00:00:00.000Z',
       schemaVersion: 1,
     });
-    await ctx.privateWhatsAppRepository.storeIncomingMessage({
-      sourceAccountId: SOURCE_ACCOUNT_ID,
-      userId: USER_ID,
-      deliveryMode: 'backfill',
-      receivedAt: '2026-06-30T10:00:00.000Z',
-      chat: { matrixRoomId: '!direct', type: 'direct', displayName: 'Alice' },
-      message: {
-        matrixRoomId: '!direct',
-        matrixEventId: '$event-1',
-        matrixSenderId: '@alice:matrix.example',
-        senderDisplayName: 'Alice',
-        senderKey: 'phone:+48111111111',
-        direction: 'incoming',
-        type: 'text',
-        text: 'We agreed to meet at 17:00.',
-        eventTimestamp: '2026-06-30T10:00:00.000Z',
-        rawMatrixEvent: {},
-      },
+    await storeMessage({
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      matrixEventId: '$event-1',
+      text: 'We agreed to meet at 17:00.',
     });
     return await createToken({ sub: USER_ID });
   }
@@ -83,6 +98,7 @@ describe('Conversation Assistant routes', () => {
       data: {
         session: {
           id: string;
+          effectiveRange: ConversationAssistantDateRange;
           transcriptText?: string;
           model: string;
           modelDisplayName: string;
@@ -91,6 +107,10 @@ describe('Conversation Assistant routes', () => {
       };
     };
     expect(body.data.session.transcriptText).toBeUndefined();
+    expect(body.data.session.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:00:00.000Z',
+    });
     expect(body.data.session.model).toBe(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
     expect(body.data.session.modelDisplayName).toBe('MiniMax M3');
     expect(JSON.stringify(body)).not.toContain('We agreed to meet');
@@ -134,6 +154,11 @@ describe('Conversation Assistant routes', () => {
 
   it('creates first turns, lists sessions, and lists turns', async () => {
     const token = await seed();
+    await storeMessage({
+      eventTimestamp: '2026-06-30T10:05:00.000Z',
+      matrixEventId: '$event-2',
+      text: 'Second message that should be truncated.',
+    });
 
     const created = await ctx.app.inject({
       method: 'POST',
@@ -143,21 +168,38 @@ describe('Conversation Assistant routes', () => {
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
-        maxMessages: 10,
+        maxMessages: 1,
         question: 'What was agreed?',
       },
     });
 
     expect(created.statusCode).toBe(201);
     const createdBody = JSON.parse(created.body) as {
-      data: { session: { id: string }; turns: { role: string }[] };
+      data: {
+        session: {
+          id: string;
+          effectiveRange: ConversationAssistantDateRange;
+          transcriptText?: string;
+        };
+        turns: { role: string }[];
+      };
     };
     expect(createdBody.data.turns.map((turn) => turn.role)).toEqual(['user', 'assistant']);
+    expect(createdBody.data.session.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:00:00.000Z',
+    });
+    expect(createdBody.data.session.transcriptText).toBeUndefined();
     expect(ctx.llmClient.chatCalls[0]?.options.sessionId).toBe(createdBody.data.session.id);
 
     const listed = await ctx.app.inject({
       method: 'GET',
       url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const fetched = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${createdBody.data.session.id}`,
       headers: { authorization: `Bearer ${token}` },
     });
     const turns = await ctx.app.inject({
@@ -167,9 +209,19 @@ describe('Conversation Assistant routes', () => {
     });
 
     expect(listed.statusCode).toBe(200);
+    expect(fetched.statusCode).toBe(200);
     expect(turns.statusCode).toBe(200);
+    expect(JSON.parse(listed.body).data.sessions[0].effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:00:00.000Z',
+    });
     expect(JSON.parse(listed.body).data.sessions[0].transcriptText).toBeUndefined();
     expect(JSON.stringify(JSON.parse(listed.body).data.sessions)).not.toContain('We agreed to meet');
+    expect(JSON.parse(fetched.body).data.session.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:00:00.000Z',
+    });
+    expect(JSON.parse(fetched.body).data.session.transcriptText).toBeUndefined();
     expect(JSON.parse(turns.body).data.turns).toHaveLength(2);
   });
 
@@ -226,6 +278,14 @@ describe('Conversation Assistant routes', () => {
     expect(ctx.pdfConversationExporter.calls[0]?.messageCounts).toEqual({
       included: 1,
       excluded: 0,
+    });
+    expect(ctx.pdfConversationExporter.calls[0]?.sourceRange).toEqual({
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    });
+    expect(ctx.pdfConversationExporter.calls[0]?.effectiveRange).toEqual({
+      from: '2026-06-30T10:00:00.000Z',
+      to: '2026-06-30T10:00:00.000Z',
     });
   });
 

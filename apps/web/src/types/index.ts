@@ -1,5 +1,9 @@
 import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
-import type { ConversationAssistantModel, LlmProvider } from '@intexuraos/llm-contract';
+import type {
+  ConversationAssistantDateRange,
+  ConversationAssistantModel,
+  LlmProvider,
+} from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
  */
@@ -360,10 +364,8 @@ export interface ConversationAssistantSession {
   chatId: string;
   chatDisplayName?: string;
   status: ConversationAssistantSessionStatus;
-  range: {
-    from: string;
-    to: string;
-  };
+  range: ConversationAssistantDateRange;
+  effectiveRange: ConversationAssistantDateRange;
   model: ConversationAssistantModel | string;
   modelDisplayName: string;
   transcriptSha256: string;

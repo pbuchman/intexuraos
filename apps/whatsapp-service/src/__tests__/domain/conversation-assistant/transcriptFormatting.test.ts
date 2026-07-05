@@ -154,6 +154,7 @@ describe('projectPrivateConversationContext', () => {
       {
         id: 'message-1',
         eventTimestamp: '2026-06-22T10:00:00.000Z',
+        importedAt: '2026-06-22T10:00:02.000Z',
         direction: 'incoming',
         speakerLabel: 'Alice',
         messageType: 'text',
@@ -163,6 +164,7 @@ describe('projectPrivateConversationContext', () => {
       {
         id: 'message-2',
         eventTimestamp: '2026-06-22T10:05:00.000Z',
+        importedAt: '2026-06-22T10:00:02.000Z',
         direction: 'outgoing',
         speakerLabel: 'You',
         messageType: 'audio',
@@ -179,8 +181,8 @@ describe('projectPrivateConversationContext', () => {
     });
     expect(result.messageCount).toBe(2);
     const expectedTranscript = [
-      '[22 June] Alice: hello from private chat',
-      '[22 June] You: voice transcript',
+      '[Sent 22 June 2026; imported 22 June 2026] Alice: hello from private chat',
+      '[Sent 22 June 2026; imported 22 June 2026] You: voice transcript',
     ].join('\n');
     expect(expectedTranscript).not.toContain('T10:00:00');
     expect(result.transcriptSha256).toBe(
@@ -216,11 +218,19 @@ describe('projectPrivateConversationContext', () => {
         from: '2026-06-22T09:00:00.000Z',
         to: '2026-06-22T11:00:00.000Z',
       },
-      messages: [message({ eventTimestamp: 'not-a-date', text: 'invalid timestamp text' })],
+      messages: [
+        message({
+          eventTimestamp: 'not-a-date',
+          ingestedAt: 'still-not-a-date',
+          text: 'invalid timestamp text',
+        }),
+      ],
     });
 
     const transcriptText = buildPrivateConversationTranscriptText(result.messages);
-    expect(transcriptText).toBe('[Unknown date] Alice: invalid timestamp text');
+    expect(transcriptText).toBe(
+      '[Sent Unknown date; imported Unknown date] Alice: invalid timestamp text'
+    );
     expect(transcriptText).not.toContain('NaN');
   });
 
@@ -252,7 +262,7 @@ describe('projectPrivateConversationContext', () => {
 
     expect(context.messages).toHaveLength(1);
     expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
-      '[3 July] Alice: See you at five\n  Reactions: 👍 Alice'
+      '[Sent 3 July 2026; imported 22 June 2026] Alice: See you at five\n  Reactions: 👍 Alice'
     );
   });
 
@@ -325,7 +335,7 @@ describe('projectPrivateConversationContext', () => {
 
     expect(context.messages).toHaveLength(1);
     expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
-      '[3 July] Alice: See you at five\n  Reactions: 👍 Alice'
+      '[Sent 3 July 2026; imported 22 June 2026] Alice: See you at five\n  Reactions: 👍 Alice'
     );
   });
 
@@ -359,7 +369,7 @@ describe('projectPrivateConversationContext', () => {
     });
 
     expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
-      '[3 July] Alice: See you at five\n  Reactions: 👍 You'
+      '[Sent 3 July 2026; imported 22 June 2026] Alice: See you at five\n  Reactions: 👍 You'
     );
   });
 

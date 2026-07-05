@@ -43,6 +43,18 @@ export const conversationAssistantRandomIds = {
 
 const CONVERSATION_CONTEXT_RAW_SCAN_LIMIT = 5000;
 
+export function deriveEffectiveRange(
+  messages: readonly { eventTimestamp: string }[],
+  fallback: { from: string; to: string }
+): { from: string; to: string } {
+  const first = messages[0];
+  const last = messages.at(-1);
+  if (first === undefined || last === undefined) {
+    return fallback;
+  }
+  return { from: first.eventTimestamp, to: last.eventTimestamp };
+}
+
 export async function createConversationAssistantSession(
   input: CreateConversationAssistantSessionInput,
   deps: ConversationAssistantDeps
@@ -91,6 +103,7 @@ export async function createConversationAssistantSession(
     chat: chatLoadResult.value.chat,
     range: { from: input.from, to: input.to },
     messages,
+    ...(input.maxMessages !== undefined ? { maxMessages: input.maxMessages } : {}),
   });
   if (context.messages.length === 0) {
     return err({ code: 'EMPTY_TRANSCRIPT', message: 'Selected range contains no textual messages' });
@@ -103,6 +116,10 @@ export async function createConversationAssistantSession(
     chatId: input.chatId,
     status: 'active',
     range: { from: input.from, to: input.to },
+    effectiveRange: deriveEffectiveRange(context.messages, {
+      from: input.from,
+      to: input.to,
+    }),
     model: selectedModel,
     transcriptSha256: context.transcriptSha256,
     transcriptMessageCount: context.messageCount,
@@ -305,6 +322,7 @@ export async function exportConversationAssistantSessionPdf(
     initialPrompt,
     generatedAt: deps.clock.now(),
     sourceRange: session.range,
+    effectiveRange: session.effectiveRange,
     messageCounts: {
       included: session.transcriptMessageCount,
       excluded,
@@ -391,6 +409,7 @@ async function buildPromptInputAfterUserTurn(
   const promptInput: Parameters<typeof buildWhatsAppConversationAssistantMessages>[0] = {
     transcriptText: input.session.transcriptText,
     range: input.session.range,
+    effectiveRange: input.session.effectiveRange,
     priorTurns: priorTurns.slice(0, -1),
     question: input.question,
   };
