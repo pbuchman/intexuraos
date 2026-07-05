@@ -541,6 +541,10 @@ describe('useWhatsAppConversationAssistant', () => {
       expect(result.current.selectedChatId).toBe(directChat.id);
     });
 
+    act(() => {
+      result.current.setFirstQuestion('  Please summarize the legal risk.  ');
+    });
+
     await act(async () => {
       await result.current.createSession();
     });
@@ -557,6 +561,13 @@ describe('useWhatsAppConversationAssistant', () => {
     });
 
     expect(mocks.createConversationAssistantSession).toHaveBeenCalledTimes(1);
+    expect(mocks.createConversationAssistantSession).toHaveBeenCalledWith('tok', {
+      chatId: directChat.id,
+      from: expect.any(String),
+      to: expect.any(String),
+      model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+      question: 'Please summarize the legal risk.',
+    });
     expect(result.current.largeContextWarning).toBeNull();
     await waitFor(() => {
       expect(result.current.selectedSession?.id).toBe(createdSession.id);
