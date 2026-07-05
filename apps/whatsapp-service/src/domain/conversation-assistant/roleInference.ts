@@ -17,6 +17,7 @@ const COMMON_PERSON_NAME_PATTERN =
 const ORGANIZATION_PATTERN =
   /(?:\b(?:acme|amazon|apple|contoso|google|intexuraos|meta|microsoft|openai|stripe|tesla)\b|\b(?:inc|llc|ltd|corp(?:oration)?|company|group|clinic|hospital|firm|partners|associates|team)\b$)/iu;
 const CREDENTIAL_PATTERN = /\b(?:licensed|certified|registered|accredited|phd|m\.?d\.?|esq\.?)\b/iu;
+const ROLE_LABEL_WORD_PATTERN = /\p{L}[\p{L}\p{N}]*/gu;
 
 export interface InferConversationAssistantRoleLabelInput {
   initialQuestion: string | undefined;
@@ -66,8 +67,8 @@ export function normalizeConversationAssistantRoleLabel(label: string): string {
     return DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL;
   }
 
-  return collapsed
-    .split(' ')
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(' ');
+  return collapsed.replace(
+    ROLE_LABEL_WORD_PATTERN,
+    (word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1).toLowerCase()}`
+  );
 }
