@@ -335,6 +335,7 @@ export async function exportConversationAssistantSessionPdf(
   const exportResult = await deps.pdfExporter.exportConversation({
     title: session.title,
     modelName: getConversationAssistantModelDisplayName(session.model),
+    assistantRoleLabel: session.assistantRoleLabel,
     initialPrompt,
     generatedAt: deps.clock.now(),
     sourceRange: session.range,

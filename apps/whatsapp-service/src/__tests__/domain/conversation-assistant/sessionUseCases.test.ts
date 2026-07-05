@@ -776,7 +776,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 7,
       transcriptText: 'frozen transcript',
-      assistantRoleLabel: 'Assistant',
+      assistantRoleLabel: 'Psychologist',
       omitted: {
         mediaOnly: 2,
         failedTranscriptions: 1,
@@ -819,6 +819,7 @@ describe('Conversation Assistant session use cases', () => {
       {
         title: 'Alice context',
         modelName: 'Gemini 3.5 Flash Thinking',
+        assistantRoleLabel: 'Psychologist',
         initialPrompt: 'user question',
         generatedAt: '2026-06-30T12:00:00.000Z',
         sourceRange: {
@@ -851,6 +852,7 @@ describe('Conversation Assistant session use cases', () => {
         ],
       },
     ]);
+    expect(pdfExporter.calls[0]?.assistantRoleLabel).toBe('Psychologist');
   });
 
   it('orders equal-timestamp PDF export turns by conversation role and same-role id', async () => {

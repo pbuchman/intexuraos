@@ -5,6 +5,7 @@ import type { PdfConversationExportInput } from '../types.js';
 const validInput: PdfConversationExportInput = {
   title: 'Alice context',
   modelName: 'MiniMax M3',
+  assistantRoleLabel: 'Psychologist',
   initialPrompt: 'What happened?',
   generatedAt: '2026-07-03T16:00:00.000Z',
   sourceRange: {
@@ -59,6 +60,7 @@ describe('createPdfConversationExporter', () => {
     const normalizedPdfText = normalizePdfText(readablePdfText);
     expect(readablePdfText).toContain('Alice context');
     expect(readablePdfText).toContain('Generated at 2026-07-03T16:00:00.000Z');
+    expect(readablePdfText).toContain('Assistant role: Psychologist');
     expect(readablePdfText).toContain(
       'Information range: 2026-06-30T00:00:00.000Z to 2026-07-01T00:00:00.000Z'
     );
@@ -69,6 +71,7 @@ describe('createPdfConversationExporter', () => {
     expect(readablePdfText).toContain('Messages excluded: 23');
     expect(readablePdfText).toContain('Media Only');
     expect(readablePdfText).toContain('Failed Transcriptions');
+    expect(readablePdfText).toContain('Psychologist (MiniMax M3)');
     expect(normalizedPdfText).toContain(normalizePdfText('Assistant answer with\nmultiple lines.'));
     expect(normalizedPdfText).toContain(normalizePdfText(validInput.messages[0]?.text ?? ''));
   });
@@ -84,6 +87,7 @@ describe('createPdfConversationExporter', () => {
     const invalidInputs: PdfConversationExportInput[] = [
       { ...validInput, title: '   ' },
       { ...validInput, modelName: '   ' },
+      { ...validInput, assistantRoleLabel: '   ' },
       { ...validInput, initialPrompt: '   ' },
       { ...validInput, generatedAt: '   ' },
       { ...validInput, sourceRange: { from: '', to: validInput.sourceRange.to } },
@@ -186,8 +190,9 @@ describe('createPdfConversationExporter', () => {
     const normalizedPdfText = normalizePdfText(readablePdfText);
     expect(readablePdfText).toContain('Decision summary');
     expect(readablePdfText).toContain('LLM model: Claude Sonnet 5');
+    expect(readablePdfText).toContain('Assistant role: Psychologist');
     expect(readablePdfText).toContain('Initial prompt: Please decide what to include.');
-    expect(readablePdfText).toContain('LLM response (Claude Sonnet 5)');
+    expect(readablePdfText).toContain('Psychologist (Claude Sonnet 5)');
     expect(readablePdfText).toContain('Decision');
     expect(readablePdfText).toContain(
       'Include the timeline and evidence (https://example.test/evidence).'
@@ -215,6 +220,7 @@ describe('createPdfConversationExporter', () => {
     const result = await exporter.exportConversation({
       title: validInput.title,
       modelName: validInput.modelName,
+      assistantRoleLabel: validInput.assistantRoleLabel,
       initialPrompt: validInput.initialPrompt,
       generatedAt: validInput.generatedAt,
       sourceRange: validInput.sourceRange,

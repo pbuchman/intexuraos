@@ -39,6 +39,7 @@ export interface ConversationAssistantLlmClientFactory {
 export interface ConversationAssistantPdfExportInput {
   title: string;
   modelName: string;
+  assistantRoleLabel: string;
   initialPrompt: string;
   generatedAt: string;
   sourceRange: ConversationAssistantDateRange;
