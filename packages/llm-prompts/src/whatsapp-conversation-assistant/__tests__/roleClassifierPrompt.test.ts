@@ -8,7 +8,7 @@ import {
 
 describe('conversation assistant role classifier prompt', () => {
   it('exposes semver prompt metadata and a dedicated prompt type', () => {
-    expect(CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT.version).toBe('1.0.0');
+    expect(CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT.version).toBe('1.1.0');
     expect(CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT.promptType).toBe(
       'whatsapp-conversation-assistant-role-classifier'
     );
@@ -57,6 +57,41 @@ describe('conversation assistant role classifier prompt', () => {
       confidence: 0.91,
       rationale: 'The user asks about primary care.',
     });
+    const validSupportEngineer = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Support Engineer',
+      confidence: 0.91,
+      rationale: 'The user asks about technical support.',
+    });
+    const validSystemsAnalyst = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Systems Analyst',
+      confidence: 0.91,
+      rationale: 'The user asks about technical systems.',
+    });
+    const validSolutionsArchitect = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Solutions Architect',
+      confidence: 0.91,
+      rationale: 'The user asks about solution design.',
+    });
+    const validBusinessStrategist = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Business Strategist',
+      confidence: 0.91,
+      rationale: 'The user asks about business strategy.',
+    });
+    const validSecurityAnalyst = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Security Analyst',
+      confidence: 0.91,
+      rationale: 'The user asks about security analysis.',
+    });
+    const validMarketingConsultant = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Marketing Consultant',
+      confidence: 0.91,
+      rationale: 'The user asks about marketing.',
+    });
+    const validPolicyAdvisor = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Policy Advisor',
+      confidence: 0.91,
+      rationale: 'The user asks about policy.',
+    });
     const invalid = conversationAssistantRoleClassificationSchema.safeParse({
       roleLabel: 'Employment Lawyer',
       confidence: 0.91,
@@ -70,6 +105,16 @@ describe('conversation assistant role classifier prompt', () => {
     });
     const personalTitle = conversationAssistantRoleClassificationSchema.safeParse({
       roleLabel: 'Dr. Alice',
+      confidence: 0.91,
+      rationale: 'The user asks about a health concern.',
+    });
+    const embeddedPersonalTitle = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Advisor Dr. Smith',
+      confidence: 0.91,
+      rationale: 'The user asks about advice.',
+    });
+    const compactPersonalTitle = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Dr.Alice',
       confidence: 0.91,
       rationale: 'The user asks about a health concern.',
     });
@@ -102,6 +147,26 @@ describe('conversation assistant role classifier prompt', () => {
       roleLabel: 'Microsoft Advisor',
       confidence: 0.91,
       rationale: 'The user asks about account access.',
+    });
+    const organizationStrategist = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Amazon Strategist',
+      confidence: 0.91,
+      rationale: 'The user asks about marketplace strategy.',
+    });
+    const organizationAnalyst = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Meta Analyst',
+      confidence: 0.91,
+      rationale: 'The user asks about an ad account.',
+    });
+    const organizationAdvisor = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Contoso Advisor',
+      confidence: 0.91,
+      rationale: 'The user asks about an account.',
+    });
+    const organizationStrategistName = conversationAssistantRoleClassificationSchema.safeParse({
+      roleLabel: 'Intexuraos Strategist',
+      confidence: 0.91,
+      rationale: 'The user asks about an organization.',
     });
     const genericBrandSupport = conversationAssistantRoleClassificationSchema.safeParse({
       roleLabel: 'Stripe Support',
@@ -139,15 +204,28 @@ describe('conversation assistant role classifier prompt', () => {
     expect(validGroupRole.success).toBe(true);
     expect(validSocialWorker.success).toBe(true);
     expect(validFamilyPhysician.success).toBe(true);
+    expect(validSupportEngineer.success).toBe(true);
+    expect(validSystemsAnalyst.success).toBe(true);
+    expect(validSolutionsArchitect.success).toBe(true);
+    expect(validBusinessStrategist.success).toBe(true);
+    expect(validSecurityAnalyst.success).toBe(true);
+    expect(validMarketingConsultant.success).toBe(true);
+    expect(validPolicyAdvisor.success).toBe(true);
     expect(invalid.success).toBe(false);
     expect(markdown.success).toBe(false);
     expect(personalTitle.success).toBe(false);
+    expect(embeddedPersonalTitle.success).toBe(false);
+    expect(compactPersonalTitle.success).toBe(false);
     expect(credentialClaim.success).toBe(false);
     expect(singlePersonName.success).toBe(false);
     expect(organization.success).toBe(false);
     expect(organizationBrand.success).toBe(false);
     expect(reviewerOrganization.success).toBe(false);
     expect(secondReviewerOrganization.success).toBe(false);
+    expect(organizationStrategist.success).toBe(false);
+    expect(organizationAnalyst.success).toBe(false);
+    expect(organizationAdvisor.success).toBe(false);
+    expect(organizationStrategistName.success).toBe(false);
     expect(genericBrandSupport.success).toBe(false);
     expect(genericOrganizationTeam.success).toBe(false);
     expect(numericOnly.success).toBe(false);

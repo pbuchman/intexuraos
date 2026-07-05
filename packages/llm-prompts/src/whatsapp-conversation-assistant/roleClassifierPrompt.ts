@@ -3,19 +3,20 @@ import { z } from 'zod';
 import type { PromptBuilder } from '../shared/types.js';
 
 export const CONVERSATION_ASSISTANT_ROLE_CLASSIFIER_PROMPT = {
-  version: '1.0.0',
+  version: '1.1.0',
   promptType: 'whatsapp-conversation-assistant-role-classifier',
 } as const;
 
 const ROLE_LABEL_SAFE_CHARACTERS_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} .&'/-]{0,38}[\p{L}\p{N}]$/u;
 const ROLE_LABEL_HAS_LETTER_PATTERN = /\p{L}/u;
 const ROLE_LABEL_REPEATED_PUNCTUATION_PATTERN = /[.&'/-]{2,}/u;
-const ROLE_LABEL_PERSONAL_TITLE_PATTERN = /^(?:dr|mr|mrs|ms|prof)\.?\s+\p{L}/iu;
+const ROLE_LABEL_PERSONAL_TITLE_PATTERN = /\b(?:dr|mr|mrs|ms|prof)\.?\s*\p{L}/iu;
 const ROLE_LABEL_COMMON_SINGLE_NAME_PATTERN =
   /^(?:alex|alice|anna|ben|charles|david|emma|jane|john|julia|maria|michael|natalie|oliver|piotr|priya|robert|sarah|sophia|thomas|william)$/iu;
 const ROLE_LABEL_ORGANIZATION_PATTERN =
-  /(?:\b(?:acme|google|microsoft|openai)\b|\b(?:inc|llc|ltd|corp(?:oration)?|company|group|clinic|hospital|firm|partners|associates|support|team|services?|labs|systems|technologies|solutions)\b$)/iu;
-const ROLE_LABEL_CREDENTIAL_PATTERN = /\b(?:licensed|certified|registered|accredited|phd|m\.?d\.?|esq\.?)\b/iu;
+  /(?:\b(?:acme|amazon|apple|contoso|google|intexuraos|meta|microsoft|openai|stripe|tesla)\b|\b(?:inc|llc|ltd|corp(?:oration)?|company|group|clinic|hospital|firm|partners|associates|team)\b$)/iu;
+const ROLE_LABEL_CREDENTIAL_PATTERN =
+  /\b(?:licensed|certified|registered|accredited|phd|m\.?d\.?|esq\.?)\b/iu;
 
 export const conversationAssistantRoleClassificationSchema = z
   .object({
@@ -35,7 +36,7 @@ export const conversationAssistantRoleClassificationSchema = z
         message: 'roleLabel must not be punctuation-heavy',
       })
       .refine((label) => !ROLE_LABEL_PERSONAL_TITLE_PATTERN.test(label), {
-        message: 'roleLabel must not start with a personal title',
+        message: 'roleLabel must not contain a personal title',
       })
       .refine((label) => !ROLE_LABEL_COMMON_SINGLE_NAME_PATTERN.test(label), {
         message: 'roleLabel must not be a person name',
@@ -63,7 +64,7 @@ export const conversationAssistantRoleClassifierPrompt: PromptBuilder<Conversati
   {
     name: 'whatsapp-conversation-assistant-role-classifier',
     description: 'Infers the expert role label to display for a WhatsApp assistant session',
-    version: '1.0.0',
+    version: '1.1.0',
     build(input: ConversationAssistantRoleClassifierPromptInput): string {
       return [
         'Infer the professional or expert role label that should be displayed for an assistant session.',
@@ -89,7 +90,7 @@ export const conversationAssistantRoleClassifierRepairPrompt: PromptBuilder<Conv
   {
     name: 'whatsapp-conversation-assistant-role-classifier-repair',
     description: 'Repairs invalid role-classification JSON for WhatsApp assistant sessions',
-    version: '1.0.0',
+    version: '1.1.0',
     build(input: ConversationAssistantRoleClassifierRepairPromptInput): string {
       return [
         'The previous role-classification response was invalid.',
