@@ -26,4 +26,14 @@ describe('migration 122 - whatsapp conversation assistant snapshot index redeplo
     expect(deployIndexes).toHaveBeenCalledOnce();
     consoleSpy.mockRestore();
   });
+
+  it('propagates deployIndexes failures from up()', async () => {
+    const deployIndexes = vi.fn().mockRejectedValue(new Error('deploy failed'));
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await expect(up({ deployIndexes })).rejects.toThrow('deploy failed');
+
+    expect(deployIndexes).toHaveBeenCalledOnce();
+    consoleSpy.mockRestore();
+  });
 });
