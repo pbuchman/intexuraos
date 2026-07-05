@@ -364,6 +364,10 @@ export interface ConversationAssistantSession {
     from: string;
     to: string;
   };
+  effectiveRange: {
+    from: string;
+    to: string;
+  };
   model: ConversationAssistantModel | string;
   modelDisplayName: string;
   transcriptSha256: string;

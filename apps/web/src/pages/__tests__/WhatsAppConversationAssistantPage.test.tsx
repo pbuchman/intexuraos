@@ -29,35 +29,39 @@ import { WhatsAppConversationAssistantPage } from '../WhatsAppConversationAssist
 function createHookResult(
   overrides: Partial<UseWhatsAppConversationAssistantResult> = {}
 ): UseWhatsAppConversationAssistantResult {
+  const session = {
+    id: 'session-1',
+    userId: 'user-1',
+    chatId: 'chat-direct',
+    chatDisplayName: 'Alice',
+    status: 'active',
+    range: {
+      from: '2026-06-20T09:00:00.000Z',
+      to: '2026-06-21T10:00:00.000Z',
+    },
+    effectiveRange: {
+      from: '2026-06-20T09:30:00.000Z',
+      to: '2026-06-21T09:45:00.000Z',
+    },
+    model: 'or:google/gemini-3.5-flash',
+    modelDisplayName: 'Gemini 3.5 Flash Thinking',
+    transcriptSha256: 'abc123',
+    transcriptMessageCount: 9,
+    omitted: {
+      mediaOnly: 2,
+      failedTranscriptions: 1,
+      pendingTranscriptions: 0,
+      nonText: 3,
+      overLimit: 0,
+    },
+    title: 'Alice context',
+    createdAt: '2026-06-21T11:00:00.000Z',
+    updatedAt: '2026-06-21T11:05:00.000Z',
+    lastTurnAt: '2026-06-21T11:05:00.000Z',
+  } satisfies UseWhatsAppConversationAssistantResult['sessions'][number];
+
   return {
-    sessions: [
-      {
-        id: 'session-1',
-        userId: 'user-1',
-        chatId: 'chat-direct',
-        chatDisplayName: 'Alice',
-        status: 'active',
-        range: {
-          from: '2026-06-20T09:00:00.000Z',
-          to: '2026-06-21T10:00:00.000Z',
-        },
-        model: 'or:google/gemini-3.5-flash',
-        modelDisplayName: 'Gemini 3.5 Flash Thinking',
-        transcriptSha256: 'abc123',
-        transcriptMessageCount: 9,
-        omitted: {
-          mediaOnly: 2,
-          failedTranscriptions: 1,
-          pendingTranscriptions: 0,
-          nonText: 3,
-          overLimit: 0,
-        },
-        title: 'Alice context',
-        createdAt: '2026-06-21T11:00:00.000Z',
-        updatedAt: '2026-06-21T11:05:00.000Z',
-        lastTurnAt: '2026-06-21T11:05:00.000Z',
-      },
-    ],
+    sessions: [session],
     selectedSessionId: undefined,
     selectedSession: undefined,
     turns: [],
@@ -175,6 +179,25 @@ describe('WhatsAppConversationAssistantPage', () => {
     expect(screen.getByText(/non-text 3/i)).toBeInTheDocument();
     expect(screen.getByText(/over limit 0/i)).toBeInTheDocument();
     expect(screen.getByText(/abc123/i)).toBeInTheDocument();
+    expect(screen.getByText('Information range')).toBeInTheDocument();
+    expect(screen.getByText('Effective range')).toBeInTheDocument();
+    expect(screen.getAllByText(/2026/).length).toBeGreaterThan(1);
+  });
+
+  it('renders both labeled ranges in the session rail with year-bearing dates', () => {
+    const result = createHookResult();
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSession: result.sessions[0],
+      })
+    );
+
+    render(<WhatsAppConversationAssistantPage />);
+
+    const sessionButton = screen.getByRole('button', { name: /Alice context/i });
+    expect(within(sessionButton).getByText(/Information/i)).toBeInTheDocument();
+    expect(within(sessionButton).getByText(/Effective/i)).toBeInTheDocument();
+    expect(sessionButton).toHaveTextContent('2026');
   });
 
   it('forces bottom-follow mode back on while a send is in progress', () => {

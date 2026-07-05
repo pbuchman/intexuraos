@@ -1,9 +1,9 @@
 import { Bot, Clock, MessageSquare } from 'lucide-react';
 import type { ConversationAssistantSession } from '@/types';
-import { formatDateTimeCompact } from '@/utils/dateFormat';
+import { formatDateTime, formatDateTimeCompact } from '@/utils/dateFormat';
 
-function formatRange(session: ConversationAssistantSession): string {
-  return `${formatDateTimeCompact(session.range.from)} - ${formatDateTimeCompact(session.range.to)}`;
+function formatRange(range: { from: string; to: string }): string {
+  return `${formatDateTime(range.from)} - ${formatDateTime(range.to)}`;
 }
 
 export function ConversationAssistantSessionRail({
@@ -53,9 +53,23 @@ export function ConversationAssistantSessionRail({
                 <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{session.chatDisplayName ?? session.chatId}</span>
               </span>
-              <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <Clock className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{formatRange(session)}</span>
+              <span className="mt-1 flex min-w-0 items-start gap-1 text-xs text-slate-500 dark:text-slate-400">
+                <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block font-medium text-slate-600 dark:text-slate-300">
+                    Information
+                  </span>
+                  <span className="block truncate">{formatRange(session.range)}</span>
+                </span>
+              </span>
+              <span className="mt-1 flex min-w-0 items-start gap-1 text-xs text-slate-500 dark:text-slate-400">
+                <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block font-medium text-slate-600 dark:text-slate-300">
+                    Effective
+                  </span>
+                  <span className="block truncate">{formatRange(session.effectiveRange)}</span>
+                </span>
               </span>
               <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                 <Bot className="h-3.5 w-3.5 shrink-0" />

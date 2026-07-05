@@ -6,7 +6,7 @@ import { ConversationAssistantComposer } from '@/components/whatsapp/Conversatio
 import { ConversationAssistantSessionRail } from '@/components/whatsapp/ConversationAssistantSessionRail';
 import { useWhatsAppConversationAssistant } from '@/hooks/useWhatsAppConversationAssistant';
 import type { ConversationAssistantOmittedCounts, ConversationAssistantSession } from '@/types';
-import { formatDateTimeCompact } from '@/utils/dateFormat';
+import { formatDateTime, formatDateTimeCompact } from '@/utils/dateFormat';
 
 function sumOmitted(omitted: ConversationAssistantOmittedCounts): number {
   return (
@@ -25,8 +25,13 @@ function SessionMetadata({
 }): React.JSX.Element {
   if (session === undefined) {
     return (
-      <div className="grid grid-cols-1 gap-2 text-sm text-slate-500 dark:text-slate-400 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No source range</div>
+      <div className="grid grid-cols-1 gap-2 text-sm text-slate-500 dark:text-slate-400 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+          No information range
+        </div>
+        <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+          No effective range
+        </div>
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No transcript</div>
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No omissions</div>
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No model</div>
@@ -35,11 +40,21 @@ function SessionMetadata({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
       <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
-        <div className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Range</div>
+        <div className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+          Information range
+        </div>
         <div className="mt-1 text-sm text-slate-950 dark:text-slate-50">
-          {formatDateTimeCompact(session.range.from)} - {formatDateTimeCompact(session.range.to)}
+          {formatDateTime(session.range.from)} - {formatDateTime(session.range.to)}
+        </div>
+      </div>
+      <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+        <div className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+          Effective range
+        </div>
+        <div className="mt-1 text-sm text-slate-950 dark:text-slate-50">
+          {formatDateTime(session.effectiveRange.from)} - {formatDateTime(session.effectiveRange.to)}
         </div>
       </div>
       <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
