@@ -55,6 +55,7 @@ locals {
     "/internal/auto-archive-merged-tasks"               = "code-agent"
     "/internal/bookmarks/pubsub/enrich"                 = "bookmarks-agent"
     "/internal/bookmarks/pubsub/summarize"              = "bookmarks-agent"
+    "/internal/calendar/schedules/tick"                 = "calendar-agent"
     "/internal/code/detect-zombies"                     = "code-agent"
     "/internal/code/pubsub/pr-triage"                   = "code-agent"
     "/internal/drain-queue"                             = "code-agent"

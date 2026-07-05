@@ -52,6 +52,19 @@ locals {
       min_backoff_duration = "5s"
       max_backoff_duration = "30s"
     }
+    calendar_schedule_tick = {
+      job_name             = "intexuraos-calendar-schedule-tick-prod-hetzner"
+      description          = "Process due Calendar Agent schedules every 15 minutes via Hetzner edge"
+      schedule             = "*/15 * * * *"
+      time_zone            = "UTC"
+      path                 = "/internal/calendar/schedules/tick"
+      body                 = null
+      headers              = {}
+      retry_count          = 1
+      max_retry_duration   = "60s"
+      min_backoff_duration = "5s"
+      max_backoff_duration = "30s"
+    }
     drain_task_queue = {
       job_name             = "intexuraos-drain-task-queue-prod-hetzner"
       description          = "Drain queued code tasks when workers become available via Hetzner edge"

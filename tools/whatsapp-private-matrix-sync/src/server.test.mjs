@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import {
   collectWhatsAppInviteRoomIds,
   collectPrivateWhatsAppEvents,
   createConfig,
+  createHealthServer,
   createProcessingPlan,
   ensureRoomContextsForIncomingEvents,
   extractRoomContexts,
@@ -1595,3 +1597,331 @@ async function createTempStateFile(state) {
   await fsp.writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
   return stateFile;
 }
+
+async function createTempFile(name, contents) {
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'whatsapp-private-matrix-sync-'));
+  const filePath = path.join(tempDir, name);
+  await fsp.writeFile(filePath, contents, 'utf8');
+  return filePath;
+}
+
+async function createServerHarness(configOverrides = {}) {
+  const runtime = { state: 'starting', counters: {} };
+  const config = {
+    ...createConfig({
+      PORT: '0',
+      MATRIX_HOMESERVER_URL: 'http://synapse:8008',
+      MATRIX_USER_ID: '@pbuchman:home-dev',
+      MATRIX_ACCESS_TOKEN_FILE: '',
+      INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL:
+        'https://intexuraos.cloud/internal/whatsapp/private/events',
+      INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE: '',
+      INTEXURAOS_OIDC_AUDIENCE: 'https://intexuraos.cloud',
+      INTEXURAOS_OIDC_IMPERSONATE_SERVICE_ACCOUNT:
+        'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com',
+      INTEXURAOS_SOURCE_ACCOUNT_ID: 'pbuchman-private-whatsapp',
+      WHATSAPP_SYNC_STATE_FILE: '/tmp/state.json',
+    }),
+    ...configOverrides,
+  };
+  const server = createHealthServer(config, runtime);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const origin =
+    typeof address === 'object' && address !== null
+      ? `http://127.0.0.1:${String(address.port)}`
+      : null;
+  assert.notEqual(origin, null);
+
+  return {
+    config,
+    runtime,
+    async request(pathname, init = {}) {
+      const body =
+        typeof init.body === 'string'
+          ? init.body
+          : init.body === undefined
+            ? undefined
+            : String(init.body);
+      const response = await new Promise((resolve, reject) => {
+        const request = http.request(
+          `${origin}${pathname}`,
+          {
+            method: init.method ?? 'GET',
+            headers: init.headers,
+          },
+          (result) => {
+            const chunks = [];
+            result.on('data', (chunk) => chunks.push(chunk));
+            result.on('end', () =>
+              resolve({
+                status: result.statusCode ?? 0,
+                body: Buffer.concat(chunks).toString('utf8'),
+              })
+            );
+          }
+        );
+        request.on('error', reject);
+        if (body !== undefined) {
+          request.write(body);
+        }
+        request.end();
+      });
+      return {
+        status: response.status,
+        body: JSON.parse(response.body),
+      };
+    },
+    async close() {
+      await new Promise((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      );
+    },
+  };
+}
+
+test('matrix outbound readiness requires adapter auth', async () => {
+  const harness = await createServerHarness();
+
+  try {
+    const response = await harness.request(
+      '/internal/matrix/outbound/readiness/pbuchman-private-whatsapp/intex_agent'
+    );
+
+    assert.equal(response.status, 401);
+    assert.deepEqual(response.body, {
+      ok: false,
+      error: 'unauthorized',
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('matrix outbound readiness returns setup_required when targets config is missing', async () => {
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const harness = await createServerHarness({
+    matrixOutboundAuthTokenFile: authTokenFile,
+    matrixOutboundTargetsFile: '/tmp/does-not-exist.json',
+  });
+
+  try {
+    const response = await harness.request(
+      '/internal/matrix/outbound/readiness/pbuchman-private-whatsapp/intex_agent',
+      {
+        headers: {
+          authorization: 'Bearer adapter-secret',
+        },
+      }
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, {
+      status: 'setup_required',
+      reason: 'missing_matrix_outbound_targets',
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('matrix outbound readiness returns setup_required when source account mapping is missing', async () => {
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const targetsFile = await createTempFile(
+    'matrix-outbound-targets.json',
+    `${JSON.stringify(
+      {
+        'someone-else-private-whatsapp': {
+          intex_agent: '!agent:home-dev',
+        },
+      },
+      null,
+      2
+    )}\n`
+  );
+  const harness = await createServerHarness({
+    matrixOutboundAuthTokenFile: authTokenFile,
+    matrixOutboundTargetsFile: targetsFile,
+  });
+
+  try {
+    const response = await harness.request(
+      '/internal/matrix/outbound/readiness/pbuchman-private-whatsapp/intex_agent',
+      {
+        headers: {
+          authorization: 'Bearer adapter-secret',
+        },
+      }
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, {
+      status: 'setup_required',
+      reason: 'missing_matrix_outbound_source_account',
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('matrix outbound readiness returns ready without sending a Matrix event when mapping resolves', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (...args) => {
+    throw new Error(`unexpected_fetch:${JSON.stringify(args[0])}`);
+  };
+
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const accessTokenFile = await createTempFile('matrix-access-token.txt', 'matrix-user-token\n');
+  const targetsFile = await createTempFile(
+    'matrix-outbound-targets.json',
+    `${JSON.stringify(
+      {
+        'pbuchman-private-whatsapp': {
+          intex_agent: '!agent:home-dev',
+        },
+      },
+      null,
+      2
+    )}\n`
+  );
+  const harness = await createServerHarness({
+    matrixAccessTokenFile: accessTokenFile,
+    matrixOutboundAuthTokenFile: authTokenFile,
+    matrixOutboundTargetsFile: targetsFile,
+  });
+
+  try {
+    const response = await harness.request(
+      '/internal/matrix/outbound/readiness/pbuchman-private-whatsapp/intex_agent',
+      {
+        headers: {
+          authorization: 'Bearer adapter-secret',
+        },
+      }
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, {
+      status: 'ready',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    await harness.close();
+  }
+});
+
+test('matrix outbound send returns setup_required when target mapping is missing', async () => {
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const targetsFile = await createTempFile(
+    'matrix-outbound-targets.json',
+    `${JSON.stringify(
+      {
+        'pbuchman-private-whatsapp': {},
+      },
+      null,
+      2
+    )}\n`
+  );
+  const harness = await createServerHarness({
+    matrixOutboundAuthTokenFile: authTokenFile,
+    matrixOutboundTargetsFile: targetsFile,
+  });
+
+  try {
+    const response = await harness.request('/internal/matrix/outbound/messages', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer adapter-secret',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        target: 'intex_agent',
+        text: 'hello',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, {
+      status: 'setup_required',
+      reason: 'missing_matrix_outbound_target',
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('matrix outbound send posts Matrix text messages with the resolved room id and txn id', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    fetchCalls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ event_id: '$matrix-event-1' }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+      },
+    });
+  };
+
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const accessTokenFile = await createTempFile('matrix-access-token.txt', 'matrix-user-token\n');
+  const targetsFile = await createTempFile(
+    'matrix-outbound-targets.json',
+    `${JSON.stringify(
+      {
+        'pbuchman-private-whatsapp': {
+          intex_agent: '!agent:home-dev',
+        },
+      },
+      null,
+      2
+    )}\n`
+  );
+  const harness = await createServerHarness({
+    homeserverUrl: 'http://synapse:8008',
+    matrixAccessTokenFile: accessTokenFile,
+    matrixOutboundAuthTokenFile: authTokenFile,
+    matrixOutboundTargetsFile: targetsFile,
+  });
+
+  try {
+    const response = await harness.request('/internal/matrix/outbound/messages', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer adapter-secret',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        target: 'intex_agent',
+        text: 'new session: Send me events that they have in the calendar in the next 24 hours.',
+        idempotencyKey: 'calendar-daily-lookahead-2026-07-04',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, {
+      status: 'sent',
+      matrixEventId: '$matrix-event-1',
+    });
+    assert.equal(fetchCalls.length, 1);
+    assert.deepEqual(fetchCalls[0], {
+      url: 'http://synapse:8008/_matrix/client/v3/rooms/!agent%3Ahome-dev/send/m.room.message/calendar-daily-lookahead-2026-07-04',
+      init: {
+        method: 'PUT',
+        headers: {
+          authorization: 'Bearer matrix-user-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          msgtype: 'm.text',
+          body: 'new session: Send me events that they have in the calendar in the next 24 hours.',
+        }),
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    await harness.close();
+  }
+});

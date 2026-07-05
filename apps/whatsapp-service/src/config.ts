@@ -202,6 +202,8 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_LLM_USAGE_SERVICE_URL',
     'INTEXURAOS_USER_SERVICE_URL',
+    'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
+    'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

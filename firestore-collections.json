@@ -142,6 +142,14 @@
       "owner": "calendar-agent",
       "description": "Calendar event previews generated async before user approval"
     },
+    "calendar_schedules": {
+      "owner": "calendar-agent",
+      "description": "Per-user reusable calendar schedules, including daily lookahead notifications."
+    },
+    "calendar_schedule_runs": {
+      "owner": "calendar-agent",
+      "description": "Per-local-date audit records for claimed and completed calendar schedule executions."
+    },
     "linear_connections": {
       "owner": "linear-agent",
       "description": "Linear API key connections and team configuration"

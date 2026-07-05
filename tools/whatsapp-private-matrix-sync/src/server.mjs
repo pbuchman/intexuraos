@@ -30,6 +30,8 @@ export function createConfig(env = process.env) {
     homeserverUrl: env.MATRIX_HOMESERVER_URL ?? '',
     matrixUserId: env.MATRIX_USER_ID ?? '',
     matrixAccessTokenFile: env.MATRIX_ACCESS_TOKEN_FILE ?? '',
+    matrixOutboundAuthTokenFile: env.MATRIX_OUTBOUND_AUTH_TOKEN_FILE ?? '',
+    matrixOutboundTargetsFile: env.MATRIX_OUTBOUND_TARGETS_FILE ?? '',
     ingestUrl: env.INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL ?? '',
     mediaUploadUrl:
       env.INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_URL ??
@@ -532,23 +534,78 @@ function isPrivateMediaUploadMessageType(messageType) {
 }
 
 export function createHealthServer(config, runtime) {
-  return http.createServer((request, response) => {
-    if (request.url !== '/health') {
-      response.writeHead(404, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ ok: false, error: 'not_found' }));
-      return;
+  return http.createServer(async (request, response) => {
+    try {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+
+      if (request.method === 'GET' && url.pathname === '/health') {
+        const payload = buildHealthPayload(config, {
+          hasMatrixAccessToken: readAccessToken(config.matrixAccessTokenFile) !== '',
+          hasOidcCredentials: hasNonEmptyFile(config.googleApplicationCredentialsFile),
+          runtimeState: runtime.state,
+          counters: runtime.counters,
+          lastError: runtime.lastError,
+        });
+
+        writeJson(response, 200, payload);
+        return;
+      }
+
+      const readinessMatch = url.pathname.match(
+        /^\/internal\/matrix\/outbound\/readiness\/([^/]+)\/([^/]+)$/
+      );
+      if (request.method === 'GET' && readinessMatch !== null) {
+        if (!isAuthorizedRequest(request, config.matrixOutboundAuthTokenFile)) {
+          writeJson(response, 401, { ok: false, error: 'unauthorized' });
+          return;
+        }
+
+        const [, rawSourceAccountId, rawTarget] = readinessMatch;
+        const resolved = resolveMatrixOutboundContext(config, {
+          sourceAccountId: decodeURIComponent(rawSourceAccountId),
+          target: decodeURIComponent(rawTarget),
+        });
+        if (!resolved.ok) {
+          writeJson(response, 200, {
+            status: 'setup_required',
+            reason: resolved.reason,
+          });
+          return;
+        }
+
+        writeJson(response, 200, { status: 'ready' });
+        return;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/internal/matrix/outbound/messages') {
+        if (!isAuthorizedRequest(request, config.matrixOutboundAuthTokenFile)) {
+          writeJson(response, 401, { ok: false, error: 'unauthorized' });
+          return;
+        }
+
+        const body = await readJsonRequestBody(request);
+        const result = await sendMatrixOutboundMessage(config, body);
+        if (result.status === 'setup_required') {
+          writeJson(response, 200, result);
+          return;
+        }
+        if (result.status === 'invalid_request') {
+          writeJson(response, 400, result);
+          return;
+        }
+
+        writeJson(response, 200, result);
+        return;
+      }
+
+      writeJson(response, 404, { ok: false, error: 'not_found' });
+    } catch (error) {
+      writeJson(response, 500, {
+        ok: false,
+        error: 'internal_error',
+        reason: sanitizeError(error),
+      });
     }
-
-    const payload = buildHealthPayload(config, {
-      hasMatrixAccessToken: readAccessToken(config.matrixAccessTokenFile) !== '',
-      hasOidcCredentials: hasNonEmptyFile(config.googleApplicationCredentialsFile),
-      runtimeState: runtime.state,
-      counters: runtime.counters,
-      lastError: runtime.lastError,
-    });
-
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify(payload));
   });
 }
 
@@ -900,6 +957,143 @@ export function parseMxcUri(mxcUri) {
 function mediaIdFromMxcUri(mxcUri) {
   const parsed = parseMxcUri(mxcUri);
   return `${parsed.serverName}-${parsed.mediaId}`;
+}
+
+function writeJson(response, statusCode, payload) {
+  response.writeHead(statusCode, { 'content-type': 'application/json' });
+  response.end(JSON.stringify(payload));
+}
+
+function isAuthorizedRequest(request, authTokenFile) {
+  const expectedToken = readAccessToken(authTokenFile);
+  if (expectedToken === '') {
+    return false;
+  }
+
+  const authorization = request.headers.authorization;
+  return typeof authorization === 'string' && authorization === `Bearer ${expectedToken}`;
+}
+
+async function readJsonRequestBody(request) {
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  }
+
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function resolveMatrixOutboundContext(config, request) {
+  if (typeof request?.sourceAccountId !== 'string' || request.sourceAccountId === '') {
+    return { ok: false, reason: 'missing_matrix_outbound_source_account' };
+  }
+  if (typeof request?.target !== 'string' || request.target === '') {
+    return { ok: false, reason: 'missing_matrix_outbound_target' };
+  }
+
+  const targets = readMatrixOutboundTargets(config.matrixOutboundTargetsFile);
+  if (!targets.ok) {
+    return targets;
+  }
+
+  const sourceTargets = targets.value[request.sourceAccountId];
+  if (!isRecord(sourceTargets)) {
+    return { ok: false, reason: 'missing_matrix_outbound_source_account' };
+  }
+
+  const roomId = readString(sourceTargets, request.target);
+  if (roomId === undefined || roomId === '') {
+    return { ok: false, reason: 'missing_matrix_outbound_target' };
+  }
+
+  if (config.homeserverUrl === '') {
+    return { ok: false, reason: 'missing_matrix_homeserver_url' };
+  }
+
+  const accessToken = readAccessToken(config.matrixAccessTokenFile);
+  if (accessToken === '') {
+    return { ok: false, reason: 'missing_matrix_access_token' };
+  }
+
+  return {
+    ok: true,
+    accessToken,
+    roomId,
+  };
+}
+
+function readMatrixOutboundTargets(filePath) {
+  if (typeof filePath !== 'string' || filePath === '') {
+    return { ok: false, reason: 'missing_matrix_outbound_targets' };
+  }
+
+  try {
+    const value = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (!isRecord(value)) {
+      return { ok: false, reason: 'invalid_matrix_outbound_targets' };
+    }
+    return { ok: true, value };
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return { ok: false, reason: 'missing_matrix_outbound_targets' };
+    }
+    return { ok: false, reason: 'invalid_matrix_outbound_targets' };
+  }
+}
+
+async function sendMatrixOutboundMessage(config, request) {
+  const resolved = resolveMatrixOutboundContext(config, request);
+  if (!resolved.ok) {
+    return {
+      status: 'setup_required',
+      reason: resolved.reason,
+    };
+  }
+  if (typeof request?.text !== 'string' || request.text === '') {
+    return {
+      status: 'invalid_request',
+      reason: 'missing_text',
+    };
+  }
+
+  const transactionId =
+    typeof request.idempotencyKey === 'string' && request.idempotencyKey !== ''
+      ? request.idempotencyKey
+      : `matrix-outbound-${Date.now()}`;
+  const url = new URL(
+    `/_matrix/client/v3/rooms/${encodeURIComponent(resolved.roomId)}/send/m.room.message/${encodeURIComponent(transactionId)}`,
+    config.homeserverUrl
+  );
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      authorization: `Bearer ${resolved.accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      msgtype: 'm.text',
+      body: request.text,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`matrix_outbound_send_failed_${response.status}`);
+  }
+
+  const body = await response.json();
+  const matrixEventId = isRecord(body) ? readString(body, 'event_id') : undefined;
+  if (matrixEventId === undefined || matrixEventId === '') {
+    throw new Error('matrix_outbound_send_missing_event_id');
+  }
+
+  return {
+    status: 'sent',
+    matrixEventId,
+  };
 }
 
 export function buildMatrixMediaDownloadUrl(config, mxcUri) {

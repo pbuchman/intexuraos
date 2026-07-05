@@ -39,6 +39,7 @@ HETZNER_RUNTIME_SECRETS=(
   INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET
   INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI
   INTEXURAOS_INTERNAL_AUTH_TOKEN
+  INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN
   INTEXURAOS_OPENAI_APP_API_KEY
   INTEXURAOS_OPENROUTER_APP_API_KEY
   INTEXURAOS_ORCHESTRATOR_SECRET
@@ -174,6 +175,7 @@ HEADER
   write_env_line "${output_path}" "INTEXURAOS_WEB_APP_URL" "${PUBLIC_ORIGIN}"
   write_env_line "${output_path}" "INTEXURAOS_WEB_URL" "${PUBLIC_ORIGIN}"
   write_env_line "${output_path}" "INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL" "${PUBLIC_ORIGIN}/api/code"
+  write_env_line "${output_path}" "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL" "http://localhost:8099"
   write_env_line "${output_path}" "INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY" "pbuchman/intexuraos"
   write_env_line "${output_path}" "INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH" "development"
   write_env_line "${output_path}" "NODE_ENV" "production"

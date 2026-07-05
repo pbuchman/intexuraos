@@ -90,6 +90,13 @@ import type {
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../domain/conversation-assistant/types.js';
+import type {
+  MatrixOutboundGateway,
+  MatrixOutboundReadinessInput,
+  MatrixOutboundReadinessResult,
+  MatrixOutboundSendInput,
+  MatrixOutboundSendResult,
+} from '../domain/whatsapp/ports/matrixOutboundGateway.js';
 import { randomUUID } from 'node:crypto';
 
 export class FakeConversationAssistantRepository implements ConversationAssistantRepository {
@@ -162,6 +169,39 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
 
   getAllTurns(): ConversationAssistantTurn[] {
     return Array.from(this.turns.values()).map((turn) => ({ ...turn }));
+  }
+}
+
+export class FakeMatrixOutboundGateway implements MatrixOutboundGateway {
+  readonly readinessCalls: MatrixOutboundReadinessInput[] = [];
+  readonly sendCalls: MatrixOutboundSendInput[] = [];
+  private readinessResult: MatrixOutboundReadinessResult = {
+    status: 'setup_required',
+    reason: 'Matrix outbound target is not configured',
+  };
+  private sendResult: MatrixOutboundSendResult = {
+    status: 'setup_required',
+    reason: 'Matrix outbound target is not configured',
+  };
+
+  setReadinessResult(result: MatrixOutboundReadinessResult): void {
+    this.readinessResult = result;
+  }
+
+  setSendResult(result: MatrixOutboundSendResult): void {
+    this.sendResult = result;
+  }
+
+  getDeliveryReadiness(
+    input: MatrixOutboundReadinessInput
+  ): Promise<MatrixOutboundReadinessResult> {
+    this.readinessCalls.push(input);
+    return Promise.resolve(this.readinessResult);
+  }
+
+  sendMessage(input: MatrixOutboundSendInput): Promise<MatrixOutboundSendResult> {
+    this.sendCalls.push(input);
+    return Promise.resolve(this.sendResult);
   }
 }
 

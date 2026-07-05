@@ -936,6 +936,7 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain('HETZNER_RUNTIME_SECRETS=(');
     expect(script).toContain('INTEXURAOS_SENTRY_WEBHOOK_SECRET');
     expect(script).toContain('INTEXURAOS_SENTRY_AUTOMATION_USER_ID');
+    expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
     expect(script).toContain('PROVISIONER_SA_KEY_FILE');
     expect(script).toContain('RUNTIME_SA_KEY_FILE');
     expect(script).toContain('TEMP_ENV_FILE=');
@@ -981,6 +982,20 @@ describe('Hetzner secret loader', () => {
     );
     expect(terraform).toContain('INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY  = "pbuchman/intexuraos"');
     expect(terraform).toContain('INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH = "development"');
+  });
+
+  it('writes private Matrix outbound adapter config for Hetzner prod', () => {
+    const script = readRequired(loadSecretsPath);
+    const terraform = readRequired(terraformDevMainPath);
+
+    expect(script).toContain(
+      'write_env_line "${output_path}" "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL" "http://localhost:8099"'
+    );
+    expect(terraform).toContain(
+      'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL  = "http://localhost:8099"'
+    );
+    expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
+    expect(terraform).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",');
   });
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {

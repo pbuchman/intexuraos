@@ -25,10 +25,10 @@ import type {
   EventPublisherPort,
   LinkPreviewFetcherPort,
   MediaStoragePort,
+  PrivateWhatsAppRepository,
   NotificationPreferencesRepository,
   OutboundMessageRepository,
   PhoneVerificationRepository,
-  PrivateWhatsAppRepository,
   ThumbnailGeneratorPort,
   WhatsAppCloudApiPort,
   WhatsAppMessageRepository,
@@ -36,6 +36,7 @@ import type {
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEventRepository,
 } from './domain/whatsapp/index.js';
+import type { MatrixOutboundGateway } from './domain/whatsapp/ports/matrixOutboundGateway.js';
 import type {
   ConversationAssistantLlmClientFactory,
   ConversationAssistantPdfExporter,
@@ -44,6 +45,7 @@ import type {
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
 import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
 import { createConversationAssistantRepository } from './infra/firestore/conversationAssistantRepository.js';
+import { createMatrixOutboundAdapterClient } from './infra/http/matrixOutboundAdapterClient.js';
 
 /**
  * Configuration for service initialization.
@@ -62,6 +64,8 @@ export interface ServiceConfig {
   llmUsageServiceUrl: string;
   userServiceUrl: string;
   conversationAssistantModel: ConversationAssistantModel;
+  matrixOutboundAdapterBaseUrl: string;
+  matrixOutboundAdapterAuthToken: string;
 }
 
 function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
@@ -90,6 +94,7 @@ export interface ServiceContainer {
   phoneVerificationRepository: PhoneVerificationRepository;
   notificationPreferencesRepository: NotificationPreferencesRepository;
   privateWhatsAppRepository: PrivateWhatsAppRepository;
+  matrixOutboundGateway: MatrixOutboundGateway;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
@@ -134,6 +139,10 @@ export function getServices(): ServiceContainer {
     phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
     privateWhatsAppRepository: createPrivateWhatsAppRepository(),
+    matrixOutboundGateway: createMatrixOutboundAdapterClient({
+      baseUrl: serviceConfig.matrixOutboundAdapterBaseUrl,
+      authToken: serviceConfig.matrixOutboundAdapterAuthToken,
+    }),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(
