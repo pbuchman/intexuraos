@@ -25,7 +25,7 @@ function SessionMetadata({
 }): React.JSX.Element {
   if (session === undefined) {
     return (
-      <div className="grid grid-cols-1 gap-2 text-sm text-slate-500 dark:text-slate-400 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-2 text-sm text-slate-500 dark:text-slate-400 sm:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
           No information range
         </div>
@@ -35,12 +35,13 @@ function SessionMetadata({
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No transcript</div>
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No omissions</div>
         <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No model</div>
+        <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">No role</div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
       <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
         <div className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
           Information range
@@ -81,6 +82,12 @@ function SessionMetadata({
           {session.modelDisplayName}
         </div>
       </div>
+      <div className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+        <div className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Role</div>
+        <div className="mt-1 text-sm text-slate-950 dark:text-slate-50">
+          {session.assistantRoleLabel}
+        </div>
+      </div>
     </div>
   );
 }
@@ -92,6 +99,7 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
     assistant.turns.length > 0 &&
     !assistant.sending &&
     !assistant.exporting;
+  const assistantRoleLabel = assistant.selectedSession?.assistantRoleLabel ?? 'Assistant';
   const selectedSessionId = assistant.selectedSessionId;
   const turnsScrollRef = useRef<HTMLDivElement | null>(null);
   const followTurnsRef = useRef(true);
@@ -341,9 +349,11 @@ export function WhatsAppConversationAssistantPage(): React.JSX.Element {
                         : 'mr-auto border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
                     }`}
                   >
-                    <div className="mb-1 flex items-center justify-between gap-3 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                      <span>{isUser ? 'You' : 'Assistant'}</span>
-                      <span>{formatDateTimeCompact(turn.createdAt)}</span>
+                    <div className="mb-1 flex flex-wrap items-start justify-between gap-x-3 gap-y-1 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+                      <span className="min-w-0 flex-1 break-words">
+                        {isUser ? 'You' : assistantRoleLabel}
+                      </span>
+                      <span className="shrink-0">{formatDateTimeCompact(turn.createdAt)}</span>
                     </div>
                     {isUser ? (
                       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-950 dark:text-slate-50">

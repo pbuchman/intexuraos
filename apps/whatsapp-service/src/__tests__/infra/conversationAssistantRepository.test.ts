@@ -24,6 +24,7 @@ function makeSession(overrides: Partial<ConversationAssistantSession> = {}): Con
     transcriptSha256: 'hash',
     transcriptMessageCount: 1,
     transcriptText: '[2026-06-30T10:00:00.000Z] Alice: hello',
+    assistantRoleLabel: 'Doctor',
     omitted: { mediaOnly: 0, failedTranscriptions: 0, pendingTranscriptions: 0, nonText: 0, overLimit: 0 },
     title: 'Question',
     createdAt: '2026-06-30T10:00:00.000Z',
@@ -155,6 +156,7 @@ describe('conversationAssistantRepository', () => {
       transcriptSha256: '',
       transcriptMessageCount: 0,
       transcriptText: '',
+      assistantRoleLabel: 'Assistant',
       omitted: { mediaOnly: 0, failedTranscriptions: 0, pendingTranscriptions: 0, nonText: 0, overLimit: 0 },
       title: '',
       createdAt: '',
@@ -162,6 +164,7 @@ describe('conversationAssistantRepository', () => {
       chatDisplayName: 'Alice',
       lastTurnAt: '2026-06-30T10:03:00.000Z',
     });
+    expect(empty?.assistantRoleLabel).toBe('Assistant');
   });
 
   it('preserves unknown legacy models while defaulting missing model values', async () => {

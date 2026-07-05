@@ -100,6 +100,7 @@ describe('Conversation Assistant routes', () => {
           id: string;
           effectiveRange: ConversationAssistantDateRange;
           transcriptText?: string;
+          assistantRoleLabel: string;
           model: string;
           modelDisplayName: string;
         };
@@ -107,6 +108,7 @@ describe('Conversation Assistant routes', () => {
       };
     };
     expect(body.data.session.transcriptText).toBeUndefined();
+    expect(body.data.session.assistantRoleLabel).toBe('Assistant');
     expect(body.data.session.effectiveRange).toEqual({
       from: '2026-06-30T10:00:00.000Z',
       to: '2026-06-30T10:00:00.000Z',
@@ -114,6 +116,7 @@ describe('Conversation Assistant routes', () => {
     expect(body.data.session.model).toBe(DEFAULT_CONVERSATION_ASSISTANT_MODEL);
     expect(body.data.session.modelDisplayName).toBe('MiniMax M3');
     expect(JSON.stringify(body)).not.toContain('We agreed to meet');
+    expect(JSON.stringify(body)).not.toContain('transcriptText');
     expect(body.data.turns).toEqual([]);
   });
 
@@ -154,6 +157,10 @@ describe('Conversation Assistant routes', () => {
 
   it('creates first turns, lists sessions, and lists turns', async () => {
     const token = await seed();
+    ctx.llmClient.queueGenerateResponse({
+      content:
+        '{"roleLabel":"lawyer","confidence":0.92,"rationale":"Conversation asks for legal interpretation."}',
+    });
     await storeMessage({
       eventTimestamp: '2026-06-30T10:05:00.000Z',
       matrixEventId: '$event-2',
@@ -169,7 +176,7 @@ describe('Conversation Assistant routes', () => {
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
         maxMessages: 1,
-        question: 'What was agreed?',
+        question: 'Can a lawyer explain what these messages mean for my lease dispute?',
       },
     });
 
@@ -180,16 +187,19 @@ describe('Conversation Assistant routes', () => {
           id: string;
           effectiveRange: ConversationAssistantDateRange;
           transcriptText?: string;
+          assistantRoleLabel: string;
         };
         turns: { role: string }[];
       };
     };
     expect(createdBody.data.turns.map((turn) => turn.role)).toEqual(['user', 'assistant']);
+    expect(createdBody.data.session.assistantRoleLabel).toBe('Lawyer');
     expect(createdBody.data.session.effectiveRange).toEqual({
       from: '2026-06-30T10:00:00.000Z',
       to: '2026-06-30T10:00:00.000Z',
     });
     expect(createdBody.data.session.transcriptText).toBeUndefined();
+    expect(JSON.stringify(createdBody)).not.toContain('transcriptText');
     expect(ctx.llmClient.chatCalls[0]?.options.sessionId).toBe(createdBody.data.session.id);
 
     const listed = await ctx.app.inject({
@@ -216,12 +226,14 @@ describe('Conversation Assistant routes', () => {
       to: '2026-06-30T10:00:00.000Z',
     });
     expect(JSON.parse(listed.body).data.sessions[0].transcriptText).toBeUndefined();
+    expect(JSON.parse(listed.body).data.sessions[0].assistantRoleLabel).toBe('Lawyer');
     expect(JSON.stringify(JSON.parse(listed.body).data.sessions)).not.toContain('We agreed to meet');
     expect(JSON.parse(fetched.body).data.session.effectiveRange).toEqual({
       from: '2026-06-30T10:00:00.000Z',
       to: '2026-06-30T10:00:00.000Z',
     });
     expect(JSON.parse(fetched.body).data.session.transcriptText).toBeUndefined();
+    expect(JSON.parse(fetched.body).data.session.assistantRoleLabel).toBe('Lawyer');
     expect(JSON.parse(turns.body).data.turns).toHaveLength(2);
   });
 

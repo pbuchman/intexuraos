@@ -118,7 +118,6 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
   const sendInFlightRef = useRef(false);
   const exportInFlightRef = useRef(false);
   const turnsRequestIdRef = useRef(0);
-  const skipNextSelectedSessionLoadRef = useRef<string | undefined>(undefined);
 
   const defaultRange = useMemo(() => getDefaultRange(), []);
   const [sessions, setSessions] = useState<ConversationAssistantSession[]>([]);
@@ -149,13 +148,9 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     useState<PendingLargeContextCreate | null>(null);
 
   useEffect(() => {
-    const skipSelectedSessionLoad =
-      selectedSessionId !== undefined && skipNextSelectedSessionLoadRef.current === selectedSessionId;
     selectedSessionIdRef.current = selectedSessionId;
-    if (!skipSelectedSessionLoad) {
-      setSelectedSessionOverride(undefined);
-      setTurns([]);
-    }
+    setSelectedSessionOverride(undefined);
+    setTurns([]);
     setFollowUpQuestion('');
     sendInFlightRef.current = false;
     setSending(false);
@@ -164,8 +159,6 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     setPendingLargeContext(null);
     setInvalidSelectedSessionId(undefined);
     if (selectedSessionId === undefined) {
-      setLoadingTurns(false);
-    } else if (skipSelectedSessionLoad) {
       setLoadingTurns(false);
     }
   }, [selectedSessionId]);
@@ -229,14 +222,6 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
       turnsRequestIdRef.current += 1;
       setSelectedSessionOverride(undefined);
       setTurns([]);
-      setLoadingTurns(false);
-      return;
-    }
-
-    if (skipNextSelectedSessionLoadRef.current === selectedSessionId) {
-      skipNextSelectedSessionLoadRef.current = undefined;
-      turnsRequestIdRef.current += 1;
-      setInvalidSelectedSessionId(undefined);
       setLoadingTurns(false);
       return;
     }
@@ -441,11 +426,14 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     async (
       token: string,
       request: CreateConversationAssistantSessionRequest,
-      firstQuestionToStream: string,
+      firstQuestionForCreate: string,
       requestId: number,
       originatingSessionId: string | undefined
     ): Promise<void> => {
-      const session = await createConversationAssistantSession(token, request);
+      const session = await createConversationAssistantSession(token, {
+        ...request,
+        ...(firstQuestionForCreate !== '' ? { question: firstQuestionForCreate } : {}),
+      });
       if (
         createRequestIdRef.current !== requestId ||
         selectedSessionIdRef.current !== originatingSessionId
@@ -461,18 +449,12 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
       setError(null);
       turnsRequestIdRef.current += 1;
       selectedSessionIdRef.current = session.id;
-      if (firstQuestionToStream !== '') {
-        skipNextSelectedSessionLoadRef.current = session.id;
+      if (firstQuestionForCreate !== '') {
         setTurns([]);
       }
       setSessionParam(session.id);
-      if (firstQuestionToStream !== '') {
-        await streamQuestionIntoSession(token, session.id, firstQuestionToStream, () => {
-          setFirstQuestionState('');
-        }, undefined, false);
-      }
     },
-    [setSessionParam, streamQuestionIntoSession]
+    [setSessionParam]
   );
 
   const createSession = useCallback(async (): Promise<void> => {

@@ -532,6 +532,7 @@ describe('Conversation Assistant session use cases', () => {
     expect(conversationRepository.getAllTurns()).toHaveLength(2);
     expect(llmFactoryCalls).toEqual([
       { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
+      { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
     ]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
     expect(llmClient.chatCalls[0]?.options.reasoning).toEqual({ enabled: true });
@@ -616,10 +617,59 @@ describe('Conversation Assistant session use cases', () => {
     expect(llmFactoryCalls).toEqual([
       { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
       { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
+      { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
     ]);
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages[1])).toBe(
       JSON.stringify(llmClient.chatCalls[1]?.messages[1])
     );
+  });
+
+  it('stores an inferred assistant role label from the initial question', async () => {
+    const { deps, llmClient } = makeDeps();
+    await seedDirectMessage(deps.privateWhatsAppRepository as FakePrivateWhatsAppRepository);
+    llmClient.queueGenerateResponse({
+      content:
+        '{"roleLabel":"psychologist","confidence":0.88,"rationale":"The user asks about anxiety."}',
+    });
+    llmClient.queueChatResponse('The selected context shows...');
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'Why do I keep feeling anxious after these messages?',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.assistantRoleLabel).toBe('Psychologist');
+  });
+
+  it('falls back to Assistant when role classification returns invalid content', async () => {
+    const { deps, llmClient } = makeDeps();
+    await seedDirectMessage(deps.privateWhatsAppRepository as FakePrivateWhatsAppRepository);
+    llmClient.queueGenerateResponse({ content: 'not json' });
+    llmClient.queueGenerateResponse({ content: '{"roleLabel":"","confidence":2,"rationale":""}' });
+    llmClient.queueChatResponse('The selected context shows...');
+
+    const result = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        question: 'Do I need a doctor?',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.assistantRoleLabel).toBe('Assistant');
   });
 
   it('streams follow-up turns and persists the final assistant turn', async () => {
@@ -726,6 +776,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 7,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: 'Psychologist',
       omitted: {
         mediaOnly: 2,
         failedTranscriptions: 1,
@@ -768,6 +819,7 @@ describe('Conversation Assistant session use cases', () => {
       {
         title: 'Alice context',
         modelName: 'Gemini 3.5 Flash Thinking',
+        assistantRoleLabel: 'Psychologist',
         initialPrompt: 'user question',
         generatedAt: '2026-06-30T12:00:00.000Z',
         sourceRange: {
@@ -800,6 +852,7 @@ describe('Conversation Assistant session use cases', () => {
         ],
       },
     ]);
+    expect(pdfExporter.calls[0]?.assistantRoleLabel).toBe('Psychologist');
   });
 
   it('orders equal-timestamp PDF export turns by conversation role and same-role id', async () => {
@@ -822,6 +875,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 4,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: 'Assistant',
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,
@@ -907,6 +961,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 1,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: 'Assistant',
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,
@@ -958,6 +1013,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 1,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: 'Assistant',
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,
@@ -1028,6 +1084,7 @@ describe('Conversation Assistant session use cases', () => {
       transcriptSha256: 'abc123',
       transcriptMessageCount: 1,
       transcriptText: 'frozen transcript',
+      assistantRoleLabel: 'Assistant',
       omitted: {
         mediaOnly: 0,
         failedTranscriptions: 0,

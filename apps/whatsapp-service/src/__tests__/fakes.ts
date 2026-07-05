@@ -10,6 +10,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import type {
+  GenerateOptions,
   GenerateChatOptions,
   GenerateChatResult,
   GenerateChatStreamEvent,
@@ -206,6 +207,8 @@ export class FakeMatrixOutboundGateway implements MatrixOutboundGateway {
 }
 
 export class FakeLlmGenerateClient implements LlmGenerateClient {
+  private readonly generateResponses: Result<GenerateResult, LLMError>[] = [];
+  private readonly chatResponses: Result<GenerateChatResult, LLMError>[] = [];
   private nextChatResult: Result<GenerateChatResult, LLMError> = ok({
     content: 'assistant answer',
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
@@ -218,7 +221,14 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
   readonly chatCalls: { messages: LlmChatMessage[]; options: GenerateChatOptions }[] = [];
   readonly streamChatCalls: { messages: LlmChatMessage[]; options: GenerateChatOptions }[] = [];
 
-  generate(): Promise<Result<GenerateResult, LLMError>> {
+  generate(
+    _prompt?: string,
+    _options?: GenerateOptions
+  ): Promise<Result<GenerateResult, LLMError>> {
+    const queued = this.generateResponses.shift();
+    if (queued !== undefined) {
+      return Promise.resolve(queued);
+    }
     return Promise.resolve(
       ok({
         content: 'assistant answer',
@@ -232,6 +242,10 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
     options: GenerateChatOptions
   ): Promise<Result<GenerateChatResult, LLMError>> {
     this.chatCalls.push({ messages, options });
+    const queued = this.chatResponses.shift();
+    if (queued !== undefined) {
+      return Promise.resolve(queued);
+    }
     return Promise.resolve(this.nextChatResult);
   }
 
@@ -249,6 +263,36 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
 
   setNextStreamEvents(events: GenerateChatStreamEvent[]): void {
     this.nextStreamEvents = events;
+  }
+
+  queueGenerateResponse(
+    response: Partial<GenerateResult> & Pick<GenerateResult, 'content'>
+  ): void {
+    this.generateResponses.push(
+      ok({
+        content: response.content,
+        usage: response.usage ?? {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          costUsd: 0,
+        },
+      })
+    );
+  }
+
+  queueChatResponse(content: string, usage?: GenerateChatResult['usage']): void {
+    this.chatResponses.push(
+      ok({
+        content,
+        usage: usage ?? {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          costUsd: 0.001,
+        },
+      })
+    );
   }
 
   failNextChat(message = 'model failed'): void {

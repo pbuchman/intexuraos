@@ -6,6 +6,7 @@ import type {
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../../domain/conversation-assistant/types.js';
+import { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL } from '../../domain/conversation-assistant/roleInference.js';
 
 export const WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION =
   'whatsapp_conversation_assistant_sessions';
@@ -144,6 +145,10 @@ function toSession(
     transcriptSha256: session?.transcriptSha256 ?? '',
     transcriptMessageCount: session?.transcriptMessageCount ?? 0,
     transcriptText: session?.transcriptText ?? '',
+    assistantRoleLabel:
+      typeof session?.assistantRoleLabel === 'string' && session.assistantRoleLabel.trim().length > 0
+        ? session.assistantRoleLabel
+        : DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
     omitted: session?.omitted ?? {
       mediaOnly: 0,
       failedTranscriptions: 0,
