@@ -441,11 +441,14 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     async (
       token: string,
       request: CreateConversationAssistantSessionRequest,
-      firstQuestionToStream: string,
+      firstQuestionForCreate: string,
       requestId: number,
       originatingSessionId: string | undefined
     ): Promise<void> => {
-      const session = await createConversationAssistantSession(token, request);
+      const session = await createConversationAssistantSession(token, {
+        ...request,
+        ...(firstQuestionForCreate !== '' ? { question: firstQuestionForCreate } : {}),
+      });
       if (
         createRequestIdRef.current !== requestId ||
         selectedSessionIdRef.current !== originatingSessionId
@@ -461,18 +464,12 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
       setError(null);
       turnsRequestIdRef.current += 1;
       selectedSessionIdRef.current = session.id;
-      if (firstQuestionToStream !== '') {
-        skipNextSelectedSessionLoadRef.current = session.id;
+      if (firstQuestionForCreate !== '') {
         setTurns([]);
       }
       setSessionParam(session.id);
-      if (firstQuestionToStream !== '') {
-        await streamQuestionIntoSession(token, session.id, firstQuestionToStream, () => {
-          setFirstQuestionState('');
-        }, undefined, false);
-      }
     },
-    [setSessionParam, streamQuestionIntoSession]
+    [setSessionParam]
   );
 
   const createSession = useCallback(async (): Promise<void> => {
