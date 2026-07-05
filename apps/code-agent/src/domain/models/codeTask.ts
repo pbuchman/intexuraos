@@ -1,4 +1,4 @@
-import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
+import type { CodeTaskRebaseResult, CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { Timestamp } from '@google-cloud/firestore';
 import type { ExecutionMemoryType } from './executionMemory.js';
 import type { ExecutionMemoryApplicationCandidate } from './executionMemoryApplication.js';
@@ -69,8 +69,11 @@ export interface TaskResult {
   summary?: string;         // AI-generated summary of changes
   ciFailed?: boolean;       // True if CI checks failed
   partialWork?: boolean;    // True if task timed out with partial progress
-  rebaseResult?: 'success' | 'conflict' | 'skipped';  // For long tasks (design lines 1356-1364)
+  rebaseResult?: CodeTaskRebaseResult;  // For long tasks (design lines 1356-1364)
   comment_replied?: boolean; // True if PR comment reply was sent (for pull_request agent)
+  pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+  merge_ready?: '1';
+  merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;

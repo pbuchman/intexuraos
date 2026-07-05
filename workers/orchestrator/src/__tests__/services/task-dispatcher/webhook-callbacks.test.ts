@@ -340,7 +340,7 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
     expect(result.requires_re_review).toBe('0');
   });
 
-  it('overlays pull_request fields (pr, comment_replied=yes)', () => {
+  it('overlays pull_request fields (pr, pull_request_outcome, comment_replied=yes)', () => {
     const task = makeTask();
     const result = buildResultFromVerification(
       task,
@@ -348,11 +348,13 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
       parsedVerdict({
         summary: 'Replied',
         pr: 'https://github.com/pr/55',
+        pull_request_outcome: 'no_changes_needed',
         comment_replied: 'yes',
       }),
       'pull_request'
     );
     expect(result.prUrl).toBe('https://github.com/pr/55');
+    expect(result.pull_request_outcome_label).toBe('no_changes_needed');
     expect(result.comment_replied).toBe(true);
   });
 

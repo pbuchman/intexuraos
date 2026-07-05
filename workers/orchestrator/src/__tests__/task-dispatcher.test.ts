@@ -1828,7 +1828,13 @@ describe('TaskDispatcher', () => {
     it('returns parsed rebase result for valid JSON with attempted: true, success: true', () => {
       const output = JSON.stringify({ attempted: true, success: true });
       const result = getInternal().parseRebaseResultOutput(output, 'task-1');
-      expect(result).toEqual({ attempted: true, success: true });
+      expect(result).toEqual({ attempted: true, success: true, conflictFiles: [] });
+    });
+
+    it('returns parsed rebase result for valid JSON with attempted: false', () => {
+      const output = JSON.stringify({ attempted: false });
+      const result = getInternal().parseRebaseResultOutput(output, 'task-not-required');
+      expect(result).toEqual({ attempted: false, reason: 'not_required' });
     });
 
     it('returns parsed rebase result with conflictFiles for valid JSON with attempted: true, success: false, conflictFiles', () => {

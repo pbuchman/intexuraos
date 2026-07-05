@@ -1,6 +1,7 @@
 import type { WorkerRuntime } from '../services/runtime/types.js';
 import type { WorkerType } from '../services/isolation/types.js';
 import type { ExecutionMemoryPromptContext } from './execution-memory.js';
+import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 
 export type TaskStatus =
   | 'queued'
@@ -170,6 +171,7 @@ export interface TaskResult {
   summary?: string;
   ciFailed?: boolean;
   comment_replied?: boolean;
+  pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;
@@ -198,11 +200,7 @@ export interface TaskResult {
   sentry_linear_issue?: string;
   sentry_outcome?: 'fixed' | 'suppressed';
   sentry_verification?: string;
-  rebaseResult?: {
-    attempted: boolean;
-    success: boolean;
-    conflictFiles?: string[];
-  };
+  rebaseResult?: CodeTaskRebaseResult;
 }
 
 export interface TaskError {

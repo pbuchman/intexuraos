@@ -281,6 +281,13 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
         emptyAliases: DEFAULT_EMPTY_ALIASES,
       },
       {
+        name: 'pull_request_outcome',
+        alias: ['Pull request outcome', 'Outcome'],
+        kind: 'enum',
+        required: true,
+        enumValues: ['commits_pushed', 'no_changes_needed'],
+      },
+      {
         name: 'comment_replied',
         alias: ['Comment replied'],
         kind: 'enum',

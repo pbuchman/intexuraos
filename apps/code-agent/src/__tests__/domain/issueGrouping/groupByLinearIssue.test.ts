@@ -337,6 +337,202 @@ describe('groupByLinearIssue', () => {
     const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
     expect(mergeStep).toBeUndefined();
   });
+
+  it('adds merge step when execution task carries durable merge-ready evidence without a Linear label', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-exec',
+        agentType: 'execution',
+        status: 'implemented',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/42',
+          merge_ready: '1',
+          merge_ready_reason: 'review_skipped',
+        },
+        linearIssueId: 'INT-100',
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Review', type: 'started' },
+          priority: 3,
+          assignee: null,
+          labels: [],
+          url: 'https://linear.app/test/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('adds merge step when remediation task carries durable merge-ready evidence without a Linear label', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-exec',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssueId: 'INT-100',
+      }),
+      makeTask({
+        id: 'task-remediation',
+        agentType: 'remediation',
+        status: 'implemented',
+        result: {
+          execution_outcome_label: 'already_completed',
+          merge_ready: '1',
+          merge_ready_reason: 'remediation_already_completed',
+        },
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('does not add merge step from stale durable evidence after a later pull_request pushed commits', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-pull-request',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: '2026-04-15T12:00:00.000Z',
+        updatedAt: '2026-04-15T12:00:00.000Z',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/42',
+          pull_request_outcome_label: 'commits_pushed',
+        },
+        linearIssueId: 'INT-100',
+      }),
+      makeTask({
+        id: 'task-review',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-15T10:00:00.000Z',
+        updatedAt: '2026-04-15T10:00:00.000Z',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/42',
+          needs_remediation: '0',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+        },
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeUndefined();
+    expect(groups[0]?.pipeline.pr?.status).toBe('open');
+  });
+
+  it('does not add merge step from stale durable evidence after a later review requires remediation', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-review-needs-remediation',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-15T12:00:00.000Z',
+        updatedAt: '2026-04-15T12:00:00.000Z',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/42',
+          needs_remediation: '1',
+        },
+        linearIssueId: 'INT-100',
+      }),
+      makeTask({
+        id: 'task-review-pass',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-15T10:00:00.000Z',
+        updatedAt: '2026-04-15T10:00:00.000Z',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/42',
+          needs_remediation: '0',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+        },
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+    expect(pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+  });
+
+  it('does not add merge step from stale durable evidence after a later remediation pushed commits', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-remediation',
+        agentType: 'remediation',
+        status: 'implemented',
+        createdAt: '2026-04-15T12:00:00.000Z',
+        updatedAt: '2026-04-15T12:00:00.000Z',
+        result: {
+          execution_outcome_label: 'implemented',
+        },
+        linearIssueId: 'INT-100',
+      }),
+      makeTask({
+        id: 'task-review-pass',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-15T10:00:00.000Z',
+        updatedAt: '2026-04-15T10:00:00.000Z',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/42',
+          needs_remediation: '0',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+        },
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+    expect(pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+  });
+
+  it('ignores invalid invalidator timestamps when checking durable evidence freshness', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-pull-request',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: '2026-04-15T12:00:00.000Z',
+        updatedAt: 'not-a-date',
+        result: {
+          pull_request_outcome_label: 'commits_pushed',
+        },
+        linearIssueId: 'INT-100',
+      }),
+      makeTask({
+        id: 'task-review-pass',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-15T10:00:00.000Z',
+        updatedAt: '2026-04-15T10:00:00.000Z',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/42',
+          needs_remediation: '0',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+        },
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+    expect(pipeline.steps.find((s) => s.agentType === 'merge')).toBeDefined();
+  });
 });
 
 describe('deriveAggregateStatus', () => {

@@ -1076,7 +1076,15 @@ export interface CodeTaskResult {
   summary?: string;
   ciFailed?: boolean;
   partialWork?: boolean;
-  rebaseResult?: 'success' | 'conflict' | 'skipped';
+  rebaseResult?:
+    | 'success'
+    | 'conflict'
+    | 'skipped'
+    | { attempted: false; reason: 'not_required' }
+    | { attempted: true; success: boolean; conflictFiles?: string[] };
+  pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+  merge_ready?: '1';
+  merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;

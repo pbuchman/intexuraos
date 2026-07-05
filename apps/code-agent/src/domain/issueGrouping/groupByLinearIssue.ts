@@ -39,6 +39,33 @@ function deriveStepState(status: string): StepState {
   return 'failed';
 }
 
+function isMergeReadyInvalidator(task: SerializedTask): boolean {
+  if (task.status === 'archived') {
+    return false;
+  }
+  if (task.agentType === 'review' && task.result?.needs_remediation === '1') {
+    return true;
+  }
+  if (task.agentType === 'pull_request' && task.result?.pull_request_outcome_label === 'commits_pushed') {
+    return true;
+  }
+  if (
+    task.agentType === 'remediation' &&
+    (task.result?.execution_outcome_label === 'implemented' || task.result?.requires_re_review === '1')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function hasDurableMergeReadyEvidence(task: SerializedTask | undefined, invalidatedAtMs: number): boolean {
+  return task !== undefined &&
+    task.result?.merge_ready === '1' &&
+    task.prMergedAt === undefined &&
+    task.prClosedAt === undefined &&
+    Date.parse(task.updatedAt) > invalidatedAtMs;
+}
+
 export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // Tasks are already sorted by updatedAt desc from the caller.
   // Group by agentType, keeping only the first non-archived task per type (= latest by updatedAt).
@@ -98,6 +125,13 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   const isMerged = prOwnerTask?.prMergedAt !== undefined;
   const isClosed = prOwnerTask?.prClosedAt !== undefined;
   const isPrClosedOrMerged = isMerged || isClosed;
+  const mergeReadyInvalidatedAtMs = tasks.reduce((latest, task) => {
+    if (!isMergeReadyInvalidator(task)) {
+      return latest;
+    }
+    const updatedAtMs = Date.parse(task.updatedAt);
+    return Number.isFinite(updatedAtMs) && updatedAtMs > latest ? updatedAtMs : latest;
+  }, 0);
 
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
   if (
@@ -138,6 +172,21 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     }
   }
 
+  if (
+    !hasActiveTask &&
+    !isPrClosedOrMerged &&
+    executionEntry?.step.state === 'completed' &&
+    executionEntry.task.result?.prUrl !== undefined &&
+    !steps.some((s) => s.agentType === 'merge') &&
+    hasDurableMergeReadyEvidence(executionEntry.task, mergeReadyInvalidatedAtMs)
+  ) {
+    steps.push({
+      agentType: 'merge',
+      state: 'actionable',
+      label: 'Merge',
+    });
+  }
+
   // Merge-ready fallback for review tasks: if the review step completed with
   // needs_remediation === '0' AND the ready-to-merge label is still present.
   // The label check is essential: handlePrClose removes ready-to-merge when
@@ -154,6 +203,24 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     hasMergeReadyLabel(reviewEntry.task.linearIssue?.labels) &&
     !steps.some((s) => s.agentType === 'merge') &&
     (planningEntry === undefined || planningEntry.task.implementationTaskId !== undefined)
+  ) {
+    steps.push({
+      agentType: 'merge',
+      state: 'actionable',
+      label: 'Merge',
+    });
+  }
+
+  if (
+    !hasActiveTask &&
+    !isPrClosedOrMerged &&
+    !steps.some((s) => s.agentType === 'merge') &&
+    (
+      hasDurableMergeReadyEvidence(reviewEntry?.task, mergeReadyInvalidatedAtMs) ||
+      hasDurableMergeReadyEvidence(stepMap.get('execution')?.task, mergeReadyInvalidatedAtMs) ||
+      hasDurableMergeReadyEvidence(stepMap.get('pull_request')?.task, mergeReadyInvalidatedAtMs) ||
+      hasDurableMergeReadyEvidence(stepMap.get('remediation')?.task, mergeReadyInvalidatedAtMs)
+    )
   ) {
     steps.push({
       agentType: 'merge',

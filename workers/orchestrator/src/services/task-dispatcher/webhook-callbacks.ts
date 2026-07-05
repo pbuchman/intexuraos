@@ -229,6 +229,10 @@ export function buildResultFromVerification(
     if (prUrl !== '') {
       base.prUrl = prUrl;
     }
+    const pullRequestOutcome = toStringOr(data['pull_request_outcome']);
+    if (pullRequestOutcome === 'commits_pushed' || pullRequestOutcome === 'no_changes_needed') {
+      base.pull_request_outcome_label = pullRequestOutcome;
+    }
     const commentReplied = toStringOr(data['comment_replied']);
     base.comment_replied = commentReplied === 'yes';
   } else if (inferredType === 'sentry') {

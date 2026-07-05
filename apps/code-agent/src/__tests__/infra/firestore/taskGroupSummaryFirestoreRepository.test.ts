@@ -3154,7 +3154,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('prNumber')).toBeNull();
     });
 
-    it('only sets prNumber from the first task that has prUrl', async () => {
+    it('sets prNumber from the newest task that has prUrl', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -3188,8 +3188,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.recomputeGroupFromTasks('user-4', 'INT-PRFIRST', [task1, task2]);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-PRFIRST').get();
-      // First task with prUrl wins for prNumber
-      expect(doc.get('prNumber')).toBe(10);
+      // Newest task with prUrl wins so older plan PR state cannot poison the execution PR.
+      expect(doc.get('prNumber')).toBe(20);
     });
   });
 

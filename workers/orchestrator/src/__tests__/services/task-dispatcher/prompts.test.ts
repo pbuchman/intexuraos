@@ -169,6 +169,12 @@ describe('parseRebaseResultOutput', () => {
     });
   });
 
+  it('returns not-required rebase evidence for attempted=false', () => {
+    const output = JSON.stringify({ attempted: false });
+    const result = parseRebaseResultOutput(output, 'task-1', mockLogger as never);
+    expect(result).toEqual({ attempted: false, reason: 'not_required' });
+  });
+
   it('returns undefined when the JSON does not include attempted=true', () => {
     const result = parseRebaseResultOutput('{}', 'task-1', mockLogger as never);
     expect(result).toBeUndefined();

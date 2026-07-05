@@ -48,10 +48,12 @@ import {
   callbackStateSchema,
   dispatchStatusSchema,
   linearIssueForDisplaySchema,
+  nullableRebaseResultSchema,
   workerTypeSchema,
   executionMemoryContextSchema,
   executionMemoryPostRunSchema,
 } from './schemas.js';
+import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 import type { CodeRoutesOptions } from './types.js';
 
 /** Terminal task statuses eligible for archival, rate-limit recording, etc. */
@@ -456,7 +458,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prUrl?: string;
         ciFailed?: boolean;
         partialWork?: boolean;
-        rebaseResult?: 'success' | 'conflict' | 'skipped';
+        rebaseResult?: CodeTaskRebaseResult;
       };
       error?: {
         code: string;
@@ -505,7 +507,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 prUrl: { type: 'string', nullable: true },
                 ciFailed: { type: 'boolean', nullable: true },
                 partialWork: { type: 'boolean', nullable: true },
-                rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
+                rebaseResult: nullableRebaseResultSchema,
               },
               required: [],
             },
@@ -603,7 +605,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             prUrl?: string;
             ciFailed?: boolean;
             partialWork?: boolean;
-            rebaseResult?: 'success' | 'conflict' | 'skipped';
+            rebaseResult?: CodeTaskRebaseResult;
           };
           error?: {
             code: string;
@@ -1843,7 +1845,14 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                         summary: { type: 'string' },
                         ciFailed: { type: 'boolean', nullable: true },
                         partialWork: { type: 'boolean', nullable: true },
-                        rebaseResult: { type: 'string', nullable: true },
+                        rebaseResult: nullableRebaseResultSchema,
+                        pull_request_outcome_label: { type: 'string', enum: ['commits_pushed', 'no_changes_needed'], nullable: true },
+                        merge_ready: { type: 'string', enum: ['1'], nullable: true },
+                        merge_ready_reason: {
+                          type: 'string',
+                          enum: ['review_no_remediation', 'pull_request_no_changes_rebase_clean', 'remediation_already_completed', 'review_skipped'],
+                          nullable: true,
+                        },
                         review_comments_posted: { type: 'string', nullable: true },
                         review_types: { type: 'string', nullable: true },
                         requirements_tracker_updated: { type: 'string', nullable: true },

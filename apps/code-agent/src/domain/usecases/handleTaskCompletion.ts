@@ -51,6 +51,7 @@
 /* eslint-disable eqeqeq */
 import type { Logger } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { isRebaseClean, parseCodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 import { getServices } from '../../services.js';
 import { loadConfig } from '../../config.js';
 import type { CodeTask } from '../models/codeTask.js';
@@ -81,8 +82,9 @@ export type TaskCompleteWebhookBody = {
     summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
-    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    rebaseResult?: unknown;
     comment_replied?: boolean;
+    pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
     planning_outcome_label?: 'planned' | 'unclear';
     planning_has_plan_doc?: '0' | '1';
     planning_superpowers_writing_plans_used?: '0' | '1';
@@ -105,6 +107,8 @@ export type TaskCompleteWebhookBody = {
     gh_actions_status?: string;
     needs_remediation?: string;
     requires_re_review?: string;
+    merge_ready?: '1';
+    merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
     sentry_issue_url?: string;
     sentry_linear_issue?: string;
     sentry_outcome?: 'fixed' | 'suppressed';
@@ -123,6 +127,18 @@ export type TaskCompleteWebhookBody = {
   duration?: number;
   resumedCompletion?: boolean;
 };
+
+type MergeReadyReason = NonNullable<NonNullable<TaskCompleteWebhookBody['result']>['merge_ready_reason']>;
+type TaskCompleteWebhookResult = NonNullable<TaskCompleteWebhookBody['result']>;
+
+function normalizeTaskResult(result: TaskCompleteWebhookResult | undefined): CodeTask['result'] | undefined {
+  if (result === undefined) return undefined;
+  const { rebaseResult, ...rest } = result;
+  if (rebaseResult === undefined) return rest;
+  const parsedRebaseResult = parseCodeTaskRebaseResult(rebaseResult);
+  if (parsedRebaseResult === undefined) return rest;
+  return { ...rest, rebaseResult: parsedRebaseResult };
+}
 
 export type HandleTaskCompletionResult =
   | { kind: 'received' }
@@ -155,7 +171,8 @@ export async function handleTaskCompletion(
         gitHubPRClient,
         userServiceClient,
       } = getServices();
-      const { taskId, status, result, error } = body;
+      const { taskId, status, error } = body;
+      const result = normalizeTaskResult(body.result);
 
       logger.info(
         {
@@ -163,7 +180,7 @@ export async function handleTaskCompletion(
           status,
           traceId,
           hasResult: result !== undefined,
-          resultKeys: result ? Object.keys(result) : [],
+          resultKeys: body.result ? Object.keys(body.result) : [],
           resultBranch: result?.branch,
           resultPrUrl: result?.prUrl,
           bodyKeys: Object.keys(body),
@@ -181,6 +198,19 @@ export async function handleTaskCompletion(
       const task = taskResult.value;
       const completedAt = new Date();
 
+      const markTaskMergeReady = async (reason: MergeReadyReason): Promise<void> => {
+        await codeTaskRepo.update(taskId, {
+          result: {
+            ...(task.result ?? {}),
+            /* v8 ignore start -- schema: merge-ready callers require result fields before invoking this helper; this fallback is defensive for malformed webhook payloads @preserve */
+            ...(result ?? {}),
+            /* v8 ignore stop @preserve */
+            merge_ready: '1',
+            merge_ready_reason: reason,
+          },
+        });
+      };
+
       // Set `ready-to-merge` on the Linear issue associated with a PR.
       // Shared between two callbacks that produce the same outcome:
       //   1. review completed with `needs_remediation='0'`
@@ -188,7 +218,7 @@ export async function handleTaskCompletion(
       //      `execution_outcome_label='already_completed'` (no new commits pushed)
       // Guarded by a PR-already-merged check (summary + GitHub API fallback) and
       // a planning-origin guard that auto-merges the plan PR instead of labeling.
-      const applyReadyToMergeLabel = async (prNumber: number): Promise<void> => {
+      const applyReadyToMergeLabel = async (prNumber: number, reason: MergeReadyReason): Promise<void> => {
         // Best-effort: set review-outcome label on the associated Linear issue
         // Skip if PR is already merged — handlePrClose already cleaned up labels.
         let prAlreadyMerged = false;
@@ -275,6 +305,8 @@ export async function handleTaskCompletion(
             requestLog.warn({ taskId, prNumber, [SKIP_SENTRY_KEY]: true },
               'No Linear issue available for review-outcome label — skipping');
           } else {
+            await markTaskMergeReady(reason);
+
             const issueValidation = await linearAgentClient.validateIssue({
               userId: targetUserId!,
               identifier: targetLinearIssueId,
@@ -1406,7 +1438,7 @@ export async function handleTaskCompletion(
                 signal: remediationSignal,
               });
 
-              await applyReadyToMergeLabel(prNumber);
+              await applyReadyToMergeLabel(prNumber, 'review_no_remediation');
             } else {
               if (!isPrStillOpen()) {
                 requestLog.info(
@@ -1555,7 +1587,15 @@ export async function handleTaskCompletion(
           result?.requires_re_review === '0' &&
           result.execution_outcome_label === 'already_completed'
         ) {
-          await applyReadyToMergeLabel(prNumber);
+          await applyReadyToMergeLabel(prNumber, 'remediation_already_completed');
+        }
+
+        if (
+          task.agentType === 'pull_request' &&
+          result?.pull_request_outcome_label === 'no_changes_needed' &&
+          isRebaseClean(parseCodeTaskRebaseResult(result.rebaseResult))
+        ) {
+          await markTaskMergeReady('pull_request_no_changes_rebase_clean');
         }
 
         // Best-effort In Review transition for agent types without deterministic enforcement.

@@ -100,6 +100,37 @@ export function hasImplementationLink(task: CodeTask): boolean {
   return task.implementationTaskId !== undefined || (task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0);
 }
 
+function getMergeReadyReason(task: CodeTask): string | null {
+  return task.status !== 'archived' &&
+    task.result?.merge_ready === '1' &&
+    task.result.merge_ready_reason !== undefined
+    ? task.result.merge_ready_reason
+    : null;
+}
+
+function isMergeReadyInvalidator(task: CodeTask): boolean {
+  if (task.status === 'archived') {
+    return false;
+  }
+  if (task.agentType === 'review' && task.result?.needs_remediation === '1') {
+    return true;
+  }
+  if (task.agentType === 'pull_request' && task.result?.pull_request_outcome_label === 'commits_pushed') {
+    return true;
+  }
+  if (
+    task.agentType === 'remediation' &&
+    (task.result?.execution_outcome_label === 'implemented' || task.result?.requires_re_review === '1')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function hasRepresentativePr(task: CodeTask): boolean {
+  return task.status !== 'archived' && task.result?.prUrl !== undefined;
+}
+
 function normalizeSummarySortFields(summary: TaskGroupSummary): TaskGroupSummary {
   return {
     ...summary,
@@ -174,6 +205,19 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
     hasPrUrl: data['hasPrUrl'] === true,
     prNumber: data['prNumber'] !== undefined && data['prNumber'] !== null
       ? Number(data['prNumber'])
+      : null,
+    latestMergeReadyEvidence: data['latestMergeReadyEvidence'] === true,
+    latestMergeReadyReason: data['latestMergeReadyReason'] !== undefined && data['latestMergeReadyReason'] !== null
+      ? String(data['latestMergeReadyReason'])
+      : null,
+    latestMergeReadyUpdatedAt: data['latestMergeReadyUpdatedAt'] !== undefined && data['latestMergeReadyUpdatedAt'] !== null
+      ? toTimestamp(data['latestMergeReadyUpdatedAt'])
+      : null,
+    prMergedAt: data['prMergedAt'] !== undefined && data['prMergedAt'] !== null
+      ? toTimestamp(data['prMergedAt'])
+      : null,
+    prClosedAt: data['prClosedAt'] !== undefined && data['prClosedAt'] !== null
+      ? toTimestamp(data['prClosedAt'])
       : null,
     latestReviewNeedsRemediation: data['latestReviewNeedsRemediation'] === true
       ? true
@@ -255,6 +299,10 @@ export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGr
   const hasImplementationTaskId = hasImplementationLink(task);
   const latestReviewNeedsRemediation = computeReviewNeedsRemediation(task);
   const prNumber = hasPrUrl && task.prNumber !== undefined ? task.prNumber : null;
+  const latestMergeReadyReason = getMergeReadyReason(task);
+  const latestMergeReadyUpdatedAt = latestMergeReadyReason !== null ? toTimestamp(task.updatedAt) : null;
+  const prMergedAt = hasRepresentativePr(task) && task.prMergedAt !== undefined ? toTimestamp(task.prMergedAt) : null;
+  const prClosedAt = hasRepresentativePr(task) && task.prClosedAt !== undefined ? toTimestamp(task.prClosedAt) : null;
   const mostRecentDispatchedAt = task.dispatchedAt !== undefined ? toTimestamp(task.dispatchedAt) : null;
 
   return {
@@ -273,6 +321,11 @@ export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGr
     hasImplementationTaskId,
     hasPrUrl,
     prNumber,
+    latestMergeReadyEvidence: latestMergeReadyReason !== null,
+    latestMergeReadyReason,
+    latestMergeReadyUpdatedAt,
+    prMergedAt,
+    prClosedAt,
     latestReviewNeedsRemediation,
     oldestTaskCreatedAt: toTimestamp(task.createdAt),
     mostRecentDispatchedAt,
@@ -320,6 +373,26 @@ export function applyIncrementalCreateUpdate(current: TaskGroupSummary, task: Co
     updated.hasPrUrl = true;
     if (task.prNumber !== undefined) {
       updated.prNumber = task.prNumber;
+    }
+    updated.prMergedAt = task.prMergedAt !== undefined ? toTimestamp(task.prMergedAt) : null;
+    updated.prClosedAt = task.prClosedAt !== undefined ? toTimestamp(task.prClosedAt) : null;
+  }
+
+  const mergeReadyReason = getMergeReadyReason(task);
+  if (mergeReadyReason !== null) {
+    updated.latestMergeReadyEvidence = true;
+    updated.latestMergeReadyReason = mergeReadyReason;
+    updated.latestMergeReadyUpdatedAt = toTimestamp(task.updatedAt);
+  } else if (isMergeReadyInvalidator(task)) {
+    const taskUpdatedAt = toTimestamp(task.updatedAt);
+    if (
+      updated.latestMergeReadyUpdatedAt === undefined ||
+      updated.latestMergeReadyUpdatedAt === null ||
+      taskUpdatedAt.toMillis() >= updated.latestMergeReadyUpdatedAt.toMillis()
+    ) {
+      updated.latestMergeReadyEvidence = false;
+      updated.latestMergeReadyReason = null;
+      updated.latestMergeReadyUpdatedAt = null;
     }
   }
 
@@ -396,6 +469,26 @@ export function applyStatusChangeUpdate(
     updated.hasPrUrl = true;
     if (newTask.prNumber !== undefined) {
       updated.prNumber = newTask.prNumber;
+    }
+    updated.prMergedAt = newTask.prMergedAt !== undefined ? toTimestamp(newTask.prMergedAt) : null;
+    updated.prClosedAt = newTask.prClosedAt !== undefined ? toTimestamp(newTask.prClosedAt) : null;
+  }
+
+  const mergeReadyReason = getMergeReadyReason(newTask);
+  if (mergeReadyReason !== null) {
+    updated.latestMergeReadyEvidence = true;
+    updated.latestMergeReadyReason = mergeReadyReason;
+    updated.latestMergeReadyUpdatedAt = toTimestamp(newTask.updatedAt);
+  } else if (isMergeReadyInvalidator(newTask)) {
+    const taskUpdatedAt = toTimestamp(newTask.updatedAt);
+    if (
+      updated.latestMergeReadyUpdatedAt === undefined ||
+      updated.latestMergeReadyUpdatedAt === null ||
+      taskUpdatedAt.toMillis() >= updated.latestMergeReadyUpdatedAt.toMillis()
+    ) {
+      updated.latestMergeReadyEvidence = false;
+      updated.latestMergeReadyReason = null;
+      updated.latestMergeReadyUpdatedAt = null;
     }
   }
 
@@ -506,14 +599,21 @@ export function computeSummaryFromTasks(
   let hasImplementationTaskId = false;
   let hasPrUrl = false;
   let prNumber: number | null = null;
+  let latestMergeReadyReason: string | null = null;
+  let latestMergeReadyUpdatedAtMs = 0;
+  let prMergedAt: Timestamp | null = null;
+  let prClosedAt: Timestamp | null = null;
+  let prOwnerUpdatedAtMs = 0;
   let latestReviewNeedsRemediation: boolean | null = null;
   let latestReviewUpdatedAtMs = 0;
+  let latestMergeReadyInvalidatedAtMs = 0;
 
   const firstTask = nonArchivedTasks[0];
   const linearIssueId = firstTask?.linearIssueId ?? null;
   const sortFields = getLinearIssueSortFields(linearIssueId);
 
   for (const task of nonArchivedTasks) {
+    const updatedAtMs = toTimestamp(task.updatedAt).toMillis();
     taskCount++;
     if (isActiveStatus(task.status)) {
       activeTaskCount++;
@@ -535,12 +635,14 @@ export function computeSummaryFromTasks(
     }
     if (task.result?.prUrl !== undefined) {
       hasPrUrl = true;
-      if (prNumber === null && task.prNumber !== undefined) {
+      if (task.prNumber !== undefined && updatedAtMs >= prOwnerUpdatedAtMs) {
+        prOwnerUpdatedAtMs = updatedAtMs;
         prNumber = task.prNumber;
+        prMergedAt = task.prMergedAt !== undefined ? toTimestamp(task.prMergedAt) : null;
+        prClosedAt = task.prClosedAt !== undefined ? toTimestamp(task.prClosedAt) : null;
       }
     }
 
-    const updatedAtMs = toTimestamp(task.updatedAt).toMillis();
     if (updatedAtMs > latestTaskUpdatedAtMs) {
       latestTaskUpdatedAtMs = updatedAtMs;
       latestTaskStatus = task.status;
@@ -573,6 +675,20 @@ export function computeSummaryFromTasks(
         }
       }
     }
+
+    const mergeReadyReason = getMergeReadyReason(task);
+    if (mergeReadyReason !== null && updatedAtMs >= latestMergeReadyUpdatedAtMs) {
+      latestMergeReadyUpdatedAtMs = updatedAtMs;
+      latestMergeReadyReason = mergeReadyReason;
+    }
+    if (isMergeReadyInvalidator(task) && updatedAtMs > latestMergeReadyInvalidatedAtMs) {
+      latestMergeReadyInvalidatedAtMs = updatedAtMs;
+    }
+  }
+
+  if (latestMergeReadyReason !== null && latestMergeReadyUpdatedAtMs <= latestMergeReadyInvalidatedAtMs) {
+    latestMergeReadyReason = null;
+    latestMergeReadyUpdatedAtMs = 0;
   }
 
   return {
@@ -591,6 +707,11 @@ export function computeSummaryFromTasks(
     hasImplementationTaskId,
     hasPrUrl,
     prNumber,
+    latestMergeReadyEvidence: latestMergeReadyReason !== null,
+    latestMergeReadyReason,
+    latestMergeReadyUpdatedAt: latestMergeReadyReason !== null ? Timestamp.fromMillis(latestMergeReadyUpdatedAtMs) : null,
+    prMergedAt,
+    prClosedAt,
     latestReviewNeedsRemediation,
     /* v8 ignore start -- ts-type: oldestTaskCreatedAt is always set in the loop when nonArchivedTasks is non-empty; the ?? now fallback is a TypeScript narrowing artifact @preserve */
     oldestTaskCreatedAt: oldestTaskCreatedAt ?? now,

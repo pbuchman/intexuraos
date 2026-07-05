@@ -15,6 +15,10 @@ export interface GroupSummaryFields {
   hasImplementationReadyLabel?: boolean;
   /** Whether the Linear issue has the ready-to-merge label. undefined = unknown, use conservative default (false). */
   hasMergeReadyLabel?: boolean;
+  latestMergeReadyEvidence?: boolean;
+  latestMergeReadyReason?: string | null;
+  prMergedAt?: unknown;
+  prClosedAt?: unknown;
 }
 
 export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): GroupStatus {
@@ -28,9 +32,17 @@ export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): Gr
     return 'active';
   }
 
+  const hasMergeReadiness = (fields.hasMergeReadyLabel ?? false) || fields.latestMergeReadyEvidence === true;
+  const reviewAllowsMerge =
+    fields.latestReviewNeedsRemediation !== true ||
+    fields.latestMergeReadyReason === 'remediation_already_completed';
+  const isPrTerminal =
+    (fields.prMergedAt !== undefined && fields.prMergedAt !== null) ||
+    (fields.prClosedAt !== undefined && fields.prClosedAt !== null);
+
   // 1b. Active: execution agent completed but review hasn't cleared it
-  // Exception: if merge-ready label is set, skip to needs-action check instead
-  if (fields.hasCompletedExecutionAgent && fields.latestReviewNeedsRemediation !== false && !(fields.hasMergeReadyLabel === true)) {
+  // Exception: if merge-ready evidence is set, skip to needs-action check instead
+  if (fields.hasCompletedExecutionAgent && fields.latestReviewNeedsRemediation !== false && !hasMergeReadiness) {
     return 'active';
   }
 
@@ -49,9 +61,20 @@ export function deriveAggregateStatusFromSummary(fields: GroupSummaryFields): Gr
   // Covers both execution-based and review-only workflows
   // Conservative when label unknown (undefined → false)
   if (
+    fields.hasCompletedExecution &&
     fields.hasPrUrl &&
-    fields.latestReviewNeedsRemediation !== true &&
-    (fields.hasMergeReadyLabel ?? false)
+    fields.latestMergeReadyEvidence === true &&
+    !isPrTerminal &&
+    reviewAllowsMerge
+  ) {
+    return 'needs-action';
+  }
+
+  if (
+    fields.hasPrUrl &&
+    !isPrTerminal &&
+    reviewAllowsMerge &&
+    hasMergeReadiness
   ) {
     return 'needs-action';
   }

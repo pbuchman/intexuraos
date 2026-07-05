@@ -379,6 +379,59 @@ describe('codeRoutes', () => {
       expect(body.data.result.review_types).toBe('code_quality,architecture');
     });
 
+    it('returns durable merge-ready result fields when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review PR',
+        sanitizedPrompt: 'review pr',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-merge-ready-123',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const updateResult = await repo.update(created.value.id, {
+        status: 'reviewed',
+        result: {
+          summary: 'Reviewed the PR and no remediation is required.',
+          rebaseResult: { attempted: false, reason: 'not_required' },
+          pull_request_outcome_label: 'no_changes_needed',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+        } as typeof created.value.result,
+      });
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/tasks/${created.value.id}`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.result).toMatchObject({
+        rebaseResult: { attempted: false, reason: 'not_required' },
+        pull_request_outcome_label: 'no_changes_needed',
+        merge_ready: '1',
+        merge_ready_reason: 'review_no_remediation',
+      });
+    });
+
     it('returns execution memory candidates and search counts when present', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
