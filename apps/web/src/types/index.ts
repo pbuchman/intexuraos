@@ -368,6 +368,7 @@ export interface ConversationAssistantSession {
   effectiveRange: ConversationAssistantDateRange;
   model: ConversationAssistantModel | string;
   modelDisplayName: string;
+  assistantRoleLabel: string;
   transcriptSha256: string;
   transcriptMessageCount: number;
   omitted: ConversationAssistantOmittedCounts;
