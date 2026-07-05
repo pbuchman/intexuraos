@@ -41,6 +41,7 @@
 | Modified | `GET /conversation-assistant/sessions` | `whatsapp-service` | Return each public session with `effectiveRange`, using selected `range` as the legacy fallback when stored data is absent. |
 | Modified | `GET /conversation-assistant/sessions/:sessionId` | `whatsapp-service` | Return `effectiveRange` for the selected session. |
 | Modified | `GET /conversation-assistant/sessions/:sessionId/export.pdf` | `whatsapp-service` | Pass both selected information range and effective range to the PDF exporter. |
+| Modified | `POST /internal/whatsapp/private/conversation-context` | `whatsapp-service` | Continue returning the shared projected private context messages and update its response schema/tests to include `importedAt`. |
 | Modified | Web route `/whatsapp/conversation-assistant` | `apps/web` | Display both ranges in detail metadata and session shortcut cards with year-bearing labels. |
 | Removed | None | - | No endpoint removal. |
 | Unchanged | `POST /conversation-assistant/context/check`, turn submit, turn stream, and turn list endpoints | `whatsapp-service` | Context checking and turn persistence keep their current request shapes. |
@@ -90,11 +91,16 @@ range: { from: string; to: string };
 effectiveRange: { from: string; to: string };
 ```
 
+`PrivateConversationContextMessage` exists in both the Conversation Assistant transcript projection and the private WhatsApp domain DTO returned by `POST /internal/whatsapp/private/conversation-context`; both contracts must include `importedAt` so the shared projection, internal route schema, and route tests stay aligned.
+
 ## Task 1: Add Year-Bearing Transcript Message Dates
 
 **Files:**
 - Modify: `apps/whatsapp-service/src/domain/conversation-assistant/transcriptFormatting.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts`
+- Modify: `apps/whatsapp-service/src/domain/whatsapp/models/PrivateWhatsApp.ts`
+- Modify: `apps/whatsapp-service/src/routes/privateSyncRoutes.ts`
+- Modify: `apps/whatsapp-service/src/__tests__/privateSyncRoutes.test.ts`
 
 **Interfaces:**
 - Consumes: `PrivateWhatsAppMessage.eventTimestamp`, `PrivateWhatsAppMessage.ingestedAt`.
@@ -133,7 +139,7 @@ Expected: FAIL because `importedAt` and the new label format are not implemented
 
 - [ ] **Step 2: Add imported timestamp to the projected context message**
 
-Modify `PrivateConversationContextMessage`:
+Modify `PrivateConversationContextMessage` in `apps/whatsapp-service/src/domain/conversation-assistant/transcriptFormatting.ts`:
 
 ```ts
 export interface PrivateConversationContextMessage {
@@ -164,6 +170,43 @@ const contextMessage: PrivateConversationContextMessage = {
 };
 ```
 
+- [ ] **Step 2a: Keep the internal private context endpoint contract aligned**
+
+Because `projectPrivateConversationContext()` is also returned by `POST /internal/whatsapp/private/conversation-context`, update the duplicate DTO in `apps/whatsapp-service/src/domain/whatsapp/models/PrivateWhatsApp.ts`:
+
+```ts
+export interface PrivateConversationContextMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: PrivateWhatsAppMessageDirection;
+  speakerLabel: string;
+  messageType: PrivateWhatsAppMessageType;
+  contentKind: 'text' | 'transcription';
+  content: string;
+  reactions?: PrivateWhatsAppReactionSummary[];
+}
+```
+
+Update the response schema for `POST /internal/whatsapp/private/conversation-context` in `apps/whatsapp-service/src/routes/privateSyncRoutes.ts` so each message object includes required `importedAt` while keeping `additionalProperties: false`:
+
+```ts
+importedAt: { type: 'string' },
+```
+
+Extend `apps/whatsapp-service/src/__tests__/privateSyncRoutes.test.ts` to assert the endpoint response includes `importedAt` on projected messages:
+
+```ts
+expect(body.data.messages[0]).toMatchObject({
+  eventTimestamp: '2026-06-22T10:00:00.000Z',
+  importedAt: '2026-06-22T10:00:02.000Z',
+});
+```
+
+Run: `pnpm --filter whatsapp-service test -- src/__tests__/privateSyncRoutes.test.ts`
+
+Expected: FAIL before the DTO/schema update, PASS after the route schema and expectation are aligned.
+
 - [ ] **Step 3: Format sent and imported dates with years**
 
 Replace transcript line construction with this shape:
@@ -183,6 +226,10 @@ Keep the existing `Unknown date` fallback.
 - [ ] **Step 4: Verify transcript formatting**
 
 Run: `pnpm --filter whatsapp-service test -- src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts`
+
+Expected: PASS.
+
+Also run: `pnpm --filter whatsapp-service test -- src/__tests__/privateSyncRoutes.test.ts`
 
 Expected: PASS.
 
@@ -683,6 +730,7 @@ Run:
 
 ```bash
 pnpm --filter whatsapp-service test -- src/__tests__/domain/conversation-assistant/transcriptFormatting.test.ts
+pnpm --filter whatsapp-service test -- src/__tests__/privateSyncRoutes.test.ts
 pnpm --filter whatsapp-service test -- src/__tests__/domain/conversation-assistant/sessionUseCases.test.ts
 pnpm --filter whatsapp-service test -- src/__tests__/infra/conversationAssistantRepository.test.ts
 pnpm --filter whatsapp-service test -- src/__tests__/conversationAssistantRoutes.test.ts
@@ -708,4 +756,4 @@ Expected: PASS before commit.
 
 - Spec coverage: The plan covers prompt transcript year/imported date, selected information range, effective prompt-message range, PDF export, detail UI, and session shortcut cards.
 - Placeholder scan: The plan contains concrete file paths, expected labels, field names, and verification commands.
-- Type consistency: `effectiveRange` is added consistently to backend session types, public web types, prompt input, and PDF export input.
+- Type consistency: `effectiveRange` is added consistently to backend session types, public web types, prompt input, and PDF export input; `importedAt` is added consistently to the Conversation Assistant projection type, private WhatsApp context DTO, internal route schema, and route tests.
