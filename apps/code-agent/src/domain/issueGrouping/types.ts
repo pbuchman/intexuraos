@@ -2,6 +2,7 @@
  * Type definitions for backend issue grouping.
  * Operates on serialized API-shaped tasks with ISO string dates.
  */
+import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';
@@ -59,7 +60,10 @@ export interface SerializedTask {
     summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
-    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    rebaseResult?: CodeTaskRebaseResult;
+    pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+    merge_ready?: '1';
+    merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;

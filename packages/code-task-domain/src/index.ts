@@ -25,3 +25,8 @@ export {
   isValidTimeoutHours,
   timeoutHoursToMs,
 } from './codeTaskTimeout.js';
+export {
+  isRebaseClean,
+  parseCodeTaskRebaseResult,
+  type CodeTaskRebaseResult,
+} from './rebaseResult.js';

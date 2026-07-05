@@ -92,6 +92,35 @@ describe('routes/code/schemas', () => {
     expect(validate(task)).toBe(true);
   });
 
+  it('codeTaskSchema accepts structured rebaseResult and merge-ready result fields', () => {
+    const validate = ajv.compile(codeTaskSchema);
+    const task = {
+      id: 'task_1',
+      userId: 'u_1',
+      prompt: 'p',
+      sanitizedPrompt: 'p',
+      systemPromptHash: 'h',
+      workerType: 'auto',
+      workerLocation: 'pending',
+      repository: 'org/repo',
+      baseBranch: 'development',
+      traceId: 't',
+      status: 'implemented',
+      dedupKey: 'd',
+      callbackReceived: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      result: {
+        summary: 'No changes needed',
+        rebaseResult: { attempted: false, reason: 'not_required' },
+        merge_ready: '1',
+        merge_ready_reason: 'pull_request_no_changes_rebase_clean',
+      },
+    };
+
+    expect(validate(task)).toBe(true);
+  });
+
   it('executionMemoryContextSchema restricts status to the enum', () => {
     const validate = ajv.compile(executionMemoryContextSchema);
     expect(validate({ status: 'matched' })).toBe(true);

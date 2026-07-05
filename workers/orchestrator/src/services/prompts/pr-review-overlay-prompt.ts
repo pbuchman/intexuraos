@@ -4,7 +4,7 @@ import type { SystemPromptParams } from './prompt-shared.js';
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '3.1.1',
+  version: '3.2.0',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     return `
@@ -84,6 +84,7 @@ PULL_REQUEST_AGENT_FINAL:
 - PR: <full GitHub PR URL>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
+- Pull request outcome: <commits_pushed|no_changes_needed>
 - Comment replied: <yes|no>
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../../domain/models/codeTask.js';
 import type { UserGroupCounts, TaskGroupSummary } from '../../../../domain/models/taskGroupSummary.js';
+import { deriveAggregateStatusFromSummary } from '../../../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import {
   applyDeleteGroupDelta,
   applyDeleteUpdate,
@@ -322,6 +323,40 @@ describe('serializer: buildInitialSummary', () => {
     expect(s.prNumber).toBe(42);
   });
 
+  it('tracks durable merge-ready evidence and representative PR terminal state from the initial task', () => {
+    const prClosedAt = Timestamp.fromDate(new Date('2026-07-05T10:00:00Z'));
+    const summary = buildInitialSummary(makeTask({
+      agentType: 'execution',
+      status: 'implemented',
+      prClosedAt,
+      prNumber: 42,
+      result: {
+        prUrl: 'https://github.com/org/repo/pull/42',
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+    }), now);
+
+    expect(summary.latestMergeReadyEvidence).toBe(true);
+    expect(summary.latestMergeReadyReason).toBe('review_skipped');
+    expect(summary.prClosedAt).toBe(prClosedAt);
+    expect(summary.prMergedAt).toBeNull();
+  });
+
+  it('tracks merged representative PR terminal state from the initial task', () => {
+    const prMergedAt = Timestamp.fromDate(new Date('2026-07-05T11:00:00Z'));
+    const summary = buildInitialSummary(makeTask({
+      agentType: 'execution',
+      status: 'implemented',
+      prMergedAt,
+      prNumber: 42,
+      result: { prUrl: 'https://github.com/org/repo/pull/42' },
+    }), now);
+
+    expect(summary.prMergedAt).toBe(prMergedAt);
+    expect(summary.prClosedAt).toBeNull();
+  });
+
   it('prNumber is null when hasPrUrl but prNumber absent', () => {
     const task = makeTask({ agentType: 'execution', status: 'implemented', result: { prUrl: 'https://x' } });
     expect(buildInitialSummary(task, now).prNumber).toBeNull();
@@ -397,6 +432,123 @@ describe('serializer: applyIncrementalCreateUpdate', () => {
     const updated = applyIncrementalCreateUpdate(base, makeTask({ agentType: 'execution', status: 'implemented', result: { prUrl: 'https://x' }, prNumber: 7, createdAt: t2, updatedAt: t2 }), t2);
     expect(updated.hasPrUrl).toBe(true);
     expect(updated.prNumber).toBe(7);
+  });
+
+  it('sets representative PR terminal timestamps when prUrl is added incrementally', () => {
+    const prMergedAt = Timestamp.fromDate(new Date('2026-07-05T12:00:00Z'));
+    const prClosedAt = Timestamp.fromDate(new Date('2026-07-05T13:00:00Z'));
+    const updated = applyIncrementalCreateUpdate(
+      base,
+      makeTask({
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://x' },
+        prNumber: 7,
+        prMergedAt,
+        prClosedAt,
+        createdAt: t2,
+        updatedAt: t2,
+      }),
+      t2,
+    );
+
+    expect(updated.prMergedAt).toBe(prMergedAt);
+    expect(updated.prClosedAt).toBe(prClosedAt);
+  });
+
+  it('sets durable merge-ready evidence when added incrementally', () => {
+    const updated = applyIncrementalCreateUpdate(
+      base,
+      makeTask({
+        agentType: 'execution',
+        status: 'implemented',
+        result: {
+          prUrl: 'https://x',
+          merge_ready: '1',
+          merge_ready_reason: 'review_skipped',
+        },
+        createdAt: t2,
+        updatedAt: t2,
+      }),
+      t2,
+    );
+
+    expect(updated.latestMergeReadyEvidence).toBe(true);
+    expect(updated.latestMergeReadyReason).toBe('review_skipped');
+  });
+
+  it('clears durable merge-ready evidence when a newer pull_request pushed commits', () => {
+    const withEvidence: TaskGroupSummary = {
+      ...base,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_no_remediation',
+      latestMergeReadyUpdatedAt: t1,
+    };
+    const updated = applyIncrementalCreateUpdate(
+      withEvidence,
+      makeTask({
+        agentType: 'pull_request',
+        status: 'implemented',
+        result: {
+          prUrl: 'https://x',
+          pull_request_outcome_label: 'commits_pushed',
+        },
+        createdAt: t2,
+        updatedAt: t2,
+      }),
+      t2,
+    );
+
+    expect(updated.latestMergeReadyEvidence).toBe(false);
+    expect(updated.latestMergeReadyReason).toBeNull();
+    expect(updated.latestMergeReadyUpdatedAt).toBeNull();
+  });
+
+  it('clears durable merge-ready evidence when existing evidence timestamp is missing', () => {
+    const withLegacyEvidence: TaskGroupSummary = {
+      ...base,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_no_remediation',
+    };
+    const updated = applyIncrementalCreateUpdate(
+      withLegacyEvidence,
+      makeTask({
+        agentType: 'pull_request',
+        status: 'implemented',
+        result: { pull_request_outcome_label: 'commits_pushed' },
+        createdAt: t2,
+        updatedAt: t2,
+      }),
+      t2,
+    );
+
+    expect(updated.latestMergeReadyEvidence).toBe(false);
+    expect(updated.latestMergeReadyReason).toBeNull();
+    expect(updated.latestMergeReadyUpdatedAt).toBeNull();
+  });
+
+  it('keeps durable merge-ready evidence when an older invalidator is added incrementally', () => {
+    const withEvidence: TaskGroupSummary = {
+      ...base,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_no_remediation',
+      latestMergeReadyUpdatedAt: t2,
+    };
+    const updated = applyIncrementalCreateUpdate(
+      withEvidence,
+      makeTask({
+        agentType: 'pull_request',
+        status: 'implemented',
+        result: { pull_request_outcome_label: 'commits_pushed' },
+        createdAt: t1,
+        updatedAt: t1,
+      }),
+      t2,
+    );
+
+    expect(updated.latestMergeReadyEvidence).toBe(true);
+    expect(updated.latestMergeReadyReason).toBe('review_no_remediation');
+    expect(updated.latestMergeReadyUpdatedAt).toBe(t2);
   });
 
   it('updates review needs-remediation', () => {
@@ -500,6 +652,84 @@ describe('serializer: applyStatusChangeUpdate', () => {
     const { updated } = applyStatusChangeUpdate(base, makeTask({ status: 'running' }), newTask, t2);
     expect(updated.hasPrUrl).toBe(true);
     expect(updated.prNumber).toBe(3);
+  });
+
+  it('sets representative PR terminal timestamps from newTask during status change', () => {
+    const prMergedAt = Timestamp.fromDate(new Date('2026-07-05T14:00:00Z'));
+    const prClosedAt = Timestamp.fromDate(new Date('2026-07-05T15:00:00Z'));
+    const newTask = makeTask({
+      agentType: 'execution',
+      status: 'implemented',
+      result: { prUrl: 'https://x' },
+      prNumber: 3,
+      prMergedAt,
+      prClosedAt,
+      updatedAt: t2,
+    });
+    const { updated } = applyStatusChangeUpdate(base, makeTask({ status: 'running' }), newTask, t2);
+
+    expect(updated.prMergedAt).toBe(prMergedAt);
+    expect(updated.prClosedAt).toBe(prClosedAt);
+  });
+
+  it('sets durable merge-ready evidence from newTask during status change', () => {
+    const newTask = makeTask({
+      agentType: 'execution',
+      status: 'implemented',
+      result: {
+        prUrl: 'https://x',
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+      updatedAt: t2,
+    });
+    const { updated } = applyStatusChangeUpdate(base, makeTask({ status: 'running' }), newTask, t2);
+
+    expect(updated.latestMergeReadyEvidence).toBe(true);
+    expect(updated.latestMergeReadyReason).toBe('review_skipped');
+  });
+
+  it('clears durable merge-ready evidence when a newer status-change result pushes commits', () => {
+    const withEvidence: TaskGroupSummary = {
+      ...base,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_no_remediation',
+      latestMergeReadyUpdatedAt: t1,
+    };
+    const newTask = makeTask({
+      agentType: 'pull_request',
+      status: 'implemented',
+      result: {
+        prUrl: 'https://x',
+        pull_request_outcome_label: 'commits_pushed',
+      },
+      updatedAt: t2,
+    });
+    const { updated } = applyStatusChangeUpdate(withEvidence, makeTask({ status: 'running' }), newTask, t2);
+
+    expect(updated.latestMergeReadyEvidence).toBe(false);
+    expect(updated.latestMergeReadyReason).toBeNull();
+    expect(updated.latestMergeReadyUpdatedAt).toBeNull();
+  });
+
+  it('keeps durable merge-ready evidence when an older status-change invalidator arrives', () => {
+    const withEvidence: TaskGroupSummary = {
+      ...base,
+      latestMergeReadyEvidence: true,
+      latestMergeReadyReason: 'review_no_remediation',
+      latestMergeReadyUpdatedAt: t2,
+    };
+    const newTask = makeTask({
+      agentType: 'pull_request',
+      status: 'implemented',
+      result: { pull_request_outcome_label: 'commits_pushed' },
+      updatedAt: t1,
+    });
+    const { updated } = applyStatusChangeUpdate(withEvidence, makeTask({ status: 'running' }), newTask, t2);
+
+    expect(updated.latestMergeReadyEvidence).toBe(true);
+    expect(updated.latestMergeReadyReason).toBe('review_no_remediation');
+    expect(updated.latestMergeReadyUpdatedAt).toBe(t2);
   });
 
   it('sets hasCompletedPlanning when planning task transitions to planned', () => {
@@ -683,10 +913,170 @@ describe('serializer: computeSummaryFromTasks', () => {
     expect(computeSummaryFromTasks('u', 'g', [task], t1)?.mostRecentDispatchedAt).toBeDefined();
   });
 
-  it('first task with prUrl wins for prNumber', () => {
+  it('latest representative PR task wins for prNumber', () => {
     const t1Task = makeTask({ id: 'a', agentType: 'execution', status: 'implemented', result: { prUrl: 'https://1' }, prNumber: 10, createdAt: t1, updatedAt: t1 });
     const t2Task = makeTask({ id: 'b', agentType: 'execution', status: 'implemented', result: { prUrl: 'https://2' }, prNumber: 20, createdAt: t2, updatedAt: t2 });
-    expect(computeSummaryFromTasks('u', 'g', [t1Task, t2Task], t2)?.prNumber).toBe(10);
+    expect(computeSummaryFromTasks('u', 'g', [t1Task, t2Task], t2)?.prNumber).toBe(20);
+  });
+
+  it('latest representative PR task carries terminal timestamps', () => {
+    const prMergedAt = Timestamp.fromDate(new Date('2026-07-05T16:00:00Z'));
+    const prClosedAt = Timestamp.fromDate(new Date('2026-07-05T17:00:00Z'));
+    const olderTask = makeTask({
+      id: 'a',
+      agentType: 'execution',
+      status: 'implemented',
+      result: { prUrl: 'https://1' },
+      prNumber: 10,
+      createdAt: t1,
+      updatedAt: t1,
+    });
+    const newerTask = makeTask({
+      id: 'b',
+      agentType: 'execution',
+      status: 'implemented',
+      result: { prUrl: 'https://2' },
+      prNumber: 20,
+      prMergedAt,
+      prClosedAt,
+      createdAt: t2,
+      updatedAt: t2,
+    });
+    const summary = computeSummaryFromTasks('u', 'g', [olderTask, newerTask], t2);
+
+    expect(summary?.prNumber).toBe(20);
+    expect(summary?.prMergedAt).toBe(prMergedAt);
+    expect(summary?.prClosedAt).toBe(prClosedAt);
+  });
+
+  it('latest durable merge-ready evidence wins during full recompute', () => {
+    const olderTask = makeTask({
+      id: 'a',
+      agentType: 'execution',
+      status: 'implemented',
+      result: {
+        prUrl: 'https://1',
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+      createdAt: t1,
+      updatedAt: t1,
+    });
+    const newerTask = makeTask({
+      id: 'b',
+      agentType: 'remediation',
+      status: 'implemented',
+      result: {
+        merge_ready: '1',
+        merge_ready_reason: 'remediation_already_completed',
+      },
+      createdAt: t2,
+      updatedAt: t2,
+    });
+    const summary = computeSummaryFromTasks('u', 'g', [olderTask, newerTask], t2);
+
+    expect(summary?.latestMergeReadyEvidence).toBe(true);
+    expect(summary?.latestMergeReadyReason).toBe('remediation_already_completed');
+  });
+
+  it('marks remediation already-completed durable evidence as needs-action after an earlier remediation-required review', () => {
+    const review = makeTask({
+      id: 'review',
+      agentType: 'review',
+      status: 'reviewed',
+      result: {
+        prUrl: 'https://github.com/org/repo/pull/42',
+        needs_remediation: '1',
+      },
+      createdAt: t1,
+      updatedAt: t1,
+    });
+    const remediation = makeTask({
+      id: 'remediation',
+      agentType: 'remediation',
+      status: 'implemented',
+      result: {
+        prUrl: 'https://github.com/org/repo/pull/42',
+        execution_outcome_label: 'already_completed',
+        merge_ready: '1',
+        merge_ready_reason: 'remediation_already_completed',
+      },
+      createdAt: t2,
+      updatedAt: t2,
+    });
+    const summary = computeSummaryFromTasks('u', 'g', [remediation, review], t2);
+
+    expect(summary?.latestReviewNeedsRemediation).toBe(true);
+    expect(summary?.latestMergeReadyEvidence).toBe(true);
+    expect(summary?.latestMergeReadyReason).toBe('remediation_already_completed');
+    expect(summary).not.toBeNull();
+    if (summary === null) {
+      throw new Error('expected summary');
+    }
+    expect(deriveAggregateStatusFromSummary(summary)).toBe('needs-action');
+  });
+
+  it('full recompute clears stale durable evidence after a later pull_request pushed commits', () => {
+    const review = makeTask({
+      id: 'review',
+      agentType: 'review',
+      status: 'reviewed',
+      result: {
+        prUrl: 'https://github.com/org/repo/pull/42',
+        needs_remediation: '0',
+        merge_ready: '1',
+        merge_ready_reason: 'review_no_remediation',
+      },
+      createdAt: t1,
+      updatedAt: t1,
+    });
+    const pullRequest = makeTask({
+      id: 'pull-request',
+      agentType: 'pull_request',
+      status: 'implemented',
+      result: {
+        prUrl: 'https://github.com/org/repo/pull/42',
+        pull_request_outcome_label: 'commits_pushed',
+      },
+      createdAt: t2,
+      updatedAt: t2,
+    });
+    const summary = computeSummaryFromTasks('u', 'g', [pullRequest, review], t2);
+
+    expect(summary?.latestMergeReadyEvidence).toBe(false);
+    expect(summary?.latestMergeReadyReason).toBeNull();
+    expect(summary?.latestMergeReadyUpdatedAt).toBeNull();
+  });
+
+  it('full recompute clears stale durable evidence after a later remediation pushed commits', () => {
+    const review = makeTask({
+      id: 'review',
+      agentType: 'review',
+      status: 'reviewed',
+      result: {
+        prUrl: 'https://github.com/org/repo/pull/42',
+        needs_remediation: '0',
+        merge_ready: '1',
+        merge_ready_reason: 'review_no_remediation',
+      },
+      createdAt: t1,
+      updatedAt: t1,
+    });
+    const remediation = makeTask({
+      id: 'remediation',
+      agentType: 'remediation',
+      status: 'implemented',
+      result: {
+        execution_outcome_label: 'implemented',
+      },
+      createdAt: t2,
+      updatedAt: t2,
+    });
+    const summary = computeSummaryFromTasks('u', 'g', [remediation, review], t2);
+
+    expect(summary?.latestMergeReadyEvidence).toBe(false);
+    expect(summary?.latestMergeReadyReason).toBeNull();
+    expect(summary?.latestMergeReadyUpdatedAt).toBeNull();
   });
 
   it('mostRecentDispatchedAt keeps the max when tasks arrive in descending dispatch order', () => {

@@ -17,6 +17,7 @@ import {
 } from '../../domain/issueGrouping/index.js';
 import type { GroupStatus, SortOption, SerializedTask } from '../../domain/issueGrouping/index.js';
 import type { TaskGroupSummary } from '../../domain/models/taskGroupSummary.js';
+import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
@@ -66,7 +67,10 @@ function taskToSerializedTask(task: {
     summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
-    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    rebaseResult?: CodeTaskRebaseResult;
+    pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+    merge_ready?: '1';
+    merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;

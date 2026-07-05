@@ -82,6 +82,7 @@ describe('onReviewSkipped callback branches', () => {
 
     mockCodeTaskRepo = {
       findOriginTaskByPR: vi.fn(),
+      update: vi.fn(),
     } as unknown as CodeTaskRepository;
 
     mockLinearAgentClient = {
@@ -178,6 +179,12 @@ describe('onReviewSkipped callback branches', () => {
       expect.objectContaining({ linearIssueId: 'INT-123' }),
       expect.stringContaining('Failed to validate issue'),
     );
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', {
+      result: {
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+    });
     expect(mockLinearAgentClient.updateIssueMetadata).not.toHaveBeenCalled();
   });
 
@@ -207,6 +214,12 @@ describe('onReviewSkipped callback branches', () => {
       }),
       expect.stringContaining('ready-to-merge label not found'),
     );
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', {
+      result: {
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+    });
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
     expect(mockGroupSummaryRepo.recomputeWithLabels).not.toHaveBeenCalled();
     expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
@@ -238,6 +251,13 @@ describe('onReviewSkipped callback branches', () => {
       userId: 'user-1',
       issueId: 'linear-id-123',
       addLabels: ['ready-to-merge'],
+    });
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', {
+      result: {
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
     });
     expect(resolveGitHubToken).toHaveBeenCalledWith('user-1');
     expect(mockGitHubPRClient.getPullRequestDetails).toHaveBeenCalledWith(
@@ -275,6 +295,36 @@ describe('onReviewSkipped callback branches', () => {
       ]),
       expect.any(String),
     );
+  });
+
+  it('persists merge-ready evidence when the origin task has no prior result', async () => {
+    mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
+      ok(createFakeCodeTask({
+        linearIssueId: 'INT-123',
+        userId: 'user-1',
+      })),
+    );
+    mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
+      ok({
+        id: 'linear-id-123',
+        identifier: 'INT-123',
+        title: 'Test',
+        url: 'https://linear.app/INT-123',
+        labels: ['ready-to-merge'],
+      }),
+    );
+    mockLinearAgentClient.updateIssueMetadata = vi.fn().mockResolvedValue(
+      ok({ droppedLabels: [] }),
+    );
+
+    await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
+
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', {
+      result: {
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+    });
   });
 
   it('does not duplicate ready-to-merge label or notification when the label already exists', async () => {
@@ -432,6 +482,12 @@ describe('onReviewSkipped callback branches', () => {
       expect.objectContaining({ linearIssueId: 'INT-123' }),
       expect.stringContaining('Failed to set ready-to-merge label'),
     );
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', {
+      result: {
+        merge_ready: '1',
+        merge_ready_reason: 'review_skipped',
+      },
+    });
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
     expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
   });

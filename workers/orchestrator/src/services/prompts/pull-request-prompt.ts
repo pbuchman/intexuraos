@@ -9,7 +9,7 @@ import {
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '6.0.0',
+  version: '6.1.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -141,6 +141,7 @@ PULL_REQUEST_AGENT_FINAL:
 - PR: <full GitHub PR URL>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL, or "none" when no Linear issue is associated>
+- Pull request outcome: <commits_pushed|no_changes_needed>
 - Comment replied: <yes|no>
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated

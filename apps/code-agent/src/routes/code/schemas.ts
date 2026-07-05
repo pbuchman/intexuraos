@@ -6,6 +6,41 @@
  */
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 
+export const rebaseResultSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      properties: {
+        attempted: { type: 'boolean', const: false },
+        reason: { type: 'string', enum: ['not_required'] },
+      },
+      required: ['attempted', 'reason'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        attempted: { type: 'boolean', const: true },
+        success: { type: 'boolean' },
+        conflictFiles: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['attempted', 'success'],
+      additionalProperties: false,
+    },
+    {
+      type: 'string',
+      enum: ['success', 'conflict', 'skipped'],
+    },
+  ],
+} as const;
+
+export const nullableRebaseResultSchema = {
+  anyOf: [
+    rebaseResultSchema,
+    { type: 'null' },
+  ],
+} as const;
+
 const linearIssueForDisplaySchema = {
   type: 'object',
   properties: {
@@ -259,7 +294,14 @@ const codeTaskSchema = {
         summary: { type: 'string' },
         ciFailed: { type: 'boolean', nullable: true },
         partialWork: { type: 'boolean', nullable: true },
-        rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
+        rebaseResult: nullableRebaseResultSchema,
+        pull_request_outcome_label: { type: 'string', enum: ['commits_pushed', 'no_changes_needed'], nullable: true },
+        merge_ready: { type: 'string', enum: ['1'], nullable: true },
+        merge_ready_reason: {
+          type: 'string',
+          enum: ['review_no_remediation', 'pull_request_no_changes_rebase_clean', 'remediation_already_completed', 'review_skipped'],
+          nullable: true,
+        },
         review_comments_posted: { type: 'string', nullable: true },
         review_types: { type: 'string', nullable: true },
         requirements_tracker_updated: { type: 'string', nullable: true },

@@ -600,6 +600,7 @@ describe('coerceFields', () => {
       pr: 'https://github.com/x/y/pull/1',
       ci_evidence: 'pnpm run ci:tracked successful',
       linear_issue: 'none',
+      pull_request_outcome: 'no_changes_needed',
       comment_replied: 'yes',
       tracking_comment_id: '12345',
       tracking_comment: 'updated',
@@ -615,6 +616,7 @@ describe('coerceFields', () => {
     expect(missingRequired).toEqual([]);
     expect(warnings).toEqual([]);
     expect(data['linear_issue']).toBe('');
+    expect(data['pull_request_outcome']).toBe('no_changes_needed');
   });
 
   it('reports missing required fields when absent', () => {

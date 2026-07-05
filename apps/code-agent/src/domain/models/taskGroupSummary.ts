@@ -30,6 +30,11 @@ export interface TaskGroupSummary {
   hasImplementationTaskId: boolean;
   hasPrUrl: boolean;
   prNumber: number | null;
+  latestMergeReadyEvidence?: boolean;
+  latestMergeReadyReason?: string | null;
+  latestMergeReadyUpdatedAt?: Timestamp | null;
+  prMergedAt?: Timestamp | null;
+  prClosedAt?: Timestamp | null;
   latestReviewNeedsRemediation: boolean | null;
 
   // Sort key fields

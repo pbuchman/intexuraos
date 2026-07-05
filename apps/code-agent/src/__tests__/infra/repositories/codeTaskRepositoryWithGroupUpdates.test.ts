@@ -226,6 +226,72 @@ describe('withGroupUpdates decorator', () => {
       expect(updateAfterStatusChangeSpy).not.toHaveBeenCalled();
     });
 
+    it('refreshes group summaries when merge-ready evidence changes without a status change', async () => {
+      const oldTask = makeTask({
+        id: 'task-review',
+        status: 'reviewed',
+        agentType: 'review',
+        result: { needs_remediation: '0' },
+      });
+      const newTask = {
+        ...oldTask,
+        result: {
+          ...oldTask.result,
+          merge_ready: '1' as const,
+          merge_ready_reason: 'review_no_remediation' as const,
+        },
+      };
+      vi.mocked(inner.findById).mockResolvedValue(ok(oldTask));
+      vi.mocked(inner.update).mockResolvedValue(ok(newTask));
+      const updateAfterStatusChangeSpy = vi.spyOn(groupSummaryRepo, 'updateAfterStatusChange');
+
+      const result = await decorated.update('task-review', {
+        result: {
+          ...newTask.result,
+        },
+      });
+
+      expect(result).toEqual(ok(newTask));
+      expect(inner.findById).toHaveBeenCalledWith('task-review');
+      expect(inner.update).toHaveBeenCalledWith(
+        'task-review',
+        { result: newTask.result },
+        undefined,
+      );
+      await Promise.resolve();
+      expect(updateAfterStatusChangeSpy).toHaveBeenCalledWith(oldTask, newTask);
+    });
+
+    it('refreshes group summaries when merge-ready invalidating evidence changes without a status change', async () => {
+      const oldTask = makeTask({
+        id: 'task-pull-request',
+        status: 'implemented',
+        agentType: 'pull_request',
+        result: { prUrl: 'https://github.com/test/repo/pull/42' },
+      });
+      const newTask = {
+        ...oldTask,
+        result: {
+          ...oldTask.result,
+          pull_request_outcome_label: 'commits_pushed' as const,
+        },
+      };
+      vi.mocked(inner.findById).mockResolvedValue(ok(oldTask));
+      vi.mocked(inner.update).mockResolvedValue(ok(newTask));
+      const updateAfterStatusChangeSpy = vi.spyOn(groupSummaryRepo, 'updateAfterStatusChange');
+
+      const result = await decorated.update('task-pull-request', {
+        result: {
+          ...newTask.result,
+        },
+      });
+
+      expect(result).toEqual(ok(newTask));
+      expect(inner.findById).toHaveBeenCalledWith('task-pull-request');
+      await Promise.resolve();
+      expect(updateAfterStatusChangeSpy).toHaveBeenCalledWith(oldTask, newTask);
+    });
+
     it('does NOT call updateAfterStatusChange when inner.update fails', async () => {
       const oldTask = makeTask({ status: 'running' });
       vi.mocked(inner.findById).mockResolvedValue(ok(oldTask));

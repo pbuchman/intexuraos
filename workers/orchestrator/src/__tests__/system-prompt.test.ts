@@ -416,8 +416,8 @@ describe('prompt versions', () => {
     expect(reviewPrompt.version).toBe('11.0.0');
   });
 
-  it('pullRequestPrompt version is 6.0.0', () => {
-    expect(pullRequestPrompt.version).toBe('6.0.0');
+  it('pullRequestPrompt version is 6.1.0', () => {
+    expect(pullRequestPrompt.version).toBe('6.1.0');
   });
 });
 

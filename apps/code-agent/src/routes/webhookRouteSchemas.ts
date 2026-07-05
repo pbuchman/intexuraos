@@ -5,6 +5,7 @@
  * These schemas describe the public wire contract — they MUST stay in sync
  * with the webhook request/response types consumed by the orchestrator.
  */
+import { rebaseResultSchema } from './code/schemas.js';
 
 export const taskCompleteWebhookSchema = {
   operationId: 'taskCompleteWebhook',
@@ -33,7 +34,13 @@ export const taskCompleteWebhookSchema = {
           summary: { type: 'string' },
           ciFailed: { type: 'boolean' },
           partialWork: { type: 'boolean' },
-          rebaseResult: { type: 'string' },
+          rebaseResult: rebaseResultSchema,
+          pull_request_outcome_label: { type: 'string', enum: ['commits_pushed', 'no_changes_needed'] },
+          merge_ready: { type: 'string', enum: ['1'] },
+          merge_ready_reason: {
+            type: 'string',
+            enum: ['review_no_remediation', 'pull_request_no_changes_rebase_clean', 'remediation_already_completed', 'review_skipped'],
+          },
           planning_superpowers_writing_plans_used: { type: 'string' },
           planning_linear_url: { type: 'string' },
           execution_outcome_label: { type: 'string' },

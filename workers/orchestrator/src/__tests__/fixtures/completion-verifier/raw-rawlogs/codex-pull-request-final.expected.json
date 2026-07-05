@@ -15,7 +15,7 @@
   },
   "postFixVerdict": {
     "kind": "parsed",
-    "missingRequired": [],
+    "missingRequired": ["pull_request_outcome"],
     "dataAssertions": {
       "pr": "https://github.com/example/repo/pull/1",
       "comment_replied": "yes",

@@ -171,6 +171,56 @@ describe('deriveAggregateStatusFromSummary', () => {
     expect(result).not.toBe('needs-action');
   });
 
+  it('returns needs-action from durable merge-ready evidence without a Linear label', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: true,
+        hasPrUrl: true,
+        latestMergeReadyEvidence: true,
+        latestReviewNeedsRemediation: false,
+      }),
+    ).toBe('needs-action');
+  });
+
+  it('does not use durable merge-ready evidence when the representative PR is terminal', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: true,
+        hasPrUrl: true,
+        latestMergeReadyEvidence: true,
+        latestReviewNeedsRemediation: false,
+        prClosedAt: {} as never,
+      }),
+    ).toBe('done');
+  });
+
+  it('does not use durable merge-ready evidence while latest review requires remediation', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: true,
+        hasPrUrl: true,
+        latestMergeReadyEvidence: true,
+        latestReviewNeedsRemediation: true,
+      }),
+    ).toBe('done');
+  });
+
+  it('uses remediation already-completed durable evidence despite earlier remediation-required review', () => {
+    expect(
+      deriveAggregateStatusFromSummary({
+        ...base,
+        hasCompletedExecution: true,
+        hasPrUrl: true,
+        latestMergeReadyEvidence: true,
+        latestMergeReadyReason: 'remediation_already_completed',
+        latestReviewNeedsRemediation: true,
+      }),
+    ).toBe('needs-action');
+  });
+
   it('does not return active when review needs remediation but hasMergeReadyLabel is true (label cleared in practice)', () => {
     expect(
       deriveAggregateStatusFromSummary({

@@ -7,8 +7,21 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
+import type { CodeTaskRepository, UpdateTaskInput } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskGroupSummaryRepository } from '../../domain/ports/taskGroupSummaryRepository.js';
+
+function hasGroupSummaryRelevantResultChange(input: UpdateTaskInput): boolean {
+  return input.result?.merge_ready !== undefined ||
+    input.result?.merge_ready_reason !== undefined ||
+    input.result?.pull_request_outcome_label !== undefined ||
+    input.result?.execution_outcome_label !== undefined ||
+    input.result?.needs_remediation !== undefined ||
+    input.result?.requires_re_review !== undefined;
+}
+
+function hasGroupSummaryRelevantPrTerminalChange(input: UpdateTaskInput): boolean {
+  return input.prMergedAt !== undefined || input.prClosedAt !== undefined;
+}
 
 export function withGroupUpdates(
   inner: CodeTaskRepository,
@@ -29,9 +42,13 @@ export function withGroupUpdates(
     },
 
     update: async (taskId, input, options): ReturnType<CodeTaskRepository['update']> => {
-      // Only read old task if status is changing — saves the extra Firestore read
-      // on heartbeat updates, workerLocation updates, etc.
-      const shouldUpdateGroupSummary = input.status !== undefined && options?.transaction === undefined;
+      const shouldUpdateGroupSummary =
+        options?.transaction === undefined &&
+        (
+          input.status !== undefined ||
+          hasGroupSummaryRelevantResultChange(input) ||
+          hasGroupSummaryRelevantPrTerminalChange(input)
+        );
       let oldTaskResult;
       if (shouldUpdateGroupSummary) {
         oldTaskResult = await inner.findById(taskId);

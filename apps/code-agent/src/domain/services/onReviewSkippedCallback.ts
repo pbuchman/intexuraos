@@ -61,6 +61,14 @@ export function createOnReviewSkippedCallback(deps: OnReviewSkippedDeps): (args:
         return;
       }
 
+      await codeTaskRepo.update(origin.id, {
+        result: {
+          ...(origin.result ?? {}),
+          merge_ready: '1',
+          merge_ready_reason: 'review_skipped',
+        },
+      });
+
       // Validate issue exists and get current labels
       const issueValidation = await linearAgentClient.validateIssue({
         userId: origin.userId,
