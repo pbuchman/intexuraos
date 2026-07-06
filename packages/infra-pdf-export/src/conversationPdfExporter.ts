@@ -10,8 +10,9 @@ import type {
 } from './types.js';
 
 const PAGE_MARGIN = 36;
-const SECTION_GAP = 18;
 const BLOCK_GAP = 10;
+const TABLE_CELL_GAP = 8;
+const TABLE_CELL_PADDING = 4;
 const STANDARD_REGULAR_FONT = 'Helvetica';
 const STANDARD_BOLD_FONT = 'Helvetica-Bold';
 const UNICODE_REGULAR_FONT = 'NotoSansRegular';
@@ -21,6 +22,12 @@ const require = createRequire(import.meta.url);
 const REGULAR_FONT_PATH =
   require.resolve('@expo-google-fonts/noto-sans/400Regular/NotoSans_400Regular.ttf');
 const BOLD_FONT_PATH = require.resolve('@expo-google-fonts/noto-sans/700Bold/NotoSans_700Bold.ttf');
+
+type PdfTextBlock =
+  | { kind: 'heading'; text: string }
+  | { kind: 'paragraph'; text: string }
+  | { kind: 'list'; items: string[] }
+  | { kind: 'table'; rows: string[][] };
 
 export function createPdfConversationExporter(): PdfConversationExporter {
   return {
@@ -122,6 +129,7 @@ async function renderPdf(input: PdfConversationExportInput): Promise<Buffer> {
   const doc = new PDFDocument({
     size: 'A4',
     margin: PAGE_MARGIN,
+    bufferPages: true,
     compress: false,
   });
   const chunks: Buffer[] = [];
@@ -148,7 +156,7 @@ function registerConversationFonts(doc: PDFKit.PDFDocument): void {
 
 function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportInput): void {
   const contentWidth = getContentWidth(doc);
-  const titleText = toPlainPdfText(input.title) || FALLBACK_FILE_NAME;
+  const titleText = createDisplayTitle(input.title);
 
   doc.info.Title = titleText;
   doc.font(fontForText(titleText, 'bold')).fontSize(20).fillColor('#111827');
@@ -157,34 +165,27 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
     align: 'left',
   });
 
-  doc.moveDown(0.35);
-  const generatedAtText = `Generated at ${input.generatedAt}`;
-  doc.font(fontForText(generatedAtText, 'regular')).fontSize(9).fillColor('#6b7280');
-  doc.text(generatedAtText, {
-    width: contentWidth,
-    align: 'left',
-  });
-
-  doc.moveDown(0.35);
+  doc.moveDown(0.55);
+  drawSectionHeading(doc, contentWidth, 'Export summary');
+  drawMetadataLine(doc, contentWidth, 'Generated', formatTimestamp(input.generatedAt));
   drawMetadataLine(doc, contentWidth, 'LLM model', input.modelName);
   drawMetadataLine(doc, contentWidth, 'Assistant role', input.assistantRoleLabel);
   drawMetadataLine(doc, contentWidth, 'Initial prompt', toPlainPdfText(input.initialPrompt));
 
-  doc.moveDown(0.9);
-  drawDivider(doc, contentWidth);
-  doc.moveDown(0.9);
+  doc.moveDown(0.5);
+  drawSectionHeading(doc, contentWidth, 'Conversation scope');
 
   drawMetadataLine(
     doc,
     contentWidth,
     'Information range',
-    `${input.sourceRange.from} to ${input.sourceRange.to}`
+    formatDateRange(input.sourceRange.from, input.sourceRange.to)
   );
   drawMetadataLine(
     doc,
     contentWidth,
     'Effective range',
-    `${input.effectiveRange.from} to ${input.effectiveRange.to}`
+    formatDateRange(input.effectiveRange.from, input.effectiveRange.to)
   );
   drawMetadataLine(
     doc,
@@ -210,12 +211,25 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
       doc,
       contentWidth,
       message.role,
-      message.createdAt,
+      formatTimestamp(message.createdAt),
       message.text,
       input.modelName,
       input.assistantRoleLabel
     );
   }
+
+  drawPageFooters(doc, titleText);
+}
+
+function drawSectionHeading(doc: PDFKit.PDFDocument, contentWidth: number, heading: string): void {
+  const height = doc
+    .font(fontForText(heading, 'bold'))
+    .fontSize(11)
+    .heightOfString(heading, { width: contentWidth });
+  ensureSpace(doc, height + BLOCK_GAP);
+  doc.font(fontForText(heading, 'bold')).fontSize(11).fillColor('#111827');
+  doc.text(heading, { width: contentWidth, lineGap: 1 });
+  doc.moveDown(0.25);
 }
 
 function drawMetadataLine(
@@ -238,12 +252,13 @@ function drawIndentedMetadataLine(
   label: string,
   value: string
 ): void {
-  const indent = 14;
-  const lineText = `${label}: ${value}`;
+  const indent = 12;
+  const startX = doc.page.margins.left + indent;
+  const lineText = `- ${label}: ${value}`;
   doc.font(fontForText(lineText, 'regular')).fontSize(10);
   ensureSpace(doc, doc.heightOfString(lineText, { width: contentWidth - indent }) + BLOCK_GAP);
   doc.fillColor('#4b5563');
-  doc.text(lineText, doc.x + indent, doc.y, {
+  doc.text(lineText, startX, doc.y, {
     width: contentWidth - indent,
     lineGap: 1.5,
   });
@@ -260,16 +275,12 @@ function drawMessage(
   assistantRoleLabel: string
 ): void {
   const roleLabel = getMessageRoleLabel(role, modelName, assistantRoleLabel);
-  const headerText = `${roleLabel}  ${createdAt}`;
-  const plainText = toPlainPdfText(text);
+  const headerText = `${roleLabel} ${createdAt}`;
+  const blocks = toPdfTextBlocks(text);
   const headerFont = fontForText(headerText, 'bold');
-  const textFont = fontForText(plainText, 'regular');
   doc.font(headerFont).fontSize(11);
   const headerHeight = doc.heightOfString(headerText, { width: contentWidth });
-  doc.font(textFont).fontSize(10.5);
-  const textHeight = doc.heightOfString(plainText, { width: contentWidth });
-  const minimumHeight = headerHeight + textHeight + SECTION_GAP;
-  ensureSpace(doc, minimumHeight);
+  ensureSpace(doc, headerHeight + 48);
 
   doc
     .font(headerFont)
@@ -281,11 +292,7 @@ function drawMessage(
   });
 
   doc.moveDown(0.2);
-  doc.font(textFont).fontSize(10.5).fillColor('#111827');
-  doc.text(plainText, {
-    width: contentWidth,
-    lineGap: 2,
-  });
+  drawTextBlocks(doc, contentWidth, blocks);
 
   doc.moveDown(0.8);
 }
@@ -300,6 +307,10 @@ function getMessageRoleLabel(
 
 function toPlainPdfText(text: string): string {
   const inlineCleaned = text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(normalizePdfGlyphs)
+    .join('\n')
     .replace(/\r\n/g, '\n')
     .replace(/^```[A-Za-z0-9_-]*\s*$/gm, '')
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1 ($2)')
@@ -323,6 +334,10 @@ function toPlainPdfText(text: string): string {
 
 function cleanMarkdownLine(line: string): string | null {
   const trimmed = line.trim();
+  if (/^-{3,}$/.test(trimmed)) {
+    return null;
+  }
+
   if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(trimmed)) {
     return null;
   }
@@ -343,6 +358,255 @@ function cleanMarkdownLine(line: string): string | null {
     .replace(/^\s{0,3}[-*+]\s+\[[ xX]\]\s+/, '')
     .replace(/^\s{0,3}[-*+]\s+/, '')
     .replace(/^\s{0,3}\d+[.)]\s+/, '');
+}
+
+function toPdfTextBlocks(text: string): PdfTextBlock[] {
+  const blocks: PdfTextBlock[] = [];
+  let paragraphLines: string[] = [];
+  let listItems: string[] = [];
+  let tableRows: string[][] = [];
+  let insideCodeFence = false;
+
+  const flushParagraph = (): void => {
+    if (paragraphLines.length === 0) return;
+    const paragraph = paragraphLines.join(' ').replace(/\s+/g, ' ').trim();
+    if (paragraph.length > 0) {
+      blocks.push(
+        looksLikeSectionHeading(paragraph)
+          ? { kind: 'heading', text: paragraph }
+          : { kind: 'paragraph', text: paragraph }
+      );
+    }
+    paragraphLines = [];
+  };
+
+  const flushList = (): void => {
+    if (listItems.length === 0) return;
+    blocks.push({ kind: 'list', items: listItems });
+    listItems = [];
+  };
+
+  const flushTable = (): void => {
+    if (tableRows.length === 0) return;
+    blocks.push({ kind: 'table', rows: tableRows });
+    tableRows = [];
+  };
+
+  const flushAll = (): void => {
+    flushParagraph();
+    flushList();
+    flushTable();
+  };
+
+  for (const rawLine of text.replace(/\r\n/g, '\n').split('\n')) {
+    const normalizedLine = normalizePdfGlyphs(rawLine);
+    const trimmed = normalizedLine.trim();
+    if (/^```[A-Za-z0-9_-]*\s*$/.test(trimmed)) {
+      insideCodeFence = !insideCodeFence;
+      continue;
+    }
+    if (insideCodeFence) {
+      paragraphLines.push(normalizedLine);
+      continue;
+    }
+    if (trimmed.length === 0) {
+      flushAll();
+      continue;
+    }
+    if (/^-{3,}$/.test(trimmed)) {
+      flushAll();
+      continue;
+    }
+    if (isMarkdownTableSeparator(trimmed)) {
+      continue;
+    }
+    const tableCells = parseMarkdownTableRow(normalizedLine);
+    if (tableCells !== null) {
+      flushParagraph();
+      flushList();
+      tableRows.push(tableCells);
+      continue;
+    }
+    const heading = parseMarkdownHeading(trimmed);
+    if (heading !== null) {
+      flushAll();
+      blocks.push({ kind: 'heading', text: heading });
+      continue;
+    }
+    const listItem = parseMarkdownListItem(normalizedLine);
+    if (listItem !== null) {
+      flushParagraph();
+      flushTable();
+      listItems.push(listItem);
+      continue;
+    }
+
+    flushList();
+    flushTable();
+    const cleaned = cleanMarkdownLine(normalizedLine) as string;
+    paragraphLines.push(cleanInlineMarkdown(cleaned));
+  }
+
+  flushAll();
+  return blocks.length > 0 ? blocks : [{ kind: 'paragraph', text: toPlainPdfText(text) }];
+}
+
+function drawTextBlocks(
+  doc: PDFKit.PDFDocument,
+  contentWidth: number,
+  blocks: PdfTextBlock[]
+): void {
+  for (const block of blocks) {
+    if (block.kind === 'heading') {
+      drawMessageHeading(doc, contentWidth, block.text);
+      continue;
+    }
+    if (block.kind === 'list') {
+      drawListBlock(doc, contentWidth, block.items);
+      continue;
+    }
+    if (block.kind === 'table') {
+      drawTableBlock(doc, contentWidth, block.rows);
+      continue;
+    }
+    drawParagraphBlock(doc, contentWidth, block.text);
+  }
+}
+
+function drawMessageHeading(doc: PDFKit.PDFDocument, contentWidth: number, text: string): void {
+  resetToContentLeft(doc);
+  const font = fontForText(text, 'bold');
+  doc.font(font).fontSize(11.5);
+  ensureSpace(doc, doc.heightOfString(text, { width: contentWidth }) + BLOCK_GAP);
+  doc.font(font).fontSize(11.5).fillColor('#111827');
+  doc.text(text, { width: contentWidth, lineGap: 1.2 });
+  doc.moveDown(0.3);
+}
+
+function drawParagraphBlock(doc: PDFKit.PDFDocument, contentWidth: number, text: string): void {
+  resetToContentLeft(doc);
+  const font = fontForText(text, 'regular');
+  doc.font(font).fontSize(10.5);
+  ensureSpace(doc, Math.min(doc.heightOfString(text, { width: contentWidth }), 72) + BLOCK_GAP);
+  doc.font(font).fontSize(10.5).fillColor('#111827');
+  doc.text(text, { width: contentWidth, lineGap: 2 });
+  doc.moveDown(0.45);
+}
+
+function drawListBlock(doc: PDFKit.PDFDocument, contentWidth: number, items: string[]): void {
+  resetToContentLeft(doc);
+  const indent = 12;
+  const textWidth = contentWidth - indent;
+  for (const item of items) {
+    const lineText = `- ${item}`;
+    const font = fontForText(lineText, 'regular');
+    doc.font(font).fontSize(10.5);
+    ensureSpace(doc, doc.heightOfString(lineText, { width: textWidth }) + BLOCK_GAP);
+    doc.font(font).fontSize(10.5).fillColor('#111827');
+    doc.text(lineText, doc.page.margins.left + indent, doc.y, {
+      width: textWidth,
+      lineGap: 2,
+    });
+    doc.moveDown(0.15);
+  }
+  resetToContentLeft(doc);
+  doc.moveDown(0.35);
+}
+
+function drawTableBlock(doc: PDFKit.PDFDocument, contentWidth: number, rows: string[][]): void {
+  const columnCount = Math.max(...rows.map((row) => row.length), 1);
+  const columnWidth = (contentWidth - TABLE_CELL_GAP * (columnCount - 1)) / columnCount;
+  resetToContentLeft(doc);
+
+  rows.forEach((row, rowIndex) => {
+    const cells = Array.from({ length: columnCount }, (_value, index) => row[index] ?? '');
+    const cellHeights = cells.map((cell) => {
+      const font = fontForText(cell, rowIndex === 0 ? 'bold' : 'regular');
+      doc.font(font).fontSize(9.5);
+      return doc.heightOfString(cell, { width: columnWidth - TABLE_CELL_PADDING * 2 });
+    });
+    const rowHeight = Math.max(...cellHeights, 12) + TABLE_CELL_PADDING * 2;
+    ensureSpace(doc, rowHeight + 2);
+    const y = doc.y;
+    if (rowIndex === 0) {
+      doc.save().rect(doc.page.margins.left, y, contentWidth, rowHeight).fill('#f3f4f6').restore();
+    }
+    cells.forEach((cell, cellIndex) => {
+      const x =
+        doc.page.margins.left + cellIndex * (columnWidth + TABLE_CELL_GAP) + TABLE_CELL_PADDING;
+      const font = fontForText(cell, rowIndex === 0 ? 'bold' : 'regular');
+      doc.font(font).fontSize(9.5).fillColor('#111827');
+      doc.text(cell, x, y + TABLE_CELL_PADDING, {
+        width: columnWidth - TABLE_CELL_PADDING * 2,
+        lineGap: 1.2,
+      });
+    });
+    doc
+      .save()
+      .lineWidth(0.5)
+      .strokeColor('#e5e7eb')
+      .moveTo(doc.page.margins.left, y + rowHeight)
+      .lineTo(doc.page.margins.left + contentWidth, y + rowHeight)
+      .stroke()
+      .restore();
+    doc.y = y + rowHeight + 2;
+    resetToContentLeft(doc);
+  });
+  doc.moveDown(0.5);
+}
+
+function parseMarkdownHeading(line: string): string | null {
+  const match = /^(#{1,6})\s+(.+)$/.exec(line);
+  return match?.[2] !== undefined ? cleanInlineMarkdown(match[2]).trim() : null;
+}
+
+function parseMarkdownListItem(line: string): string | null {
+  const match = /^\s{0,3}(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+)$/.exec(line);
+  return match?.[1] !== undefined ? cleanInlineMarkdown(match[1]).trim() : null;
+}
+
+function parseMarkdownTableRow(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|')) {
+    return null;
+  }
+  const cells = trimmed
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cleanInlineMarkdown(cell).trim())
+    .filter((cell) => cell.length > 0);
+  return cells.length >= 2 ? cells : null;
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line);
+}
+
+function cleanInlineMarkdown(text: string): string {
+  return normalizePdfGlyphs(text)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function looksLikeSectionHeading(text: string): boolean {
+  if (text.length > 96 || text.endsWith('.')) {
+    return false;
+  }
+  if (text.endsWith(':')) {
+    return true;
+  }
+  return /^(Co wiadomo|What is known|Profil|Profile|Struktura|Mechanizmy|Potrzeby|Teoretyczne|Horyzont|Poziom|Dynamika|Typ relacji|Główne osie|Ograniczenia|Brak danych)/i.test(
+    text
+  );
 }
 
 function drawDivider(doc: PDFKit.PDFDocument, contentWidth: number): void {
@@ -377,6 +641,10 @@ function getContentWidth(doc: PDFKit.PDFDocument): number {
   return doc.page.width - doc.page.margins.left - doc.page.margins.right;
 }
 
+function resetToContentLeft(doc: PDFKit.PDFDocument): void {
+  doc.x = doc.page.margins.left;
+}
+
 function fontForText(text: string, weight: 'regular' | 'bold'): string {
   if (/[\u0080-\uFFFF]/.test(text)) {
     return weight === 'bold' ? UNICODE_BOLD_FONT : UNICODE_REGULAR_FONT;
@@ -386,7 +654,7 @@ function fontForText(text: string, weight: 'regular' | 'bold'): string {
 }
 
 function createBaseFileName(title: string): string {
-  const sanitizedTitle = sanitizeTitle(toPlainPdfText(title));
+  const sanitizedTitle = sanitizeTitle(maskSensitiveText(toPlainPdfText(title)));
   return sanitizedTitle.length > 0 ? sanitizedTitle : FALLBACK_FILE_NAME;
 }
 
@@ -401,12 +669,79 @@ function sanitizeTitle(title: string): string {
 }
 
 function formatBreakdownLabel(key: string): string {
-  return key
+  const label = key
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[-_]+/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^./, (first) => first.toUpperCase());
+    .trim();
+  return label.length === 0
+    ? 'Other'
+    : `${label.charAt(0).toUpperCase()}${label.slice(1).toLowerCase()}`;
+}
+
+function createDisplayTitle(title: string): string {
+  const plainTitle = toPlainPdfText(title) || FALLBACK_FILE_NAME;
+  return maskSensitiveText(plainTitle);
+}
+
+function maskSensitiveText(text: string): string {
+  return text.replace(/\+?\d[\d\s().-]{7,}\d/g, (value) => maskPhoneLikeValue(value));
+}
+
+function maskPhoneLikeValue(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 10) {
+    return value;
+  }
+  const visiblePrefix = digits.slice(0, Math.min(3, digits.length));
+  const visibleSuffix = digits.slice(-2);
+  const hiddenLength = Math.max(digits.length - visiblePrefix.length - visibleSuffix.length, 3);
+  const plusPrefix = value.trim().startsWith('+') ? '+' : '';
+  return `${plusPrefix}${visiblePrefix}${'*'.repeat(hiddenLength)}${visibleSuffix}`;
+}
+
+function formatDateRange(from: string, to: string): string {
+  return `${formatTimestamp(from)} - ${formatTimestamp(to)}`;
+}
+
+function formatTimestamp(value: string): string {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return normalizePdfGlyphs(value);
+  }
+  const date = new Date(parsed);
+  const year = String(date.getUTCFullYear());
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hour = String(date.getUTCHours()).padStart(2, '0');
+  const minute = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute} UTC`;
+}
+
+function normalizePdfGlyphs(text: string): string {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/[–—]/g, ' - ')
+    .replace(/[→⇒➜➔]/g, '->')
+    .replace(/[↔⟷]/g, '<->')
+    .replace(/[\u{1f300}-\u{1faff}\u{2600}-\u{27bf}]/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trimEnd();
+}
+
+function drawPageFooters(doc: PDFKit.PDFDocument, title: string): void {
+  const range = doc.bufferedPageRange();
+  for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
+    doc.switchToPage(pageIndex);
+    const pageNumber = pageIndex - range.start + 1;
+    const footer = `${title} | Page ${String(pageNumber)} of ${String(range.count)}`;
+    doc.font(fontForText(footer, 'regular')).fontSize(8).fillColor('#6b7280');
+    doc.text(footer, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - 20, {
+      width: getContentWidth(doc),
+      align: 'center',
+      lineBreak: false,
+    });
+  }
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
