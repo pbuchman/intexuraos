@@ -3,7 +3,9 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import {
   createConversationAssistantRepository,
+  TRANSCRIPT_CHUNK_MAX_BYTES,
   WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION,
+  WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION,
   WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
 } from '../../infra/firestore/conversationAssistantRepository.js';
 import type {
@@ -59,8 +61,9 @@ describe('conversationAssistantRepository', () => {
     resetFirestore();
   });
 
-  it('stores private transcript text on sessions and lists only the owning user sessions', async () => {
-    await repository.saveSession(makeSession());
+  it('stores private transcript text in chunks and lists only the owning user sessions', async () => {
+    const transcriptText = `${'a'.repeat(TRANSCRIPT_CHUNK_MAX_BYTES)}b`;
+    await repository.saveSession(makeSession({ transcriptText }));
     await repository.saveSession(
       makeSession({
         id: 'whatsapp_conv_session_other',
@@ -75,10 +78,34 @@ describe('conversationAssistantRepository', () => {
       .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
       .doc('whatsapp_conv_session_1')
       .get();
+    const firstChunk = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc('whatsapp_conv_session_1_000000')
+      .get();
+    const secondChunk = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc('whatsapp_conv_session_1_000001')
+      .get();
 
-    expect(loaded?.transcriptText).toContain('Alice: hello');
+    expect(loaded?.transcriptText).toBe(transcriptText);
     expect(listed.map((session) => session.id)).toEqual(['whatsapp_conv_session_1']);
-    expect(storedDoc.data()?.['transcriptText']).toContain('Alice: hello');
+    expect(storedDoc.data()?.['transcriptText']).toBeUndefined();
+    expect(storedDoc.data()?.['transcriptStorage']).toEqual({
+      type: 'chunks',
+      chunkCount: 2,
+      chunkSizeBytes: TRANSCRIPT_CHUNK_MAX_BYTES,
+      byteLength: TRANSCRIPT_CHUNK_MAX_BYTES + 1,
+    });
+    expect(firstChunk.data()).toMatchObject({
+      sessionId: 'whatsapp_conv_session_1',
+      chunkIndex: 0,
+      text: 'a'.repeat(TRANSCRIPT_CHUNK_MAX_BYTES),
+    });
+    expect(secondChunk.data()).toMatchObject({
+      sessionId: 'whatsapp_conv_session_1',
+      chunkIndex: 1,
+      text: 'b',
+    });
   });
 
   it('stores and lists turns chronologically by session', async () => {
@@ -96,8 +123,9 @@ describe('conversationAssistantRepository', () => {
     expect(storedDoc.data()?.['role']).toBe('assistant');
   });
 
-  it('loads a session snapshot with turns from one repository call', async () => {
-    await repository.saveSession(makeSession());
+  it('loads a session snapshot with hydrated transcript chunks and turns from one repository call', async () => {
+    const transcriptText = `${'x'.repeat(TRANSCRIPT_CHUNK_MAX_BYTES)}y`;
+    await repository.saveSession(makeSession({ transcriptText }));
     await repository.saveTurn(makeTurn({ id: 'turn-2', role: 'assistant', createdAt: '2026-06-30T10:02:00.000Z' }));
     await repository.saveTurn(makeTurn({ id: 'turn-1', role: 'user', createdAt: '2026-06-30T10:01:00.000Z' }));
     await repository.saveTurn(makeTurn({ id: 'foreign-turn', sessionId: 'other-session' }));
@@ -119,9 +147,127 @@ describe('conversationAssistantRepository', () => {
     });
 
     expect(snapshot?.session.id).toBe('whatsapp_conv_session_1');
+    expect(snapshot?.session.transcriptText).toBe(transcriptText);
     expect(snapshot?.turns.map((turn) => turn.id)).toEqual(['turn-1', 'turn-2']);
     expect(missing).toBeNull();
     expect(foreign).toBeNull();
+  });
+
+  it('hydrates legacy sessions that still store transcript text inline', async () => {
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc('whatsapp_conv_session_legacy_inline')
+      .set(makeSession({ transcriptText: 'legacy inline transcript' }));
+
+    const loaded = await repository.getSessionById('whatsapp_conv_session_legacy_inline');
+
+    expect(loaded?.transcriptText).toBe('legacy inline transcript');
+  });
+
+  it('hydrates empty chunk storage without writing inline transcript text', async () => {
+    await repository.saveSession(
+      makeSession({ id: 'whatsapp_conv_session_empty_transcript', transcriptText: '' })
+    );
+
+    const loaded = await repository.getSessionById('whatsapp_conv_session_empty_transcript');
+    const storedDoc = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc('whatsapp_conv_session_empty_transcript')
+      .get();
+    const firstChunk = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc('whatsapp_conv_session_empty_transcript_000000')
+      .get();
+
+    expect(loaded?.transcriptText).toBe('');
+    expect(storedDoc.data()?.['transcriptText']).toBeUndefined();
+    expect(storedDoc.data()?.['transcriptStorage']).toEqual({
+      type: 'chunks',
+      chunkCount: 0,
+      chunkSizeBytes: TRANSCRIPT_CHUNK_MAX_BYTES,
+      byteLength: 0,
+    });
+    expect(firstChunk.exists).toBe(false);
+  });
+
+  it('falls back to inline transcript text when legacy storage metadata is malformed', async () => {
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc('whatsapp_conv_session_wrong_storage_type')
+      .set({
+        ...makeSession({
+          id: 'whatsapp_conv_session_wrong_storage_type',
+          transcriptText: 'wrong storage type fallback',
+        }),
+        transcriptStorage: { type: 'inline' },
+      });
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc('whatsapp_conv_session_invalid_storage_shape')
+      .set({
+        ...makeSession({
+          id: 'whatsapp_conv_session_invalid_storage_shape',
+          transcriptText: 'invalid storage shape fallback',
+        }),
+        transcriptStorage: {
+          type: 'chunks',
+          chunkCount: '1',
+          chunkSizeBytes: 0,
+          byteLength: -1,
+        },
+      });
+
+    const wrongType = await repository.getSessionById('whatsapp_conv_session_wrong_storage_type');
+    const invalidShape = await repository.getSessionById('whatsapp_conv_session_invalid_storage_shape');
+
+    expect(wrongType?.transcriptText).toBe('wrong storage type fallback');
+    expect(invalidShape?.transcriptText).toBe('invalid storage shape fallback');
+  });
+
+  it('throws a load error when chunked transcript metadata points to missing or invalid chunks', async () => {
+    const missingChunkSession = 'whatsapp_conv_session_missing_chunk';
+    const invalidChunkSession = 'whatsapp_conv_session_invalid_chunk';
+    const missingChunkDocument: Record<string, unknown> = {
+      ...makeSession({ id: missingChunkSession }),
+      transcriptStorage: {
+        type: 'chunks',
+        chunkCount: 1,
+        chunkSizeBytes: TRANSCRIPT_CHUNK_MAX_BYTES,
+        byteLength: 1,
+      },
+    };
+    const invalidChunkDocument: Record<string, unknown> = {
+      ...makeSession({ id: invalidChunkSession }),
+      transcriptStorage: {
+        type: 'chunks',
+        chunkCount: 1,
+        chunkSizeBytes: TRANSCRIPT_CHUNK_MAX_BYTES,
+        byteLength: 1,
+      },
+    };
+    Reflect.deleteProperty(missingChunkDocument, 'transcriptText');
+    Reflect.deleteProperty(invalidChunkDocument, 'transcriptText');
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(missingChunkSession)
+      .set(missingChunkDocument);
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(invalidChunkSession)
+      .set(invalidChunkDocument);
+    fakeFirestore.seedCollection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION, [
+      {
+        id: `${invalidChunkSession}_000000`,
+        data: null as unknown as Record<string, unknown>,
+      },
+    ]);
+
+    await expect(repository.getSessionById(missingChunkSession)).rejects.toThrow(
+      `Missing transcript chunk 0 for ${missingChunkSession}`
+    );
+    await expect(repository.getSessionById(invalidChunkSession)).rejects.toThrow(
+      `Invalid transcript chunk 0 for ${invalidChunkSession}`
+    );
   });
 
   it('returns null for missing sessions and hydrates defensive defaults', async () => {
