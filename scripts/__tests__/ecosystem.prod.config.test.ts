@@ -280,6 +280,8 @@ describe('ecosystem.config.prod.cjs', () => {
       INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET: 'github-oauth-secret',
       INTEXURAOS_GUEST_SESSION_SECRET: 'guest-session-secret',
       INTEXURAOS_INTERNAL_AUTH_TOKEN: 'internal-token',
+      INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN: 'matrix-auth-token',
+      INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL: 'https://matrix-adapter.example.test',
       INTEXURAOS_OPENAI_APP_API_KEY: 'openai-key',
       INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-key',
       INTEXURAOS_ORCHESTRATOR_SECRET: 'orchestrator-secret',
@@ -292,9 +294,25 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBe(
       'whatsapp-token'
     );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN).toBe(
+      'matrix-auth-token'
+    );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL).toBe(
+      'https://matrix-adapter.example.test'
+    );
     expect(byName.get('user-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
+    expect(
+      byName.get('user-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN
+    ).toBeUndefined();
+    expect(byName.get('user-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL).toBeUndefined();
     expect(byName.get('notion-service')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('notion-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
+    expect(
+      byName.get('notion-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN
+    ).toBeUndefined();
+    expect(
+      byName.get('notion-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL
+    ).toBeUndefined();
     expect(byName.get('code-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
     expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_WEBHOOK_SECRET).toBe(
       'sentry-webhook-secret'
