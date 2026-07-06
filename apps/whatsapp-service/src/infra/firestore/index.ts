@@ -62,7 +62,9 @@ export {
 } from './privateWhatsAppRepository.js';
 
 export {
+  TRANSCRIPT_CHUNK_MAX_BYTES,
   WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION,
+  WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION,
   WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
   createConversationAssistantRepository,
 } from './conversationAssistantRepository.js';

@@ -62,6 +62,10 @@
       "owner": "whatsapp-service",
       "description": "Private WhatsApp Conversation Assistant sessions with frozen transcript snapshots and public metadata."
     },
+    "whatsapp_conversation_assistant_transcript_chunks": {
+      "owner": "whatsapp-service",
+      "description": "Chunked frozen transcript text for private WhatsApp Conversation Assistant sessions."
+    },
     "whatsapp_conversation_assistant_turns": {
       "owner": "whatsapp-service",
       "description": "Autosaved user and assistant turns for private WhatsApp Conversation Assistant sessions."
