@@ -40,6 +40,71 @@ afterEach(() => {
 });
 
 describe('createPdfConversationExporter', () => {
+  it('renders a privacy-safe readable report instead of raw chat export text', async () => {
+    const exporter = createPdfConversationExporter();
+    const result = await exporter.exportConversation({
+      ...validInput,
+      title: '+15124186656 (WA) (2026-07-05 to 2026-07-06)',
+      generatedAt: '2026-07-06T10:27:10.279Z',
+      sourceRange: {
+        from: '2026-07-05T10:20:00.000Z',
+        to: '2026-07-06T10:20:00.000Z',
+      },
+      effectiveRange: {
+        from: '2026-07-06T07:39:52.000Z',
+        to: '2026-07-06T10:19:55.000Z',
+      },
+      messages: [
+        {
+          role: 'user',
+          createdAt: '2026-07-06T10:21:13.222Z',
+          text: 'Prepare a profile.',
+        },
+        {
+          role: 'assistant',
+          createdAt: '2026-07-06T10:23:56.891Z',
+          text: [
+            '# Psychological profile',
+            '',
+            '---',
+            '',
+            '## What is known',
+            '- First concrete observation',
+            '- Second concrete observation',
+            '',
+            '| Axis | You | Maria |',
+            '| --- | --- | --- |',
+            '| Future | earn → choose projects | rest ↔ work |',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const readablePdfText = toReadablePdfText(extractPdfText(result.value.bytes));
+    const normalizedPdfText = normalizePdfText(readablePdfText);
+    expect(extractMediaBoxes(result.value.bytes)).toHaveLength(1);
+    expect(result.value.fileName).not.toContain('15124186656');
+    expect(readablePdfText).not.toContain('+15124186656');
+    expect(readablePdfText).toContain('+151******56');
+    expect(readablePdfText).toContain('Generated: 2026-07-06 10:27 UTC');
+    expect(readablePdfText).toContain(
+      'Information range: 2026-07-05 10:20 UTC - 2026-07-06 10:20 UTC'
+    );
+    expect(readablePdfText).toContain('User 2026-07-06 10:21 UTC');
+    expect(readablePdfText).toContain('Psychologist (MiniMax M3) 2026-07-06 10:23 UTC');
+    expect(readablePdfText).toContain('- First concrete observation');
+    expect(readablePdfText).not.toContain('---');
+    expect(readablePdfText).not.toContain('2026-07-06T10:23:56.891Z');
+    expect(normalizedPdfText).toContain(
+      normalizePdfText('Axis You Maria\nFuture earn -> choose projects rest <-> work')
+    );
+  });
+
   it('renders an A4 PDF conversation snapshot without truncating messages', async () => {
     const exporter = createPdfConversationExporter();
 
@@ -59,18 +124,18 @@ describe('createPdfConversationExporter', () => {
     const readablePdfText = toReadablePdfText(pdfText);
     const normalizedPdfText = normalizePdfText(readablePdfText);
     expect(readablePdfText).toContain('Alice context');
-    expect(readablePdfText).toContain('Generated at 2026-07-03T16:00:00.000Z');
+    expect(readablePdfText).toContain('Generated: 2026-07-03 16:00 UTC');
     expect(readablePdfText).toContain('Assistant role: Psychologist');
     expect(readablePdfText).toContain(
-      'Information range: 2026-06-30T00:00:00.000Z to 2026-07-01T00:00:00.000Z'
+      'Information range: 2026-06-30 00:00 UTC - 2026-07-01 00:00 UTC'
     );
     expect(readablePdfText).toContain(
-      'Effective range: 2026-06-30T10:00:00.000Z to 2026-06-30T10:45:00.000Z'
+      'Effective range: 2026-06-30 10:00 UTC - 2026-06-30 10:45 UTC'
     );
     expect(readablePdfText).toContain('Messages taken under consideration: 47');
     expect(readablePdfText).toContain('Messages excluded: 23');
-    expect(readablePdfText).toContain('Media Only');
-    expect(readablePdfText).toContain('Failed Transcriptions');
+    expect(readablePdfText).toContain('Media only');
+    expect(readablePdfText).toContain('Failed transcriptions');
     expect(readablePdfText).toContain('Psychologist (MiniMax M3)');
     expect(normalizedPdfText).toContain(normalizePdfText('Assistant answer with\nmultiple lines.'));
     expect(normalizedPdfText).toContain(normalizePdfText(validInput.messages[0]?.text ?? ''));
@@ -205,11 +270,95 @@ describe('createPdfConversationExporter', () => {
     expect(readablePdfText).not.toContain('# Decision **summary**');
     expect(readablePdfText).not.toContain('# Decision');
     expect(readablePdfText).not.toContain('**Include**');
-    expect(readablePdfText).not.toContain('- First action');
+    expect(readablePdfText).toContain('- First action');
     expect(readablePdfText).not.toContain('- [ ] Follow up');
     expect(readablePdfText).not.toContain('| --- | --- |');
     expect(readablePdfText).not.toContain('![chart]');
     expect(readablePdfText).not.toContain('[evidence]');
+    expect(readablePdfText).not.toContain('```');
+  });
+
+  it('cleans markdown tables in metadata and inferred section headings in messages', async () => {
+    const exporter = createPdfConversationExporter();
+
+    const result = await exporter.exportConversation({
+      ...validInput,
+      title: '15124186656 direct',
+      generatedAt: 'not-a-date',
+      initialPrompt: [
+        'Context before separator',
+        '---',
+        '| Source | Meaning |',
+        '| --- | --- |',
+        '| WA | Conversation context |',
+      ].join('\n'),
+      omittedBreakdown: {
+        '': 1,
+      },
+      messages: [
+        {
+          role: 'assistant',
+          createdAt: '2026-07-03T16:02:00.000Z',
+          text: [
+            'Interpretation:',
+            '',
+            'This section heading should be rendered as a heading.',
+            '',
+            '| Axis | Value | Notes |',
+            '| --- | --- | --- |',
+            '| Missing | Filled value |',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const readablePdfText = toReadablePdfText(extractPdfText(result.value.bytes));
+    const normalizedPdfText = normalizePdfText(readablePdfText);
+    expect(readablePdfText).toContain('151******56 direct');
+    expect(readablePdfText).not.toContain('15124186656');
+    expect(readablePdfText).toContain('Generated: not-a-date');
+    expect(readablePdfText).toContain('- Other: 1');
+    expect(normalizedPdfText).toContain(
+      normalizePdfText(
+        'Initial prompt: Context before separator\nSource Meaning\nWA Conversation context'
+      )
+    );
+    expect(readablePdfText).toContain('Interpretation:');
+    expect(normalizedPdfText).toContain(normalizePdfText('Axis Value Notes\nMissing Filled value'));
+    expect(readablePdfText).not.toContain('| --- | --- |');
+  });
+
+  it('handles markdown-only and single-cell pipe message edge cases', async () => {
+    const exporter = createPdfConversationExporter();
+
+    const result = await exporter.exportConversation({
+      ...validInput,
+      messages: [
+        {
+          role: 'assistant',
+          createdAt: '2026-07-03T16:02:00.000Z',
+          text: ['```text', '   ', '```'].join('\n'),
+        },
+        {
+          role: 'user',
+          createdAt: '2026-07-03T16:03:00.000Z',
+          text: '| Single |',
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const readablePdfText = toReadablePdfText(extractPdfText(result.value.bytes));
+    expect(readablePdfText).toContain('Single');
     expect(readablePdfText).not.toContain('```');
   });
 
