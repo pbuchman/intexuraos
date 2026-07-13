@@ -467,6 +467,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
+          503: {
+            description: 'Linear upstream temporarily unavailable',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
         },
       },
     },
