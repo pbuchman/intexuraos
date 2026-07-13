@@ -89,6 +89,7 @@ install_base_packages() {
     gnupg \
     jq \
     libnginx-mod-http-lua \
+    logrotate \
     lua5.1 \
     lua-cjson \
     nginx-extras \
@@ -245,6 +246,11 @@ install_grafana_alloy_collector() {
   INTEXURAOS_ENVIRONMENT=prod "${SCRIPT_DIR}/../observability/install-grafana-alloy.sh"
 }
 
+install_pm2_logrotate() {
+  printf 'Installing bounded PM2 log rotation\n'
+  INTEXURAOS_ENVIRONMENT=prod "${SCRIPT_DIR}/install-pm2-logrotate.sh"
+}
+
 main() {
   parse_args "$@"
   require_prod
@@ -255,6 +261,7 @@ main() {
   ensure_swap
   install_node_22
   prepare_user_and_directories
+  install_pm2_logrotate
   configure_firewall
   write_pm2_systemd_unit
 

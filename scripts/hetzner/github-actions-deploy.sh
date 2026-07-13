@@ -133,6 +133,7 @@ run_remote_deploy_web() {
 deploy_runtime() {
   run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
   run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/observability/install-grafana-alloy.sh'
+  run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh'
   run_remote 'CI=true pnpm install --frozen-lockfile'
   run_remote_deploy_web
   run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'

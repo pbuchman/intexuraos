@@ -7,7 +7,8 @@ CONFIG_SOURCE="${CONFIG_SOURCE:-ecosystem.config.prod.cjs}"
 RENDERED_CONFIG="${RENDERED_CONFIG:-/home/deploy/.pm2/intexuraos-prod-ecosystem.json}"
 PM2_START_TIMEOUT_SECONDS="${PM2_START_TIMEOUT_SECONDS:-120}"
 PM2_SYSTEMD_SERVICE="${PM2_SYSTEMD_SERVICE:-pm2-deploy.service}"
-PM2_HEALTH_URLS="${PM2_HEALTH_URLS:-http://127.0.0.1:8122/health http://127.0.0.1:8110/health}"
+PM2_HEALTH_URLS="${PM2_HEALTH_URLS:-}"
+PM2_HEALTH_CONSECUTIVE_SUCCESSES="${PM2_HEALTH_CONSECUTIVE_SUCCESSES:-3}"
 TEMP_RENDERED_CONFIG=""
 
 usage() {
@@ -83,6 +84,34 @@ process.stdout.write(JSON.stringify(config, null, 2));
 NODE
 }
 
+derive_health_urls() {
+  node - "${RENDERED_CONFIG}" <<'NODE'
+const { readFileSync } = require('node:fs');
+
+const config = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+if (!config || !Array.isArray(config.apps)) {
+  throw new Error('Rendered PM2 config must contain apps');
+}
+
+const urls = config.apps.map((app) => {
+  const port = Number(app.env?.PORT);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`PM2 app ${app.name ?? 'unknown'} has invalid PORT`);
+  }
+  return `http://127.0.0.1:${port}/health`;
+});
+
+if (urls.length === 0) {
+  throw new Error('Rendered PM2 config must contain at least one app');
+}
+if (new Set(urls).size !== urls.length) {
+  throw new Error('Rendered PM2 config contains duplicate health ports');
+}
+
+process.stdout.write(urls.join(' '));
+NODE
+}
+
 wait_for_pm2_online() {
   local deadline=$((SECONDS + PM2_START_TIMEOUT_SECONDS))
   local not_online=""
@@ -122,6 +151,7 @@ wait_for_http_health() {
   local deadline=$((SECONDS + PM2_START_TIMEOUT_SECONDS))
   local failed_urls=""
   local health_urls=()
+  local healthy_passes=0
   local url=""
   local IFS=' '
 
@@ -137,13 +167,19 @@ wait_for_http_health() {
     done
 
     if [[ -z "${failed_urls}" ]]; then
-      return 0
+      healthy_passes=$((healthy_passes + 1))
+      if ((healthy_passes >= PM2_HEALTH_CONSECUTIVE_SUCCESSES)); then
+        return 0
+      fi
+    else
+      healthy_passes=0
     fi
 
     sleep 5
   done
 
-  printf 'ERROR: HTTP health checks did not become ready:\n%s\n' "${failed_urls}" >&2
+  printf 'ERROR: PM2 health checks did not remain ready:\n%s\n' "${failed_urls}" >&2
+  pm2 status >&2 || true
   return 1
 }
 
@@ -162,6 +198,8 @@ main() {
   require_prod
 
   [[ "${PM2_START_TIMEOUT_SECONDS}" =~ ^[0-9]+$ ]] || fail "PM2_START_TIMEOUT_SECONDS must be an integer"
+  [[ "${PM2_HEALTH_CONSECUTIVE_SUCCESSES}" =~ ^[1-9][0-9]*$ ]] \
+    || fail "PM2_HEALTH_CONSECUTIVE_SUCCESSES must be a positive integer"
   command -v curl >/dev/null 2>&1 || fail "curl is required"
   command -v node >/dev/null 2>&1 || fail "node is required"
   command -v pm2 >/dev/null 2>&1 || fail "pm2 is required"
@@ -174,6 +212,9 @@ main() {
   render_config "${CONFIG_SOURCE}" "${TEMP_RENDERED_CONFIG}"
   install -d -m 700 "$(dirname "${RENDERED_CONFIG}")"
   install -m 600 "${TEMP_RENDERED_CONFIG}" "${RENDERED_CONFIG}"
+  if [[ -z "${PM2_HEALTH_URLS}" ]]; then
+    PM2_HEALTH_URLS="$(derive_health_urls)"
+  fi
 
   pm2 delete all || true
   pm2 start "${RENDERED_CONFIG}" --update-env

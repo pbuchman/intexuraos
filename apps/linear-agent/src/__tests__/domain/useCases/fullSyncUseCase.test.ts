@@ -537,40 +537,7 @@ describe('fullSyncAllUsers', () => {
     }
   });
 
-  it('continues on individual user sync failure', async () => {
-    linearClient.seedIssue({
-      id: 'issue-1',
-      identifier: 'INT-1',
-      title: 'Test Issue',
-      description: 'Test description',
-      priority: 2,
-      state: { id: 'state-1', name: 'In Progress', type: 'started' },
-      url: 'https://linear.app/team/issue/INT-1',
-      createdAt: '2025-01-01T00:00:00.000Z',
-      updatedAt: '2025-01-02T00:00:00.000Z',
-      completedAt: null,
-      childCount: 0,
-      children: [],
-      labels: [],
-    });
-    linearClient.seedIssue({
-      id: 'issue-2',
-      identifier: 'INT-2',
-      title: 'Test Issue 2',
-      description: 'Test description 2',
-      priority: 2,
-      state: { id: 'state-1', name: 'In Progress', type: 'started' },
-      url: 'https://linear.app/team/issue/INT-2',
-      createdAt: '2025-01-01T00:00:00.000Z',
-      updatedAt: '2025-01-02T00:00:00.000Z',
-      completedAt: null,
-      childCount: 0,
-      children: [],
-      labels: [],
-    });
-
-    // Make first user fail by setting failure on getFullConnection
-    // Need to create a spy that fails only for user-1
+  it('returns an error after attempting every user when one sync fails', async () => {
     const originalGetFullConnection = connectionRepo.getFullConnection.bind(connectionRepo);
     const getFullConnectionSpy = vi.spyOn(connectionRepo, 'getFullConnection').mockImplementation(async (userId) => {
       if (userId === 'user-1') {
@@ -581,11 +548,54 @@ describe('fullSyncAllUsers', () => {
 
     const result = await fullSyncAllUsers(deps);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      // Only user-2 should sync, getting 2 issues
-      expect(result.value.totalIssues).toBe(2);
-    }
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'NOT_CONNECTED', message: 'User not connected' },
+    });
+    expect(getFullConnectionSpy).toHaveBeenCalledWith('user-1');
+    expect(getFullConnectionSpy).toHaveBeenCalledWith('user-2');
+
+    getFullConnectionSpy.mockRestore();
+  });
+
+  it('prioritizes a transient failure after attempting every user', async () => {
+    deps.getAllConnectedUserIds = vi.fn().mockResolvedValue({
+      ok: true,
+      value: ['user-1', 'user-2', 'user-3'],
+    });
+    connectionRepo.seedConnection({
+      userId: 'user-3',
+      apiKey: 'test-api-key',
+      teamId: 'team-1',
+      teamName: 'Engineering',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+    const originalGetFullConnection = connectionRepo.getFullConnection.bind(connectionRepo);
+    const getFullConnectionSpy = vi.spyOn(connectionRepo, 'getFullConnection').mockImplementation(async (userId) => {
+      if (userId === 'user-1') {
+        return err({ code: 'NOT_CONNECTED', message: 'User not connected' });
+      }
+      if (userId === 'user-2') {
+        return err({
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'Linear API temporarily unavailable',
+        });
+      }
+      return originalGetFullConnection(userId);
+    });
+
+    const result = await fullSyncAllUsers(deps);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'UPSTREAM_UNAVAILABLE',
+        message: 'Linear API temporarily unavailable',
+      },
+    });
+    expect(getFullConnectionSpy).toHaveBeenCalledTimes(3);
 
     getFullConnectionSpy.mockRestore();
   });

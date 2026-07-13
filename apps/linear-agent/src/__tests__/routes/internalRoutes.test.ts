@@ -1,7 +1,8 @@
 /**
  * Tests for internal API routes.
  */
-import { describe, expect, it, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { err } from '@intexuraos/common-core';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../server.js';
 import type { LinearConnection, LinearIssueWithTeam } from '../../domain/models.js';
@@ -540,6 +541,17 @@ describe('internalRoutes', () => {
   });
 
   describe('POST /internal/linear/sync-all', () => {
+    it('documents the scheduler-retryable 503 response', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/openapi.json',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const document = response.json();
+      expect(document.paths['/internal/linear/sync-all'].post.responses).toHaveProperty('503');
+    });
+
     it('returns 401 when no internal auth header provided', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -616,6 +628,35 @@ describe('internalRoutes', () => {
       const body = response.json();
       expect(body.success).toBe(true);
       expect(body.data.userCount).toBe(2);
+    });
+
+    it('returns 503 after attempting all users when one sync is transiently unavailable', async () => {
+      seedConnection('user-1');
+      seedConnection('user-2');
+      const originalGetFullConnection = fakeConnectionRepo.getFullConnection.bind(fakeConnectionRepo);
+      const getFullConnectionSpy = vi
+        .spyOn(fakeConnectionRepo, 'getFullConnection')
+        .mockImplementation(async (userId) => {
+          if (userId === 'user-1') {
+            return err({
+              code: 'UPSTREAM_UNAVAILABLE',
+              message: 'Linear API temporarily unavailable',
+            });
+          }
+          return originalGetFullConnection(userId);
+        });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync-all',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json().success).toBe(false);
+      expect(getFullConnectionSpy).toHaveBeenCalledTimes(2);
+
+      getFullConnectionSpy.mockRestore();
     });
 
     it('handles sync failure for all users', async () => {

@@ -7,6 +7,10 @@ This runbook covers the Hetzner host runtime owned by `scripts/hetzner/**` and
 Pub/Sub, Secret Manager, retained buckets, Cloud Functions, Artifact Registry,
 and the shared project `intexuraos-dev-pbuchman`.
 
+Dead-letter investigation and selected replay follow the
+[Pub/Sub DLQ runbook](./pubsub-dlq-runbook.md). Do not inspect or replay a DLQ
+with ad-hoc bulk commands.
+
 ## Runtime Layout
 
 | Path | Purpose |
@@ -86,9 +90,9 @@ INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/provision.sh --email ops@exampl
 ```
 
 Provisioning installs Node 22, PM2, Google Cloud CLI, nginx with Lua support,
-`lua-cjson`, certbot with the Cloudflare DNS plugin, loads secrets, installs
-certificates, and deploys the nginx config. A provisioned host must pass the
-nginx JWT Lua dependency check before nginx is reloaded:
+`lua-cjson`, logrotate, certbot with the Cloudflare DNS plugin, loads secrets,
+installs certificates, and deploys the nginx config. A provisioned host must
+pass the nginx JWT Lua dependency check before nginx is reloaded:
 
 ```bash
 lua5.1 <<'LUA'
@@ -145,6 +149,7 @@ secret allowlist and updates `/etc/intexuraos/internal-auth-token` for nginx.
 ```bash
 cd /opt/intexuraos
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh
+sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
@@ -159,7 +164,29 @@ Sentry values plus generated public API paths, so ignored local env files
 cannot leak backend secrets into Vite.
 `reload-pm2.sh` renders the CommonJS ecosystem config to a private JSON file
 before starting PM2, because PM2 treats `ecosystem.config.prod.cjs` as a plain
-script on the Hetzner host. `deploy-nginx.sh` verifies `cjson.safe` and
+script on the Hetzner host. It derives every local `/health` URL from the
+rendered app ports and requires three consecutive all-service passes before
+`pm2 save`. `PM2_HEALTH_URLS` remains an explicit override for controlled
+diagnostics; normal deployments must leave it unset.
+
+PM2 file logs are bounded by `/etc/logrotate.d/intexuraos-pm2`: daily rotation,
+early rotation at 100 MB per file, 14 retained rotations, compression with one
+rotation of delay, and `pm2 reloadLogs` after rotation. Validate the installed
+policy without rotating data:
+
+```bash
+sudo logrotate --debug /etc/logrotate.d/intexuraos-pm2
+sudo systemctl is-active alloy
+```
+
+A controlled forced rotation may be run with
+`sudo logrotate --force /etc/logrotate.d/intexuraos-pm2`; immediately verify
+`pm2 status`, new active log files owned by `deploy`, and active Grafana Alloy
+collection. Reinstalling the policy is idempotent. Rollback may restore the
+previous policy, but must preserve existing rotated log files until their
+documented retention expires.
+
+`deploy-nginx.sh` verifies `cjson.safe` and
 `resty.openidc`, then runs `nginx -t` before reload. If the VM is not available,
 validate an equivalent generated config in a container or staging VM that has
 nginx Lua/OpenResty modules installed, then record the command output in the
@@ -369,16 +396,13 @@ terraform -chdir=terraform/hetzner-prod apply
 
 ## Pre-Cutover Smoke Test
 
-Before changing DNS, every PM2 process must respond on localhost:
+Before changing DNS, reload through the production readiness gate. It derives
+the current app ports from `ecosystem.config.prod.cjs`, requires every PM2
+process to be online, and requires all health endpoints to pass three times:
 
 ```bash
-for port in \
-  8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 \
-  8123 8124 8125 8126 8127 8128 8129 8130 8131 8132 8133
-do
-  curl --fail --silent --show-error "http://127.0.0.1:${port}/health" >/dev/null
-done
-
+INTEXURAOS_ENVIRONMENT=prod PM2_HEALTH_CONSECUTIVE_SUCCESSES=3 \
+  bash scripts/hetzner/reload-pm2.sh
 curl --fail --silent --show-error http://127.0.0.1/healthz
 sudo nginx -t
 pm2 status
