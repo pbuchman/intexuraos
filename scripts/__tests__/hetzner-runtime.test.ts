@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -10,11 +10,13 @@ const jwtVerifierPath = resolve(repoRoot, 'scripts/hetzner/nginx/jwt-verify.lua'
 const loadSecretsPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
 const reloadPm2Path = resolve(repoRoot, 'scripts/hetzner/reload-pm2.sh');
+const prodEcosystemPath = resolve(repoRoot, 'ecosystem.config.prod.cjs');
 const cutoverEdgePath = resolve(repoRoot, 'scripts/hetzner/cutover-gcp-edge.sh');
 const pubsubPublishTestPath = resolve(repoRoot, 'scripts/pubsub-publish-test.mjs');
 const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-cert.sh');
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
 const githubActionsDeployPath = resolve(repoRoot, 'scripts/hetzner/github-actions-deploy.sh');
+const installPm2LogrotatePath = resolve(repoRoot, 'scripts/hetzner/install-pm2-logrotate.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
 const pubsubDlqRunbookPath = resolve(repoRoot, 'docs/operations/pubsub-dlq-runbook.md');
 const migrationPlanPath = resolve(repoRoot, 'docs/operations/hetzner-prod-migration-plan.md');
@@ -430,17 +432,24 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('pm2 start "${RENDERED_CONFIG}" --update-env');
     expect(script).toContain('PM2_START_TIMEOUT_SECONDS');
     expect(script).toContain('PM2_SYSTEMD_SERVICE');
-    expect(script).toContain('PM2_HEALTH_URLS');
+    expect(script).toContain('PM2_HEALTH_URLS="${PM2_HEALTH_URLS:-}"');
+    expect(script).toContain(
+      'PM2_HEALTH_CONSECUTIVE_SUCCESSES="${PM2_HEALTH_CONSECUTIVE_SUCCESSES:-3}"'
+    );
+    expect(script).toContain('derive_health_urls()');
+    expect(script).toContain('config.apps');
+    expect(script).toContain('app.env?.PORT');
+    expect(script).toContain('http://127.0.0.1:${port}/health');
     expect(script).toContain('wait_for_pm2_online()');
     expect(script).toContain('wait_for_http_health()');
     expect(script).toContain('sync_pm2_systemd_service()');
     expect(script).toContain('pm2 jlist');
-    expect(script).toContain('http://127.0.0.1:8122/health');
-    expect(script).toContain('http://127.0.0.1:8110/health');
     expect(script).toContain("local IFS=' '");
+    expect(script).toContain('healthy_passes=$((healthy_passes + 1))');
+    expect(script).toContain('healthy_passes=0');
     expect(script).toContain('curl --fail --silent --show-error --max-time 5');
     expect(script).toContain('failed to reach online state');
-    expect(script).toContain('HTTP health checks did not become ready');
+    expect(script).toContain('PM2 health checks did not remain ready');
     expect(script).toContain('pm2 save');
     expect(script).toContain('systemctl start "${PM2_SYSTEMD_SERVICE}"');
     expect(script).toContain('systemctl is-active --quiet "${PM2_SYSTEMD_SERVICE}"');
@@ -458,7 +467,28 @@ describe('Hetzner web asset deployment', () => {
       reloadFlow.indexOf('pm2 save')
     );
     expect(runbook).toContain('scripts/hetzner/reload-pm2.sh');
+    expect(runbook).toContain('PM2_HEALTH_CONSECUTIVE_SUCCESSES=3');
+    expect(runbook).not.toContain('for port in');
     expect(plan).toContain('scripts/hetzner/reload-pm2.sh');
+
+    const renderedConfig = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          '-e',
+          'const config = require(process.argv[1]); process.stdout.write(JSON.stringify(config));',
+          prodEcosystemPath,
+        ],
+        {
+          encoding: 'utf8',
+          env: { ...process.env, INTEXURAOS_ENVIRONMENT: 'prod' },
+        }
+      )
+    ) as { apps: Array<{ env?: { PORT?: string } }> };
+    const ports = renderedConfig.apps.map((app) => Number(app.env?.PORT));
+    expect(ports).toHaveLength(18);
+    expect(ports.every((port) => Number.isInteger(port) && port > 0 && port <= 65535)).toBe(true);
+    expect(new Set(ports).size).toBe(18);
   });
 
   it('bootstraps Corepack when an existing Node 22 install does not provide it', () => {
@@ -603,6 +633,62 @@ describe('Hetzner web asset deployment', () => {
     expect(provisionFlow.indexOf('install_grafana_alloy_collector')).toBeGreaterThan(
       provisionFlow.indexOf('load-secrets.sh')
     );
+  });
+
+  it('installs validated bounded PM2 log rotation during provisioning and deploy', () => {
+    const nonProd = spawnSync('bash', [installPm2LogrotatePath, '--render'], {
+      encoding: 'utf8',
+      env: { ...process.env, INTEXURAOS_ENVIRONMENT: 'dev', PM2_BIN: '/usr/bin/pm2' },
+    });
+    expect(nonProd.status).not.toBe(0);
+    expect(nonProd.stderr).toContain('INTEXURAOS_ENVIRONMENT must be prod');
+
+    const rendered = execFileSync('bash', [installPm2LogrotatePath, '--render'], {
+      encoding: 'utf8',
+      env: { ...process.env, INTEXURAOS_ENVIRONMENT: 'prod', PM2_BIN: '/usr/bin/pm2' },
+    });
+    for (const directive of [
+      '/home/deploy/.pm2/logs/*.log',
+      'daily',
+      'maxsize 100M',
+      'rotate 14',
+      'compress',
+      'delaycompress',
+      'missingok',
+      'notifempty',
+      'su deploy deploy',
+      'create 0640 deploy deploy',
+      'sharedscripts',
+      'reloadLogs',
+    ]) {
+      expect(rendered).toContain(directive);
+    }
+
+    const installer = readRequired(installPm2LogrotatePath);
+    const provision = readRequired(provisionPath);
+    const deploy = readRequired(githubActionsDeployPath);
+    const runbook = readRequired(runbookPath);
+    expect(installer).toContain('logrotate --debug "${TEMP_CONFIG}"');
+    expect(installer).toContain(
+      'install -o root -g root -m 0644 "${TEMP_CONFIG}" "${LOGROTATE_CONFIG_PATH}"'
+    );
+    expect(installer).toContain('trap cleanup EXIT');
+    expect(provision).toContain('logrotate');
+    expect(provision).toContain('install_pm2_logrotate()');
+    expect(provision).toContain(
+      'INTEXURAOS_ENVIRONMENT=prod "${SCRIPT_DIR}/install-pm2-logrotate.sh"'
+    );
+    expect(deploy).toContain(
+      'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh'
+    );
+    expect(deploy.indexOf('scripts/hetzner/install-pm2-logrotate.sh')).toBeGreaterThan(
+      deploy.indexOf('scripts/observability/install-grafana-alloy.sh')
+    );
+    expect(deploy.indexOf('scripts/hetzner/install-pm2-logrotate.sh')).toBeLessThan(
+      deploy.indexOf('CI=true pnpm install --frozen-lockfile')
+    );
+    expect(runbook).toContain('/etc/logrotate.d/intexuraos-pm2');
+    expect(runbook).toContain('three consecutive');
   });
 });
 
