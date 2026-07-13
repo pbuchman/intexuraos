@@ -392,7 +392,7 @@ resource "google_monitoring_dashboard" "main" {
               dataSets = [{
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-\")"
+                    filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.labels.subscription_id=has_substring(\"-dlq-\")"
                     aggregation = {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_MEAN"
@@ -481,7 +481,7 @@ resource "google_monitoring_dashboard" "main" {
             scorecard = {
               timeSeriesQuery = {
                 timeSeriesFilter = {
-                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-\")"
+                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.labels.subscription_id=has_substring(\"-dlq-\")"
                   aggregation = {
                     alignmentPeriod    = "60s"
                     perSeriesAligner   = "ALIGN_MEAN"
@@ -724,7 +724,7 @@ resource "google_monitoring_alert_policy" "dlq_messages" {
       filter          = <<-EOT
         resource.type="pubsub_subscription"
         metric.type="pubsub.googleapis.com/subscription/num_undelivered_messages"
-        resource.label.subscription_id=has_substring("-dlq-")
+        resource.labels.subscription_id=has_substring("-dlq-")
       EOT
       comparison      = "COMPARISON_GT"
       threshold_value = 0
@@ -763,7 +763,7 @@ resource "google_monitoring_alert_policy" "dlq_forwarding_failures" {
       filter          = <<-EOT
         resource.type="pubsub_subscription"
         metric.type="pubsub.googleapis.com/subscription/dead_letter_message_count"
-        metric.label.response_code!="success"
+        metric.labels.response_code!="success"
       EOT
       comparison      = "COMPARISON_GT"
       threshold_value = 0

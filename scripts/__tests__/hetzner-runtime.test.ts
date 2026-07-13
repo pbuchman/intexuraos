@@ -780,9 +780,11 @@ describe('Pub/Sub dead-letter reliability', () => {
     const monitoring = readRequired(terraformMonitoringMainPath);
     const dlqRunbook = readRequired(pubsubDlqRunbookPath);
 
-    expect(monitoring).toContain('resource.label.subscription_id=has_substring("-dlq-")');
+    expect(monitoring.match(/resource\.labels\.subscription_id=has_substring/g)).toHaveLength(3);
+    expect(monitoring).not.toMatch(/resource\.label\.subscription_id=has_substring/);
     expect(monitoring).toContain('pubsub.googleapis.com/subscription/dead_letter_message_count');
-    expect(monitoring).toContain('metric.label.response_code!="success"');
+    expect(monitoring).toContain('metric.labels.response_code!="success"');
+    expect(monitoring).not.toContain('metric.label.response_code!="success"');
     expect(monitoring).toContain('docs/operations/pubsub-dlq-runbook.md');
     expect(dlqRunbook).toContain('31 days');
     expect(dlqRunbook).toContain('payload hash');
