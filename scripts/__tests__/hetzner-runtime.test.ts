@@ -16,6 +16,7 @@ const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-ce
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
 const githubActionsDeployPath = resolve(repoRoot, 'scripts/hetzner/github-actions-deploy.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
+const pubsubDlqRunbookPath = resolve(repoRoot, 'docs/operations/pubsub-dlq-runbook.md');
 const migrationPlanPath = resolve(repoRoot, 'docs/operations/hetzner-prod-migration-plan.md');
 const selfReviewPath = resolve(repoRoot, 'docs/operations/hetzner-prod-self-review.md');
 const deployWorkflowPath = resolve(repoRoot, '.github/workflows/deploy.yml');
@@ -34,6 +35,7 @@ const terraformPubsubPushModuleMainPath = resolve(
   repoRoot,
   'terraform/modules/pubsub-push/main.tf'
 );
+const terraformPubsubModuleMainPath = resolve(repoRoot, 'terraform/modules/pubsub/main.tf');
 const terraformPubsubPushModuleOutputsPath = resolve(
   repoRoot,
   'terraform/modules/pubsub-push/outputs.tf'
@@ -69,6 +71,7 @@ const terraformMonitoringCodeTaskAlertsPath = resolve(
   repoRoot,
   'terraform/modules/monitoring/code-task-alerts.tf'
 );
+const terraformMonitoringMainPath = resolve(repoRoot, 'terraform/modules/monitoring/main.tf');
 const terraformMonitoringOutputsPath = resolve(repoRoot, 'terraform/modules/monitoring/outputs.tf');
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 const pnpmWorkspacePath = resolve(repoRoot, 'pnpm-workspace.yaml');
@@ -664,6 +667,45 @@ describe('Pub/Sub dev tooling', () => {
   });
 });
 
+describe('Pub/Sub dead-letter reliability', () => {
+  it('grants the Pub/Sub service agent both dead-letter roles with 31-day retention', () => {
+    const pushModule = readRequired(terraformPubsubPushModuleMainPath);
+    const pullModule = readRequired(terraformPubsubModuleMainPath);
+    const devTerraform = readRequired(terraformDevMainPath);
+
+    expect(pushModule).toMatch(
+      /resource "google_pubsub_subscription_iam_member" "dlq_subscriber" \{[\s\S]*?count\s+=\s+var\.enable_push_subscription \? 1 : 0[\s\S]*?subscription\s+=\s+google_pubsub_subscription\.push\[0\]\.name[\s\S]*?role\s+=\s+"roles\/pubsub\.subscriber"/
+    );
+    expect(pullModule).toMatch(
+      /resource "google_pubsub_subscription_iam_member" "dlq_subscriber" \{[\s\S]*?subscription\s+=\s+google_pubsub_subscription\.main\.name[\s\S]*?role\s+=\s+"roles\/pubsub\.subscriber"/
+    );
+    for (const terraform of [pushModule, pullModule]) {
+      expect(terraform).toContain('message_retention_duration = "2678400s"');
+    }
+    expect(devTerraform).toMatch(
+      /resource "google_pubsub_subscription_iam_member" "pubsub_subscribes_audio_stored_push" \{[\s\S]*?subscription\s+=\s+google_pubsub_subscription\.audio_stored_push\.name[\s\S]*?role\s+=\s+"roles\/pubsub\.subscriber"/
+    );
+    expect(devTerraform).toMatch(
+      /resource "google_pubsub_subscription" "transcription_dlq_inspect" \{[\s\S]*?message_retention_duration\s+=\s+"2678400s"/
+    );
+  });
+
+  it('alerts on every DLQ naming form and documents safe selected replay', () => {
+    const monitoring = readRequired(terraformMonitoringMainPath);
+    const dlqRunbook = readRequired(pubsubDlqRunbookPath);
+
+    expect(monitoring).toContain('resource.label.subscription_id=has_substring("-dlq-")');
+    expect(monitoring).toContain('pubsub.googleapis.com/subscription/dead_letter_message_count');
+    expect(monitoring).toContain('metric.label.response_code!="success"');
+    expect(monitoring).toContain('docs/operations/pubsub-dlq-runbook.md');
+    expect(dlqRunbook).toContain('31 days');
+    expect(dlqRunbook).toContain('payload hash');
+    expect(dlqRunbook).toContain('Do not bulk replay');
+    expect(dlqRunbook).toContain('ACK');
+    expect(dlqRunbook).toContain('correlation');
+  });
+});
+
 describe('Hetzner async edge cutover', () => {
   it('stages retained GCP Pub/Sub and Scheduler consumers in the Hetzner Terraform root', () => {
     const script = readRequired(cutoverEdgePath);
@@ -752,6 +794,24 @@ describe('Hetzner async edge cutover', () => {
     expect(hetznerMain).not.toContain(`"${retiredTodosPushPath}"`);
     expect(hetznerMain).not.toContain('"/internal/cron/tick"');
     expect(hetznerPubsub).toContain('google_pubsub_subscription" "hetzner_push"');
+    expect(hetznerPubsub).toContain('resource "google_pubsub_topic" "hetzner_push_dlq"');
+    expect(hetznerPubsub).toMatch(/name\s+=\s+"\$\{each\.value\.subscription_name\}-dlq"/);
+    expect(hetznerPubsub).toContain(
+      'resource "google_pubsub_subscription" "hetzner_push_dlq_inspect"'
+    );
+    expect(hetznerPubsub).toMatch(/name\s+=\s+"\$\{each\.value\.subscription_name\}-dlq-sub"/);
+    expect(hetznerPubsub).toContain('message_retention_duration = "2678400s"');
+    expect(hetznerPubsub).toContain(
+      'resource "google_pubsub_topic_iam_member" "hetzner_push_dlq_publisher"'
+    );
+    expect(hetznerPubsub).toContain(
+      'resource "google_pubsub_subscription_iam_member" "hetzner_push_dlq_subscriber"'
+    );
+    expect(hetznerPubsub).toContain('role         = "roles/pubsub.subscriber"');
+    expect(hetznerPubsub).toContain(
+      'dead_letter_topic     = google_pubsub_topic.hetzner_push_dlq[each.key].id'
+    );
+    expect(hetznerPubsub).not.toContain('data.google_pubsub_topic.hetzner_push_dlq');
     expect(hetznerPubsub).not.toContain(retiredUnderscored('todos', 'processing'));
     expect(hetznerPubsub).not.toContain(retiredTodosPushPath);
     expect(hetznerPubsub).toContain(

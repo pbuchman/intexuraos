@@ -45,6 +45,8 @@ resource "google_pubsub_subscription" "main" {
   expiration_policy {
     ttl = ""
   }
+
+  depends_on = [google_pubsub_topic_iam_member.dlq_publisher]
 }
 
 # DLQ subscription (for manual inspection)
@@ -57,8 +59,8 @@ resource "google_pubsub_subscription" "dlq" {
   # Longer ack deadline for manual processing
   ack_deadline_seconds = 600
 
-  # Retain messages for 7 days
-  message_retention_duration = "604800s"
+  # Retain messages for 31 days
+  message_retention_duration = "2678400s"
 
   # No retry policy - manual handling
   expiration_policy {
@@ -95,3 +97,11 @@ resource "google_pubsub_topic_iam_member" "dlq_publisher" {
   member  = "serviceAccount:service-${var.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
+# Grant the Pub/Sub service agent permission to ACK the source subscription
+# after forwarding a message to the DLQ.
+resource "google_pubsub_subscription_iam_member" "dlq_subscriber" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.main.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:service-${var.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}

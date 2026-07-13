@@ -7,6 +7,10 @@ This runbook covers the Hetzner host runtime owned by `scripts/hetzner/**` and
 Pub/Sub, Secret Manager, retained buckets, Cloud Functions, Artifact Registry,
 and the shared project `intexuraos-dev-pbuchman`.
 
+Dead-letter investigation and selected replay follow the
+[Pub/Sub DLQ runbook](./pubsub-dlq-runbook.md). Do not inspect or replay a DLQ
+with ad-hoc bulk commands.
+
 ## Runtime Layout
 
 | Path | Purpose |

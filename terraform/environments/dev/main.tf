@@ -786,7 +786,7 @@ resource "google_pubsub_topic_iam_member" "transcription_publishes_dlq" {
   member  = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# DLQ inspection subscription — pull subscription with 7-day retention for
+# DLQ inspection subscription — pull subscription with 31-day retention for
 # manual / tooling-driven incident review. Per parent plan §5, this is the
 # anchor for a future BigQuery log sink.
 resource "google_pubsub_subscription" "transcription_dlq_inspect" {
@@ -796,7 +796,7 @@ resource "google_pubsub_subscription" "transcription_dlq_inspect" {
   labels  = local.common_labels
 
   ack_deadline_seconds       = 600
-  message_retention_duration = "604800s" # 7 days
+  message_retention_duration = "2678400s" # 31 days
 
   expiration_policy {
     ttl = ""
@@ -1409,7 +1409,7 @@ resource "google_pubsub_subscription" "transcription_completed_dlq" {
   labels  = local.common_labels
 
   ack_deadline_seconds       = 600
-  message_retention_duration = "604800s"
+  message_retention_duration = "2678400s"
 
   expiration_policy {
     ttl = ""
@@ -1528,6 +1528,15 @@ resource "google_pubsub_subscription" "audio_stored_push" {
     google_pubsub_topic.transcription_dlq,
     google_pubsub_topic_iam_member.pubsub_publishes_transcription_dlq,
   ]
+}
+
+# Pub/Sub must be able to ACK the source message after forwarding it to the
+# transcription DLQ.
+resource "google_pubsub_subscription_iam_member" "pubsub_subscribes_audio_stored_push" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.audio_stored_push.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
 # -----------------------------------------------------------------------------

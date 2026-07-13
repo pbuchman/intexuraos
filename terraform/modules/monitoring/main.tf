@@ -392,7 +392,7 @@ resource "google_monitoring_dashboard" "main" {
               dataSets = [{
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-sub\")"
+                    filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-\")"
                     aggregation = {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_MEAN"
@@ -481,7 +481,7 @@ resource "google_monitoring_dashboard" "main" {
             scorecard = {
               timeSeriesQuery = {
                 timeSeriesFilter = {
-                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-sub\")"
+                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-\")"
                   aggregation = {
                     alignmentPeriod    = "60s"
                     perSeriesAligner   = "ALIGN_MEAN"
@@ -724,7 +724,7 @@ resource "google_monitoring_alert_policy" "dlq_messages" {
       filter          = <<-EOT
         resource.type="pubsub_subscription"
         metric.type="pubsub.googleapis.com/subscription/num_undelivered_messages"
-        resource.label.subscription_id=has_substring("-dlq-sub")
+        resource.label.subscription_id=has_substring("-dlq-")
       EOT
       comparison      = "COMPARISON_GT"
       threshold_value = 0
@@ -747,7 +747,50 @@ resource "google_monitoring_alert_policy" "dlq_messages" {
   }
 
   documentation {
-    content   = "Messages have failed processing and moved to DLQ. Investigate immediately - messages will expire after 7 days."
+    content   = "Messages have failed processing and moved to a DLQ. Investigate within the 31-day retention window using [the Pub/Sub DLQ runbook](https://github.com/pbuchman/intexuraos/blob/development/docs/operations/pubsub-dlq-runbook.md)."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "dlq_forwarding_failures" {
+  count        = var.alert_email != null ? 1 : 0
+  display_name = "Dead Letter Queue Forwarding Failed"
+
+  combiner = "OR"
+  conditions {
+    display_name = "Pub/Sub could not forward or acknowledge a dead letter"
+    condition_threshold {
+      filter          = <<-EOT
+        resource.type="pubsub_subscription"
+        metric.type="pubsub.googleapis.com/subscription/dead_letter_message_count"
+        metric.label.response_code!="success"
+      EOT
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "60s"
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields = [
+          "resource.label.subscription_id",
+          "metric.label.response_code",
+        ]
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.email[0].name]
+
+  alert_strategy {
+    auto_close = "3600s"
+  }
+
+  documentation {
+    content   = "Pub/Sub failed to forward a dead letter or ACK its source message. Check the source subscription IAM and follow [the Pub/Sub DLQ runbook](https://github.com/pbuchman/intexuraos/blob/development/docs/operations/pubsub-dlq-runbook.md)."
     mime_type = "text/markdown"
   }
 }
