@@ -1135,6 +1135,8 @@ describe('Hetzner secret loader', () => {
   it('writes private Matrix outbound adapter config for Hetzner prod', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
+    const cloudRunExcludedSecretsSection =
+      terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
     const setupDoc = readRequired(
       resolve(repoRoot, 'docs/setup/16-private-whatsapp-matrix-sync.md')
     );
@@ -1152,6 +1154,10 @@ describe('Hetzner secret loader', () => {
     );
     expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
     expect(terraform).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",');
+    expect(cloudRunExcludedSecretsSection).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",');
+    expect(cloudRunExcludedSecretsSection).toContain(
+      '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",'
+    );
     expect(setupDoc).toContain('Store `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` in Secret Manager');
     expect(setupDoc).toContain('Do not point this value at `localhost`');
   });
