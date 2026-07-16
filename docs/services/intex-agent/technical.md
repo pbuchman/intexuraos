@@ -65,6 +65,10 @@ The request must use `contractVersion: "2026-07-01"`, `mode:
 normal Intex Agent Firestore collections, so every run must use a unique
 `runId` and test user id.
 
+Requests accept 1 through exactly 20 turns and reject 0 or 21.
+The independent provider tool-loop limit remains unchanged. See the
+[Intex Agent evaluation runbook](../../testing/intex-agent-evals.md).
+
 Example:
 
 ```bash
