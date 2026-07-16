@@ -1,5 +1,6 @@
 import {
   chmod,
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -8,10 +9,12 @@ import {
   rename,
   rm,
   symlink,
+  unlink,
   writeFile,
 } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('firebase-admin/app', () => ({
@@ -63,6 +66,11 @@ import {
 } from '../preflight.js';
 
 const UID = process.getuid?.() ?? 1000;
+const TEST_NONCE = '00000000-0000-4000-8000-000000000001';
+
+function stagingPath(path: string, nonce = TEST_NONCE): string {
+  return join(dirname(path), `.intex-agent-evals-${nonce}.tmp`);
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -146,12 +154,7 @@ function createFakeProtectedFiles(config: EvaluatorConfig): ProtectedFilePort {
         return { state: 'exists' as const };
       }
       storedConfig = contents;
-      return {
-        state: 'created' as const,
-        cleanup: vi.fn(async () => {
-          storedConfig = undefined;
-        }),
-      };
+      return { state: 'created' as const };
     }),
   };
 }
@@ -254,6 +257,12 @@ describe('evaluator config schemas', () => {
     ['provider-subject alias', { ...VALID_CONFIG, accountAlias: 'auth0|operator' }],
     ['phone alias', { ...VALID_CONFIG, accountAlias: '48123456789' }],
     ['formatted phone alias', { ...VALID_CONFIG, accountAlias: '48 123-456-789' }],
+    ['dotted phone alias', { ...VALID_CONFIG, accountAlias: '481.234.567' }],
+    ['mixed separator phone alias', { ...VALID_CONFIG, accountAlias: '48-123.456' }],
+    [
+      'international mixed separator phone alias',
+      { ...VALID_CONFIG, accountAlias: '0048 123.456' },
+    ],
     ['Matrix alias', { ...VALID_CONFIG, accountAlias: '@operator:home-dev' }],
     ['path alias', { ...VALID_CONFIG, accountAlias: '/home/operator' }],
     ['newline alias', { ...VALID_CONFIG, accountAlias: 'operator\nsecret' }],
@@ -474,10 +483,12 @@ describe('createNodeProtectedFilePort', () => {
     expect(await readFile(protectedFile, 'utf8')).toBe('protected contents');
   });
 
-  it('removes the exclusively created file when permission hardening fails', async () => {
+  it('removes only the staging file and leaves the canonical path absent when hardening fails', async () => {
     const partialPath = join(privateDirectory, 'partial.json');
+    const temporaryPath = stagingPath(partialPath);
     const port = createNodeProtectedFilePort({
       expectedUid: UID,
+      nonce: () => TEST_NONCE,
       fileSystem: {
         open: async (...args) => {
           const handle = await open(...args);
@@ -501,6 +512,142 @@ describe('createNodeProtectedFilePort', () => {
     expect(result).toEqual({ state: 'failed' });
     expect(JSON.stringify(result)).not.toContain('private chmod sentinel');
     await expect(lstat(partialPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.each(['../escape', 'ABCDEF0123456789ABCDEF0123456789', 'abc/def', 'short'])(
+    'rejects invalid staging nonce %s before filesystem I/O',
+    async (nonce) => {
+      const openSpy = vi.fn(async (): Promise<never> => {
+        throw new Error('unexpected open');
+      });
+      const linkSpy = vi.fn(async () => undefined);
+      const unlinkSpy = vi.fn(async () => undefined);
+      const port = createNodeProtectedFilePort({
+        expectedUid: UID,
+        nonce: () => nonce,
+        fileSystem: { open: openSpy, link: linkSpy, unlink: unlinkSpy },
+      });
+
+      await expect(
+        port.createExclusive(join(privateDirectory, 'invalid-nonce.json'), 'contents')
+      ).resolves.toEqual({ state: 'failed' });
+      expect(openSpy).not.toHaveBeenCalled();
+      expect(linkSpy).not.toHaveBeenCalled();
+      expect(unlinkSpy).not.toHaveBeenCalled();
+    }
+  );
+
+  it('uses an atomic hard link without replacing a concurrently created canonical file', async () => {
+    const canonicalPath = join(privateDirectory, 'race.json');
+    const temporaryPath = stagingPath(canonicalPath);
+    const linkSpy = vi.fn(async (sourcePath: string, destinationPath: string) => {
+      await writeFile(destinationPath, 'race winner contents', { mode: 0o600 });
+      await chmod(destinationPath, 0o600);
+      await link(sourcePath, destinationPath);
+    });
+    const port = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: { link: linkSpy },
+    });
+
+    await expect(port.createExclusive(canonicalPath, 'candidate contents')).resolves.toEqual({
+      state: 'exists',
+    });
+    expect(linkSpy).toHaveBeenCalledWith(temporaryPath, canonicalPath);
+    expect(await readFile(canonicalPath, 'utf8')).toBe('race winner contents');
+    await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.each(['chmod', 'writeFile', 'sync', 'close'] as const)(
+    'leaves the canonical path absent when staging %s fails before publish',
+    async (failingMethod) => {
+      const canonicalPath = join(privateDirectory, `${failingMethod}.json`);
+      const temporaryPath = stagingPath(canonicalPath);
+      const openedPaths: string[] = [];
+      const linkSpy = vi.fn(async () => undefined);
+      const port = createNodeProtectedFilePort({
+        expectedUid: UID,
+        nonce: () => TEST_NONCE,
+        fileSystem: {
+          open: async (...args) => {
+            openedPaths.push(args[0]);
+            const handle = await open(...args);
+            return new Proxy(handle, {
+              get(target, property): unknown {
+                if (property === failingMethod) {
+                  return async (): Promise<never> => {
+                    if (failingMethod === 'close') {
+                      await target.close();
+                    }
+                    throw new Error('private staging failure sentinel');
+                  };
+                }
+                const value = Reflect.get(target, property, target) as unknown;
+                return typeof value === 'function' ? value.bind(target) : value;
+              },
+            });
+          },
+          link: linkSpy,
+        },
+      });
+
+      const result = await port.createExclusive(canonicalPath, 'candidate contents');
+
+      expect(result).toEqual({ state: 'failed' });
+      expect(JSON.stringify(result)).not.toContain('private staging failure sentinel');
+      expect(openedPaths).toEqual([temporaryPath]);
+      expect(linkSpy).not.toHaveBeenCalled();
+      await expect(lstat(canonicalPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  );
+
+  it('leaves the canonical path absent when atomic publish fails', async () => {
+    const canonicalPath = join(privateDirectory, 'link-failure.json');
+    const temporaryPath = stagingPath(canonicalPath);
+    const linkSpy = vi.fn(async () => {
+      throw Object.assign(new Error('private link failure sentinel'), { code: 'EACCES' });
+    });
+    const port = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: { link: linkSpy },
+    });
+
+    const result = await port.createExclusive(canonicalPath, 'candidate contents');
+
+    expect(result).toEqual({ state: 'failed' });
+    expect(JSON.stringify(result)).not.toContain('private link failure sentinel');
+    expect(linkSpy).toHaveBeenCalledWith(temporaryPath, canonicalPath);
+    await expect(lstat(canonicalPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('keeps a complete canonical file when best-effort staging cleanup fails', async () => {
+    const canonicalPath = join(privateDirectory, 'cleanup-failure.json');
+    const temporaryPath = stagingPath(canonicalPath);
+    const unlinkSpy = vi.fn(async (path: string) => {
+      if (path === temporaryPath) {
+        throw Object.assign(new Error('private unlink failure sentinel'), { code: 'EACCES' });
+      }
+      await unlink(path);
+    });
+    const port = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: { unlink: unlinkSpy },
+    });
+
+    const result = await port.createExclusive(canonicalPath, 'complete candidate contents');
+
+    expect(result).toEqual({ state: 'created' });
+    expect(JSON.stringify(result)).not.toContain('private unlink failure sentinel');
+    expect(await readFile(canonicalPath, 'utf8')).toBe('complete candidate contents');
+    expect(unlinkSpy).toHaveBeenCalledTimes(1);
+    expect(unlinkSpy).toHaveBeenCalledWith(temporaryPath);
+    expect(unlinkSpy).not.toHaveBeenCalledWith(canonicalPath);
   });
 });
 
@@ -629,34 +776,68 @@ describe('setupEvaluatorConfig', () => {
     });
   });
 
-  it('cleans only a config created by this call when the secure reread fails', async () => {
-    const cleanup = vi.fn(async () => undefined);
-    const protectedFiles = createFakeProtectedFiles(VALID_CONFIG);
-    const ports = createSetupPorts(VALID_CONFIG, protectedFiles);
-    const originalRead = protectedFiles.read;
-    protectedFiles.createExclusive = vi.fn(async () => ({
-      state: 'created' as const,
-      cleanup,
-    }));
-    protectedFiles.read = vi.fn(async (path, policy) => {
-      if (path === ports.configPath) {
-        return { ok: false as const, reason: 'unreadable' as const };
-      }
-      return await originalRead(path, policy);
-    });
+  it('never unlinks a replacement canonical path when the secure reread fails', async () => {
+    const secretsDirectory = join(rootDirectory, 'race-secrets');
+    const configDirectory = join(rootDirectory, 'race-config');
+    const configPath = join(configDirectory, 'intex-agent-evals.json');
+    const publishedOriginalPath = join(configDirectory, 'published-original.json');
+    await mkdir(secretsDirectory, { mode: 0o700 });
+    await chmod(secretsDirectory, 0o700);
+    const candidate: EvaluatorConfig = {
+      ...VALID_CONFIG,
+      matrixAccessTokenFile: join(secretsDirectory, 'matrix-token'),
+      matrixTargetsFile: join(secretsDirectory, 'matrix-targets.json'),
+    };
+    await writeFile(candidate.matrixAccessTokenFile, 'synthetic-matrix-token\n', { mode: 0o600 });
+    await writeFile(
+      candidate.matrixTargetsFile,
+      JSON.stringify({ 'synthetic-source': { intex_agent: '!agent-room:home-dev' } }),
+      { mode: 0o600 }
+    );
+    await chmod(candidate.matrixAccessTokenFile, 0o600);
+    await chmod(candidate.matrixTargetsFile, 0o600);
 
-    const result = await setupEvaluatorConfig(VALID_CONFIG, ports);
+    let staleCanonicalStats: Stats | undefined;
+    const nodePort = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: {
+        lstat: async (path) =>
+          path === configPath && staleCanonicalStats !== undefined
+            ? staleCanonicalStats
+            : await lstat(path),
+      },
+    });
+    const protectedFiles: ProtectedFilePort = {
+      ...nodePort,
+      read: async (path, policy) => {
+        if (path === configPath) {
+          await rename(configPath, publishedOriginalPath);
+          staleCanonicalStats = await lstat(publishedOriginalPath);
+          await writeFile(configPath, 'replacement canonical contents', { mode: 0o600 });
+          await chmod(configPath, 0o600);
+          return { ok: false, reason: 'unreadable' };
+        }
+        return await nodePort.read(path, policy);
+      },
+    };
+    const ports = createSetupPorts(candidate, protectedFiles);
+    ports.configPath = configPath;
+
+    const result = await setupEvaluatorConfig(candidate, ports);
 
     expect(result).toMatchObject({
       ok: false,
       exitCode: 2,
       code: 'CONFIG_WRITE_FAILED',
     });
-    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(await readFile(configPath, 'utf8')).toBe('replacement canonical contents');
+    expect(await readFile(publishedOriginalPath, 'utf8')).toBe(
+      canonicalizeEvaluatorConfig(candidate)
+    );
   });
 
-  it('never cleans a pre-existing file and never leaks a differing config', async () => {
-    const cleanup = vi.fn(async () => undefined);
+  it('never mutates a pre-existing file and never leaks a differing config', async () => {
     const protectedFiles = createFakeProtectedFiles(VALID_CONFIG);
     const ports = createSetupPorts(VALID_CONFIG, protectedFiles);
     const originalRead = protectedFiles.read;
@@ -677,7 +858,6 @@ describe('setupEvaluatorConfig', () => {
     const result = await setupEvaluatorConfig(VALID_CONFIG, ports);
 
     expect(result).toMatchObject({ ok: false, exitCode: 2 });
-    expect(cleanup).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain('private-existing-user');
     expect(JSON.stringify(result)).not.toContain('private secret sentinel');
   });
@@ -1004,6 +1184,34 @@ describe('preflight readiness mappings', () => {
     expect(JSON.stringify(result)).not.toContain('private error sentinel');
     expect(JSON.stringify(result)).not.toContain('private body sentinel');
   });
+
+  it.each(['toString', 'constructor', '__proto__'] as const)(
+    'rejects inherited Matrix target key %s instead of passing full preflight',
+    async (sourceAccountId) => {
+      const ports = createPreflightPorts();
+      const originalRead = ports.protectedFiles.read;
+      ports.protectedFiles.read = vi.fn(async (path, policy) =>
+        path === VALID_CONFIG.matrixTargetsFile
+          ? { ok: true as const, contents: '{}' }
+          : await originalRead(path, policy)
+      );
+      overrideHealthResult(ports, MATRIX_ADAPTER_HEALTH_URL, {
+        ok: true,
+        status: 200,
+        body: { ...runningMatrixHealth(), sourceAccountId },
+      });
+
+      const result = await runPreflight(ports);
+
+      expect(result).toMatchObject({
+        ok: false,
+        exitCode: 2,
+        code: 'MATRIX_TARGETS_INVALID',
+      });
+      expect(ports.firebaseIdentity.getUserState).not.toHaveBeenCalled();
+      expect(ports.miniMaxProbe.probe).not.toHaveBeenCalled();
+    }
+  );
 
   it.each([
     [{ ok: true, state: 'missing' }, 'FIREBASE_IDENTITY_MISSING'],

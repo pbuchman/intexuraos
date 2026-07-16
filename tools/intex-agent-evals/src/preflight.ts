@@ -5,9 +5,11 @@ import {
 } from '@intexuraos/internal-clients';
 import { getApp, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { FirebaseAuthError, getAuth } from 'firebase-admin/auth';
+import { randomUUID as nodeRandomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import {
+  link as nodeLink,
   lstat as nodeLstat,
   mkdir as nodeMkdir,
   open as nodeOpen,
@@ -37,10 +39,6 @@ const AbsolutePathSchema = z
   .max(4096)
   .refine((value) => isAbsolute(value));
 
-function isPhoneLikeAlias(value: string): boolean {
-  return /^[\d -]{7,}$/u.test(value);
-}
-
 export const EvaluatorConfigSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -50,7 +48,7 @@ export const EvaluatorConfigSchema = z
       .max(64)
       .regex(/^[A-Za-z0-9][A-Za-z0-9._ -]*$/u)
       .refine((value) => value === value.trim())
-      .refine((value) => !isPhoneLikeAlias(value)),
+      .refine((value) => /[A-Za-z]/u.test(value)),
     userId: z
       .string()
       .min(1)
@@ -123,7 +121,7 @@ export type PrivateDirectoryResult =
   | { ok: false; reason: 'missing' | 'unsafe' | 'create_failed' };
 
 export type ExclusiveCreateResult =
-  | { state: 'created'; cleanup(): Promise<void> }
+  | { state: 'created' }
   | { state: 'exists' }
   | { state: 'failed' };
 
@@ -147,6 +145,7 @@ interface FileStats {
 
 export interface NodeProtectedFileSystem {
   lstat(path: string): Promise<FileStats>;
+  link(sourcePath: string, destinationPath: string): Promise<void>;
   mkdir(path: string, options: { mode: number; recursive: true }): Promise<string | undefined>;
   open(path: string, flags: number, mode?: number): Promise<FileHandle>;
   unlink(path: string): Promise<void>;
@@ -155,14 +154,18 @@ export interface NodeProtectedFileSystem {
 export interface NodeProtectedFilePortOptions {
   expectedUid: number;
   fileSystem?: Partial<NodeProtectedFileSystem>;
+  nonce?: () => string;
 }
 
 const NODE_FILE_SYSTEM: NodeProtectedFileSystem = {
   lstat: nodeLstat,
+  link: nodeLink,
   mkdir: nodeMkdir,
   open: nodeOpen,
   unlink: nodeUnlink,
 };
+
+const STAGING_NONCE_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/u;
 
 function errorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
@@ -268,17 +271,6 @@ export function createNodeProtectedFilePort(
     }
   }
 
-  async function removeIfSameFile(path: string, identity: FileStats): Promise<void> {
-    try {
-      const current = await fileSystem.lstat(path);
-      if (hasSameIdentity(identity, current) && current.isFile() && !current.isSymbolicLink()) {
-        await fileSystem.unlink(path);
-      }
-    } catch {
-      // Cleanup is best-effort and must never reveal or replace the primary safe result.
-    }
-  }
-
   return {
     async read(path, policy): Promise<ProtectedFileReadResult> {
       let before: FileStats;
@@ -335,17 +327,29 @@ export function createNodeProtectedFilePort(
     },
 
     async createExclusive(path, contents): Promise<ExclusiveCreateResult> {
+      let nonce: string;
+      try {
+        nonce = (options.nonce ?? nodeRandomUUID)();
+      } catch {
+        return { state: 'failed' };
+      }
+      if (!STAGING_NONCE_PATTERN.test(nonce)) {
+        return { state: 'failed' };
+      }
+
+      const temporaryPath = join(dirname(path), `.intex-agent-evals-${nonce}.tmp`);
       let handle: FileHandle | undefined;
-      let identity: FileStats | undefined;
+      let temporaryCreated = false;
+      let publishAttempted = false;
       try {
         handle = await fileSystem.open(
-          path,
+          temporaryPath,
           constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
           0o600
         );
-        identity = await handle.stat();
+        temporaryCreated = true;
         await handle.chmod(0o600);
-        identity = await handle.stat();
+        const identity = await handle.stat();
         if (!isSafeFile(identity, options.expectedUid, 0o600)) {
           throw new Error('unsafe-created-file');
         }
@@ -353,21 +357,18 @@ export function createNodeProtectedFilePort(
         await handle.sync();
         await handle.close();
         handle = undefined;
-        const createdIdentity = identity;
-        return {
-          state: 'created',
-          async cleanup(): Promise<void> {
-            await removeIfSameFile(path, createdIdentity);
-          },
-        };
+        publishAttempted = true;
+        await fileSystem.link(temporaryPath, path);
+        return { state: 'created' };
       } catch (error) {
-        await handle?.close().catch(() => undefined);
-        if (identity !== undefined) {
-          await removeIfSameFile(path, identity);
-        }
-        return errorCode(error) === 'EEXIST' || errorCode(error) === 'ELOOP'
+        return publishAttempted && errorCode(error) === 'EEXIST'
           ? { state: 'exists' }
           : { state: 'failed' };
+      } finally {
+        await handle?.close().catch(() => undefined);
+        if (temporaryCreated) {
+          await fileSystem.unlink(temporaryPath).catch(() => undefined);
+        }
       }
     },
   };
@@ -685,7 +686,7 @@ async function validateAccountReadiness(
   if (matrixHealth.data.matrixUserId !== config.matrixUserId) {
     return readinessFailure(checks, 'matrix_health', 'MATRIX_IDENTITY_MISMATCH');
   }
-  if (targets.value[matrixHealth.data.sourceAccountId] === undefined) {
+  if (!Object.hasOwn(targets.value, matrixHealth.data.sourceAccountId)) {
     return readinessFailure(checks, 'matrix_health', 'MATRIX_TARGETS_INVALID');
   }
   checks.push({ check: 'matrix_health', status: 'passed' });
@@ -787,7 +788,6 @@ export async function setupEvaluatorConfig(
     });
     if (!configRead.ok) {
       if (created.state === 'created') {
-        await created.cleanup();
         return setupFailure(checks, 'config', 'CONFIG_WRITE_FAILED');
       }
       return setupFailure(checks, 'config', 'CONFIG_FILE_UNSAFE');
@@ -795,7 +795,6 @@ export async function setupEvaluatorConfig(
     const loaded = parseEvaluatorConfigContents(configRead.contents);
     if (!loaded.ok || !configsEqual(loaded.value, config)) {
       if (created.state === 'created') {
-        await created.cleanup();
         return setupFailure(checks, 'config', 'CONFIG_WRITE_FAILED');
       }
       return setupFailure(checks, 'config', 'CONFIG_CONFLICT');
