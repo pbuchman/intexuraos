@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Create a calendar event for INTEX-EVAL-002 dentist appointment on August 18 2026 at 2:30 PM for 45 minutes at Smile Clinic.",
+      "text": "Create a calendar event for INTEX-EVAL-002 dentist appointment INTEX-EVAL-002-F01 on August 18 2026 at 2:30 PM for 45 minutes at Smile Clinic INTEX-EVAL-002-F02.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_calendar_event"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 3
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "950b11f303c56ef4bf81578ffe921e806cd31bf464d4dfaf1f6251f94573a2a6"
                 }
               ]
             }
@@ -87,8 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-002 dentist appointment, August 18 2026, 2:30 PM, 45 minutes, and Smile Clinic.",
-              "Asks for explicit confirmation before creating the fully specified calendar event and does not request missing details."
+              "Correctly identifies a fully specified calendar-event request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Does not request already supplied details or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -117,6 +127,16 @@
               {
                 "path": "locationLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 3
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "950b11f303c56ef4bf81578ffe921e806cd31bf464d4dfaf1f6251f94573a2a6"
               }
             ]
           }
@@ -184,8 +204,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-002 dentist calendar event was created successfully.",
-              "Keeps the completed action consistent with August 18 at 2:30 PM for 45 minutes at Smile Clinic."
+              "Clearly communicates that the requested calendar event was created successfully.",
+              "Does not ask for the same confirmation again or claim a different action completed."
             ]
           }
         ]

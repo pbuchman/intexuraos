@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Delete preference pref_eval_019 at version 0. INTEX-EVAL-019.",
+      "text": "Delete preference pref_INTEX-EVAL-019_INTEX-EVAL-019-F01 at version 0.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "delete_user_preference"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "6d78d5df687770fc1af3b76803e4cf0a31e43029c6d6b10ab975c51ac1638c3f"
                 }
               ]
             }
@@ -87,8 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-019, pref_eval_019, and expected version 0 for deletion.",
-              "Asks for explicit confirmation before deleting the preference."
+              "Correctly identifies an exact preference-delete request and asks for explicit confirmation.",
+              "Does not claim the preference already changed or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -109,6 +119,16 @@
                 "path": "expectedVersion",
                 "operator": "equals",
                 "value": 0
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "6d78d5df687770fc1af3b76803e4cf0a31e43029c6d6b10ab975c51ac1638c3f"
               }
             ]
           }
@@ -176,8 +196,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that pref_eval_019 for INTEX-EVAL-019 was deleted successfully.",
-              "Does not claim to add or update a different preference."
+              "Reports the sanitized resulting preference state as empty without exposing deleted row content.",
+              "Does not request the same confirmation again; deterministic completed-tool evidence establishes delete success."
             ]
           }
         ]

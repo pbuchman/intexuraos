@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Remember INTEX-EVAL-006 initial context: the garage remote is in the desk drawer.",
+      "text": "Remember INTEX-EVAL-006 initial context: the garage remote is in the desk drawer INTEX-EVAL-006-F01.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -18,7 +18,7 @@
     },
     {
       "kind": "message",
-      "text": "Also remember INTEX-EVAL-006 parking is on level P3.",
+      "text": "Also remember INTEX-EVAL-006 parking is on level P3 INTEX-EVAL-006-F02.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -88,6 +88,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "e0eda90831ff9374d7859804dbd65e1297d922b7cfc9a4988a1186ac51c9d83e"
                 }
               ]
             }
@@ -97,8 +107,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-006, the garage remote, and its desk drawer location.",
-              "Asks for explicit confirmation before saving the initial garage-remote note."
+              "Correctly identifies the first note-save request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Does not claim the note already exists or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -113,6 +123,16 @@
               {
                 "path": "contentLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "e0eda90831ff9374d7859804dbd65e1297d922b7cfc9a4988a1186ac51c9d83e"
               }
             ]
           }
@@ -180,7 +200,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the initial INTEX-EVAL-006 garage-remote note was saved successfully.",
+              "Clearly communicates that the first requested note was saved successfully.",
               "Leaves the interaction open for a coherent follow-up."
             ]
           }
@@ -231,6 +251,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "a22c1e642c3003676c7351e647f170bb70448e84ef3f7c8d3d90d50f3106ebc8"
                 }
               ]
             }
@@ -240,9 +270,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-006 parking and level P3 as a second note request.",
-              "Asks for explicit confirmation before saving the follow-up parking note.",
-              "Does not announce or imply that another new session started."
+              "Correctly identifies the follow-up as a second note-save request and asks for explicit confirmation.",
+              "Does not announce another session, claim the note exists, or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -257,6 +286,16 @@
               {
                 "path": "contentLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "a22c1e642c3003676c7351e647f170bb70448e84ef3f7c8d3d90d50f3106ebc8"
               }
             ]
           }
@@ -324,7 +363,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-006 parking-level P3 note was saved successfully.",
+              "Clearly communicates that the follow-up note was saved successfully.",
               "Remains coherent with the prior successful action in the same session."
             ]
           }

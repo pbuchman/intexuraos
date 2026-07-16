@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTestConversationRunnerService,
@@ -128,13 +129,18 @@ describe('createTestConversationRunnerService', () => {
       async run(): Promise<IntexAgentRunnerResult> {
         return {
           outcome: 'needs_confirmation',
-          reply: 'Add this note?\nContent: secret service test',
+          reply:
+            'Add this note?\nContent: secret service test INTEX-EVAL-001 INTEX-EVAL-001-F01',
           toolName: 'create_note',
-          toolArgs: { content: 'secret service test' },
+          toolArgs: {
+            content: 'secret service test INTEX-EVAL-001 INTEX-EVAL-001-F01',
+          },
         };
       },
       async executeConfirmed(): Promise<IntexAgentRunnerResult> {
-        const rawResult = await config.toolExecutor.createNote({ content: 'secret service test' });
+        const rawResult = await config.toolExecutor.createNote({
+          content: 'secret service test INTEX-EVAL-001 INTEX-EVAL-001-F01',
+        });
         const toolResult = JSON.parse(rawResult) as Record<string, unknown>;
         return {
           outcome: 'completed',
@@ -164,7 +170,10 @@ describe('createTestConversationRunnerService', () => {
       runId: 'intex-e2e-confirm-service',
       currentDateTime: '2026-07-01T10:00:00.000Z',
       turns: [
-        { kind: 'message', text: 'Save note intex-e2e-confirm-service' },
+        {
+          kind: 'message',
+          text: 'Save note INTEX-EVAL-001 INTEX-EVAL-001-F01 intex-e2e-confirm-service',
+        },
         { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },
       ],
       toolMocks: {
@@ -177,14 +186,36 @@ describe('createTestConversationRunnerService', () => {
 
     expect(createAgentRunnerFn).toHaveBeenCalledTimes(2);
     expect(result.turns[1]?.assistantReplies[0]?.message).toBe('Confirmed note status: completed');
+    const expectedArgsSummary = {
+      contentLength: 53,
+      syntheticMarkerCount: 2,
+      syntheticMarkerDigest: markerDigest(['INTEX-EVAL-001', 'INTEX-EVAL-001-F01']),
+    };
     expect(result.toolCalls).toEqual([
       {
         toolName: 'create_note',
         status: 'completed',
-        argsSummary: { contentLength: 19 },
+        argsSummary: expectedArgsSummary,
         resultSummary: { status: 'completed' },
       },
     ]);
+    const confirmationRequested = Object.values(result.eventsBySessionId)
+      .flat()
+      .find((event) => event.type === 'confirmation_requested');
+    expect(confirmationRequested?.payload['argsSummary']).toEqual(expectedArgsSummary);
+    expect(JSON.stringify(confirmationRequested?.payload)).not.toMatch(/secret service|INTEX-EVAL/iu);
+    expect(JSON.stringify(result.toolCalls)).not.toMatch(/secret service|INTEX-EVAL/iu);
+    expect(result.turns[0]?.submittedTextPreview).toContain('INTEX-EVAL-001-F01');
+    const resultWithoutSubmittedText = {
+      ...result,
+      turns: result.turns.map(({ submittedTextPreview: _submittedTextPreview, ...turn }) => turn),
+      behavioralTranscript: {
+        turns: result.behavioralTranscript.turns.map(
+          ({ submittedTextPreview: _submittedTextPreview, ...turn }) => turn
+        ),
+      },
+    };
+    expect(JSON.stringify(resultWithoutSubmittedText)).not.toContain('INTEX-EVAL');
     expect(JSON.stringify(result)).not.toContain('secret service test');
   });
 
@@ -277,6 +308,12 @@ function testRequest(runId: string): Parameters<ReturnType<typeof createTestConv
     currentDateTime: '2026-07-01T10:00:00.000Z',
     turns: [{ kind: 'message', text: `Ping ${runId}` }],
   };
+}
+
+function markerDigest(markers: readonly string[]): string {
+  return createHash('sha256')
+    .update(`intex-eval-marker-set:v1\0${[...markers].sort().join('\n')}`, 'utf8')
+    .digest('hex');
 }
 
 function testConfig(): CreateTestConversationRunnerServiceInput['config'] {

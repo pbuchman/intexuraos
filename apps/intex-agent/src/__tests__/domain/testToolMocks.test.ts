@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
 import {
   createCapturedReplyPublisher,
   createTestToolExecutor,
 } from '../../domain/testConversation/testToolMocks.js';
+import { sanitizeAssistantReplies } from '../../domain/testConversation/testConversationSanitizer.js';
 import type {
   CapturedAssistantReply,
   CapturedToolCall,
@@ -61,7 +64,11 @@ describe('test tool mocks', () => {
       {
         toolName: 'create_note',
         status: 'failed',
-        argsSummary: { contentLength: 16 },
+        argsSummary: {
+          contentLength: 16,
+          syntheticMarkerCount: 0,
+          syntheticMarkerDigest: markerDigest([]),
+        },
         error: 'mock note failure',
       },
     ]);
@@ -82,9 +89,114 @@ describe('test tool mocks', () => {
       contentLength: 16,
       tagsCount: 2,
       sourceMessageIdsCount: 1,
+      syntheticMarkerCount: 0,
+      syntheticMarkerDigest: markerDigest([]),
     });
     expect(JSON.stringify(calls)).not.toContain('private');
     expect(JSON.stringify(calls)).not.toContain('wamid-1');
+  });
+
+  it('records canonical marker evidence without changing it when surrounding secrets change', async () => {
+    const calls: CapturedToolCall[] = [];
+    const executor = createTestToolExecutor({ calls });
+
+    await executor.createNote({
+      content: 'private-one INTEX-EVAL-006-F01 INTEX-EVAL-006',
+    });
+    await executor.createNote({
+      content: 'private-two INTEX-EVAL-006 INTEX-EVAL-006-F01',
+    });
+
+    const expectedEvidence = {
+      syntheticMarkerCount: 2,
+      syntheticMarkerDigest: markerDigest(['INTEX-EVAL-006', 'INTEX-EVAL-006-F01']),
+    };
+    expect(calls[0]?.argsSummary).toMatchObject(expectedEvidence);
+    expect(calls[1]?.argsSummary).toMatchObject(expectedEvidence);
+    expect(JSON.stringify(calls)).not.toMatch(/private-one|private-two|INTEX-EVAL/iu);
+  });
+
+  it('returns canonical default preference blocks that sanitize to resulting-state replies', async () => {
+    const calls: CapturedToolCall[] = [];
+    const executor = createTestToolExecutor({ calls });
+
+    const add = JSON.parse(
+      await executor.addUserPreference({ text: '  Reply   briefly.  ', expectedVersion: 0 })
+    ) as Record<string, unknown>;
+    const update = JSON.parse(
+      await executor.updateUserPreference({
+        itemId: 'pref_input',
+        text: 'Reply formally.',
+        expectedVersion: 1,
+      })
+    ) as Record<string, unknown>;
+    const deleted = JSON.parse(
+      await executor.deleteUserPreference({ itemId: 'pref_input', expectedVersion: 2 })
+    ) as Record<string, unknown>;
+
+    expect(add['promptBlock']).toBe(
+      'User Preferences v1:\n1. (id: pref_mock) "Reply briefly."'
+    );
+    expect(update['promptBlock']).toBe(
+      'User Preferences v2:\n1. (id: pref_input) "Reply formally."'
+    );
+    expect(deleted['promptBlock']).toBe('');
+  });
+
+  it('returns the actual sanitized resulting-state replies for preference mutations', async () => {
+    const calls: CapturedToolCall[] = [];
+    const runner = createIntexAgentRunner({
+      client: {} as Parameters<typeof createIntexAgentRunner>[0]['client'],
+      toolExecutor: createTestToolExecutor({ calls }),
+    });
+    const session = {
+      id: 'intex_session_test',
+      userId: 'test-intex-agent-preference-replies',
+      channel: 'whatsapp' as const,
+      status: 'waiting_for_user' as const,
+      startedAt: '2026-07-16T10:00:00.000Z',
+      lastUserMessageAt: '2026-07-16T10:00:00.000Z',
+      startReason: 'no_active_session' as const,
+    };
+    const results = await Promise.all([
+      runner.executeConfirmed({
+        session,
+        toolName: 'add_user_preference',
+        toolArgs: { text: 'Reply briefly.', expectedVersion: 0 },
+        currentDateTime: '2026-07-16T10:00:00.000Z',
+      }),
+      runner.executeConfirmed({
+        session,
+        toolName: 'update_user_preference',
+        toolArgs: { itemId: 'pref_input', text: 'Reply formally.', expectedVersion: 1 },
+        currentDateTime: '2026-07-16T10:00:00.000Z',
+      }),
+      runner.executeConfirmed({
+        session,
+        toolName: 'delete_user_preference',
+        toolArgs: { itemId: 'pref_input', expectedVersion: 2 },
+        currentDateTime: '2026-07-16T10:00:00.000Z',
+      }),
+    ]);
+    const sanitizedReplies = sanitizeAssistantReplies(
+      results.map((result, index) => ({
+        userId: session.userId,
+        message: result.reply,
+        replyToMessageId: `wamid-${String(index)}`,
+        correlationId: session.id,
+      }))
+    );
+
+    expect(sanitizedReplies.map((reply) => reply.message)).toEqual([
+      'User Preferences: [redacted] [redacted-preference-item]',
+      'User Preferences: [redacted] [redacted-preference-item]',
+      'No Intex Agent preferences are defined yet.',
+    ]);
+    expect(calls.map((call) => call.toolName)).toEqual([
+      'add_user_preference',
+      'update_user_preference',
+      'delete_user_preference',
+    ]);
   });
 
   it('redacts raw URLs, prompts, and preference text from captured tool summaries', async () => {
@@ -246,3 +358,9 @@ describe('test tool mocks', () => {
     ]);
   });
 });
+
+function markerDigest(markers: readonly string[]): string {
+  return createHash('sha256')
+    .update(`intex-eval-marker-set:v1\0${[...markers].sort().join('\n')}`, 'utf8')
+    .digest('hex');
+}

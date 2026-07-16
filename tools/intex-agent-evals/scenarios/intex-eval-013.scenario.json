@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "https://example.com/intex-eval-013",
+      "text": "https://example.com/intex-eval-013?fact=INTEX-EVAL-013-F01",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_link"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "60cf803182cc180d9f6e274d7b700a8627123b2da1a80cbd301eb725d33c17a6"
                 }
               ]
             }
@@ -87,9 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Interprets the bare URL https://example.com/intex-eval-013 as a bookmark request.",
-              "The confirmation preview preserves example.com/intex-eval-013 without inventing fetched page content.",
-              "Asks for explicit confirmation before saving the link."
+              "Correctly interprets the bare synthetic URL as a bookmark request and asks for explicit confirmation.",
+              "Does not invent fetched page content or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -105,6 +114,16 @@
                 "path": "hasUrl",
                 "operator": "equals",
                 "value": true
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "60cf803182cc180d9f6e274d7b700a8627123b2da1a80cbd301eb725d33c17a6"
               }
             ]
           }
@@ -172,7 +191,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the example.com/intex-eval-013 link or bookmark was saved successfully.",
+              "Clearly communicates that the requested bookmark was saved successfully.",
               "Does not claim to create a note, research draft, or calendar event."
             ]
           }

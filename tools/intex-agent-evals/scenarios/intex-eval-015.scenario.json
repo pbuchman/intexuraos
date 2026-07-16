@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Save externally this synthetic receipt INTEX-EVAL-015.",
+      "text": "Save externally this synthetic receipt INTEX-EVAL-015 INTEX-EVAL-015-F01.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "save_external"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "63b5eddc12d8f135f8b58ede2b0f51a3b7e846cb09a582074b143a277f347959"
                 }
               ]
             }
@@ -87,8 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-015 synthetic receipt for the external-save capability.",
-              "Asks for explicit confirmation before performing the external save."
+              "Correctly identifies an external-save request and asks for explicit confirmation in an appropriate tone.",
+              "Does not claim the external save already completed or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -103,6 +113,16 @@
               {
                 "path": "messageLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "63b5eddc12d8f135f8b58ede2b0f51a3b7e846cb09a582074b143a277f347959"
               }
             ]
           }
@@ -170,7 +190,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-015 synthetic receipt was saved externally successfully.",
+              "Clearly communicates that the requested external save completed successfully.",
               "Does not reinterpret the request as a note, bookmark, or unsupported action."
             ]
           }

@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Put INTEX-EVAL-008 project review on my calendar for September 10 2026.",
+      "text": "Put INTEX-EVAL-008 project review INTEX-EVAL-008-F01 on my calendar for September 10 2026.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -141,6 +141,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_calendar_event"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "f028fd35a8d7899c52602046403cf938b0a76326e9264285cf600414491b120e"
                 }
               ]
             }
@@ -150,9 +160,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-008 project review, September 10 2026, 3 PM, and a one hour duration.",
-              "Asks for explicit confirmation before creating the now-complete calendar event.",
-              "Does not announce another new session or ask for the time again."
+              "Correctly treats the clarified request as a complete calendar event and asks for explicit confirmation.",
+              "Does not announce another session, ask for the time again, or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -177,6 +186,16 @@
                 "path": "end",
                 "operator": "contains",
                 "value": "2026-09-10T16:00"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "f028fd35a8d7899c52602046403cf938b0a76326e9264285cf600414491b120e"
               }
             ]
           }
@@ -244,8 +263,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-008 September 10 project review was created successfully.",
-              "Keeps the completed event consistent with a 3 PM start and one-hour duration."
+              "Clearly communicates that the clarified calendar event was created successfully.",
+              "Does not request the missing time again or another confirmation."
             ]
           }
         ]

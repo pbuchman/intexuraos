@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { IntexAgentSessionEvent, IntexAgentToolName } from '../sessions/types.js';
 import type {
   BehavioralTranscript,
@@ -15,12 +16,15 @@ const SECRET_FIELD_PATTERN =
   /token|secret|password|key|authorization|auth|credential|toolargs|promptblock|replycontext|sourceurl|whatsappsender/iu;
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"')]+|\/#\/[^\s<>"')]+/giu;
 const SENSITIVE_REPLY_LINE_PATTERN =
-  /^\s*(url|source|zrodlo|źródło|content|treść|tresc|prompt|new entry|nowy wpis|entry|wpis|before|przed|after|po)\s*:/iu;
+  /^\s*(url|source|zrodlo|źródło|title|tytuł|content|treść|tresc|start|początek|end|koniec|location|miejsce|attendees|uczestnicy|prompt|mode|tryb|worker|typ workera|new entry|nowy wpis|entry|wpis|before|przed|after|po)\s*:/iu;
 const PREFERENCE_BLOCK_HEADER_PATTERN =
   /^\s*(user preferences|prompt preferences|current preferences|rendered prompt block|preferencje|preferencje użytkownika)\b/iu;
 const PREFERENCE_BLOCK_ITEM_PATTERN = /^\s*(?:[-*]|\d+[).])\s+\S/u;
 const TEXT_PREVIEW_LIMIT = 220;
 const REPLY_MESSAGE_LIMIT = 4000;
+const SYNTHETIC_MARKER_PATTERN =
+  /(?<![A-Z0-9-])INTEX-EVAL-[0-9]{3}(?:-F[0-9]{2})?(?![A-Z0-9-])/giu;
+const SYNTHETIC_MARKER_DIGEST_PREFIX = 'intex-eval-marker-set:v1\0';
 
 type TranscriptEvent = IntexAgentSessionEvent | SanitizedSessionEvent;
 
@@ -41,13 +45,16 @@ export function sanitizeAssistantReplies(
 ): SanitizedAssistantReply[] {
   return replies.map((reply) => ({
     userId: reply.userId,
-    message: truncateTo(redactSensitiveText(reply.message), REPLY_MESSAGE_LIMIT),
+    message: truncateTo(
+      redactSyntheticMarkers(redactSensitiveText(reply.message)),
+      REPLY_MESSAGE_LIMIT
+    ),
     replyToMessageId: reply.replyToMessageId,
     correlationId: reply.correlationId,
     ...(reply.ctaUrl !== undefined
       ? {
           ctaUrl: {
-            displayText: previewText(reply.ctaUrl.displayText),
+            displayText: previewText(redactSyntheticMarkers(reply.ctaUrl.displayText)),
             url: '[redacted-url]',
           },
         }
@@ -136,6 +143,72 @@ export function sanitizeRecord(record: Record<string, unknown>): Record<string, 
   return sanitized;
 }
 
+export function summarizeArgs(
+  toolName: IntexAgentToolName,
+  args: Record<string, unknown>
+): Record<string, unknown> {
+  const summary: Record<string, unknown> = {};
+  if (toolName === 'query_calendar_events') {
+    copySummaryString(args, summary, 'mode');
+    copySummaryString(args, summary, 'timeMin');
+    copySummaryString(args, summary, 'timeMax');
+    copySummaryNumber(args, summary, 'maxResults');
+    copySummaryStringLength(args, summary, 'query');
+    copySummaryPresence(args, summary, 'calendarId');
+    return sanitizeRecord(summary);
+  }
+
+  if (toolName === 'create_calendar_event') {
+    copySummaryStringLength(args, summary, 'summary');
+    copySummaryString(args, summary, 'start');
+    copySummaryString(args, summary, 'end');
+    copySummaryString(args, summary, 'timeZone');
+    copySummaryStringLength(args, summary, 'location');
+    copySummaryStringLength(args, summary, 'description');
+    copySummaryArrayCount(args, summary, 'attendees');
+  } else if (toolName === 'create_note') {
+    copySummaryStringLength(args, summary, 'content');
+    copySummaryStringLength(args, summary, 'title');
+    copySummaryArrayCount(args, summary, 'tags');
+    copySummaryArrayCount(args, summary, 'sourceMessageIds');
+  } else if (toolName === 'create_research') {
+    copySummaryStringLength(args, summary, 'title');
+    copySummaryStringLength(args, summary, 'prompt');
+    copySummaryStringLength(args, summary, 'originalMessage');
+    copySummaryArrayCount(args, summary, 'sourceMessageIds');
+  } else if (toolName === 'create_link') {
+    copySummaryPresence(args, summary, 'url');
+    copySummaryStringLength(args, summary, 'title');
+    copySummaryStringLength(args, summary, 'description');
+    copySummaryArrayCount(args, summary, 'tags');
+    copySummaryArrayCount(args, summary, 'sourceMessageIds');
+  } else if (toolName === 'create_code_task') {
+    copySummaryStringLength(args, summary, 'prompt');
+    copySummaryString(args, summary, 'workerType');
+    copySummaryString(args, summary, 'taskMode');
+    copySummaryPresence(args, summary, 'linearIssueId');
+  } else if (toolName === 'save_external') {
+    copySummaryStringLength(args, summary, 'message');
+    copySummaryPresence(args, summary, 'sourceUrl');
+  } else if (toolName === 'get_user_preferences') {
+    return {};
+  } else if (toolName === 'add_user_preference') {
+    copySummaryStringLength(args, summary, 'text');
+    copySummaryNumber(args, summary, 'expectedVersion');
+  } else {
+    copySummaryPresence(args, summary, 'itemId');
+    copySummaryStringLength(args, summary, 'text');
+    copySummaryNumber(args, summary, 'expectedVersion');
+  }
+
+  const markers = collectSyntheticMarkers(args);
+  summary['syntheticMarkerCount'] = markers.length;
+  summary['syntheticMarkerDigest'] = createHash('sha256')
+    .update(`${SYNTHETIC_MARKER_DIGEST_PREFIX}${markers.join('\n')}`, 'utf8')
+    .digest('hex');
+  return sanitizeRecord(summary);
+}
+
 export function previewText(text: string): string {
   return truncate(redactSensitiveText(text).trim().replace(/\s+/gu, ' '));
 }
@@ -153,13 +226,21 @@ function sanitizeEventPayload(event: IntexAgentSessionEvent): Record<string, unk
 
   const text = readFirstString(payload, ['text', 'message']);
   if (text !== undefined) {
-    sanitized['textPreview'] = previewText(text);
+    sanitized['textPreview'] = previewText(redactSyntheticMarkers(text));
   }
 
   if (event.type === 'tool_call_completed') {
     const result = payload['result'];
     if (isPlainRecord(result)) {
       sanitized['resultSummary'] = sanitizeRecord(summarizeResult(result));
+    }
+  }
+
+  if (event.type === 'confirmation_requested') {
+    const toolName = payload['toolName'];
+    const toolArgs = payload['toolArgs'];
+    if (isToolName(toolName) && isPlainRecord(toolArgs)) {
+      sanitized['argsSummary'] = summarizeArgs(toolName, toolArgs);
     }
   }
 
@@ -245,6 +326,76 @@ function sanitizeValue(value: unknown): unknown {
   return undefined;
 }
 
+function collectSyntheticMarkers(value: unknown): string[] {
+  const markers = new Set<string>();
+  visitArgumentValues(value, (text) => {
+    for (const match of text.matchAll(SYNTHETIC_MARKER_PATTERN)) {
+      markers.add(match[0].toUpperCase());
+    }
+  });
+  return [...markers].sort();
+}
+
+function visitArgumentValues(value: unknown, visit: (text: string) => void): void {
+  if (typeof value === 'string') {
+    visit(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) visitArgumentValues(item, visit);
+    return;
+  }
+  if (isPlainRecord(value)) {
+    for (const item of Object.values(value)) visitArgumentValues(item, visit);
+  }
+}
+
+function copySummaryString(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  key: string
+): void {
+  const value = source[key];
+  if (typeof value === 'string') target[key] = redactSyntheticMarkers(value);
+}
+
+function copySummaryNumber(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  key: string
+): void {
+  const value = source[key];
+  if (typeof value === 'number') target[key] = value;
+}
+
+function copySummaryStringLength(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  key: string
+): void {
+  const value = source[key];
+  if (typeof value === 'string') target[`${key}Length`] = value.length;
+}
+
+function copySummaryArrayCount(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  key: string
+): void {
+  const value = source[key];
+  if (Array.isArray(value)) target[`${key}Count`] = value.length;
+}
+
+function copySummaryPresence(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  key: string
+): void {
+  if (source[key] !== undefined) {
+    target[`has${key.charAt(0).toUpperCase()}${key.slice(1)}`] = true;
+  }
+}
+
 function summarizeResult(result: Record<string, unknown>): Record<string, unknown> {
   const summary: Record<string, unknown> = {};
   for (const key of ['status', 'mode', 'count', 'eventId', 'bookmarkId', 'codeTaskId', 'changedItemId']) {
@@ -292,6 +443,10 @@ function redactSensitiveText(text: string): string {
       return line.replace(/:\s*.*$/u, ': [redacted]');
     })
     .join('\n');
+}
+
+function redactSyntheticMarkers(text: string): string {
+  return text.replace(SYNTHETIC_MARKER_PATTERN, '[synthetic-marker]');
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

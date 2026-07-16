@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Create a research draft titled INTEX-EVAL-012 about synthetic battery testing.",
+      "text": "Create a research draft titled INTEX-EVAL-012 INTEX-EVAL-012-F01 about synthetic battery testing INTEX-EVAL-012-F02.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_research"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 3
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "33f849a943093bf7bee7474af153394b8148d5710e3b309a7afdaeb827760a04"
                 }
               ]
             }
@@ -87,8 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves research title INTEX-EVAL-012 and the synthetic battery testing topic.",
-              "Asks for explicit confirmation before creating the research draft."
+              "Correctly identifies a research-draft request and asks for explicit confirmation in an appropriate tone.",
+              "Does not claim the draft already exists or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -107,6 +117,16 @@
               {
                 "path": "promptLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 3
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "33f849a943093bf7bee7474af153394b8148d5710e3b309a7afdaeb827760a04"
               }
             ]
           }
@@ -174,7 +194,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-012 synthetic battery testing research draft was created successfully.",
+              "Clearly communicates that the requested research draft was created successfully.",
               "Does not reinterpret the request as a note, bookmark, or unsupported action."
             ]
           }

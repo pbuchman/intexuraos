@@ -85,6 +85,8 @@ export const TOOL_ARGUMENT_PATH_METADATA = {
     titleLength: 'number',
     tagsCount: 'number',
     sourceMessageIdsCount: 'number',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   create_calendar_event: {
     summaryLength: 'number',
@@ -94,6 +96,8 @@ export const TOOL_ARGUMENT_PATH_METADATA = {
     locationLength: 'number',
     descriptionLength: 'number',
     attendeesCount: 'number',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   query_calendar_events: {
     mode: 'string',
@@ -108,6 +112,8 @@ export const TOOL_ARGUMENT_PATH_METADATA = {
     promptLength: 'number',
     originalMessageLength: 'number',
     sourceMessageIdsCount: 'number',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   create_link: {
     hasUrl: 'boolean',
@@ -115,30 +121,42 @@ export const TOOL_ARGUMENT_PATH_METADATA = {
     descriptionLength: 'number',
     tagsCount: 'number',
     sourceMessageIdsCount: 'number',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   create_code_task: {
     promptLength: 'number',
     workerType: 'string',
     taskMode: 'string',
     hasLinearIssueId: 'boolean',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   save_external: {
     messageLength: 'number',
     hasSourceUrl: 'boolean',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   get_user_preferences: {},
   add_user_preference: {
     textLength: 'number',
     expectedVersion: 'number',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   update_user_preference: {
     hasItemId: 'boolean',
     textLength: 'number',
     expectedVersion: 'number',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
   delete_user_preference: {
     hasItemId: 'boolean',
     expectedVersion: 'number',
+    syntheticMarkerCount: 'number',
+    syntheticMarkerDigest: 'string',
   },
 } as const satisfies Record<IntexAgentToolName, AssertionPathMetadata>;
 
@@ -165,6 +183,8 @@ export const TIMELINE_PAYLOAD_PATH_METADATA = {
   sourceOutcome: 'string',
   sourceType: 'string',
   textPreview: 'string',
+  'argsSummary.syntheticMarkerCount': 'number',
+  'argsSummary.syntheticMarkerDigest': 'string',
 } as const satisfies AssertionPathMetadata;
 
 export const TIMELINE_PAYLOAD_PATHS = Object.keys(TIMELINE_PAYLOAD_PATH_METADATA);

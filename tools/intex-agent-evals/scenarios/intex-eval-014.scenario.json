@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Create a MiniMax planning code task to investigate synthetic cache behavior INTEX-EVAL-014.",
+      "text": "Create a MiniMax planning code task to investigate synthetic cache behavior INTEX-EVAL-014 INTEX-EVAL-014-F01.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_code_task"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "87b4ad9d89e483405f04f87a3cf8062e5244cb8f93d9bc137c70820422d22a05"
                 }
               ]
             }
@@ -87,8 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-014, MiniMax worker, planning mode, and synthetic cache investigation.",
-              "Asks for explicit confirmation before creating the code task."
+              "Correctly identifies a planning code-task request for the selected worker and asks for explicit confirmation.",
+              "Does not claim the task already exists or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -113,6 +123,16 @@
                 "path": "taskMode",
                 "operator": "equals",
                 "value": "planning"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "87b4ad9d89e483405f04f87a3cf8062e5244cb8f93d9bc137c70820422d22a05"
               }
             ]
           }
@@ -180,8 +200,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-014 planning code task was created successfully.",
-              "Preserves the synthetic cache-investigation intent and MiniMax worker choice."
+              "Clearly communicates that the requested code task was created successfully.",
+              "Does not ask for another confirmation or claim a different tool action completed."
             ]
           }
         ]

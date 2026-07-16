@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Remember that the garage code for INTEX-EVAL-001 is 7241.",
+      "text": "Remember that the garage code for INTEX-EVAL-001 is 7241 INTEX-EVAL-001-F01.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "aee146a0b4eeb114cbf9b5192fc90400c6b0acba80cd89aecdf2ef6261d384b8"
                 }
               ]
             }
@@ -87,9 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Treats INTEX-EVAL-001 garage code 7241 as a request to save a note.",
-              "The confirmation preview preserves INTEX-EVAL-001, the garage context, and code 7241 without substituting another value.",
-              "Asks for explicit confirmation before saving and does not claim the note already exists."
+              "Correctly identifies a note-save request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Does not claim the note already exists and does not expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -104,6 +113,16 @@
               {
                 "path": "contentLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "aee146a0b4eeb114cbf9b5192fc90400c6b0acba80cd89aecdf2ef6261d384b8"
               }
             ]
           }
@@ -171,7 +190,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the requested INTEX-EVAL-001 garage-code note was saved successfully.",
+              "Clearly communicates that the requested note was saved successfully.",
               "Does not ask for the same confirmation again or describe the action as unsupported."
             ]
           }

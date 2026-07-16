@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Keep this for later: INTEX-EVAL-007 passport expires in November 2029.",
+      "text": "Keep this for later: INTEX-EVAL-007 passport expires in November 2029 INTEX-EVAL-007-F01.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -78,6 +78,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "9f6c5056da193c9a5bb79cb80d5a3aa6fed7eeffed3d7f32a3cd80c0089c824b"
                 }
               ]
             }
@@ -87,8 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-007 passport expiry in November 2029 as a note request.",
-              "Asks for explicit confirmation without classifying the request as unsupported or asking what action is wanted."
+              "Correctly identifies the request as a note-save action and asks for explicit confirmation.",
+              "Does not classify the request as unsupported or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -103,6 +113,16 @@
               {
                 "path": "contentLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "9f6c5056da193c9a5bb79cb80d5a3aa6fed7eeffed3d7f32a3cd80c0089c824b"
               }
             ]
           }
@@ -170,8 +190,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-007 passport-expiry note was saved successfully.",
-              "Does not describe the note request as ambiguous or unsupported after confirmation."
+              "Clearly communicates that the requested note was saved successfully.",
+              "Does not describe the confirmed action as ambiguous or unsupported."
             ]
           }
         ]

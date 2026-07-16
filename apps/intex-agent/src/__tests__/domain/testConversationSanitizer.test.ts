@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import * as sanitizerModule from '../../domain/testConversation/testConversationSanitizer.js';
 import {
   buildBehavioralTranscript,
   sanitizeAssistantReplies,
@@ -14,6 +16,68 @@ import type {
 import type { IntexAgentSessionEvent } from '../../domain/sessions/types.js';
 
 describe('test conversation sanitizer', () => {
+  it('summarizes only complete canonical synthetic markers without exposing their tokens', () => {
+    const summarizeArgs = (
+      sanitizerModule as unknown as {
+        summarizeArgs?: (
+          toolName: 'create_note' | 'create_calendar_event' | 'query_calendar_events',
+          args: Record<string, unknown>
+        ) => Record<string, unknown>;
+      }
+    ).summarizeArgs;
+
+    expect(summarizeArgs).toBeTypeOf('function');
+    if (summarizeArgs === undefined) return;
+
+    const first = summarizeArgs('create_note', {
+      content:
+        'secret-alpha INTEX-eval-001-f02 INTEX-EVAL-001 INTEX-EVAL-001-F01 INTEX-EVAL-001-F01',
+    });
+    const second = summarizeArgs('create_note', {
+      content: 'different-secret INTEX-EVAL-001-F01 INTEX-EVAL-001-F02 INTEX-EVAL-001',
+    });
+    const disallowed = summarizeArgs('create_note', {
+      content: 'INTEX-EVAL-001-PRIVATE XINTEX-EVAL-002 INTEX-EVAL-003-F021',
+    });
+
+    expect(first).toMatchObject({
+      syntheticMarkerCount: 3,
+      syntheticMarkerDigest: markerDigest([
+        'INTEX-EVAL-001',
+        'INTEX-EVAL-001-F01',
+        'INTEX-EVAL-001-F02',
+      ]),
+    });
+    expect(second).toMatchObject({
+      syntheticMarkerCount: first['syntheticMarkerCount'],
+      syntheticMarkerDigest: first['syntheticMarkerDigest'],
+    });
+    expect(disallowed).toMatchObject({
+      syntheticMarkerCount: 0,
+      syntheticMarkerDigest: markerDigest([]),
+    });
+    expect(JSON.stringify(first)).not.toMatch(/secret-alpha|INTEX-EVAL/iu);
+
+    expect(
+      summarizeArgs('query_calendar_events', {
+        mode: 'list',
+        query: 'INTEX-EVAL-011',
+      })
+    ).not.toHaveProperty('syntheticMarkerCount');
+
+    const calendar = summarizeArgs('create_calendar_event', {
+      summary: 'Synthetic event',
+      start: '2026-08-18T14:30:00+02:00 INTEX-EVAL-002-F01',
+      end: '2026-08-18T15:15:00+02:00',
+    });
+    expect(calendar['start']).toBe('2026-08-18T14:30:00+02:00 [synthetic-marker]');
+    expect(calendar).toMatchObject({
+      syntheticMarkerCount: 1,
+      syntheticMarkerDigest: markerDigest(['INTEX-EVAL-002-F01']),
+    });
+    expect(JSON.stringify(calendar)).not.toContain('INTEX-EVAL');
+  });
+
   it('omits raw tool args, raw results, source urls, reply contexts, and secret-like payload fields', () => {
     const event: IntexAgentSessionEvent = {
       id: 'event-1',
@@ -24,8 +88,11 @@ describe('test conversation sanitizer', () => {
       payload: {
         confirmationId: 'confirm-1',
         toolName: 'create_note',
-        toolArgs: { content: 'private body', apiKey: 'secret-key' },
-        message: 'Czy dodać notatkę?',
+        toolArgs: {
+          content: 'private body INTEX-EVAL-001 INTEX-EVAL-001-F01',
+          apiKey: 'secret-key',
+        },
+        message: 'Czy dodać notatkę?\nTreść: private body INTEX-EVAL-001-F01',
         sourceUrl: 'https://signed.example/private',
         whatsappSender: '+48123123123',
         replyContext: { text: 'previous private text' },
@@ -44,7 +111,15 @@ describe('test conversation sanitizer', () => {
           payload: {
             confirmationId: 'confirm-1',
             toolName: 'create_note',
-            textPreview: 'Czy dodać notatkę?',
+            textPreview: 'Czy dodać notatkę? Treść: [redacted]',
+            argsSummary: {
+              contentLength: 46,
+              syntheticMarkerCount: 2,
+              syntheticMarkerDigest: markerDigest([
+                'INTEX-EVAL-001',
+                'INTEX-EVAL-001-F01',
+              ]),
+            },
           },
         },
       ],
@@ -55,6 +130,40 @@ describe('test conversation sanitizer', () => {
     expect(JSON.stringify(sanitized)).not.toContain('whatsappSender');
     expect(JSON.stringify(sanitized)).not.toContain('replyContext');
     expect(JSON.stringify(sanitized)).not.toContain('secret-token');
+    expect(JSON.stringify(sanitized)).not.toContain('INTEX-EVAL-001');
+  });
+
+  it('omits argument evidence for malformed confirmation payloads', () => {
+    const sanitized = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'confirmation_requested',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: { toolName: 'create_note', message: 'Confirm?' },
+        },
+        {
+          id: 'event-2',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'confirmation_requested',
+          createdAt: '2026-07-01T10:00:01.000Z',
+          payload: {
+            toolName: 'not_a_tool',
+            toolArgs: { content: 'INTEX-EVAL-001-F01' },
+            message: 'Confirm?',
+          },
+        },
+      ],
+    });
+
+    expect(sanitized['intex_session_1']?.map((event) => event.payload)).toEqual([
+      { toolName: 'create_note', textPreview: 'Confirm?' },
+      { toolName: 'not_a_tool', textPreview: 'Confirm?' },
+    ]);
+    expect(JSON.stringify(sanitized)).not.toContain('INTEX-EVAL');
   });
 
   it('sanitizes captured tool call summaries recursively', () => {
@@ -202,6 +311,83 @@ describe('test conversation sanitizer', () => {
     ]);
     expect(JSON.stringify(sanitized)).not.toContain('tajna preferencja');
     expect(JSON.stringify(sanitized)).not.toContain('https://signed.example/private');
+  });
+
+  it('redacts all structured confirmation fields that can carry synthetic markers', () => {
+    const message = [
+      'Add this calendar event?',
+      'Title: Dentist INTEX-EVAL-002-F01',
+      'Start: 2026-08-18T14:30:00+02:00',
+      'End: 2026-08-18T15:15:00+02:00',
+      'Location: Smile Clinic INTEX-EVAL-002-F02',
+    ].join('\n');
+
+    const sanitizedReply = sanitizeAssistantReplies([
+      {
+        userId: 'test-intex-agent-run',
+        message,
+        replyToMessageId: 'wamid-1',
+        correlationId: 'intex_session_1',
+      },
+    ]);
+    const sanitizedEvent = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'confirmation_requested',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: {
+            toolName: 'create_calendar_event',
+            message,
+            toolArgs: {
+              summary: 'Dentist INTEX-EVAL-002-F01',
+              start: '2026-08-18T14:30:00+02:00',
+              end: '2026-08-18T15:15:00+02:00',
+              location: 'Smile Clinic INTEX-EVAL-002-F02',
+            },
+          },
+        },
+      ],
+    });
+
+    expect(sanitizedReply[0]?.message).toBe(
+      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted]'
+    );
+    expect(sanitizedEvent['intex_session_1']?.[0]?.payload['textPreview']).toBe(
+      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted]'
+    );
+    expect(JSON.stringify([sanitizedReply, sanitizedEvent])).not.toContain('INTEX-EVAL');
+  });
+
+  it('keeps synthetic marker tokens out of generic assistant and event previews', () => {
+    const sanitizedReply = sanitizeAssistantReplies([
+      {
+        userId: 'test-intex-agent-run',
+        message: 'Please confirm INTEX-EVAL-001-F01.',
+        replyToMessageId: 'wamid-1',
+        correlationId: 'intex_session_1',
+      },
+    ]);
+    const sanitizedEvent = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'user_message',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: { text: 'Save INTEX-EVAL-001 INTEX-EVAL-001-F01.' },
+        },
+      ],
+    });
+
+    expect(sanitizedReply[0]?.message).toBe('Please confirm [synthetic-marker].');
+    expect(sanitizedEvent['intex_session_1']?.[0]?.payload['textPreview']).toBe(
+      'Save [synthetic-marker] [synthetic-marker].'
+    );
+    expect(JSON.stringify([sanitizedReply, sanitizedEvent])).not.toContain('INTEX-EVAL');
   });
 
   it('redacts rendered prompt preference blocks in captured replies', () => {
@@ -453,3 +639,9 @@ describe('test conversation sanitizer', () => {
     });
   });
 });
+
+function markerDigest(markers: readonly string[]): string {
+  return createHash('sha256')
+    .update(`intex-eval-marker-set:v1\0${[...markers].sort().join('\n')}`, 'utf8')
+    .digest('hex');
+}

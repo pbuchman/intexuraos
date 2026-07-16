@@ -457,6 +457,31 @@ describe('IntexEvalScenarioSchema', () => {
     expectScenarioValid(scenario);
   });
 
+  it.each([
+    ['create_note', 'syntheticMarkerCount', 2],
+    ['create_calendar_event', 'syntheticMarkerDigest', 'digest'],
+    ['create_research', 'syntheticMarkerCount', 2],
+    ['create_link', 'syntheticMarkerDigest', 'digest'],
+    ['create_code_task', 'syntheticMarkerCount', 2],
+    ['save_external', 'syntheticMarkerDigest', 'digest'],
+    ['add_user_preference', 'syntheticMarkerCount', 2],
+    ['update_user_preference', 'syntheticMarkerDigest', 'digest'],
+    ['delete_user_preference', 'syntheticMarkerCount', 2],
+  ])('accepts mutating marker evidence path %s.%s', (toolName, path, value) => {
+    const scenario = createScenario();
+    setToolAssertion(scenario, toolName, { path, operator: 'equals', value });
+    expectScenarioValid(scenario);
+  });
+
+  it.each(['syntheticMarkerCount', 'syntheticMarkerDigest'])(
+    'rejects query marker evidence path %s',
+    (path) => {
+      const scenario = createScenario();
+      setToolAssertion(scenario, 'query_calendar_events', { path, operator: 'exists' });
+      expectScenarioInvalid(scenario);
+    }
+  );
+
   it('accepts no argument assertions for get_user_preferences', () => {
     const scenario = createScenario();
     const call = scenario.expected.turns[0]?.requiredToolCalls[0];
@@ -517,6 +542,15 @@ describe('IntexEvalScenarioSchema', () => {
     if (payloadAssertion !== undefined) {
       payloadAssertion.assertions = [{ path, operator: 'exists' }];
     }
+    expectScenarioValid(scenario);
+  });
+
+  it.each([
+    ['argsSummary.syntheticMarkerCount', 2],
+    ['argsSummary.syntheticMarkerDigest', 'digest'],
+  ])('accepts nested timeline marker evidence path %s', (path, value) => {
+    const scenario = createScenario();
+    setTimelineAssertion(scenario, { path, operator: 'equals', value });
     expectScenarioValid(scenario);
   });
 

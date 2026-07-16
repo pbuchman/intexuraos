@@ -8,92 +8,92 @@
   "turns": [
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 1 of 18: Project Atlas uses the synthetic green folder. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 1 of 18: Project Atlas uses the synthetic green folder INTEX-EVAL-020-F01. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 2 of 18: The working title is Atlas Readiness Brief. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 2 of 18: The working title is Atlas Readiness Brief INTEX-EVAL-020-F02. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 3 of 18: The synthetic owner role is launch coordinator. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 3 of 18: The synthetic owner role is launch coordinator INTEX-EVAL-020-F03. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 4 of 18: The target review date is July 30 2026. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 4 of 18: The target review date is July 30 2026 INTEX-EVAL-020-F04. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 5 of 18: The first checklist item is verify the demo dataset. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 5 of 18: The first checklist item is verify the demo dataset INTEX-EVAL-020-F05. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 6 of 18: The second checklist item is review the rollback outline. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 6 of 18: The second checklist item is review the rollback outline INTEX-EVAL-020-F06. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 7 of 18: The third checklist item is confirm the mock dashboard. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 7 of 18: The third checklist item is confirm the mock dashboard INTEX-EVAL-020-F07. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 8 of 18: The risk label is synthetic amber. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 8 of 18: The risk label is synthetic amber INTEX-EVAL-020-F08. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 9 of 18: The mitigation is rehearse the dry-run sequence. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 9 of 18: The mitigation is rehearse the dry-run sequence INTEX-EVAL-020-F09. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 10 of 18: The decision log uses numbered entries. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 10 of 18: The decision log uses numbered entries INTEX-EVAL-020-F10. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 11 of 18: The summary should use concise bullet points. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 11 of 18: The summary should use concise bullet points INTEX-EVAL-020-F11. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 12 of 18: The brief should include a short risks section. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 12 of 18: The brief should include a short risks section INTEX-EVAL-020-F12. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 13 of 18: The brief should include a short decisions section. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 13 of 18: The brief should include a short decisions section INTEX-EVAL-020-F13. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 14 of 18: The brief should include a short next-actions section. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 14 of 18: The brief should include a short next-actions section INTEX-EVAL-020-F14. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 15 of 18: The synthetic meeting room label is Orion. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 15 of 18: The synthetic meeting room label is Orion INTEX-EVAL-020-F15. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 16 of 18: The review duration is forty-five minutes. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 16 of 18: The review duration is forty-five minutes INTEX-EVAL-020-F16. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 17 of 18: The final checklist owner is the launch coordinator. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 17 of 18: The final checklist owner is the launch coordinator INTEX-EVAL-020-F17. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "INTEX-EVAL-020 context fragment 18 of 18: The closing line should say ready for synthetic review. Do not save yet; only retain this context.",
+      "text": "INTEX-EVAL-020 context fragment 18 of 18: The closing line should say ready for synthetic review INTEX-EVAL-020-F18. Do not save yet; only retain this context.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -1046,6 +1046,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 19
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "94ecaab733451a4d5cb30a79e6b2220a64a33c718bf1943d32d1f82f790e9c9c"
                 }
               ]
             }
@@ -1055,11 +1065,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview includes INTEX-EVAL-020 title Atlas Readiness Brief, synthetic green folder, launch coordinator owner, and July 30 2026 review date.",
-              "The preview includes verify the demo dataset, review the rollback outline, confirm the mock dashboard, synthetic amber risk, and rehearse the dry-run sequence mitigation.",
-              "The preview includes numbered entries in the decision log, concise bullet points, a risks section, a decisions section, and a next-actions section.",
-              "The preview includes Orion room, forty-five minutes duration, final checklist owner launch coordinator, and closing line ready for synthetic review.",
-              "Asks for explicit confirmation before saving one note from all eighteen facts and does not claim the note already exists."
+              "Correctly identifies the accumulated context as one note-save request and asks for explicit confirmation in an appropriate tone.",
+              "Does not claim the note exists, ask for the context again, or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -1078,6 +1085,16 @@
               {
                 "path": "titleLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 19
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "94ecaab733451a4d5cb30a79e6b2220a64a33c718bf1943d32d1f82f790e9c9c"
               }
             ]
           }
@@ -1145,7 +1162,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the accumulated INTEX-EVAL-020 Atlas Readiness Brief note was saved successfully.",
+              "Clearly communicates that the accumulated note was saved successfully.",
               "Does not ask for the context again or request another confirmation."
             ]
           }

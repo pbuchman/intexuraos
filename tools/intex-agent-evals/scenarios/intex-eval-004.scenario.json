@@ -13,7 +13,7 @@
     },
     {
       "kind": "message",
-      "text": "new session: remember that INTEX-EVAL-004 backup code is 9988",
+      "text": "new session: remember that INTEX-EVAL-004 backup code is 9988 INTEX-EVAL-004-F01",
       "sourceType": "whatsapp_text"
     },
     {
@@ -171,6 +171,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "e48cfe7e19f880c1176da25e9deff7c4045589dd357efa8adf5612aa5081e863"
                 }
               ]
             }
@@ -180,9 +190,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Treats INTEX-EVAL-004 backup code 9988 as a note request, not as the missing calendar date.",
-              "The confirmation preview preserves INTEX-EVAL-004, the backup code context, and value 9988.",
-              "Asks for explicit confirmation before saving the backup-code note and does not claim the dentist event was created."
+              "Correctly treats the new-session request as a note action rather than the abandoned calendar request and asks for confirmation.",
+              "Does not claim either action already completed or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -197,6 +206,16 @@
               {
                 "path": "contentLength",
                 "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "e48cfe7e19f880c1176da25e9deff7c4045589dd357efa8adf5612aa5081e863"
               }
             ]
           }
@@ -264,8 +283,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-004 backup-code note was saved successfully.",
-              "Does not claim that the abandoned dentist calendar event was created."
+              "Clearly communicates that the requested note was saved successfully.",
+              "Does not claim that the abandoned calendar event was created."
             ]
           }
         ]

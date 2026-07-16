@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Add INTEX-EVAL-003 lunch with Marta at noon.",
+      "text": "Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 at noon.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -141,6 +141,16 @@
                   "path": "toolName",
                   "operator": "equals",
                   "value": "create_calendar_event"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "df556f2cf480abccb1b38ef61e273d7ffa80d7771bcc68defdebb1cdd5f8e64b"
                 }
               ]
             }
@@ -150,9 +160,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "The confirmation preview preserves INTEX-EVAL-003 lunch with Marta, next Tuesday at noon, and a one hour duration.",
-              "Asks for explicit confirmation before creating the now-complete calendar event.",
-              "Does not announce another new session or request the date again."
+              "Correctly treats the clarified request as a complete calendar event and asks for explicit confirmation.",
+              "Does not announce another session, request the date again, or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -177,6 +186,16 @@
                 "path": "end",
                 "operator": "contains",
                 "value": "2026-07-21T13:00"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "df556f2cf480abccb1b38ef61e273d7ffa80d7771bcc68defdebb1cdd5f8e64b"
               }
             ]
           }
@@ -244,8 +263,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the INTEX-EVAL-003 lunch with Marta was created successfully.",
-              "Keeps the completed event consistent with next Tuesday from noon to 1 PM."
+              "Clearly communicates that the clarified calendar event was created successfully.",
+              "Does not request more calendar details or another confirmation."
             ]
           }
         ]

@@ -42,114 +42,99 @@ const MUTATING_TOOL_NAMES = new Set<IntexAgentToolName>([
   'delete_user_preference',
 ]);
 
-const MUTATING_REQUEST_CRITERIA_CASES = [
-  {
-    scenarioId: 'intex-eval-001',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-001', 'garage', '7241'],
-  },
-  {
-    scenarioId: 'intex-eval-002',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-002', 'dentist', 'August 18', '2:30 PM', '45 minutes', 'Smile Clinic'],
-  },
-  {
-    scenarioId: 'intex-eval-003',
-    turnIndex: 1,
-    tokens: ['INTEX-EVAL-003', 'lunch', 'Marta', 'next Tuesday', 'noon', 'one hour'],
-  },
-  {
-    scenarioId: 'intex-eval-004',
-    turnIndex: 1,
-    tokens: ['INTEX-EVAL-004', 'backup code', '9988'],
-  },
-  {
-    scenarioId: 'intex-eval-006',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-006', 'garage remote', 'desk drawer'],
-  },
-  {
-    scenarioId: 'intex-eval-006',
-    turnIndex: 2,
-    tokens: ['INTEX-EVAL-006', 'parking', 'P3'],
-  },
-  {
-    scenarioId: 'intex-eval-007',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-007', 'passport', 'November 2029'],
-  },
-  {
-    scenarioId: 'intex-eval-008',
-    turnIndex: 1,
-    tokens: ['INTEX-EVAL-008', 'project review', 'September 10', '3 PM', 'one hour'],
-  },
-  {
-    scenarioId: 'intex-eval-010',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-010', 'storage unit key', 'blue drawer'],
-  },
-  {
-    scenarioId: 'intex-eval-012',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-012', 'battery testing'],
-  },
-  {
-    scenarioId: 'intex-eval-013',
-    turnIndex: 0,
-    tokens: ['example.com/intex-eval-013'],
-  },
-  {
-    scenarioId: 'intex-eval-014',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-014', 'MiniMax', 'planning', 'cache'],
-  },
-  {
-    scenarioId: 'intex-eval-015',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-015', 'synthetic receipt'],
-  },
-  {
-    scenarioId: 'intex-eval-017',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-017', 'concise Polish'],
-  },
-  {
-    scenarioId: 'intex-eval-018',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-018', 'pref_eval_018', 'version 0', 'formal Polish'],
-  },
-  {
-    scenarioId: 'intex-eval-019',
-    turnIndex: 0,
-    tokens: ['INTEX-EVAL-019', 'pref_eval_019', 'version 0'],
-  },
+interface MarkerEvidenceCase {
+  readonly scenarioId: string;
+  readonly requestTurnIndex: number;
+  readonly executionTurnIndex: number;
+  readonly markers: readonly string[];
+  readonly sourceTurnIndexes: readonly number[];
+}
+
+const SCENARIO_020_MARKERS = [
+  'INTEX-EVAL-020',
+  ...Array.from(
+    { length: 18 },
+    (_, index) => `INTEX-EVAL-020-F${String(index + 1).padStart(2, '0')}`
+  ),
 ] as const;
 
-const SCENARIO_020_FACT_TOKENS = [
-  'synthetic green folder',
-  'Atlas Readiness Brief',
-  'launch coordinator',
-  'July 30 2026',
-  'verify the demo dataset',
-  'review the rollback outline',
-  'confirm the mock dashboard',
-  'synthetic amber',
-  'rehearse the dry-run sequence',
-  'numbered entries',
-  'concise bullet points',
-  'risks section',
-  'decisions section',
-  'next-actions section',
-  'Orion',
-  'forty-five minutes',
-  'final checklist owner',
-  'ready for synthetic review',
+const MARKER_EVIDENCE_CASES = [
+  markerCase('intex-eval-001', 0, 1, ['INTEX-EVAL-001', 'INTEX-EVAL-001-F01']),
+  markerCase('intex-eval-002', 0, 1, [
+    'INTEX-EVAL-002',
+    'INTEX-EVAL-002-F01',
+    'INTEX-EVAL-002-F02',
+  ]),
+  markerCase('intex-eval-003', 1, 2, ['INTEX-EVAL-003', 'INTEX-EVAL-003-F01'], [0, 1]),
+  markerCase('intex-eval-004', 1, 2, ['INTEX-EVAL-004', 'INTEX-EVAL-004-F01']),
+  markerCase('intex-eval-006', 0, 1, ['INTEX-EVAL-006', 'INTEX-EVAL-006-F01']),
+  markerCase('intex-eval-006', 2, 3, ['INTEX-EVAL-006', 'INTEX-EVAL-006-F02']),
+  markerCase('intex-eval-007', 0, 1, ['INTEX-EVAL-007', 'INTEX-EVAL-007-F01']),
+  markerCase('intex-eval-008', 1, 2, ['INTEX-EVAL-008', 'INTEX-EVAL-008-F01'], [0, 1]),
+  markerCase('intex-eval-010', 0, 1, ['INTEX-EVAL-010', 'INTEX-EVAL-010-F01']),
+  markerCase('intex-eval-012', 0, 1, [
+    'INTEX-EVAL-012',
+    'INTEX-EVAL-012-F01',
+    'INTEX-EVAL-012-F02',
+  ]),
+  markerCase('intex-eval-013', 0, 1, ['INTEX-EVAL-013', 'INTEX-EVAL-013-F01']),
+  markerCase('intex-eval-014', 0, 1, ['INTEX-EVAL-014', 'INTEX-EVAL-014-F01']),
+  markerCase('intex-eval-015', 0, 1, ['INTEX-EVAL-015', 'INTEX-EVAL-015-F01']),
+  markerCase('intex-eval-017', 0, 1, ['INTEX-EVAL-017', 'INTEX-EVAL-017-F01']),
+  markerCase('intex-eval-018', 0, 1, [
+    'INTEX-EVAL-018',
+    'INTEX-EVAL-018-F01',
+    'INTEX-EVAL-018-F02',
+  ]),
+  markerCase('intex-eval-019', 0, 1, ['INTEX-EVAL-019', 'INTEX-EVAL-019-F01']),
+  markerCase(
+    'intex-eval-020',
+    18,
+    19,
+    SCENARIO_020_MARKERS,
+    Array.from({ length: 19 }, (_, index) => index)
+  ),
 ] as const;
+
+const SYNTHETIC_MARKER_PATTERN = /(?<![A-Z0-9-])INTEX-EVAL-[0-9]{3}(?:-F[0-9]{2})?(?![A-Z0-9-])/giu;
+
+function markerCase(
+  scenarioId: string,
+  requestTurnIndex: number,
+  executionTurnIndex: number,
+  markers: readonly string[],
+  sourceTurnIndexes: readonly number[] = [requestTurnIndex]
+): MarkerEvidenceCase {
+  return { scenarioId, requestTurnIndex, executionTurnIndex, markers, sourceTurnIndexes };
+}
 
 function findScenario(scenarios: readonly IntexEvalScenario[], id: string): IntexEvalScenario {
   const scenario = scenarios.find((candidate) => candidate.id === id);
   if (scenario === undefined) throw new Error(`Missing tracked scenario ${id}`);
   return scenario;
+}
+
+function messageText(scenario: IntexEvalScenario, turnIndex: number): string {
+  const turn = scenario.turns[turnIndex];
+  if (turn?.kind !== 'message') {
+    throw new Error(`Expected message turn ${String(turnIndex)} in ${scenario.id}`);
+  }
+  return turn.text;
+}
+
+function markersIn(text: string): string[] {
+  return [
+    ...new Set([...text.matchAll(SYNTHETIC_MARKER_PATTERN)].map((match) => match[0].toUpperCase())),
+  ].sort();
+}
+
+function markerEvidenceKey(
+  scenarioId: string,
+  requestTurnIndex: number,
+  executionTurnIndex: number,
+  toolName: IntexAgentToolName
+): string {
+  return `${scenarioId}:${String(requestTurnIndex)}:${String(executionTurnIndex)}:${toolName}`;
 }
 
 function expectedForbiddenTools(expectation: TurnExpectation): IntexAgentToolName[] {
@@ -161,7 +146,7 @@ function hasEqualsPayloadAssertion(
   expectation: TurnExpectation,
   eventType: string,
   path: string,
-  value: string
+  value: string | number
 ): boolean {
   return expectation.timeline.payloadAssertions.some(
     (payloadAssertion) =>
@@ -171,6 +156,12 @@ function hasEqualsPayloadAssertion(
           assertion.path === path && assertion.operator === 'equals' && assertion.value === value
       )
   );
+}
+
+function markerDigest(markers: readonly string[]): string {
+  return createHash('sha256')
+    .update(`intex-eval-marker-set:v1\0${[...new Set(markers)].sort().join('\n')}`, 'utf8')
+    .digest('hex');
 }
 
 function findRequiredToolCall(
@@ -649,36 +640,171 @@ describe('tracked scenario catalog', () => {
     );
   });
 
-  it('preserves the concrete synthetic facts in every mutating confirmation preview', () => {
-    for (const testCase of MUTATING_REQUEST_CRITERIA_CASES) {
+  it('pins marker count and digest in both confirmation preview and executed arguments', () => {
+    const actualMutatingCalls = scenarios.flatMap((scenario) =>
+      scenario.expected.turns.flatMap((expectation, executionTurnIndex) => {
+        const turn = scenario.turns[executionTurnIndex];
+        return expectation.requiredToolCalls
+          .filter((call) => MUTATING_TOOL_NAMES.has(call.toolName))
+          .map((call) => {
+            if (turn?.kind !== 'confirmation_button') {
+              throw new Error(`Mutating call is not confirmation-gated in ${scenario.id}`);
+            }
+            return markerEvidenceKey(
+              scenario.id,
+              turn.previousTurnIndex,
+              executionTurnIndex,
+              call.toolName
+            );
+          });
+      })
+    );
+    const declaredCases = MARKER_EVIDENCE_CASES.map((testCase) => {
       const scenario = findScenario(scenarios, testCase.scenarioId);
-      const semanticCriteria = scenario.expected.turns[testCase.turnIndex]?.replies
-        .flatMap((reply) => reply.semanticCriteria)
-        .join(' ');
-      expect(semanticCriteria).toBeDefined();
-      for (const token of testCase.tokens) {
-        expect(semanticCriteria?.toLocaleLowerCase('en-US')).toContain(
-          token.toLocaleLowerCase('en-US')
-        );
-      }
+      const toolName =
+        scenario.expected.turns[testCase.executionTurnIndex]?.requiredToolCalls[0]?.toolName;
+      if (toolName === undefined)
+        throw new Error(`Missing evidence call in ${testCase.scenarioId}`);
+      return markerEvidenceKey(
+        testCase.scenarioId,
+        testCase.requestTurnIndex,
+        testCase.executionTurnIndex,
+        toolName
+      );
+    });
+    expect([...declaredCases].sort()).toEqual([...actualMutatingCalls].sort());
+    expect(new Set(declaredCases).size).toBe(declaredCases.length);
+
+    for (const testCase of MARKER_EVIDENCE_CASES) {
+      const scenario = findScenario(scenarios, testCase.scenarioId);
+      const sourceMarkers = markersIn(
+        testCase.sourceTurnIndexes.map((turnIndex) => messageText(scenario, turnIndex)).join(' ')
+      );
+      expect(sourceMarkers).toEqual([...testCase.markers].sort());
+      const expectedDigest = markerDigest(testCase.markers);
+      const request = scenario.expected.turns[testCase.requestTurnIndex];
+      const execution = scenario.expected.turns[testCase.executionTurnIndex];
+      const toolCall = execution?.requiredToolCalls[0];
+
+      expect(
+        request === undefined
+          ? false
+          : hasEqualsPayloadAssertion(
+              request,
+              'confirmation_requested',
+              'argsSummary.syntheticMarkerCount',
+              testCase.markers.length
+            )
+      ).toBe(true);
+      expect(
+        request === undefined
+          ? false
+          : hasEqualsPayloadAssertion(
+              request,
+              'confirmation_requested',
+              'argsSummary.syntheticMarkerDigest',
+              expectedDigest
+            )
+      ).toBe(true);
+      expect(toolCall?.argumentAssertions).toEqual(
+        expect.arrayContaining([
+          { path: 'syntheticMarkerCount', operator: 'equals', value: testCase.markers.length },
+          { path: 'syntheticMarkerDigest', operator: 'equals', value: expectedDigest },
+        ])
+      );
+
+      const missingFactDigest = markerDigest(testCase.markers.slice(0, -1));
+      expect(missingFactDigest).not.toBe(expectedDigest);
+      expect(
+        request === undefined
+          ? false
+          : hasEqualsPayloadAssertion(
+              request,
+              'confirmation_requested',
+              'argsSummary.syntheticMarkerDigest',
+              missingFactDigest
+            )
+      ).toBe(false);
+      expect(toolCall?.argumentAssertions).not.toContainEqual({
+        path: 'syntheticMarkerDigest',
+        operator: 'equals',
+        value: missingFactDigest,
+      });
     }
   });
 
-  it('requires scenario 020 confirmation preview semantics to preserve all eighteen facts', () => {
-    const requestCriteria = findScenario(scenarios, 'intex-eval-020')
-      .expected.turns[18]?.replies.flatMap((reply) => reply.semanticCriteria)
-      .join(' ');
-    expect(requestCriteria).toBeDefined();
-    for (const factToken of SCENARIO_020_FACT_TOKENS) {
-      expect(requestCriteria?.toLocaleLowerCase('en-US')).toContain(
-        factToken.toLocaleLowerCase('en-US')
+  it('uses exactly the base marker plus F01 through F18 for scenario 020', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-020');
+    const markers = new Set(
+      scenario.turns.flatMap((turn) =>
+        turn.kind === 'message'
+          ? [...turn.text.matchAll(SYNTHETIC_MARKER_PATTERN)].map((match) => match[0].toUpperCase())
+          : []
+      )
+    );
+    expect([...markers].sort()).toEqual([...SCENARIO_020_MARKERS].sort());
+  });
+
+  it('keeps read-only query 011 free of synthetic marker evidence assertions', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-011');
+    const query = findRequiredToolCall(scenario, 'query_calendar_events');
+    const toolPaths = query.argumentAssertions.map((assertion) => assertion.path);
+    const timelinePaths = scenario.expected.turns.flatMap((turn) =>
+      turn.timeline.payloadAssertions.flatMap((payload) =>
+        payload.assertions.map((assertion) => assertion.path)
+      )
+    );
+    for (const path of ['syntheticMarkerCount', 'syntheticMarkerDigest']) {
+      expect(toolPaths).not.toContain(path);
+    }
+    for (const path of ['argsSummary.syntheticMarkerCount', 'argsSummary.syntheticMarkerDigest']) {
+      expect(timelinePaths).not.toContain(path);
+    }
+  });
+
+  it('places preference evidence markers inside fields reachable by mutation arguments', () => {
+    const addText = messageText(findScenario(scenarios, 'intex-eval-017'), 0);
+    const updateText = messageText(findScenario(scenarios, 'intex-eval-018'), 0);
+    const deleteText = messageText(findScenario(scenarios, 'intex-eval-019'), 0);
+    const addRow = /exact row:\s*(.*)$/iu.exec(addText)?.[1] ?? '';
+    const updateMatch =
+      /Update preference (\S+) at version 0 with this exact replacement row:\s*(.*)$/iu.exec(
+        updateText
       );
+    const deleteItemId = /Delete preference (\S+) at version/iu.exec(deleteText)?.[1] ?? '';
+
+    expect(markersIn(addRow)).toEqual(['INTEX-EVAL-017', 'INTEX-EVAL-017-F01']);
+    expect(markersIn(`${updateMatch?.[1] ?? ''} ${updateMatch?.[2] ?? ''}`)).toEqual([
+      'INTEX-EVAL-018',
+      'INTEX-EVAL-018-F01',
+      'INTEX-EVAL-018-F02',
+    ]);
+    expect(markersIn(deleteItemId)).toEqual(['INTEX-EVAL-019', 'INTEX-EVAL-019-F01']);
+  });
+
+  it('judges confirmation intent and redacted state instead of claiming raw previews are visible', () => {
+    for (const testCase of MARKER_EVIDENCE_CASES) {
+      const scenario = findScenario(scenarios, testCase.scenarioId);
+      const criteria = scenario.expected.turns[testCase.requestTurnIndex]?.replies
+        .flatMap((reply) => reply.semanticCriteria)
+        .join(' ');
+      expect(criteria).not.toMatch(/INTEX-EVAL-[0-9]{3}/iu);
+      expect(criteria).not.toMatch(
+        /\b(?:preview|reply|confirmation)[^.]{0,100}\b(?:preserves|includes|contains|shows|repeats|retains|mentions)\b/iu
+      );
+    }
+
+    for (const scenarioId of ['intex-eval-017', 'intex-eval-018', 'intex-eval-019']) {
+      const criteria = findScenario(scenarios, scenarioId)
+        .expected.turns[1]?.replies.flatMap((reply) => reply.semanticCriteria)
+        .join(' ');
+      expect(criteria).toMatch(/sanitized resulting preference state/iu);
     }
   });
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      'fc9e507f57668742406db3ed3769597337b889b4b88d1bb69b4810a3d6b8291b'
+      'e507a599a1a6f9513deac747dc6c8b35ee79a8579f953795ad1ad23a7657ba51'
     );
   });
 });

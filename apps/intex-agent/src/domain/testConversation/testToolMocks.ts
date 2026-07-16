@@ -13,7 +13,11 @@ import type {
 } from '../agent/toolDefinitions.js';
 import type { WhatsAppReplyPublisher } from '../messages/handleIncomingMessage.js';
 import type { IntexAgentToolName } from '../sessions/types.js';
-import { sanitizeRecord } from './testConversationSanitizer.js';
+import {
+  normalizePromptPreferenceText,
+  renderPromptPreferenceBlock,
+} from '../preferences/promptPreferences.js';
+import { sanitizeRecord, summarizeArgs } from './testConversationSanitizer.js';
 import type {
   CapturedAssistantReply,
   CapturedToolCall,
@@ -24,6 +28,9 @@ export interface CreateTestToolExecutorInput {
   mocks?: TestToolMocks | undefined;
   calls: CapturedToolCall[];
 }
+
+const MOCK_PREFERENCE_TIMESTAMP = '2026-01-01T00:00:00.000Z';
+const MOCK_PREFERENCE_ITEM_ID = 'pref_mock';
 
 export function createTestToolExecutor(input: CreateTestToolExecutorInput): IntexAgentToolExecutor {
   function execute(
@@ -107,17 +114,25 @@ export function createTestToolExecutor(input: CreateTestToolExecutorInput): Inte
       });
     },
     async addUserPreference(args: AddUserPreferenceToolArgs): Promise<string> {
+      const currentVersion = args.expectedVersion + 1;
       return await execute('add_user_preference', { ...args }, {
         status: 'completed',
-        currentVersion: args.expectedVersion + 1,
-        changedItemId: 'pref_mock',
+        currentVersion,
+        changedItemId: MOCK_PREFERENCE_ITEM_ID,
+        promptBlock: renderMockPreferenceBlock(
+          currentVersion,
+          MOCK_PREFERENCE_ITEM_ID,
+          args.text
+        ),
       });
     },
     async updateUserPreference(args: UpdateUserPreferenceToolArgs): Promise<string> {
+      const currentVersion = args.expectedVersion + 1;
       return await execute('update_user_preference', { ...args }, {
         status: 'completed',
-        currentVersion: args.expectedVersion + 1,
+        currentVersion,
         changedItemId: args.itemId,
+        promptBlock: renderMockPreferenceBlock(currentVersion, args.itemId, args.text),
       });
     },
     async deleteUserPreference(args: DeleteUserPreferenceToolArgs): Promise<string> {
@@ -125,6 +140,7 @@ export function createTestToolExecutor(input: CreateTestToolExecutorInput): Inte
         status: 'completed',
         currentVersion: args.expectedVersion + 1,
         changedItemId: args.itemId,
+        promptBlock: '',
       });
     },
   };
@@ -148,87 +164,6 @@ export function createCapturedReplyPublisher(
   };
 }
 
-function summarizeArgs(
-  toolName: IntexAgentToolName,
-  args: Record<string, unknown>
-): Record<string, unknown> {
-  const summary: Record<string, unknown> = {};
-  if (toolName === 'query_calendar_events') {
-    copyString(args, summary, 'mode');
-    copyString(args, summary, 'timeMin');
-    copyString(args, summary, 'timeMax');
-    copyNumber(args, summary, 'maxResults');
-    copyStringLength(args, summary, 'query');
-    copyPresence(args, summary, 'calendarId');
-    return sanitizeRecord(summary);
-  }
-
-  if (toolName === 'create_calendar_event') {
-    copyStringLength(args, summary, 'summary');
-    copyString(args, summary, 'start');
-    copyString(args, summary, 'end');
-    copyString(args, summary, 'timeZone');
-    copyStringLength(args, summary, 'location');
-    copyStringLength(args, summary, 'description');
-    copyArrayCount(args, summary, 'attendees');
-    return sanitizeRecord(summary);
-  }
-
-  if (toolName === 'create_note') {
-    copyStringLength(args, summary, 'content');
-    copyStringLength(args, summary, 'title');
-    copyArrayCount(args, summary, 'tags');
-    copyArrayCount(args, summary, 'sourceMessageIds');
-    return sanitizeRecord(summary);
-  }
-
-  if (toolName === 'create_research') {
-    copyStringLength(args, summary, 'title');
-    copyStringLength(args, summary, 'prompt');
-    copyStringLength(args, summary, 'originalMessage');
-    copyArrayCount(args, summary, 'sourceMessageIds');
-    return sanitizeRecord(summary);
-  }
-
-  if (toolName === 'create_link') {
-    copyPresence(args, summary, 'url');
-    copyStringLength(args, summary, 'title');
-    copyStringLength(args, summary, 'description');
-    copyArrayCount(args, summary, 'tags');
-    copyArrayCount(args, summary, 'sourceMessageIds');
-    return sanitizeRecord(summary);
-  }
-
-  if (toolName === 'create_code_task') {
-    copyStringLength(args, summary, 'prompt');
-    copyString(args, summary, 'workerType');
-    copyString(args, summary, 'taskMode');
-    copyPresence(args, summary, 'linearIssueId');
-    return sanitizeRecord(summary);
-  }
-
-  if (toolName === 'save_external') {
-    copyStringLength(args, summary, 'message');
-    copyPresence(args, summary, 'sourceUrl');
-    return sanitizeRecord(summary);
-  }
-
-  if (toolName === 'get_user_preferences') {
-    return {};
-  }
-
-  if (toolName === 'add_user_preference') {
-    copyStringLength(args, summary, 'text');
-    copyNumber(args, summary, 'expectedVersion');
-    return sanitizeRecord(summary);
-  }
-
-  copyPresence(args, summary, 'itemId');
-  copyStringLength(args, summary, 'text');
-  copyNumber(args, summary, 'expectedVersion');
-  return sanitizeRecord(summary);
-}
-
 function summarizeResult(
   _toolName: IntexAgentToolName,
   result: Record<string, unknown>
@@ -249,50 +184,6 @@ function summarizeResult(
   return sanitizeRecord(summary);
 }
 
-function copyString(
-  source: Record<string, unknown>,
-  target: Record<string, unknown>,
-  key: string
-): void {
-  const value = source[key];
-  if (typeof value === 'string') {
-    target[key] = value;
-  }
-}
-
-function copyNumber(
-  source: Record<string, unknown>,
-  target: Record<string, unknown>,
-  key: string
-): void {
-  const value = source[key];
-  if (typeof value === 'number') {
-    target[key] = value;
-  }
-}
-
-function copyStringLength(
-  source: Record<string, unknown>,
-  target: Record<string, unknown>,
-  key: string
-): void {
-  const value = source[key];
-  if (typeof value === 'string') {
-    target[`${key}Length`] = value.length;
-  }
-}
-
-function copyArrayCount(
-  source: Record<string, unknown>,
-  target: Record<string, unknown>,
-  key: string
-): void {
-  const value = source[key];
-  if (Array.isArray(value)) {
-    target[`${key}Count`] = value.length;
-  }
-}
-
 function copyPresence(
   source: Record<string, unknown>,
   target: Record<string, unknown>,
@@ -301,4 +192,16 @@ function copyPresence(
   if (source[key] !== undefined) {
     target[`has${key.charAt(0).toUpperCase()}${key.slice(1)}`] = true;
   }
+}
+
+function renderMockPreferenceBlock(currentVersion: number, itemId: string, text: string): string {
+  const normalizedText = normalizePromptPreferenceText(text);
+  return renderPromptPreferenceBlock(currentVersion, [
+    {
+      id: itemId,
+      text: normalizedText,
+      createdAt: MOCK_PREFERENCE_TIMESTAMP,
+      updatedAt: MOCK_PREFERENCE_TIMESTAMP,
+    },
+  ]);
 }
