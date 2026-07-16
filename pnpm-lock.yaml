@@ -1850,9 +1850,15 @@ importers:
 
   tools/intex-agent-evals:
     dependencies:
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      firebase-admin:
+        specifier: ^13.6.0
+        version: 13.6.0(encoding@0.1.13)
       zod:
         specifier: 'catalog:'
         version: 3.25.76

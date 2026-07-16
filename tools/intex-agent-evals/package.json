@@ -14,7 +14,9 @@
     "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
+    "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
+    "firebase-admin": "^13.6.0",
     "zod": "catalog:"
   },
   "devDependencies": {
