@@ -520,9 +520,10 @@ export function createEndpointClient(options: {
         return correlated.data as unknown as EndpointConversationResponse;
       } catch (error) {
         if (error instanceof EndpointClientError) throw error;
-        throw new EndpointClientError(
-          controller.signal.aborted ? 'endpoint_timeout' : 'endpoint_transport_failed'
-        );
+        if (controller.signal.aborted || performance.now() >= deadlineAt) {
+          throw new EndpointClientError('endpoint_timeout');
+        }
+        throw new EndpointClientError('endpoint_transport_failed');
       } finally {
         timer.clear(handle);
       }

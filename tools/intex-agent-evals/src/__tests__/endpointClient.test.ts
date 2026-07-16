@@ -221,6 +221,23 @@ describe('endpoint client transport and strict parsing', () => {
     expect(inspectThrownValue(error)).not.toContain('private-transport-sentinel');
   });
 
+  it('lets elapsed deadline win over a late fetch rejection', async () => {
+    let elapsedMs = 0;
+    monotonicClock.now.mockImplementation(() => elapsedMs);
+    const client = createEndpointClient({
+      internalAuthToken: AUTH_TOKEN,
+      timeoutMs: 100,
+      fetchFn: (async () => {
+        elapsedMs = 101;
+        throw new Error('private-late-fetch-sentinel');
+      }) as typeof fetch,
+    });
+
+    const error = await captureFailure(client.runScenario(parsedScenario(), fixedIdentity()));
+    expect(error).toMatchObject({ code: 'endpoint_timeout', message: 'endpoint_timeout' });
+    expect(inspectThrownValue(error)).not.toContain('private-late-fetch-sentinel');
+  });
+
   it('uses one abort deadline for a stalled response body', async () => {
     const timer = new ManualTimer();
     const client = createEndpointClient({
@@ -293,6 +310,27 @@ describe('endpoint client transport and strict parsing', () => {
     const error = await captureFailure(client.runScenario(parsedScenario(), fixedIdentity()));
     expect(error.code).toBe('endpoint_transport_failed');
     expect(inspectThrownValue(error)).not.toContain('private-body-sentinel');
+  });
+
+  it('lets elapsed deadline win over a late response-body rejection', async () => {
+    let elapsedMs = 0;
+    monotonicClock.now.mockImplementation(() => elapsedMs);
+    const client = createEndpointClient({
+      internalAuthToken: AUTH_TOKEN,
+      timeoutMs: 100,
+      fetchFn: (async () =>
+        ({
+          status: 200,
+          async text(): Promise<string> {
+            elapsedMs = 101;
+            throw new Error('private-late-body-sentinel');
+          },
+        }) as Response) as typeof fetch,
+    });
+
+    const error = await captureFailure(client.runScenario(parsedScenario(), fixedIdentity()));
+    expect(error).toMatchObject({ code: 'endpoint_timeout', message: 'endpoint_timeout' });
+    expect(inspectThrownValue(error)).not.toContain('private-late-body-sentinel');
   });
 
   it.each([
