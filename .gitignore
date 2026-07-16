@@ -10,6 +10,7 @@ coverage/
 scripts/test-results/
 .tsconfig.tests-workspace.json
 .superpowers/
+/.artifacts/intex-agent-evals/
 
 # IDE - exclude user-specific files but keep project configuration
 .idea/workspace.xml
