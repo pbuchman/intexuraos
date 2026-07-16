@@ -13,7 +13,7 @@
     },
     {
       "kind": "message",
-      "text": "Next Tuesday for INTEX-EVAL-003.",
+      "text": "Next Tuesday at noon for one hour for INTEX-EVAL-003.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -90,8 +90,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Asks which day or date the lunch should use because the date is missing.",
-              "Does not claim that a calendar event was created and makes clear this is a new session."
+              "Asks which day or date INTEX-EVAL-003 lunch with Marta at noon should use because the date is missing.",
+              "Does not claim that a calendar event was created before the missing date is supplied."
             ]
           }
         ]
@@ -150,7 +150,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Applies next Tuesday to the pending lunch-at-noon request in the same session.",
+              "The confirmation preview preserves INTEX-EVAL-003 lunch with Marta, next Tuesday at noon, and a one hour duration.",
               "Asks for explicit confirmation before creating the now-complete calendar event.",
               "Does not announce another new session or request the date again."
             ]
@@ -170,16 +170,13 @@
               },
               {
                 "path": "start",
-                "operator": "exists"
+                "operator": "contains",
+                "value": "2026-07-21T12:00"
               },
               {
                 "path": "end",
-                "operator": "exists"
-              },
-              {
-                "path": "timeZone",
-                "operator": "equals",
-                "value": "Europe/Warsaw"
+                "operator": "contains",
+                "value": "2026-07-21T13:00"
               }
             ]
           }
@@ -247,8 +244,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the lunch calendar event was created successfully.",
-              "Reflects the resolved next-Tuesday date and noon time without reopening clarification."
+              "Confirms that the INTEX-EVAL-003 lunch with Marta was created successfully.",
+              "Keeps the completed event consistent with next Tuesday from noon to 1 PM."
             ]
           }
         ]

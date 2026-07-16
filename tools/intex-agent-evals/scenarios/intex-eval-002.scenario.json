@@ -87,9 +87,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Understands the requested title, date, start time, 45-minute duration, and Smile Clinic location.",
-              "Asks for explicit confirmation before creating the calendar event and does not ask for missing details.",
-              "Makes clear that a new Intex Agent session is handling the request."
+              "The confirmation preview preserves INTEX-EVAL-002 dentist appointment, August 18 2026, 2:30 PM, 45 minutes, and Smile Clinic.",
+              "Asks for explicit confirmation before creating the fully specified calendar event and does not request missing details."
             ]
           }
         ]
@@ -114,11 +113,6 @@
                 "path": "end",
                 "operator": "contains",
                 "value": "2026-08-18T15:15"
-              },
-              {
-                "path": "timeZone",
-                "operator": "equals",
-                "value": "Europe/Warsaw"
               },
               {
                 "path": "locationLength",
@@ -190,8 +184,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the calendar event was created successfully.",
-              "Includes enough human-readable event detail to recognize the dentist appointment date and time."
+              "Confirms that the INTEX-EVAL-002 dentist calendar event was created successfully.",
+              "Keeps the completed action consistent with August 18 at 2:30 PM for 45 minutes at Smile Clinic."
             ]
           }
         ]

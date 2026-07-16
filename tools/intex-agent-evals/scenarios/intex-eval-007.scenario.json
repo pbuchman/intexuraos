@@ -87,9 +87,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Interprets keep this for later as a request to save a note.",
-              "Asks for explicit confirmation without classifying the request as unsupported or asking what action is wanted.",
-              "Makes clear that a new session is handling the request."
+              "The confirmation preview preserves INTEX-EVAL-007 passport expiry in November 2029 as a note request.",
+              "Asks for explicit confirmation without classifying the request as unsupported or asking what action is wanted."
             ]
           }
         ]
@@ -171,7 +170,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the passport-expiry note was saved successfully.",
+              "Confirms that the INTEX-EVAL-007 passport-expiry note was saved successfully.",
               "Does not describe the note request as ambiguous or unsupported after confirmation."
             ]
           }

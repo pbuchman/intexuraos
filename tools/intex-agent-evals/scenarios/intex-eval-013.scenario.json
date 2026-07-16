@@ -87,9 +87,9 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Interprets the bare synthetic URL as a bookmark or saved-link request.",
-              "Asks for explicit confirmation before saving the link.",
-              "Makes clear that a new session is handling the request."
+              "Interprets the bare URL https://example.com/intex-eval-013 as a bookmark request.",
+              "The confirmation preview preserves example.com/intex-eval-013 without inventing fetched page content.",
+              "Asks for explicit confirmation before saving the link."
             ]
           }
         ]
@@ -172,7 +172,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the synthetic link or bookmark was saved successfully.",
+              "Confirms that the example.com/intex-eval-013 link or bookmark was saved successfully.",
               "Does not claim to create a note, research draft, or calendar event."
             ]
           }

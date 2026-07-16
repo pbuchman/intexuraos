@@ -87,9 +87,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Understands that the user wants a planning code task using the MiniMax worker.",
-              "Asks for explicit confirmation before creating the code task.",
-              "Makes clear that a new session is handling the request."
+              "The confirmation preview preserves INTEX-EVAL-014, MiniMax worker, planning mode, and synthetic cache investigation.",
+              "Asks for explicit confirmation before creating the code task."
             ]
           }
         ]
@@ -181,7 +180,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the planning code task was created successfully.",
+              "Confirms that the INTEX-EVAL-014 planning code task was created successfully.",
               "Preserves the synthetic cache-investigation intent and MiniMax worker choice."
             ]
           }

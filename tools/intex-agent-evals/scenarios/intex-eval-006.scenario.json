@@ -97,8 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Understands the initial garage-remote message as a note-save request.",
-              "Asks for explicit confirmation before saving and makes clear this is a new session."
+              "The confirmation preview preserves INTEX-EVAL-006, the garage remote, and its desk drawer location.",
+              "Asks for explicit confirmation before saving the initial garage-remote note."
             ]
           }
         ]
@@ -180,7 +180,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the initial garage-remote note was saved successfully.",
+              "Confirms that the initial INTEX-EVAL-006 garage-remote note was saved successfully.",
               "Leaves the interaction open for a coherent follow-up."
             ]
           }
@@ -240,8 +240,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Treats the parking-level message as a second note request in the same session.",
-              "Asks for explicit confirmation before saving the follow-up note.",
+              "The confirmation preview preserves INTEX-EVAL-006 parking and level P3 as a second note request.",
+              "Asks for explicit confirmation before saving the follow-up parking note.",
               "Does not announce or imply that another new session started."
             ]
           }
@@ -324,7 +324,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the parking-level note was saved successfully.",
+              "Confirms that the INTEX-EVAL-006 parking-level P3 note was saved successfully.",
               "Remains coherent with the prior successful action in the same session."
             ]
           }

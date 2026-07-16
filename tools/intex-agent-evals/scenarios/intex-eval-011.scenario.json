@@ -28,11 +28,13 @@
               },
               {
                 "path": "timeMin",
-                "operator": "exists"
+                "operator": "contains",
+                "value": "2026-07-17"
               },
               {
                 "path": "timeMax",
-                "operator": "exists"
+                "operator": "contains",
+                "value": "2026-07-18"
               }
             ]
           }
@@ -100,9 +102,9 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Directly answers the request by reporting the calendar query result for tomorrow.",
-              "Does not ask for mutation confirmation or claim to create, update, or delete an event.",
-              "Makes clear that a new session is handling the request."
+              "Answers the INTEX-EVAL-011 read-only calendar request for tomorrow, July 17 2026.",
+              "Reports listed calendar results or clearly reports that no events were found for that range.",
+              "Does not ask for mutation confirmation or claim to create, update, or delete an event."
             ]
           }
         ]

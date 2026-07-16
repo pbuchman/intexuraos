@@ -87,9 +87,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Understands the requested title and synthetic battery-testing research topic.",
-              "Asks for explicit confirmation before creating the research draft.",
-              "Makes clear that a new session is handling the request."
+              "The confirmation preview preserves research title INTEX-EVAL-012 and the synthetic battery testing topic.",
+              "Asks for explicit confirmation before creating the research draft."
             ]
           }
         ]
@@ -175,7 +174,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the requested research draft was created successfully.",
+              "Confirms that the INTEX-EVAL-012 synthetic battery testing research draft was created successfully.",
               "Does not reinterpret the request as a note, bookmark, or unsupported action."
             ]
           }

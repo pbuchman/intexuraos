@@ -1055,9 +1055,11 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Understands the explicit request to save one note from all eighteen accumulated context fragments.",
-              "Asks for explicit confirmation before saving and does not claim the note already exists.",
-              "Keeps the request in the same long-running session."
+              "The confirmation preview includes INTEX-EVAL-020 title Atlas Readiness Brief, synthetic green folder, launch coordinator owner, and July 30 2026 review date.",
+              "The preview includes verify the demo dataset, review the rollback outline, confirm the mock dashboard, synthetic amber risk, and rehearse the dry-run sequence mitigation.",
+              "The preview includes numbered entries in the decision log, concise bullet points, a risks section, a decisions section, and a next-actions section.",
+              "The preview includes Orion room, forty-five minutes duration, final checklist owner launch coordinator, and closing line ready for synthetic review.",
+              "Asks for explicit confirmation before saving one note from all eighteen facts and does not claim the note already exists."
             ]
           }
         ]
@@ -1143,7 +1145,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the accumulated Atlas Readiness Brief note was saved successfully.",
+              "Confirms that the accumulated INTEX-EVAL-020 Atlas Readiness Brief note was saved successfully.",
               "Does not ask for the context again or request another confirmation."
             ]
           }

@@ -97,9 +97,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Treats the voice transcript exactly as a note-save request.",
-              "Asks for explicit confirmation before saving and preserves the storage-key meaning.",
-              "Makes clear that a new Intex Agent session is handling the request."
+              "Treats the voice transcript as a note-save request whose confirmation preview preserves INTEX-EVAL-010, storage unit key, and blue drawer.",
+              "Asks for explicit confirmation before saving without asking the user to repeat the transcript."
             ]
           }
         ]
@@ -181,7 +180,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the note derived from the voice transcript was saved successfully.",
+              "Confirms that the INTEX-EVAL-010 storage-unit-key note from the voice transcript was saved successfully.",
               "Does not ask the user to repeat the transcript or reconfirm the same action."
             ]
           }

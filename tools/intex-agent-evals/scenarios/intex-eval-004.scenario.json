@@ -90,8 +90,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Asks for the missing day or date for the dentist event.",
-              "Does not claim that a calendar event was created and makes clear this is a new session."
+              "Asks for the missing day or date for the INTEX-EVAL-004 dentist event at 4 PM.",
+              "Does not claim that a calendar event was created before the date is supplied."
             ]
           }
         ]
@@ -180,9 +180,9 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Treats the message as an explicit new note request, not as the missing calendar date.",
-              "Clearly communicates that the pending calendar session was superseded and a new session started.",
-              "Asks for explicit confirmation before saving the backup-code note."
+              "Treats INTEX-EVAL-004 backup code 9988 as a note request, not as the missing calendar date.",
+              "The confirmation preview preserves INTEX-EVAL-004, the backup code context, and value 9988.",
+              "Asks for explicit confirmation before saving the backup-code note and does not claim the dentist event was created."
             ]
           }
         ]
@@ -264,7 +264,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the backup-code note was saved successfully.",
+              "Confirms that the INTEX-EVAL-004 backup-code note was saved successfully.",
               "Does not claim that the abandoned dentist calendar event was created."
             ]
           }

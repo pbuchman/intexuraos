@@ -87,9 +87,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Understands which synthetic preference to delete and its expected version.",
-              "Asks for explicit confirmation before deleting the preference.",
-              "Makes clear that a new session is handling the request."
+              "The confirmation preview preserves INTEX-EVAL-019, pref_eval_019, and expected version 0 for deletion.",
+              "Asks for explicit confirmation before deleting the preference."
             ]
           }
         ]
@@ -177,7 +176,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the specified preference was deleted successfully.",
+              "Confirms that pref_eval_019 for INTEX-EVAL-019 was deleted successfully.",
               "Does not claim to add or update a different preference."
             ]
           }

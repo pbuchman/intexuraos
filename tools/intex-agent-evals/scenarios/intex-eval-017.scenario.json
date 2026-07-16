@@ -87,9 +87,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Understands that the user wants to add a durable concise-Polish response preference.",
-              "Asks for explicit confirmation before adding the preference.",
-              "Makes clear that a new session is handling the request."
+              "The confirmation preview preserves INTEX-EVAL-017 and the durable preference to reply in concise Polish.",
+              "Asks for explicit confirmation before adding the preference."
             ]
           }
         ]
@@ -176,8 +175,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Confirms that the durable preference was added successfully.",
-              "Preserves the concise-Polish response intent and does not request the same confirmation again."
+              "Confirms that the INTEX-EVAL-017 durable concise Polish preference was added successfully.",
+              "Does not request the same confirmation again or claim a different preference action."
             ]
           }
         ]

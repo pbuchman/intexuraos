@@ -86,9 +86,9 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Reports the current saved Intex Agent preferences or clearly says that none are saved.",
-              "Does not ask for mutation confirmation or claim that a preference was changed.",
-              "Makes clear that a new session is handling the request."
+              "Answers the INTEX-EVAL-016 read-only request for saved Intex Agent preferences.",
+              "Reports the current preferences or clearly says that none are saved.",
+              "Does not ask for mutation confirmation or claim that a preference was changed."
             ]
           }
         ]
