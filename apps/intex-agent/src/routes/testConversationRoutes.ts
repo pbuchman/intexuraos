@@ -68,7 +68,7 @@ const testConversationBodySchema = {
     turns: {
       type: 'array',
       minItems: 1,
-      maxItems: 5,
+      maxItems: 20,
       items: {
         anyOf: [
           {
@@ -105,7 +105,7 @@ const testConversationBodySchema = {
             required: ['kind', 'previousTurnIndex', 'decision'],
             properties: {
               kind: { type: 'string', enum: ['confirmation_button'] },
-              previousTurnIndex: { type: 'integer', minimum: 0, maximum: 4 },
+              previousTurnIndex: { type: 'integer', minimum: 0, maximum: 19 },
               decision: { type: 'string', enum: ['accept', 'reject'] },
               messageId: { type: 'string', minLength: 1, maxLength: 256 },
               timestamp: { type: 'string', minLength: 1 },
@@ -126,7 +126,7 @@ export const testConversationRoutes: FastifyPluginCallback = (fastify, _opts, do
   fastify.post<{ Body: unknown }>(
     '/internal/intex-agent/test/conversation',
     {
-      bodyLimit: 64 * 1024,
+      bodyLimit: 256 * 1024,
       onRequest: (_request, reply, done): void => {
         if (process.env['INTEXURAOS_ENVIRONMENT'] === 'prod') {
           void reply.fail('NOT_FOUND', 'Route not found');

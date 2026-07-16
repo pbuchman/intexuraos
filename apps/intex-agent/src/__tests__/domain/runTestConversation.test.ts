@@ -130,6 +130,62 @@ describe('test conversation contract', () => {
     expect(result.behavioralTranscript.turns[1]).not.toHaveProperty('toolOutcome');
   });
 
+  it('runs 20 message turns in order and returns the complete transcript', async () => {
+    const repository = new MemorySessionRepository();
+    const exchanges = Array.from({ length: 20 }, (_, index) => ({
+      message: `Message ${String(index + 1)}`,
+      reply: `Reply ${String(index + 1)}`,
+    }));
+    const runner = new ScriptedRunner(
+      exchanges.map(({ reply }) => ({ outcome: 'no_action' as const, reply }))
+    );
+
+    const result = await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-twenty-turns',
+        runId: 'intex-e2e-twenty-turns',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: exchanges.map(({ message }, index) => ({
+          kind: 'message',
+          messageId: `wamid-${String(index + 1)}`,
+          text: message,
+        })),
+      },
+      {
+        sessionRepository: repository,
+        runner,
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls: [],
+        logger: silentLogger(),
+      }
+    );
+
+    expect(
+      runner.calls.map((call) => (call as Parameters<IntexAgentRunner['run']>[0]).message)
+    ).toEqual(exchanges.map(({ message }) => message));
+    expect(result.turns).toHaveLength(20);
+    expect(
+      result.turns.map((turn) => ({
+        turnIndex: turn.turnIndex,
+        messageId: turn.messageId,
+        submittedTextPreview: turn.submittedTextPreview,
+        assistantReplies: turn.assistantReplies.map((reply) => reply.message),
+      }))
+    ).toEqual(
+      exchanges.map(({ message, reply }, index) => ({
+        turnIndex: index,
+        messageId: `wamid-${String(index + 1)}`,
+        submittedTextPreview: message,
+        assistantReplies: [reply],
+      }))
+    );
+    expect(result.sessionTransitions).toHaveLength(20);
+    expect(result.behavioralTranscript.turns).toHaveLength(20);
+  });
+
   it('does not expose secret-like session summaries in serialized responses', async () => {
     const repository = new MemorySessionRepository();
     const result = await runTestConversation(
