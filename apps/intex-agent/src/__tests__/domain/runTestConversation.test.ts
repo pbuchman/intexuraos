@@ -683,6 +683,47 @@ describe('test conversation contract', () => {
     );
   });
 
+  it('advances generated turn clocks by absolute seconds across the Warsaw DST fallback', async () => {
+    const previousTimeZone = process.env['TZ'];
+    process.env['TZ'] = 'Europe/Warsaw';
+    try {
+      const runner = new ScriptedRunner([
+        { outcome: 'no_action', reply: 'First.' },
+        { outcome: 'no_action', reply: 'Second.' },
+      ]);
+
+      await runTestConversation(
+        {
+          contractVersion: '2026-07-01',
+          mode: 'live_llm_mock_tools',
+          userId: 'test-intex-agent-intex-e2e-dst-fallback',
+          runId: 'intex-e2e-dst-fallback',
+          currentDateTime: '2026-10-25T00:59:59.000Z',
+          turns: [
+            { kind: 'message', text: 'First.' },
+            { kind: 'message', text: 'Second.' },
+          ],
+        },
+        {
+          sessionRepository: new MemorySessionRepository(),
+          runner,
+          sessionTimeoutMs: 30 * 60 * 1000,
+          ids: fixedTestIds(),
+          toolCalls: [],
+          logger: silentLogger(),
+        }
+      );
+
+      expect(
+        runner.calls.map(
+          (call) => (call as Parameters<IntexAgentRunner['run']>[0]).currentDateTime
+        )
+      ).toEqual(['2026-10-25T00:59:59.000Z', '2026-10-25T01:00:00.000Z']);
+    } finally {
+      restoreTimeZone(previousTimeZone);
+    }
+  });
+
   it('fails fast when a semantic confirmation cannot find a captured button', async () => {
     const repository = new MemorySessionRepository();
 
@@ -870,4 +911,12 @@ function silentLogger(): { info(): void; warn(): void; error(): void } {
       return undefined;
     },
   };
+}
+
+function restoreTimeZone(value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env['TZ'];
+    return;
+  }
+  process.env['TZ'] = value;
 }

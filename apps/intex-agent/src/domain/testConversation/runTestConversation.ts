@@ -277,7 +277,5 @@ async function loadEventsBySessionId(
 }
 
 function timestampForTurn(base: string, turnIndex: number): string {
-  const date = new Date(base);
-  date.setSeconds(date.getSeconds() + turnIndex);
-  return date.toISOString();
+  return new Date(new Date(base).getTime() + turnIndex * 1_000).toISOString();
 }

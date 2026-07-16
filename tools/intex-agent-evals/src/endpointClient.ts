@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import {
   IntexAgentSessionEndReasonSchema,
@@ -456,6 +457,7 @@ export function createEndpointClient(options: {
         throw new EndpointClientError('missing_internal_auth');
       }
       const request = materializeEndpointRequest(scenario, identity);
+      const deadlineAt = performance.now() + options.timeoutMs;
       const controller = new AbortController();
       let rejectDeadline: ((error: EndpointClientError) => void) | undefined;
       const deadline = new Promise<never>((_resolve, reject) => {
@@ -480,30 +482,41 @@ export function createEndpointClient(options: {
           }),
           deadline,
         ]);
+        throwIfDeadlineExceeded(deadlineAt);
         if (response.status !== 200) {
           throw new EndpointClientError('endpoint_http_failed', response.status);
         }
         const body = await Promise.race([response.text(), deadline]);
+        throwIfDeadlineExceeded(deadlineAt);
         let decoded: unknown;
         try {
           decoded = JSON.parse(body) as unknown;
         } catch {
+          throwIfDeadlineExceeded(deadlineAt);
           throw new EndpointClientError('malformed_endpoint_response');
         }
+        throwIfDeadlineExceeded(deadlineAt);
         const parsed = SuccessEnvelopeSchema.safeParse(decoded);
+        throwIfDeadlineExceeded(deadlineAt);
         if (!parsed.success) {
           throw new EndpointClientError('malformed_endpoint_response');
         }
-        if (!isCorrelated(request, parsed.data.data)) {
+        const isResponseCorrelated = isCorrelated(request, parsed.data.data);
+        throwIfDeadlineExceeded(deadlineAt);
+        if (!isResponseCorrelated) {
           throw new EndpointClientError('endpoint_correlation_failed');
         }
         const correlated = EndpointConversationResponseSchema.safeParse(parsed.data.data);
+        throwIfDeadlineExceeded(deadlineAt);
         if (!correlated.success) {
           throw new EndpointClientError('endpoint_correlation_failed');
         }
-        if (correlated.data.scenarioId === undefined) {
+        const hasScenarioId = correlated.data.scenarioId !== undefined;
+        throwIfDeadlineExceeded(deadlineAt);
+        if (!hasScenarioId) {
           throw new EndpointClientError('endpoint_correlation_failed');
         }
+        throwIfDeadlineExceeded(deadlineAt);
         return correlated.data as unknown as EndpointConversationResponse;
       } catch (error) {
         if (error instanceof EndpointClientError) throw error;
@@ -526,6 +539,12 @@ const productionTimer: EndpointTimer = {
   },
 };
 
+function throwIfDeadlineExceeded(deadlineAt: number): void {
+  if (performance.now() >= deadlineAt) {
+    throw new EndpointClientError('endpoint_timeout');
+  }
+}
+
 function assertIdentity(identity: SyntheticRunIdentity): void {
   if (
     !RUN_ID_PATTERN.test(identity.runId) ||
@@ -537,9 +556,7 @@ function assertIdentity(identity: SyntheticRunIdentity): void {
 }
 
 function timestampForTurn(base: string, turnIndex: number): string {
-  const value = new Date(base);
-  value.setSeconds(value.getSeconds() + turnIndex);
-  return value.toISOString();
+  return new Date(new Date(base).getTime() + turnIndex * 1_000).toISOString();
 }
 
 function isCorrelated(

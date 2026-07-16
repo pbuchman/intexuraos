@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EndpointClientError,
   createEndpointClient,
@@ -12,8 +12,17 @@ import {
 import { IntexEvalScenarioSchema, type IntexEvalScenario } from '../scenarioSchema.js';
 import { createConfirmationScenario, createScenario } from './scenarioFixtures.js';
 
+const monotonicClock = vi.hoisted(() => ({ now: vi.fn(() => 0) }));
+
+vi.mock('node:perf_hooks', () => ({ performance: { now: monotonicClock.now } }));
+
 const UUID = '123E4567-E89B-12D3-A456-426614174000';
 const AUTH_TOKEN = 'private-auth-token-sentinel';
+
+beforeEach(() => {
+  monotonicClock.now.mockReset();
+  monotonicClock.now.mockReturnValue(0);
+});
 
 describe('endpoint client identity and request materialization', () => {
   it('creates a bounded lowercase synthetic identity from a canonical UUID', () => {
@@ -77,6 +86,27 @@ describe('endpoint client identity and request materialization', () => {
   it('uses whatsapp_text when a tracked message omits sourceType', () => {
     const request = materializeEndpointRequest(parsedScenario(), fixedIdentity());
     expect(request.turns[0]).toMatchObject({ sourceType: 'whatsapp_text' });
+  });
+
+  it('advances generated timestamps by absolute seconds across the Warsaw DST fallback', () => {
+    const previousTimeZone = process.env['TZ'];
+    process.env['TZ'] = 'Europe/Warsaw';
+    try {
+      const scenario = IntexEvalScenarioSchema.parse({
+        ...createConfirmationScenario(),
+        currentDateTime: '2026-10-25T00:59:59.000Z',
+        timeZone: 'Europe/Warsaw',
+      });
+
+      const request = materializeEndpointRequest(scenario, fixedIdentity());
+
+      expect(request.turns.map((turn) => turn.timestamp)).toEqual([
+        '2026-10-25T00:59:59.000Z',
+        '2026-10-25T01:00:00.000Z',
+      ]);
+    } finally {
+      restoreTimeZone(previousTimeZone);
+    }
   });
 });
 
@@ -188,7 +218,7 @@ describe('endpoint client transport and strict parsing', () => {
       code: 'endpoint_transport_failed',
       message: 'endpoint_transport_failed',
     });
-    expect(serializeFailure(error)).not.toContain('private-transport-sentinel');
+    expect(inspectThrownValue(error)).not.toContain('private-transport-sentinel');
   });
 
   it('uses one abort deadline for a stalled response body', async () => {
@@ -212,6 +242,41 @@ describe('endpoint client transport and strict parsing', () => {
     expect(timer.clearCount).toBe(1);
   });
 
+  it('returns timeout when synchronous JSON parsing exhausts the one deadline', async () => {
+    monotonicClock.now
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(101);
+    const scenario = parsedScenario();
+    const identity = fixedIdentity();
+
+    await expectFailure(
+      clientForBody({ success: true, data: validResponse(scenario, identity) }).runScenario(
+        scenario,
+        identity
+      ),
+      { code: 'endpoint_timeout' }
+    );
+  });
+
+  it('lets timeout win when synchronous schema validation exhausts the deadline', async () => {
+    monotonicClock.now
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(101);
+    const scenario = parsedScenario();
+    const identity = fixedIdentity();
+    const envelope = validEnvelope(scenario, identity);
+    delete asRecord(envelope['data'])['toolCalls'];
+
+    await expectFailure(clientForBody(envelope).runScenario(scenario, identity), {
+      code: 'endpoint_timeout',
+    });
+  });
+
   it('maps a response-body failure without retaining the cause', async () => {
     const client = createEndpointClient({
       internalAuthToken: AUTH_TOKEN,
@@ -227,7 +292,7 @@ describe('endpoint client transport and strict parsing', () => {
 
     const error = await captureFailure(client.runScenario(parsedScenario(), fixedIdentity()));
     expect(error.code).toBe('endpoint_transport_failed');
-    expect(serializeFailure(error)).not.toContain('private-body-sentinel');
+    expect(inspectThrownValue(error)).not.toContain('private-body-sentinel');
   });
 
   it.each([
@@ -247,7 +312,7 @@ describe('endpoint client transport and strict parsing', () => {
       code: 'malformed_endpoint_response',
       message: 'malformed_endpoint_response',
     });
-    expect(serializeFailure(error)).not.toMatch(
+    expect(inspectThrownValue(error)).not.toMatch(
       /private-invalid-json-sentinel|private-error-envelope-sentinel/u
     );
   });
@@ -309,7 +374,7 @@ describe('endpoint client transport and strict parsing', () => {
     mutate(envelope);
     const error = await captureFailure(clientForBody(envelope).runScenario(scenario, identity));
     expect(error.code).toBe('malformed_endpoint_response');
-    expect(serializeFailure(error)).not.toMatch(
+    expect(inspectThrownValue(error)).not.toMatch(
       /private-turn-sentinel|private-event-user-sentinel/u
     );
   });
@@ -424,6 +489,8 @@ describe('endpoint client correlation', () => {
     const identity = fixedIdentity();
     const envelope = validEnvelope(scenario, identity);
     const data = asRecord(envelope['data']);
+    asRecord(asArray(firstTurn(envelope)['assistantReplies'])[0])['message'] =
+      'private-assistant-reply-sentinel';
     mutate(data);
 
     const error = await captureFailure(clientForBody(envelope).runScenario(scenario, identity));
@@ -431,8 +498,8 @@ describe('endpoint client correlation', () => {
       code: 'endpoint_correlation_failed',
       message: 'endpoint_correlation_failed',
     });
-    expect(serializeFailure(error)).not.toMatch(
-      /private-run-sentinel|private-user-sentinel|private-message-sentinel|private-final-session-sentinel|private-auth-token-sentinel/u
+    expect(inspectThrownValue(error)).not.toMatch(
+      /private-run-sentinel|private-user-sentinel|private-message-sentinel|private-final-session-sentinel|private-auth-token-sentinel|private-assistant-reply-sentinel/u
     );
   });
 });
@@ -561,9 +628,15 @@ function validResponse(
 }
 
 function timestampAt(base: string, seconds: number): string {
-  const value = new Date(base);
-  value.setSeconds(value.getSeconds() + seconds);
-  return value.toISOString();
+  return new Date(new Date(base).getTime() + seconds * 1_000).toISOString();
+}
+
+function restoreTimeZone(value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env['TZ'];
+    return;
+  }
+  process.env['TZ'] = value;
 }
 
 function clientForBody(body: unknown): EndpointClient {
@@ -607,13 +680,29 @@ async function expectFailure(
   expect(error).toMatchObject({ ...expected, message: expected.code });
 }
 
-function serializeFailure(error: EndpointClientError): string {
-  return JSON.stringify({
-    name: error.name,
-    message: error.message,
-    code: error.code,
-    ...(error.httpStatus !== undefined ? { httpStatus: error.httpStatus } : {}),
-  });
+function inspectThrownValue(value: unknown): string {
+  const seen = new WeakSet<object>();
+  const inspectOwnProperties = (candidate: unknown): unknown => {
+    if (candidate === null || typeof candidate !== 'object') {
+      return typeof candidate === 'symbol' || typeof candidate === 'bigint'
+        ? String(candidate)
+        : candidate;
+    }
+    if (seen.has(candidate)) return '[Circular]';
+    seen.add(candidate);
+    const properties: Record<string, unknown> = {};
+    for (const key of Reflect.ownKeys(candidate)) {
+      const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
+      const propertyName = typeof key === 'symbol' ? key.toString() : key;
+      properties[propertyName] =
+        descriptor !== undefined && 'value' in descriptor
+          ? inspectOwnProperties(descriptor.value)
+          : '[Accessor]';
+    }
+    return properties;
+  };
+
+  return `${String(value)}\n${JSON.stringify(inspectOwnProperties(value))}`;
 }
 
 class ManualTimer implements EndpointTimer {
