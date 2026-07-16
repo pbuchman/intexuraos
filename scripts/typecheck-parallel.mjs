@@ -7,50 +7,26 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { discoverWorkspaceNames } from './lib/workspace-discovery.mjs';
 
 const rootDir = resolve(import.meta.dirname, '..');
-const packageJsonPath = resolve(rootDir, 'package.json');
+const WORKSPACE_PATTERNS = ['apps/*', 'packages/*', 'workers/*', 'tools/intex-agent-evals'];
 
 // Get all workspace packages
 function getWorkspaces() {
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
-  const workspaces = packageJson.workspaces ?? [];
+  return discoverWorkspaceNames(rootDir, WORKSPACE_PATTERNS, 'typecheck');
+}
 
-  // Expand workspace patterns (apps/*, packages/*)
-  const workspaceNames = [];
-
-  for (const pattern of workspaces) {
-    if (pattern.endsWith('/*')) {
-      // apps/* or packages/*
-      const baseDir = pattern.replace('/*', '');
-      const basePath = resolve(rootDir, baseDir);
-
-      if (existsSync(basePath)) {
-        const dirs = readdirSync(basePath, { withFileTypes: true });
-        for (const dir of dirs) {
-          if (dir.isDirectory()) {
-            const pkgPath = resolve(basePath, dir.name, 'package.json');
-            if (existsSync(pkgPath)) {
-              const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-              if (pkg.scripts?.typecheck) {
-                workspaceNames.push(pkg.name);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return workspaceNames;
+export function typecheckCommandArgs(workspaceName) {
+  return ['--filter', workspaceName, 'run', 'typecheck'];
 }
 
 // Run typecheck for a single workspace, returning process handle
 function typecheckWorkspace(workspaceName, activeProcesses) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('pnpm', ['run', 'typecheck', '--workspace', workspaceName], {
+    const proc = spawn('pnpm', typecheckCommandArgs(workspaceName), {
       stdio: 'inherit',
     });
 
@@ -70,8 +46,7 @@ function typecheckWorkspace(workspaceName, activeProcesses) {
   });
 }
 
-// Main execution
-(async () => {
+async function main() {
   try {
     const workspaces = getWorkspaces();
     const activeProcesses = [];
@@ -94,4 +69,8 @@ function typecheckWorkspace(workspaceName, activeProcesses) {
     console.error(`\n❌ Typecheck failed: ${error.message}\n`);
     process.exit(1);
   }
-})();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main();
+}

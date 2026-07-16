@@ -1,0 +1,25 @@
+{
+  "name": "@intexuraos/intex-agent-evals",
+  "version": "3.8.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "validate": "pnpm run typecheck && pnpm run lint:local && pnpm run validate:scenarios && pnpm run test",
+    "validate:scenarios": "vitest run src/__tests__/trackedScenarioCatalog.test.ts",
+    "test": "vitest run src/__tests__",
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@intexuraos/llm-prompts": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
+  }
+}
