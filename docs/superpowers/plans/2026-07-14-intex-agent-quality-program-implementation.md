@@ -16,12 +16,12 @@ It supersedes the previous four-plan implementation graph for evaluation infrast
 
 The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.md`](../specs/2026-06-24-intex-agent-dev-api-test-scenarios.md) are the behavioral source for the initial executable corpus. The completed endpoint plan in [`2026-07-01-intex-agent-internal-test-conversation-endpoint.md`](./2026-07-01-intex-agent-internal-test-conversation-endpoint.md) is historical context, not work to repeat.
 
-### Current implementation status — 2026-07-16
+### Current implementation status — 2026-07-17
 
-- Tasks 1–4 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
-- Delivered commits: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus with privacy-safe synthetic argument evidence), and `52680fd04` + `56b24fe21` (secure Home Dev configuration and preflight).
-- Task 5 is the next implementation step. Tasks 5–9 remain before the operator command is ready; the final Home Dev live acceptance additionally requires the explicit operator instruction defined below.
-- No real endpoint corpus, MiniMax M3 judge run, or Matrix message has been executed yet. Unit/contract success is not the final acceptance.
+- Tasks 1–8 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
+- Delivered commits through Task 8: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus), `52680fd04` + `56b24fe21` (secure Home Dev configuration and preflight), `c2d673683` + `6cd0dd44e` + `3033e438f` (scenario lifecycle), `4382f9223` + `f40dda449` (MiniMax M3 judge), `e75bc6f3a` (safe Matrix smoke), and `6f1fbb351` (CLI, reports, and Home Dev wrapper).
+- The two offline Task 9 documentation items are implemented and independently reviewed. Deployment through `development`, Home Dev health/revision proof, the aggregate Task 9 run checklist, and live acceptance remain pending and require explicit operator authorization.
+- No real endpoint corpus, MiniMax M3 judge run, or Matrix message has been executed yet. Offline/unit/contract success is not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
 ## Global constraints
@@ -307,22 +307,22 @@ The real values exist only in the mode-`0600` Home Dev file. Existing `INTEXURAO
 
 ## Task 5: Run scenarios and deterministic assertions
 
-- [ ] First add failing Intex Agent domain/sanitizer tests for per-turn evidence, including explicit-new-session events across both affected sessions and preserved `sourceType`.
-- [ ] Add required sanitized fields to every endpoint turn result: the turn's `toolCalls` slice, immediate `sessionAfterTurn` snapshot, and all `timelineEvents` caused by that turn. Keep every existing top-level field for compatibility and never expose raw tool arguments or private text.
+- [x] First add failing Intex Agent domain/sanitizer tests for per-turn evidence, including explicit-new-session events across both affected sessions and preserved `sourceType`.
+- [x] Add required sanitized fields to every endpoint turn result: the turn's `toolCalls` slice, immediate `sessionAfterTurn` snapshot, and all `timelineEvents` caused by that turn. Keep every existing top-level field for compatibility and never expose raw tool arguments or private text.
 - [x] Add one shared privacy-safe synthetic-evidence summarizer for both pending confirmations and executed test-tool calls. It recognizes only whole `INTEX-EVAL-NNN` / `INTEX-EVAL-NNN-FNN` markers, emits only a count and domain-separated SHA-256 digest, and never emits marker values or raw arguments. Use the same summary in `confirmation_requested.payload.argsSummary` and captured `toolCalls[].argsSummary`; tests must prove suffix-boundary safety, secret independence, preview/execution equality, and missing-marker detection. Delivered early in `c15b0c2fe` to close Task 3 review.
 - [x] Make the default preference mutation mocks return canonical prompt blocks through the production preference normalizer/renderer (empty after delete), so add/update/delete completion replies represent the resulting state before the existing sanitizer redacts private preference content. Delivered early in `c15b0c2fe` to close Task 3 review.
-- [ ] Write failing tests for missing required calls, extra forbidden calls, wrong turn/count, missing reply, invalid transition, timeout, and malformed endpoint response.
-- [ ] Implement the authenticated endpoint client.
-- [ ] Generate a unique lowercase `runId` and exact `test-intex-agent-<runId>` user per scenario.
-- [ ] Evaluate tool name/count/turn and safe `argsSummary` assertions, the exact transition action, the immediate session snapshot, and per-turn required/forbidden timeline events plus allowed payload assertions.
-- [ ] Apply tool argument assertions to every matching required call. For one timeline payload-assertion group, require one event of that type whose single payload satisfies every assertion.
-- [ ] Treat deterministic synthetic-marker assertions as the authority for redacted free-text arguments. MiniMax judges confirmation intent, clarity, and tone from the sanitized reply plus the deterministic outcome; it must not infer that redacted private text was visible.
-- [ ] Require an exact `(turnIndex, replyIndex)` bijection between actual assistant replies and scenario reply expectations; an extra or missing reply is a deterministic failure.
-- [ ] Never compare exact assistant wording deterministically.
-- [ ] Continue after a behavioral failure so the report covers the entire corpus.
-- [ ] Add scenario/corpus lifecycle modules with an injected fake `JudgeReplies` seam; Task 6 supplies its real MiniMax implementation. Keep endpoint, deterministic, judge, and cleanup results separate so no `finally` return can erase prior evidence.
-- [ ] In a `finally` path, build the existing cleanup input through its exported `parseArgs()`, call `runCleanup()` from `scripts/cleanup-intex-agent-test-conversations.mjs` for the scenario's exact synthetic user/run pair, and require deleted-count equality with the discovered target count.
-- [ ] Add tests proving cleanup runs after pass, behavioral failure, endpoint failure, and judge failure; treat cleanup failure as infrastructure failure without hiding the earlier verdict.
+- [x] Write failing tests for missing required calls, extra forbidden calls, wrong turn/count, missing reply, invalid transition, timeout, and malformed endpoint response.
+- [x] Implement the authenticated endpoint client.
+- [x] Generate a unique lowercase `runId` and exact `test-intex-agent-<runId>` user per scenario.
+- [x] Evaluate tool name/count/turn and safe `argsSummary` assertions, the exact transition action, the immediate session snapshot, and per-turn required/forbidden timeline events plus allowed payload assertions.
+- [x] Apply tool argument assertions to every matching required call. For one timeline payload-assertion group, require one event of that type whose single payload satisfies every assertion.
+- [x] Treat deterministic synthetic-marker assertions as the authority for redacted free-text arguments. MiniMax judges confirmation intent, clarity, and tone from the sanitized reply plus the deterministic outcome; it must not infer that redacted private text was visible.
+- [x] Require an exact `(turnIndex, replyIndex)` bijection between actual assistant replies and scenario reply expectations; an extra or missing reply is a deterministic failure.
+- [x] Never compare exact assistant wording deterministically.
+- [x] Continue after a behavioral failure so the report covers the entire corpus.
+- [x] Add scenario/corpus lifecycle modules with an injected fake `JudgeReplies` seam; Task 6 supplies its real MiniMax implementation. Keep endpoint, deterministic, judge, and cleanup results separate so no `finally` return can erase prior evidence.
+- [x] In a `finally` path, build the existing cleanup input through its exported `parseArgs()`, call `runCleanup()` from `scripts/cleanup-intex-agent-test-conversations.mjs` for the scenario's exact synthetic user/run pair, and require deleted-count equality with the discovered target count.
+- [x] Add tests proving cleanup runs after pass, behavioral failure, endpoint failure, and judge failure; treat cleanup failure as infrastructure failure without hiding the earlier verdict.
 
 **Acceptance:** deterministic failure always makes the scenario fail, regardless of judge output. `behavioralTranscript` is report-only and never the source of a pass verdict.
 
@@ -351,15 +351,15 @@ const MiniMaxJudgeVerdictSchema = z.object({
 }).strict();
 ```
 
-- [ ] Test exact MiniMax model selection, JSON-object mode, temperature 0, one repair, and absence of alternative models.
-- [ ] Use `createOpenRouterClient` directly with raw model `minimax/minimax-m3`; do not widen the Intex tool-calling allowlist.
-- [ ] Use versioned `PromptBuilder` prompts and call `generateChat`; do not use the generic structured helper, strip Markdown fences, or confuse one structured repair with the client's same-model transient transport retries.
-- [ ] Judge each reply independently from synthetic scenario criteria plus sanitized technical facts.
-- [ ] Expose a separate Matrix-smoke judge seam on the same MiniMax evaluator. It uses closed transport facts and the same model/schema/repair/usage accounting, and never fabricates endpoint-only tool/session facts.
-- [ ] Preserve `(scenarioId, turnIndex, replyIndex)` in verdicts.
-- [ ] Require verdict coherence: `pass === true` exactly when all five criteria are true and `failures` is empty; reject duplicate failure enums. Score remains reported but does not define pass.
-- [ ] Treat invalid output after one repair as exit `2`.
-- [ ] Add optional `providerReportedUsd` to the public chat usage result and propagate the already-extracted OpenRouter value without changing existing normalized `costUsd` semantics. Judge success requires this finite non-negative provider value and sums it with input/output/total tokens across the initial and repair responses.
+- [x] Test exact MiniMax model selection, JSON-object mode, temperature 0, one repair, and absence of alternative models.
+- [x] Use `createOpenRouterClient` directly with raw model `minimax/minimax-m3`; do not widen the Intex tool-calling allowlist.
+- [x] Use versioned `PromptBuilder` prompts and call `generateChat`; do not use the generic structured helper, strip Markdown fences, or confuse one structured repair with the client's same-model transient transport retries.
+- [x] Judge each reply independently from synthetic scenario criteria plus sanitized technical facts.
+- [x] Expose a separate Matrix-smoke judge seam on the same MiniMax evaluator. It uses closed transport facts and the same model/schema/repair/usage accounting, and never fabricates endpoint-only tool/session facts.
+- [x] Preserve `(scenarioId, turnIndex, replyIndex)` in verdicts.
+- [x] Require verdict coherence: `pass === true` exactly when all five criteria are true and `failures` is empty; reject duplicate failure enums. Score remains reported but does not define pass.
+- [x] Treat invalid output after one repair as exit `2`.
+- [x] Add optional `providerReportedUsd` to the public chat usage result and propagate the already-extracted OpenRouter value without changing existing normalized `costUsd` semantics. Judge success requires this finite non-negative provider value and sums it with input/output/total tokens across the initial and repair responses.
 
 **Acceptance:** scenario pass = deterministic pass AND all reply-level MiniMax verdicts pass.
 
@@ -367,17 +367,17 @@ const MiniMaxJudgeVerdictSchema = z.object({
 
 **Sequencing annotation:** Task 8's Matrix library and fakes are implemented before Task 7's production composition, so the remaining execution order is `4 → 5 → 6 → 8 → 7 → 9`. Task numbering is retained for traceability. Task 7 must wire the real Task 8 implementation; it must not introduce a temporary or stub production `full` / `matrix-smoke` command.
 
-- [ ] Test commands `setup`, `preflight`, `endpoint`, `full`, `scenario <id>`, `matrix-smoke`, unknown input, and exit-code propagation.
-- [ ] Support both exact scenario selectors `scenario <id>` and `--scenario <id>`; reject every other flag/extra argument. Normalize SSH, revision, and unexpected process statuses to infrastructure exit `2`, while preserving remote `0`, `1`, and `2`.
-- [ ] Write `.artifacts/intex-agent-evals/<runId>/report.json` and `report.md` atomically through a restrictive temporary directory plus rename, with totals, tool/turn summaries, judge verdicts, provider-reported cost, duration, and safe failure codes. Evaluation commands produce reports; `setup` and `preflight` print safe summaries only.
-- [ ] Ignore the artifact root in Git.
-- [ ] Add root scripts `eval:intex-agent:setup`, `eval:intex-agent:preflight`, `eval:intex-agent:endpoint`, `eval:intex-agent`, and `eval:intex-agent:matrix-smoke`.
-- [ ] Continue corpus and the authorized Matrix smoke after behavioral failures so the report is complete; stop before later scenarios or Matrix only after infrastructure, cleanup, judge-protocol, or reporting failure. Exit precedence is `2` over `1` over `0`, while preserving all earlier verdicts.
-- [ ] Implement the wrapper with a closed selector set and fixed `home-dev` / `~/deploy/intexuraos`.
-- [ ] Execute remotely through `zsh -lic` and `direnv exec .`. Never forward secrets as SSH arguments.
-- [ ] Resolve the local implementation SHA, pass it only as the revision proof, and require remote `git merge-base --is-ancestor <requiredSha> HEAD` before preflight or tests.
-- [ ] Refuse to use HEAD as revision proof when any evaluator implementation path is staged, modified, or untracked.
-- [ ] Test exact quoting, unknown-selector rejection, revision mismatch, exit normalization, and safe-output pass-through. The wrapper never adds environment/argv/remote-command text to output; the evaluator CLI owns the allowlisted safe output contract and never emits raw errors or secrets.
+- [x] Test commands `setup`, `preflight`, `endpoint`, `full`, `scenario <id>`, `matrix-smoke`, unknown input, and exit-code propagation.
+- [x] Support both exact scenario selectors `scenario <id>` and `--scenario <id>`; reject every other flag/extra argument. Normalize SSH, revision, and unexpected process statuses to infrastructure exit `2`, while preserving remote `0`, `1`, and `2`.
+- [x] Write `.artifacts/intex-agent-evals/<runId>/report.json` and `report.md` atomically through a restrictive temporary directory plus rename, with totals, tool/turn summaries, judge verdicts, provider-reported cost, duration, and safe failure codes. Evaluation commands produce reports; `setup` and `preflight` print safe summaries only.
+- [x] Ignore the artifact root in Git.
+- [x] Add root scripts `eval:intex-agent:setup`, `eval:intex-agent:preflight`, `eval:intex-agent:endpoint`, `eval:intex-agent`, and `eval:intex-agent:matrix-smoke`.
+- [x] Continue corpus and the authorized Matrix smoke after behavioral failures so the report is complete; stop before later scenarios or Matrix only after infrastructure, cleanup, judge-protocol, or reporting failure. Exit precedence is `2` over `1` over `0`, while preserving all earlier verdicts.
+- [x] Implement the wrapper with a closed selector set and fixed `home-dev` / `~/deploy/intexuraos`.
+- [x] Execute remotely through `zsh -lic` and `direnv exec .`. Never forward secrets as SSH arguments.
+- [x] Resolve the local implementation SHA, pass it only as the revision proof, and require remote `git merge-base --is-ancestor <requiredSha> HEAD` before preflight or tests.
+- [x] Refuse to use HEAD as revision proof when any evaluator implementation path is staged, modified, or untracked.
+- [x] Test exact quoting, unknown-selector rejection, revision mismatch, exit normalization, and safe-output pass-through. The wrapper never adds environment/argv/remote-command text to output; the evaluator CLI owns the allowlisted safe output contract and never emits raw errors or secrets.
 
 **Acceptance:** `scripts/run-intex-agent-evals-home-dev.sh full` is the single command used when the user says “odpal testy”.
 
@@ -385,25 +385,25 @@ const MiniMaxJudgeVerdictSchema = z.object({
 
 **Execution note:** implement this task before Task 7, as required by the sequencing annotation above.
 
-- [ ] Test readiness failure, send failure, timeout, unrelated events, self-authored events, valid reply, and MiniMax rejection with fakes.
-- [ ] Refactor Task 4 readiness behind a callback-scoped validated-account-context helper. The CLI runs full preflight first; Task 8 reuses the same checks immediately before send as a just-in-time account/Matrix/WhatsApp recheck, without rerunning the catalog or MiniMax probe and without returning secret context.
-- [ ] Read token/target paths only from the mode-0600 machine-local config.
-- [ ] Capture a Matrix sync cursor before sending.
-- [ ] Resolve the adapter health `sourceAccountId` against the machine-local targets file and select only its `intex_agent` room; verify Matrix `/account/whoami` equals the configured Matrix identity.
-- [ ] Call `POST /internal/whatsapp/private/outbound-matrix-messages` with the machine-local user ID, `startNewSession: true`, a unique idempotency key, and a synthetic prompt that explicitly asks the agent to request missing note content and not save anything yet.
-- [ ] Ensure the prompt cannot authorize a note, calendar, research, link, code, external-save, or preference side effect.
-- [ ] Poll only the configured `intex_agent` room from the captured cursor.
-- [ ] Ignore self messages, bridge bookkeeping, reactions, edits, and non-text events.
-- [ ] Accept only the first new non-redacted `m.text` event whose sender matches the existing WhatsApp puppet predicate; reject/ignore self, bridge-bot, unknown-sender, limited-timeline, and unrelated-room evidence.
-- [ ] Judge the first new assistant text through the dedicated MiniMax M3 Matrix seam; return/report only the closed verdict fields and usage, never rationale or message text.
-- [ ] Retain no token, room/user/event ID, phone, or room history in reports.
+- [x] Test readiness failure, send failure, timeout, unrelated events, self-authored events, valid reply, and MiniMax rejection with fakes.
+- [x] Refactor Task 4 readiness behind a callback-scoped validated-account-context helper. The CLI runs full preflight first; Task 8 reuses the same checks immediately before send as a just-in-time account/Matrix/WhatsApp recheck, without rerunning the catalog or MiniMax probe and without returning secret context.
+- [x] Read token/target paths only from the mode-0600 machine-local config.
+- [x] Capture a Matrix sync cursor before sending.
+- [x] Resolve the adapter health `sourceAccountId` against the machine-local targets file and select only its `intex_agent` room; verify Matrix `/account/whoami` equals the configured Matrix identity.
+- [x] Call `POST /internal/whatsapp/private/outbound-matrix-messages` with the machine-local user ID, `startNewSession: true`, a unique idempotency key, and a synthetic prompt that explicitly asks the agent to request missing note content and not save anything yet.
+- [x] Ensure the prompt cannot authorize a note, calendar, research, link, code, external-save, or preference side effect.
+- [x] Poll only the configured `intex_agent` room from the captured cursor.
+- [x] Ignore self messages, bridge bookkeeping, reactions, edits, and non-text events.
+- [x] Accept only the first new non-redacted `m.text` event whose sender matches the existing WhatsApp puppet predicate; reject/ignore self, bridge-bot, unknown-sender, limited-timeline, and unrelated-room evidence.
+- [x] Judge the first new assistant text through the dedicated MiniMax M3 Matrix seam; return/report only the closed verdict fields and usage, never rationale or message text.
+- [x] Retain no token, room/user/event ID, phone, or room history in reports.
 
 **Acceptance:** `endpoint` never sends a real message. `full` and `matrix-smoke` each send exactly one safe outbound prompt and may persist its real bridge/message metadata plus one real Intex Agent session on the configured operator account. The prompt never authorizes a product side effect, and synthetic cleanup never targets these records. This Matrix smoke does not claim hidden tool-call auditing; deterministic tool selection is covered by the endpoint corpus.
 
 ## Task 9: Write the runbook and prove the workflow
 
-- [ ] Write `docs/testing/intex-agent-evals.md` with commands, fixed Home Dev host/repo/ports, machine-local config path/schema, scenario/report directories, exit codes, and failure triage.
-- [ ] Update Intex Agent technical docs for 20 turns and link the runbook.
+- [x] Write `docs/testing/intex-agent-evals.md` with commands, fixed Home Dev host/repo/ports, machine-local config path/schema, scenario/report directories, exit codes, and failure triage.
+- [x] Update Intex Agent technical docs for 20 turns and link the runbook.
 - [ ] After local CI and review, deliver the exact implementation commit through the existing `development` → Home Dev deployment path; do not add a second deployment mechanism.
 - [ ] Wait for Home Dev health, verify the implementation commit is an ancestor of the remote deployed HEAD, and only then run live acceptance.
 - [ ] Run:
@@ -437,6 +437,7 @@ The following would make the system more comprehensive or portable, but is inten
 - browser automation for Auth0, settings, and Element;
 - Meta delivery receipts, correlation, crash recovery, tombstones, TTL, and drills;
 - multi-machine bootstrap, containerized runner, and portable secret management;
+- portable native no-replace report-directory publication with filesystem-specific atomic collision guarantees;
 - an independent judge for future rows where MiniMax M3 itself is the product model;
 - release activation gates, signed evidence, artifact provenance, and deployment attestation.
 
