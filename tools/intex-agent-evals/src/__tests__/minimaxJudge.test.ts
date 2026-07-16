@@ -118,6 +118,24 @@ function successfulResponse(
   return { ok: true, value: { content, usage } };
 }
 
+function successfulResponseWithUnknownContent(
+  content: unknown
+): Awaited<ReturnType<MiniMaxClient['generateChat']>> {
+  return {
+    ok: true,
+    value: {
+      content,
+      usage: {
+        inputTokens: 11,
+        outputTokens: 7,
+        totalTokens: 18,
+        costUsd: 0,
+        providerReportedUsd: 0.0042,
+      },
+    },
+  } as unknown as Awaited<ReturnType<MiniMaxClient['generateChat']>>;
+}
+
 function failedResponse(
   code: 'API_ERROR' | 'TIMEOUT',
   message = 'private-provider-error'
@@ -615,6 +633,82 @@ describe('MiniMax judge usage and batch contract', () => {
     expect(generateChat).toHaveBeenCalledOnce();
   });
 
+  it('rejects aggregate token overflow while retaining the earlier representable token sum', async () => {
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponse('invalid-first-verdict', {
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 1,
+        totalTokens: 2,
+        costUsd: 0,
+        providerReportedUsd: 0.125,
+      }),
+      successfulResponse(JSON.stringify(validVerdict()), {
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 2,
+        totalTokens: 3,
+        costUsd: 0,
+        providerReportedUsd: 0.25,
+      })
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'MINIMAX_JUDGE_USAGE_INVALID',
+      failedReply: { scenarioId: 'intex-eval-001', turnIndex: 2, replyIndex: 1 },
+      completedVerdicts: [],
+      usage: {
+        logicalCalls: 2,
+        repairCount: 1,
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 3,
+        totalTokens: 5,
+        providerReportedUsd: 0.375,
+        providerReportedUsdComplete: false,
+      },
+    });
+    expect(generateChat).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects aggregate provider-cost overflow while retaining the earlier finite cost', async () => {
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponse('invalid-first-verdict', {
+        inputTokens: 1,
+        outputTokens: 2,
+        totalTokens: 3,
+        costUsd: 0,
+        providerReportedUsd: Number.MAX_VALUE,
+      }),
+      successfulResponse(JSON.stringify(validVerdict()), {
+        inputTokens: 4,
+        outputTokens: 5,
+        totalTokens: 9,
+        costUsd: 0,
+        providerReportedUsd: Number.MAX_VALUE,
+      })
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'MINIMAX_JUDGE_USAGE_INVALID',
+      failedReply: { scenarioId: 'intex-eval-001', turnIndex: 2, replyIndex: 1 },
+      completedVerdicts: [],
+      usage: {
+        logicalCalls: 2,
+        repairCount: 1,
+        inputTokens: 5,
+        outputTokens: 7,
+        totalTokens: 12,
+        providerReportedUsd: Number.MAX_VALUE,
+        providerReportedUsdComplete: false,
+      },
+    });
+    expect(generateChat).toHaveBeenCalledTimes(2);
+  });
+
   it('does not require total tokens to equal input plus output', async () => {
     const { evaluator } = evaluatorWithResponses(
       successfulResponse(JSON.stringify(validVerdict()), {
@@ -816,6 +910,65 @@ describe('MiniMax judge usage and batch contract', () => {
       usage: { logicalCalls: 0, providerReportedUsdComplete: true },
     });
     expect(JSON.stringify([first, second])).not.toContain('private-factory-sentinel');
+  });
+
+  it('closes a successful provider response with null content without repair or rejection', async () => {
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponseWithUnknownContent(null)
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'MINIMAX_JUDGE_PROVIDER_FAILED',
+      failedReply: { scenarioId: 'intex-eval-001', turnIndex: 2, replyIndex: 1 },
+      completedVerdicts: [],
+      usage: {
+        logicalCalls: 1,
+        repairCount: 0,
+        inputTokens: 11,
+        outputTokens: 7,
+        totalTokens: 18,
+        providerReportedUsd: 0.0042,
+        providerReportedUsdComplete: true,
+      },
+    });
+    expect(generateChat).toHaveBeenCalledOnce();
+    expect(JSON.stringify(result)).not.toContain('TypeError');
+  });
+
+  it('closes an unexpected endpoint serialization throw without leaking input', async () => {
+    const cyclicFacts: Record<string, unknown> = { marker: 'private-cycle-sentinel' };
+    cyclicFacts['self'] = cyclicFacts;
+    const input = {
+      ...INPUT,
+      technicalFacts: cyclicFacts as unknown as ReplyEvaluationInput['technicalFacts'],
+    };
+    const generateChat = vi.fn<MiniMaxClient['generateChat']>();
+    const createClient = vi.fn<MiniMaxClientFactory>(() => ({ generateChat }));
+    const evaluator = createMiniMaxEvaluator({ apiKey: 'private-key', createClient });
+
+    const result = await evaluator.judgeReplies([input]);
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'MINIMAX_JUDGE_PROVIDER_FAILED',
+      failedReply: { scenarioId: 'intex-eval-001', turnIndex: 2, replyIndex: 1 },
+      completedVerdicts: [],
+      usage: {
+        logicalCalls: 0,
+        repairCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        providerReportedUsd: 0,
+        providerReportedUsdComplete: true,
+      },
+    });
+    expect(createClient).toHaveBeenCalledOnce();
+    expect(generateChat).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('private-cycle-sentinel');
   });
 });
 
@@ -1027,6 +1180,61 @@ describe('MiniMax Matrix-smoke judge seam', () => {
       usage: { logicalCalls: 0, providerReportedUsdComplete: true },
     });
     expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('closes a successful provider response with numeric content without repair or rejection', async () => {
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponseWithUnknownContent(42)
+    );
+
+    const result = await evaluator.judgeMatrixSmokeReply(MATRIX_INPUT);
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'MINIMAX_JUDGE_PROVIDER_FAILED',
+      usage: {
+        logicalCalls: 1,
+        repairCount: 0,
+        inputTokens: 11,
+        outputTokens: 7,
+        totalTokens: 18,
+        providerReportedUsd: 0.0042,
+        providerReportedUsdComplete: true,
+      },
+    });
+    expect(generateChat).toHaveBeenCalledOnce();
+    expect(JSON.stringify(result)).not.toContain('TypeError');
+  });
+
+  it('closes an unexpected Matrix input getter throw without leaking it', async () => {
+    const input = {
+      ...MATRIX_INPUT,
+      get assistantText(): string {
+        throw new Error('private-matrix-getter-sentinel');
+      },
+    };
+    const generateChat = vi.fn<MiniMaxClient['generateChat']>();
+    const createClient = vi.fn<MiniMaxClientFactory>(() => ({ generateChat }));
+    const evaluator = createMiniMaxEvaluator({ apiKey: 'private-key', createClient });
+
+    const result = await evaluator.judgeMatrixSmokeReply(input);
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'MINIMAX_JUDGE_PROVIDER_FAILED',
+      usage: {
+        logicalCalls: 0,
+        repairCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        providerReportedUsd: 0,
+        providerReportedUsdComplete: true,
+      },
+    });
+    expect(createClient).not.toHaveBeenCalled();
+    expect(generateChat).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('private-matrix-getter-sentinel');
   });
 });
 

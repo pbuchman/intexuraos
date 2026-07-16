@@ -246,6 +246,25 @@ function replyIdentity(input: ReplyEvaluationInput): {
   };
 }
 
+function checkedTokenSum(current: number, increment: number): number | undefined {
+  if (!Number.isSafeInteger(increment) || increment < 0) {
+    return undefined;
+  }
+  const candidate = current + increment;
+  return Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : undefined;
+}
+
+function checkedProviderCostSum(
+  current: number,
+  increment: number | undefined
+): number | undefined {
+  if (increment === undefined || !Number.isFinite(increment) || increment < 0) {
+    return undefined;
+  }
+  const candidate = current + increment;
+  return Number.isFinite(candidate) && candidate >= 0 ? candidate : undefined;
+}
+
 type VerdictParseResult =
   | { ok: true; verdict: MiniMaxJudgeVerdict }
   | { ok: false; issues: readonly string[] };
@@ -303,27 +322,30 @@ export function createMiniMaxEvaluator(config: {
     responseUsage: GenerateChatResult['usage']
   ): boolean {
     let valid = true;
-    if (Number.isSafeInteger(responseUsage.inputTokens) && responseUsage.inputTokens >= 0) {
-      usage.inputTokens += responseUsage.inputTokens;
+    const inputTokens = checkedTokenSum(usage.inputTokens, responseUsage.inputTokens);
+    if (inputTokens !== undefined) {
+      usage.inputTokens = inputTokens;
     } else {
       valid = false;
     }
-    if (Number.isSafeInteger(responseUsage.outputTokens) && responseUsage.outputTokens >= 0) {
-      usage.outputTokens += responseUsage.outputTokens;
+    const outputTokens = checkedTokenSum(usage.outputTokens, responseUsage.outputTokens);
+    if (outputTokens !== undefined) {
+      usage.outputTokens = outputTokens;
     } else {
       valid = false;
     }
-    if (Number.isSafeInteger(responseUsage.totalTokens) && responseUsage.totalTokens >= 0) {
-      usage.totalTokens += responseUsage.totalTokens;
+    const totalTokens = checkedTokenSum(usage.totalTokens, responseUsage.totalTokens);
+    if (totalTokens !== undefined) {
+      usage.totalTokens = totalTokens;
     } else {
       valid = false;
     }
-    if (
-      responseUsage.providerReportedUsd !== undefined &&
-      Number.isFinite(responseUsage.providerReportedUsd) &&
-      responseUsage.providerReportedUsd >= 0
-    ) {
-      usage.providerReportedUsd += responseUsage.providerReportedUsd;
+    const providerReportedUsd = checkedProviderCostSum(
+      usage.providerReportedUsd,
+      responseUsage.providerReportedUsd
+    );
+    if (providerReportedUsd !== undefined) {
+      usage.providerReportedUsd = providerReportedUsd;
     } else {
       valid = false;
     }
@@ -362,6 +384,9 @@ export function createMiniMaxEvaluator(config: {
     }
     if (!accumulateUsage(usage, response.value.usage)) {
       return { ok: false, code: 'MINIMAX_JUDGE_USAGE_INVALID' };
+    }
+    if (typeof response.value.content !== 'string') {
+      return { ok: false, code: 'MINIMAX_JUDGE_PROVIDER_FAILED' };
     }
     return { ok: true, content: response.value.content };
   }
@@ -440,16 +465,33 @@ export function createMiniMaxEvaluator(config: {
     }
 
     for (const input of inputs) {
-      const judged = await judgeOneReply(
-        client,
-        miniMaxJudgePrompt.build({}),
-        JSON.stringify({
-          semanticCriteria: input.semanticCriteria,
-          assistantReply: input.assistantText,
-          technicalFacts: input.technicalFacts,
-        }),
-        usage
-      );
+      const logicalCallsBefore = usage.logicalCalls;
+      let judged:
+        | { ok: true; verdict: MiniMaxJudgeVerdict }
+        | { ok: false; code: JudgeInfrastructureCode };
+      try {
+        judged = await judgeOneReply(
+          client,
+          miniMaxJudgePrompt.build({}),
+          JSON.stringify({
+            semanticCriteria: input.semanticCriteria,
+            assistantReply: input.assistantText,
+            technicalFacts: input.technicalFacts,
+          }),
+          usage
+        );
+      } catch {
+        if (usage.logicalCalls > logicalCallsBefore) {
+          usage.providerReportedUsdComplete = false;
+        }
+        return {
+          ok: false,
+          code: 'MINIMAX_JUDGE_PROVIDER_FAILED',
+          failedReply: replyIdentity(input),
+          completedVerdicts: verdicts,
+          usage,
+        };
+      }
       if (!judged.ok) {
         return {
           ok: false,
@@ -471,30 +513,37 @@ export function createMiniMaxEvaluator(config: {
       input: MatrixSmokeEvaluationInput
     ): Promise<MiniMaxMatrixSmokeJudgeResult> {
       const usage = emptyUsage();
-      const parsedInput = MatrixSmokeEvaluationInputSchema.safeParse(input);
-      if (!parsedInput.success) {
-        return { ok: false, code: 'MINIMAX_JUDGE_INVALID_OUTPUT', usage };
-      }
-      if (config.apiKey.trim().length === 0) {
-        return { ok: false, code: 'MINIMAX_JUDGE_KEY_MISSING', usage };
-      }
-      const client = getClient();
-      if (client === undefined) {
+      try {
+        const parsedInput = MatrixSmokeEvaluationInputSchema.safeParse(input);
+        if (!parsedInput.success) {
+          return { ok: false, code: 'MINIMAX_JUDGE_INVALID_OUTPUT', usage };
+        }
+        if (config.apiKey.trim().length === 0) {
+          return { ok: false, code: 'MINIMAX_JUDGE_KEY_MISSING', usage };
+        }
+        const client = getClient();
+        if (client === undefined) {
+          return { ok: false, code: 'MINIMAX_JUDGE_PROVIDER_FAILED', usage };
+        }
+        const judged = await judgeOneReply(
+          client,
+          miniMaxMatrixSmokeJudgePrompt.build({}),
+          JSON.stringify({
+            semanticCriteria: parsedInput.data.semanticCriteria,
+            assistantReply: parsedInput.data.assistantText,
+            transportFacts: parsedInput.data.transportFacts,
+          }),
+          usage
+        );
+        return judged.ok
+          ? { ok: true, verdict: judged.verdict, usage }
+          : { ok: false, code: judged.code, usage };
+      } catch {
+        if (usage.logicalCalls > 0) {
+          usage.providerReportedUsdComplete = false;
+        }
         return { ok: false, code: 'MINIMAX_JUDGE_PROVIDER_FAILED', usage };
       }
-      const judged = await judgeOneReply(
-        client,
-        miniMaxMatrixSmokeJudgePrompt.build({}),
-        JSON.stringify({
-          semanticCriteria: parsedInput.data.semanticCriteria,
-          assistantReply: parsedInput.data.assistantText,
-          transportFacts: parsedInput.data.transportFacts,
-        }),
-        usage
-      );
-      return judged.ok
-        ? { ok: true, verdict: judged.verdict, usage }
-        : { ok: false, code: judged.code, usage };
     },
     async probe(): ReturnType<MiniMaxProbePort['probe']> {
       if (config.apiKey.trim().length === 0) {
