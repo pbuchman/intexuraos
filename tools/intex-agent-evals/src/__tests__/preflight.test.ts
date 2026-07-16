@@ -54,6 +54,7 @@ import {
   parseMatrixTargetsContents,
   runPreflight,
   setupEvaluatorConfig,
+  withValidatedAccountContext,
   type EvaluatorConfig,
   type FirebaseAdminDependencies,
   type MiniMaxProbePort,
@@ -62,6 +63,7 @@ import {
   type RuntimeIdentityPort,
   type ScenarioCatalogPort,
   type SetupPorts,
+  type ValidatedAccountContext,
   type WhatsAppClientFactory,
 } from '../preflight.js';
 
@@ -887,6 +889,143 @@ describe('setupEvaluatorConfig', () => {
       .mocked(protectedFiles.read)
       .mock.calls.find(([path]) => path === ports.configPath);
     expect(configRead?.[1]).toEqual({ mode: 0o600, maxBytes: CONFIG_MAX_BYTES });
+  });
+});
+
+describe('withValidatedAccountContext', () => {
+  it('exposes the exact validated account context only inside the callback', async () => {
+    const ports = createSetupPorts(VALID_CONFIG, createPreflightProtectedFiles(VALID_CONFIG));
+    ports.runtime = createRuntimePort({ INTEXURAOS_OPENROUTER_APP_API_KEY: undefined });
+    const callback = vi.fn(async (context: ValidatedAccountContext) => {
+      expect(context).toEqual({
+        userId: VALID_CONFIG.userId,
+        matrixUserId: VALID_CONFIG.matrixUserId,
+        homeserverUrl: 'https://matrix.synthetic.test',
+        accessToken: 'synthetic-matrix-token',
+        targetRoomId: '!agent-room:home-dev',
+      });
+    });
+
+    const result = await withValidatedAccountContext(ports, callback);
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      checks: [
+        { check: 'runtime', status: 'passed' },
+        { check: 'environment', status: 'passed' },
+        { check: 'config', status: 'passed' },
+        { check: 'matrix_files', status: 'passed' },
+        { check: 'intex_agent_health', status: 'passed' },
+        { check: 'whatsapp_health', status: 'passed' },
+        { check: 'matrix_health', status: 'passed' },
+        { check: 'firebase_identity', status: 'passed' },
+        { check: 'matrix_identity', status: 'passed' },
+        { check: 'whatsapp_delivery', status: 'passed' },
+      ],
+    });
+    const serialized = JSON.stringify(result);
+    for (const privateValue of [
+      VALID_CONFIG.userId,
+      VALID_CONFIG.matrixUserId,
+      'https://matrix.synthetic.test',
+      'synthetic-matrix-token',
+      '!agent-room:home-dev',
+    ]) {
+      expect(serialized).not.toContain(privateValue);
+    }
+  });
+
+  it('requires the Matrix source account target to be an own property', async () => {
+    const ports = createSetupPorts(VALID_CONFIG, createPreflightProtectedFiles(VALID_CONFIG));
+    const originalRead = ports.protectedFiles.read;
+    ports.protectedFiles.read = vi.fn(async (path, policy) =>
+      path === VALID_CONFIG.matrixTargetsFile
+        ? { ok: true as const, contents: '{}' }
+        : await originalRead(path, policy)
+    );
+    const originalHealthGet = ports.healthHttp.get;
+    ports.healthHttp.get = vi.fn(async (url) =>
+      url === MATRIX_ADAPTER_HEALTH_URL
+        ? {
+            ok: true as const,
+            status: 200,
+            body: { ...runningMatrixHealth(), sourceAccountId: 'constructor' },
+          }
+        : await originalHealthGet(url)
+    );
+    const callback = vi.fn(async () => undefined);
+
+    const result = await withValidatedAccountContext(ports, callback);
+
+    expect(result).toMatchObject({ ok: false, code: 'MATRIX_TARGETS_INVALID' });
+    expect(callback).not.toHaveBeenCalled();
+    expect(ports.firebaseIdentity.getUserState).not.toHaveBeenCalled();
+  });
+
+  it('checks target ownership before reading a potentially inherited getter', async () => {
+    const inheritedKey = 'inheritedTargetGetterSentinel';
+    Object.defineProperty(Object.prototype, inheritedKey, {
+      configurable: true,
+      get: () => {
+        throw new Error('private inherited getter sentinel');
+      },
+    });
+    try {
+      const ports = createSetupPorts(VALID_CONFIG, createPreflightProtectedFiles(VALID_CONFIG));
+      const originalRead = ports.protectedFiles.read;
+      ports.protectedFiles.read = vi.fn(async (path, policy) =>
+        path === VALID_CONFIG.matrixTargetsFile
+          ? { ok: true as const, contents: '{}' }
+          : await originalRead(path, policy)
+      );
+      const originalHealthGet = ports.healthHttp.get;
+      ports.healthHttp.get = vi.fn(async (url) =>
+        url === MATRIX_ADAPTER_HEALTH_URL
+          ? {
+              ok: true as const,
+              status: 200,
+              body: { ...runningMatrixHealth(), sourceAccountId: inheritedKey },
+            }
+          : await originalHealthGet(url)
+      );
+      const callback = vi.fn(async () => undefined);
+
+      const result = await withValidatedAccountContext(ports, callback);
+
+      expect(result).toMatchObject({ ok: false, code: 'MATRIX_TARGETS_INVALID' });
+      expect(callback).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain('private inherited getter sentinel');
+    } finally {
+      Reflect.deleteProperty(Object.prototype, inheritedKey);
+    }
+  });
+
+  it('does not invoke the callback when any readiness prerequisite fails', async () => {
+    const ports = createSetupPorts(VALID_CONFIG, createPreflightProtectedFiles(VALID_CONFIG));
+    vi.mocked(ports.whatsapp.getDeliveryStatus).mockResolvedValue({
+      ok: true,
+      value: { status: 'setup_required', deliverable: false, reason: 'private reason sentinel' },
+    });
+    const callback = vi.fn(async () => undefined);
+
+    const result = await withValidatedAccountContext(ports, callback);
+
+    expect(result).toMatchObject({ ok: false, code: 'WHATSAPP_DELIVERY_NOT_READY' });
+    expect(callback).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('private reason sentinel');
+  });
+
+  it('closes and redacts an unexpected callback throw', async () => {
+    const ports = createSetupPorts(VALID_CONFIG, createPreflightProtectedFiles(VALID_CONFIG));
+
+    const result = await withValidatedAccountContext(ports, async () => {
+      throw new Error('private callback exception sentinel');
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'UNEXPECTED_FAILURE' });
+    expect(JSON.stringify(result)).not.toContain('private callback exception sentinel');
+    expect(JSON.stringify(result)).not.toContain('synthetic-matrix-token');
   });
 });
 

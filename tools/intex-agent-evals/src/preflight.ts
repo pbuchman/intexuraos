@@ -548,6 +548,22 @@ export interface SetupPorts extends AccountReadinessPorts {
   runtime: RuntimeIdentityPort;
 }
 
+export interface ValidatedAccountContext {
+  userId: string;
+  matrixUserId: string;
+  homeserverUrl: string;
+  accessToken: string;
+  targetRoomId: string;
+}
+
+export type ValidatedAccountContextResult =
+  | { ok: true; checks: SafeCheckResult[] }
+  | {
+      ok: false;
+      code: PreflightFailureCode;
+      checks: SafeCheckResult[];
+    };
+
 function isNonEmpty(value: string | undefined): value is string {
   return value !== undefined && value.trim() !== '';
 }
@@ -604,7 +620,7 @@ function validateRuntime(
 }
 
 type ReadinessResult =
-  | { ok: true; checks: SafeCheckResult[] }
+  | { ok: true; checks: SafeCheckResult[]; context: ValidatedAccountContext }
   | {
       ok: false;
       check: PreflightCheckId;
@@ -689,6 +705,10 @@ async function validateAccountReadiness(
   if (!Object.hasOwn(targets.value, matrixHealth.data.sourceAccountId)) {
     return readinessFailure(checks, 'matrix_health', 'MATRIX_TARGETS_INVALID');
   }
+  const target = targets.value[matrixHealth.data.sourceAccountId];
+  if (target === undefined) {
+    return readinessFailure(checks, 'matrix_health', 'MATRIX_TARGETS_INVALID');
+  }
   checks.push({ check: 'matrix_health', status: 'passed' });
 
   const firebaseState = await ports.firebaseIdentity.getUserState(config.userId);
@@ -731,7 +751,17 @@ async function validateAccountReadiness(
     return readinessFailure(checks, 'whatsapp_delivery', 'WHATSAPP_DELIVERY_NOT_READY');
   }
   checks.push({ check: 'whatsapp_delivery', status: 'passed' });
-  return { ok: true, checks };
+  return {
+    ok: true,
+    checks,
+    context: {
+      userId: config.userId,
+      matrixUserId: config.matrixUserId,
+      homeserverUrl: matrixHealth.data.homeserverUrl,
+      accessToken,
+      targetRoomId: target.intex_agent,
+    },
+  };
 }
 
 function configsEqual(left: EvaluatorConfig, right: EvaluatorConfig): boolean {
@@ -864,6 +894,106 @@ function preflightFailure(
   };
 }
 
+type LoadedAccountReadinessResult =
+  | {
+      ok: true;
+      config: EvaluatorConfig;
+      context: ValidatedAccountContext;
+      checks: SafeCheckResult[];
+    }
+  | {
+      ok: false;
+      check: PreflightCheckId;
+      code: PreflightFailureCode;
+      checks: SafeCheckResult[];
+    };
+
+async function loadAccountReadiness(
+  ports: SetupPorts,
+  includeMiniMaxKey: boolean
+): Promise<LoadedAccountReadinessResult> {
+  let checks: SafeCheckResult[] = [];
+  let currentCheck: PreflightCheckId = 'runtime';
+  try {
+    const runtime = validateRuntime(ports.runtime, includeMiniMaxKey);
+    checks = runtime.checks;
+    if (!runtime.ok) {
+      return runtime;
+    }
+
+    currentCheck = 'config';
+    const parent = await ports.protectedFiles.validatePrivateDirectory(dirname(ports.configPath));
+    if (!parent.ok) {
+      return {
+        ok: false,
+        check: 'config',
+        code: parent.reason === 'missing' ? 'CONFIG_NOT_FOUND' : 'CONFIG_PARENT_UNSAFE',
+        checks,
+      };
+    }
+
+    const configRead = await ports.protectedFiles.read(ports.configPath, {
+      mode: 0o600,
+      maxBytes: CONFIG_MAX_BYTES,
+    });
+    if (!configRead.ok) {
+      return {
+        ok: false,
+        check: 'config',
+        code: configRead.reason === 'missing' ? 'CONFIG_NOT_FOUND' : 'CONFIG_FILE_UNSAFE',
+        checks,
+      };
+    }
+    const loadedConfig = parseEvaluatorConfigContents(configRead.contents);
+    if (!loadedConfig.ok) {
+      return { ok: false, check: 'config', code: 'CONFIG_INVALID', checks };
+    }
+    checks.push({ check: 'config', status: 'passed' });
+
+    currentCheck = 'matrix_files';
+    const readiness = await validateAccountReadiness(loadedConfig.value, ports);
+    checks.push(...readiness.checks);
+    if (!readiness.ok) {
+      return { ...readiness, checks };
+    }
+
+    return {
+      ok: true,
+      config: loadedConfig.value,
+      context: readiness.context,
+      checks,
+    };
+  } catch {
+    return {
+      ok: false,
+      check: currentCheck,
+      code: 'UNEXPECTED_FAILURE',
+      checks,
+    };
+  }
+}
+
+export async function withValidatedAccountContext(
+  ports: SetupPorts,
+  callback: (context: ValidatedAccountContext) => Promise<void>
+): Promise<ValidatedAccountContextResult> {
+  const readiness = await loadAccountReadiness(ports, false);
+  if (!readiness.ok) {
+    return {
+      ok: false,
+      code: readiness.code,
+      checks: [...readiness.checks, failedCheck(readiness.check, readiness.code)],
+    };
+  }
+
+  try {
+    await callback(readiness.context);
+    return { ok: true, checks: readiness.checks };
+  } catch {
+    return { ok: false, code: 'UNEXPECTED_FAILURE', checks: readiness.checks };
+  }
+}
+
 function mapMiniMaxFailure(
   reason: Exclude<Awaited<ReturnType<MiniMaxProbePort['probe']>>, { ok: true }>['reason']
 ): PreflightFailureCode {
@@ -882,44 +1012,10 @@ function mapMiniMaxFailure(
 
 export async function runPreflight(ports: PreflightPorts): Promise<PreflightResult> {
   let checks: SafeCheckResult[] = [];
-  let currentCheck: PreflightCheckId = 'runtime';
+  let currentCheck: PreflightCheckId = 'scenario_catalog';
   try {
-    const runtime = validateRuntime(ports.runtime, true);
-    checks = runtime.checks;
-    if (!runtime.ok) {
-      return preflightFailure(checks, runtime.check, runtime.code);
-    }
-
-    currentCheck = 'config';
-    const parent = await ports.protectedFiles.validatePrivateDirectory(dirname(ports.configPath));
-    if (!parent.ok) {
-      return preflightFailure(
-        checks,
-        'config',
-        parent.reason === 'missing' ? 'CONFIG_NOT_FOUND' : 'CONFIG_PARENT_UNSAFE'
-      );
-    }
-
-    const configRead = await ports.protectedFiles.read(ports.configPath, {
-      mode: 0o600,
-      maxBytes: CONFIG_MAX_BYTES,
-    });
-    if (!configRead.ok) {
-      return preflightFailure(
-        checks,
-        'config',
-        configRead.reason === 'missing' ? 'CONFIG_NOT_FOUND' : 'CONFIG_FILE_UNSAFE'
-      );
-    }
-    const loadedConfig = parseEvaluatorConfigContents(configRead.contents);
-    if (!loadedConfig.ok) {
-      return preflightFailure(checks, 'config', 'CONFIG_INVALID');
-    }
-    checks.push({ check: 'config', status: 'passed' });
-
-    currentCheck = 'matrix_files';
-    const readiness = await validateAccountReadiness(loadedConfig.value, ports);
-    checks.push(...readiness.checks);
+    const readiness = await loadAccountReadiness(ports, true);
+    checks = readiness.checks;
     if (!readiness.ok) {
       return preflightFailure(checks, readiness.check, readiness.code);
     }
@@ -946,7 +1042,7 @@ export async function runPreflight(ports: PreflightPorts): Promise<PreflightResu
         ports: { intexAgent: 8134, whatsappService: 8113, matrixAdapter: 8099 },
         judgeModel: JUDGE_MODEL,
         scenarioCount: catalog.count,
-        accountAlias: loadedConfig.value.accountAlias,
+        accountAlias: readiness.config.accountAlias,
       },
       checks,
     };
