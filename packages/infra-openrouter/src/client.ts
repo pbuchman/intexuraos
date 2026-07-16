@@ -243,6 +243,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
   function toGenerateChatUsage(input: {
     normalized: NormalizedUsage;
+    providerReportedUsd?: number | null;
     cachedTokens?: number;
     cacheWriteTokens?: number;
   }): GenerateChatResult['usage'] {
@@ -251,6 +252,10 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       outputTokens: input.normalized.outputTokens,
       totalTokens: input.normalized.totalTokens,
       costUsd: input.normalized.costUsd,
+      ...(input.providerReportedUsd !== undefined &&
+        input.providerReportedUsd !== null && {
+          providerReportedUsd: input.providerReportedUsd,
+        }),
       ...(input.cachedTokens !== undefined && { cachedTokens: input.cachedTokens }),
       ...(input.cacheWriteTokens !== undefined && { cacheWriteTokens: input.cacheWriteTokens }),
     };

@@ -1850,9 +1850,15 @@ importers:
 
   tools/intex-agent-evals:
     dependencies:
+      '@intexuraos/infra-openrouter':
+        specifier: workspace:*
+        version: link:../../packages/infra-openrouter
       '@intexuraos/internal-clients':
         specifier: workspace:*
         version: link:../../packages/internal-clients
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
