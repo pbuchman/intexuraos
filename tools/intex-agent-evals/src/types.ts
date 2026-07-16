@@ -75,47 +75,96 @@ export const SCENARIO_SOURCE_TYPES = ['whatsapp_text', 'whatsapp_audio_transcrip
 export const ScenarioSourceTypeSchema = z.enum(SCENARIO_SOURCE_TYPES);
 export type ScenarioSourceType = z.infer<typeof ScenarioSourceTypeSchema>;
 
+export type AssertionPathValueType = 'boolean' | 'number' | 'string';
+
+type AssertionPathMetadata = Readonly<Record<string, AssertionPathValueType>>;
+
+export const TOOL_ARGUMENT_PATH_METADATA = {
+  create_note: {
+    contentLength: 'number',
+    titleLength: 'number',
+    tagsCount: 'number',
+    sourceMessageIdsCount: 'number',
+  },
+  create_calendar_event: {
+    summaryLength: 'number',
+    start: 'string',
+    end: 'string',
+    timeZone: 'string',
+    locationLength: 'number',
+    descriptionLength: 'number',
+    attendeesCount: 'number',
+  },
+  query_calendar_events: {
+    mode: 'string',
+    timeMin: 'string',
+    timeMax: 'string',
+    maxResults: 'number',
+    queryLength: 'number',
+    hasCalendarId: 'boolean',
+  },
+  create_research: {
+    titleLength: 'number',
+    promptLength: 'number',
+    originalMessageLength: 'number',
+    sourceMessageIdsCount: 'number',
+  },
+  create_link: {
+    hasUrl: 'boolean',
+    titleLength: 'number',
+    descriptionLength: 'number',
+    tagsCount: 'number',
+    sourceMessageIdsCount: 'number',
+  },
+  create_code_task: {
+    promptLength: 'number',
+    workerType: 'string',
+    taskMode: 'string',
+    hasLinearIssueId: 'boolean',
+  },
+  save_external: {
+    messageLength: 'number',
+    hasSourceUrl: 'boolean',
+  },
+  get_user_preferences: {},
+  add_user_preference: {
+    textLength: 'number',
+    expectedVersion: 'number',
+  },
+  update_user_preference: {
+    hasItemId: 'boolean',
+    textLength: 'number',
+    expectedVersion: 'number',
+  },
+  delete_user_preference: {
+    hasItemId: 'boolean',
+    expectedVersion: 'number',
+  },
+} as const satisfies Record<IntexAgentToolName, AssertionPathMetadata>;
+
 export const TOOL_ARGUMENT_PATHS = {
-  create_note: ['contentLength', 'titleLength', 'tagsCount', 'sourceMessageIdsCount'],
-  create_calendar_event: [
-    'summaryLength',
-    'start',
-    'end',
-    'timeZone',
-    'locationLength',
-    'descriptionLength',
-    'attendeesCount',
-  ],
-  query_calendar_events: [
-    'mode',
-    'timeMin',
-    'timeMax',
-    'maxResults',
-    'queryLength',
-    'hasCalendarId',
-  ],
-  create_research: [
-    'titleLength',
-    'promptLength',
-    'originalMessageLength',
-    'sourceMessageIdsCount',
-  ],
-  create_link: ['hasUrl', 'titleLength', 'descriptionLength', 'tagsCount', 'sourceMessageIdsCount'],
-  create_code_task: ['promptLength', 'workerType', 'taskMode', 'hasLinearIssueId'],
-  save_external: ['messageLength', 'hasSourceUrl'],
-  get_user_preferences: [],
-  add_user_preference: ['textLength', 'expectedVersion'],
-  update_user_preference: ['hasItemId', 'textLength', 'expectedVersion'],
-  delete_user_preference: ['hasItemId', 'expectedVersion'],
+  create_note: Object.keys(TOOL_ARGUMENT_PATH_METADATA.create_note),
+  create_calendar_event: Object.keys(TOOL_ARGUMENT_PATH_METADATA.create_calendar_event),
+  query_calendar_events: Object.keys(TOOL_ARGUMENT_PATH_METADATA.query_calendar_events),
+  create_research: Object.keys(TOOL_ARGUMENT_PATH_METADATA.create_research),
+  create_link: Object.keys(TOOL_ARGUMENT_PATH_METADATA.create_link),
+  create_code_task: Object.keys(TOOL_ARGUMENT_PATH_METADATA.create_code_task),
+  save_external: Object.keys(TOOL_ARGUMENT_PATH_METADATA.save_external),
+  get_user_preferences: Object.keys(TOOL_ARGUMENT_PATH_METADATA.get_user_preferences),
+  add_user_preference: Object.keys(TOOL_ARGUMENT_PATH_METADATA.add_user_preference),
+  update_user_preference: Object.keys(TOOL_ARGUMENT_PATH_METADATA.update_user_preference),
+  delete_user_preference: Object.keys(TOOL_ARGUMENT_PATH_METADATA.delete_user_preference),
 } as const satisfies Record<IntexAgentToolName, readonly string[]>;
 
-export const TIMELINE_PAYLOAD_PATHS = [
-  'toolName',
-  'resolution',
-  'reason',
-  'status',
-  'fallbackReason',
-  'sourceOutcome',
-  'sourceType',
-  'textPreview',
-] as const;
+export const TIMELINE_PAYLOAD_PATH_METADATA = {
+  toolName: 'string',
+  resolution: 'string',
+  reason: 'string',
+  status: 'string',
+  fallbackReason: 'string',
+  sourceOutcome: 'string',
+  sourceType: 'string',
+  textPreview: 'string',
+} as const satisfies AssertionPathMetadata;
+
+export const TIMELINE_PAYLOAD_PATHS = Object.keys(TIMELINE_PAYLOAD_PATH_METADATA);

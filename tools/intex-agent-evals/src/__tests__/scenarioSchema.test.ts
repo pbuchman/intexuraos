@@ -20,6 +20,36 @@ function expectScenarioValid(scenario: unknown): void {
   expect(IntexEvalScenarioSchema.safeParse(scenario).success).toBe(true);
 }
 
+function setToolAssertion(
+  scenario: ReturnType<typeof createScenario>,
+  toolName: string,
+  assertion: {
+    path: string;
+    operator: string;
+    value?: null | boolean | number | string;
+  }
+): void {
+  const expectation = scenario.expected.turns[0];
+  const call = expectation?.requiredToolCalls[0];
+  if (expectation !== undefined && call !== undefined) {
+    expectation.forbiddenToolCalls = [];
+    call.toolName = toolName;
+    call.argumentAssertions = [assertion];
+  }
+}
+
+function setTimelineAssertion(
+  scenario: ReturnType<typeof createScenario>,
+  assertion: {
+    path: string;
+    operator: string;
+    value?: null | boolean | number | string;
+  }
+): void {
+  const payloadAssertion = scenario.expected.turns[0]?.timeline.payloadAssertions[0];
+  if (payloadAssertion !== undefined) payloadAssertion.assertions = [assertion];
+}
+
 describe('IntexEvalScenarioSchema', () => {
   it('parses a fully valid version 1 scenario and normalizes trimmed fields', () => {
     const scenario = createScenario();
@@ -454,6 +484,33 @@ describe('IntexEvalScenarioSchema', () => {
     expectScenarioInvalid(scenario);
   });
 
+  it.each([
+    ['numeric contains', 'create_note', 'contentLength', 'contains', '12'],
+    ['boolean contains', 'create_link', 'hasUrl', 'contains', 'true'],
+    ['empty string contains', 'create_calendar_event', 'start', 'contains', '   '],
+    ['wrong numeric equals value', 'query_calendar_events', 'maxResults', 'equals', '10'],
+    ['wrong boolean equals value', 'query_calendar_events', 'hasCalendarId', 'equals', 'true'],
+    ['wrong string equals value', 'create_code_task', 'workerType', 'equals', 7],
+    ['null numeric equals value', 'create_note', 'contentLength', 'equals', null],
+    ['null boolean equals value', 'create_link', 'hasUrl', 'equals', null],
+    ['null string equals value', 'create_calendar_event', 'start', 'equals', null],
+  ])('rejects %s for %s.%s', (_name, toolName, path, operator, value) => {
+    const scenario = createScenario();
+    setToolAssertion(scenario, toolName, { path, operator, value });
+    expectScenarioInvalid(scenario);
+  });
+
+  it.each([
+    ['numeric equals', 'create_note', 'contentLength', 'equals', 12],
+    ['boolean equals', 'create_link', 'hasUrl', 'equals', true],
+    ['string equals', 'create_code_task', 'workerType', 'equals', 'codex'],
+    ['non-empty string contains', 'create_calendar_event', 'start', 'contains', '2026-07'],
+  ])('accepts %s for %s.%s', (_name, toolName, path, operator, value) => {
+    const scenario = createScenario();
+    setToolAssertion(scenario, toolName, { path, operator, value });
+    expectScenarioValid(scenario);
+  });
+
   it.each(TIMELINE_PAYLOAD_PATHS)('accepts timeline payload assertion path %s', (path) => {
     const scenario = createScenario();
     const payloadAssertion = scenario.expected.turns[0]?.timeline.payloadAssertions[0];
@@ -470,6 +527,26 @@ describe('IntexEvalScenarioSchema', () => {
       payloadAssertion.assertions = [{ path: 'rawMessage', operator: 'exists' }];
     }
     expectScenarioInvalid(scenario);
+  });
+
+  it.each([
+    ['wrong equals value', 'toolName', 'equals', 7],
+    ['null equals value', 'reason', 'equals', null],
+    ['wrong contains value', 'status', 'contains', false],
+    ['empty contains value', 'textPreview', 'contains', '   '],
+  ])('rejects timeline %s for %s', (_name, path, operator, value) => {
+    const scenario = createScenario();
+    setTimelineAssertion(scenario, { path, operator, value });
+    expectScenarioInvalid(scenario);
+  });
+
+  it.each([
+    ['equals', 'toolName', 'create_note'],
+    ['contains', 'textPreview', 'synthetic note'],
+  ])('accepts timeline string %s for %s', (operator, path, value) => {
+    const scenario = createScenario();
+    setTimelineAssertion(scenario, { path, operator, value });
+    expectScenarioValid(scenario);
   });
 
   it('exports a path catalog for every canonical tool', () => {

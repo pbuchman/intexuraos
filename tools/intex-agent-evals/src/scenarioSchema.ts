@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  type AssertionPathValueType,
   IntexAgentSessionEndReasonSchema,
   IntexAgentSessionEventTypeSchema,
   IntexAgentSessionStartReasonSchema,
@@ -7,8 +8,8 @@ import {
   IntexAgentToolNameSchema,
   IntexAgentTransitionActionSchema,
   ScenarioSourceTypeSchema,
-  TIMELINE_PAYLOAD_PATHS,
-  TOOL_ARGUMENT_PATHS,
+  TIMELINE_PAYLOAD_PATH_METADATA,
+  TOOL_ARGUMENT_PATH_METADATA,
 } from './types.js';
 
 const SCENARIO_ID_PATTERN = /^intex-eval-[0-9]{3}$/u;
@@ -89,6 +90,41 @@ export const ValueAssertionSchema = z
   });
 export type ValueAssertion = z.infer<typeof ValueAssertionSchema>;
 
+function validateAssertionValueType(
+  assertion: ValueAssertion,
+  valueType: AssertionPathValueType,
+  context: z.RefinementCtx,
+  path: (string | number)[]
+): void {
+  if (assertion.operator === 'equals') {
+    if (assertion.value !== undefined && typeof assertion.value !== valueType) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [...path, 'value'],
+        message: `equals assertions for ${valueType}-valued paths require a ${valueType} value`,
+      });
+    }
+    return;
+  }
+
+  if (assertion.operator !== 'contains') return;
+
+  if (valueType !== 'string') {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [...path, 'operator'],
+      message: 'contains assertions are only supported for string-valued paths',
+    });
+  }
+  if (typeof assertion.value !== 'string' || assertion.value.trim().length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [...path, 'value'],
+      message: 'contains assertions require a non-empty string value',
+    });
+  }
+}
+
 export const ScenarioMessageTurnSchema = z
   .object({
     kind: z.literal('message'),
@@ -121,15 +157,19 @@ export const RequiredToolCallExpectationSchema = z
   })
   .strict()
   .superRefine((toolCall, context) => {
-    const allowedPaths = new Set<string>(TOOL_ARGUMENT_PATHS[toolCall.toolName]);
+    const pathMetadata: Readonly<Record<string, AssertionPathValueType>> =
+      TOOL_ARGUMENT_PATH_METADATA[toolCall.toolName];
     for (const [index, assertion] of toolCall.argumentAssertions.entries()) {
-      if (!allowedPaths.has(assertion.path)) {
+      const valueType = pathMetadata[assertion.path];
+      if (valueType === undefined) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['argumentAssertions', index, 'path'],
           message: `Path "${assertion.path}" is not observable for ${toolCall.toolName}`,
         });
+        continue;
       }
+      validateAssertionValueType(assertion, valueType, context, ['argumentAssertions', index]);
     }
   });
 export type RequiredToolCallExpectation = z.infer<typeof RequiredToolCallExpectationSchema>;
@@ -159,15 +199,19 @@ export const TimelinePayloadAssertionSchema = z
   })
   .strict()
   .superRefine((payloadAssertion, context) => {
-    const allowedPaths = new Set<string>(TIMELINE_PAYLOAD_PATHS);
+    const pathMetadata: Readonly<Record<string, AssertionPathValueType>> =
+      TIMELINE_PAYLOAD_PATH_METADATA;
     for (const [index, assertion] of payloadAssertion.assertions.entries()) {
-      if (!allowedPaths.has(assertion.path)) {
+      const valueType = pathMetadata[assertion.path];
+      if (valueType === undefined) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['assertions', index, 'path'],
           message: `Path "${assertion.path}" is not an observable timeline payload field`,
         });
+        continue;
       }
+      validateAssertionValueType(assertion, valueType, context, ['assertions', index]);
     }
   });
 export type TimelinePayloadAssertion = z.infer<typeof TimelinePayloadAssertionSchema>;
