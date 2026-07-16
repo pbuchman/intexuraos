@@ -1,0 +1,1154 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-020",
+  "title": "Retain context for exactly twenty turns",
+  "description": "Retains eighteen explicitly unsaved synthetic context fragments, requests a note on turn nineteen, and executes only after turn-twenty confirmation.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 1 of 18: Project Atlas uses the synthetic green folder. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 2 of 18: The working title is Atlas Readiness Brief. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 3 of 18: The synthetic owner role is launch coordinator. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 4 of 18: The target review date is July 30 2026. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 5 of 18: The first checklist item is verify the demo dataset. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 6 of 18: The second checklist item is review the rollback outline. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 7 of 18: The third checklist item is confirm the mock dashboard. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 8 of 18: The risk label is synthetic amber. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 9 of 18: The mitigation is rehearse the dry-run sequence. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 10 of 18: The decision log uses numbered entries. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 11 of 18: The summary should use concise bullet points. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 12 of 18: The brief should include a short risks section. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 13 of 18: The brief should include a short decisions section. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 14 of 18: The brief should include a short next-actions section. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 15 of 18: The synthetic meeting room label is Orion. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 16 of 18: The review duration is forty-five minutes. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 17 of 18: The final checklist owner is the launch coordinator. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "INTEX-EVAL-020 context fragment 18 of 18: The closing line should say ready for synthetic review. Do not save yet; only retain this context.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "Now save one note titled INTEX-EVAL-020 Atlas Readiness Brief containing all 18 context fragments from this session.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "confirmation_button",
+      "previousTurnIndex": 18,
+      "decision": "accept"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["session_started", "user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 1,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 2,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 3,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 4,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 5,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 6,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 7,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 8,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 9,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 10,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 11,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 12,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 13,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 14,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 15,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 16,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 17,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
+              "Honors the explicit no-save instruction and does not ask for action confirmation."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 18,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session",
+          "activeTool": "create_note"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "confirmation_requested", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_requested",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_note"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Understands the explicit request to save one note from all eighteen accumulated context fragments.",
+              "Asks for explicit confirmation before saving and does not claim the note already exists.",
+              "Keeps the request in the same long-running session."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 19,
+        "requiredToolCalls": [
+          {
+            "toolName": "create_note",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "contentLength",
+                "operator": "exists"
+              },
+              {
+                "path": "titleLength",
+                "operator": "exists"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "user_message",
+            "confirmation_resolved",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_resolved",
+              "assertions": [
+                {
+                  "path": "resolution",
+                  "operator": "equals",
+                  "value": "accepted"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_note"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Confirms that the accumulated Atlas Readiness Brief note was saved successfully.",
+              "Does not ask for the context again or request another confirmation."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

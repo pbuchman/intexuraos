@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-009",
+  "title": "Start an idle new session",
+  "description": "An explicit new-session command starts an idle waiting session and performs no tool work.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "new session",
+      "sourceType": "whatsapp_text"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "user_requested_new_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["session_started", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "user_message",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "user_requested_new_session"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly says that a new Intex Agent session is ready.",
+              "Briefly explains supported actions the user can request next.",
+              "Does not claim that any resource was created or ask for confirmation of an action."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

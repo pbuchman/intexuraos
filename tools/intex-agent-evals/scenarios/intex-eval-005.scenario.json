@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-005",
+  "title": "Reject an unsupported ride booking",
+  "description": "Explains that a synthetic ride-booking request is unsupported and invokes no Intex Agent tool.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Book me an Uber to the airport for INTEX-EVAL-005.",
+      "sourceType": "whatsapp_text"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "agent_fallback",
+            "unsupported_request",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "agent_fallback",
+              "assertions": [
+                {
+                  "path": "sourceOutcome",
+                  "operator": "equals",
+                  "value": "unsupported"
+                }
+              ]
+            },
+            {
+              "eventType": "unsupported_request",
+              "assertions": [
+                {
+                  "path": "textPreview",
+                  "operator": "exists"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly says that booking an Uber or ride is not a supported capability.",
+              "Names useful supported Intex Agent actions without pretending a ride was booked.",
+              "Makes clear that a new session is handling the request."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
