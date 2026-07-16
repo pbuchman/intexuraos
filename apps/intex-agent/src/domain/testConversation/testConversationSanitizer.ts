@@ -7,6 +7,8 @@ import type {
   SanitizedAssistantReply,
   SanitizedSessionEvent,
   SanitizedTestConversationSession,
+  SanitizedTurnTimelineEvent,
+  TestConversationSessionAfterTurn,
   TestConversationSessionTransition,
   TestConversationTurnResult,
 } from './testConversationTypes.js';
@@ -69,14 +71,31 @@ export function sanitizeEventsBySessionId(
   return Object.fromEntries(
     Object.entries(eventsBySessionId).map(([sessionId, events]) => [
       sessionId,
-      events.map((event) => ({
-        id: event.id,
-        type: event.type,
-        createdAt: event.createdAt,
-        payload: sanitizeEventPayload(event),
-      })),
+      events.map(sanitizeSessionEvent),
     ])
   );
+}
+
+export function sanitizeTurnTimelineEvents(
+  events: readonly IntexAgentSessionEvent[]
+): SanitizedTurnTimelineEvent[] {
+  return events.map((event) => ({
+    sessionId: event.sessionId,
+    ...sanitizeSessionEvent(event),
+  }));
+}
+
+export function sanitizeSessionAfterTurn(
+  session: IntexAgentSession
+): TestConversationSessionAfterTurn {
+  const activeTool = (session as { activeTool?: IntexAgentToolName | null }).activeTool;
+  return {
+    id: session.id,
+    status: session.status,
+    startReason: session.startReason,
+    ...(session.endReason !== undefined ? { endReason: session.endReason } : {}),
+    ...(activeTool !== undefined && activeTool !== null ? { activeTool } : {}),
+  };
 }
 
 export function sanitizeSessions(
@@ -223,6 +242,9 @@ function sanitizeEventPayload(event: IntexAgentSessionEvent): Record<string, unk
   copyString(payload, sanitized, 'status');
   copyString(payload, sanitized, 'fallbackReason');
   copyString(payload, sanitized, 'sourceOutcome');
+  if (event.type === 'user_message') {
+    copyString(payload, sanitized, 'sourceType');
+  }
 
   const text = readFirstString(payload, ['text', 'message']);
   if (text !== undefined) {
@@ -245,6 +267,15 @@ function sanitizeEventPayload(event: IntexAgentSessionEvent): Record<string, unk
   }
 
   return sanitized;
+}
+
+function sanitizeSessionEvent(event: IntexAgentSessionEvent): SanitizedSessionEvent {
+  return {
+    id: event.id,
+    type: event.type,
+    createdAt: event.createdAt,
+    payload: sanitizeEventPayload(event),
+  };
 }
 
 function copyString(

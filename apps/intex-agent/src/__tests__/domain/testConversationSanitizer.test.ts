@@ -16,6 +16,102 @@ import type {
 import type { IntexAgentSessionEvent } from '../../domain/sessions/types.js';
 
 describe('test conversation sanitizer', () => {
+  it('projects narrow per-turn timeline events and immediate session state', () => {
+    const sanitizeTurnTimelineEvents = (
+      sanitizerModule as unknown as {
+        sanitizeTurnTimelineEvents?: (
+          events: readonly IntexAgentSessionEvent[]
+        ) => Record<string, unknown>[];
+      }
+    ).sanitizeTurnTimelineEvents;
+    const sanitizeSessionAfterTurn = (
+      sanitizerModule as unknown as {
+        sanitizeSessionAfterTurn?: (session: Record<string, unknown>) => Record<string, unknown>;
+      }
+    ).sanitizeSessionAfterTurn;
+
+    expect(sanitizeTurnTimelineEvents).toBeTypeOf('function');
+    expect(sanitizeSessionAfterTurn).toBeTypeOf('function');
+    if (sanitizeTurnTimelineEvents === undefined || sanitizeSessionAfterTurn === undefined) return;
+
+    const timeline = sanitizeTurnTimelineEvents([
+      {
+        id: 'event-user',
+        sessionId: 'intex_session_1',
+        userId: 'test-intex-agent-secret-user',
+        type: 'user_message',
+        createdAt: '2026-07-01T10:00:00.000Z',
+        payload: {
+          text: 'Content: private-message-sentinel',
+          sourceType: 'whatsapp_audio_transcript',
+          toolArgs: { content: 'private-tool-args' },
+          result: { message: 'private-result' },
+          sourceUrl: 'https://example.com/private',
+          whatsappSender: '+48123123123',
+          replyContext: { text: 'private-reply-context' },
+          promptBlock: 'private-preference',
+          secretKey: 'private-secret',
+          userId: 'private-user-id',
+          timestamp: 'private-timestamp',
+          channel: 'private-channel',
+          summary: 'private-summary',
+        },
+      },
+      {
+        id: 'event-assistant',
+        sessionId: 'intex_session_1',
+        userId: 'test-intex-agent-secret-user',
+        type: 'assistant_message',
+        createdAt: '2026-07-01T10:00:01.000Z',
+        payload: { message: 'Safe assistant reply', sourceType: 'must-not-copy' },
+      },
+    ]);
+    const snapshot = sanitizeSessionAfterTurn({
+      id: 'intex_session_1',
+      userId: 'test-intex-agent-secret-user',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-07-01T10:00:00.000Z',
+      endedAt: '2026-07-01T10:00:01.000Z',
+      lastUserMessageAt: '2026-07-01T10:00:00.000Z',
+      lastAssistantMessageAt: '2026-07-01T10:00:01.000Z',
+      startReason: 'no_active_session',
+      endReason: 'tool_completed',
+      activeTool: 'create_note',
+      summary: 'private-session-summary',
+    });
+
+    expect(timeline).toEqual([
+      {
+        sessionId: 'intex_session_1',
+        id: 'event-user',
+        type: 'user_message',
+        createdAt: '2026-07-01T10:00:00.000Z',
+        payload: {
+          sourceType: 'whatsapp_audio_transcript',
+          textPreview: 'Content: [redacted]',
+        },
+      },
+      {
+        sessionId: 'intex_session_1',
+        id: 'event-assistant',
+        type: 'assistant_message',
+        createdAt: '2026-07-01T10:00:01.000Z',
+        payload: { textPreview: 'Safe assistant reply' },
+      },
+    ]);
+    expect(snapshot).toEqual({
+      id: 'intex_session_1',
+      status: 'waiting_for_user',
+      startReason: 'no_active_session',
+      endReason: 'tool_completed',
+      activeTool: 'create_note',
+    });
+    expect(JSON.stringify({ timeline, snapshot })).not.toMatch(
+      /private-message-sentinel|private-tool-args|private-result|private-reply-context|private-preference|private-secret|private-user-id|private-timestamp|private-channel|private-summary|private-session-summary|must-not-copy/u
+    );
+  });
+
   it('summarizes only complete canonical synthetic markers without exposing their tokens', () => {
     const summarizeArgs = (
       sanitizerModule as unknown as {
@@ -455,6 +551,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-1',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         submittedTextPreview: 'Jakie wydarzenia jutro?',
         assistantReplies: [
           {
@@ -505,6 +602,7 @@ describe('test conversation sanitizer', () => {
         kind: 'confirmation_button',
         messageId: 'wamid-1',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         assistantReplies: [],
       },
       {
@@ -512,6 +610,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-2',
         sessionId: 'intex_session_2',
+        ...emptyTurnEvidence('intex_session_2'),
         assistantReplies: [{ userId: 'u', message: 'done', replyToMessageId: 'wamid-2', correlationId: 's' }],
       },
     ];
@@ -578,6 +677,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-1',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         assistantReplies: [{ userId: 'u', message: 'first', replyToMessageId: 'wamid-1', correlationId: 's' }],
       },
       {
@@ -585,6 +685,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-2',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         assistantReplies: [{ userId: 'u', message: 'second', replyToMessageId: 'wamid-2', correlationId: 's' }],
       },
     ];
@@ -626,6 +727,7 @@ describe('test conversation sanitizer', () => {
           kind: 'message',
           messageId: 'wamid-1',
           sessionId: 'intex_session_1',
+          ...emptyTurnEvidence('intex_session_1'),
           assistantReplies: [],
         },
       ],
@@ -644,4 +746,18 @@ function markerDigest(markers: readonly string[]): string {
   return createHash('sha256')
     .update(`intex-eval-marker-set:v1\0${[...markers].sort().join('\n')}`, 'utf8')
     .digest('hex');
+}
+
+function emptyTurnEvidence(
+  sessionId: string
+): Pick<TestConversationTurnResult, 'toolCalls' | 'sessionAfterTurn' | 'timelineEvents'> {
+  return {
+    toolCalls: [],
+    sessionAfterTurn: {
+      id: sessionId,
+      status: 'waiting_for_user',
+      startReason: 'no_active_session',
+    },
+    timelineEvents: [],
+  };
 }

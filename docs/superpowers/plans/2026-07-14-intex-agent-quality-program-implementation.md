@@ -18,9 +18,9 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 
 ### Current implementation status — 2026-07-16
 
-- Tasks 1–3 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
-- Delivered commits: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), and `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus with privacy-safe synthetic argument evidence).
-- Task 4 is the next implementation step. Tasks 4–9 remain before the operator command and Home Dev live acceptance are complete.
+- Tasks 1–4 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
+- Delivered commits: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus with privacy-safe synthetic argument evidence), and `52680fd04` + `56b24fe21` (secure Home Dev configuration and preflight).
+- Task 5 is the next implementation step. Tasks 5–9 remain before the operator command is ready; the final Home Dev live acceptance additionally requires the explicit operator instruction defined below.
 - No real endpoint corpus, MiniMax M3 judge run, or Matrix message has been executed yet. Unit/contract success is not the final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
@@ -293,15 +293,15 @@ Strict keys:
 
 The real values exist only in the mode-`0600` Home Dev file. Existing `INTEXURAOS_INTERNAL_AUTH_TOKEN` and `INTEXURAOS_OPENROUTER_APP_API_KEY` come from direnv.
 
-- [ ] Add the library workflow behind the one-time interactive `setup` command. `setupEvaluatorConfig()` accepts an in-memory candidate, validates it before writing, creates the parent directory with mode `0700`, and exclusively writes a new non-symlink config with mode `0600`. It may succeed idempotently for an identical safe file but refuses an existing differing config. Task 7 owns non-echoing TTY collection and command dispatch.
-- [ ] During setup, prove the supplied canonical ID is one enabled Firebase identity with one active private WhatsApp account and matching Matrix delivery target. Do not attempt e-mail-to-user discovery and never source the user ID from the adapter's legacy compatibility field.
-- [ ] Verify the configured token/targets paths resolve to readable regular files owned by the Home Dev user; validate content shape/non-emptiness without printing it.
-- [ ] Write fake-client tests for missing/unsafe config, wrong environment, unavailable service, `401`, missing/disabled Firebase identity, inactive private account, Matrix setup-required, wrong Matrix identity, and every closed `MiniMaxProbePort` failure. Require Linux, exact hostname `home-dev`, and `INTEXURAOS_ENVIRONMENT=dev`; the environment variable alone does not distinguish local from Home Dev.
-- [ ] Check `127.0.0.1:8134/health`, `127.0.0.1:8113/health`, `127.0.0.1:8099/health`, and WhatsApp `matrix-delivery-status/:userId`.
-- [ ] Check the configured Firebase UID with the existing Admin SDK and require `disabled !== true`; do not fetch or print profile fields.
-- [ ] Verify Matrix state `running`, direct Matrix `/account/whoami` equality with the configured Matrix identity, and delivery `ready`.
-- [ ] Define and orchestrate one `MiniMaxProbePort` call as the final preflight check. Task 6 supplies its only production implementation: one minimal MiniMax M3 JSON-object request with strict Zod parsing, no fallback, and no alternative model.
-- [ ] Return only closed safe results containing host, fixed ports, readiness, judge model, scenario count, and `accountAlias`. Task 7 owns printing those results and cannot print arbitrary exception text.
+- [x] Add the library workflow behind the one-time interactive `setup` command. `setupEvaluatorConfig()` accepts an in-memory candidate, validates it before writing, creates the parent directory with mode `0700`, and exclusively writes a new non-symlink config with mode `0600`. It may succeed idempotently for an identical safe file but refuses an existing differing config. Task 7 owns non-echoing TTY collection and command dispatch.
+- [x] During setup, prove the supplied canonical ID is one enabled Firebase identity with one active private WhatsApp account and matching Matrix delivery target. Do not attempt e-mail-to-user discovery and never source the user ID from the adapter's legacy compatibility field.
+- [x] Verify the configured token/targets paths resolve to readable regular files owned by the Home Dev user; validate content shape/non-emptiness without printing it.
+- [x] Write fake-client tests for missing/unsafe config, wrong environment, unavailable service, `401`, missing/disabled Firebase identity, inactive private account, Matrix setup-required, wrong Matrix identity, and every closed `MiniMaxProbePort` failure. Require Linux, exact hostname `home-dev`, and `INTEXURAOS_ENVIRONMENT=dev`; the environment variable alone does not distinguish local from Home Dev.
+- [x] Check `127.0.0.1:8134/health`, `127.0.0.1:8113/health`, `127.0.0.1:8099/health`, and WhatsApp `matrix-delivery-status/:userId`.
+- [x] Check the configured Firebase UID with the existing Admin SDK and require `disabled !== true`; do not fetch or print profile fields.
+- [x] Verify Matrix state `running`, direct Matrix `/account/whoami` equality with the configured Matrix identity, and delivery `ready`.
+- [x] Define and orchestrate one `MiniMaxProbePort` call as the final preflight check. Task 6 supplies its only production implementation: one minimal MiniMax M3 JSON-object request with strict Zod parsing, no fallback, and no alternative model.
+- [x] Return only closed safe results containing host, fixed ports, readiness, judge model, scenario count, and `accountAlias`. Task 7 owns printing those results and cannot print arbitrary exception text.
 
 **Acceptance:** offline Task 4 tests prove secure config handling and the full readiness orchestration through injected fakes. A real command-level preflight is not complete until Tasks 6 and 7 provide the production MiniMax adapter and CLI. Never print token, e-mail, real user ID, room ID, phone, secret path, or private message. WhatsApp delivery readiness here is configuration readiness; the one Task 8 send is the end-to-end delivery proof.
 
@@ -355,6 +355,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 - [ ] Use `createOpenRouterClient` directly with raw model `minimax/minimax-m3`; do not widen the Intex tool-calling allowlist.
 - [ ] Use versioned `PromptBuilder` prompts and call `generateChat`; do not use the generic structured helper, strip Markdown fences, or confuse one structured repair with the client's same-model transient transport retries.
 - [ ] Judge each reply independently from synthetic scenario criteria plus sanitized technical facts.
+- [ ] Expose a separate Matrix-smoke judge seam on the same MiniMax evaluator. It uses closed transport facts and the same model/schema/repair/usage accounting, and never fabricates endpoint-only tool/session facts.
 - [ ] Preserve `(scenarioId, turnIndex, replyIndex)` in verdicts.
 - [ ] Require verdict coherence: `pass === true` exactly when all five criteria are true and `failures` is empty; reject duplicate failure enums. Score remains reported but does not define pass.
 - [ ] Treat invalid output after one repair as exit `2`.
@@ -385,6 +386,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 **Execution note:** implement this task before Task 7, as required by the sequencing annotation above.
 
 - [ ] Test readiness failure, send failure, timeout, unrelated events, self-authored events, valid reply, and MiniMax rejection with fakes.
+- [ ] Refactor Task 4 readiness behind a callback-scoped validated-account-context helper. The CLI runs full preflight first; Task 8 reuses the same checks immediately before send as a just-in-time account/Matrix/WhatsApp recheck, without rerunning the catalog or MiniMax probe and without returning secret context.
 - [ ] Read token/target paths only from the mode-0600 machine-local config.
 - [ ] Capture a Matrix sync cursor before sending.
 - [ ] Resolve the adapter health `sourceAccountId` against the machine-local targets file and select only its `intex_agent` room; verify Matrix `/account/whoami` equals the configured Matrix identity.
@@ -393,7 +395,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 - [ ] Poll only the configured `intex_agent` room from the captured cursor.
 - [ ] Ignore self messages, bridge bookkeeping, reactions, edits, and non-text events.
 - [ ] Accept only the first new non-redacted `m.text` event whose sender matches the existing WhatsApp puppet predicate; reject/ignore self, bridge-bot, unknown-sender, limited-timeline, and unrelated-room evidence.
-- [ ] Judge the first new assistant text through MiniMax M3.
+- [ ] Judge the first new assistant text through the dedicated MiniMax M3 Matrix seam; return/report only the closed verdict fields and usage, never rationale or message text.
 - [ ] Retain no token, room/user/event ID, phone, or room history in reports.
 
 **Acceptance:** `endpoint` never sends a real message. `full` and `matrix-smoke` each send exactly one safe outbound prompt and may persist its real bridge/message metadata plus one real Intex Agent session on the configured operator account. The prompt never authorizes a product side effect, and synthetic cleanup never targets these records. This Matrix smoke does not claim hidden tool-call auditing; deterministic tool selection is covered by the endpoint corpus.

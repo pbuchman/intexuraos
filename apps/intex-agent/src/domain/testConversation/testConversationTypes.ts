@@ -80,6 +80,18 @@ export interface CapturedToolCall {
   error?: string;
 }
 
+export interface TestConversationSessionAfterTurn {
+  id: string;
+  status: IntexAgentSession['status'];
+  startReason: IntexAgentSession['startReason'];
+  endReason?: IntexAgentSession['endReason'];
+  activeTool?: IntexAgentToolName;
+}
+
+export interface SanitizedTurnTimelineEvent extends SanitizedSessionEvent {
+  sessionId: string;
+}
+
 export interface TestConversationTurnResult {
   turnIndex: number;
   kind: TestConversationTurnInput['kind'];
@@ -87,6 +99,9 @@ export interface TestConversationTurnResult {
   sessionId: string;
   submittedTextPreview?: string;
   assistantReplies: SanitizedAssistantReply[];
+  toolCalls: CapturedToolCall[];
+  sessionAfterTurn: TestConversationSessionAfterTurn;
+  timelineEvents: SanitizedTurnTimelineEvent[];
 }
 
 export interface TestConversationSessionTransition {
