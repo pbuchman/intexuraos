@@ -90,6 +90,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
+              "Clearly tells the user that a new Intex Agent session has started.",
               "Clearly says that booking an Uber or ride for INTEX-EVAL-005 is not a supported capability.",
               "Names useful supported Intex Agent actions without pretending a ride was booked.",
               "Does not claim that any ride-booking tool or resource action was executed."

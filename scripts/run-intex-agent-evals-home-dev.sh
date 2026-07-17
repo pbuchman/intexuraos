@@ -99,24 +99,56 @@ if [[ ! $required_sha =~ ^[0-9a-f]{40}$ ]]; then
   exit 2
 fi
 
+if ! frame_id=$(LC_ALL=C od -An -N24 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n'); then
+  printf '%s\n' 'remote_execution_failed' >&2
+  exit 2
+fi
+if [[ ! $frame_id =~ ^[0-9a-f]{48}$ ]]; then
+  printf '%s\n' 'remote_execution_failed' >&2
+  exit 2
+fi
+readonly frame_id
+readonly begin_marker="__INTEX_AGENT_EVAL_${frame_id}_BEGIN__"
+readonly end_marker_prefix="__INTEX_AGENT_EVAL_${frame_id}_END_"
+
 remote_program=''
 IFS= read -r -d '' remote_program <<'REMOTE_PROGRAM' || :
 set -eu
-if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
-  printf '%s\n' 'remote_environment_unavailable' >&2
+frame_id=$1
+shift
+case $frame_id in
+  (*[!a-f0-9]*|'') exit 2 ;;
+esac
+if [ ${#frame_id} -ne 48 ]; then
   exit 2
+fi
+emit() {
+  printf '%s\n' "$1" >&3
+}
+finish() {
+  emit "__INTEX_AGENT_EVAL_${frame_id}_END_$1__"
+  exit "$1"
+}
+emit "__INTEX_AGENT_EVAL_${frame_id}_BEGIN__"
+if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
+  emit 'remote_environment_unavailable'
+  finish 2
 fi
 required_sha=$1
 shift
 if ! git merge-base --is-ancestor "$required_sha" HEAD >/dev/null 2>&1; then
-  printf '%s\n' 'revision_mismatch' >&2
-  exit 2
+  emit 'revision_mismatch'
+  finish 2
 fi
-if ! command -v direnv >/dev/null 2>&1 || ! command -v pnpm >/dev/null 2>&1 || ! direnv exec . true >/dev/null 2>&1; then
-  printf '%s\n' 'remote_environment_unavailable' >&2
-  exit 2
+if ! command -v direnv >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1 || ! direnv exec . true >/dev/null 2>&1; then
+  emit 'remote_environment_unavailable'
+  finish 2
 fi
-exec direnv exec . pnpm --filter @intexuraos/intex-agent-evals run cli -- "$@"
+set +e
+direnv exec . node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
+cli_status=$?
+set -e
+finish "$cli_status"
 REMOTE_PROGRAM
 remote_program=${remote_program%$'\n'}
 
@@ -126,13 +158,15 @@ shell_single_quote() {
   printf "'%s'" "$value"
 }
 
-remote_command="zsh -lic $(shell_single_quote "$remote_program")"
+remote_command="exec 3>&1; exec zsh -lic $(shell_single_quote "$remote_program")"
 for positional_argument in \
   'intex-agent-evals-home-dev' \
+  "$frame_id" \
   "$required_sha" \
   "${cli_arguments[@]}"; do
   remote_command+=" $(shell_single_quote "$positional_argument")"
 done
+remote_command+=' >/dev/null 2>&1'
 
 run_ssh() {
   local tty_mode=$1
@@ -144,15 +178,161 @@ run_ssh() {
     ssh "$tty_mode" -o LogLevel=QUIET -o 'SendEnv=-*' home-dev "$remote_command" 9>&-
 }
 
-if [[ ${cli_arguments[0]} == 'setup' ]]; then
-  if run_ssh '-tt'; then
-    ssh_status=0
-  else
-    ssh_status=$?
+readonly safe_check_pattern='(runtime|environment|config|matrix_files|intex_agent_health|whatsapp_health|matrix_health|firebase_identity|matrix_identity|whatsapp_delivery|scenario_catalog|minimax_probe)'
+readonly safe_failure_pattern='(HOME_DEV_REQUIRED|REQUIRED_ENV_MISSING|SETUP_TTY_REQUIRED|CONFIG_NOT_FOUND|CONFIG_INVALID|CONFIG_PARENT_UNSAFE|CONFIG_FILE_UNSAFE|CONFIG_CONFLICT|CONFIG_WRITE_FAILED|MATRIX_TOKEN_FILE_UNSAFE|MATRIX_TOKEN_INVALID|MATRIX_TARGETS_FILE_UNSAFE|MATRIX_TARGETS_INVALID|INTEX_AGENT_HEALTH_FAILED|WHATSAPP_HEALTH_FAILED|MATRIX_HEALTH_FAILED|FIREBASE_IDENTITY_MISSING|FIREBASE_IDENTITY_DISABLED|FIREBASE_CHECK_FAILED|MATRIX_IDENTITY_MISMATCH|MATRIX_WHOAMI_UNAUTHORIZED|MATRIX_WHOAMI_FAILED|WHATSAPP_DELIVERY_NOT_READY|WHATSAPP_DELIVERY_FAILED|SCENARIO_CATALOG_FAILED|MINIMAX_KEY_MISSING|MINIMAX_PROBE_TIMEOUT|MINIMAX_PROBE_INVALID|MINIMAX_PROBE_FAILED|UNEXPECTED_FAILURE)'
+readonly safe_alias_pattern='^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$'
+readonly safe_run_id_pattern='[a-z0-9][a-z0-9._-]{0,95}'
+
+is_safe_alias() {
+  local candidate=$1
+  [[ $candidate =~ $safe_alias_pattern ]] && [[ $candidate =~ [A-Za-z] ]]
+}
+
+is_safe_check_line() {
+  local prefix=$1
+  local line=$2
+  local pass_pattern="^${prefix} check ${safe_check_pattern} PASS$"
+  local fail_pattern="^${prefix} check ${safe_check_pattern} FAIL ${safe_failure_pattern}$"
+  [[ $line =~ $pass_pattern ]] || [[ $line =~ $fail_pattern ]]
+}
+
+is_safe_preflight_pass_line() {
+  local line=$1
+  local pattern='^preflight result PASS host home-dev intex-agent 8134 whatsapp-service 8113 matrix-adapter 8099 judge or:minimax/minimax-m3 scenarios ([0-9]{1,6}) account (.+)$'
+  [[ $line =~ $pattern ]] && is_safe_alias "${BASH_REMATCH[2]}"
+}
+
+is_safe_preflight_fail_line() {
+  local line=$1
+  local pattern="^preflight result FAIL ${safe_failure_pattern}$"
+  [[ $line =~ $pattern ]]
+}
+
+is_safe_setup_pass_line() {
+  local line=$1
+  local pattern='^setup result PASS (created|already_configured) account (.+)$'
+  [[ $line =~ $pattern ]] && is_safe_alias "${BASH_REMATCH[2]}"
+}
+
+is_safe_setup_fail_line() {
+  local line=$1
+  local pattern="^setup result FAIL ${safe_failure_pattern}$"
+  [[ $line =~ $pattern ]]
+}
+
+filter_setup_stream() {
+  local state='before'
+  local invalid=0
+  local payload_status=''
+  local frame_status=''
+  local terminal_line=''
+  local line=''
+  local end_pattern="^${end_marker_prefix}([0-9]+)__$"
+
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%$'\r'}
+    case $state in
+      before)
+        if [[ $line == "$begin_marker" ]]; then
+          state='inside'
+        else
+          invalid=1
+        fi
+        ;;
+      inside)
+        if [[ $line =~ $end_pattern ]]; then
+          frame_status=${BASH_REMATCH[1]}
+          state='after'
+          continue
+        fi
+        if [[ -n $payload_status ]]; then
+          invalid=1
+          continue
+        fi
+
+        case $line in
+          '')
+            printf '\n'
+            ;;
+          'setup input account_alias')
+            printf '%s\n' "$line"
+            ;;
+          'setup input canonical_user_id' | 'setup input matrix_user_id' | \
+            'setup input matrix_access_token_file' | 'setup input matrix_targets_file')
+            printf '%s\n' "$line"
+            ;;
+          'revision_mismatch' | 'remote_environment_unavailable')
+            if [[ -z $payload_status ]]; then
+              terminal_line=$line
+              payload_status=2
+            else
+              invalid=1
+            fi
+            ;;
+          'cli result FAIL UNEXPECTED_FAILURE')
+            if [[ -z $payload_status ]]; then
+              terminal_line=$line
+              payload_status=2
+            else
+              invalid=1
+            fi
+            ;;
+          *)
+            if is_safe_check_line 'setup' "$line"; then
+              printf '%s\n' "$line"
+            elif is_safe_setup_pass_line "$line"; then
+              if [[ -z $payload_status ]]; then
+                terminal_line=$line
+                payload_status=0
+              else
+                invalid=1
+              fi
+            elif is_safe_setup_fail_line "$line"; then
+              if [[ -z $payload_status ]]; then
+                terminal_line=$line
+                payload_status=2
+              else
+                invalid=1
+              fi
+            else
+              invalid=1
+            fi
+            ;;
+        esac
+        ;;
+      after)
+        invalid=1
+        ;;
+    esac
+  done
+
+  if ((invalid != 0)) || [[ $state != 'after' ]] || \
+    [[ -z $payload_status || $payload_status != "$frame_status" ]]; then
+    return 90
   fi
+  printf '%s\n' "$terminal_line"
+  case $frame_status in
+    0) return 10 ;;
+    1) return 11 ;;
+    2) return 12 ;;
+    *) return 90 ;;
+  esac
+}
+
+if [[ ${cli_arguments[0]} == 'setup' ]]; then
+  set +e
+  run_ssh '-tt' 2>/dev/null | filter_setup_stream
+  pipeline_status=("${PIPESTATUS[@]}")
+  set -e
+  ssh_status=${pipeline_status[0]:-255}
+  filter_status=${pipeline_status[1]:-90}
 
   case $ssh_status in
     0 | 1 | 2)
+      if ((filter_status != ssh_status + 10)); then
+        printf '%s\n' 'remote_execution_failed' >&2
+        exit 2
+      fi
       exit "$ssh_status"
       ;;
     *)
@@ -161,6 +341,200 @@ if [[ ${cli_arguments[0]} == 'setup' ]]; then
       ;;
   esac
 fi
+
+validate_preflight_payload() {
+  local payload=$1
+  local expected_status=$2
+  local remaining=$payload
+  local line=''
+  local terminal_status=''
+
+  while [[ -n $remaining ]]; do
+    [[ $remaining == *$'\n'* ]] || return 1
+    line=${remaining%%$'\n'*}
+    remaining=${remaining#*$'\n'}
+    if is_safe_check_line 'preflight' "$line"; then
+      continue
+    fi
+    if is_safe_preflight_pass_line "$line"; then
+      [[ -z $terminal_status ]] || return 1
+      terminal_status=0
+      continue
+    fi
+    if is_safe_preflight_fail_line "$line" || [[ $line == 'cli result FAIL UNEXPECTED_FAILURE' ]]; then
+      [[ -z $terminal_status ]] || return 1
+      terminal_status=2
+      continue
+    fi
+    return 1
+  done
+
+  [[ -n $terminal_status && $terminal_status == "$expected_status" ]]
+}
+
+validate_evaluation_payload() {
+  local payload=$1
+  local expected_status=$2
+  local expected_command=${cli_arguments[0]}
+  local expected_scenario=${cli_arguments[1]-}
+  local remaining=$payload
+  local line=''
+  local run_id=''
+  local terminal_status=''
+  local report_seen=0
+  local preflight_seen=0
+  local behavioral_seen=0
+  local infrastructure_seen=0
+  local cli_failure_seen=0
+  local run_pattern="^evaluation run (${safe_run_id_pattern}) command ${expected_command}$"
+  local scenario_pattern='^scenario (intex-eval-[0-9]{3}) (PASS|BEHAVIORAL_FAILURE|INFRASTRUCTURE_FAILURE)$'
+  local report_pattern="^evaluation report \\.artifacts/intex-agent-evals/(${safe_run_id_pattern})$"
+
+  while [[ -n $remaining ]]; do
+    [[ $remaining == *$'\n'* ]] || return 1
+    line=${remaining%%$'\n'*}
+    remaining=${remaining#*$'\n'}
+
+    if [[ $line =~ $run_pattern ]]; then
+      [[ -z $run_id ]] || return 1
+      run_id=${BASH_REMATCH[1]}
+      continue
+    fi
+    if is_safe_check_line 'preflight' "$line"; then
+      continue
+    fi
+    if is_safe_preflight_pass_line "$line"; then
+      ((preflight_seen == 0)) || return 1
+      preflight_seen=1
+      continue
+    fi
+    if is_safe_preflight_fail_line "$line"; then
+      ((preflight_seen == 0)) || return 1
+      preflight_seen=1
+      infrastructure_seen=1
+      continue
+    fi
+    if [[ $line =~ $scenario_pattern ]]; then
+      [[ $expected_command == 'endpoint' || $expected_command == 'full' || $expected_command == 'scenario' ]] || return 1
+      if [[ $expected_command == 'scenario' && ${BASH_REMATCH[1]} != "$expected_scenario" ]]; then
+        return 1
+      fi
+      case ${BASH_REMATCH[2]} in
+        PASS) ;;
+        BEHAVIORAL_FAILURE) behavioral_seen=1 ;;
+        INFRASTRUCTURE_FAILURE) infrastructure_seen=1 ;;
+      esac
+      continue
+    fi
+    case $line in
+      'matrix-smoke PASS')
+        [[ $expected_command == 'full' || $expected_command == 'matrix-smoke' ]] || return 1
+        continue
+        ;;
+      'matrix-smoke BEHAVIORAL_FAILURE')
+        [[ $expected_command == 'full' || $expected_command == 'matrix-smoke' ]] || return 1
+        behavioral_seen=1
+        continue
+        ;;
+      'matrix-smoke INFRASTRUCTURE_FAILURE')
+        [[ $expected_command == 'full' || $expected_command == 'matrix-smoke' ]] || return 1
+        infrastructure_seen=1
+        continue
+        ;;
+      'evaluation result PASS exit 0')
+        [[ -z $terminal_status ]] || return 1
+        terminal_status=0
+        continue
+        ;;
+      'evaluation result BEHAVIORAL_FAILURE exit 1')
+        [[ -z $terminal_status ]] || return 1
+        terminal_status=1
+        behavioral_seen=1
+        continue
+        ;;
+      'evaluation result INFRASTRUCTURE_FAILURE exit 2')
+        [[ -z $terminal_status ]] || return 1
+        terminal_status=2
+        infrastructure_seen=1
+        continue
+        ;;
+      'evaluation report FAIL REPORTING_FAILED')
+        ((report_seen == 0)) || return 1
+        report_seen=1
+        infrastructure_seen=1
+        continue
+        ;;
+      'cli result FAIL UNEXPECTED_FAILURE')
+        [[ -z $terminal_status ]] || return 1
+        terminal_status=2
+        cli_failure_seen=1
+        infrastructure_seen=1
+        continue
+        ;;
+      'cli result FAIL INVALID_SCENARIO')
+        [[ $expected_command == 'scenario' && -z $terminal_status ]] || return 1
+        terminal_status=2
+        cli_failure_seen=1
+        infrastructure_seen=1
+        continue
+        ;;
+    esac
+    if [[ $line =~ $report_pattern ]]; then
+      ((report_seen == 0)) || return 1
+      [[ -n $run_id && ${BASH_REMATCH[1]} == "$run_id" ]] || return 1
+      report_seen=1
+      continue
+    fi
+    return 1
+  done
+
+  [[ -n $terminal_status && $terminal_status == "$expected_status" ]] || return 1
+  if ((cli_failure_seen == 1)); then
+    [[ -z $run_id && $preflight_seen -eq 0 && $report_seen -eq 0 ]] || return 1
+  else
+    [[ -n $run_id && $preflight_seen -eq 1 && $report_seen -eq 1 ]] || return 1
+  fi
+  case $expected_status in
+    0) ((behavioral_seen == 0 && infrastructure_seen == 0)) ;;
+    1) ((behavioral_seen == 1 && infrastructure_seen == 0)) ;;
+    2) ((infrastructure_seen == 1)) ;;
+    *) return 1 ;;
+  esac
+}
+
+extract_validated_payload() {
+  local captured=$1
+  local expected_status=$2
+  local destination_name=$3
+  local prefix="${begin_marker}"$'\n'
+  local suffix="${end_marker_prefix}${expected_status}__"$'\n'
+  local payload=''
+
+  [[ $captured == "$prefix"* ]] || return 1
+  [[ $captured == *"$suffix" ]] || return 1
+  payload=${captured#"$prefix"}
+  payload=${payload%"$suffix"}
+  [[ -n $payload && $payload == *$'\n' ]] || return 1
+
+  if [[ $expected_status == 2 && \
+    ($payload == $'revision_mismatch\n' || $payload == $'remote_environment_unavailable\n') ]]; then
+    printf -v "$destination_name" '%s' "$payload"
+    return 0
+  fi
+
+  case ${cli_arguments[0]} in
+    preflight)
+      validate_preflight_payload "$payload" "$expected_status" || return 1
+      ;;
+    endpoint | full | scenario | matrix-smoke)
+      validate_evaluation_payload "$payload" "$expected_status" || return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  printf -v "$destination_name" '%s' "$payload"
+}
 
 temporary_directory=''
 cleanup_temporary_directory() {
@@ -219,8 +593,16 @@ case $ssh_status in
       printf '%s\n' 'remote_execution_failed' >&2
       exit 2
     fi
-    printf '%s' "$captured_stdout"
-    printf '%s' "$captured_stderr" >&2
+    if [[ -n $captured_stderr || -z $captured_stdout ]]; then
+      printf '%s\n' 'remote_execution_failed' >&2
+      exit 2
+    fi
+    validated_payload=''
+    if ! extract_validated_payload "$captured_stdout" "$ssh_status" validated_payload; then
+      printf '%s\n' 'remote_execution_failed' >&2
+      exit 2
+    fi
+    printf '%s' "$validated_payload"
     exit "$ssh_status"
     ;;
   *)

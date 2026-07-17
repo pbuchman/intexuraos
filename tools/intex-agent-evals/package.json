@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "cli": "tsx src/cli.ts",
+    "cli": "node --no-warnings --import tsx src/cli.ts",
     "validate": "pnpm run typecheck && pnpm run lint:local && pnpm run validate:scenarios && pnpm run test",
     "validate:scenarios": "vitest run src/__tests__/trackedScenarioCatalog.test.ts",
     "test": "vitest run src/__tests__",

@@ -68,7 +68,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly says that a new Intex Agent session is ready.",
+              "Clearly says that a new Intex Agent session has started.",
               "Briefly explains supported actions the user can request next.",
               "Does not claim that any resource was created or ask for confirmation of an action."
             ]

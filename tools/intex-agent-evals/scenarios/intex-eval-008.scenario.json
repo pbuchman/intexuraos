@@ -90,6 +90,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
+              "Clearly tells the user that a new Intex Agent session has started.",
               "Asks what time the INTEX-EVAL-008 project review on September 10 2026 should start.",
               "Does not create or claim to create a timed event before the missing time is supplied."
             ]

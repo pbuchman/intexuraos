@@ -140,8 +140,8 @@ describe('direct CLI module', () => {
     );
 
     expect(result.status).toBe(2);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toBe('cli result FAIL INVALID_COMMAND\n');
+    expect(result.stdout).toBe('cli result FAIL INVALID_COMMAND\n');
+    expect(result.stderr).toBe('');
     expect(`${result.stdout}${result.stderr}`).not.toContain(privateArgvSentinel);
   });
 });
@@ -162,7 +162,7 @@ describe('production setup input', () => {
     await setupInput.close();
   });
 
-  it('reads the account alias visibly', async () => {
+  it('reads the account alias without forwarding readline terminal rendering', async () => {
     const input = new FakeTtyInput();
     const output = new CapturingTtyOutput();
     const setupInput = createNodeSetupInputPort({ input, output });
@@ -171,6 +171,9 @@ describe('production setup input', () => {
     input.write('operator-account\n');
 
     await expect(answer).resolves.toBe('operator-account');
+    expect(output.text()).toBe('');
+    expect(output.text()).not.toContain('operator-account');
+    expect(output.text()).not.toContain('*');
     expect(input.isRaw).toBe(false);
     await setupInput.close();
   });

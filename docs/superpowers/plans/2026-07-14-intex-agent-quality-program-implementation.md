@@ -20,7 +20,8 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 
 - Tasks 1–8 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
 - Delivered commits through Task 8: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus), `52680fd04` + `56b24fe21` (secure Home Dev configuration and preflight), `c2d673683` + `6cd0dd44e` + `3033e438f` (scenario lifecycle), `4382f9223` + `f40dda449` (MiniMax M3 judge), `e75bc6f3a` (safe Matrix smoke), and `6f1fbb351` (CLI, reports, and Home Dev wrapper).
-- The two offline Task 9 documentation items are implemented and independently reviewed. Deployment through `development`, Home Dev health/revision proof, the aggregate Task 9 run checklist, and live acceptance remain pending and require explicit operator authorization.
+- The offline completion audit is implemented and independently approved: every correlated assistant reply is judged, scenarios 001–010 enforce their source lifecycle semantics, tool/error evidence is closed and privacy-safe, setup is non-echoing, and the Home Dev wrapper accepts only one private framed CLI stream with selector/status validation. A fresh `pnpm run ci:tracked` passed on 2026-07-17.
+- The only remaining executable work is the Task 9 live lane: deliver the implementation through `development`, prove Home Dev health and deployed revision, then run `preflight` → `endpoint` → `full`. It remains gated on the user's explicit “odpal testy” instruction.
 - No real endpoint corpus, MiniMax M3 judge run, or Matrix message has been executed yet. Offline/unit/contract success is not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
@@ -68,12 +69,12 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 After implementation:
 
 ```bash
-pnpm run eval:intex-agent:setup
-pnpm run eval:intex-agent:preflight
-pnpm run eval:intex-agent:endpoint
-pnpm run eval:intex-agent
-pnpm run eval:intex-agent -- --scenario intex-eval-003
-pnpm run eval:intex-agent:matrix-smoke
+pnpm --silent run eval:intex-agent:setup
+pnpm --silent run eval:intex-agent:preflight
+pnpm --silent run eval:intex-agent:endpoint
+pnpm --silent run eval:intex-agent
+pnpm --silent run eval:intex-agent --scenario intex-eval-003
+pnpm --silent run eval:intex-agent:matrix-smoke
 ```
 
 From this workstation, the canonical wrapper is:
@@ -161,7 +162,7 @@ The phrase “odpal testy” is the explicit authorization for the one safe Matr
 
 **Produces:** the unchanged `2026-07-01` request contract with a larger accepted range.
 
-- [x] Add route tests proving 20 message turns are accepted, 21 are rejected, confirmation index `19` is accepted, and `20` is rejected.
+- [x] Add route tests proving 20 message turns are accepted, 21 are rejected, confirmation index `19` passes the schema maximum and reaches the unchanged earlier-turn validation, and `20` is rejected by the schema.
 - [x] Run `pnpm exec vitest run apps/intex-agent/src/__tests__/routes/testConversationRoutes.test.ts` and confirm RED at schema validation.
 - [x] Change only: body limit `64 * 1024` → `256 * 1024`, `turns.maxItems` `5` → `20`, and confirmation maximum `4` → `19`.
 - [x] Add a domain test proving the runner executes 20 turns in order and returns the complete transcript.
@@ -188,7 +189,7 @@ export interface TurnExpectation {
     toolName: IntexAgentToolName;
     count: number;
     argumentAssertions: ValueAssertion[];
-  }>; 
+  }>;
   forbiddenToolCalls: IntexAgentToolName[];
   transition: {
     action: 'started' | 'continued' | 'superseded_previous' | 'expired_previous';

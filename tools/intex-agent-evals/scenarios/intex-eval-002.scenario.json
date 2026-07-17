@@ -97,7 +97,9 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
+              "Clearly tells the user that a new Intex Agent session has started.",
               "Correctly identifies a fully specified calendar-event request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Asks for confirmation using recognizable human-readable details: dentist appointment, August 18 2026, and 2:30 PM.",
               "Does not request already supplied details or expose raw argument content in the sanitized reply."
             ]
           }
@@ -205,6 +207,7 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Clearly communicates that the requested calendar event was created successfully.",
+              "Confirms the dentist appointment was created and includes the recognizable date August 18 2026 and time 2:30 PM.",
               "Does not ask for the same confirmation again or claim a different action completed."
             ]
           }

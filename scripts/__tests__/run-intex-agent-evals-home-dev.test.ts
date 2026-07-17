@@ -16,6 +16,13 @@ const EVALUATOR_PACKAGE_PATH = path.join(
 );
 const LOCKFILE_PATH = path.join(REPOSITORY_ROOT, 'pnpm-lock.yaml');
 const GITIGNORE_PATH = path.join(REPOSITORY_ROOT, '.gitignore');
+const PLAN_PATH = path.join(
+  REPOSITORY_ROOT,
+  'docs',
+  'superpowers',
+  'plans',
+  '2026-07-14-intex-agent-quality-program-implementation.md'
+);
 
 const VALID_SHA = '0123456789abcdef0123456789abcdef01234567';
 const SECRET_SENTINEL = 'wrapper-secret-sentinel-2d56179a';
@@ -23,6 +30,8 @@ const GENERIC_PATH_SENTINEL = '/private/wrapper-path-sentinel-9f4f55a1';
 const GENERIC_TOKEN_SENTINEL = 'generic-wrapper-token-sentinel-9867d198';
 const USAGE_LINE =
   'usage: run-intex-agent-evals-home-dev.sh {setup|preflight|endpoint|full|scenario intex-eval-NNN|matrix-smoke}\n';
+const FRAME_PLACEHOLDER = '0123456789abcdef0123456789abcdef0123456789abcdef';
+const FRAME_PATTERN = /[a-f0-9]{48}/u;
 
 const IMPLEMENTATION_PATHS = [
   'apps/intex-agent/src/routes/testConversationRoutes.ts',
@@ -45,21 +54,41 @@ const IMPLEMENTATION_PATHS = [
 ] as const;
 
 const REMOTE_PROGRAM = `set -eu
-if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
-  printf '%s\\n' 'remote_environment_unavailable' >&2
+frame_id=$1
+shift
+case $frame_id in
+  (*[!a-f0-9]*|'') exit 2 ;;
+esac
+if [ \${#frame_id} -ne 48 ]; then
   exit 2
+fi
+emit() {
+  printf '%s\\n' "$1" >&3
+}
+finish() {
+  emit "__INTEX_AGENT_EVAL_\${frame_id}_END_$1__"
+  exit "$1"
+}
+emit "__INTEX_AGENT_EVAL_\${frame_id}_BEGIN__"
+if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
+  emit 'remote_environment_unavailable'
+  finish 2
 fi
 required_sha=$1
 shift
 if ! git merge-base --is-ancestor "$required_sha" HEAD >/dev/null 2>&1; then
-  printf '%s\\n' 'revision_mismatch' >&2
-  exit 2
+  emit 'revision_mismatch'
+  finish 2
 fi
-if ! command -v direnv >/dev/null 2>&1 || ! command -v pnpm >/dev/null 2>&1 || ! direnv exec . true >/dev/null 2>&1; then
-  printf '%s\\n' 'remote_environment_unavailable' >&2
-  exit 2
+if ! command -v direnv >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1 || ! direnv exec . true >/dev/null 2>&1; then
+  emit 'remote_environment_unavailable'
+  finish 2
 fi
-exec direnv exec . pnpm --filter @intexuraos/intex-agent-evals run cli -- "$@"`;
+set +e
+direnv exec . node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
+cli_status=$?
+set -e
+finish "$cli_status"`;
 
 const tempDirectories: string[] = [];
 
@@ -122,12 +151,62 @@ function shellSingleQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function expectedRemoteCommand(cliArguments: readonly string[]): string {
-  const positionalArguments = ['intex-agent-evals-home-dev', VALID_SHA, ...cliArguments];
+function expectedRemoteCommand(cliArguments: readonly string[], frameId: string): string {
+  const positionalArguments = ['intex-agent-evals-home-dev', frameId, VALID_SHA, ...cliArguments];
 
-  return `zsh -lic ${shellSingleQuote(REMOTE_PROGRAM)} ${positionalArguments
+  return `exec 3>&1; exec zsh -lic ${shellSingleQuote(REMOTE_PROGRAM)} ${positionalArguments
     .map(shellSingleQuote)
-    .join(' ')}`;
+    .join(' ')} >/dev/null 2>&1`;
+}
+
+function framedOutput(payload: string, status: number): string {
+  return `__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_BEGIN__\n${payload}__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_END_${String(status)}__\n`;
+}
+
+function preflightPayload(status: 0 | 2 = 0): string {
+  if (status === 2) {
+    return 'preflight check runtime FAIL HOME_DEV_REQUIRED\npreflight result FAIL HOME_DEV_REQUIRED\n';
+  }
+  return (
+    'preflight check runtime PASS\n' +
+    'preflight result PASS host home-dev intex-agent 8134 whatsapp-service 8113 ' +
+    'matrix-adapter 8099 judge or:minimax/minimax-m3 scenarios 10 account operator-one\n'
+  );
+}
+
+function setupPayload(): string {
+  return (
+    'setup input account_alias\n' +
+    'setup input canonical_user_id\n' +
+    'setup input matrix_user_id\n' +
+    'setup input matrix_access_token_file\n' +
+    'setup input matrix_targets_file\n' +
+    'setup check runtime PASS\n' +
+    'setup result PASS created account operator-one\n'
+  );
+}
+
+function evaluationPayload(
+  command: 'endpoint' | 'full' | 'scenario' | 'matrix-smoke',
+  status: 0 | 1 | 2,
+  scenarioId = 'intex-eval-003'
+): string {
+  const run = `evaluation run eval-run-123 command ${command}\n${preflightPayload(0)}`;
+  const scenario =
+    command === 'endpoint' || command === 'full' || command === 'scenario'
+      ? `scenario ${scenarioId} ${status === 0 ? 'PASS' : status === 1 ? 'BEHAVIORAL_FAILURE' : 'INFRASTRUCTURE_FAILURE'}\n`
+      : '';
+  const matrix =
+    command === 'matrix-smoke' || command === 'full'
+      ? `matrix-smoke ${status === 0 ? 'PASS' : status === 1 ? 'BEHAVIORAL_FAILURE' : 'INFRASTRUCTURE_FAILURE'}\n`
+      : '';
+  const result =
+    status === 0
+      ? 'evaluation result PASS exit 0\n'
+      : status === 1
+        ? 'evaluation result BEHAVIORAL_FAILURE exit 1\n'
+        : 'evaluation result INFRASTRUCTURE_FAILURE exit 2\n';
+  return `${run}${scenario}${matrix}${result}evaluation report .artifacts/intex-agent-evals/eval-run-123\n`;
 }
 
 function runWrapper(
@@ -220,6 +299,10 @@ process.stdout.write(fs.readFileSync(sourcePath));
 const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
+const remoteCommand = args.at(-1) || '';
+const frameMatch = remoteCommand.match(/[a-f0-9]{48}/u);
+const frameId = frameMatch ? frameMatch[0] : '';
+const materialize = (value) => value.replaceAll('${FRAME_PLACEHOLDER}', frameId);
 fs.appendFileSync(process.env.FAKE_SSH_LOG, JSON.stringify(args) + '\\n');
 fs.appendFileSync(process.env.FAKE_SSH_SENSITIVE_ENVIRONMENT_LOG, JSON.stringify([
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
@@ -243,8 +326,8 @@ if (process.env.FAKE_SSH_PARENT_SIGNAL) {
   process.kill(process.ppid, process.env.FAKE_SSH_PARENT_SIGNAL);
   setTimeout(() => process.exit(0), 50);
 } else {
-  process.stdout.write(process.env.FAKE_SSH_STDOUT || '');
-  process.stderr.write(process.env.FAKE_SSH_STDERR || '');
+  process.stdout.write(materialize(process.env.FAKE_SSH_STDOUT || ''));
+  process.stderr.write(materialize(process.env.FAKE_SSH_STDERR || ''));
   if (process.env.FAKE_SSH_SIGNAL) {
     process.kill(process.pid, process.env.FAKE_SSH_SIGNAL);
   }
@@ -326,7 +409,7 @@ describe('Intex Agent evaluator command wiring', () => {
     const rootPackage = readPackageManifest(ROOT_PACKAGE_PATH);
     const evaluatorPackage = readPackageManifest(EVALUATOR_PACKAGE_PATH);
 
-    expect(evaluatorPackage.scripts?.cli).toBe('tsx src/cli.ts');
+    expect(evaluatorPackage.scripts?.cli).toBe('node --no-warnings --import tsx src/cli.ts');
     expect(evaluatorPackage.devDependencies?.tsx).toBe('^4.21.0');
     expect({
       setup: rootPackage.scripts?.['eval:intex-agent:setup'],
@@ -335,12 +418,86 @@ describe('Intex Agent evaluator command wiring', () => {
       full: rootPackage.scripts?.['eval:intex-agent'],
       matrixSmoke: rootPackage.scripts?.['eval:intex-agent:matrix-smoke'],
     }).toEqual({
-      setup: 'pnpm --filter @intexuraos/intex-agent-evals run cli -- setup',
-      preflight: 'pnpm --filter @intexuraos/intex-agent-evals run cli -- preflight',
-      endpoint: 'pnpm --filter @intexuraos/intex-agent-evals run cli -- endpoint',
-      full: 'pnpm --filter @intexuraos/intex-agent-evals run cli --',
-      matrixSmoke: 'pnpm --filter @intexuraos/intex-agent-evals run cli -- matrix-smoke',
+      setup: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts setup',
+      preflight: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts preflight',
+      endpoint: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts endpoint',
+      full: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts',
+      matrixSmoke:
+        'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts matrix-smoke',
     });
+  });
+
+  it('documents only the banner-free canonical root commands and no literal scenario separator', () => {
+    const plan = fs.readFileSync(PLAN_PATH, 'utf8');
+    const canonicalBlock = `\`\`\`bash
+pnpm --silent run eval:intex-agent:setup
+pnpm --silent run eval:intex-agent:preflight
+pnpm --silent run eval:intex-agent:endpoint
+pnpm --silent run eval:intex-agent
+pnpm --silent run eval:intex-agent --scenario intex-eval-003
+pnpm --silent run eval:intex-agent:matrix-smoke
+\`\`\``;
+
+    expect(plan).toContain(canonicalBlock);
+    expect(plan).not.toContain('pnpm run eval:intex-agent');
+    expect(plan).not.toContain('eval:intex-agent -- --scenario');
+  });
+
+  it('runs the exact banner-free setup command without forwarding a pnpm separator', () => {
+    const result = spawnSync('pnpm', ['--silent', 'run', 'eval:intex-agent:setup'], {
+      cwd: REPOSITORY_ROOT,
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('setup result FAIL SETUP_TTY_REQUIRED\n');
+    expect(result.stderr).toBe('');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('INVALID_COMMAND');
+  });
+
+  it('runs the exact banner-free root scenario command without a literal pnpm separator', () => {
+    const result = spawnSync(
+      'pnpm',
+      ['--silent', 'run', 'eval:intex-agent', '--scenario', 'intex-eval-999'],
+      {
+        cwd: REPOSITORY_ROOT,
+        encoding: 'utf8',
+        timeout: 30_000,
+      }
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('cli result FAIL INVALID_SCENARIO\n');
+    expect(result.stderr).toBe('');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('INVALID_COMMAND');
+  });
+
+  it('keeps the direct production entry output closed when the CLI returns exit 2', () => {
+    const result = spawnSync(
+      'node',
+      [
+        '--no-warnings',
+        '--import',
+        'tsx',
+        'tools/intex-agent-evals/src/cli.ts',
+        '--offline-invalid-audit',
+      ],
+      {
+        cwd: REPOSITORY_ROOT,
+        encoding: 'utf8',
+        timeout: 30_000,
+      }
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('cli result FAIL INVALID_COMMAND\n');
+    expect(result.stderr).toBe('');
+    expect(`${result.stdout}${result.stderr}`).not.toContain(REPOSITORY_ROOT);
+    expect(`${result.stdout}${result.stderr}`).not.toContain('tsx src/cli.ts');
   });
 
   it('locks the direct tsx dependency for the evaluator importer', () => {
@@ -423,41 +580,60 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
   );
 
   it.each([
-    { selector: 'setup', arguments_: ['setup'], cliArguments: ['setup'], tty: '-tt' },
+    {
+      selector: 'setup',
+      arguments_: ['setup'],
+      cliArguments: ['setup'],
+      tty: '-tt',
+      payload: setupPayload(),
+    },
     {
       selector: 'preflight',
       arguments_: ['preflight'],
       cliArguments: ['preflight'],
       tty: '-T',
+      payload: preflightPayload(),
     },
     {
       selector: 'endpoint',
       arguments_: ['endpoint'],
       cliArguments: ['endpoint'],
       tty: '-T',
+      payload: evaluationPayload('endpoint', 0),
     },
-    { selector: 'full', arguments_: ['full'], cliArguments: ['full'], tty: '-T' },
+    {
+      selector: 'full',
+      arguments_: ['full'],
+      cliArguments: ['full'],
+      tty: '-T',
+      payload: evaluationPayload('full', 0),
+    },
     {
       selector: 'scenario',
       arguments_: ['scenario', 'intex-eval-003'],
       cliArguments: ['scenario', 'intex-eval-003'],
       tty: '-T',
+      payload: evaluationPayload('scenario', 0),
     },
     {
       selector: 'matrix-smoke',
       arguments_: ['matrix-smoke'],
       cliArguments: ['matrix-smoke'],
       tty: '-T',
+      payload: evaluationPayload('matrix-smoke', 0),
     },
   ])(
     'accepts the exact $selector selector',
-    ({ arguments_, cliArguments, tty }) => {
-      const run = runWrapper(arguments_, { sshStdout: 'safe remote output\n' });
+    ({ arguments_, cliArguments, tty, payload }) => {
+      const run = runWrapper(arguments_, { sshStdout: framedOutput(payload, 0) });
+      const remoteCommand = run.sshCalls[0]?.[6] ?? '';
+      const frameId = remoteCommand.match(FRAME_PATTERN)?.[0] ?? '';
 
       expect(run.result.error).toBeUndefined();
       expect(run.result.status).toBe(0);
-      expect(run.result.stdout).toBe('safe remote output\n');
+      expect(run.result.stdout).toBe(payload);
       expect(run.result.stderr).toBe('');
+      expect(frameId).toMatch(/^[a-f0-9]{48}$/u);
       expect(run.gitCalls).toEqual([
         [
           '-C',
@@ -478,7 +654,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
           '-o',
           'SendEnv=-*',
           'home-dev',
-          expectedRemoteCommand(cliArguments),
+          expectedRemoteCommand(cliArguments, frameId),
         ],
       ]);
     },
@@ -565,12 +741,16 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     'single-quotes the fixed remote program and every argument without local HOME expansion',
     { timeout: 30_000 },
     () => {
-      const run = runWrapper(['scenario', 'intex-eval-003']);
+      const run = runWrapper(['scenario', 'intex-eval-003'], {
+        sshStdout: framedOutput(evaluationPayload('scenario', 0), 0),
+      });
       const sshArguments = run.sshCalls[0] ?? [];
       const remoteCommand = sshArguments[6] ?? '';
+      const frameId = remoteCommand.match(FRAME_PATTERN)?.[0] ?? '';
+      const invocation = remoteCommand.slice('exec 3>&1; exec '.length, -' >/dev/null 2>&1'.length);
       const parseResult = spawnSync(
         '/bin/zsh',
-        ['-fc', `set -- ${remoteCommand}; printf '%s\\0' "$@"`],
+        ['-fc', `set -- ${invocation}; printf '%s\\0' "$@"`],
         { encoding: 'utf8', timeout: 30_000 }
       );
 
@@ -582,9 +762,9 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
         '-o',
         'SendEnv=-*',
         'home-dev',
-        expectedRemoteCommand(['scenario', 'intex-eval-003']),
+        expectedRemoteCommand(['scenario', 'intex-eval-003'], frameId),
       ]);
-      expect(remoteCommand).toContain('zsh -lic ');
+      expect(remoteCommand).toContain('exec 3>&1; exec zsh -lic ');
       expect(remoteCommand).toContain("'\\''remote_environment_unavailable'\\''");
       expect(remoteCommand).toContain('$HOME/deploy/intexuraos');
       expect(remoteCommand).not.toContain(run.localHome);
@@ -592,11 +772,12 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
         'git merge-base --is-ancestor "$required_sha" HEAD >/dev/null 2>&1'
       );
       expect(remoteCommand).toContain('command -v direnv >/dev/null 2>&1');
-      expect(remoteCommand).toContain('command -v pnpm >/dev/null 2>&1');
+      expect(remoteCommand).toContain('command -v node >/dev/null 2>&1');
       expect(remoteCommand).toContain('direnv exec . true >/dev/null 2>&1');
       expect(remoteCommand).toContain(
-        'exec direnv exec . pnpm --filter @intexuraos/intex-agent-evals run cli -- "$@"'
+        'direnv exec . node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null'
       );
+      expect(remoteCommand).toContain('>/dev/null 2>&1');
       expect(parseResult.error).toBeUndefined();
       expect(parseResult.status).toBe(0);
       expect(parseResult.stderr).toBe('');
@@ -605,6 +786,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
         '-lic',
         REMOTE_PROGRAM,
         'intex-agent-evals-home-dev',
+        frameId,
         VALID_SHA,
         'scenario',
         'intex-eval-003',
@@ -612,18 +794,170 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     }
   );
 
-  it.each([0, 1, 2])(
-    'preserves remote status %i and safe output',
+  it.each([0, 1, 2] as const)(
+    'preserves remote status %i and only the validated framed CLI payload',
     (status) => {
+      const payload = evaluationPayload('endpoint', status);
       const run = runWrapper(['endpoint'], {
         sshExit: status,
-        sshStdout: `safe stdout ${String(status)}\n`,
-        sshStderr: `safe stderr ${String(status)}\n`,
+        sshStdout: framedOutput(payload, status),
       });
 
       expect(run.result.status).toBe(status);
-      expect(run.result.stdout).toBe(`safe stdout ${String(status)}\n`);
-      expect(run.result.stderr).toBe(`safe stderr ${String(status)}\n`);
+      expect(run.result.stdout).toBe(payload);
+      expect(run.result.stderr).toBe('');
+    },
+    30_000
+  );
+
+  it.each(['revision_mismatch', 'remote_environment_unavailable'])(
+    'preserves the safe remote precheck code %s',
+    (code) => {
+      const run = runWrapper(['endpoint'], {
+        sshExit: 2,
+        sshStdout: framedOutput(`${code}\n`, 2),
+      });
+
+      expect(run.result.status).toBe(2);
+      expect(run.result.stdout).toBe(`${code}\n`);
+      expect(run.result.stderr).toBe('');
+    },
+    30_000
+  );
+
+  it.each([
+    {
+      label: 'before the frame',
+      stdout: `${SECRET_SENTINEL} ${GENERIC_PATH_SENTINEL}\n${framedOutput(
+        evaluationPayload('endpoint', 0),
+        0
+      )}`,
+    },
+    {
+      label: 'inside the frame',
+      stdout: framedOutput(
+        `${evaluationPayload('endpoint', 0)}${SECRET_SENTINEL} ${GENERIC_PATH_SENTINEL}\n`,
+        0
+      ),
+    },
+    {
+      label: 'after the frame',
+      stdout: `${framedOutput(evaluationPayload('endpoint', 0), 0)}${SECRET_SENTINEL} ${GENERIC_PATH_SENTINEL}\n`,
+    },
+  ])(
+    'rejects non-CLI output $label without replaying any captured bytes',
+    ({ stdout }) => {
+      const run = runWrapper(['endpoint'], { sshStdout: stdout });
+
+      expect(run.result.status).toBe(2);
+      expect(run.result.stdout).toBe('');
+      expect(run.result.stderr).toBe('remote_execution_failed\n');
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(SECRET_SENTINEL);
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(GENERIC_PATH_SENTINEL);
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain('evaluation run');
+    },
+    30_000
+  );
+
+  it.each([
+    {
+      label: 'missing begin marker',
+      stdout: `${evaluationPayload('endpoint', 0)}__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_END_0__\n`,
+    },
+    {
+      label: 'missing end marker',
+      stdout: `__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_BEGIN__\n${evaluationPayload('endpoint', 0)}`,
+    },
+    {
+      label: 'duplicate complete frame',
+      stdout: `${framedOutput(evaluationPayload('endpoint', 0), 0)}${framedOutput(
+        evaluationPayload('endpoint', 0),
+        0
+      )}`,
+    },
+    {
+      label: 'status mismatch',
+      stdout: framedOutput(evaluationPayload('endpoint', 0), 1),
+    },
+  ])(
+    'requires exactly one complete private frame: $label',
+    ({ stdout }) => {
+      const run = runWrapper(['endpoint'], { sshStdout: stdout });
+
+      expect(run.result.status).toBe(2);
+      expect(run.result.stdout).toBe('');
+      expect(run.result.stderr).toBe('remote_execution_failed\n');
+    },
+    30_000
+  );
+
+  it.each([
+    {
+      label: 'before the frame',
+      stdout: `${SECRET_SENTINEL} ${GENERIC_PATH_SENTINEL}\n${framedOutput(setupPayload(), 0)}`,
+    },
+    {
+      label: 'inside the frame',
+      stdout: framedOutput(
+        `setup input account_alias\n${SECRET_SENTINEL} ${GENERIC_PATH_SENTINEL}\nsetup result PASS created account operator-one\n`,
+        0
+      ),
+    },
+    {
+      label: 'after the frame',
+      stdout: `${framedOutput(setupPayload(), 0)}${SECRET_SENTINEL} ${GENERIC_PATH_SENTINEL}\n`,
+    },
+  ])(
+    'filters setup output and rejects unsafe data $label',
+    ({ stdout }) => {
+      const run = runWrapper(['setup'], { sshStdout: stdout });
+
+      expect(run.result.status).toBe(2);
+      expect(run.result.stderr).toBe('remote_execution_failed\n');
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(SECRET_SENTINEL);
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(GENERIC_PATH_SENTINEL);
+    },
+    30_000
+  );
+
+  it('rejects setup when its safe result contradicts the framed and ssh status', () => {
+    const run = runWrapper(['setup'], {
+      sshExit: 2,
+      sshStdout: framedOutput(setupPayload(), 2),
+    });
+
+    expect(run.result.status).toBe(2);
+    expect(run.result.stdout).not.toContain('setup result PASS');
+    expect(run.result.stderr).toBe('remote_execution_failed\n');
+  });
+
+  it.each([0, 1, 2] as const)(
+    'normalizes nominal status %i when any non-CLI stderr escapes',
+    (status) => {
+      const run = runWrapper(['endpoint'], {
+        sshExit: status,
+        sshStdout: framedOutput(evaluationPayload('endpoint', status), status),
+        sshStderr: `${SECRET_SENTINEL} ${GENERIC_PATH_SENTINEL} process diagnostic\n`,
+      });
+
+      expect(run.result.status).toBe(2);
+      expect(run.result.stdout).toBe('');
+      expect(run.result.stderr).toBe('remote_execution_failed\n');
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(SECRET_SENTINEL);
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(GENERIC_PATH_SENTINEL);
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain('evaluation run');
+    },
+    30_000
+  );
+
+  it.each([0, 1, 2])(
+    'normalizes nominal status %i when the CLI produces no safe output',
+    (status) => {
+      const run = runWrapper(['endpoint'], { sshExit: status });
+
+      expect(run.result.status).toBe(2);
+      expect(run.result.stdout).toBe('');
+      expect(run.result.stderr).toBe('remote_execution_failed\n');
     },
     30_000
   );
@@ -684,8 +1018,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     { timeout: 30_000 },
     () => {
       const run = runWrapper(['endpoint'], {
-        sshStdout: 'safe stdout\n',
-        sshStderr: 'safe stderr\n',
+        sshStdout: framedOutput(evaluationPayload('endpoint', 0), 0),
       });
 
       expect(run.result.status).toBe(0);
@@ -725,7 +1058,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     (catFailureCall) => {
       const run = runWrapper(['endpoint'], {
         catFailureCall,
-        sshStdout: 'safe stdout must remain buffered\n',
+        sshStdout: framedOutput(evaluationPayload('endpoint', 0), 0),
         sshStderr: 'safe stderr must remain buffered\n',
       });
 
@@ -734,7 +1067,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       expect(run.result.stderr).toBe('remote_execution_failed\n');
       expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(SECRET_SENTINEL);
       expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(run.tempRoot);
-      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain('must remain buffered');
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain('evaluation run');
     },
     30_000
   );
@@ -744,14 +1077,14 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     { timeout: 30_000 },
     () => {
       const run = runWrapper(['endpoint'], {
-        sshStdout: 'evaluation result PASS exit 0\n',
+        sshStdout: framedOutput(evaluationPayload('endpoint', 0), 0),
       });
       const serializedSshArguments = JSON.stringify(run.sshCalls);
       const output = `${run.result.stdout}${run.result.stderr}`;
 
       expect(run.result.status).toBe(0);
       expect(serializedSshArguments).not.toContain(SECRET_SENTINEL);
-      expect(output).toBe('evaluation result PASS exit 0\n');
+      expect(output).toBe(evaluationPayload('endpoint', 0));
       expect(output).not.toContain(SECRET_SENTINEL);
       expect(output).not.toContain(VALID_SHA);
       expect(output).not.toContain('zsh -lic');
@@ -764,7 +1097,9 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     'removes sensitive local environment variables from the ssh process',
     { timeout: 30_000 },
     () => {
-      const run = runWrapper(['endpoint']);
+      const run = runWrapper(['endpoint'], {
+        sshStdout: framedOutput(evaluationPayload('endpoint', 0), 0),
+      });
 
       expect(run.result.status).toBe(0);
       expect(run.sshSensitiveEnvironment).toEqual([[]]);
@@ -775,7 +1110,9 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     'disables ssh_config SendEnv forwarding for generic inherited path and token values',
     { timeout: 30_000 },
     () => {
-      const run = runWrapper(['endpoint']);
+      const run = runWrapper(['endpoint'], {
+        sshStdout: framedOutput(evaluationPayload('endpoint', 0), 0),
+      });
       const sshArguments = run.sshCalls[0] ?? [];
 
       expect(run.result.status).toBe(0);

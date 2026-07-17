@@ -23,6 +23,7 @@ import type {
   CapturedToolCall,
   TestToolMocks,
 } from './testConversationTypes.js';
+import { TEST_CONVERSATION_TOOL_FAILURE_CODE } from './testConversationTypes.js';
 
 export interface CreateTestToolExecutorInput {
   mocks?: TestToolMocks | undefined;
@@ -41,8 +42,13 @@ export function createTestToolExecutor(input: CreateTestToolExecutorInput): Inte
     const mock = input.mocks?.[toolName];
     const argsSummary = summarizeArgs(toolName, args);
     if (mock?.mode === 'failure') {
-      input.calls.push({ toolName, status: 'failed', argsSummary, error: mock.message });
-      return Promise.reject(new Error(mock.message));
+      input.calls.push({
+        toolName,
+        status: 'failed',
+        argsSummary,
+        error: TEST_CONVERSATION_TOOL_FAILURE_CODE,
+      });
+      return Promise.reject(new Error(TEST_CONVERSATION_TOOL_FAILURE_CODE));
     }
 
     const result = mock?.mode === 'success' ? mock.result : defaultResult;

@@ -171,7 +171,9 @@ export function createNodeSetupInputPort(options: NodeSetupInputOptions = {}): S
     try {
       readline = createInterface({
         input,
-        output: hidden ? HIDDEN_OUTPUT : output,
+        // Keep every raw TTY answer off the framed SSH output. The safe alias is
+        // rendered only after setup validation in the closed result line.
+        output: HIDDEN_OUTPUT,
         terminal: true,
       });
       const closed = new Promise<never>((_resolve, reject) => {
@@ -1012,7 +1014,7 @@ export function createProductionCliDependencies(): CliDependencies {
       process.stdout.write(`${line}\n`);
     },
     stderr(line): void {
-      process.stderr.write(`${line}\n`);
+      process.stdout.write(`${line}\n`);
     },
   };
   const setupInput = createNodeSetupInputPort();
@@ -1106,7 +1108,7 @@ if (isDirectModule()) {
   try {
     process.exitCode = await runCli(process.argv.slice(2), createProductionCliDependencies());
   } catch {
-    process.stderr.write('cli result FAIL UNEXPECTED_FAILURE\n');
+    process.stdout.write('cli result FAIL UNEXPECTED_FAILURE\n');
     process.exitCode = 2;
   }
 }

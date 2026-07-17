@@ -4,6 +4,7 @@ import type { IntexAgentSession, IntexAgentSessionEvent, IntexAgentToolName } fr
 
 export const TEST_CONVERSATION_CONTRACT_VERSION = '2026-07-01';
 export const TEST_CONVERSATION_SIDE_EFFECT_BOUNDARY = 'mocked_tools_no_downstream_writes';
+export const TEST_CONVERSATION_TOOL_FAILURE_CODE = 'tool_execution_failed';
 
 export type TestConversationMode = 'live_llm_mock_tools';
 
@@ -75,9 +76,65 @@ export interface SanitizedAssistantReply {
 export interface CapturedToolCall {
   toolName: IntexAgentToolName;
   status: 'completed' | 'failed';
-  argsSummary?: Record<string, unknown>;
-  resultSummary?: Record<string, unknown>;
+  argsSummary?: object;
+  resultSummary?: object;
   error?: string;
+}
+
+export interface SanitizedToolArgsSummary {
+  mode?: 'list' | 'count';
+  start?: string;
+  end?: string;
+  timeMin?: string;
+  timeMax?: string;
+  timeZone?: string;
+  workerType?: 'codex' | 'codex-xhigh' | 'minimax';
+  taskMode?: 'planning' | 'execution';
+  maxResults?: number;
+  queryLength?: number;
+  summaryLength?: number;
+  locationLength?: number;
+  descriptionLength?: number;
+  attendeesCount?: number;
+  contentLength?: number;
+  titleLength?: number;
+  tagsCount?: number;
+  sourceMessageIdsCount?: number;
+  promptLength?: number;
+  originalMessageLength?: number;
+  messageLength?: number;
+  textLength?: number;
+  expectedVersion?: number;
+  syntheticMarkerCount?: number;
+  syntheticMarkerDigest?: string;
+  hasCalendarId?: boolean;
+  hasUrl?: boolean;
+  hasLinearIssueId?: boolean;
+  hasSourceUrl?: boolean;
+  hasItemId?: boolean;
+}
+
+export interface SanitizedToolResultSummary {
+  status?: 'completed';
+  mode?: 'list' | 'count';
+  count?: number;
+  currentVersion?: number;
+  hasEventId?: boolean;
+  hasBookmarkId?: boolean;
+  hasCodeTaskId?: boolean;
+  hasChangedItemId?: boolean;
+  hasResourceUrl?: boolean;
+  hasHtmlLink?: boolean;
+  hasUrl?: boolean;
+  hasSourceUrl?: boolean;
+}
+
+export interface SanitizedToolCall {
+  toolName: IntexAgentToolName;
+  status: 'completed' | 'failed';
+  argsSummary?: SanitizedToolArgsSummary;
+  resultSummary?: SanitizedToolResultSummary;
+  error?: typeof TEST_CONVERSATION_TOOL_FAILURE_CODE;
 }
 
 export interface TestConversationSessionAfterTurn {
@@ -99,7 +156,7 @@ export interface TestConversationTurnResult {
   sessionId: string;
   submittedTextPreview?: string;
   assistantReplies: SanitizedAssistantReply[];
-  toolCalls: CapturedToolCall[];
+  toolCalls: SanitizedToolCall[];
   sessionAfterTurn: TestConversationSessionAfterTurn;
   timelineEvents: SanitizedTurnTimelineEvent[];
 }
@@ -152,7 +209,7 @@ export interface TestConversationResponse {
   userId: string;
   finalSessionId: string | null;
   turns: TestConversationTurnResult[];
-  toolCalls: CapturedToolCall[];
+  toolCalls: SanitizedToolCall[];
   sessions: SanitizedTestConversationSession[];
   sessionTransitions: TestConversationSessionTransition[];
   eventsBySessionId: Record<string, SanitizedSessionEvent[]>;

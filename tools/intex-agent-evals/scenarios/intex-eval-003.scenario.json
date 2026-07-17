@@ -90,6 +90,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
+              "Clearly tells the user that a new Intex Agent session has started.",
               "Asks which day or date INTEX-EVAL-003 lunch with Marta at noon should use because the date is missing.",
               "Does not claim that a calendar event was created before the missing date is supplied."
             ]

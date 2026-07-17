@@ -61,10 +61,10 @@ setup/preflight select only its `intex_agent` room. Never add a real UID, e-mail
 phone number, Matrix identity, room, token, protected absolute operator path, or
 account data to Git.
 
-`setup` is interactive. It displays only `accountAlias` and reads `userId`,
-`matrixUserId`, `matrixAccessTokenFile`, and `matrixTargetsFile` without echo. Run
-it only when preflight returns `CONFIG_NOT_FOUND` or the operator has independently
-confirmed that the configuration file is absent.
+`setup` is interactive and reads all five values without echo. Only the validated
+`accountAlias` can appear afterward in the closed setup result. Run it only when
+preflight returns `CONFIG_NOT_FOUND` or the operator has independently confirmed
+that the configuration file is absent.
 
 ## Tracked inputs and private outputs
 
@@ -82,7 +82,7 @@ the wrapper does not copy them to the workstation.
 Before connecting, the wrapper requires clean evaluator implementation paths and
 passes the workstation's exact 40-character `HEAD` only as revision proof. On Home
 Dev it requires that revision to be an ancestor of deployed `HEAD`, enters the
-fixed repository, verifies `direnv` and `pnpm`, preserves remote exits `0`, `1`,
+fixed repository, verifies `direnv` and `node`, preserves remote exits `0`, `1`,
 and `2`, and forwards only safe CLI output.
 
 The CLI report, not the wrapper, records preflight checks; scenario, turn, reply,

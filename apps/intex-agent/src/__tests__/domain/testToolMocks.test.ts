@@ -10,6 +10,7 @@ import type {
   CapturedAssistantReply,
   CapturedToolCall,
 } from '../../domain/testConversation/testConversationTypes.js';
+import { TEST_CONVERSATION_TOOL_FAILURE_CODE } from '../../domain/testConversation/testConversationTypes.js';
 
 type TestToolExecutor = ReturnType<typeof createTestToolExecutor>;
 type TestToolRunner = (executor: TestToolExecutor) => Promise<string>;
@@ -31,6 +32,9 @@ describe('test tool mocks', () => {
       mode: 'list',
       timeMin: '2026-07-02T00:00:00+02:00',
       timeMax: '2026-07-03T00:00:00+02:00',
+      maxResults: 10,
+      query: 'private search INTEX-EVAL-011-F01',
+      calendarId: 'private-calendar-id',
     });
 
     expect(JSON.parse(raw)).toEqual({ status: 'completed', mode: 'list', count: 0, events: [] });
@@ -42,23 +46,31 @@ describe('test tool mocks', () => {
           mode: 'list',
           timeMin: '2026-07-02T00:00:00+02:00',
           timeMax: '2026-07-03T00:00:00+02:00',
+          maxResults: 10,
+          queryLength: 33,
+          hasCalendarId: true,
+          syntheticMarkerCount: 1,
+          syntheticMarkerDigest: markerDigest(['INTEX-EVAL-011-F01']),
         },
         resultSummary: { status: 'completed', mode: 'list', count: 0 },
       },
     ]);
+    expect(JSON.stringify(calls)).not.toMatch(/private search|private-calendar-id|INTEX-EVAL/iu);
   });
 
-  it('throws configured failures and records the error without raw args', async () => {
+  it('throws and records only the closed failure code for configured failures', async () => {
     const calls: CapturedToolCall[] = [];
+    const privateFailure =
+      'delivery failed for private.person@example.com; secret=sk-private-value';
     const executor = createTestToolExecutor({
       calls,
       mocks: {
-        create_note: { mode: 'failure', message: 'mock note failure' },
+        create_note: { mode: 'failure', message: privateFailure },
       },
     });
 
     await expect(executor.createNote({ content: 'secret note body' })).rejects.toThrow(
-      'mock note failure'
+      TEST_CONVERSATION_TOOL_FAILURE_CODE
     );
     expect(calls).toEqual([
       {
@@ -69,9 +81,10 @@ describe('test tool mocks', () => {
           syntheticMarkerCount: 0,
           syntheticMarkerDigest: markerDigest([]),
         },
-        error: 'mock note failure',
+        error: TEST_CONVERSATION_TOOL_FAILURE_CODE,
       },
     ]);
+    expect(JSON.stringify(calls)).not.toMatch(/private\.person@example\.com|sk-private-value/iu);
     expect(JSON.stringify(calls)).not.toContain('secret note body');
   });
 

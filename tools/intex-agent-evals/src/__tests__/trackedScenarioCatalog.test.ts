@@ -194,6 +194,14 @@ function fullCatalogDigest(scenarios: readonly IntexEvalScenario[]): string {
     .digest('hex');
 }
 
+function semanticCriteriaFor(scenario: IntexEvalScenario, turnIndex: number): string {
+  return (
+    scenario.expected.turns[turnIndex]?.replies
+      .flatMap((reply) => reply.semanticCriteria)
+      .join(' ') ?? ''
+  );
+}
+
 describe('tracked scenario catalog', () => {
   let scenarios: IntexEvalScenario[];
 
@@ -567,19 +575,46 @@ describe('tracked scenario catalog', () => {
     ]);
   });
 
-  it('does not require positive lifecycle announcements outside the idle new-session command', () => {
-    const positiveLifecycleCriterion =
-      /(?:makes clear|clearly communicates)[^.]{0,200}(?:new (?:Intex Agent )?session|session (?:was )?superseded)|new (?:Intex Agent )?session (?:started|is handling)/iu;
+  it('requires user-facing lifecycle announcements for initial and superseding starts in scenarios 001 through 010', () => {
+    const sourceScenarios = scenarios.slice(0, 10);
 
-    for (const scenario of scenarios) {
-      if (scenario.id === 'intex-eval-009') continue;
-      for (const criterion of scenario.expected.turns.flatMap((turn) =>
-        turn.replies.flatMap((reply) => reply.semanticCriteria)
-      )) {
-        if (criterion.trimStart().toLocaleLowerCase('en-US').startsWith('does not ')) continue;
-        expect(criterion).not.toMatch(positiveLifecycleCriterion);
-      }
+    for (const scenario of sourceScenarios) {
+      const initialTurn = scenario.expected.turns[0];
+      expect(initialTurn?.transition.action).toBe('started');
+      expect(semanticCriteriaFor(scenario, 0)).toMatch(
+        /new (?:Intex Agent )?session (?:has )?started/iu
+      );
     }
+
+    const supersedingCriteria = semanticCriteriaFor(findScenario(scenarios, 'intex-eval-004'), 1);
+    expect(supersedingCriteria).toMatch(/previous session (?:was )?(?:closed|superseded)/iu);
+    expect(supersedingCriteria).toMatch(/new (?:Intex Agent )?session (?:has )?started/iu);
+  });
+
+  it('retains explicit no-new-session criteria for continued conversational turns', () => {
+    for (const [scenarioId, turnIndex] of [
+      ['intex-eval-003', 1],
+      ['intex-eval-006', 2],
+      ['intex-eval-008', 1],
+    ] as const) {
+      const scenario = findScenario(scenarios, scenarioId);
+      expect(scenario.expected.turns[turnIndex]?.transition.action).toBe('continued');
+      expect(semanticCriteriaFor(scenario, turnIndex)).toMatch(
+        /does not (?:announce|say|state)[^.]{0,120}(?:new|another) session/iu
+      );
+    }
+  });
+
+  it('requires the scenario 002 confirmation and creation replies to identify the event', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-002');
+
+    for (const turnIndex of [0, 1]) {
+      const criteria = semanticCriteriaFor(scenario, turnIndex);
+      expect(criteria).toMatch(/dentist appointment/iu);
+      expect(criteria).toMatch(/August 18,? 2026/iu);
+      expect(criteria).toMatch(/2:30 PM/iu);
+    }
+    expect(semanticCriteriaFor(scenario, 1)).toMatch(/created/iu);
   });
 
   it('uses endpoint-observable exact calendar ranges without requiring a tool timezone', () => {
@@ -804,7 +839,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      'e507a599a1a6f9513deac747dc6c8b35ee79a8579f953795ad1ad23a7657ba51'
+      '04b2c5a5769d751c08131f8bb700fe20bb484b672cbe2df80d1c3ca3617e498f'
     );
   });
 });
