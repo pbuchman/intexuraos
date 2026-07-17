@@ -749,7 +749,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       const frameId = remoteCommand.match(FRAME_PATTERN)?.[0] ?? '';
       const invocation = remoteCommand.slice('exec 3>&1; exec '.length, -' >/dev/null 2>&1'.length);
       const parseResult = spawnSync(
-        '/bin/zsh',
+        '/bin/sh',
         ['-fc', `set -- ${invocation}; printf '%s\\0' "$@"`],
         { encoding: 'utf8', timeout: 30_000 }
       );
