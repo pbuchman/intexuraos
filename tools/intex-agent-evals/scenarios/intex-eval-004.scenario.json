@@ -1,0 +1,296 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-004",
+  "title": "Supersede a pending clarification",
+  "description": "An explicit new-session note request supersedes a pending synthetic calendar clarification.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Schedule INTEX-EVAL-004 dentist at 4 PM.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "new session: remember that INTEX-EVAL-004 backup code is 9988 INTEX-EVAL-004-F01",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "confirmation_button",
+      "previousTurnIndex": 1,
+      "decision": "accept"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "clarification_requested",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "clarification_requested",
+              "assertions": [
+                {
+                  "path": "textPreview",
+                  "operator": "exists"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly tells the user that a new Intex Agent session has started.",
+              "Asks for the missing day or date for the INTEX-EVAL-004 dentist event at 4 PM.",
+              "Does not claim that a calendar event was created before the date is supplied."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 1,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "superseded_previous",
+          "previousEndReason": "superseded_by_user"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "user_requested_new_session",
+          "activeTool": "create_note"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_closed",
+            "session_started",
+            "user_message",
+            "confirmation_requested",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "user_requested_new_session"
+                }
+              ]
+            },
+            {
+              "eventType": "session_closed",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "superseded_by_user"
+                },
+                {
+                  "path": "status",
+                  "operator": "equals",
+                  "value": "superseded"
+                }
+              ]
+            },
+            {
+              "eventType": "confirmation_requested",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "e48cfe7e19f880c1176da25e9deff7c4045589dd357efa8adf5612aa5081e863"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly tells the user that the previous session was superseded and a new Intex Agent session has started.",
+              "Correctly treats the new-session request as a note action rather than the abandoned calendar request and asks for confirmation.",
+              "Does not claim either action already completed or expose raw argument content in the sanitized reply."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 2,
+        "requiredToolCalls": [
+          {
+            "toolName": "create_note",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "contentLength",
+                "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "e48cfe7e19f880c1176da25e9deff7c4045589dd357efa8adf5612aa5081e863"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "user_requested_new_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "user_message",
+            "confirmation_resolved",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_resolved",
+              "assertions": [
+                {
+                  "path": "resolution",
+                  "operator": "equals",
+                  "value": "accepted"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_note"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly communicates that the requested note was saved successfully.",
+              "Does not claim that the abandoned calendar event was created."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

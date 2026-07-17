@@ -84,7 +84,13 @@ export function readServiceAccountInfo(credentialsPath) {
   return parsed;
 }
 
-export async function runCleanup(rawInput) {
+const defaultOutput = {
+  writeLine(line) {
+    console.log(line);
+  },
+};
+
+export async function runCleanup(rawInput, output = defaultOutput) {
   const input = validateCleanupRequest(rawInput);
   const serviceAccount = readServiceAccountInfo(input.credentialsPath);
   const app =
@@ -98,7 +104,7 @@ export async function runCleanup(rawInput) {
   const targets = await collectTargets(firestore, input.userId);
   const total = Object.values(targets).reduce((sum, docs) => sum + docs.length, 0);
 
-  console.log(
+  output.writeLine(
     JSON.stringify(
       {
         userId: input.userId,
@@ -116,14 +122,14 @@ export async function runCleanup(rawInput) {
   );
 
   if (!input.execute) {
-    console.log('Dry run only. Re-run with --execute to delete matching test documents.');
+    output.writeLine('Dry run only. Re-run with --execute to delete matching test documents.');
     return { deleted: 0, total };
   }
 
   for (const docs of Object.values(targets)) {
     await Promise.all(docs.map(async (doc) => await doc.ref.delete()));
   }
-  console.log(`Deleted ${String(total)} matching test documents.`);
+  output.writeLine(`Deleted ${String(total)} matching test documents.`);
   return { deleted: total, total };
 }
 

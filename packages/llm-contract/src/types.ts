@@ -172,6 +172,8 @@ export interface GenerateChatResult {
     outputTokens: number;
     totalTokens: number;
     costUsd: number;
+    /** Provider-reported per-request USD amount, distinct from normalized costUsd. */
+    providerReportedUsd?: number;
     cachedTokens?: number;
     cacheWriteTokens?: number;
   };

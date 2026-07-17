@@ -1,0 +1,212 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-010",
+  "title": "Handle a voice transcript as a note",
+  "description": "Applies normal note confirmation semantics to a synthetic WhatsApp audio transcript.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Remember INTEX-EVAL-010 the storage unit key is in the blue drawer INTEX-EVAL-010-F01.",
+      "sourceType": "whatsapp_audio_transcript"
+    },
+    {
+      "kind": "confirmation_button",
+      "previousTurnIndex": 0,
+      "decision": "accept"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session",
+          "activeTool": "create_note"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "confirmation_requested",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "user_message",
+              "assertions": [
+                {
+                  "path": "sourceType",
+                  "operator": "equals",
+                  "value": "whatsapp_audio_transcript"
+                }
+              ]
+            },
+            {
+              "eventType": "confirmation_requested",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_note"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "8718f1090476c14ea8c813dcaa85abf0f91861d1481b6886eee57bbe28003103"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly tells the user that a new Intex Agent session has started.",
+              "Correctly identifies the voice transcript as a note-save request and asks for explicit confirmation.",
+              "Does not ask the user to repeat the transcript or expose raw argument content in the sanitized reply."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 1,
+        "requiredToolCalls": [
+          {
+            "toolName": "create_note",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "contentLength",
+                "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "8718f1090476c14ea8c813dcaa85abf0f91861d1481b6886eee57bbe28003103"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "user_message",
+            "confirmation_resolved",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_resolved",
+              "assertions": [
+                {
+                  "path": "resolution",
+                  "operator": "equals",
+                  "value": "accepted"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_note"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly communicates that the note from the voice transcript was saved successfully.",
+              "Does not ask the user to repeat the transcript or reconfirm the same action."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

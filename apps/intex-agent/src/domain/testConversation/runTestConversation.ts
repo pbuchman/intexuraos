@@ -11,8 +11,10 @@ import {
   previewText,
   sanitizeAssistantReplies,
   sanitizeEventsBySessionId,
+  sanitizeSessionAfterTurn,
   sanitizeSessions,
   sanitizeToolCalls,
+  sanitizeTurnTimelineEvents,
 } from './testConversationSanitizer.js';
 import { createCapturedReplyPublisher } from './testToolMocks.js';
 import {
@@ -58,15 +60,15 @@ export async function runTestConversation(
   const turns: TestConversationTurnResult[] = [];
   const transitions: TestConversationSessionTransition[] = [];
   const touchedSessionIds = new Set<string>();
-  const eventCountsBySessionId = new Map<string, number>();
   const turnEventsByTurnIndex: Record<number, readonly IntexAgentSessionEvent[]> = {};
   const toolCallsByTurnIndex: Record<number, readonly CapturedToolCall[]> = {};
 
   for (const [index, turn] of input.turns.entries()) {
     const beforeSession = await deps.sessionRepository.findContinuableSession(input.userId);
-    if (beforeSession !== null && !eventCountsBySessionId.has(beforeSession.id)) {
+    const eventBaselines = new Map<string, number>();
+    if (beforeSession !== null) {
       const beforeEvents = await deps.sessionRepository.listEvents(beforeSession.id, input.userId);
-      eventCountsBySessionId.set(beforeSession.id, beforeEvents.length);
+      eventBaselines.set(beforeSession.id, beforeEvents.length);
     }
     const beforeReplyCount = replies.length;
     const beforeToolCallCount = deps.toolCalls.length;
@@ -80,7 +82,8 @@ export async function runTestConversation(
       ids: deps.ids,
       sessionTimeoutMs: deps.sessionTimeoutMs,
     });
-    touchedSessionIds.add(result.sessionId);
+    const affectedSessionIds = orderedUniqueSessionIds(beforeSession?.id, result.sessionId);
+    for (const sessionId of affectedSessionIds) touchedSessionIds.add(sessionId);
     const transition = await describeTransition(
       deps.sessionRepository,
       input.userId,
@@ -89,12 +92,19 @@ export async function runTestConversation(
       beforeSession
     );
     transitions.push(transition);
-    const eventsAfterTurn = await deps.sessionRepository.listEvents(result.sessionId, input.userId);
-    const previousEventCount = eventCountsBySessionId.get(result.sessionId) ?? 0;
-    turnEventsByTurnIndex[index] = eventsAfterTurn.slice(previousEventCount);
-    eventCountsBySessionId.set(result.sessionId, eventsAfterTurn.length);
+    const rawTurnEvents: IntexAgentSessionEvent[] = [];
+    for (const sessionId of affectedSessionIds) {
+      const eventsAfterTurn = await deps.sessionRepository.listEvents(sessionId, input.userId);
+      rawTurnEvents.push(...eventsAfterTurn.slice(eventBaselines.get(sessionId) ?? 0));
+    }
+    turnEventsByTurnIndex[index] = rawTurnEvents;
     const assistantReplies = sanitizeAssistantReplies(replies.slice(beforeReplyCount));
-    toolCallsByTurnIndex[index] = sanitizeToolCalls(deps.toolCalls.slice(beforeToolCallCount));
+    const turnToolCalls = sanitizeToolCalls(deps.toolCalls.slice(beforeToolCallCount));
+    toolCallsByTurnIndex[index] = turnToolCalls;
+    const resultSession = await deps.sessionRepository.getSession(result.sessionId, input.userId);
+    if (resultSession === null) {
+      throw new Error('test conversation result session missing');
+    }
     turns.push({
       turnIndex: index,
       kind: turn.kind,
@@ -102,6 +112,9 @@ export async function runTestConversation(
       sessionId: result.sessionId,
       ...(turn.kind === 'message' ? { submittedTextPreview: previewText(turn.text) } : {}),
       assistantReplies,
+      toolCalls: turnToolCalls,
+      sessionAfterTurn: sanitizeSessionAfterTurn(resultSession),
+      timelineEvents: sanitizeTurnTimelineEvents(rawTurnEvents),
     });
   }
 
@@ -137,6 +150,16 @@ export async function runTestConversation(
     sideEffectBoundary: TEST_CONVERSATION_SIDE_EFFECT_BOUNDARY,
     warnings: [],
   };
+}
+
+function orderedUniqueSessionIds(
+  previousSessionId: string | undefined,
+  returnedSessionId: string
+): string[] {
+  if (previousSessionId === undefined || previousSessionId === returnedSessionId) {
+    return [returnedSessionId];
+  }
+  return [previousSessionId, returnedSessionId];
 }
 
 function buildIncomingMessage(
@@ -254,7 +277,5 @@ async function loadEventsBySessionId(
 }
 
 function timestampForTurn(base: string, turnIndex: number): string {
-  const date = new Date(base);
-  date.setSeconds(date.getSeconds() + turnIndex);
-  return date.toISOString();
+  return new Date(new Date(base).getTime() + turnIndex * 1_000).toISOString();
 }

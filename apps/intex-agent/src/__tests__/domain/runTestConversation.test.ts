@@ -55,6 +55,13 @@ describe('test conversation contract', () => {
           kind: 'message',
           messageId: 'wamid-contract-1',
           sessionId: 'intex_session_1',
+          toolCalls: [],
+          sessionAfterTurn: {
+            id: 'intex_session_1',
+            status: 'waiting_for_user',
+            startReason: 'no_active_session',
+          },
+          timelineEvents: [],
           submittedTextPreview: 'Jakie mam jutro wydarzenia? intex-e2e-contract',
           assistantReplies: [],
         },
@@ -128,6 +135,75 @@ describe('test conversation contract', () => {
       toolOutcome: { toolName: 'query_calendar_events', status: 'completed' },
     });
     expect(result.behavioralTranscript.turns[1]).not.toHaveProperty('toolOutcome');
+    expect(result.turns[0]?.timelineEvents.map((event) => event.id)).not.toEqual(
+      result.turns[1]?.timelineEvents.map((event) => event.id)
+    );
+    expect(result.turns[0]?.timelineEvents.filter((event) => event.type === 'user_message')).toHaveLength(1);
+    expect(result.turns[1]?.timelineEvents.filter((event) => event.type === 'user_message')).toHaveLength(1);
+  });
+
+  it('runs 20 message turns in order and returns the complete transcript', async () => {
+    const repository = new MemorySessionRepository();
+    const exchanges = Array.from({ length: 20 }, (_, index) => ({
+      message: `Message ${String(index + 1)}`,
+      reply: `Reply ${String(index + 1)}`,
+    }));
+    const runner = new ScriptedRunner(
+      exchanges.map(({ reply }) => ({ outcome: 'no_action' as const, reply }))
+    );
+
+    const result = await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-twenty-turns',
+        runId: 'intex-e2e-twenty-turns',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: exchanges.map(({ message }, index) => ({
+          kind: 'message',
+          messageId: `wamid-${String(index + 1)}`,
+          text: message,
+        })),
+      },
+      {
+        sessionRepository: repository,
+        runner,
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls: [],
+        logger: silentLogger(),
+      }
+    );
+
+    expect(
+      runner.calls.map((call) => (call as Parameters<IntexAgentRunner['run']>[0]).message)
+    ).toEqual(exchanges.map(({ message }) => message));
+    expect(result.turns).toHaveLength(20);
+    expect(
+      result.turns.map((turn) => ({
+        turnIndex: turn.turnIndex,
+        messageId: turn.messageId,
+        submittedTextPreview: turn.submittedTextPreview,
+        assistantReplies: turn.assistantReplies.map((reply) => reply.message),
+      }))
+    ).toEqual(
+      exchanges.map(({ message, reply }, index) => ({
+        turnIndex: index,
+        messageId: `wamid-${String(index + 1)}`,
+        submittedTextPreview: message,
+        assistantReplies: [reply],
+      }))
+    );
+    expect(result.sessionTransitions).toHaveLength(20);
+    expect(result.behavioralTranscript.turns).toHaveLength(20);
+    expect(
+      result.turns.every(
+        (turn) =>
+          Array.isArray(turn.toolCalls) &&
+          turn.sessionAfterTurn.id === turn.sessionId &&
+          Array.isArray(turn.timelineEvents)
+      )
+    ).toBe(true);
   });
 
   it('does not expose secret-like session summaries in serialized responses', async () => {
@@ -251,6 +327,16 @@ describe('test conversation contract', () => {
     expect(result.turns[1]?.kind).toBe('confirmation_button');
     expect(result.turns[1]?.assistantReplies[0]?.message).toContain('Zapisałem notatkę');
     expect(result.toolCalls).toEqual(toolCalls);
+    expect(result.turns[0]?.sessionAfterTurn).toMatchObject({
+      id: 'intex_session_test_1',
+      status: 'waiting_for_user',
+      activeTool: 'create_note',
+    });
+    expect(result.turns[1]?.sessionAfterTurn).toMatchObject({
+      id: 'intex_session_test_1',
+      status: 'waiting_for_user',
+    });
+    expect(result.turns[1]?.sessionAfterTurn).not.toHaveProperty('activeTool');
     expect(result.behavioralTranscript.turns[1]).toMatchObject({
       confirmationAction: 'accepted',
       toolOutcome: { toolName: 'create_note', status: 'completed' },
@@ -358,6 +444,168 @@ describe('test conversation contract', () => {
       previousSessionId: 'intex_session_old',
       previousEndReason: 'timeout',
     });
+    expect(result.turns[0]?.timelineEvents.map((event) => [event.sessionId, event.type])).toEqual([
+      ['intex_session_old', 'session_closed'],
+      ['intex_session_test_2', 'session_started'],
+      ['intex_session_test_2', 'user_message'],
+      ['intex_session_test_2', 'assistant_message'],
+    ]);
+    expect(result.turns[0]?.timelineEvents[0]?.payload).toMatchObject({ reason: 'timeout' });
+  });
+
+  it('keeps old-session close events before new-session events for explicit supersession', async () => {
+    const repository = new MemorySessionRepository();
+    const result = await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-switch',
+        runId: 'intex-e2e-switch',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: [
+          { kind: 'message', text: 'First topic.' },
+          { kind: 'message', text: 'new session: second topic' },
+        ],
+      },
+      {
+        sessionRepository: repository,
+        runner: new ScriptedRunner([
+          { outcome: 'no_action', reply: 'First reply.' },
+          { outcome: 'no_action', reply: 'Second reply.' },
+        ]),
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls: [],
+        logger: silentLogger(),
+      }
+    );
+
+    const firstSessionId = result.turns[0]?.sessionId;
+    const secondSessionId = result.turns[1]?.sessionId;
+    expect(firstSessionId).toBeDefined();
+    expect(secondSessionId).toBeDefined();
+    expect(secondSessionId).not.toBe(firstSessionId);
+    expect(result.turns[1]?.timelineEvents.map((event) => [event.sessionId, event.type])).toEqual([
+      [firstSessionId, 'session_closed'],
+      [secondSessionId, 'session_started'],
+      [secondSessionId, 'user_message'],
+      [secondSessionId, 'assistant_message'],
+    ]);
+    expect(result.turns[1]?.timelineEvents.map((event) => event.id)).not.toEqual(
+      result.turns[0]?.timelineEvents.map((event) => event.id)
+    );
+  });
+
+  it('slices captured tool calls to the turn that created them', async () => {
+    const repository = new MemorySessionRepository();
+    const toolCalls: CapturedToolCall[] = [];
+    const capturedCall: CapturedToolCall = {
+      toolName: 'query_calendar_events',
+      status: 'completed',
+      argsSummary: { mode: 'list' },
+      resultSummary: { status: 'completed', count: 0 },
+    };
+    const runner = new ScriptedRunner(
+      [
+        { outcome: 'no_action', reply: 'First.' },
+        { outcome: 'completed', reply: 'Second.', toolName: 'query_calendar_events' },
+      ],
+      [],
+      (callIndex) => {
+        if (callIndex === 1) toolCalls.push(capturedCall);
+      }
+    );
+
+    const result = await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-call-slice',
+        runId: 'intex-e2e-call-slice',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: [
+          { kind: 'message', text: 'First.' },
+          { kind: 'message', text: 'Second.' },
+        ],
+      },
+      {
+        sessionRepository: repository,
+        runner,
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls,
+        logger: silentLogger(),
+      }
+    );
+
+    expect(result.turns[0]?.toolCalls).toEqual([]);
+    expect(result.turns[1]?.toolCalls).toEqual([capturedCall]);
+    expect(result.toolCalls).toEqual([capturedCall]);
+  });
+
+  it('preserves audio source type in per-turn and aggregate sanitized events', async () => {
+    const result = await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-audio',
+        runId: 'intex-e2e-audio',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: [
+          {
+            kind: 'message',
+            text: 'Audio transcript.',
+            sourceType: 'whatsapp_audio_transcript',
+          },
+        ],
+      },
+      {
+        sessionRepository: new MemorySessionRepository(),
+        runner: new ScriptedRunner([{ outcome: 'no_action', reply: 'Received.' }]),
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls: [],
+        logger: silentLogger(),
+      }
+    );
+
+    const turnUserMessage = result.turns[0]?.timelineEvents.find(
+      (event) => event.type === 'user_message'
+    );
+    const aggregateUserMessage = Object.values(result.eventsBySessionId)
+      .flat()
+      .find((event) => event.type === 'user_message');
+    expect(turnUserMessage?.payload['sourceType']).toBe('whatsapp_audio_transcript');
+    expect(aggregateUserMessage?.payload['sourceType']).toBe('whatsapp_audio_transcript');
+  });
+
+  it('fails before the next turn when the returned session cannot be reloaded', async () => {
+    await expect(
+      runTestConversation(
+        {
+          contractVersion: '2026-07-01',
+          mode: 'live_llm_mock_tools',
+          userId: 'test-intex-agent-intex-e2e-missing-result-session',
+          runId: 'intex-e2e-missing-result-session',
+          currentDateTime: '2026-07-01T10:00:00.000Z',
+          turns: [
+            { kind: 'message', text: 'First.' },
+            { kind: 'message', text: 'Must not execute.' },
+          ],
+        },
+        {
+          sessionRepository: new MissingResultSessionRepository(),
+          runner: new ScriptedRunner([
+            { outcome: 'no_action', reply: 'First reply.' },
+            { outcome: 'no_action', reply: 'Unexpected second reply.' },
+          ]),
+          sessionTimeoutMs: 30 * 60 * 1000,
+          ids: fixedTestIds(),
+          toolCalls: [],
+          logger: silentLogger(),
+        }
+      )
+    ).rejects.toThrow('test conversation result session missing');
   });
 
   it('reports superseded transitions for explicit new-session commands', async () => {
@@ -435,6 +683,47 @@ describe('test conversation contract', () => {
     );
   });
 
+  it('advances generated turn clocks by absolute seconds across the Warsaw DST fallback', async () => {
+    const previousTimeZone = process.env['TZ'];
+    process.env['TZ'] = 'Europe/Warsaw';
+    try {
+      const runner = new ScriptedRunner([
+        { outcome: 'no_action', reply: 'First.' },
+        { outcome: 'no_action', reply: 'Second.' },
+      ]);
+
+      await runTestConversation(
+        {
+          contractVersion: '2026-07-01',
+          mode: 'live_llm_mock_tools',
+          userId: 'test-intex-agent-intex-e2e-dst-fallback',
+          runId: 'intex-e2e-dst-fallback',
+          currentDateTime: '2026-10-25T00:59:59.000Z',
+          turns: [
+            { kind: 'message', text: 'First.' },
+            { kind: 'message', text: 'Second.' },
+          ],
+        },
+        {
+          sessionRepository: new MemorySessionRepository(),
+          runner,
+          sessionTimeoutMs: 30 * 60 * 1000,
+          ids: fixedTestIds(),
+          toolCalls: [],
+          logger: silentLogger(),
+        }
+      );
+
+      expect(
+        runner.calls.map(
+          (call) => (call as Parameters<IntexAgentRunner['run']>[0]).currentDateTime
+        )
+      ).toEqual(['2026-10-25T00:59:59.000Z', '2026-10-25T01:00:00.000Z']);
+    } finally {
+      restoreTimeZone(previousTimeZone);
+    }
+  });
+
   it('fails fast when a semantic confirmation cannot find a captured button', async () => {
     const repository = new MemorySessionRepository();
 
@@ -498,11 +787,13 @@ class ScriptedRunner implements IntexAgentRunner {
 
   constructor(
     private readonly runResults: IntexAgentRunnerResult[],
-    private readonly executeResults: IntexAgentRunnerResult[] = []
+    private readonly executeResults: IntexAgentRunnerResult[] = [],
+    private readonly onRun?: (callIndex: number) => void
   ) {}
 
   async run(input: Parameters<IntexAgentRunner['run']>[0]): Promise<IntexAgentRunnerResult> {
     this.calls.push(input);
+    this.onRun?.(this.runIndex);
     const result = this.runResults[this.runIndex];
     this.runIndex += 1;
     if (result === undefined) {
@@ -580,6 +871,12 @@ class MemorySessionRepository implements SessionRepository {
   }
 }
 
+class MissingResultSessionRepository extends MemorySessionRepository {
+  override async getSession(): Promise<IntexAgentSession | null> {
+    return null;
+  }
+}
+
 function fixedTestIds(): {
   sessionId(): string;
   eventId(): string;
@@ -614,4 +911,12 @@ function silentLogger(): { info(): void; warn(): void; error(): void } {
       return undefined;
     },
   };
+}
+
+function restoreTimeZone(value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env['TZ'];
+    return;
+  }
+  process.env['TZ'] = value;
 }

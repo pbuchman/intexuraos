@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTestConversationRunnerService,
   type AgentRunnerFactory,
   type CreateTestConversationRunnerServiceInput,
 } from '../services.js';
+import { createIntexAgentRunner } from '../domain/agent/intexAgentRunner.js';
 import { INTEX_AGENT_MODEL } from '../domain/agent/systemPrompt.js';
 import {
   addPromptPreferenceItem,
@@ -114,6 +116,8 @@ describe('createTestConversationRunnerService', () => {
           mode: 'list',
           timeMin: '2026-07-02T00:00:00+02:00',
           timeMax: '2026-07-03T00:00:00+02:00',
+          syntheticMarkerCount: 0,
+          syntheticMarkerDigest: markerDigest([]),
         },
         resultSummary: { status: 'completed', mode: 'list', count: 2 },
       },
@@ -122,19 +126,95 @@ describe('createTestConversationRunnerService', () => {
     expect(JSON.stringify(result)).not.toContain('private event');
   });
 
+  it('keeps mocked failure details out of the full confirmed-execution response', async () => {
+    const privateFailure =
+      'delivery failed for private.person@example.com; secret=sk-private-value';
+    const createAgentRunnerFn: AgentRunnerFactory = vi.fn((config): IntexAgentRunner => {
+      const realRunner = createIntexAgentRunner(config);
+      return {
+        async run(): Promise<IntexAgentRunnerResult> {
+          return {
+            outcome: 'needs_confirmation',
+            reply: 'Add this note?\nContent: private note body',
+            toolName: 'create_note',
+            toolArgs: { content: 'private note body' },
+          };
+        },
+        async executeConfirmed(input): Promise<IntexAgentRunnerResult> {
+          return await realRunner.executeConfirmed(input);
+        },
+      };
+    });
+    const runner = createTestConversationRunnerService({
+      config: testConfig(),
+      sessionRepository: new MemorySessionRepository(),
+      promptPreferencesRepository: promptPreferencesRepository([]),
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
+      createLlmClientFn: vi.fn(() => fakeStructuredClient()),
+      createAgentRunnerFn,
+      ids: fixedTestIds(),
+    });
+
+    const result = await runner.run({
+      contractVersion: '2026-07-01',
+      mode: 'live_llm_mock_tools',
+      userId: 'test-intex-agent-private-tool-failure',
+      runId: 'private-tool-failure',
+      currentDateTime: '2026-07-01T10:00:00.000Z',
+      turns: [
+        { kind: 'message', text: 'Save this note.' },
+        { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },
+      ],
+      toolMocks: {
+        create_note: { mode: 'failure', message: privateFailure },
+      },
+    });
+
+    expect(createAgentRunnerFn).toHaveBeenCalledTimes(2);
+    expect(result.turns[1]?.assistantReplies[0]?.message).toBe(
+      'I could not execute this action: tool_execution_failed. Please try again later.'
+    );
+    expect(result.turns[1]?.toolCalls).toEqual([
+      {
+        toolName: 'create_note',
+        status: 'failed',
+        argsSummary: {
+          contentLength: 17,
+          syntheticMarkerCount: 0,
+          syntheticMarkerDigest: markerDigest([]),
+        },
+        error: 'tool_execution_failed',
+      },
+    ]);
+    expect(result.behavioralTranscript.turns[1]?.toolOutcome).toEqual({
+      toolName: 'create_note',
+      status: 'failed',
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /private\.person@example\.com|sk-private-value|private note body/iu
+    );
+  });
+
   it('wires confirmed execution through mocked tools only', async () => {
     const repository = new MemorySessionRepository();
     const createAgentRunnerFn: AgentRunnerFactory = vi.fn((config): IntexAgentRunner => ({
       async run(): Promise<IntexAgentRunnerResult> {
         return {
           outcome: 'needs_confirmation',
-          reply: 'Add this note?\nContent: secret service test',
+          reply:
+            'Add this note?\nContent: secret service test INTEX-EVAL-001 INTEX-EVAL-001-F01',
           toolName: 'create_note',
-          toolArgs: { content: 'secret service test' },
+          toolArgs: {
+            content: 'secret service test INTEX-EVAL-001 INTEX-EVAL-001-F01',
+          },
         };
       },
       async executeConfirmed(): Promise<IntexAgentRunnerResult> {
-        const rawResult = await config.toolExecutor.createNote({ content: 'secret service test' });
+        const rawResult = await config.toolExecutor.createNote({
+          content: 'secret service test INTEX-EVAL-001 INTEX-EVAL-001-F01',
+        });
         const toolResult = JSON.parse(rawResult) as Record<string, unknown>;
         return {
           outcome: 'completed',
@@ -164,7 +244,10 @@ describe('createTestConversationRunnerService', () => {
       runId: 'intex-e2e-confirm-service',
       currentDateTime: '2026-07-01T10:00:00.000Z',
       turns: [
-        { kind: 'message', text: 'Save note intex-e2e-confirm-service' },
+        {
+          kind: 'message',
+          text: 'Save note INTEX-EVAL-001 INTEX-EVAL-001-F01 intex-e2e-confirm-service',
+        },
         { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },
       ],
       toolMocks: {
@@ -177,14 +260,36 @@ describe('createTestConversationRunnerService', () => {
 
     expect(createAgentRunnerFn).toHaveBeenCalledTimes(2);
     expect(result.turns[1]?.assistantReplies[0]?.message).toBe('Confirmed note status: completed');
+    const expectedArgsSummary = {
+      contentLength: 53,
+      syntheticMarkerCount: 2,
+      syntheticMarkerDigest: markerDigest(['INTEX-EVAL-001', 'INTEX-EVAL-001-F01']),
+    };
     expect(result.toolCalls).toEqual([
       {
         toolName: 'create_note',
         status: 'completed',
-        argsSummary: { contentLength: 19 },
+        argsSummary: expectedArgsSummary,
         resultSummary: { status: 'completed' },
       },
     ]);
+    const confirmationRequested = Object.values(result.eventsBySessionId)
+      .flat()
+      .find((event) => event.type === 'confirmation_requested');
+    expect(confirmationRequested?.payload['argsSummary']).toEqual(expectedArgsSummary);
+    expect(JSON.stringify(confirmationRequested?.payload)).not.toMatch(/secret service|INTEX-EVAL/iu);
+    expect(JSON.stringify(result.toolCalls)).not.toMatch(/secret service|INTEX-EVAL/iu);
+    expect(result.turns[0]?.submittedTextPreview).toContain('INTEX-EVAL-001-F01');
+    const resultWithoutSubmittedText = {
+      ...result,
+      turns: result.turns.map(({ submittedTextPreview: _submittedTextPreview, ...turn }) => turn),
+      behavioralTranscript: {
+        turns: result.behavioralTranscript.turns.map(
+          ({ submittedTextPreview: _submittedTextPreview, ...turn }) => turn
+        ),
+      },
+    };
+    expect(JSON.stringify(resultWithoutSubmittedText)).not.toContain('INTEX-EVAL');
     expect(JSON.stringify(result)).not.toContain('secret service test');
   });
 
@@ -277,6 +382,12 @@ function testRequest(runId: string): Parameters<ReturnType<typeof createTestConv
     currentDateTime: '2026-07-01T10:00:00.000Z',
     turns: [{ kind: 'message', text: `Ping ${runId}` }],
   };
+}
+
+function markerDigest(markers: readonly string[]): string {
+  return createHash('sha256')
+    .update(`intex-eval-marker-set:v1\0${[...markers].sort().join('\n')}`, 'utf8')
+    .digest('hex');
 }
 
 function testConfig(): CreateTestConversationRunnerServiceInput['config'] {

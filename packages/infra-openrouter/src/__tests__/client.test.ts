@@ -857,6 +857,56 @@ describe('createOpenRouterClient', () => {
   });
 
   describe('generateChat', () => {
+    it('returns provider-reported USD separately from normalized chat cost', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Chat response', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            cost: 0.0042,
+          },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChat([{ role: 'user', content: 'hello' }], {
+        promptType: 'test-chat-prompt',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage).toMatchObject({
+          inputTokens: 100,
+          outputTokens: 50,
+          totalTokens: 150,
+          costUsd: 0,
+          providerReportedUsd: 0.0042,
+        });
+      }
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ providerReportedUsd: 0.0042 })
+      );
+    });
+
     it('forwards reasoning options to OpenRouter chat completions', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 
@@ -961,11 +1011,18 @@ describe('createOpenRouterClient', () => {
       expect(events).toContainEqual({ type: 'delta', text: 'lo' });
       expect(events).toContainEqual({
         type: 'usage',
-        usage: expect.objectContaining({ inputTokens: 3, outputTokens: 2, totalTokens: 5 }),
+        usage: expect.objectContaining({
+          inputTokens: 3,
+          outputTokens: 2,
+          totalTokens: 5,
+          costUsd: 0,
+          providerReportedUsd: 0.001,
+        }),
       });
       if (result.ok) {
         expect(result.value.content).toBe('Hello');
         expect(result.value.usage.totalTokens).toBe(5);
+        expect(result.value.usage.providerReportedUsd).toBe(0.001);
       }
     });
 
@@ -1199,6 +1256,7 @@ describe('createOpenRouterClient', () => {
             cacheWriteTokens: 40,
           },
         });
+        expect(result.value.usage).not.toHaveProperty('providerReportedUsd');
       }
     });
 
@@ -1376,6 +1434,10 @@ describe('createOpenRouterClient', () => {
 
       const result = await client.generate('hello', { promptType: 'test-prompt' });
       expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.costUsd).toBe(0);
+        expect(result.value.usage).not.toHaveProperty('providerReportedUsd');
+      }
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({ providerReportedUsd: 0.0042 })

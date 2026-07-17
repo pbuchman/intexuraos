@@ -223,7 +223,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/*/src/**/*.ts', 'workers/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
+    files: [
+      'apps/*/src/**/*.ts',
+      'workers/*/src/**/*.ts',
+      'packages/*/src/**/*.ts',
+      'tools/intex-agent-evals/src/**/*.ts',
+    ],
     ignores: ['**/__tests__/**'],
     plugins: {
       local: {

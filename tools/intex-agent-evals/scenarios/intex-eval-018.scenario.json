@@ -1,0 +1,211 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-018",
+  "title": "Update a user preference",
+  "description": "Confirms and updates a synthetic preference identifier at expected version zero.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Update preference pref_INTEX-EVAL-018-F01 at version 0 with this exact replacement row: reply in formal Polish INTEX-EVAL-018 INTEX-EVAL-018-F02.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "confirmation_button",
+      "previousTurnIndex": 0,
+      "decision": "accept"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session",
+          "activeTool": "update_user_preference"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "confirmation_requested",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "confirmation_requested",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "update_user_preference"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 3
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "103677081913ddfa22df52efaa38e95b21555e0bdcd56b71784d40df4e7c41ae"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Correctly identifies an exact preference-update request and asks for explicit confirmation.",
+              "Does not claim the preference already changed or expose raw argument content in the sanitized reply."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 1,
+        "requiredToolCalls": [
+          {
+            "toolName": "update_user_preference",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "hasItemId",
+                "operator": "equals",
+                "value": true
+              },
+              {
+                "path": "textLength",
+                "operator": "exists"
+              },
+              {
+                "path": "expectedVersion",
+                "operator": "equals",
+                "value": 0
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 3
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "103677081913ddfa22df52efaa38e95b21555e0bdcd56b71784d40df4e7c41ae"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "user_message",
+            "confirmation_resolved",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_resolved",
+              "assertions": [
+                {
+                  "path": "resolution",
+                  "operator": "equals",
+                  "value": "accepted"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "update_user_preference"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Presents the sanitized resulting preference state as a redacted preference block without exposing the replacement row.",
+              "Does not request the same confirmation again; deterministic completed-tool evidence establishes update success."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

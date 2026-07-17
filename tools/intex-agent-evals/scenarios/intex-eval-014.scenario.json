@@ -1,0 +1,211 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-014",
+  "title": "Create a planning code task",
+  "description": "Confirms and creates a synthetic MiniMax planning code task with structural argument evidence.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Create a MiniMax planning code task to investigate synthetic cache behavior INTEX-EVAL-014 INTEX-EVAL-014-F01.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "confirmation_button",
+      "previousTurnIndex": 0,
+      "decision": "accept"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session",
+          "activeTool": "create_code_task"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "confirmation_requested",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "confirmation_requested",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_code_task"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "87b4ad9d89e483405f04f87a3cf8062e5244cb8f93d9bc137c70820422d22a05"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Correctly identifies a planning code-task request for the selected worker and asks for explicit confirmation.",
+              "Does not claim the task already exists or expose raw argument content in the sanitized reply."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 1,
+        "requiredToolCalls": [
+          {
+            "toolName": "create_code_task",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "promptLength",
+                "operator": "exists"
+              },
+              {
+                "path": "workerType",
+                "operator": "equals",
+                "value": "minimax"
+              },
+              {
+                "path": "taskMode",
+                "operator": "equals",
+                "value": "planning"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "87b4ad9d89e483405f04f87a3cf8062e5244cb8f93d9bc137c70820422d22a05"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "user_message",
+            "confirmation_resolved",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_resolved",
+              "assertions": [
+                {
+                  "path": "resolution",
+                  "operator": "equals",
+                  "value": "accepted"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_code_task"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly communicates that the requested code task was created successfully.",
+              "Does not ask for another confirmation or claim a different tool action completed."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

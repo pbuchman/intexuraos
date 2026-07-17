@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import * as sanitizerModule from '../../domain/testConversation/testConversationSanitizer.js';
 import {
   buildBehavioralTranscript,
   sanitizeAssistantReplies,
@@ -9,11 +11,185 @@ import {
 } from '../../domain/testConversation/testConversationSanitizer.js';
 import type {
   CapturedToolCall,
+  SanitizedToolCall,
   TestConversationTurnResult,
 } from '../../domain/testConversation/testConversationTypes.js';
 import type { IntexAgentSessionEvent } from '../../domain/sessions/types.js';
 
 describe('test conversation sanitizer', () => {
+  it('projects narrow per-turn timeline events and immediate session state', () => {
+    const sanitizeTurnTimelineEvents = (
+      sanitizerModule as unknown as {
+        sanitizeTurnTimelineEvents?: (
+          events: readonly IntexAgentSessionEvent[]
+        ) => Record<string, unknown>[];
+      }
+    ).sanitizeTurnTimelineEvents;
+    const sanitizeSessionAfterTurn = (
+      sanitizerModule as unknown as {
+        sanitizeSessionAfterTurn?: (session: Record<string, unknown>) => Record<string, unknown>;
+      }
+    ).sanitizeSessionAfterTurn;
+
+    expect(sanitizeTurnTimelineEvents).toBeTypeOf('function');
+    expect(sanitizeSessionAfterTurn).toBeTypeOf('function');
+    if (sanitizeTurnTimelineEvents === undefined || sanitizeSessionAfterTurn === undefined) return;
+
+    const timeline = sanitizeTurnTimelineEvents([
+      {
+        id: 'event-user',
+        sessionId: 'intex_session_1',
+        userId: 'test-intex-agent-secret-user',
+        type: 'user_message',
+        createdAt: '2026-07-01T10:00:00.000Z',
+        payload: {
+          text: 'Content: private-message-sentinel',
+          sourceType: 'whatsapp_audio_transcript',
+          toolArgs: { content: 'private-tool-args' },
+          result: { message: 'private-result' },
+          sourceUrl: 'https://example.com/private',
+          whatsappSender: '+48123123123',
+          replyContext: { text: 'private-reply-context' },
+          promptBlock: 'private-preference',
+          secretKey: 'private-secret',
+          userId: 'private-user-id',
+          timestamp: 'private-timestamp',
+          channel: 'private-channel',
+          summary: 'private-summary',
+        },
+      },
+      {
+        id: 'event-assistant',
+        sessionId: 'intex_session_1',
+        userId: 'test-intex-agent-secret-user',
+        type: 'assistant_message',
+        createdAt: '2026-07-01T10:00:01.000Z',
+        payload: { message: 'Safe assistant reply', sourceType: 'must-not-copy' },
+      },
+    ]);
+    const snapshot = sanitizeSessionAfterTurn({
+      id: 'intex_session_1',
+      userId: 'test-intex-agent-secret-user',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-07-01T10:00:00.000Z',
+      endedAt: '2026-07-01T10:00:01.000Z',
+      lastUserMessageAt: '2026-07-01T10:00:00.000Z',
+      lastAssistantMessageAt: '2026-07-01T10:00:01.000Z',
+      startReason: 'no_active_session',
+      endReason: 'tool_completed',
+      activeTool: 'create_note',
+      summary: 'private-session-summary',
+    });
+
+    expect(timeline).toEqual([
+      {
+        sessionId: 'intex_session_1',
+        id: 'event-user',
+        type: 'user_message',
+        createdAt: '2026-07-01T10:00:00.000Z',
+        payload: {
+          sourceType: 'whatsapp_audio_transcript',
+          textPreview: 'Content: [redacted]',
+        },
+      },
+      {
+        sessionId: 'intex_session_1',
+        id: 'event-assistant',
+        type: 'assistant_message',
+        createdAt: '2026-07-01T10:00:01.000Z',
+        payload: { textPreview: 'Safe assistant reply' },
+      },
+    ]);
+    expect(snapshot).toEqual({
+      id: 'intex_session_1',
+      status: 'waiting_for_user',
+      startReason: 'no_active_session',
+      endReason: 'tool_completed',
+      activeTool: 'create_note',
+    });
+    expect(JSON.stringify({ timeline, snapshot })).not.toMatch(
+      /private-message-sentinel|private-tool-args|private-result|private-reply-context|private-preference|private-secret|private-user-id|private-timestamp|private-channel|private-summary|private-session-summary|must-not-copy/u
+    );
+  });
+
+  it('summarizes only complete canonical synthetic markers without exposing their tokens', () => {
+    const summarizeArgs = (
+      sanitizerModule as unknown as {
+        summarizeArgs?: (
+          toolName: 'create_note' | 'create_calendar_event' | 'query_calendar_events',
+          args: Record<string, unknown>
+        ) => Record<string, unknown>;
+      }
+    ).summarizeArgs;
+
+    expect(summarizeArgs).toBeTypeOf('function');
+    if (summarizeArgs === undefined) return;
+
+    const first = summarizeArgs('create_note', {
+      content:
+        'secret-alpha INTEX-eval-001-f02 INTEX-EVAL-001 INTEX-EVAL-001-F01 INTEX-EVAL-001-F01',
+    });
+    const second = summarizeArgs('create_note', {
+      content: 'different-secret INTEX-EVAL-001-F01 INTEX-EVAL-001-F02 INTEX-EVAL-001',
+    });
+    const disallowed = summarizeArgs('create_note', {
+      content: 'INTEX-EVAL-001-PRIVATE XINTEX-EVAL-002 INTEX-EVAL-003-F021',
+    });
+
+    expect(first).toMatchObject({
+      syntheticMarkerCount: 3,
+      syntheticMarkerDigest: markerDigest([
+        'INTEX-EVAL-001',
+        'INTEX-EVAL-001-F01',
+        'INTEX-EVAL-001-F02',
+      ]),
+    });
+    expect(second).toMatchObject({
+      syntheticMarkerCount: first['syntheticMarkerCount'],
+      syntheticMarkerDigest: first['syntheticMarkerDigest'],
+    });
+    expect(disallowed).toMatchObject({
+      syntheticMarkerCount: 0,
+      syntheticMarkerDigest: markerDigest([]),
+    });
+    expect(JSON.stringify(first)).not.toMatch(/secret-alpha|INTEX-EVAL/iu);
+
+    const rawCalendarQuery = 'private search INTEX-EVAL-011-F01';
+    const querySummary = summarizeArgs('query_calendar_events', {
+      mode: 'list',
+      timeMin: '2026-07-18T00:00:00+02:00',
+      timeMax: '2026-07-19T00:00:00+02:00',
+      maxResults: 10,
+      query: rawCalendarQuery,
+      calendarId: 'private-calendar-id',
+    });
+    expect(querySummary).toEqual({
+      mode: 'list',
+      timeMin: '2026-07-18T00:00:00+02:00',
+      timeMax: '2026-07-19T00:00:00+02:00',
+      maxResults: 10,
+      queryLength: rawCalendarQuery.length,
+      hasCalendarId: true,
+      syntheticMarkerCount: 1,
+      syntheticMarkerDigest: markerDigest(['INTEX-EVAL-011-F01']),
+    });
+    expect(JSON.stringify(querySummary)).not.toMatch(/private search|INTEX-EVAL/iu);
+
+    const calendar = summarizeArgs('create_calendar_event', {
+      summary: 'Synthetic event',
+      start: '2026-08-18T14:30:00+02:00 INTEX-EVAL-002-F01',
+      end: '2026-08-18T15:15:00+02:00',
+    });
+    expect(calendar).not.toHaveProperty('start');
+    expect(calendar['end']).toBe('2026-08-18T15:15:00+02:00');
+    expect(calendar).toMatchObject({
+      syntheticMarkerCount: 1,
+      syntheticMarkerDigest: markerDigest(['INTEX-EVAL-002-F01']),
+    });
+    expect(JSON.stringify(calendar)).not.toContain('INTEX-EVAL');
+  });
+
   it('omits raw tool args, raw results, source urls, reply contexts, and secret-like payload fields', () => {
     const event: IntexAgentSessionEvent = {
       id: 'event-1',
@@ -24,8 +200,11 @@ describe('test conversation sanitizer', () => {
       payload: {
         confirmationId: 'confirm-1',
         toolName: 'create_note',
-        toolArgs: { content: 'private body', apiKey: 'secret-key' },
-        message: 'Czy dodać notatkę?',
+        toolArgs: {
+          content: 'private body INTEX-EVAL-001 INTEX-EVAL-001-F01',
+          apiKey: 'secret-key',
+        },
+        message: 'Czy dodać notatkę?\nTreść: private body INTEX-EVAL-001-F01',
         sourceUrl: 'https://signed.example/private',
         whatsappSender: '+48123123123',
         replyContext: { text: 'previous private text' },
@@ -44,7 +223,15 @@ describe('test conversation sanitizer', () => {
           payload: {
             confirmationId: 'confirm-1',
             toolName: 'create_note',
-            textPreview: 'Czy dodać notatkę?',
+            textPreview: 'Czy dodać notatkę? Treść: [redacted]',
+            argsSummary: {
+              contentLength: 46,
+              syntheticMarkerCount: 2,
+              syntheticMarkerDigest: markerDigest([
+                'INTEX-EVAL-001',
+                'INTEX-EVAL-001-F01',
+              ]),
+            },
           },
         },
       ],
@@ -55,6 +242,40 @@ describe('test conversation sanitizer', () => {
     expect(JSON.stringify(sanitized)).not.toContain('whatsappSender');
     expect(JSON.stringify(sanitized)).not.toContain('replyContext');
     expect(JSON.stringify(sanitized)).not.toContain('secret-token');
+    expect(JSON.stringify(sanitized)).not.toContain('INTEX-EVAL-001');
+  });
+
+  it('omits argument evidence for malformed confirmation payloads', () => {
+    const sanitized = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'confirmation_requested',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: { toolName: 'create_note', message: 'Confirm?' },
+        },
+        {
+          id: 'event-2',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'confirmation_requested',
+          createdAt: '2026-07-01T10:00:01.000Z',
+          payload: {
+            toolName: 'not_a_tool',
+            toolArgs: { content: 'INTEX-EVAL-001-F01' },
+            message: 'Confirm?',
+          },
+        },
+      ],
+    });
+
+    expect(sanitized['intex_session_1']?.map((event) => event.payload)).toEqual([
+      { toolName: 'create_note', textPreview: 'Confirm?' },
+      { toolName: 'not_a_tool', textPreview: 'Confirm?' },
+    ]);
+    expect(JSON.stringify(sanitized)).not.toContain('INTEX-EVAL');
   });
 
   it('sanitizes captured tool call summaries recursively', () => {
@@ -78,8 +299,140 @@ describe('test conversation sanitizer', () => {
         toolName: 'query_calendar_events',
         status: 'completed',
         argsSummary: { mode: 'list' },
-        resultSummary: { status: 'completed', count: 1, nested: {} },
+        resultSummary: { status: 'completed', count: 1 },
       },
+    ]);
+  });
+
+  it('uses closed summary DTOs without string index signatures', () => {
+    type HasStringIndex<T> = string extends keyof T ? true : false;
+    const argsSummaryHasStringIndex: HasStringIndex<
+      NonNullable<SanitizedToolCall['argsSummary']>
+    > = false;
+    const resultSummaryHasStringIndex: HasStringIndex<
+      NonNullable<SanitizedToolCall['resultSummary']>
+    > = false;
+
+    expect(argsSummaryHasStringIndex).toBe(false);
+    expect(resultSummaryHasStringIndex).toBe(false);
+  });
+
+  it('runtime-allowlists typed tool summaries and rejects arbitrary or malformed values', () => {
+    const digest = markerDigest(['INTEX-EVAL-011-F01']);
+    const sanitized = sanitizeToolCalls([
+      {
+        toolName: 'create_calendar_event',
+        status: 'completed',
+        argsSummary: {
+          mode: 'count',
+          start: '2026-07-18T10:00:00+02:00',
+          end: '2026-07-18T11:00:00+02:00',
+          timeMin: '2026-07-18T00:00:00Z',
+          timeMax: '2026-07-19T00:00:00Z',
+          timeZone: 'Europe/Warsaw',
+          workerType: 'minimax',
+          taskMode: 'planning',
+          maxResults: 10,
+          queryLength: 33,
+          hasCalendarId: true,
+          syntheticMarkerCount: 1,
+          syntheticMarkerDigest: digest,
+          neutralKey: 'neutral-string-sentinel',
+        },
+        resultSummary: {
+          status: 'completed',
+          mode: 'list',
+          count: 0,
+          currentVersion: 3,
+          hasEventId: true,
+          hasResourceUrl: false,
+          neutralResult: 'neutral-result-sentinel',
+        },
+      },
+      {
+        toolName: 'create_code_task',
+        status: 'completed',
+        argsSummary: {
+          mode: 'private.person@example.com',
+          start: '/Users/private/secret',
+          end: 'neutral-string-sentinel',
+          timeMin: 'https://private.example/time',
+          timeMax: '2026-07-18',
+          timeZone: 'private.person@example.com',
+          workerType: '/Users/private/worker',
+          taskMode: 'neutral-task-mode',
+          maxResults: Number.POSITIVE_INFINITY,
+          queryLength: -1,
+          hasCalendarId: 'true',
+          syntheticMarkerCount: 1.5,
+          syntheticMarkerDigest: 'private-digest-sentinel',
+          neutralKey: true,
+        },
+        resultSummary: {
+          status: 'private.person@example.com',
+          mode: '/Users/private/result',
+          count: Number.POSITIVE_INFINITY,
+          currentVersion: -1,
+          hasEventId: 'true',
+          neutralResult: 'neutral-result-sentinel',
+        },
+      },
+    ]);
+
+    expect(sanitized).toEqual([
+      {
+        toolName: 'create_calendar_event',
+        status: 'completed',
+        argsSummary: {
+          mode: 'count',
+          start: '2026-07-18T10:00:00+02:00',
+          end: '2026-07-18T11:00:00+02:00',
+          timeMin: '2026-07-18T00:00:00Z',
+          timeMax: '2026-07-19T00:00:00Z',
+          timeZone: 'Europe/Warsaw',
+          workerType: 'minimax',
+          taskMode: 'planning',
+          maxResults: 10,
+          queryLength: 33,
+          hasCalendarId: true,
+          syntheticMarkerCount: 1,
+          syntheticMarkerDigest: digest,
+        },
+        resultSummary: {
+          status: 'completed',
+          mode: 'list',
+          count: 0,
+          currentVersion: 3,
+          hasEventId: true,
+          hasResourceUrl: false,
+        },
+      },
+      {
+        toolName: 'create_code_task',
+        status: 'completed',
+        argsSummary: {},
+        resultSummary: {},
+      },
+    ]);
+    expect(JSON.stringify(sanitized)).not.toMatch(
+      /neutral-string-sentinel|neutral-result-sentinel|private\.person@example\.com|\/Users\/private|private\.example|private-digest-sentinel/iu
+    );
+
+    const closedValues = sanitizeToolCalls(
+      [
+        { mode: 'list', workerType: 'codex', taskMode: 'planning' },
+        { mode: 'count', workerType: 'codex-xhigh', taskMode: 'execution' },
+        { workerType: 'minimax' },
+      ].map((argsSummary) => ({
+        toolName: 'create_code_task' as const,
+        status: 'completed' as const,
+        argsSummary,
+      }))
+    );
+    expect(closedValues.map((call) => call.argsSummary)).toEqual([
+      { mode: 'list', workerType: 'codex', taskMode: 'planning' },
+      { mode: 'count', workerType: 'codex-xhigh', taskMode: 'execution' },
+      { workerType: 'minimax' },
     ]);
   });
 
@@ -152,13 +505,13 @@ describe('test conversation sanitizer', () => {
     ]);
   });
 
-  it('truncates errors and summarizes arrays without leaking unsupported values', () => {
+  it('closes errors and summarizes arrays without leaking unsupported values', () => {
     const sanitizedCalls = sanitizeToolCalls([
       {
         toolName: 'create_note',
         status: 'failed',
         argsSummary: { tags: ['private', 'labels'], authToken: 'secret-token' },
-        error: 'x'.repeat(260),
+        error: 'delivery failed for private.person@example.com; secret=sk-private-value',
       },
     ]);
     const record = sanitizeRecord({
@@ -168,7 +521,10 @@ describe('test conversation sanitizer', () => {
       unsupported: Symbol('unsupported'),
     });
 
-    expect(sanitizedCalls[0]?.error).toHaveLength(220);
+    expect(sanitizedCalls[0]?.error).toBe('tool_execution_failed');
+    expect(JSON.stringify(sanitizedCalls)).not.toMatch(
+      /private\.person@example\.com|sk-private-value/iu
+    );
     expect(JSON.stringify(sanitizedCalls)).not.toContain('secret-token');
     expect(record).toEqual({
       visible: 'hello world',
@@ -204,6 +560,99 @@ describe('test conversation sanitizer', () => {
     expect(JSON.stringify(sanitized)).not.toContain('https://signed.example/private');
   });
 
+  it('redacts all structured confirmation fields that can carry synthetic markers', () => {
+    const message = [
+      'Add this calendar event?',
+      'Title: Dentist INTEX-EVAL-002-F01',
+      'Start: 2026-08-18T14:30:00+02:00',
+      'End: 2026-08-18T15:15:00+02:00',
+      'Location: Smile Clinic INTEX-EVAL-002-F02',
+    ].join('\n');
+
+    const sanitizedReply = sanitizeAssistantReplies([
+      {
+        userId: 'test-intex-agent-run',
+        message,
+        replyToMessageId: 'wamid-1',
+        correlationId: 'intex_session_1',
+      },
+    ]);
+    const sanitizedEvent = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'confirmation_requested',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: {
+            toolName: 'create_calendar_event',
+            message,
+            toolArgs: {
+              summary: 'Dentist INTEX-EVAL-002-F01',
+              start: '2026-08-18T14:30:00+02:00',
+              end: '2026-08-18T15:15:00+02:00',
+              location: 'Smile Clinic INTEX-EVAL-002-F02',
+            },
+          },
+        },
+      ],
+    });
+
+    expect(sanitizedReply[0]?.message).toBe(
+      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted]'
+    );
+    expect(sanitizedEvent['intex_session_1']?.[0]?.payload['textPreview']).toBe(
+      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted]'
+    );
+    expect(JSON.stringify([sanitizedReply, sanitizedEvent])).not.toContain('INTEX-EVAL');
+  });
+
+  it('keeps synthetic marker tokens out of generic assistant and event previews', () => {
+    const sanitizedReply = sanitizeAssistantReplies([
+      {
+        userId: 'test-intex-agent-run',
+        message: 'Please confirm INTEX-EVAL-001-F01.',
+        replyToMessageId: 'wamid-1',
+        correlationId: 'intex_session_1',
+      },
+    ]);
+    const sanitizedEvent = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'user_message',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: { text: 'Save INTEX-EVAL-001 INTEX-EVAL-001-F01.' },
+        },
+      ],
+    });
+
+    expect(sanitizedReply[0]?.message).toBe('Please confirm [synthetic-marker].');
+    expect(sanitizedEvent['intex_session_1']?.[0]?.payload['textPreview']).toBe(
+      'Save [synthetic-marker] [synthetic-marker].'
+    );
+    expect(JSON.stringify([sanitizedReply, sanitizedEvent])).not.toContain('INTEX-EVAL');
+  });
+
+  it('bounds normalized assistant replies without retaining the truncated suffix', () => {
+    const truncatedSuffix = 'private-truncated-suffix-sentinel';
+    const sanitized = sanitizeAssistantReplies([
+      {
+        userId: 'test-intex-agent-run',
+        message: `Safe prefix ${'x'.repeat(4100)} ${truncatedSuffix}`,
+        replyToMessageId: 'wamid-long',
+        correlationId: 'intex_session_long',
+      },
+    ]);
+
+    expect(sanitized[0]?.message).toHaveLength(4000);
+    expect(sanitized[0]?.message.endsWith('...')).toBe(true);
+    expect(sanitized[0]?.message).not.toContain(truncatedSuffix);
+  });
+
   it('redacts rendered prompt preference blocks in captured replies', () => {
     const sanitized = sanitizeAssistantReplies([
       {
@@ -232,7 +681,7 @@ describe('test conversation sanitizer', () => {
     expect(JSON.stringify(sanitized)).not.toContain('hidden value');
   });
 
-  it('summarizes tool completed events and omits secret-like result fields', () => {
+  it('uses the closed result summary for completed timeline events', () => {
     const sanitized = sanitizeEventsBySessionId({
       intex_session_1: [
         {
@@ -245,9 +694,29 @@ describe('test conversation sanitizer', () => {
             toolName: 'create_code_task',
             result: {
               status: 'completed',
-              codeTaskId: 'task_mock',
+              mode: 'list',
+              count: 1,
+              codeTaskId: 'private.person@example.com',
+              resourceUrl: '/Users/private/secret',
+              neutralResult: 'neutral-result-sentinel',
               token: 'secret-token',
               events: [{ private: true }],
+            },
+          },
+        },
+        {
+          id: 'event-2',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'tool_call_completed',
+          createdAt: '2026-07-01T10:00:01.000Z',
+          payload: {
+            toolName: 'create_code_task',
+            result: {
+              status: 'private.person@example.com',
+              mode: '/Users/private/result',
+              count: 2,
+              eventId: 'neutral-event-id-sentinel',
             },
           },
         },
@@ -256,10 +725,21 @@ describe('test conversation sanitizer', () => {
 
     expect(sanitized['intex_session_1']?.[0]?.payload).toEqual({
       toolName: 'create_code_task',
-      resultSummary: { status: 'completed', codeTaskId: 'task_mock' },
+      resultSummary: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        hasCodeTaskId: true,
+        hasResourceUrl: true,
+      },
     });
-    expect(JSON.stringify(sanitized)).not.toContain('secret-token');
-    expect(JSON.stringify(sanitized)).not.toContain('private');
+    expect(sanitized['intex_session_1']?.[1]?.payload).toEqual({
+      toolName: 'create_code_task',
+      resultSummary: { count: 2, hasEventId: true },
+    });
+    expect(JSON.stringify(sanitized)).not.toMatch(
+      /secret-token|private\.person@example\.com|\/Users\/private|neutral-result-sentinel|neutral-event-id-sentinel/iu
+    );
   });
 
   it('builds a normalized behavioral transcript from turns, events, transitions, and tool calls', () => {
@@ -269,6 +749,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-1',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         submittedTextPreview: 'Jakie wydarzenia jutro?',
         assistantReplies: [
           {
@@ -319,6 +800,7 @@ describe('test conversation sanitizer', () => {
         kind: 'confirmation_button',
         messageId: 'wamid-1',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         assistantReplies: [],
       },
       {
@@ -326,6 +808,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-2',
         sessionId: 'intex_session_2',
+        ...emptyTurnEvidence('intex_session_2'),
         assistantReplies: [{ userId: 'u', message: 'done', replyToMessageId: 'wamid-2', correlationId: 's' }],
       },
     ];
@@ -392,6 +875,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-1',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         assistantReplies: [{ userId: 'u', message: 'first', replyToMessageId: 'wamid-1', correlationId: 's' }],
       },
       {
@@ -399,6 +883,7 @@ describe('test conversation sanitizer', () => {
         kind: 'message',
         messageId: 'wamid-2',
         sessionId: 'intex_session_1',
+        ...emptyTurnEvidence('intex_session_1'),
         assistantReplies: [{ userId: 'u', message: 'second', replyToMessageId: 'wamid-2', correlationId: 's' }],
       },
     ];
@@ -440,6 +925,7 @@ describe('test conversation sanitizer', () => {
           kind: 'message',
           messageId: 'wamid-1',
           sessionId: 'intex_session_1',
+          ...emptyTurnEvidence('intex_session_1'),
           assistantReplies: [],
         },
       ],
@@ -453,3 +939,23 @@ describe('test conversation sanitizer', () => {
     });
   });
 });
+
+function markerDigest(markers: readonly string[]): string {
+  return createHash('sha256')
+    .update(`intex-eval-marker-set:v1\0${[...markers].sort().join('\n')}`, 'utf8')
+    .digest('hex');
+}
+
+function emptyTurnEvidence(
+  sessionId: string
+): Pick<TestConversationTurnResult, 'toolCalls' | 'sessionAfterTurn' | 'timelineEvents'> {
+  return {
+    toolCalls: [],
+    sessionAfterTurn: {
+      id: sessionId,
+      status: 'waiting_for_user',
+      startReason: 'no_active_session',
+    },
+    timelineEvents: [],
+  };
+}

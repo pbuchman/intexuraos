@@ -1,0 +1,218 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-002",
+  "title": "Create a calendar event in one message",
+  "description": "Confirms and creates a fully specified synthetic calendar event with date, time, duration, and location.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Create a calendar event for INTEX-EVAL-002 dentist appointment INTEX-EVAL-002-F01 on August 18 2026 at 2:30 PM for 45 minutes at Smile Clinic INTEX-EVAL-002-F02.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "confirmation_button",
+      "previousTurnIndex": 0,
+      "decision": "accept"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session",
+          "activeTool": "create_calendar_event"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "confirmation_requested",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "confirmation_requested",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_calendar_event"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 3
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "950b11f303c56ef4bf81578ffe921e806cd31bf464d4dfaf1f6251f94573a2a6"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly tells the user that a new Intex Agent session has started.",
+              "Correctly identifies a fully specified calendar-event request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Asks for confirmation using recognizable human-readable details: dentist appointment, August 18 2026, and 2:30 PM.",
+              "Does not request already supplied details or expose raw argument content in the sanitized reply."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 1,
+        "requiredToolCalls": [
+          {
+            "toolName": "create_calendar_event",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "summaryLength",
+                "operator": "exists"
+              },
+              {
+                "path": "start",
+                "operator": "contains",
+                "value": "2026-08-18T14:30"
+              },
+              {
+                "path": "end",
+                "operator": "contains",
+                "value": "2026-08-18T15:15"
+              },
+              {
+                "path": "locationLength",
+                "operator": "exists"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 3
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "950b11f303c56ef4bf81578ffe921e806cd31bf464d4dfaf1f6251f94573a2a6"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_note",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "user_message",
+            "confirmation_resolved",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_resolved",
+              "assertions": [
+                {
+                  "path": "resolution",
+                  "operator": "equals",
+                  "value": "accepted"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_calendar_event"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly communicates that the requested calendar event was created successfully.",
+              "Confirms the dentist appointment was created and includes the recognizable date August 18 2026 and time 2:30 PM.",
+              "Does not ask for the same confirmation again or claim a different action completed."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

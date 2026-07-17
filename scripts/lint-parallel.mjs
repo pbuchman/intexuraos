@@ -10,10 +10,10 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseShardArg, selectShardItems } from './lib/sharding.mjs';
+import { discoverWorkspaceNames } from './lib/workspace-discovery.mjs';
 
 const rootDir = resolve(import.meta.dirname, '..');
 
@@ -66,36 +66,11 @@ function getConcurrency({ sequentialMode }) {
 }
 
 // Workspace patterns from pnpm-workspace.yaml
-const WORKSPACE_PATTERNS = ['apps/*', 'packages/*', 'workers/*'];
+const WORKSPACE_PATTERNS = ['apps/*', 'packages/*', 'workers/*', 'tools/intex-agent-evals'];
 
 // Get all workspace packages
 function getWorkspaces() {
-  const workspaceNames = [];
-
-  for (const pattern of WORKSPACE_PATTERNS) {
-    if (pattern.endsWith('/*')) {
-      // apps/* or packages/* or workers/*
-      const baseDir = pattern.replace('/*', '');
-      const basePath = resolve(rootDir, baseDir);
-
-      if (existsSync(basePath)) {
-        const dirs = readdirSync(basePath, { withFileTypes: true });
-        for (const dir of dirs) {
-          if (dir.isDirectory()) {
-            const pkgPath = resolve(basePath, dir.name, 'package.json');
-            if (existsSync(pkgPath)) {
-              const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-              if (pkg.scripts?.['lint:local']) {
-                workspaceNames.push(pkg.name);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return workspaceNames;
+  return discoverWorkspaceNames(rootDir, WORKSPACE_PATTERNS, 'lint:local');
 }
 
 // Run lint for a single workspace, returning process handle

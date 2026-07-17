@@ -29,6 +29,15 @@ interface RoutePayload {
   toolMocks?: Record<string, unknown>;
 }
 
+interface RouteErrorResponse {
+  error: {
+    message: string;
+    details?: {
+      errors: { path: string; message: string }[];
+    };
+  };
+}
+
 describe('test conversation routes', () => {
   let app: FastifyInstance;
   let testConversationRunner: FakeTestConversationRunner;
@@ -140,7 +149,6 @@ describe('test conversation routes', () => {
     ['invalid current date', { currentDateTime: 'not-a-date' }],
     ['tool mocks must be object', { toolMocks: null }],
     ['tool mock mode must be known', { toolMocks: { create_note: { mode: 'bad' } } }],
-    ['too many turns', { turns: Array.from({ length: 6 }, () => validPayload().turns[0] ?? {}) }],
     ['too long text', { turns: [{ ...(validPayload().turns[0] ?? {}), text: 'x'.repeat(4001) }] }],
     [
       'confirmation points to current turn',
@@ -189,6 +197,100 @@ describe('test conversation routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(testConversationRunner.calls).toEqual([]);
+  });
+
+  it('accepts 20 message turns', async () => {
+    const turns = validMessageTurns(20);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/test/conversation',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { ...validPayload(), turns },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(testConversationRunner.calls).toEqual([expect.objectContaining({ turns })]);
+  });
+
+  it('rejects 21 message turns at schema validation', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/test/conversation',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { ...validPayload(), turns: validMessageTurns(21) },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json<RouteErrorResponse>().error).toMatchObject({
+      message: 'Validation failed',
+      details: {
+        errors: [{ path: 'turns', message: 'must NOT have more than 20 items' }],
+      },
+    });
+    expect(testConversationRunner.calls).toEqual([]);
+  });
+
+  it('accepts confirmation index 19 at schema validation', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/test/conversation',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: {
+        ...validPayload(),
+        turns: [{ kind: 'confirmation_button', previousTurnIndex: 19, decision: 'accept' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json<RouteErrorResponse>().error.message).toBe(
+      'confirmation_button previousTurnIndex must reference an earlier turn'
+    );
+    expect(testConversationRunner.calls).toEqual([]);
+  });
+
+  it('rejects confirmation index 20 at schema validation', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/test/conversation',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: {
+        ...validPayload(),
+        turns: [{ kind: 'confirmation_button', previousTurnIndex: 20, decision: 'accept' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const error = response.json<RouteErrorResponse>().error;
+    expect(error.message).toBe('Validation failed');
+    expect(error.details?.errors).toContainEqual({
+      path: 'turns.0.previousTurnIndex',
+      message: 'must be <= 19',
+    });
+    expect(testConversationRunner.calls).toEqual([]);
+  });
+
+  it('accepts a schema-valid request body above 64 KiB', async () => {
+    const payload = JSON.stringify({
+      ...validPayload(),
+      turns: validMessageTurns(20, 4000),
+    });
+
+    expect(Buffer.byteLength(payload)).toBeGreaterThan(64 * 1024);
+    expect(Buffer.byteLength(payload)).toBeLessThan(256 * 1024);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/test/conversation',
+      headers: {
+        'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        'content-type': 'application/json',
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(testConversationRunner.calls).toHaveLength(1);
   });
 
   it('accepts app-relative mock result URLs', async () => {
@@ -316,7 +418,7 @@ describe('test conversation routes', () => {
     expect(logOutput).not.toContain('token abc');
   });
 
-  it('rejects oversized bodies with 413', async () => {
+  it('rejects bodies over 256 KiB with 413', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/intex-agent/test/conversation',
@@ -324,7 +426,7 @@ describe('test conversation routes', () => {
         'x-internal-auth': INTERNAL_AUTH_TOKEN,
         'content-type': 'application/json',
       },
-      payload: JSON.stringify({ ...validPayload(), padding: 'x'.repeat(65 * 1024) }),
+      payload: JSON.stringify({ ...validPayload(), padding: 'x'.repeat(257 * 1024) }),
     });
 
     expect(response.statusCode).toBe(413);
@@ -391,6 +493,18 @@ function validPayload(): RoutePayload {
       },
     },
   };
+}
+
+function validMessageTurns(count: number, textLength?: number): Record<string, unknown>[] {
+  return Array.from({ length: count }, (_, index) => ({
+    kind: 'message',
+    messageId: `wamid-route-${String(index + 1)}`,
+    text:
+      textLength === undefined
+        ? `Message ${String(index + 1)} intex-e2e-route`
+        : 'x'.repeat(textLength),
+    timestamp: '2026-07-01T10:00:00.000Z',
+  }));
 }
 
 class FakeTestConversationRunner {

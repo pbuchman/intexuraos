@@ -1,0 +1,31 @@
+{
+  "name": "@intexuraos/intex-agent-evals",
+  "version": "3.8.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "cli": "node --no-warnings --import tsx src/cli.ts",
+    "validate": "pnpm run typecheck && pnpm run lint:local && pnpm run validate:scenarios && pnpm run test",
+    "validate:scenarios": "vitest run src/__tests__/trackedScenarioCatalog.test.ts",
+    "test": "vitest run src/__tests__",
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@intexuraos/infra-openrouter": "workspace:*",
+    "@intexuraos/internal-clients": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*",
+    "@intexuraos/llm-prompts": "workspace:*",
+    "firebase-admin": "^13.6.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
+  }
+}
