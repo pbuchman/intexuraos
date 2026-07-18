@@ -3468,6 +3468,36 @@ describe('createIntexAgentRunner', () => {
     ]);
   });
 
+  it('returns the completed preference result when the final model envelope says no_action', async () => {
+    const promptBlock =
+      'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub@gmail.com."';
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [ok(toolResult({ outcome: 'no_action', reply: 'No action is needed.' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Tell me my defined user preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: promptBlock,
+      toolName: 'get_user_preferences',
+      toolResult: { status: 'completed', currentVersion: 1, promptBlock },
+    });
+  });
+
   it('keeps read-only completed summaries even when the tool result is plain text', async () => {
     const client = new ToolExecutingFakeToolCallingClient(
       {
@@ -3508,6 +3538,53 @@ describe('createIntexAgentRunner', () => {
       reply: 'Jutro masz jedno wydarzenie.',
       summary: 'Listed tomorrow calendar events.',
       toolName: 'query_calendar_events',
+    });
+  });
+
+  it('returns the completed calendar result when the final model envelope says no_action', async () => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      events: [
+        {
+          id: 'event-1',
+          summary: 'Dentist',
+          start: { dateTime: '2026-06-25T09:00:00.000Z' },
+          end: { dateTime: '2026-06-25T10:00:00.000Z' },
+        },
+      ],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00.000Z',
+          timeMax: '2026-06-26T00:00:00.000Z',
+        },
+      },
+      [ok(toolResult({ outcome: 'no_action', reply: 'You have Dentist tomorrow at 09:00.' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'What are my events tomorrow?',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'You have Dentist tomorrow at 09:00.',
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
     });
   });
 

@@ -614,6 +614,21 @@ async function parseRunnerContent(
     };
   }
 
+  if (
+    toolExecution !== undefined &&
+    toolExecution.error === undefined &&
+    parsed.outcome !== 'completed'
+  ) {
+    return buildCompletedToolExecutionResult(
+      toolExecution.toolName,
+      toolExecution.result,
+      parsed.reply,
+      parsed.summary,
+      webAppUrl,
+      replyLanguage
+    );
+  }
+
   switch (parsed.outcome) {
     case 'needs_clarification':
       return {
@@ -659,29 +674,43 @@ async function parseRunnerContent(
       if (toolExecution?.toolName !== parsed.toolName) {
         return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch');
       }
-      const completedToolExecution = toolExecution;
-      const completedReply = buildCompletedReply(
-        completedToolExecution.toolName,
-        completedToolExecution.result,
+      return buildCompletedToolExecutionResult(
+        toolExecution.toolName,
+        toolExecution.result,
         parsed.reply,
+        parsed.summary,
         webAppUrl,
         replyLanguage
       );
-
-      return {
-        outcome: parsed.outcome,
-        reply: completedReply.reply,
-        ...(parsed.summary !== undefined ? { summary: parsed.summary } : {}),
-        toolName: completedToolExecution.toolName,
-        ...(completedToolExecution.result !== undefined
-          ? { toolResult: completedToolExecution.result }
-          : {}),
-        /* v8 ignore start -- schema: normal completed turns cannot produce CTA URLs because mutating tools are confirmation-gated and read-only tools have no CTA results @preserve */
-        ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
-        /* v8 ignore stop @preserve */
-      };
     }
   }
+}
+
+function buildCompletedToolExecutionResult(
+  toolName: IntexAgentToolName,
+  result: Record<string, unknown> | undefined,
+  fallbackReply: string,
+  summary: string | undefined,
+  webAppUrl: string,
+  replyLanguage: IntexAgentReplyLanguage
+): IntexAgentRunnerResult {
+  const completedReply = buildCompletedReply(
+    toolName,
+    result,
+    fallbackReply,
+    webAppUrl,
+    replyLanguage
+  );
+  return {
+    outcome: 'completed',
+    reply: completedReply.reply,
+    ...(summary !== undefined ? { summary } : {}),
+    toolName,
+    ...(result !== undefined ? { toolResult: result } : {}),
+    /* v8 ignore start -- schema: read-only tool results cannot produce CTA URLs because CTA-capable tools require confirmation @preserve */
+    ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
+    /* v8 ignore stop @preserve */
+  };
 }
 
 function isConversationIntent(
