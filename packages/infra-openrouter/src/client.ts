@@ -178,8 +178,17 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
+  const requireParameters = providerRouting?.requireParameters;
+  const providerOrder = providerRouting?.order;
+  const allowFallbacks = providerRouting?.allowFallbacks;
   const providerRequest =
-    providerRouting?.requireParameters === true ? { require_parameters: true } : undefined;
+    requireParameters === undefined && providerOrder === undefined && allowFallbacks === undefined
+      ? undefined
+      : {
+          ...(requireParameters !== undefined && { require_parameters: requireParameters }),
+          ...(providerOrder !== undefined && { order: [...providerOrder] }),
+          ...(allowFallbacks !== undefined && { allow_fallbacks: allowFallbacks }),
+        };
 
   function trackUsage(
     callType: CallType,

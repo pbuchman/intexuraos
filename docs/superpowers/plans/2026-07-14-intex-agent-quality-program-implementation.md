@@ -23,7 +23,7 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - The offline completion audit is implemented and independently approved: every correlated assistant reply is judged, scenarios 001–010 enforce their source lifecycle semantics, tool/error evidence is closed and privacy-safe, setup is non-echoing, and the Home Dev wrapper accepts only one private framed CLI stream with selector/status validation. A fresh `pnpm run ci:tracked` passed on 2026-07-17.
 - The user explicitly authorized the Task 9 live lane. The implementation and the first two acceptance fixes were delivered through `development`; Home Dev health, deployed revision, account, Firebase, Matrix identity, and delivery readiness were verified.
 - Real preflight and endpoint evaluation calls have been executed. Preflight reached exit `0` after the prompt-only experiment, but the endpoint run stopped on scenario 001 when MiniMax returned invalid judge output both initially and after the one allowed repair; deterministic endpoint execution and cleanup succeeded. No Matrix message has been sent.
-- The remaining executable work is to deliver the final parameter-compatible routing fix, then repeat `preflight` → `endpoint` → `full`. Offline/unit/contract success is not final acceptance.
+- The remaining executable work is to deliver the self-contained verdict prompt and verified three-host routing contract, then repeat `preflight` → `endpoint` → `full`. Offline/unit/contract success is not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
 ### Live contract correction — 2026-07-18
@@ -31,14 +31,15 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - Home Dev A/B evidence showed that OpenRouter's mixed MiniMax M3 endpoint pool can send `response_format: { type: 'json_object' }` to an endpoint that does not support it; the affected path returned `finish_reason: 'stop'` with `message.content: null`.
 - Removing `response_format` restored string content, but the first real scenario then failed strict parsing after the one allowed repair. Prompt-only JSON is therefore not reliable enough for the judge contract.
 - Two otherwise identical probes with `response_format` plus `provider.require_parameters: true` returned the expected final string while keeping reasoning separate. The evaluator therefore preserves JSON-object mode and requires OpenRouter to route only to endpoints that support every requested parameter.
-- It does not parse `message.reasoning`, change the judge model, add a fallback, or weaken local `JSON.parse` plus strict Zod validation. All privacy, fail-closed, cost-accounting, temperature, model, and repair constraints remain authoritative.
+- A real endpoint retry then proved two remaining defects. The judge and repair prompts referred to “documented failure enums” without listing the six allowed values, so three parameter-compatible MiniMax M3 hosts returned valid JSON that failed only at `failures[]`; the repair repeated the same error. The same privacy-safe provider matrix also found one host returning `content: null` and another rate-limited.
+- The final contract uses one canonical failure-code tuple in Zod and every judge prompt, makes repair self-contained, and orders the three verified string-content MiniMax M3 hosts with fallback outside that list disabled. It does not parse `message.reasoning`, change the judge model, add a second model, or weaken local `JSON.parse` plus strict Zod validation. All privacy, fail-closed, cost-accounting, temperature, model, and repair constraints remain authoritative.
 
 ## Global constraints
 
 - The only evaluation judge is `or:minimax/minimax-m3` (`minimax/minimax-m3` at the raw OpenRouter boundary).
 - Claude Sonnet is not used as judge, fallback, repair model, or retry model.
 - A MiniMax failure, invalid JSON, missing credential, or timeout is an infrastructure failure. It never silently passes or switches models.
-- The judge uses OpenRouter JSON-object mode with `provider.require_parameters: true`, strict local Zod validation, temperature `0`, and at most one structured repair. It does not parse reasoning as the answer.
+- The judge uses OpenRouter JSON-object mode with `provider.require_parameters: true`, the verified order `gmicloud` → `minimax` → `morph`, no fallback outside that list, strict local Zod validation, temperature `0`, and at most one structured repair. It does not parse reasoning as the answer.
 - The system under test uses the currently deployed Intex Agent model. Product model selection is outside this plan.
 - The endpoint accepts from 1 through exactly 20 product turns. The independent provider tool-loop limit remains unchanged.
 - Product tools stay mocked in the endpoint scenario suite.
@@ -360,7 +361,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 }).strict();
 ```
 
-- [x] Test exact MiniMax model selection, JSON-object mode, required parameter-compatible routing, temperature 0, one repair, and absence of alternative models.
+- [x] Test exact MiniMax model selection, JSON-object mode, required parameter-compatible routing, the verified provider order with outside fallback disabled, temperature 0, one repair, and absence of alternative models.
 - [x] Use `createOpenRouterClient` directly with raw model `minimax/minimax-m3`; do not widen the Intex tool-calling allowlist.
 - [x] Use versioned `PromptBuilder` prompts and call `generateChat`; do not use the generic structured helper, strip Markdown fences, or confuse one structured repair with the client's same-model transient transport retries.
 - [x] Judge each reply independently from synthetic scenario criteria plus sanitized technical facts.
