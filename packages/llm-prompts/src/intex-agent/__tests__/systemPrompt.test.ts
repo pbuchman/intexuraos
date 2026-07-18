@@ -6,10 +6,10 @@ const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('14.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('15.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('7.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('8.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -75,6 +75,17 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('show every event candidate you can identify');
     expect(prompt).toContain('create only one calendar event per confirmed tool call');
     expect(prompt).toContain('Current-date questions are answerable from Current date-time');
+  });
+
+  it('acknowledges current-session context retention without echoing fragment details', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain(
+      'When the current user message explicitly asks you only to retain or hold provided context and not save it yet, reply with a short neutral acknowledgement. Do not paraphrase, restate, enumerate, count, or infer the provided fragment details, and do not claim durable storage; the context exists only in the current session.'
+    );
   });
 
   it('keeps direct answers and explicit tool requests out of generic protocol fallback', () => {

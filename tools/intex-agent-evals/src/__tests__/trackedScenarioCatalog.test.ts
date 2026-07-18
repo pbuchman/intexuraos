@@ -100,6 +100,59 @@ const SYNTHETIC_MARKER_PATTERN = /(?<![A-Z0-9-])INTEX-EVAL-[0-9]{3}(?:-F[0-9]{2}
 const SESSION_LIFECYCLE_NARRATION_PATTERN =
   /\b(?:(?:new|another|previous) (?:Intex Agent )?session|session (?:has |was )?(?:started|closed|superseded)|session (?:start|closure|supersession|lifecycle))\b/iu;
 
+const COMPLETE_REDACTED_CONFIRMATION_EVIDENCE =
+  'The redacted values are complete expected evidence for the judge and are not missing information.';
+
+const REDACTED_CONFIRMATION_CASES = [
+  {
+    scenarioId: 'intex-eval-002',
+    turnIndex: 0,
+    labels: ['Title: [redacted]', 'Start: [redacted]', 'End: [redacted]', 'Location: [redacted]'],
+  },
+  {
+    scenarioId: 'intex-eval-006',
+    turnIndex: 0,
+    labels: ['Title: [redacted]', 'Content: [redacted]'],
+  },
+  {
+    scenarioId: 'intex-eval-006',
+    turnIndex: 2,
+    labels: ['Title: [redacted]', 'Content: [redacted]'],
+  },
+  {
+    scenarioId: 'intex-eval-012',
+    turnIndex: 0,
+    labels: ['Title: [redacted]', 'Prompt: [redacted]'],
+  },
+  {
+    scenarioId: 'intex-eval-018',
+    turnIndex: 0,
+    labels: ['Entry: [redacted]', 'After: [redacted]'],
+  },
+  {
+    scenarioId: 'intex-eval-020',
+    turnIndex: 18,
+    labels: ['Title: [redacted]', 'Content: [redacted]'],
+  },
+] as const;
+
+const SCENARIO_020_ISOLATED_REPLY_CRITERIA = [
+  'A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.',
+  'Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details.',
+] as const;
+
+const OBSERVABLE_NOTE_CONFIRMATION_CRITERIA = [
+  'Correctly identifies a note-save request and asks for explicit confirmation in an appropriate, concise tone.',
+  'Expected complete sanitized confirmation evidence: `Title: [redacted]` and `Content: [redacted]`.',
+  COMPLETE_REDACTED_CONFIRMATION_EVIDENCE,
+  'Does not claim the note already exists or expose raw argument content in the sanitized reply.',
+] as const;
+
+const CONCISE_NOTE_COMPLETION_CRITERIA = [
+  'Clearly communicates that the requested note was saved successfully.',
+  'A concise completion-only reply is sufficient and should not restate details or invite another action.',
+] as const;
+
 function markerCase(
   scenarioId: string,
   requestTurnIndex: number,
@@ -637,6 +690,59 @@ describe('tracked scenario catalog', () => {
     expect(completionCriteria).not.toMatch(duplicatedExactValue);
   });
 
+  it('treats literal redacted confirmation labels as complete judge evidence', () => {
+    for (const testCase of REDACTED_CONFIRMATION_CASES) {
+      const criteria = semanticCriteriaFor(
+        findScenario(scenarios, testCase.scenarioId),
+        testCase.turnIndex
+      );
+
+      for (const label of testCase.labels) expect(criteria).toContain(label);
+      expect(criteria).toContain(COMPLETE_REDACTED_CONFIRMATION_EVIDENCE);
+      expect(markersIn(criteria)).toEqual([]);
+    }
+  });
+
+  it('uses a privacy-safe isolated-reply contract for scenario 020 context turns', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-020');
+
+    for (let turnIndex = 0; turnIndex < 18; turnIndex += 1) {
+      expect(scenario.expected.turns[turnIndex]?.replies[0]?.semanticCriteria).toEqual(
+        SCENARIO_020_ISOLATED_REPLY_CRITERIA
+      );
+    }
+  });
+
+  it('keeps scenario 006 confirmation and completion criteria isolated from prior turns', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-006');
+    const inaccessiblePriorStatePattern = /\b(?:first|second|follow-up|prior|previous)\b/iu;
+
+    for (const turnIndex of [0, 2]) {
+      expect(scenario.expected.turns[turnIndex]?.replies[0]?.semanticCriteria).toEqual(
+        OBSERVABLE_NOTE_CONFIRMATION_CRITERIA
+      );
+    }
+    for (const turnIndex of [1, 3]) {
+      expect(scenario.expected.turns[turnIndex]?.replies[0]?.semanticCriteria).toEqual(
+        CONCISE_NOTE_COMPLETION_CRITERIA
+      );
+    }
+    for (let turnIndex = 0; turnIndex < 4; turnIndex += 1) {
+      expect(semanticCriteriaFor(scenario, turnIndex)).not.toMatch(inaccessiblePriorStatePattern);
+    }
+  });
+
+  it('keeps scenario 020 final confirmation and completion observable in isolation', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-020');
+
+    expect(scenario.expected.turns[18]?.replies[0]?.semanticCriteria).toEqual(
+      OBSERVABLE_NOTE_CONFIRMATION_CRITERIA
+    );
+    expect(scenario.expected.turns[19]?.replies[0]?.semanticCriteria).toEqual(
+      CONCISE_NOTE_COMPLETION_CRITERIA
+    );
+  });
+
   it('uses endpoint-observable exact calendar ranges without requiring a tool timezone', () => {
     const calendar002 = findRequiredToolCall(
       findScenario(scenarios, 'intex-eval-002'),
@@ -859,7 +965,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '9b20c9b8e96e9e61322eff382d2473360648028fe4601c0b4efcc69032b0f5e1'
+      'e1e03fcbaafa900bde373446cc7904384f2bf646832a61dad2e963fe76b885e7'
     );
   });
 });

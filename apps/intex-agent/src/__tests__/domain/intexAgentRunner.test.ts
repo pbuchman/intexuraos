@@ -93,7 +93,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toBe(
       `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('14.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('15.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -1550,7 +1550,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('14.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('15.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);

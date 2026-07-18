@@ -98,6 +98,8 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Correctly identifies an exact preference-update request and asks for explicit confirmation.",
+              "Expected complete sanitized confirmation evidence: `Entry: [redacted]` and `After: [redacted]`.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
               "Does not claim the preference already changed or expose raw argument content in the sanitized reply."
             ]
           }
