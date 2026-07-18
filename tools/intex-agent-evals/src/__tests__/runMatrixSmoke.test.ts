@@ -385,25 +385,55 @@ describe('safe Matrix smoke transport', () => {
     expect(dependencies.whatsapp.sendPrivateOutboundMatrixMessage).not.toHaveBeenCalled();
   });
 
-  it('fails a limited capture timeline before sending', async () => {
+  it('discards a limited initial timeline and polls from its captured cursor', async () => {
     const { dependencies } = createDependencies();
-    vi.mocked(dependencies.matrix.syncTargetRoom).mockResolvedValue({
-      ok: true,
-      nextBatch: 'limited-capture-cursor',
-      limited: true,
-      events: [eligibleEvent('capture history')],
+    const calls: string[] = [];
+    vi.mocked(dependencies.matrix.syncTargetRoom).mockImplementation(async (input) => {
+      calls.push(input.since === undefined ? 'capture' : 'poll');
+      return input.since === undefined
+        ? {
+            ok: true,
+            nextBatch: 'limited-capture-cursor',
+            limited: true,
+            events: [eligibleEvent('historical reply must be ignored')],
+          }
+        : {
+            ok: true,
+            nextBatch: 'reply-cursor',
+            limited: false,
+            events: [eligibleEvent('later reply')],
+          };
     });
+    vi.mocked(dependencies.whatsapp.sendPrivateOutboundMatrixMessage).mockImplementation(
+      async () => {
+        calls.push('send');
+        return {
+          ok: true,
+          value: { status: 'sent', matrixEventId: '$private-outbound-event' },
+        };
+      }
+    );
 
     const result = await runMatrixSmoke(dependencies);
 
+    expect(calls).toEqual(['capture', 'send', 'poll']);
+    expect(vi.mocked(dependencies.matrix.syncTargetRoom).mock.calls[1]?.[0]?.since).toBe(
+      'limited-capture-cursor'
+    );
+    expect(dependencies.judgeMatrixSmokeReply).toHaveBeenCalledWith(
+      expect.objectContaining({ assistantText: 'later reply' })
+    );
     expect(result).toMatchObject({
-      exitCode: 2,
-      failureCodes: ['MATRIX_TIMELINE_LIMITED'],
-      transportFacts: { cursorCaptured: false, outboundSent: false },
-      judge: { status: 'not_run' },
+      effectiveKind: 'passed',
+      exitCode: 0,
+      failureCodes: [],
+      transportFacts: {
+        cursorCaptured: true,
+        outboundSent: true,
+        eligiblePuppetTextObserved: true,
+      },
     });
-    expect(dependencies.whatsapp.sendPrivateOutboundMatrixMessage).not.toHaveBeenCalled();
-    expect(dependencies.judgeMatrixSmokeReply).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('historical reply must be ignored');
   });
 
   it.each([
