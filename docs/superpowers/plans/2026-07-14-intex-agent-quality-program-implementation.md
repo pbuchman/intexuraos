@@ -25,12 +25,18 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - No real endpoint corpus, MiniMax M3 judge run, or Matrix message has been executed yet. Offline/unit/contract success is not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
+### Live contract correction — 2026-07-18
+
+- Home Dev A/B evidence showed that OpenRouter's mixed MiniMax M3 endpoint pool can ignore `response_format: { type: 'json_object' }`; the affected path returned `finish_reason: 'stop'` with `message.content: null`, while the otherwise identical prompt-only request returned the expected final string and kept reasoning separate.
+- The evaluator therefore uses prompt-enforced strict JSON, `JSON.parse`, strict local Zod validation, and at most one same-model repair. It does not send `response_format`, parse `message.reasoning`, add `provider.require_parameters`, change the judge model, or add a fallback.
+- This is a narrow evidence-based correction to the original JSON-object-mode constraint. All privacy, fail-closed, cost-accounting, temperature, model, and repair constraints remain authoritative.
+
 ## Global constraints
 
 - The only evaluation judge is `or:minimax/minimax-m3` (`minimax/minimax-m3` at the raw OpenRouter boundary).
 - Claude Sonnet is not used as judge, fallback, repair model, or retry model.
 - A MiniMax failure, invalid JSON, missing credential, or timeout is an infrastructure failure. It never silently passes or switches models.
-- The judge uses OpenRouter JSON-object mode, strict local Zod validation, temperature `0`, and at most one structured repair.
+- The judge uses prompt-enforced strict JSON, strict local Zod validation, temperature `0`, and at most one structured repair. It does not parse reasoning as the answer.
 - The system under test uses the currently deployed Intex Agent model. Product model selection is outside this plan.
 - The endpoint accepts from 1 through exactly 20 product turns. The independent provider tool-loop limit remains unchanged.
 - Product tools stay mocked in the endpoint scenario suite.
@@ -301,7 +307,7 @@ The real values exist only in the mode-`0600` Home Dev file. Existing `INTEXURAO
 - [x] Check `127.0.0.1:8134/health`, `127.0.0.1:8113/health`, `127.0.0.1:8099/health`, and WhatsApp `matrix-delivery-status/:userId`.
 - [x] Check the configured Firebase UID with the existing Admin SDK and require `disabled !== true`; do not fetch or print profile fields.
 - [x] Verify Matrix state `running`, direct Matrix `/account/whoami` equality with the configured Matrix identity, and delivery `ready`.
-- [x] Define and orchestrate one `MiniMaxProbePort` call as the final preflight check. Task 6 supplies its only production implementation: one minimal MiniMax M3 JSON-object request with strict Zod parsing, no fallback, and no alternative model.
+- [x] Define and orchestrate one `MiniMaxProbePort` call as the final preflight check. Task 6 supplies its only production implementation: one minimal MiniMax M3 prompt-enforced JSON request with strict Zod parsing, no fallback, and no alternative model.
 - [x] Return only closed safe results containing host, fixed ports, readiness, judge model, scenario count, and `accountAlias`. Task 7 owns printing those results and cannot print arbitrary exception text.
 
 **Acceptance:** offline Task 4 tests prove secure config handling and the full readiness orchestration through injected fakes. A real command-level preflight is not complete until Tasks 6 and 7 provide the production MiniMax adapter and CLI. Never print token, e-mail, real user ID, room ID, phone, secret path, or private message. WhatsApp delivery readiness here is configuration readiness; the one Task 8 send is the end-to-end delivery proof.
@@ -352,7 +358,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 }).strict();
 ```
 
-- [x] Test exact MiniMax model selection, JSON-object mode, temperature 0, one repair, and absence of alternative models.
+- [x] Test exact MiniMax model selection, prompt-enforced strict JSON without `responseFormat`, temperature 0, one repair, and absence of alternative models.
 - [x] Use `createOpenRouterClient` directly with raw model `minimax/minimax-m3`; do not widen the Intex tool-calling allowlist.
 - [x] Use versioned `PromptBuilder` prompts and call `generateChat`; do not use the generic structured helper, strip Markdown fences, or confuse one structured repair with the client's same-model transient transport retries.
 - [x] Judge each reply independently from synthetic scenario criteria plus sanitized technical facts.

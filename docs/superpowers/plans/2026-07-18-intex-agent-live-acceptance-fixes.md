@@ -4,7 +4,7 @@
 
 **Goal:** Remove the two infrastructure defects discovered during the first Home Dev acceptance run, redeploy the exact fixes, and complete `preflight` → `endpoint` → `full`.
 
-**Architecture:** Keep the approved evaluator contract unchanged. The Intex Agent sanitizer omits normalized-empty event values before they reach the strict evaluator wire schema. The shared OpenRouter client rejects malformed or in-band error completions as provider failures before MiniMax output parsing; MiniMax remains the sole judge in JSON-object mode with no fallback.
+**Architecture:** The Intex Agent sanitizer omits normalized-empty event values before they reach the strict evaluator wire schema. The shared OpenRouter client rejects malformed or in-band error completions as provider failures before MiniMax output parsing. MiniMax remains the sole judge with prompt-enforced strict JSON, local `JSON.parse` plus Zod validation, one same-model repair, and no fallback.
 
 **Tech Stack:** TypeScript 5.7, Node.js 22, pnpm 10, Vitest 4, Zod 3, Home Dev, OpenRouter, MiniMax M3.
 
@@ -13,11 +13,18 @@
 - The only evaluation judge is `or:minimax/minimax-m3` (`minimax/minimax-m3` at the raw OpenRouter boundary).
 - Claude Sonnet is not used as judge, fallback, repair model, or retry model.
 - A MiniMax failure, invalid JSON, missing credential, or timeout is an infrastructure failure. It never silently passes or switches models.
-- Preserve JSON-object mode, temperature `0`, strict local Zod validation, and at most one same-model structured repair.
+- Preserve temperature `0`, prompt-enforced strict JSON, strict local Zod validation, and at most one same-model structured repair. Do not parse reasoning as the answer.
 - Product tools remain mocked in endpoint scenarios; every synthetic user is cleaned in `finally`.
 - Never log response content, provider error text, real user identifiers, Matrix identifiers, paths, tokens, or messages.
 - Do not implement strict JSON Schema routing, `provider.require_parameters`, a second model, or any deferred-perfection item in this fix.
 - Every production change follows RED → GREEN and receives an independent task review.
+
+## Live Contract Amendment — 2026-07-18
+
+- Two consecutive deployed preflights passed every local/account/Matrix check and failed only the MiniMax provider probe.
+- A privacy-safe Home Dev A/B request proved the cause: with `response_format: { type: 'json_object' }`, the selected MiniMax M3 path returned `finish_reason: 'stop'` and `message.content: null`; without that parameter, the otherwise identical request returned the expected final string and a separate reasoning field.
+- OpenRouter documents that unsupported parameters may be ignored, and its MiniMax M3 endpoint pool has mixed `response_format` support. The evaluator therefore omits only `responseFormat`; it keeps MiniMax M3, temperature `0`, strict prompts, `JSON.parse`, Zod, one repair, closed errors, and no fallback.
+- Do not solve this by parsing chain-of-thought, adding JSON Schema routing, setting `provider.require_parameters`, switching providers/models, or weakening the non-string response guard.
 
 ---
 
@@ -28,18 +35,18 @@
 - Test: `apps/intex-agent/src/__tests__/domain/testConversationSanitizer.test.ts`
 
 **Interfaces:**
-- Consumes: `sanitizeRecord(record: Record<string, unknown>): Record<string, unknown>`.
-- Produces: the same public function, with string values omitted when normalization by the existing `truncate()` helper yields `''`.
+- Consumes: `sanitizeRecord(record)` and the public `sanitizeEventsBySessionId(eventsBySessionId)` path.
+- Produces: sanitized generic records and event payloads with string values omitted when normalization yields `''`.
 
 - [ ] **Step 1: Write the failing regression test**
 
-  Add one test using the real `sanitizeRecord()` implementation:
+  Add one test using the real `sanitizeRecord()` implementation and one regression through public `sanitizeEventsBySessionId()`:
 
   ```ts
   expect(sanitizeRecord({ textPreview: ' \n\t ', reason: 'kept' })).toEqual({ reason: 'kept' });
   ```
 
-  The test must also retain the existing coverage proving non-empty strings are normalized and kept.
+  The public-path test must prove whitespace-only `text`/`message` does not emit `textPreview` and a whitespace-only copied payload field is also omitted. Retain existing coverage proving non-empty strings are normalized and kept.
 
 - [ ] **Step 2: Verify RED**
 
@@ -49,11 +56,11 @@
   pnpm exec vitest run apps/intex-agent/src/__tests__/domain/testConversationSanitizer.test.ts
   ```
 
-  Expected: the new assertion fails because the current result contains `textPreview: ''`.
+  Expected: the tests fail because the generic record and live event path contain normalized-empty values.
 
 - [ ] **Step 3: Implement the minimum fix**
 
-  In the string branch of `sanitizeValue()`, normalize once with `truncate(value)` and return `undefined` only when the normalized value is empty. Do not widen the evaluator wire schema and do not special-case `textPreview`.
+  In the string branch of `sanitizeValue()`, normalize once and omit an empty result. Apply the same rule to the actual event payload copy path and `textPreview` assignment. Do not widen the evaluator wire schema.
 
 - [ ] **Step 4: Verify GREEN and commit**
 
@@ -102,7 +109,7 @@
 
   Run the focused OpenRouter test, evaluator MiniMax tests, and `pnpm run ci:tracked`; all must pass. Commit only this task's source and test changes.
 
-**Acceptance:** provider failures cannot be mislabeled downstream as valid chat output; valid string completions, usage accounting, JSON-object requests, and all existing model behavior remain unchanged.
+**Acceptance:** provider failures cannot be mislabeled downstream as valid chat output; valid string completions, usage accounting, and all existing model behavior remain unchanged.
 
 ---
 
