@@ -285,7 +285,6 @@ describe('MiniMax judge happy path', () => {
       ],
       {
         promptType: 'intex-agent-eval-minimax-judge',
-        responseFormat: { type: 'json_object' },
         temperature: 0,
       }
     );
@@ -379,7 +378,6 @@ describe('MiniMax judge strict parsing and one repair', () => {
     expect(repairCall?.[1]).toEqual(initialCall?.[1]);
     expect(repairCall?.[1]).toEqual({
       promptType: 'intex-agent-eval-minimax-judge',
-      responseFormat: { type: 'json_object' },
       temperature: 0,
     });
     expect(repairCall?.[0]).toEqual([
@@ -1063,7 +1061,6 @@ describe('MiniMax Matrix-smoke judge seam', () => {
       ],
       {
         promptType: 'intex-agent-eval-minimax-judge',
-        responseFormat: { type: 'json_object' },
         temperature: 0,
       },
     ]);
@@ -1264,7 +1261,6 @@ describe('MiniMax production preflight probe', () => {
       ],
       {
         promptType: 'intex-agent-eval-minimax-probe',
-        responseFormat: { type: 'json_object' },
         temperature: 0,
       },
     ]);
