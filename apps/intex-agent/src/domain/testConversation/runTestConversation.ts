@@ -62,8 +62,15 @@ export async function runTestConversation(
   const touchedSessionIds = new Set<string>();
   const turnEventsByTurnIndex: Record<number, readonly IntexAgentSessionEvent[]> = {};
   const toolCallsByTurnIndex: Record<number, readonly CapturedToolCall[]> = {};
+  let stoppedBeforeTurn: TestConversationResponse['stoppedBeforeTurn'];
 
   for (const [index, turn] of input.turns.entries()) {
+    const turnNow = turn.timestamp ?? timestampForTurn(input.currentDateTime, index);
+    const message = buildIncomingMessage(input, turn, index, turns, turnNow);
+    if (message === null) {
+      stoppedBeforeTurn = { turnIndex: index, reason: 'confirmation_button_unavailable' };
+      break;
+    }
     const beforeSession = await deps.sessionRepository.findContinuableSession(input.userId);
     const eventBaselines = new Map<string, number>();
     if (beforeSession !== null) {
@@ -72,8 +79,6 @@ export async function runTestConversation(
     }
     const beforeReplyCount = replies.length;
     const beforeToolCallCount = deps.toolCalls.length;
-    const turnNow = turn.timestamp ?? timestampForTurn(input.currentDateTime, index);
-    const message = buildIncomingMessage(input, turn, index, turns, turnNow);
     const result = await handleIncomingMessage(message, {
       sessionRepository: deps.sessionRepository,
       runner: deps.runner,
@@ -134,6 +139,7 @@ export async function runTestConversation(
     ...(input.scenarioId !== undefined ? { scenarioId: input.scenarioId } : {}),
     userId: input.userId,
     finalSessionId,
+    ...(stoppedBeforeTurn !== undefined ? { stoppedBeforeTurn } : {}),
     turns,
     toolCalls: sanitizedToolCalls,
     sessions: sanitizeSessions(sessions),
@@ -168,15 +174,17 @@ function buildIncomingMessage(
   index: number,
   previousTurns: readonly TestConversationTurnResult[],
   timestamp: string
-): IntexIncomingMessage {
+): IntexIncomingMessage | null {
   if (turn.kind === 'confirmation_button') {
     const previous = previousTurns[turn.previousTurnIndex];
-    if (previous === undefined) {
-      throw new Error('confirmation_button previousTurnIndex does not reference an executed turn');
+    if (previous?.kind !== 'message') {
+      throw new Error(
+        'confirmation_button previousTurnIndex does not reference an executed message turn'
+      );
     }
     const button = findConfirmationButton(previous, turn.decision);
     if (button === null) {
-      throw new Error('confirmation_button could not resolve a captured confirmation button');
+      return null;
     }
     return {
       type: 'intex.message.ingest',

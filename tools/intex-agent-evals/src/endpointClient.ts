@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import {
   IntexAgentSessionEndReasonSchema,
@@ -282,6 +283,13 @@ const BehavioralTranscriptTurnSchema = z
   })
   .strict();
 
+const StoppedBeforeTurnSchema = z
+  .object({
+    turnIndex: z.number().int().nonnegative().max(19),
+    reason: z.literal('confirmation_button_unavailable'),
+  })
+  .strict();
+
 const EndpointConversationResponseSchema = z
   .object({
     contractVersion: z.literal('2026-07-01'),
@@ -290,6 +298,7 @@ const EndpointConversationResponseSchema = z
     scenarioId: BoundedIdentifierSchema.optional(),
     userId: z.string().regex(USER_ID_PATTERN),
     finalSessionId: BoundedIdentifierSchema.nullable(),
+    stoppedBeforeTurn: StoppedBeforeTurnSchema.optional(),
     turns: z.array(EndpointTurnResultSchema).max(20),
     toolCalls: z.array(EndpointToolCallSchema),
     sessions: z.array(EndpointSessionSchema),
@@ -320,6 +329,10 @@ export interface EndpointConversationResponse {
   scenarioId?: string;
   userId: string;
   finalSessionId: string | null;
+  stoppedBeforeTurn?: {
+    turnIndex: number;
+    reason: 'confirmation_button_unavailable';
+  };
   turns: EndpointTurnResult[];
   toolCalls: EndpointToolCall[];
   sessions: {
@@ -570,11 +583,29 @@ function isCorrelated(
     response.runId !== request.runId ||
     response.scenarioId !== request.scenarioId ||
     response.userId !== request.userId ||
-    response.sideEffectBoundary !== 'mocked_tools_no_downstream_writes' ||
-    response.turns.length !== request.turns.length ||
-    response.sessionTransitions.length !== request.turns.length
+    response.sideEffectBoundary !== 'mocked_tools_no_downstream_writes'
   ) {
     return false;
+  }
+
+  const executedTurnCount = response.turns.length;
+  if (response.sessionTransitions.length !== executedTurnCount) return false;
+  if (response.stoppedBeforeTurn === undefined) {
+    if (executedTurnCount !== request.turns.length) return false;
+  } else {
+    const stoppedRequestTurn = request.turns[response.stoppedBeforeTurn.turnIndex];
+    if (
+      executedTurnCount === 0 ||
+      response.stoppedBeforeTurn.turnIndex !== executedTurnCount ||
+      response.stoppedBeforeTurn.turnIndex >= request.turns.length ||
+      stoppedRequestTurn?.kind !== 'confirmation_button' ||
+      stoppedRequestTurn.previousTurnIndex >= executedTurnCount ||
+      response.turns[stoppedRequestTurn.previousTurnIndex] === undefined ||
+      hasRequestedConfirmationButton(response, stoppedRequestTurn)
+    ) {
+      return false;
+    }
+    if (!hasExactPartialEvidence(response)) return false;
   }
 
   const seenTurnIndexes = new Set<number>();
@@ -597,7 +628,78 @@ function isCorrelated(
     if (matchingTransitions.length !== 1 || matchingTransitions[0]?.sessionId !== turn.sessionId) {
       return false;
     }
+    if (response.stoppedBeforeTurn !== undefined) {
+      const transcriptTurn = response.behavioralTranscript.turns[index];
+      if (
+        transcriptTurn?.turnIndex !== index ||
+        transcriptTurn.sessionAction !== matchingTransitions[0].action
+      ) {
+        return false;
+      }
+    }
   }
 
-  return response.finalSessionId === response.turns.at(-1)?.sessionId;
+  return (
+    (response.stoppedBeforeTurn === undefined ||
+      response.behavioralTranscript.turns.length === executedTurnCount) &&
+    response.finalSessionId === response.turns.at(-1)?.sessionId
+  );
+}
+
+function hasRequestedConfirmationButton(
+  response: CorrelatableEndpointConversationResponse,
+  turn: Extract<EndpointConversationTurnRequest, { kind: 'confirmation_button' }>
+): boolean {
+  const suffix = turn.decision === 'accept' ? ':yes' : ':no';
+  const referencedTurn = response.turns[turn.previousTurnIndex];
+  return (
+    referencedTurn?.assistantReplies.some(
+      (reply) => reply.buttons?.some((button) => button.reply.id.endsWith(suffix)) === true
+    ) === true
+  );
+}
+
+function hasExactPartialEvidence(response: CorrelatableEndpointConversationResponse): boolean {
+  if (response.warnings.length !== 0 || !hasExactPartialSessions(response)) return false;
+
+  const expectedToolCalls = response.turns.flatMap((turn) => turn.toolCalls);
+  if (!isDeepStrictEqual(response.toolCalls, expectedToolCalls)) return false;
+
+  const expectedEventsBySessionId: Record<string, Omit<EndpointTimelineEvent, 'sessionId'>[]> = {};
+  for (const turn of response.turns) {
+    for (const event of turn.timelineEvents) {
+      const { sessionId, ...aggregateEvent } = event;
+      const events = expectedEventsBySessionId[sessionId] ?? [];
+      events.push(aggregateEvent);
+      expectedEventsBySessionId[sessionId] = events;
+    }
+  }
+  return isDeepStrictEqual(response.eventsBySessionId, expectedEventsBySessionId);
+}
+
+function hasExactPartialSessions(response: CorrelatableEndpointConversationResponse): boolean {
+  const expectedSessionIds = new Set<string>();
+  for (const turn of response.turns) {
+    expectedSessionIds.add(turn.sessionId);
+    for (const event of turn.timelineEvents) expectedSessionIds.add(event.sessionId);
+  }
+  for (const transition of response.sessionTransitions) {
+    if (transition.previousSessionId !== undefined) {
+      expectedSessionIds.add(transition.previousSessionId);
+    }
+  }
+
+  if (response.sessions.length !== expectedSessionIds.size) return false;
+  const observedSessionIds = new Set<string>();
+  for (const session of response.sessions) {
+    if (
+      session.userId !== response.userId ||
+      !expectedSessionIds.has(session.id) ||
+      observedSessionIds.has(session.id)
+    ) {
+      return false;
+    }
+    observedSessionIds.add(session.id);
+  }
+  return observedSessionIds.size === expectedSessionIds.size;
 }

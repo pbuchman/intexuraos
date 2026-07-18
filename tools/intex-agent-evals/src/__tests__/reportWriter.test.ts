@@ -212,6 +212,28 @@ function behavioralReport(): EvaluationReportV1 {
   };
 }
 
+function stoppedConfirmationReport(): Record<string, unknown> {
+  const report = cloneReport(passReport());
+  report['status'] = 'behavioral_failure';
+  report['exitCode'] = 1;
+  const totals = report['totals'] as Record<string, unknown>;
+  totals['scenarioPassed'] = 0;
+  totals['scenarioBehavioralFailed'] = 1;
+  const scenario = first(report['scenarios'] as Record<string, unknown>[]);
+  scenario['status'] = 'behavioral_failure';
+  scenario['exitCode'] = 1;
+  scenario['deterministicFailures'] = [{ code: 'confirmation_button_unavailable', turnIndex: 2 }];
+  report['failures'] = [
+    {
+      stage: 'deterministic',
+      code: 'confirmation_button_unavailable',
+      scenarioId: 'intex-eval-001',
+      turnIndex: 2,
+    },
+  ];
+  return report;
+}
+
 function preflightFailureReport(): EvaluationReportV1 {
   return {
     schemaVersion: 1,
@@ -854,6 +876,61 @@ describe('EvaluationReportV1Schema', () => {
     }
   });
 
+  it('accepts the closed stopped-confirmation failure at the executed-prefix boundary', () => {
+    const report = stoppedConfirmationReport();
+
+    const parsed = EvaluationReportV1Schema.safeParse(report);
+
+    expect(parsed.success).toBe(true);
+    expect(JSON.stringify(parsed)).not.toMatch(/assistantText|rationale|rawResponse/u);
+  });
+
+  it.each([
+    [
+      'missing turn index',
+      (failure: Record<string, unknown>): void => {
+        delete failure['turnIndex'];
+      },
+    ],
+    [
+      'reply index',
+      (failure: Record<string, unknown>): void => {
+        failure['replyIndex'] = 0;
+      },
+    ],
+    [
+      'turn before prefix boundary',
+      (failure: Record<string, unknown>): void => {
+        failure['turnIndex'] = 1;
+      },
+    ],
+    [
+      'turn after prefix boundary',
+      (failure: Record<string, unknown>): void => {
+        failure['turnIndex'] = 3;
+      },
+    ],
+  ])('rejects stopped-confirmation evidence with %s', (_label, mutate) => {
+    const report = stoppedConfirmationReport();
+    const scenario = first(report['scenarios'] as Record<string, unknown>[]);
+    const scenarioFailure = first(scenario['deterministicFailures'] as Record<string, unknown>[]);
+    const globalFailure = first(report['failures'] as Record<string, unknown>[]);
+    mutate(scenarioFailure);
+    mutate(globalFailure);
+
+    expect(EvaluationReportV1Schema.safeParse(report).success).toBe(false);
+  });
+
+  it('keeps the executed-turn upper bound exclusive for every other deterministic code', () => {
+    const report = stoppedConfirmationReport();
+    const scenario = first(report['scenarios'] as Record<string, unknown>[]);
+    first(scenario['deterministicFailures'] as Record<string, unknown>[])['code'] =
+      'forbidden_tool_called';
+    first(report['failures'] as Record<string, unknown>[])['code'] = 'forbidden_tool_called';
+
+    expect(EvaluationReportV1Schema.safeParse(report).success).toBe(false);
+  });
+
   it.each([
     ['passed', 1],
     ['behavioral_failure', 0],
@@ -933,7 +1010,7 @@ describe('EvaluationReportV1Schema', () => {
     }
   );
 
-  it('requires the authorized Matrix stage after successful preflight unless full stopped on endpoint infrastructure', () => {
+  it('requires the authorized Matrix stage only after a fully passing endpoint corpus', () => {
     const matrixOnlyWithoutMatrix: EvaluationReportV1 = {
       ...preflightFailureReport(),
       command: 'matrix-smoke',
@@ -948,6 +1025,13 @@ describe('EvaluationReportV1Schema', () => {
     );
     expect(
       EvaluationReportV1Schema.safeParse({ ...behavioralReport(), command: 'full' }).success
+    ).toBe(true);
+    expect(
+      EvaluationReportV1Schema.safeParse({
+        ...behavioralReport(),
+        command: 'full',
+        matrixSmoke: passedMatrixReport().matrixSmoke,
+      }).success
     ).toBe(false);
     expect(
       EvaluationReportV1Schema.safeParse({ ...failedJudgeReport(), command: 'full' }).success

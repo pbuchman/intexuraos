@@ -419,6 +419,113 @@ describe('endpoint client transport and strict parsing', () => {
 });
 
 describe('endpoint client correlation', () => {
+  it('preserves the existing full-response correlation contract without a stop marker', async () => {
+    const scenario = parsedScenario();
+    const identity = fixedIdentity();
+    const response = validResponse(scenario, identity);
+    const aggregateToolCall = response.toolCalls[0];
+    const aggregateEvent = response.eventsBySessionId['intex_session_synthetic']?.[0];
+    if (aggregateToolCall === undefined || aggregateEvent === undefined) {
+      throw new Error('Expected full response aggregate fixtures');
+    }
+    response.toolCalls.push(structuredClone(aggregateToolCall));
+    response.behavioralTranscript.turns.push({
+      turnIndex: 9,
+      assistantReplyPreviews: ['Additional sanitized preview.'],
+      sessionAction: 'continued',
+    });
+    response.eventsBySessionId['intex_session_synthetic']?.push(structuredClone(aggregateEvent));
+
+    await expect(
+      clientForBody({ success: true, data: response }).runScenario(scenario, identity)
+    ).resolves.toMatchObject({ runId: identity.runId });
+  });
+
+  it.each(['accept', 'reject'] as const)(
+    'accepts an exact executed prefix stopped before an unavailable %s confirmation button',
+    async (decision) => {
+      const scenario = parsedConfirmationScenario(decision);
+      const identity = fixedIdentity();
+      const response = validResponse(scenario, identity);
+      materializeStoppedConfirmationPrefix(response as unknown as Record<string, unknown>);
+
+      const result = await clientForBody({ success: true, data: response }).runScenario(
+        scenario,
+        identity
+      );
+
+      expect(result).toMatchObject({
+        turns: [{ turnIndex: 0, kind: 'message' }],
+        stoppedBeforeTurn: { turnIndex: 1, reason: 'confirmation_button_unavailable' },
+      });
+    }
+  );
+
+  it('rejects a stop marker that points at a message request turn', async () => {
+    const scenario = IntexEvalScenarioSchema.parse(createScenario(2));
+    const identity = fixedIdentity();
+    const response = validResponse(scenario, identity);
+    materializeStoppedConfirmationPrefix(response as unknown as Record<string, unknown>);
+
+    await expectFailure(
+      clientForBody({ success: true, data: response }).runScenario(scenario, identity),
+      { code: 'endpoint_correlation_failed' }
+    );
+  });
+
+  it('accepts exact multi-session evidence in a stopped superseding prefix', async () => {
+    const scenario = parsedConfirmationScenario();
+    const identity = fixedIdentity();
+    const response = validResponse(scenario, identity);
+    const data = response as unknown as Record<string, unknown>;
+    materializeStoppedConfirmationPrefix(data);
+    const sessions = asArray(data['sessions']);
+    const currentSession = asRecord(sessions[0]);
+    const previousSession = {
+      ...structuredClone(currentSession),
+      id: 'intex_session_previous',
+      status: 'completed',
+      endedAt: scenario.currentDateTime,
+      endReason: 'cancelled_by_user',
+    };
+    sessions.unshift(previousSession);
+    const turn = asRecord(asArray(data['turns'])[0]);
+    const timelineEvents = asArray(turn['timelineEvents']);
+    const previousEvent = {
+      ...structuredClone(asRecord(timelineEvents[0])),
+      sessionId: 'intex_session_previous',
+      id: 'event-previous-session',
+    };
+    timelineEvents.unshift(previousEvent);
+    const { sessionId: _sessionId, ...aggregatePreviousEvent } = previousEvent;
+    asRecord(data['eventsBySessionId'])['intex_session_previous'] = [aggregatePreviousEvent];
+    const transition = asRecord(asArray(data['sessionTransitions'])[0]);
+    transition['action'] = 'superseded_previous';
+    transition['previousSessionId'] = 'intex_session_previous';
+    transition['previousEndReason'] = 'cancelled_by_user';
+    asRecord(asArray(asRecord(data['behavioralTranscript'])['turns'])[0])['sessionAction'] =
+      'superseded_previous';
+
+    await expect(
+      clientForBody({ success: true, data: response }).runScenario(scenario, identity)
+    ).resolves.toMatchObject({
+      stoppedBeforeTurn: { turnIndex: 1, reason: 'confirmation_button_unavailable' },
+    });
+  });
+
+  it('rejects a stopped reject turn when the requested no button is present', async () => {
+    const scenario = parsedConfirmationScenario('reject');
+    const identity = fixedIdentity();
+    const response = validResponse(scenario, identity);
+    materializeStoppedConfirmationPrefix(response as unknown as Record<string, unknown>);
+    const envelope = { success: true, data: response };
+    asRecord(firstReplyButton(envelope)['reply'])['id'] = 'confirmation-synthetic:no';
+
+    await expectFailure(clientForBody(envelope).runScenario(scenario, identity), {
+      code: 'endpoint_correlation_failed',
+    });
+  });
+
   it.each([
     [
       'contract version',
@@ -522,6 +629,115 @@ describe('endpoint client correlation', () => {
         data['finalSessionId'] = 'private-final-session-sentinel';
       },
     ],
+    [
+      'full response stop marker',
+      (data: Record<string, unknown>): void => {
+        data['stoppedBeforeTurn'] = {
+          turnIndex: 1,
+          reason: 'confirmation_button_unavailable',
+        };
+      },
+    ],
+    [
+      'partial stop marker turn index',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        asRecord(data['stoppedBeforeTurn'])['turnIndex'] = 0;
+      },
+    ],
+    [
+      'partial stop marker request bound',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        asRecord(data['stoppedBeforeTurn'])['turnIndex'] = 2;
+      },
+    ],
+    [
+      'partial transition count',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        asArray(data['sessionTransitions']).push({
+          turnIndex: 1,
+          action: 'continued',
+          sessionId: 'intex_session_synthetic',
+        });
+      },
+    ],
+    [
+      'partial behavioral transcript count',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        asArray(asRecord(data['behavioralTranscript'])['turns']).push({
+          turnIndex: 1,
+          assistantReplyPreviews: ['Unexecuted preview.'],
+          sessionAction: 'continued',
+        });
+      },
+    ],
+    [
+      'partial aggregate tool calls',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        asArray(data['toolCalls']).push(structuredClone(firstToolCall({ data })));
+      },
+    ],
+    [
+      'partial aggregate events',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        const events = asArray(asRecord(data['eventsBySessionId'])['intex_session_synthetic']);
+        events.push(structuredClone(events[0]));
+      },
+    ],
+    [
+      'partial stop marker with requested button present',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        asRecord(firstReplyButton({ data })['reply'])['id'] = 'confirmation-synthetic:yes';
+      },
+    ],
+    [
+      'partial duplicate session',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        const sessions = asArray(data['sessions']);
+        sessions.push(structuredClone(sessions[0]));
+      },
+    ],
+    [
+      'partial missing session',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        data['sessions'] = [];
+      },
+    ],
+    [
+      'partial session user',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        asRecord(asArray(data['sessions'])[0])['userId'] = 'test-intex-agent-wrong-user';
+      },
+    ],
+    [
+      'partial warning',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        data['warnings'] = ['safe warning'];
+      },
+    ],
+    [
+      'zero-turn partial',
+      (data: Record<string, unknown>): void => {
+        materializeStoppedConfirmationPrefix(data);
+        data['turns'] = [];
+        data['toolCalls'] = [];
+        data['sessionTransitions'] = [];
+        asRecord(data['behavioralTranscript'])['turns'] = [];
+        data['eventsBySessionId'] = {};
+        data['finalSessionId'] = null;
+        asRecord(data['stoppedBeforeTurn'])['turnIndex'] = 0;
+      },
+    ],
   ])('rejects %s mismatch without leaking correlated values', async (_label, mutate) => {
     const scenario = parsedConfirmationScenario();
     const identity = fixedIdentity();
@@ -546,10 +762,12 @@ function parsedScenario(): IntexEvalScenario {
   return IntexEvalScenarioSchema.parse(createScenario());
 }
 
-function parsedConfirmationScenario(): IntexEvalScenario {
+function parsedConfirmationScenario(decision: 'accept' | 'reject' = 'accept'): IntexEvalScenario {
   const fixture = createConfirmationScenario();
   const first = fixture.turns[0];
   if (first !== undefined) first.sourceType = 'whatsapp_audio_transcript';
+  const confirmation = fixture.turns[1];
+  if (confirmation !== undefined) confirmation.decision = decision;
   return IntexEvalScenarioSchema.parse(fixture);
 }
 
@@ -662,6 +880,31 @@ function validResponse(
     },
     sideEffectBoundary: 'mocked_tools_no_downstream_writes',
     warnings: [],
+  };
+}
+
+function materializeStoppedConfirmationPrefix(data: Record<string, unknown>): void {
+  const prefixTurns = asArray(data['turns']).slice(0, 1);
+  const firstPrefixTurn = asRecord(prefixTurns[0]);
+  const sessionId = String(firstPrefixTurn['sessionId']);
+  data['turns'] = prefixTurns;
+  data['toolCalls'] = prefixTurns.flatMap((turn) => asArray(asRecord(turn)['toolCalls']));
+  data['sessionTransitions'] = asArray(data['sessionTransitions']).slice(0, 1);
+  const transcript = asRecord(data['behavioralTranscript']);
+  transcript['turns'] = asArray(transcript['turns']).slice(0, 1);
+  data['eventsBySessionId'] = {
+    [sessionId]: prefixTurns.flatMap((turn) =>
+      asArray(asRecord(turn)['timelineEvents']).map((event) => {
+        const aggregateEvent = { ...asRecord(event) };
+        delete aggregateEvent['sessionId'];
+        return aggregateEvent;
+      })
+    ),
+  };
+  data['finalSessionId'] = sessionId;
+  data['stoppedBeforeTurn'] = {
+    turnIndex: 1,
+    reason: 'confirmation_button_unavailable',
   };
 }
 

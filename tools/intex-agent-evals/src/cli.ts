@@ -459,9 +459,7 @@ async function runEvaluationCommand(
 
     const endpointAllowsMatrix =
       command.kind === 'matrix-smoke' ||
-      (command.kind === 'full' &&
-        endpoint !== undefined &&
-        endpoint.result.effectiveKind !== 'infrastructure_failure');
+      (command.kind === 'full' && endpoint?.result.effectiveKind === 'passed');
     if (endpointAllowsMatrix) {
       try {
         matrixSmoke = await dependencies.runMatrixSmoke();

@@ -7,12 +7,48 @@ import type {
 } from '../endpointClient.js';
 import { IntexEvalScenarioSchema, type IntexEvalScenario } from '../scenarioSchema.js';
 import {
+  createConfirmationScenario,
   createScenario,
   type ExpectationFixture,
   type ScenarioFixture,
 } from './scenarioFixtures.js';
 
 describe('deterministic evaluator', () => {
+  it('reports a stopped confirmation without cascading failures beyond the executed prefix', () => {
+    const scenario = IntexEvalScenarioSchema.parse(createConfirmationScenario());
+    const response = responseFor(scenario);
+    requiredItem(response.turns, 0).toolCalls = [];
+    response.turns = response.turns.slice(0, 1);
+    response.sessionTransitions = response.sessionTransitions.slice(0, 1);
+    Object.assign(response, {
+      stoppedBeforeTurn: { turnIndex: 1, reason: 'confirmation_button_unavailable' },
+    });
+
+    const evaluation = evaluateDeterministically(scenario, response);
+
+    expect(evaluation.passed).toBe(false);
+    expect(evaluation.failures).toEqual([
+      {
+        code: 'required_tool_count_mismatch',
+        scenarioId: scenario.id,
+        turnIndex: 0,
+        expected: 1,
+        actual: 0,
+      },
+      {
+        code: 'confirmation_button_unavailable',
+        scenarioId: scenario.id,
+        turnIndex: 1,
+      },
+    ]);
+    expect(evaluation.repliesForJudge).toHaveLength(1);
+    expect(evaluation.repliesForJudge[0]).toMatchObject({
+      turnIndex: 0,
+      assistantText: 'Sanitized assistant reply.',
+      technicalFacts: { failureCodes: ['required_tool_count_mismatch'] },
+    });
+  });
+
   it('passes every evidence class and freezes the exact judge technical facts', () => {
     const scenario = scenarioFor((expected) => {
       expected.requiredToolCalls = [
