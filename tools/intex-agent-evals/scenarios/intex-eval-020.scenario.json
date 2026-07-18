@@ -162,8 +162,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -211,8 +211,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -260,8 +260,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -309,8 +309,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -358,8 +358,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -407,8 +407,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -456,8 +456,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -505,8 +505,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -554,8 +554,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -603,8 +603,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -652,8 +652,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -701,8 +701,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -750,8 +750,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -799,8 +799,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -848,8 +848,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -897,8 +897,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -946,8 +946,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -995,8 +995,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Acknowledges or appropriately retains the supplied synthetic context without claiming it was saved.",
-              "Honors the explicit no-save instruction and does not ask for action confirmation."
+              "A brief generic acknowledgement that the context is retained only in the current session is sufficient and preferred.",
+              "Must not claim a durable save, ask for confirmation, or restate, enumerate, count, or infer any fragment details."
             ]
           }
         ]
@@ -1065,8 +1065,10 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Correctly identifies the accumulated context as one note-save request and asks for explicit confirmation in an appropriate tone.",
-              "Does not claim the note exists, ask for the context again, or expose raw argument content in the sanitized reply."
+              "Correctly identifies a note-save request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Expected complete sanitized confirmation evidence: `Title: [redacted]` and `Content: [redacted]`.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
+              "Does not claim the note already exists or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -1162,8 +1164,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly communicates that the accumulated note was saved successfully.",
-              "Does not ask for the context again or request another confirmation."
+              "Clearly communicates that the requested note was saved successfully.",
+              "A concise completion-only reply is sufficient and should not restate details or invite another action."
             ]
           }
         ]

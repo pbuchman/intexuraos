@@ -98,6 +98,8 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Correctly identifies a fully specified calendar-event request, presents a reviewable sanitized preview using observable redacted structured labels for Title, Start, and End, and asks for explicit confirmation in an appropriate, concise tone.",
+              "Expected complete sanitized confirmation evidence: `Title: [redacted]`, `Start: [redacted]`, `End: [redacted]`, and `Location: [redacted]`.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
               "Does not request already supplied details or expose raw argument content in the sanitized reply."
             ]
           }

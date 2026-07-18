@@ -107,7 +107,9 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Correctly identifies the first note-save request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Correctly identifies a note-save request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Expected complete sanitized confirmation evidence: `Title: [redacted]` and `Content: [redacted]`.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
               "Does not claim the note already exists or expose raw argument content in the sanitized reply."
             ]
           }
@@ -200,8 +202,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly communicates that the first requested note was saved successfully.",
-              "Leaves the interaction open for a coherent follow-up."
+              "Clearly communicates that the requested note was saved successfully.",
+              "A concise completion-only reply is sufficient and should not restate details or invite another action."
             ]
           }
         ]
@@ -270,8 +272,10 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Correctly identifies the follow-up as a second note-save request and asks for explicit confirmation.",
-              "Does not claim the note exists or expose raw argument content in the sanitized reply."
+              "Correctly identifies a note-save request and asks for explicit confirmation in an appropriate, concise tone.",
+              "Expected complete sanitized confirmation evidence: `Title: [redacted]` and `Content: [redacted]`.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
+              "Does not claim the note already exists or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -363,8 +367,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly communicates that the follow-up note was saved successfully.",
-              "Remains coherent with the prior successful action in the same session."
+              "Clearly communicates that the requested note was saved successfully.",
+              "A concise completion-only reply is sufficient and should not restate details or invite another action."
             ]
           }
         ]
