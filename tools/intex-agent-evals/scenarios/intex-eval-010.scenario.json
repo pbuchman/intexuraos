@@ -107,7 +107,9 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Correctly identifies the voice transcript as a note-save request and asks for explicit confirmation.",
+              "Treats the voice-transcript request as a note-save action and asks for explicit confirmation; the reply need not mention the audio/transcript source.",
+              "Expected complete sanitized confirmation evidence: `Content: [redacted]`; an additional `Title: [redacted]` line is optional.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
               "Does not ask the user to repeat the transcript or expose raw argument content in the sanitized reply."
             ]
           }

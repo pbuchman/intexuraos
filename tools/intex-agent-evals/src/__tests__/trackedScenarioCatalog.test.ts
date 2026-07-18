@@ -120,6 +120,11 @@ const REDACTED_CONFIRMATION_CASES = [
     labels: ['Title: [redacted]', 'Content: [redacted]'],
   },
   {
+    scenarioId: 'intex-eval-010',
+    turnIndex: 0,
+    labels: ['Content: [redacted]'],
+  },
+  {
     scenarioId: 'intex-eval-012',
     turnIndex: 0,
     labels: ['Title: [redacted]', 'Prompt: [redacted]'],
@@ -715,6 +720,16 @@ describe('tracked scenario catalog', () => {
     }
   });
 
+  it('keeps scenario 010 voice-source evidence deterministic and the isolated judge contract observable', () => {
+    const criteria = semanticCriteriaFor(findScenario(scenarios, 'intex-eval-010'), 0);
+
+    expect(criteria).toContain('Content: [redacted]');
+    expect(criteria).toMatch(/additional `Title: \[redacted\]` line is optional/iu);
+    expect(criteria).toContain(COMPLETE_REDACTED_CONFIRMATION_EVIDENCE);
+    expect(criteria).toMatch(/reply need not mention the audio\/transcript source/iu);
+    expect(markersIn(criteria)).toEqual([]);
+  });
+
   it('uses a privacy-safe isolated-reply contract for scenario 020 context turns', () => {
     const scenario = findScenario(scenarios, 'intex-eval-020');
 
@@ -1042,7 +1057,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '7f0e0a4a46e6bafcb52d9c1a11b5b392e8bbb9f32de6c9cde49aba77da64f718'
+      'a6f53a18a99e3bfefc14d84a7cf8be2986715df0487df6c1702d0f54229a1119'
     );
   });
 });

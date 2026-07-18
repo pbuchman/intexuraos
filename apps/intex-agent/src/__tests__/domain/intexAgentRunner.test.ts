@@ -112,7 +112,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('18.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('19.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -195,6 +195,166 @@ describe('createIntexAgentRunner', () => {
     });
     expect(createNoteCalls).toBe(0);
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
+  });
+
+  it('restores every exact current-message opaque reference in note confirmation arguments', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'Parking is on level P3 CASE-006-F02.', title: 'Parking' },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Remember CASE-006 parking is on level P3 CASE-006-F02.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_note',
+      toolArgs: {
+        content: 'Parking is on level P3 CASE-006-F02. CASE-006',
+        title: 'Parking',
+      },
+    });
+  });
+
+  it('does not duplicate current-message opaque references already present across note fields', async () => {
+    const args = { content: 'Parking is on level P3 CASE-006-F02.', title: 'CASE-006 parking' };
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Remember CASE-006 parking is on level P3 CASE-006-F02.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({ toolArgs: args });
+  });
+
+  it('leaves natural hyphenated note text without letter-digit references unchanged', async () => {
+    const args = { content: 'Keep the well-known follow-up.', title: 'Follow-up' };
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Remember the well-known follow-up.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({ toolArgs: args });
+  });
+
+  it.each([
+    'Create a note saying parking is on level P3, but do not include CASE-006.',
+    'Zapisz notatkę, że parking jest na P3, ale pomiń CASE-006.',
+  ])('does not restore an opaque reference when the current message explicitly excludes it: %s', async (message) => {
+    const args = { content: 'Parking is on level P3.', title: 'Parking' };
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({ toolArgs: args });
+  });
+
+  it.each([
+    {
+      message: 'Remember CASE-006 parking is P3 without covered access CASE-006-F02.',
+      args: { content: 'Parking is P3 without covered access CASE-006-F02.', title: 'Parking' },
+      expectedContent: 'Parking is P3 without covered access CASE-006-F02. CASE-006',
+    },
+    {
+      message: 'Remember CASE-006 parking, but omit CASE-OLD and keep CASE-006-F02.',
+      args: { content: 'Parking CASE-006-F02.', title: 'Parking' },
+      expectedContent: 'Parking CASE-006-F02. CASE-006',
+    },
+  ])('restores included opaque references when a different phrase or reference is excluded: $message', async ({
+    message,
+    args,
+    expectedContent,
+  }) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      toolArgs: { ...args, content: expectedContent },
+    });
+  });
+
+  it('does not rewrite non-note tool arguments that contain opaque references', async () => {
+    const args = { title: 'CASE-006-F02', prompt: 'Research parking.' };
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_research', args },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_research' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_research']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create research CASE-006 with reference CASE-006-F02.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({ toolArgs: args });
   });
 
   it('formats replied-message context as context-only user message content', async () => {
@@ -346,6 +506,53 @@ describe('createIntexAgentRunner', () => {
       suggestedNextStep: 'Ask for the missing date.',
     });
   });
+
+  it.each([
+    { label: 'omits candidate intents', runnerCandidateIntents: undefined },
+    { label: 'returns an empty candidate list', runnerCandidateIntents: [] },
+    { label: 'returns a conflicting candidate intent', runnerCandidateIntents: ['create_note'] },
+  ])(
+    'preserves the classified calendar intent when the runner $label',
+    async ({ runnerCandidateIntents }) => {
+      const client = new FakeToolCallingClient([
+        ok(
+          toolResult({
+            outcome: 'needs_clarification',
+            reply: 'What time should I schedule the project review for?',
+            clarification: 'What time should I schedule the project review for?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['time'],
+            ...(runnerCandidateIntents === undefined
+              ? {}
+              : { candidateIntents: runnerCandidateIntents }),
+            suggestedNextStep: 'Ask for the missing time.',
+          })
+        ),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['create_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Put the project review on my calendar for September 10 2026.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: 'What time should I schedule the project review for?',
+        clarification: 'What time should I schedule the project review for?',
+        blockerReason: 'missing_required_details',
+        missingFields: ['time'],
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep: 'Ask for the missing time.',
+      });
+    }
+  );
 
   it.each([
     {
@@ -2157,7 +2364,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('18.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('19.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
