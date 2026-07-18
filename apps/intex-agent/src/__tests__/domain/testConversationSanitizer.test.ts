@@ -533,6 +533,36 @@ describe('test conversation sanitizer', () => {
     });
   });
 
+  it('omits strings that normalize to empty values', () => {
+    expect(sanitizeRecord({ textPreview: ' \n\t ', reason: 'kept' })).toEqual({ reason: 'kept' });
+  });
+
+  it('omits event payload strings that normalize to empty values', () => {
+    const sanitized = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'user_message',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: { text: ' \n\t ', sourceType: ' \r\n ' },
+        },
+      ],
+    });
+
+    expect(sanitized).toEqual({
+      intex_session_1: [
+        {
+          id: 'event-1',
+          type: 'user_message',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: {},
+        },
+      ],
+    });
+  });
+
   it('redacts captured reply URLs, source lines, prompt lines, and CTA URLs', () => {
     const sanitized = sanitizeAssistantReplies([
       {
