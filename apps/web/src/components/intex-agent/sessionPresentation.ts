@@ -76,10 +76,24 @@ export function getSessionTitle(session: IntexAgentSession): string {
   return formatSessionValue(session.status);
 }
 
-export function sortSessionEventsForTimeline(
+export function projectSessionEventsForTimeline(
   events: IntexAgentSessionEvent[]
 ): IntexAgentSessionEvent[] {
-  return [...events].sort(compareSessionEvents);
+  const sorted = [...events].sort(compareSessionEvents);
+  return sorted.filter((event, index) => {
+    if (event.type !== 'assistant_message') {
+      return true;
+    }
+
+    const previous = sorted[index - 1];
+    if (previous?.type !== 'clarification_requested') {
+      return true;
+    }
+
+    const assistantText = normalizeReplyText(event.payload['text']);
+    const clarificationText = normalizeReplyText(previous.payload['message']);
+    return assistantText === undefined || assistantText !== clarificationText;
+  });
 }
 
 export function getSessionStatusClass(status: IntexAgentSessionStatus): string {
@@ -136,4 +150,12 @@ function compareSessionEvents(a: IntexAgentSessionEvent, b: IntexAgentSessionEve
   }
 
   return a.id.localeCompare(b.id);
+}
+
+function normalizeReplyText(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim().replace(/\s+/gu, ' ');
+  return normalized === '' ? undefined : normalized;
 }

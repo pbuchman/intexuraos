@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, ErrorBanner, Layout } from '@/components';
@@ -6,7 +6,7 @@ import { IntexSessionRail } from '@/components/intex-agent/IntexSessionRail.js';
 import { IntexSessionTimeline } from '@/components/intex-agent/IntexSessionTimeline.js';
 import {
   formatSessionValue,
-  sortSessionEventsForTimeline,
+  projectSessionEventsForTimeline,
 } from '@/components/intex-agent/sessionPresentation.js';
 import { useAuth } from '@/context';
 import { ApiError, listIntexAgentSessionEvents, listIntexAgentSessions } from '@/services';
@@ -36,6 +36,8 @@ export function IntexAgentSessionsPage(): React.JSX.Element {
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const timelinePaneRef = useRef<HTMLDivElement>(null);
+  const restoreTimelineAfterNavigationRef = useRef(false);
 
   const loadSessions = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -108,10 +110,24 @@ export function IntexAgentSessionsPage(): React.JSX.Element {
     () => sessions.filter((session) => sessionMatchesSearch(session, search)),
     [sessions, search]
   );
-  const timelineEvents = useMemo(() => sortSessionEventsForTimeline(events), [events]);
+  const timelineEvents = useMemo(() => projectSessionEventsForTimeline(events), [events]);
   const selectedSession = sessions.find((session) => session.id === selectedSessionId);
 
+  useEffect(() => {
+    if (!restoreTimelineAfterNavigationRef.current) return;
+    restoreTimelineAfterNavigationRef.current = false;
+
+    const timelinePane = timelinePaneRef.current;
+    if (timelinePane === null) return;
+
+    timelinePane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    timelinePane.focus({ preventScroll: true });
+  }, [selectedSessionId]);
+
   const selectSession = (sessionId: string): void => {
+    restoreTimelineAfterNavigationRef.current =
+      sessionId !== selectedSessionId &&
+      !window.matchMedia('(min-width: 1280px)').matches;
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set('session', sessionId);
@@ -154,8 +170,26 @@ export function IntexAgentSessionsPage(): React.JSX.Element {
 
         <ErrorBanner message={error} />
 
-        <div className="grid min-h-[calc(100vh-12rem)] grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,23rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(20rem,25rem)_minmax(0,1fr)]">
-          <div className="flex min-w-0 flex-col gap-3">
+        <div className="grid min-h-[calc(100vh-12rem)] min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,23rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(20rem,25rem)_minmax(0,1fr)]">
+          <div
+            ref={timelinePaneRef}
+            data-testid="intex-agent-session-timeline-pane"
+            role="region"
+            aria-label="Selected session timeline"
+            tabIndex={-1}
+            className="order-1 min-w-0 xl:order-2"
+          >
+            <IntexSessionTimeline
+              session={selectedSession}
+              events={timelineEvents}
+              loading={loadingEvents}
+            />
+          </div>
+
+          <div
+            data-testid="intex-agent-session-rail-pane"
+            className="order-2 flex min-w-0 flex-col gap-3 xl:order-1"
+          >
             <label className="sr-only" htmlFor="intex-agent-session-search">
               Search sessions
             </label>
@@ -184,12 +218,6 @@ export function IntexAgentSessionsPage(): React.JSX.Element {
               onSelect={selectSession}
             />
           </div>
-
-          <IntexSessionTimeline
-            session={selectedSession}
-            events={timelineEvents}
-            loading={loadingEvents}
-          />
         </div>
       </div>
     </Layout>
