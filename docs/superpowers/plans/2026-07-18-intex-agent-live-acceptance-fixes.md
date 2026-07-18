@@ -393,6 +393,17 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** no line belonging to a redacted structured confirmation value can reach endpoint output, judge input, reports, or diagnostics, including scenario `020`'s accumulated multiline note.
 
+### Task 17: Calibrate privacy-safe isolated judging and long-session acknowledgements
+
+**Evidence:** the deployed post-fix corpus improved from `6/20` to `15/20`, with scenarios `016` and `017` now passing and zero deterministic failures. The remaining five failures were MiniMax-only. Safe endpoint-only reruns proved the confirmation replies contained their expected structured labels followed by `[redacted]`, while the 20-turn run exposed one incorrect paraphrase of a retained fragment even though the final deterministic note arguments still contained all 18 markers. Passing `submittedTextPreview` to the external judge was rejected because it would unnecessarily widen the user-text privacy boundary.
+
+- [x] Add RED catalog invariants that treat literal structured `…: [redacted]` fields as complete confirmation evidence and prohibit isolated criteria from requiring unavailable raw values or earlier conversation state.
+- [x] Calibrate scenarios `002`, `006`, `012`, `018`, and `020` without changing messages, turn counts, transitions, tools, payload assertions, cleanup, or the MiniMax M3 judge.
+- [x] Instruct Intex Agent to answer explicit retain-only, do-not-save turns with a short neutral current-session acknowledgement that does not paraphrase, enumerate, count, infer, or claim durable storage; lock the behavior with a RED prompt test and required version bump.
+- [ ] Rerun the deployed 20-scenario endpoint gate; only after exit `0`, run the full endpoint-plus-Matrix gate once.
+
+**Acceptance:** MiniMax evaluates only observable privacy-safe evidence, long context-retention turns cannot invent or repeat fragment details, all deterministic assertions remain authoritative, and Matrix remains gated behind a green endpoint corpus.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
