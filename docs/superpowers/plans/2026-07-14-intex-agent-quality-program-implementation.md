@@ -21,9 +21,13 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - Tasks 1–8 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
 - Delivered commits through Task 8: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus), `52680fd04` + `56b24fe21` (secure Home Dev configuration and preflight), `c2d673683` + `6cd0dd44e` + `3033e438f` (scenario lifecycle), `4382f9223` + `f40dda449` (MiniMax M3 judge), `e75bc6f3a` (safe Matrix smoke), and `6f1fbb351` (CLI, reports, and Home Dev wrapper).
 - The offline completion audit is implemented and independently approved: every correlated assistant reply is judged, scenarios 001–010 enforce their source lifecycle semantics, tool/error evidence is closed and privacy-safe, setup is non-echoing, and the Home Dev wrapper accepts only one private framed CLI stream with selector/status validation. A fresh `pnpm run ci:tracked` passed on 2026-07-17.
-- The user explicitly authorized the Task 9 live lane. The implementation and MiniMax contract fixes were delivered through `development`; Home Dev health, deployed revision, account, Firebase, Matrix identity, and delivery readiness were verified.
-- Real preflight and endpoint evaluation calls have been executed. The self-contained verdict contract produced 15 schema-valid MiniMax verdicts without repair across scenarios 001–006; those scenarios completed with real behavioral findings, zero deterministic failures, and complete cleanup. Scenario 007 then exposed a separate runner defect: a stochastic missing confirmation button became endpoint HTTP 500 instead of a behavioral stop. A later isolated 007 run completed as a behavioral result, confirming that transport and tool execution are healthy. No Matrix message has been sent.
-- The remaining executable work is to represent an unavailable dependent confirmation as a correlated partial response, then repeat `preflight` → `endpoint` → `full`. Offline/unit/contract success is not final acceptance.
+- The user explicitly authorized the Task 9 live lane. PR [#2328](https://github.com/pbuchman/intexuraos/pull/2328) delivered the unavailable-confirmation stop contract and hard Matrix gate through `development`. Home Dev contains the merge revision, the Intex Agent process was restarted, and all three required service health checks pass.
+- The deployed preflight passed all 12 checks for the configured operator account, Firebase identity, Matrix identity/delivery, 20-scenario catalog, and MiniMax M3 probe.
+- The deployed endpoint run `eval-8c81de82-b675-42a6-a23b-6ed7e9cfbd2f` completed all 20 scenarios and produced `.artifacts/intex-agent-evals/eval-8c81de82-b675-42a6-a23b-6ed7e9cfbd2f/report.json` on Home Dev. It exited `1` with 6 passed scenarios (`011`–`015`, `019`), 14 behavioral failures (`001`–`010`, `016`–`018`, `020`), and zero infrastructure failures. The 20-turn scenario executed all 20 turns.
+- The run evaluated 58 replies, observed 18 tool calls, made 70 MiniMax calls including 12 repairs, used 95,069 provider-reported tokens, and cost provider-reported USD `0.0280443`. Synthetic cleanup passed `214/214`.
+- Matrix was not attempted because the operator procedure correctly stopped before `full` after standalone endpoint exit `1`; therefore no full report or real Matrix message exists for this acceptance attempt. The internal `full` gate is covered by contract tests but has not yet been exercised live.
+- Live triage found no reason to weaken scenarios. Scenario `016` exposes a repeatable product regression where `get_user_preferences` executes but a `no_action` runner result suppresses `tool_call_completed`. Scenario `017` reached both a technical fallback and, on repetition, the complete two-turn path, demonstrating model/flow variance. Most remaining failures are semantic judge findings; several cannot be attributed to one semantic criterion because that finer diagnostic contract is intentionally in the deferred-perfection backlog.
+- The endpoint evaluation pipeline is delivered and live-proven. Final green acceptance now requires a separately scoped product-behavior and judge-calibration pass, followed by a fresh `endpoint` run and exactly one gated `full` run. Offline/unit/contract success alone is still not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
 ### Live contract correction — 2026-07-18
@@ -418,9 +422,9 @@ const MiniMaxJudgeVerdictSchema = z.object({
 
 - [x] Write `docs/testing/intex-agent-evals.md` with commands, fixed Home Dev host/repo/ports, machine-local config path/schema, scenario/report directories, exit codes, and failure triage.
 - [x] Update Intex Agent technical docs for 20 turns and link the runbook.
-- [ ] After local CI and review, deliver the exact implementation commit through the existing `development` → Home Dev deployment path; do not add a second deployment mechanism.
-- [ ] Wait for Home Dev health, verify the implementation commit is an ancestor of the remote deployed HEAD, and only then run live acceptance.
-- [ ] Run:
+- [x] After local CI and review, deliver the exact implementation commit through the existing `development` → Home Dev deployment path; do not add a second deployment mechanism.
+- [x] Wait for Home Dev health, verify the implementation commit is an ancestor of the remote deployed HEAD, and only then run live acceptance.
+- [x] Run the offline verification, preflight, and complete endpoint corpus:
 
 ```bash
 pnpm --filter @intexuraos/intex-agent-evals validate
@@ -430,10 +434,17 @@ pnpm run ci:tracked
 scripts/run-intex-agent-evals-home-dev.sh setup # one time, only when protected config is absent
 scripts/run-intex-agent-evals-home-dev.sh preflight
 scripts/run-intex-agent-evals-home-dev.sh endpoint
+```
+
+- [ ] After product and judge findings are resolved and `endpoint` exits `0`, run the internally gated final command exactly once:
+
+```bash
 scripts/run-intex-agent-evals-home-dev.sh full
 ```
 
-**Final acceptance:** preserve report paths in the handoff, state MiniMax cost, and list failed scenario IDs. Unit tests alone are insufficient; Home Dev `full` must pass.
+**Current acceptance result:** the endpoint pipeline, 20-turn execution, evaluator, cleanup, and reporting are live-proven. The internal `full` Matrix gate is contract-tested but not yet live-proven. The endpoint artifact path, MiniMax cost, failed scenario IDs, and cleanup totals are recorded above. The operator procedure correctly stopped before `full` after endpoint exit `1`.
+
+**Final acceptance:** after the behavioral remediation scope is approved and completed, preserve both report paths in the handoff, state MiniMax cost, and list any failed scenario IDs. Unit tests alone are insufficient; Home Dev `full` must pass.
 
 ## Deferred perfection backlog — frozen, do not implement now
 
