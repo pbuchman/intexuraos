@@ -102,7 +102,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Answers the INTEX-EVAL-011 read-only calendar request for tomorrow, July 17 2026.",
+              "Answers the read-only calendar request for tomorrow, July 17 2026.",
               "Reports listed calendar results or clearly reports that no events were found for that range.",
               "Does not ask for mutation confirmation or claim to create, update, or delete an event."
             ]

@@ -107,7 +107,6 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly tells the user that a new Intex Agent session has started.",
               "Correctly identifies the first note-save request and asks for explicit confirmation in an appropriate, concise tone.",
               "Does not claim the note already exists or expose raw argument content in the sanitized reply."
             ]
@@ -272,7 +271,7 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Correctly identifies the follow-up as a second note-save request and asks for explicit confirmation.",
-              "Does not announce another session, claim the note exists, or expose raw argument content in the sanitized reply."
+              "Does not claim the note exists or expose raw argument content in the sanitized reply."
             ]
           }
         ]

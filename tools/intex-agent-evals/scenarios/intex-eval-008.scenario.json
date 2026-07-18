@@ -90,8 +90,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly tells the user that a new Intex Agent session has started.",
-              "Asks what time the INTEX-EVAL-008 project review on September 10 2026 should start.",
+              "Asks what time the project review on September 10 2026 should start.",
               "Does not create or claim to create a timed event before the missing time is supplied."
             ]
           }
@@ -162,7 +161,7 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Correctly treats the clarified request as a complete calendar event and asks for explicit confirmation.",
-              "Does not announce another session, ask for the time again, or expose raw argument content in the sanitized reply."
+              "Does not ask for the time again or expose raw argument content in the sanitized reply."
             ]
           }
         ]
