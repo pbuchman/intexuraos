@@ -309,6 +309,7 @@ export function createMiniMaxEvaluator(config: {
           logger: SAFE_NOOP_LOGGER,
           usageSink: new NoopUsageSink(),
           ownerType: 'system',
+          providerRouting: { requireParameters: true },
         });
       } catch {
         cachedClient = undefined;
@@ -365,6 +366,7 @@ export function createMiniMaxEvaluator(config: {
     try {
       response = await client.generateChat(messages, {
         promptType: MINIMAX_JUDGE_PROMPT_TYPE,
+        responseFormat: { type: 'json_object' },
         temperature: 0,
       });
     } catch {
@@ -561,6 +563,7 @@ export function createMiniMaxEvaluator(config: {
           ],
           {
             promptType: MINIMAX_PROBE_PROMPT_TYPE,
+            responseFormat: { type: 'json_object' },
             temperature: 0,
           }
         );

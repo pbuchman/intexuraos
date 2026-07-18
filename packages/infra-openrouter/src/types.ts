@@ -93,6 +93,11 @@ export interface OpenRouterConfig {
   usageSink: UsageSink;
   /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
   ownerType?: OwnerType;
+  /** OpenRouter-specific provider routing constraints. */
+  providerRouting?: {
+    /** Route only to providers that support every supplied request parameter. */
+    requireParameters?: boolean;
+  };
 }
 
 /**

@@ -174,9 +174,12 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     logger,
     usageSink,
     ownerType,
+    providerRouting,
   } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
+  const providerRequest =
+    providerRouting?.requireParameters === true ? { require_parameters: true } : undefined;
 
   function trackUsage(
     callType: CallType,
@@ -497,6 +500,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             ...(options.responseFormat !== undefined && {
               response_format: options.responseFormat,
             }),
+            ...(providerRequest !== undefined && { provider: providerRequest }),
             ...(toOpenRouterReasoning(options.reasoning) !== undefined && {
               reasoning: toOpenRouterReasoning(options.reasoning),
             }),
@@ -601,6 +605,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         ...(options.responseFormat !== undefined && {
           response_format: options.responseFormat,
         }),
+        ...(providerRequest !== undefined && { provider: providerRequest }),
         ...(toOpenRouterReasoning(options.reasoning) !== undefined && {
           reasoning: toOpenRouterReasoning(options.reasoning),
         }),

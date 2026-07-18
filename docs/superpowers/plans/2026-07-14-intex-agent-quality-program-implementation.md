@@ -16,27 +16,29 @@ It supersedes the previous four-plan implementation graph for evaluation infrast
 
 The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.md`](../specs/2026-06-24-intex-agent-dev-api-test-scenarios.md) are the behavioral source for the initial executable corpus. The completed endpoint plan in [`2026-07-01-intex-agent-internal-test-conversation-endpoint.md`](./2026-07-01-intex-agent-internal-test-conversation-endpoint.md) is historical context, not work to repeat.
 
-### Current implementation status — 2026-07-17
+### Current implementation status — 2026-07-18
 
 - Tasks 1–8 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
 - Delivered commits through Task 8: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus), `52680fd04` + `56b24fe21` (secure Home Dev configuration and preflight), `c2d673683` + `6cd0dd44e` + `3033e438f` (scenario lifecycle), `4382f9223` + `f40dda449` (MiniMax M3 judge), `e75bc6f3a` (safe Matrix smoke), and `6f1fbb351` (CLI, reports, and Home Dev wrapper).
 - The offline completion audit is implemented and independently approved: every correlated assistant reply is judged, scenarios 001–010 enforce their source lifecycle semantics, tool/error evidence is closed and privacy-safe, setup is non-echoing, and the Home Dev wrapper accepts only one private framed CLI stream with selector/status validation. A fresh `pnpm run ci:tracked` passed on 2026-07-17.
-- The only remaining executable work is the Task 9 live lane: deliver the implementation through `development`, prove Home Dev health and deployed revision, then run `preflight` → `endpoint` → `full`. It remains gated on the user's explicit “odpal testy” instruction.
-- No real endpoint corpus, MiniMax M3 judge run, or Matrix message has been executed yet. Offline/unit/contract success is not final acceptance.
+- The user explicitly authorized the Task 9 live lane. The implementation and the first two acceptance fixes were delivered through `development`; Home Dev health, deployed revision, account, Firebase, Matrix identity, and delivery readiness were verified.
+- Real preflight and endpoint evaluation calls have been executed. Preflight reached exit `0` after the prompt-only experiment, but the endpoint run stopped on scenario 001 when MiniMax returned invalid judge output both initially and after the one allowed repair; deterministic endpoint execution and cleanup succeeded. No Matrix message has been sent.
+- The remaining executable work is to deliver the final parameter-compatible routing fix, then repeat `preflight` → `endpoint` → `full`. Offline/unit/contract success is not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
 ### Live contract correction — 2026-07-18
 
-- Home Dev A/B evidence showed that OpenRouter's mixed MiniMax M3 endpoint pool can ignore `response_format: { type: 'json_object' }`; the affected path returned `finish_reason: 'stop'` with `message.content: null`, while the otherwise identical prompt-only request returned the expected final string and kept reasoning separate.
-- The evaluator therefore uses prompt-enforced strict JSON, `JSON.parse`, strict local Zod validation, and at most one same-model repair. It does not send `response_format`, parse `message.reasoning`, add `provider.require_parameters`, change the judge model, or add a fallback.
-- This is a narrow evidence-based correction to the original JSON-object-mode constraint. All privacy, fail-closed, cost-accounting, temperature, model, and repair constraints remain authoritative.
+- Home Dev A/B evidence showed that OpenRouter's mixed MiniMax M3 endpoint pool can send `response_format: { type: 'json_object' }` to an endpoint that does not support it; the affected path returned `finish_reason: 'stop'` with `message.content: null`.
+- Removing `response_format` restored string content, but the first real scenario then failed strict parsing after the one allowed repair. Prompt-only JSON is therefore not reliable enough for the judge contract.
+- Two otherwise identical probes with `response_format` plus `provider.require_parameters: true` returned the expected final string while keeping reasoning separate. The evaluator therefore preserves JSON-object mode and requires OpenRouter to route only to endpoints that support every requested parameter.
+- It does not parse `message.reasoning`, change the judge model, add a fallback, or weaken local `JSON.parse` plus strict Zod validation. All privacy, fail-closed, cost-accounting, temperature, model, and repair constraints remain authoritative.
 
 ## Global constraints
 
 - The only evaluation judge is `or:minimax/minimax-m3` (`minimax/minimax-m3` at the raw OpenRouter boundary).
 - Claude Sonnet is not used as judge, fallback, repair model, or retry model.
 - A MiniMax failure, invalid JSON, missing credential, or timeout is an infrastructure failure. It never silently passes or switches models.
-- The judge uses prompt-enforced strict JSON, strict local Zod validation, temperature `0`, and at most one structured repair. It does not parse reasoning as the answer.
+- The judge uses OpenRouter JSON-object mode with `provider.require_parameters: true`, strict local Zod validation, temperature `0`, and at most one structured repair. It does not parse reasoning as the answer.
 - The system under test uses the currently deployed Intex Agent model. Product model selection is outside this plan.
 - The endpoint accepts from 1 through exactly 20 product turns. The independent provider tool-loop limit remains unchanged.
 - Product tools stay mocked in the endpoint scenario suite.
@@ -307,7 +309,7 @@ The real values exist only in the mode-`0600` Home Dev file. Existing `INTEXURAO
 - [x] Check `127.0.0.1:8134/health`, `127.0.0.1:8113/health`, `127.0.0.1:8099/health`, and WhatsApp `matrix-delivery-status/:userId`.
 - [x] Check the configured Firebase UID with the existing Admin SDK and require `disabled !== true`; do not fetch or print profile fields.
 - [x] Verify Matrix state `running`, direct Matrix `/account/whoami` equality with the configured Matrix identity, and delivery `ready`.
-- [x] Define and orchestrate one `MiniMaxProbePort` call as the final preflight check. Task 6 supplies its only production implementation: one minimal MiniMax M3 prompt-enforced JSON request with strict Zod parsing, no fallback, and no alternative model.
+- [x] Define and orchestrate one `MiniMaxProbePort` call as the final preflight check. Task 6 supplies its only production implementation: one minimal MiniMax M3 JSON-object request routed only to parameter-compatible endpoints, with strict Zod parsing, no fallback, and no alternative model.
 - [x] Return only closed safe results containing host, fixed ports, readiness, judge model, scenario count, and `accountAlias`. Task 7 owns printing those results and cannot print arbitrary exception text.
 
 **Acceptance:** offline Task 4 tests prove secure config handling and the full readiness orchestration through injected fakes. A real command-level preflight is not complete until Tasks 6 and 7 provide the production MiniMax adapter and CLI. Never print token, e-mail, real user ID, room ID, phone, secret path, or private message. WhatsApp delivery readiness here is configuration readiness; the one Task 8 send is the end-to-end delivery proof.
@@ -358,7 +360,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 }).strict();
 ```
 
-- [x] Test exact MiniMax model selection, prompt-enforced strict JSON without `responseFormat`, temperature 0, one repair, and absence of alternative models.
+- [x] Test exact MiniMax model selection, JSON-object mode, required parameter-compatible routing, temperature 0, one repair, and absence of alternative models.
 - [x] Use `createOpenRouterClient` directly with raw model `minimax/minimax-m3`; do not widen the Intex tool-calling allowlist.
 - [x] Use versioned `PromptBuilder` prompts and call `generateChat`; do not use the generic structured helper, strip Markdown fences, or confuse one structured repair with the client's same-model transient transport retries.
 - [x] Judge each reply independently from synthetic scenario criteria plus sanitized technical facts.
