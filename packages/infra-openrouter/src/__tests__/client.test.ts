@@ -780,6 +780,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
+        providerRouting: { requireParameters: true },
       });
 
       await client.generate('Return JSON', {
@@ -788,6 +789,7 @@ describe('createOpenRouterClient', () => {
       });
 
       expect(capturedBody).toHaveProperty('response_format', { type: 'json_object' });
+      expect(capturedBody).toHaveProperty('provider', { require_parameters: true });
     });
 
     it('does NOT include response_format in request body when no options are provided', async () => {
@@ -824,6 +826,7 @@ describe('createOpenRouterClient', () => {
       await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(capturedBody).not.toHaveProperty('response_format');
+      expect(capturedBody).not.toHaveProperty('provider');
     });
 
     it('rejects an empty choices array in generate', async () => {
@@ -935,8 +938,13 @@ describe('createOpenRouterClient', () => {
 
   describe('generateChat', () => {
     it('returns provider-reported USD separately from normalized chat cost', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+
       nock(API_BASE_URL)
-        .post('/chat/completions')
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
         .reply(200, {
           id: 'test-id',
           model: TEST_MODEL,
@@ -982,6 +990,7 @@ describe('createOpenRouterClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({ providerReportedUsd: 0.0042 })
       );
+      expect(capturedBody).not.toHaveProperty('provider');
     });
 
     it('forwards reasoning options to OpenRouter chat completions', async () => {
@@ -1013,6 +1022,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
+        providerRouting: { requireParameters: true },
       });
 
       const result = await client.generateChat([{ role: 'user', content: 'hello' }], {
@@ -1032,6 +1042,7 @@ describe('createOpenRouterClient', () => {
         max_tokens: 2048,
         exclude: true,
       });
+      expect(capturedBody?.['provider']).toEqual({ require_parameters: true });
     });
 
     it('streams chat completion deltas and final usage', async () => {
@@ -1063,6 +1074,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
+        providerRouting: { requireParameters: true },
       });
       const events: unknown[] = [];
 
@@ -1083,6 +1095,7 @@ describe('createOpenRouterClient', () => {
       expect(capturedBody).toMatchObject({
         session_id: 'session-123',
         response_format: { type: 'json_object' },
+        provider: { require_parameters: true },
       });
       expect(events).toContainEqual({ type: 'delta', text: 'Hel' });
       expect(events).toContainEqual({ type: 'delta', text: 'lo' });
@@ -1104,8 +1117,13 @@ describe('createOpenRouterClient', () => {
     });
 
     it('ignores streaming comments and buffers incomplete SSE frames', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+
       nock(API_BASE_URL)
-        .post('/chat/completions')
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
         .reply(
           200,
           ': keep-alive\n\nevent: completion\n\ndata: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n',
@@ -1130,6 +1148,7 @@ describe('createOpenRouterClient', () => {
       if (result.ok) {
         expect(result.value.content).toBe('Hi');
       }
+      expect(capturedBody).not.toHaveProperty('provider');
     });
 
     it('maps non-ok streaming responses and empty stream bodies to errors', async () => {
