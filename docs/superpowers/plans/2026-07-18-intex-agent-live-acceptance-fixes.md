@@ -291,3 +291,111 @@
 - No Matrix prompt was sent because the operator procedure stopped before `full` after endpoint exit `1`. The internal `full` hard gate is contract-tested but remains to be exercised live after a preceding green endpoint run.
 
 **Final acceptance:** Home Dev `full` exits `0`; all 20 scenarios pass deterministic and MiniMax checks; one safe Matrix smoke passes; all reports are private and complete.
+
+---
+
+## Post-acceptance quality-loop amendment — 2026-07-18
+
+The first authorized Matrix message and Chrome audit exposed additional defects after the endpoint corpus above. Work continues in small RED → GREEN increments; a live `full` run remains forbidden until the endpoint corpus itself exits `0`.
+
+### Task 8: Accept a limited initial Matrix timeline as a forward checkpoint
+
+**Files:**
+- Modify: `tools/intex-agent-evals/src/live/runMatrixSmoke.ts`
+- Test: `tools/intex-agent-evals/src/__tests__/runMatrixSmoke.test.ts`
+
+**Contract:** A since-less initial `/sync` may return `timeline.limited: true` because older room history was truncated. Its top-level `next_batch` is still the required forward cursor. The runner discards that history and sends only after capturing the cursor, so it must continue from `next_batch`. A limited timeline on any incremental post-send poll remains fail-closed as `MATRIX_TIMELINE_LIMITED`.
+
+- [x] Replace the incorrect initial-limited failure test with a RED regression proving historical events are ignored and the next poll uses the exact captured `next_batch`.
+- [x] Verify RED: the current runner stops before send with `MATRIX_TIMELINE_LIMITED`.
+- [x] Remove only the initial-capture limited rejection; keep incremental rejection and the failure-code/report schemas unchanged.
+- [x] Verify the focused runner/client/report suites, package checks, independent task review, and `pnpm run ci:tracked` before commit.
+
+**Acceptance:** a busy room can establish a safe baseline and observe only a later reply; no historical text or identifiers reach selection, judging, logs, or reports.
+
+### Task 9: Make Home Dev web deploys restart PM2 from the repository root
+
+**External repository:** `/Users/p.buchman/personal/pbuchman-dev/machine-setup`
+
+**Contract:** The webhook handler is started by systemd with `cwd=/`. Both the PM2 restart path and its start fallback must execute with the deployed IntexuraOS repository as `cwd`; a successful pull must not leave a pre-existing Vite process serving an obsolete workspace module graph.
+
+- [x] Add a RED regression that executes the handler from `/` with fake `direnv`/`pm2` and covers restart plus fallback start.
+- [x] Set `cwd: REPO_PATH` and use `direnv exec .` for both PM2 calls without changing service allowlisting or webhook authentication.
+- [x] Run the external repository's focused and full checks and review independently.
+- [x] Merge the external change, deploy the handler without touching the dirty Home Dev personal checkout, and prove a controlled no-op deployment restarts only web successfully.
+
+**Acceptance:** Home Dev deployment logs no longer contain `File ecosystem.config.cjs not found`; web serves the deployed package exports without a manual restart.
+
+### Task 10: Preserve successful read-only tool executions
+
+- [x] Add RED runner tests in `apps/intex-agent/src/__tests__/domain/intexAgentRunner.test.ts` where `get_user_preferences` and `query_calendar_events` execute successfully but the model's final envelope says `no_action`.
+- [x] Normalize a successful read-only tool execution to the canonical `completed` result before returning the parsed outcome; preserve mutation confirmation and downstream event persistence.
+- [x] Keep tool mocks, correlation, cleanup, and privacy invariants unchanged.
+
+**Acceptance:** scenario `016` exposes the real tool result and `tool_call_completed` evidence even when the final model label is `no_action`; read-only tools never enter the mutation-confirmation path.
+
+### Task 11: Characterize the scenario 017 confirmation boundary
+
+**Evidence:** correlated, privacy-safe Home Dev logs show the failed live turn completed intent classification, executed exactly one schema-valid `add_user_preference` preview, and then failed both the runner-envelope validation and its single repair. The observed boundary is therefore neither classifier variance nor a provider ignoring `toolChoice: required`.
+
+- [x] Add deterministic tests for explicit-add misclassification, a required-tool turn returning final text without a tool call, and malformed runner output.
+- [x] Assert the current safe behavior and absence of mutation for every path before choosing a product change.
+- [ ] Keep scenario `017` unchanged. Treat exactly one tracked, schema-valid mutating preview as authoritative confirmation evidence even when the final envelope remains malformed; retain fallback for no preview, read-only execution, invalid arguments, and multiple previews, and keep the real mutator at zero before confirmation.
+
+### Task 12: Make the touched UI production-ready
+
+- [x] Add a presentation projection that hides an `assistant_message` only when it immediately follows `clarification_requested` with the same normalized reply text. Keep both persisted source events and preserve distinct adjacent messages.
+- [x] Render an absent end reason as `Open` and absent active tool as `None`; reserve `Unknown` for malformed required data.
+- [x] Order the selected timeline before the session rail below `xl`, while preserving rail-first desktop layout and search behavior.
+- [ ] Preserve desktop search, status, timeline, preferences history, accessibility, and responsive no-overflow behavior; cover each change with component tests and verify it live in Chrome.
+
+### Task 13: Keep nested local checkouts out of Vitest discovery
+
+**Files:**
+- Modify: `scripts/verify-vitest-config.mjs`
+- Modify: `vitest.config.ts`
+
+- [x] Extend the config verifier first so it fails when the root test exclusion does not contain the exact `.worktrees/**` pattern.
+- [x] Observe RED with `pnpm run verify:vitest-config`, then add `.worktrees/**` only to `test.exclude` and observe GREEN.
+- [x] Do not increase or weaken the protected `coverage.exclude` budget or thresholds.
+- [x] Run `pnpm run ci:tracked` with the preserved nested checkout still present, proving its tests are not discovered.
+
+**Acceptance:** local ignored worktree contents cannot be executed or counted by the root unit/coverage gate; the existing checkout and its files remain untouched.
+
+### Task 14: Align semantic judging with the sanitized reply contract
+
+**Evidence:** privacy-safe endpoint-only reruns of scenarios `001`–`010` completed every expected flow with mocked tools and cleanup. Their replies intentionally omitted lifecycle narration and redacted raw confirmation arguments, matching the product system prompt and sanitizer. The prior MiniMax failures were driven by semantic criteria that required those unavailable strings, including synthetic evidence markers and exact calendar details already covered deterministically.
+
+- [x] Replace the catalog assertions that require lifecycle narration with a RED invariant that semantic criteria must not ask the judge to infer session transitions, synthetic markers, or redacted raw arguments; keep those facts in deterministic transition, timeline, and argument assertions.
+- [x] Remove positive and negative session-announcement requirements from scenarios `001`–`010`, remove synthetic marker tokens from every semantic criterion, and make scenario `002` judge user-facing confirmation/success without duplicating exact date/time assertions.
+- [x] Preserve all scenario messages, turn counts (including the 20-turn scenario), expected tools, confirmation boundaries, deterministic payload evidence, cleanup, privacy, and the MiniMax M3 judge.
+- [x] Regenerate the locked catalog digest and verify catalog tests before the next live corpus run.
+
+**Acceptance:** MiniMax evaluates only observable sanitized reply quality; deterministic checks remain solely authoritative for session lifecycle, exact tool arguments, and synthetic correlation evidence.
+
+### Task 15: Enforce coherent MiniMax verdict semantics
+
+**Evidence:** the live report contains verdicts with every generic criterion set to `true` while `failures` still contains `missing_information`, `unclear`, or `unsupported_claim`. The current schema treats those contradictory verdicts as valid, so otherwise correct replies fail without invoking the existing repair path.
+
+- [x] Add RED schema and evaluator tests for each closed failure-code mapping: `misunderstood_intent` requires `understoodIntent=false`; `missing_information`, `unhelpful`, and `unsupported_claim` require `helpful=false`; `unclear` requires `conciseAndClear=false`; `bad_tone` requires `professionalTone=false` or `noPassiveAggression=false`.
+- [x] Encode the same mapping in both judge and repair prompts, and reject incoherent verdicts so the existing single MiniMax repair produces one internally consistent decision.
+- [x] Keep the failure enum, five public criteria, model/provider order, one-repair limit, usage accounting, reports, privacy, endpoint ordering, and Matrix gate unchanged.
+
+**Acceptance:** no passing generic criterion can coexist with a failure code that contradicts it; incoherent MiniMax output is repaired once or fails as evaluator infrastructure instead of becoming a false behavioral regression.
+
+### Task 16: Redact multiline confirmation values completely
+
+**Evidence:** an endpoint-only run of the 20-turn synthetic scenario showed that `Content:` itself became `[redacted]`, but subsequent lines belonging to the same multiline note value remained in `assistantReplies`. This violates the endpoint privacy contract and also gives MiniMax inconsistent partial content.
+
+- [x] Add RED sanitizer tests with unique sentinels on continuation lines after `Content:`, `Prompt:`, and another structured confirmation field across CRLF plus the complete common vertical-boundary set (LF, CR, VT, FF, NEL, U+2028, U+2029); assert no sentinel survives in assistant replies or behavioral previews.
+- [x] Make structured confirmation redaction stateful across every accepted line terminator so once a sensitive field begins, all of its multiline continuation content remains redacted without weakening URL, preference-block, marker, truncation, or event-payload protections.
+- [x] Keep raw product replies and persisted session events unchanged; modify only the internal test endpoint projection and its tests.
+
+**Acceptance:** no line belonging to a redacted structured confirmation value can reach endpoint output, judge input, reports, or diagnostics, including scenario `020`'s accumulated multiline note.
+
+### Deferred perfection (recorded, not implemented in this loop)
+
+- Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
+- Automatic conversion of every debug-session request into a newly curated scenario and pull request.
+- Richer judge calibration fixtures, `failedSemanticCriterionIndexes`, and per-criterion diagnostics beyond the active closed failure-code mapping.
+- A per-user Intex Agent model selector matching the existing Default Model client contract. The current Home Dev UI exposes only the global default/fallback model and prompt preferences; implement the already frozen model-selection design separately after the evaluation baseline is stable.

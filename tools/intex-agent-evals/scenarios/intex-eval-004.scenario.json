@@ -90,8 +90,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly tells the user that a new Intex Agent session has started.",
-              "Asks for the missing day or date for the INTEX-EVAL-004 dentist event at 4 PM.",
+              "Asks for the missing day or date for the dentist event at 4 PM.",
               "Does not claim that a calendar event was created before the date is supplied."
             ]
           }
@@ -191,7 +190,6 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly tells the user that the previous session was superseded and a new Intex Agent session has started.",
               "Correctly treats the new-session request as a note action rather than the abandoned calendar request and asks for confirmation.",
               "Does not claim either action already completed or expose raw argument content in the sanitized reply."
             ]

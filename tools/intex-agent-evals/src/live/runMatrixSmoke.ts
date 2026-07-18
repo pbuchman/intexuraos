@@ -269,9 +269,6 @@ async function captureMatrixCursor(
   if (controller.signal.aborted || !capture.ok) {
     return { ok: false, code: 'MATRIX_CURSOR_CAPTURE_FAILED' };
   }
-  if (capture.limited) {
-    return { ok: false, code: 'MATRIX_TIMELINE_LIMITED' };
-  }
   return { ok: true, cursor: capture.nextBatch };
 }
 

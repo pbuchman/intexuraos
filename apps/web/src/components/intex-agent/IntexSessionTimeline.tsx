@@ -128,8 +128,14 @@ export function IntexSessionTimeline({
         {session !== undefined ? (
           <div className="mt-4 grid gap-2 text-xs text-slate-500 dark:text-slate-400 md:grid-cols-2 xl:grid-cols-4">
             <span>Start: {formatSessionValue(session.startReason)}</span>
-            <span>End: {formatSessionValue(session.endReason)}</span>
-            <span>Tool: {formatSessionValue(session.activeTool)}</span>
+            <span>
+              End:{' '}
+              {session.endReason === undefined ? 'Open' : formatSessionValue(session.endReason)}
+            </span>
+            <span>
+              Tool:{' '}
+              {session.activeTool === undefined ? 'None' : formatSessionValue(session.activeTool)}
+            </span>
             <span>
               Assistant:{' '}
               {session.lastAssistantMessageAt !== undefined

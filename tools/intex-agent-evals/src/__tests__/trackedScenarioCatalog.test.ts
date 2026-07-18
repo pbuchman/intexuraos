@@ -97,6 +97,8 @@ const MARKER_EVIDENCE_CASES = [
 ] as const;
 
 const SYNTHETIC_MARKER_PATTERN = /(?<![A-Z0-9-])INTEX-EVAL-[0-9]{3}(?:-F[0-9]{2})?(?![A-Z0-9-])/giu;
+const SESSION_LIFECYCLE_NARRATION_PATTERN =
+  /\b(?:(?:new|another|previous) (?:Intex Agent )?session|session (?:has |was )?(?:started|closed|superseded)|session (?:start|closure|supersession|lifecycle))\b/iu;
 
 function markerCase(
   scenarioId: string,
@@ -575,46 +577,64 @@ describe('tracked scenario catalog', () => {
     ]);
   });
 
-  it('requires user-facing lifecycle announcements for initial and superseding starts in scenarios 001 through 010', () => {
+  it('keeps lifecycle authority in transitions and timeline evidence rather than semantic criteria', () => {
     const sourceScenarios = scenarios.slice(0, 10);
 
     for (const scenario of sourceScenarios) {
       const initialTurn = scenario.expected.turns[0];
       expect(initialTurn?.transition.action).toBe('started');
-      expect(semanticCriteriaFor(scenario, 0)).toMatch(
-        /new (?:Intex Agent )?session (?:has )?started/iu
-      );
+      expect(initialTurn?.timeline.requiredEventTypes).toContain('session_started');
     }
 
-    const supersedingCriteria = semanticCriteriaFor(findScenario(scenarios, 'intex-eval-004'), 1);
-    expect(supersedingCriteria).toMatch(/previous session (?:was )?(?:closed|superseded)/iu);
-    expect(supersedingCriteria).toMatch(/new (?:Intex Agent )?session (?:has )?started/iu);
-  });
+    const supersedingTurn = findScenario(scenarios, 'intex-eval-004').expected.turns[1];
+    expect(supersedingTurn?.transition).toEqual({
+      action: 'superseded_previous',
+      previousEndReason: 'superseded_by_user',
+    });
+    expect(supersedingTurn?.timeline.requiredEventTypes).toEqual(
+      expect.arrayContaining(['session_closed', 'session_started'])
+    );
 
-  it('retains explicit no-new-session criteria for continued conversational turns', () => {
-    for (const [scenarioId, turnIndex] of [
-      ['intex-eval-003', 1],
-      ['intex-eval-006', 2],
-      ['intex-eval-008', 1],
-    ] as const) {
-      const scenario = findScenario(scenarios, scenarioId);
-      expect(scenario.expected.turns[turnIndex]?.transition.action).toBe('continued');
-      expect(semanticCriteriaFor(scenario, turnIndex)).toMatch(
-        /does not (?:announce|say|state)[^.]{0,120}(?:new|another) session/iu
-      );
+    for (const scenario of scenarios) {
+      for (const turn of scenario.expected.turns) {
+        for (const reply of turn.replies) {
+          for (const criterion of reply.semanticCriteria) {
+            expect(criterion).not.toMatch(SESSION_LIFECYCLE_NARRATION_PATTERN);
+          }
+        }
+      }
     }
   });
 
-  it('requires the scenario 002 confirmation and creation replies to identify the event', () => {
+  it('keeps synthetic correlation markers out of every semantic criterion', () => {
+    for (const scenario of scenarios) {
+      for (const turn of scenario.expected.turns) {
+        for (const reply of turn.replies) {
+          for (const criterion of reply.semanticCriteria) {
+            expect(markersIn(criterion)).toEqual([]);
+          }
+        }
+      }
+    }
+  });
+
+  it('requires a reviewable redacted scenario 002 preview without duplicating exact calendar values', () => {
     const scenario = findScenario(scenarios, 'intex-eval-002');
+    const confirmationCriteria = semanticCriteriaFor(scenario, 0);
+    const completionCriteria = semanticCriteriaFor(scenario, 1);
+    const duplicatedExactValue =
+      /(?:dentist appointment|Smile Clinic|August 18,? 2026|2:30 PM|2026-08-18T(?:14:30|15:15))/iu;
 
-    for (const turnIndex of [0, 1]) {
-      const criteria = semanticCriteriaFor(scenario, turnIndex);
-      expect(criteria).toMatch(/dentist appointment/iu);
-      expect(criteria).toMatch(/August 18,? 2026/iu);
-      expect(criteria).toMatch(/2:30 PM/iu);
-    }
-    expect(semanticCriteriaFor(scenario, 1)).toMatch(/created/iu);
+    expect(confirmationCriteria).toMatch(/calendar-event request/iu);
+    expect(confirmationCriteria).toMatch(/reviewable sanitized preview/iu);
+    expect(confirmationCriteria).toMatch(
+      /observable redacted structured labels for Title, Start, and End/iu
+    );
+    expect(confirmationCriteria).toMatch(/explicit confirmation/iu);
+    expect(markersIn(confirmationCriteria)).toEqual([]);
+    expect(completionCriteria).toMatch(/calendar event was created successfully/iu);
+    expect(confirmationCriteria).not.toMatch(duplicatedExactValue);
+    expect(completionCriteria).not.toMatch(duplicatedExactValue);
   });
 
   it('uses endpoint-observable exact calendar ranges without requiring a tool timezone', () => {
@@ -839,7 +859,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '04b2c5a5769d751c08131f8bb700fe20bb484b672cbe2df80d1c3ca3617e498f'
+      '9b20c9b8e96e9e61322eff382d2473360648028fe4601c0b4efcc69032b0f5e1'
     );
   });
 });

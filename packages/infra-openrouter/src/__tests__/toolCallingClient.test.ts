@@ -108,6 +108,69 @@ describe('createOpenRouterToolCallingClient', () => {
     );
   });
 
+  it('characterizes required tool choice when the provider returns final text without a tool call', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    const runTool = vi
+      .fn()
+      .mockResolvedValue(
+        JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' })
+      );
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBody = body as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, {
+        id: 'chatcmpl-required-without-tool',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18, cost: 0.00012 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Use the preference tool for explicit durable additions.',
+      messages: [{ role: 'user', content: 'Add this durable preference.' }],
+      tools: [
+        {
+          name: 'add_user_preference',
+          description: 'Add a durable user preference.',
+          parameters: {
+            type: 'object',
+            properties: {
+              text: { type: 'string' },
+              expectedVersion: { type: 'number' },
+            },
+            required: ['text', 'expectedVersion'],
+          },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      promptType: 'intex-agent-runner',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({
+      content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
+      toolCallsMade: 0,
+      iterationCount: 1,
+    });
+    expect(capturedBody?.['tool_choice']).toBe('required');
+    expect(runTool).not.toHaveBeenCalled();
+  });
+
   it('logs ownerType and zero usage when OpenRouter omits usage metadata', async () => {
     nock(API_BASE_URL)
       .post('/chat/completions')

@@ -36,4 +36,19 @@ describe('IntexSessionTimeline', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/2026-06-24T22:15:06.903Z/)).not.toBeInTheDocument();
   });
+
+  it('renders absent end state as open and absent active tool as none', () => {
+    const openSession = session({ startedAt: 'not-a-timestamp' });
+    delete openSession.endedAt;
+    delete openSession.endReason;
+    delete openSession.activeTool;
+
+    render(<IntexSessionTimeline session={openSession} events={[]} loading={false} />);
+
+    expect(screen.getByText('End: Open')).toBeInTheDocument();
+    expect(screen.getByText('Tool: None')).toBeInTheDocument();
+    expect(screen.getByText('Started Unknown')).toBeInTheDocument();
+    expect(screen.queryByText('End: Unknown')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tool: Unknown')).not.toBeInTheDocument();
+  });
 });

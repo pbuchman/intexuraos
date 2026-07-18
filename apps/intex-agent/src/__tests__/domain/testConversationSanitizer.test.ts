@@ -10,6 +10,7 @@ import {
   sanitizeToolCalls,
 } from '../../domain/testConversation/testConversationSanitizer.js';
 import type {
+  CapturedAssistantReply,
   CapturedToolCall,
   SanitizedToolCall,
   TestConversationTurnResult,
@@ -579,7 +580,7 @@ describe('test conversation sanitizer', () => {
     expect(sanitized).toEqual([
       {
         userId: 'test-intex-agent-run',
-        message: 'Czy wykonać? Prompt: [redacted] Źródło: [redacted] OK',
+        message: 'Czy wykonać? Prompt: [redacted] Źródło: [redacted] [redacted]',
         replyToMessageId: 'wamid-1',
         correlationId: 'intex_session_1',
         ctaUrl: { displayText: 'Open [redacted-url]', url: '[redacted-url]' },
@@ -588,6 +589,155 @@ describe('test conversation sanitizer', () => {
     ]);
     expect(JSON.stringify(sanitized)).not.toContain('tajna preferencja');
     expect(JSON.stringify(sanitized)).not.toContain('https://signed.example/private');
+  });
+
+  it.each([
+    {
+      name: 'LF U+000A',
+      separator: '\n',
+      sentinelTag: 'lf',
+    },
+    {
+      name: 'CRLF U+000D U+000A',
+      separator: '\r\n',
+      sentinelTag: 'crlf',
+    },
+    {
+      name: 'CR U+000D',
+      separator: '\r',
+      sentinelTag: 'cr',
+    },
+    {
+      name: 'VT U+000B',
+      separator: '\u000B',
+      sentinelTag: 'vt',
+    },
+    {
+      name: 'FF U+000C',
+      separator: '\u000C',
+      sentinelTag: 'ff',
+    },
+    {
+      name: 'NEL U+0085',
+      separator: '\u0085',
+      sentinelTag: 'nel',
+    },
+    {
+      name: 'LS U+2028',
+      separator: '\u2028',
+      sentinelTag: 'ls',
+    },
+    {
+      name: 'PS U+2029',
+      separator: '\u2029',
+      sentinelTag: 'ps',
+    },
+  ])(
+    'redacts every $name Content continuation line from replies and behavioral previews without mutating the captured reply',
+    ({ separator, sentinelTag }) => {
+      const continuationSentinel = `private-${sentinelTag}-continuation-z7q4`;
+      const trailingSentinel = `private-${sentinelTag}-trailing-v2m8`;
+      const rawMessage = [
+        'Add this note?',
+        'Content: private-content-first-line',
+        continuationSentinel,
+        trailingSentinel,
+      ].join(separator);
+      const rawReply = capturedReply(rawMessage);
+      const rawReplyBeforeSanitization = { ...rawReply };
+      const sanitizedReplies = sanitizeAssistantReplies([rawReply]);
+      const turns: TestConversationTurnResult[] = [
+        {
+          turnIndex: 0,
+          kind: 'message',
+          messageId: 'wamid-1',
+          sessionId: 'intex_session_1',
+          ...emptyTurnEvidence('intex_session_1'),
+          assistantReplies: sanitizedReplies,
+        },
+      ];
+      const transcript = buildBehavioralTranscript({
+        turns,
+        sessionTransitions: [
+          { turnIndex: 0, action: 'started', sessionId: 'intex_session_1' },
+        ],
+        eventsBySessionId: {},
+        toolCalls: [],
+      });
+
+      expect(sanitizedReplies[0]?.message).toBe(
+        'Add this note? Content: [redacted] [redacted] [redacted]'
+      );
+      expect(transcript.turns[0]?.assistantReplyPreviews).toEqual([
+        'Add this note? Content: [redacted] [redacted] [redacted]',
+      ]);
+      const sanitizedEvidence = JSON.stringify({
+        sanitizedReplies,
+        assistantReplyPreviews: transcript.turns[0]?.assistantReplyPreviews,
+      });
+      expect(sanitizedEvidence).not.toContain(continuationSentinel);
+      expect(sanitizedEvidence).not.toContain(trailingSentinel);
+      expect(rawReply).toEqual(rawReplyBeforeSanitization);
+      expect(rawReply.message).toBe(rawMessage);
+    }
+  );
+
+  it('redacts Prompt continuations and every following structured field', () => {
+    const promptContinuationSentinel = 'private-prompt-continuation-k3r9';
+    const modeSentinel = 'private-mode-field-h8w2';
+    const workerSentinel = 'private-worker-field-d4n6';
+    const sanitized = sanitizeAssistantReplies([
+      capturedReply(
+        [
+          'Create this code task?',
+          'Prompt: private-prompt-first-line',
+          promptContinuationSentinel,
+          `Mode: ${modeSentinel}`,
+          `Worker: ${workerSentinel}`,
+        ].join('\n')
+      ),
+    ]);
+
+    expect(sanitized[0]?.message).toBe(
+      'Create this code task? Prompt: [redacted] [redacted] Mode: [redacted] Worker: [redacted]'
+    );
+    expect(JSON.stringify(sanitized)).not.toMatch(
+      /private-(?:prompt-continuation-k3r9|mode-field-h8w2|worker-field-d4n6)/u
+    );
+  });
+
+  it('redacts continuations after localized and additional sensitive fields', () => {
+    const polishContinuationSentinel = 'private-polish-continuation-f5t1';
+    const locationContinuationSentinel = 'private-location-continuation-p9c3';
+    const sanitized = sanitizeAssistantReplies([
+      capturedReply(
+        [
+          'Czy dodać notatkę?',
+          'Treść: prywatna pierwsza linia',
+          polishContinuationSentinel,
+          'Miejsce: prywatna lokalizacja',
+          locationContinuationSentinel,
+        ].join('\n')
+      ),
+    ]);
+
+    expect(sanitized[0]?.message).toBe(
+      'Czy dodać notatkę? Treść: [redacted] [redacted] Miejsce: [redacted] [redacted]'
+    );
+    expect(JSON.stringify(sanitized)).not.toMatch(
+      /private-(?:polish-continuation-f5t1|location-continuation-p9c3)/u
+    );
+  });
+
+  it('preserves ordinary non-sensitive multiline assistant replies', () => {
+    const visibleSentinel = 'ordinary-visible-multiline-r6b2';
+    const sanitized = sanitizeAssistantReplies([
+      capturedReply(['First ordinary line.', visibleSentinel, 'Last ordinary line.'].join('\n')),
+    ]);
+
+    expect(sanitized[0]?.message).toBe(
+      `First ordinary line. ${visibleSentinel} Last ordinary line.`
+    );
   });
 
   it('redacts all structured confirmation fields that can carry synthetic markers', () => {
@@ -987,5 +1137,14 @@ function emptyTurnEvidence(
       startReason: 'no_active_session',
     },
     timelineEvents: [],
+  };
+}
+
+function capturedReply(message: string): CapturedAssistantReply {
+  return {
+    userId: 'test-intex-agent-run',
+    message,
+    replyToMessageId: 'wamid-1',
+    correlationId: 'intex_session_1',
   };
 }
