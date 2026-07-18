@@ -153,6 +153,13 @@ const CONCISE_NOTE_COMPLETION_CRITERIA = [
   'A concise completion-only reply is sufficient and should not restate details or invite another action.',
 ] as const;
 
+const SCENARIO_011_EMPTY_CALENDAR_CRITERIA = [
+  'Answers the read-only calendar request for tomorrow, July 17 2026.',
+  'Clearly reports that no calendar events were found for tomorrow, July 17 2026.',
+  'The closed mock returned zero calendar events; this is complete authoritative evidence for the judge and is not missing information.',
+  'Does not ask for mutation confirmation or claim to create, update, or delete an event.',
+] as const;
+
 function markerCase(
   scenarioId: string,
   requestTurnIndex: number,
@@ -713,6 +720,15 @@ describe('tracked scenario catalog', () => {
     }
   });
 
+  it('makes the closed empty calendar result authoritative judge evidence for scenario 011', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-011');
+
+    expect(scenario.expected.turns[0]?.replies[0]?.semanticCriteria).toEqual(
+      SCENARIO_011_EMPTY_CALENDAR_CRITERIA
+    );
+    expect(markersIn(semanticCriteriaFor(scenario, 0))).toEqual([]);
+  });
+
   it('keeps scenario 006 confirmation and completion criteria isolated from prior turns', () => {
     const scenario = findScenario(scenarios, 'intex-eval-006');
     const inaccessiblePriorStatePattern = /\b(?:first|second|follow-up|prior|previous)\b/iu;
@@ -795,8 +811,16 @@ describe('tracked scenario catalog', () => {
     expect(query011.argumentAssertions).toEqual(
       expect.arrayContaining([
         { path: 'mode', operator: 'equals', value: 'list' },
-        { path: 'timeMin', operator: 'contains', value: '2026-07-17' },
-        { path: 'timeMax', operator: 'contains', value: '2026-07-18' },
+        {
+          path: 'timeMin',
+          operator: 'equals',
+          value: '2026-07-17T00:00:00.000+02:00',
+        },
+        {
+          path: 'timeMax',
+          operator: 'equals',
+          value: '2026-07-18T00:00:00.000+02:00',
+        },
       ])
     );
   });
@@ -965,7 +989,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      'e1e03fcbaafa900bde373446cc7904384f2bf646832a61dad2e963fe76b885e7'
+      '8da3890c2982192fd75438ede4b0c27d91839d8d826309674077029e219aa935'
     );
   });
 });

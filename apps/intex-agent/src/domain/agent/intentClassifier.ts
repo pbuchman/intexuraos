@@ -65,7 +65,7 @@ export type IntexAgentIntentClassification =
     }
   | {
       kind: 'no_action';
-      reason: 'greeting' | 'conversation';
+      reason: 'greeting' | 'conversation' | 'retain_context';
       stylePreferenceAction?: IntexAgentStylePreferenceAction;
       languageOverride?: string;
       decisionEvidence?: string;
@@ -199,6 +199,16 @@ function mapValidatedClassifierOutput(
     return {
       kind: 'no_action',
       reason: 'greeting',
+      ...stylePreferenceFields(output.stylePreferenceAction),
+      ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
+      ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),
+    };
+  }
+
+  if (output.outcome === 'retain_context') {
+    return {
+      kind: 'no_action',
+      reason: 'retain_context',
       ...stylePreferenceFields(output.stylePreferenceAction),
       ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
       ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),

@@ -109,7 +109,7 @@ export const IntexAgentIntentClassifierOutputSchema = z.union([
     }),
   z
     .object({
-      outcome: z.enum(['conversation', 'greeting']),
+      outcome: z.enum(['conversation', 'greeting', 'retain_context']),
       ...commonClassifierFields,
     })
     .strict(),

@@ -28,13 +28,13 @@
               },
               {
                 "path": "timeMin",
-                "operator": "contains",
-                "value": "2026-07-17"
+                "operator": "equals",
+                "value": "2026-07-17T00:00:00.000+02:00"
               },
               {
                 "path": "timeMax",
-                "operator": "contains",
-                "value": "2026-07-18"
+                "operator": "equals",
+                "value": "2026-07-18T00:00:00.000+02:00"
               }
             ]
           }
@@ -103,7 +103,8 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Answers the read-only calendar request for tomorrow, July 17 2026.",
-              "Reports listed calendar results or clearly reports that no events were found for that range.",
+              "Clearly reports that no calendar events were found for tomorrow, July 17 2026.",
+              "The closed mock returned zero calendar events; this is complete authoritative evidence for the judge and is not missing information.",
               "Does not ask for mutation confirmation or claim to create, update, or delete an event."
             ]
           }

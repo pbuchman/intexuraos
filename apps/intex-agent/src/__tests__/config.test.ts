@@ -11,6 +11,7 @@ describe('loadConfig', () => {
     process.env['HOST'] = '127.0.0.1';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'project-1';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret';
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
     process.env['INTEXURAOS_NOTES_AGENT_URL'] = 'http://notes-agent.test';
     process.env['INTEXURAOS_CALENDAR_AGENT_URL'] = 'http://calendar-agent.test';
     process.env['INTEXURAOS_RESEARCH_AGENT_URL'] = 'http://research-agent.test';
@@ -27,6 +28,7 @@ describe('loadConfig', () => {
       host: '127.0.0.1',
       gcpProjectId: 'project-1',
       internalAuthToken: 'secret',
+      userServiceUrl: 'http://user-service.test',
       notesAgentUrl: 'http://notes-agent.test',
       calendarAgentUrl: 'http://calendar-agent.test',
       researchAgentUrl: 'http://research-agent.test',
@@ -47,6 +49,7 @@ describe('loadConfig', () => {
       host: '0.0.0.0',
       gcpProjectId: '',
       internalAuthToken: '',
+      userServiceUrl: '',
       notesAgentUrl: '',
       calendarAgentUrl: '',
       researchAgentUrl: '',
@@ -67,6 +70,7 @@ function clearConfigEnv(): void {
   delete process.env['HOST'];
   delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
   delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+  delete process.env['INTEXURAOS_USER_SERVICE_URL'];
   delete process.env['INTEXURAOS_NOTES_AGENT_URL'];
   delete process.env['INTEXURAOS_CALENDAR_AGENT_URL'];
   delete process.env['INTEXURAOS_RESEARCH_AGENT_URL'];

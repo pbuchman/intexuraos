@@ -118,6 +118,27 @@ describe('handleIncomingMessage', () => {
     ]);
   });
 
+  it('resolves and propagates the user IANA time zone to the runner', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([{ outcome: 'no_action', reply: 'Got it.' }]);
+    const replies = new FakeReplyPublisher();
+    const resolvedUserIds: string[] = [];
+
+    await handleIncomingMessage(
+      message(),
+      deps(repo, runner, replies, { now: () => NOW }, async (userId) => {
+        resolvedUserIds.push(userId);
+        return 'Europe/Warsaw';
+      })
+    );
+
+    expect(resolvedUserIds).toEqual(['user-1']);
+    expect(runner.calls[0]).toMatchObject({
+      currentDateTime: NOW,
+      timeZone: 'Europe/Warsaw',
+    });
+  });
+
   it('sends Tak/Nie confirmation buttons for Polish requests', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -1781,13 +1802,15 @@ function deps(
   sessionRepository: FakeSessionRepository,
   runner: FakeRunner,
   replies: FakeReplyPublisher,
-  clock: { now: () => string } = { now: () => NOW }
+  clock: { now: () => string } = { now: () => NOW },
+  resolveTimeZone: (userId: string) => Promise<string> = async () => 'UTC'
 ): Parameters<typeof handleIncomingMessage>[1] {
   return {
     sessionRepository,
     runner,
     replyPublisher: replies,
     clock,
+    resolveTimeZone,
     ids: {
       sessionId: () => `session-${String(sessionRepository.createdSessions.length + 1)}`,
       eventId: () => `event-${String(sessionRepository.events.length + 1)}`,

@@ -59,6 +59,11 @@ export interface UserServiceError {
   message: string;
 }
 
+export interface UserTimezoneLookupOptions {
+  signal?: AbortSignal;
+  throwOnError?: boolean;
+}
+
 /**
  * Client interface for user-service internal API.
  */
@@ -73,5 +78,5 @@ export interface UserServiceClient {
   resolveGitHubUsername(
     gitHubUsername: string
   ): Promise<Result<{ userId: string } | null, UserServiceError>>;
-  getUserTimezone(userId: string): Promise<string | undefined>;
+  getUserTimezone(userId: string, options?: UserTimezoneLookupOptions): Promise<string | undefined>;
 }

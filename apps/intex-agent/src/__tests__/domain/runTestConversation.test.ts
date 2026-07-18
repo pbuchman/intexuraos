@@ -26,6 +26,7 @@ describe('test conversation contract', () => {
       userId: 'test-intex-agent-intex-e2e-contract',
       runId: 'intex-e2e-contract',
       currentDateTime: '2026-07-01T10:00:00.000Z',
+      timeZone: 'UTC',
       turns: [
         {
           kind: 'message',
@@ -78,6 +79,31 @@ describe('test conversation contract', () => {
     expect(response.runId).toBe('intex-e2e-contract');
   });
 
+  it('defaults legacy 2026-07-01 requests without timeZone to UTC', async () => {
+    const runner = new ScriptedRunner([{ outcome: 'no_action', reply: 'Got it.' }]);
+
+    await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-legacy-time-zone',
+        runId: 'intex-e2e-legacy-time-zone',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: [{ kind: 'message', text: 'Legacy request.' }],
+      },
+      {
+        sessionRepository: new MemorySessionRepository(),
+        runner,
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls: [],
+        logger: silentLogger(),
+      }
+    );
+
+    expect(runner.calls[0]).toMatchObject({ timeZone: 'UTC' });
+  });
+
   it('runs two message turns through handleIncomingMessage and returns sanitized evidence', async () => {
     const repository = new MemorySessionRepository();
     const result = await runTestConversation(
@@ -87,6 +113,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-scripted',
         runId: 'intex-e2e-scripted',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           {
             kind: 'message',
@@ -159,6 +186,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-twenty-turns',
         runId: 'intex-e2e-twenty-turns',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: exchanges.map(({ message }, index) => ({
           kind: 'message',
           messageId: `wamid-${String(index + 1)}`,
@@ -215,6 +243,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-summary',
         runId: 'intex-e2e-summary',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           {
             kind: 'message',
@@ -258,6 +287,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-empty',
         runId: 'intex-e2e-empty',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [],
       },
       {
@@ -292,6 +322,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-confirm',
         runId: 'intex-e2e-confirm',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           {
             kind: 'message',
@@ -352,6 +383,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-reject',
         runId: 'intex-e2e-reject',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           {
             kind: 'message',
@@ -407,6 +439,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-timeout',
         runId: 'intex-e2e-timeout',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           {
             kind: 'message',
@@ -462,6 +495,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-switch',
         runId: 'intex-e2e-switch',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           { kind: 'message', text: 'First topic.' },
           { kind: 'message', text: 'new session: second topic' },
@@ -523,6 +557,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-call-slice',
         runId: 'intex-e2e-call-slice',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           { kind: 'message', text: 'First.' },
           { kind: 'message', text: 'Second.' },
@@ -551,6 +586,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-audio',
         runId: 'intex-e2e-audio',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           {
             kind: 'message',
@@ -588,6 +624,7 @@ describe('test conversation contract', () => {
           userId: 'test-intex-agent-intex-e2e-missing-result-session',
           runId: 'intex-e2e-missing-result-session',
           currentDateTime: '2026-07-01T10:00:00.000Z',
+          timeZone: 'UTC',
           turns: [
             { kind: 'message', text: 'First.' },
             { kind: 'message', text: 'Must not execute.' },
@@ -627,6 +664,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-supersede',
         runId: 'intex-e2e-supersede',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [{ kind: 'message', text: 'new session: fresh topic intex-e2e-supersede' }],
       },
       {
@@ -657,6 +695,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-timestamp',
         runId: 'intex-e2e-timestamp',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
         turns: [
           {
             kind: 'message',
@@ -675,8 +714,11 @@ describe('test conversation contract', () => {
       }
     );
 
-    const runnerInput = runner.calls[0] as { currentDateTime: string };
-    expect(runnerInput.currentDateTime).toBe('2026-07-01T11:15:00.000Z');
+    const runnerInput = runner.calls[0] as { currentDateTime: string; timeZone: string };
+    expect(runnerInput).toMatchObject({
+      currentDateTime: '2026-07-01T11:15:00.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
     expect(result.turns[0]?.messageId).toBe('wamid-test-intex-e2e-timestamp-0');
     expect(repository.events.find((event) => event.type === 'user_message')?.createdAt).toBe(
       '2026-07-01T11:15:00.000Z'
@@ -699,6 +741,7 @@ describe('test conversation contract', () => {
           userId: 'test-intex-agent-intex-e2e-dst-fallback',
           runId: 'intex-e2e-dst-fallback',
           currentDateTime: '2026-10-25T00:59:59.000Z',
+          timeZone: 'UTC',
           turns: [
             { kind: 'message', text: 'First.' },
             { kind: 'message', text: 'Second.' },
@@ -738,6 +781,7 @@ describe('test conversation contract', () => {
         userId: 'test-intex-agent-intex-e2e-missing-button',
         runId: 'intex-e2e-missing-button',
         currentDateTime: '2026-07-01T10:00:00.000Z',
+        timeZone: 'UTC',
         turns: [
           {
             kind: 'message',
@@ -781,6 +825,7 @@ describe('test conversation contract', () => {
           userId: 'test-intex-agent-intex-e2e-bad-confirm',
           runId: 'intex-e2e-bad-confirm',
           currentDateTime: '2026-07-01T10:00:00.000Z',
+          timeZone: 'UTC',
           turns: [{ kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' }],
         },
         {
@@ -806,6 +851,7 @@ describe('test conversation contract', () => {
           userId: 'test-intex-agent-intex-e2e-confirm-target',
           runId: 'intex-e2e-confirm-target',
           currentDateTime: '2026-07-01T10:00:00.000Z',
+          timeZone: 'UTC',
           turns: [
             { kind: 'message', text: 'Dodaj notatkę.' },
             { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },

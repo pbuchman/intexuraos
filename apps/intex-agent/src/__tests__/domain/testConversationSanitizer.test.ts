@@ -580,7 +580,7 @@ describe('test conversation sanitizer', () => {
     expect(sanitized).toEqual([
       {
         userId: 'test-intex-agent-run',
-        message: 'Czy wykonać? Prompt: [redacted] Źródło: [redacted] [redacted]',
+        message: 'Czy wykonać? Prompt: [redacted] Źródło: [redacted]',
         replyToMessageId: 'wamid-1',
         correlationId: 'intex_session_1',
         ctaUrl: { displayText: 'Open [redacted-url]', url: '[redacted-url]' },
@@ -589,6 +589,7 @@ describe('test conversation sanitizer', () => {
     ]);
     expect(JSON.stringify(sanitized)).not.toContain('tajna preferencja');
     expect(JSON.stringify(sanitized)).not.toContain('https://signed.example/private');
+    expect(JSON.stringify(sanitized)).not.toContain('OK');
   });
 
   it.each([
@@ -623,6 +624,26 @@ describe('test conversation sanitizer', () => {
       sentinelTag: 'nel',
     },
     {
+      name: 'FS U+001C',
+      separator: '\u001C',
+      sentinelTag: 'fs',
+    },
+    {
+      name: 'GS U+001D',
+      separator: '\u001D',
+      sentinelTag: 'gs',
+    },
+    {
+      name: 'RS U+001E',
+      separator: '\u001E',
+      sentinelTag: 'rs',
+    },
+    {
+      name: 'US U+001F',
+      separator: '\u001F',
+      sentinelTag: 'us',
+    },
+    {
       name: 'LS U+2028',
       separator: '\u2028',
       sentinelTag: 'ls',
@@ -633,7 +654,7 @@ describe('test conversation sanitizer', () => {
       sentinelTag: 'ps',
     },
   ])(
-    'redacts every $name Content continuation line from replies and behavioral previews without mutating the captured reply',
+    'collapses every $name Content continuation into the field redaction without mutating the captured reply',
     ({ separator, sentinelTag }) => {
       const continuationSentinel = `private-${sentinelTag}-continuation-z7q4`;
       const trailingSentinel = `private-${sentinelTag}-trailing-v2m8`;
@@ -665,11 +686,9 @@ describe('test conversation sanitizer', () => {
         toolCalls: [],
       });
 
-      expect(sanitizedReplies[0]?.message).toBe(
-        'Add this note? Content: [redacted] [redacted] [redacted]'
-      );
+      expect(sanitizedReplies[0]?.message).toBe('Add this note? Content: [redacted]');
       expect(transcript.turns[0]?.assistantReplyPreviews).toEqual([
-        'Add this note? Content: [redacted] [redacted] [redacted]',
+        'Add this note? Content: [redacted]',
       ]);
       const sanitizedEvidence = JSON.stringify({
         sanitizedReplies,
@@ -699,12 +718,63 @@ describe('test conversation sanitizer', () => {
     ]);
 
     expect(sanitized[0]?.message).toBe(
-      'Create this code task? Prompt: [redacted] [redacted] Mode: [redacted] Worker: [redacted]'
+      'Create this code task? Prompt: [redacted] Mode: [redacted] Worker: [redacted]'
     );
     expect(JSON.stringify(sanitized)).not.toMatch(
       /private-(?:prompt-continuation-k3r9|mode-field-h8w2|worker-field-d4n6)/u
     );
   });
+
+  it('redacts every canonical Polish code-task and preference confirmation label', () => {
+    const sanitized = sanitizeAssistantReplies([
+      capturedReply(
+        [
+          'Czy utworzyć zadanie programistyczne?',
+          'Polecenie: private-polish-command-a7k2',
+          'Tryb: private-polish-mode-b8m3',
+          'Typ workera: private-polish-worker-c9n4',
+          'Linear: private-linear-d1p5',
+        ].join('\n')
+      ),
+      capturedReply(
+        [
+          'Czy zmodyfikować wpis w pamięci instrukcji?',
+          'Wcześniej: private-before-e2q6',
+          'Po zmianie: private-after-f3r7',
+        ].join('\n')
+      ),
+    ]);
+
+    expect(sanitized.map((reply) => reply.message)).toEqual([
+      'Czy utworzyć zadanie programistyczne? Polecenie: [redacted] Tryb: [redacted] Typ workera: [redacted] Linear: [redacted]',
+      'Czy zmodyfikować wpis w pamięci instrukcji? Wcześniej: [redacted] Po zmianie: [redacted]',
+    ]);
+    expect(JSON.stringify(sanitized)).not.toMatch(/private-/u);
+  });
+
+  it.each([
+    { rawLabel: 'Content：', expectedLabel: 'Content' },
+    { rawLabel: 'Ｃｏｎｔｅｎｔ:', expectedLabel: 'Content' },
+    { rawLabel: 'Treść:', expectedLabel: 'Treść' },
+    { rawLabel: '*Content:*', expectedLabel: 'Content' },
+    { rawLabel: '- Content:', expectedLabel: 'Content' },
+    { rawLabel: 'Con\u200Btent:', expectedLabel: 'Content' },
+    { rawLabel: 'Content\u2060:', expectedLabel: 'Content' },
+    { rawLabel: 'Content\u200E:', expectedLabel: 'Content' },
+    { rawLabel: '> Content:', expectedLabel: 'Content' },
+    { rawLabel: '• Content:', expectedLabel: 'Content' },
+  ])(
+    'normalizes and redacts decorated sensitive label $rawLabel',
+    ({ rawLabel, expectedLabel }) => {
+      const sentinel = 'private-normalized-label-v4s8';
+      const sanitized = sanitizeAssistantReplies([
+        capturedReply(`Confirm?\n${rawLabel} ${sentinel}`),
+      ]);
+
+      expect(sanitized[0]?.message).toBe(`Confirm? ${expectedLabel}: [redacted]`);
+      expect(JSON.stringify(sanitized)).not.toContain(sentinel);
+    }
+  );
 
   it('redacts continuations after localized and additional sensitive fields', () => {
     const polishContinuationSentinel = 'private-polish-continuation-f5t1';
@@ -722,11 +792,34 @@ describe('test conversation sanitizer', () => {
     ]);
 
     expect(sanitized[0]?.message).toBe(
-      'Czy dodać notatkę? Treść: [redacted] [redacted] Miejsce: [redacted] [redacted]'
+      'Czy dodać notatkę? Treść: [redacted] Miejsce: [redacted]'
     );
     expect(JSON.stringify(sanitized)).not.toMatch(
       /private-(?:polish-continuation-f5t1|location-continuation-p9c3)/u
     );
+  });
+
+  it('collapses arbitrarily many sensitive continuations while preserving later field labels', () => {
+    const privateContinuations = Array.from(
+      { length: 18 },
+      (_, index) => `private-content-continuation-${String(index + 1)}-q7m2`
+    );
+    const rawMessage = [
+      'Add this note?',
+      'Title: private-title-a4k8',
+      'Content: private-content-first-line-b9p3',
+      ...privateContinuations,
+      'Location: private-location-c6t1',
+      'private-location-continuation-d2w5',
+      'Attendees: private-attendees-e8n4',
+    ].join('\n');
+
+    const sanitized = sanitizeAssistantReplies([capturedReply(rawMessage)]);
+
+    expect(sanitized[0]?.message).toBe(
+      'Add this note? Title: [redacted] Content: [redacted] Location: [redacted] Attendees: [redacted]'
+    );
+    expect(JSON.stringify(sanitized)).not.toMatch(/private-/u);
   });
 
   it('preserves ordinary non-sensitive multiline assistant replies', () => {

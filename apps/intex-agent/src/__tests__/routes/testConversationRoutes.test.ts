@@ -25,6 +25,7 @@ interface RoutePayload {
   runId: string;
   userId: string;
   currentDateTime: string;
+  timeZone: string;
   turns: Record<string, unknown>[];
   toolMocks?: Record<string, unknown>;
 }
@@ -147,6 +148,7 @@ describe('test conversation routes', () => {
     ['bad run id characters', { runId: 'INTEX-E2E-ROUTE', userId: 'test-intex-agent-INTEX-E2E-ROUTE' }],
     ['scripted runner mode', { mode: 'scripted_runner' }],
     ['invalid current date', { currentDateTime: 'not-a-date' }],
+    ['invalid IANA time zone', { timeZone: 'Mars/Olympus' }],
     ['tool mocks must be object', { toolMocks: null }],
     ['tool mock mode must be known', { toolMocks: { create_note: { mode: 'bad' } } }],
     ['too long text', { turns: [{ ...(validPayload().turns[0] ?? {}), text: 'x'.repeat(4001) }] }],
@@ -197,6 +199,20 @@ describe('test conversation routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(testConversationRunner.calls).toEqual([]);
+  });
+
+  it('accepts a legacy 2026-07-01 payload without timeZone', async () => {
+    const { timeZone: _timeZone, ...payload } = validPayload();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/test/conversation',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(testConversationRunner.calls).toEqual([expect.not.objectContaining({ timeZone: expect.anything() })]);
   });
 
   it('accepts 20 message turns', async () => {
@@ -454,6 +470,7 @@ describe('test conversation routes', () => {
       mode: 'live_llm_mock_tools',
       runId: 'intex-e2e-route',
       userId: 'test-intex-agent-intex-e2e-route',
+      timeZone: 'Europe/Warsaw',
     });
     expect(logIncomingRequest).toHaveBeenCalledWith(
       expect.anything(),
@@ -478,6 +495,7 @@ function validPayload(): RoutePayload {
     runId: 'intex-e2e-route',
     userId: 'test-intex-agent-intex-e2e-route',
     currentDateTime: '2026-07-01T10:00:00.000Z',
+    timeZone: 'Europe/Warsaw',
     turns: [
       {
         kind: 'message',
@@ -543,6 +561,7 @@ function createRouteTestServices(
       host: '127.0.0.1',
       gcpProjectId: 'test-project',
       internalAuthToken: INTERNAL_AUTH_TOKEN,
+      userServiceUrl: 'http://user-service.test',
       notesAgentUrl: 'http://notes-agent.test',
       calendarAgentUrl: 'http://calendar-agent.test',
       researchAgentUrl: 'http://research-agent.test',

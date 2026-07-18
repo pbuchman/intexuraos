@@ -1228,6 +1228,51 @@ describe('createUserServiceClient', () => {
       );
     });
 
+    it('propagates HTTP failures without logging user data when requested by the caller', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/private-user-123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(503);
+
+      const client = createUserServiceClient(config);
+
+      await expect(
+        client.getUserTimezone('private-user-123', { throwOnError: true })
+      ).rejects.toThrow('HTTP 503');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('propagates network failures without logging user data when requested by the caller', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/private-user-123/settings')
+        .replyWithError('ECONNREFUSED');
+
+      const client = createUserServiceClient(config);
+
+      await expect(
+        client.getUserTimezone('private-user-123', { throwOnError: true })
+      ).rejects.toThrow(/ECONNREFUSED/u);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('passes an AbortSignal to the timezone transport and propagates cancellation silently', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/private-user-123/settings')
+        .delay(5_000)
+        .reply(200, { success: true, data: { timezone: 'Europe/Warsaw' } });
+      const controller = new AbortController();
+      const client = createUserServiceClient(config);
+      const lookup = client.getUserTimezone('private-user-123', {
+        signal: controller.signal,
+        throwOnError: true,
+      });
+
+      controller.abort();
+
+      await expect(lookup).rejects.toThrow();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
     it('URL encodes userId with pipe (Auth0 format)', async () => {
       const userId = 'auth0|user123';
 

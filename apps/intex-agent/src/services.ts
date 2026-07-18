@@ -7,6 +7,8 @@ import {
   createCodeAgentServiceClient,
   createNotesAgentServiceClient,
   createResearchAgentServiceClient,
+  createUserServiceClient,
+  type UserServiceClient,
 } from '@intexuraos/internal-clients';
 import { createLlmClient, createToolCallingClient } from '@intexuraos/llm-factory';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
@@ -44,6 +46,8 @@ import { FirestorePromptPreferencesRepository } from './infra/firestore/promptPr
 import { FirestoreSessionRepository } from './infra/firestore/sessionRepository.js';
 import { createExternalSaveClient } from './infra/http/externalSaveClient.js';
 import { createWhatsAppReplyPublisher } from './infra/pubsub/whatsappReplyPublisher.js';
+
+const USER_TIME_ZONE_LOOKUP_TIMEOUT_MS = 1_000;
 
 export type AgentRunnerFactory = typeof createIntexAgentRunner;
 
@@ -119,6 +123,12 @@ export function initServices(config: ServiceConfig): void {
     service: 'intex-agent',
     component: 'agent-runner',
     logger: createAppLogger({ name: 'intex-agent-usage-sink' }),
+  });
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'intex-agent-user-service-client' }),
+    usageSink,
   });
 
   const sendPublisher = createWhatsAppSendPublisher({
@@ -230,6 +240,8 @@ export function initServices(config: ServiceConfig): void {
         clock: {
           now: () => new Date().toISOString(),
         },
+        resolveTimeZone: async (userId) =>
+          await resolveUserTimeZone(userId, userServiceClient, logger),
         ids: {
           sessionId: () => `intex_session_${randomUUID()}`,
           eventId: () => `intex_event_${randomUUID()}`,
@@ -354,6 +366,80 @@ export function setServices(services: ServiceContainer): void {
 
 export function resetServices(): void {
   container = null;
+}
+
+export async function resolveUserTimeZone(
+  userId: string,
+  userServiceClient: Pick<UserServiceClient, 'getUserTimezone'>,
+  logger: { warn(value: Record<string, unknown>, message?: string): void }
+): Promise<string> {
+  const abortController = new AbortController();
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const lookupResult = Promise.resolve()
+    .then(
+      async () =>
+        await userServiceClient.getUserTimezone(userId, {
+          signal: abortController.signal,
+          throwOnError: true,
+        })
+    )
+    .then(
+      (configuredTimeZone) => ({ status: 'resolved' as const, configuredTimeZone }),
+      () => ({ status: 'failed' as const })
+    );
+  const timeoutResult = new Promise<{ status: 'timeout' }>((resolve) => {
+    timeoutHandle = setTimeout(
+      () => {
+        resolve({ status: 'timeout' });
+        abortController.abort();
+      },
+      USER_TIME_ZONE_LOOKUP_TIMEOUT_MS
+    );
+  });
+
+  let result: Awaited<typeof lookupResult> | Awaited<typeof timeoutResult>;
+  try {
+    result = await Promise.race([lookupResult, timeoutResult]);
+  } finally {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+
+  if (result.status === 'failed') {
+    warnUserTimeZoneFallback(logger, 'time_zone_lookup_failed');
+    return 'UTC';
+  }
+  if (result.status === 'timeout') {
+    warnUserTimeZoneFallback(logger, 'time_zone_lookup_timeout');
+    return 'UTC';
+  }
+  const { configuredTimeZone } = result;
+  if (configuredTimeZone !== undefined && isIanaTimeZone(configuredTimeZone)) {
+    return configuredTimeZone;
+  }
+  if (configuredTimeZone === undefined) {
+    return 'UTC';
+  }
+
+  warnUserTimeZoneFallback(logger, 'invalid_time_zone');
+  return 'UTC';
+}
+
+function warnUserTimeZoneFallback(
+  logger: { warn(value: Record<string, unknown>, message?: string): void },
+  reason: 'invalid_time_zone' | 'time_zone_lookup_failed' | 'time_zone_lookup_timeout'
+): void {
+  logger.warn({ reason }, 'Falling back to UTC for Intex Agent user time zone');
+}
+
+function isIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createExternalSaveToolClient(

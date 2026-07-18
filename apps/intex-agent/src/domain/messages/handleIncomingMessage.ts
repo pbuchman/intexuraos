@@ -113,6 +113,7 @@ export interface IntexAgentRunner {
     sourceType?: string;
     sourceUrl?: string;
     currentDateTime: string;
+    timeZone: string;
     messageId?: string;
   }): Promise<IntexAgentRunnerResult>;
 }
@@ -146,6 +147,7 @@ export interface HandleIncomingMessageDeps {
   runner: IntexAgentRunner;
   replyPublisher: WhatsAppReplyPublisher;
   clock: Clock;
+  resolveTimeZone(userId: string): Promise<string>;
   ids: IdGenerator;
   sessionTimeoutMs: number;
 }
@@ -256,6 +258,7 @@ export async function handleIncomingMessage(
     return { sessionId: session.id };
   }
 
+  const timeZone = await deps.resolveTimeZone(input.userId);
   const runnerResult = await deps.runner.run({
     session,
     events: excludeCurrentUserMessage(events, input.messageId),
@@ -264,6 +267,7 @@ export async function handleIncomingMessage(
     sourceType: input.sourceType,
     ...(input.sourceUrl !== undefined ? { sourceUrl: input.sourceUrl } : {}),
     currentDateTime: now,
+    timeZone,
     messageId: input.messageId,
   });
   await applyRunnerResult(input, deps, session, runnerResult, events);

@@ -112,6 +112,11 @@ const PREFERENCE_VERSION_CONFLICT_REPLIES: LocalizedText = {
   pl: 'Pamięć instrukcji zmieniła się przed zapisem. Wyślij prośbę ponownie, żebym użył najnowszej wersji.',
 };
 
+const RETAIN_ONLY_REPLIES: LocalizedText = {
+  en: 'Noted for this session only. No note or other resource was created.',
+  pl: 'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
+};
+
 const CLASSIFIER_UNSUPPORTED_REPLIES: Record<
   IntexAgentReplyLanguage,
   ClassifierUnsupportedReplyMap
@@ -347,6 +352,16 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
+      if (intent.kind === 'no_action' && intent.reason === 'retain_context') {
+        const retainOnlyLanguage = detectRetainOnlyLanguage(input.message);
+        if (retainOnlyLanguage !== null) {
+          return {
+            outcome: 'no_action',
+            reply: RETAIN_ONLY_REPLIES[replyLanguageForIntent(intent, retainOnlyLanguage)],
+          };
+        }
+      }
+
       const toolExecutions: IntexAgentToolExecution[] = [];
       const tools = createIntexAgentToolDefinitions(
         createTrackingToolExecutor(createConfirmationPreviewExecutor(config.toolExecutor), toolExecutions)
@@ -357,6 +372,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       const exposedToolNames = tools.map((tool) => tool.name as IntexAgentToolName);
       const systemPrompt = buildIntexAgentSystemPrompt.build({
         currentDateTime: input.currentDateTime,
+        timeZone: input.timeZone,
         userPreferences: config.userPreferences ?? null,
       });
       const messages = buildMessages(input.events, input.message, input.replyContext);
@@ -389,6 +405,51 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       );
     },
   };
+}
+
+function detectRetainOnlyLanguage(message: string): IntexAgentReplyLanguage | null {
+  const normalized = message.normalize('NFKC').toLowerCase();
+  if (/https?:\/\//u.test(normalized)) return null;
+  const englishNoSaveMatch = /\b(?:do not|don['’]?t)\s+(?:save|store|persist)\b/u.exec(
+    normalized
+  );
+  const polishNoSaveMatch = /\bnie\s+(?:zapisuj|utrwalaj)\b/u.exec(normalized);
+  const englishNoSave = englishNoSaveMatch !== null;
+  const englishRetainOnlyMatch =
+    /\b(?:only|just)\s+(?:retain|hold|keep)\s+(?:(?:this|the|provided)\s+)?context\s*[.!?]*\s*$/u.exec(
+      normalized
+    ) ??
+    /\b(?:retain|hold|keep)\s+(?:(?:this|the|provided)\s+)?context\s+(?:only|just)\s*[.!?]*\s*$/u.exec(
+      normalized
+    );
+  const polishNoSave = polishNoSaveMatch !== null;
+  const polishRetainOnlyMatch =
+    /\btylko\s+(?:zachowaj|zapamiętaj|przechowaj)\s+(?:(?:ten|podany)\s+)?kontekst\s*[.!?]*\s*$/u.exec(
+      normalized
+    ) ??
+    /\b(?:zachowaj|zapamiętaj|przechowaj)\s+(?:(?:ten|podany)\s+)?kontekst\s+tylko\s*[.!?]*\s*$/u.exec(
+      normalized
+    );
+
+  const retainOnly =
+    polishNoSave && polishRetainOnlyMatch !== null
+      ? { language: 'pl' as const, clauseIndex: polishRetainOnlyMatch.index }
+      : englishNoSave && englishRetainOnlyMatch !== null
+        ? { language: 'en' as const, clauseIndex: englishRetainOnlyMatch.index }
+        : null;
+  if (retainOnly === null) return null;
+
+  const prefix = normalized.slice(0, retainOnly.clauseIndex);
+  if (
+    /\b(?:translate|rewrite|quote|explain|analy[sz]e|summari[sz]e)\b/u.test(prefix) ||
+    /\b(?:przetłumacz(?:yć)?|przetlumacz(?:yc)?|przeformułuj|zacytuj|wyjaśnij|wyjasnij|przeanalizuj|streść|stresc)(?!\p{L})/u.test(
+      prefix
+    )
+  ) {
+    return null;
+  }
+
+  return retainOnly.language;
 }
 
 function toolFailureMetadata(

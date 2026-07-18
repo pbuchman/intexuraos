@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTestConversationRunnerService,
+  resolveUserTimeZone,
   type AgentRunnerFactory,
   type CreateTestConversationRunnerServiceInput,
 } from '../services.js';
@@ -24,6 +25,137 @@ import type {
   IntexAgentSession,
   IntexAgentSessionEvent,
 } from '../domain/sessions/types.js';
+
+describe('resolveUserTimeZone', () => {
+  it('returns the IANA time zone loaded for the production user', async () => {
+    const getUserTimezone = vi.fn(async () => 'Europe/Warsaw');
+
+    const result = await resolveUserTimeZone(
+      'user-123',
+      { getUserTimezone },
+      silentLogger()
+    );
+
+    expect(result).toBe('Europe/Warsaw');
+    expect(getUserTimezone).toHaveBeenCalledWith(
+      'user-123',
+      expect.objectContaining({ signal: expect.any(AbortSignal), throwOnError: true })
+    );
+  });
+
+  it('falls back to UTC without warning when the user has no configured time zone', async () => {
+    const logger = silentLogger();
+    const warn = vi.spyOn(logger, 'warn');
+
+    const result = await resolveUserTimeZone(
+      'private-user-123',
+      { getUserTimezone: async () => undefined },
+      logger
+    );
+
+    expect(result).toBe('UTC');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('logs only a privacy-safe reason when the configured time zone is invalid', async () => {
+    const logger = silentLogger();
+    const warn = vi.spyOn(logger, 'warn');
+
+    const result = await resolveUserTimeZone(
+      'private-user-123',
+      { getUserTimezone: async () => 'Private/Invalid-Zone' },
+      logger
+    );
+
+    expect(result).toBe('UTC');
+    expect(warn).toHaveBeenCalledWith(
+      { reason: 'invalid_time_zone' },
+      'Falling back to UTC for Intex Agent user time zone'
+    );
+  });
+
+  it('falls back to UTC when loading the user time zone rejects', async () => {
+    const logger = silentLogger();
+    const warn = vi.spyOn(logger, 'warn');
+
+    const result = await resolveUserTimeZone(
+      'user-123',
+      {
+        getUserTimezone: async () => {
+          throw new Error('user-service unavailable');
+        },
+      },
+      logger
+    );
+
+    expect(result).toBe('UTC');
+    expect(warn).toHaveBeenCalledWith(
+      { reason: 'time_zone_lookup_failed' },
+      'Falling back to UTC for Intex Agent user time zone'
+    );
+  });
+
+  it('bounds a pending user time-zone lookup and falls back to UTC', async () => {
+    vi.useFakeTimers();
+    try {
+      const logger = silentLogger();
+      const warn = vi.spyOn(logger, 'warn');
+      let transportAborted = false;
+      let resolvedValue: string | undefined;
+      const resultPromise = resolveUserTimeZone(
+        'private-user-123',
+        {
+          getUserTimezone: (_userId, options) =>
+            new Promise((_resolve, reject) => {
+              options?.signal?.addEventListener(
+                'abort',
+                () => {
+                  transportAborted = true;
+                  reject(new DOMException('Aborted', 'AbortError'));
+                },
+                { once: true }
+              );
+            }),
+        },
+        logger
+      );
+      void resultPromise.then((value) => {
+        resolvedValue = value;
+      });
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(resolvedValue).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(resolvedValue).toBe('UTC');
+      expect(transportAborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(warn).toHaveBeenCalledWith(
+        { reason: 'time_zone_lookup_timeout' },
+        'Falling back to UTC for Intex Agent user time zone'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the lookup timeout after user-service resolves', async () => {
+    vi.useFakeTimers();
+    try {
+      await expect(
+        resolveUserTimeZone(
+          'user-123',
+          { getUserTimezone: async () => 'Europe/Warsaw' },
+          silentLogger()
+        )
+      ).resolves.toBe('Europe/Warsaw');
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('createTestConversationRunnerService', () => {
   it('wires real conversation flow with mocked tools and no downstream clients', async () => {
@@ -69,6 +201,7 @@ describe('createTestConversationRunnerService', () => {
       userId: 'test-intex-agent-intex-e2e-services',
       runId: 'intex-e2e-services',
       currentDateTime: '2026-07-01T10:00:00.000Z',
+      timeZone: 'UTC',
       turns: [
         {
           kind: 'message',
@@ -163,6 +296,7 @@ describe('createTestConversationRunnerService', () => {
       userId: 'test-intex-agent-private-tool-failure',
       runId: 'private-tool-failure',
       currentDateTime: '2026-07-01T10:00:00.000Z',
+      timeZone: 'UTC',
       turns: [
         { kind: 'message', text: 'Save this note.' },
         { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },
@@ -243,6 +377,7 @@ describe('createTestConversationRunnerService', () => {
       userId: 'test-intex-agent-intex-e2e-confirm-service',
       runId: 'intex-e2e-confirm-service',
       currentDateTime: '2026-07-01T10:00:00.000Z',
+      timeZone: 'UTC',
       turns: [
         {
           kind: 'message',
@@ -380,6 +515,7 @@ function testRequest(runId: string): Parameters<ReturnType<typeof createTestConv
     userId: `test-intex-agent-${runId}`,
     runId,
     currentDateTime: '2026-07-01T10:00:00.000Z',
+    timeZone: 'UTC',
     turns: [{ kind: 'message', text: `Ping ${runId}` }],
   };
 }
@@ -396,6 +532,7 @@ function testConfig(): CreateTestConversationRunnerServiceInput['config'] {
     host: '127.0.0.1',
     gcpProjectId: 'test-project',
     internalAuthToken: 'internal-token',
+    userServiceUrl: 'http://user-service.test',
     notesAgentUrl: 'http://notes-agent.test',
     calendarAgentUrl: 'http://calendar-agent.test',
     researchAgentUrl: 'http://research-agent.test',
