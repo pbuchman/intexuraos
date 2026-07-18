@@ -622,10 +622,16 @@ function truncateTo(text: string, limit: number): string {
 
 function redactSensitiveText(text: string): string {
   let inPreferenceBlock = false;
+  let inSensitiveReplyDetails = false;
   return text
     .replace(URL_PATTERN, '[redacted-url]')
-    .split(/\r?\n/u)
+    .split(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/u)
     .map((line) => {
+      if (inSensitiveReplyDetails) {
+        return SENSITIVE_REPLY_LINE_PATTERN.test(line)
+          ? line.replace(/:\s*.*$/u, ': [redacted]')
+          : '[redacted]';
+      }
       if (PREFERENCE_BLOCK_HEADER_PATTERN.test(line)) {
         inPreferenceBlock = true;
         return 'User Preferences: [redacted]';
@@ -641,6 +647,7 @@ function redactSensitiveText(text: string): string {
       if (!SENSITIVE_REPLY_LINE_PATTERN.test(line)) {
         return line;
       }
+      inSensitiveReplyDetails = true;
       return line.replace(/:\s*.*$/u, ': [redacted]');
     })
     .join('\n');
