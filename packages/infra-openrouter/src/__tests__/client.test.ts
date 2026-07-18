@@ -826,7 +826,7 @@ describe('createOpenRouterClient', () => {
       expect(capturedBody).not.toHaveProperty('response_format');
     });
 
-    it('handles empty choices array in generate', async () => {
+    it('rejects an empty choices array in generate', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
         .reply(200, {
@@ -848,10 +848,87 @@ describe('createOpenRouterClient', () => {
 
       const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
-      // Should return empty content when choices is empty
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.content).toBe('');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('rejects an in-band provider error instead of returning partial content', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Partial response that must not escape', role: 'assistant' },
+              finish_reason: 'error',
+              error: {
+                code: 500,
+                message: 'Sensitive provider failure text',
+                metadata: { provider_name: 'test-provider' },
+              },
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('rejects choice error metadata even when the finish reason is not error', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Partial response that must not escape', role: 'assistant' },
+              finish_reason: 'stop',
+              error: {
+                code: 500,
+                message: 'Sensitive provider failure text',
+                metadata: { provider_name: 'test-provider' },
+              },
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
       }
     });
   });
@@ -1316,7 +1393,7 @@ describe('createOpenRouterClient', () => {
       );
     });
 
-    it('returns empty content and zero usage when chat response choices are empty', async () => {
+    it('rejects a chat response with empty choices', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
         .reply(200, {
@@ -1341,17 +1418,46 @@ describe('createOpenRouterClient', () => {
         { promptType: 'test-chat-prompt' }
       );
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toEqual({
-          content: '',
-          usage: {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
-            costUsd: 0,
-          },
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('rejects null assistant content', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: null, role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 0, total_tokens: 50 },
         });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generateChat(
+        [{ role: 'user', content: 'What happened in this chat?' }],
+        { promptType: 'test-chat-prompt' }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
       }
     });
   });

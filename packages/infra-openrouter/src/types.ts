@@ -150,10 +150,11 @@ export interface OpenRouterResponse {
   choices: {
     index: number;
     message: {
-      content: string;
+      content: unknown;
       role: string;
     };
     finish_reason: string;
+    error?: unknown;
   }[];
   usage?: OpenRouterUsage;
   annotations?: (string | { url?: string })[];

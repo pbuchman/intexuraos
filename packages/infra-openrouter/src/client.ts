@@ -107,6 +107,7 @@ const DEFAULT_TIMEOUT_MS = 840_000;
 /** Application name sent to OpenRouter */
 const APP_TITLE = 'IntexuraOS';
 const RESEARCH_PROMPT_TYPE = 'research-web-search';
+const INVALID_COMPLETION_RESPONSE_MESSAGE = 'OpenRouter returned an invalid completion response';
 
 async function fetchWithTimeout(
   url: string,
@@ -327,7 +328,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         }
 
         const data = (await response.json()) as OpenRouterResponse;
-        const content = data.choices[0]?.message.content ?? '';
+        const rawContent = data.choices[0]?.message.content;
+        const content = typeof rawContent === 'string' ? rawContent : '';
         const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
         // Extract sources from annotations (OpenRouter returns web search citations as annotations)
@@ -524,13 +526,13 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
           const data = (await response.json()) as OpenRouterResponse;
           const firstChoice = data.choices[0];
-          // Handle case where choices array is empty (upstream API may return this)
-          if (firstChoice === undefined) {
-            return {
-              content: '',
-              normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
-              providerReportedUsd: null,
-            };
+          if (
+            firstChoice === undefined ||
+            firstChoice.finish_reason === 'error' ||
+            firstChoice.error !== undefined ||
+            typeof firstChoice.message.content !== 'string'
+          ) {
+            throw new OpenRouterApiError(500, INVALID_COMPLETION_RESPONSE_MESSAGE);
           }
           const content = firstChoice.message.content;
           const { normalized, providerReportedUsd, cachedTokens, cacheWriteTokens } = extractUsage(
