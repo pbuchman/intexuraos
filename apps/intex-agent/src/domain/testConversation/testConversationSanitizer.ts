@@ -405,7 +405,10 @@ function sanitizeEventPayload(event: IntexAgentSessionEvent): Record<string, unk
 
   const text = readFirstString(payload, ['text', 'message']);
   if (text !== undefined) {
-    sanitized['textPreview'] = previewText(redactSyntheticMarkers(text));
+    const textPreview = previewText(redactSyntheticMarkers(text));
+    if (textPreview !== '') {
+      sanitized['textPreview'] = textPreview;
+    }
   }
 
   if (event.type === 'tool_call_completed') {
@@ -442,7 +445,10 @@ function copyString(
 ): void {
   const value = source[key];
   if (typeof value === 'string' && !SECRET_FIELD_PATTERN.test(key)) {
-    target[key] = truncate(value);
+    const normalized = truncate(value);
+    if (normalized !== '') {
+      target[key] = normalized;
+    }
   }
 }
 
