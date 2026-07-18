@@ -548,7 +548,10 @@ describe('IntexEvalScenarioSchema', () => {
   it.each([
     ['argsSummary.syntheticMarkerCount', 2],
     ['argsSummary.syntheticMarkerDigest', 'digest'],
-  ])('accepts nested timeline marker evidence path %s', (path, value) => {
+    ['argsSummary.workerType', 'minimax'],
+    ['argsSummary.taskMode', 'planning'],
+    ['argsSummary.hasLinearIssueId', true],
+  ])('accepts nested sanitized timeline argument evidence path %s', (path, value) => {
     const scenario = createScenario();
     setTimelineAssertion(scenario, { path, operator: 'equals', value });
     expectScenarioValid(scenario);

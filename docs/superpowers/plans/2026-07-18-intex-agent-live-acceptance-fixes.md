@@ -415,13 +415,30 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 - [x] Propagate the user's IANA time zone into the runner and define exact `mode=list` whole-day bounds for `today`/`tomorrow`, including DST-skipped midnights and fully skipped civil dates; make scenario `011` assert the exact Warsaw `+02:00` bounds and bump every affected prompt version.
 - [x] Bound the production time-zone lookup to 1000 ms with transport abort, safe UTC fallback, and reason-only logs; preserve the `2026-07-01` endpoint contract by defaulting omitted `timeZone` to UTC while rejecting a supplied invalid IANA zone.
 - [x] Close every Critical/Important combined-review finding, then run `pnpm run ci:tracked` on the exact final diff (`5518/5518` tests, coverage, build, format, and bundle budget passed).
-- [ ] Commit, push, merge, and wait for Home Dev to contain the exact revision; rerun preflight and the 20-scenario endpoint gate.
+- [x] Commit, push, merge PR `#2332`, wait for Home Dev to contain exact merge `ebf1f133df901bf93bf4b7bd20038081391da2c2`, and rerun the green preflight plus 20-scenario endpoint gate.
 - [ ] Only after endpoint exit `0`, run `full` once and require its fresh endpoint corpus plus authorized Matrix smoke to exit `0`.
 - [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
 
 **Acceptance:** the real 20-scenario endpoint corpus exits `0`, the independently executed full gate exits `0` with MiniMax M3 and one Matrix smoke, no product tool writes escape the mock boundary, and the browser audit confirms the deployed session UI.
 
-**Review status:** independent combined and time-zone/operations re-reviews approved the final implementation diff after verifying mixed-intent routing, exact scenario `011` bounds, skipped-midnight/date behavior, cancellable privacy-safe lookup, and legacy endpoint compatibility. Full tracked CI passed on the exact final diff with `5518/5518` tests; deployed/live checkboxes remain deliberately open below until fresh evidence exists.
+**Review status:** independent combined and time-zone/operations re-reviews approved the final implementation diff after verifying mixed-intent routing, exact scenario `011` bounds, skipped-midnight/date behavior, cancellable privacy-safe lookup, and legacy endpoint compatibility. Full tracked CI passed on the exact final diff with `5518/5518` tests, PR `#2332` merged with every GitHub check green, and Home Dev ran the exact merge. The fresh endpoint corpus fixed `011` and `020` but exposed the separate Task 19 regressions below, so Matrix/full correctly remained closed.
+
+### Task 19: Close missing-date and code-task judge regressions from the exact deployed corpus
+
+**Evidence:** deployed endpoint run `eval-c89c1373-af10-4e19-96a3-417c261a44b6` completed all 20 scenarios; scenarios `001`–`002`, `004`–`013`, and `015`–`020` passed, including the two Task 18 targets. Scenario `003` inferred the missing event date from `Current date-time`, requested confirmation before clarification, superseded that invalid confirmation after the user supplied Tuesday, and lost one exact synthetic identifier before the completed mocked tool call. Scenario `014` had zero deterministic failures, one correct completed `create_code_task`, and cleanup `9/9`, but one MiniMax verdict treated the intentionally redacted planning/worker confirmation as unclear; independent repeats passed the identical shape `3/4` times. Cleanup for both failures was `22/22`; the endpoint exited `1`, so Matrix/full was not run.
+
+- [x] Add a RED runner test proving that a false-positive `create_calendar_event` classification cannot reach the runner LLM or tool preview when no date signal exists in the current request or relevant session history.
+- [x] Add a deterministic pre-LLM missing-date gate with localized EN/PL clarification, explicit date-signal coverage, and paired pass-through tests for weekdays, ISO dates, Polish month dates, and prior-turn dates.
+- [x] Strengthen the versioned runner prompt so a bare time never defaults to today and every exact identifier/code/reference survives clarification into final tool arguments.
+- [x] Make scenario `014` treat its literal redacted confirmation labels as complete judge evidence and deterministically assert `workerType=minimax` plus `taskMode=planning` in both confirmation and execution evidence.
+- [x] Close every Critical/Important independent-review finding and run `pnpm run ci:tracked` on the exact final source/test/evaluation diff (`5542/5542` tests, coverage, build, format, and bundle budget passed).
+- [ ] Commit, push, merge, wait for exact Home Dev deployment, rerun preflight, and require focused live scenarios `003` and `014` to pass before the complete endpoint corpus.
+- [ ] Require the 20-scenario endpoint gate to exit `0`; only then run `full` once and require its fresh endpoint corpus plus authorized Matrix smoke to exit `0`.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+**Acceptance:** the deterministic date gate prevents invented event dates without reducing valid calendar routing, exact identifiers survive clarification, scenario `014` is judged only from observable privacy-safe evidence, the real endpoint and full gates exit `0`, and Matrix remains strictly downstream of endpoint success.
+
+**Review status:** independent calendar-chain and scenario-`014` re-reviews approved the final implementation after verifying topic boundaries, multi-clarification continuity, inbound quoted context, ordinal/month false positives, omitted Linear identifiers, closed sanitization paths, and 100% branch coverage of the new runner gate. No Critical or Important findings remain.
 
 ### Deferred perfection (recorded, not implemented in this loop)
 

@@ -80,6 +80,20 @@
                   "value": "create_code_task"
                 },
                 {
+                  "path": "argsSummary.workerType",
+                  "operator": "equals",
+                  "value": "minimax"
+                },
+                {
+                  "path": "argsSummary.taskMode",
+                  "operator": "equals",
+                  "value": "planning"
+                },
+                {
+                  "path": "argsSummary.hasLinearIssueId",
+                  "operator": "absent"
+                },
+                {
                   "path": "argsSummary.syntheticMarkerCount",
                   "operator": "equals",
                   "value": 2
@@ -98,6 +112,8 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Correctly identifies a planning code-task request for the selected worker and asks for explicit confirmation.",
+              "Expected complete sanitized confirmation evidence: `Prompt: [redacted]`, `Mode: [redacted]`, and `Worker: [redacted]`.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
               "Does not claim the task already exists or expose raw argument content in the sanitized reply."
             ]
           }
@@ -123,6 +139,10 @@
                 "path": "taskMode",
                 "operator": "equals",
                 "value": "planning"
+              },
+              {
+                "path": "hasLinearIssueId",
+                "operator": "absent"
               },
               {
                 "path": "syntheticMarkerCount",

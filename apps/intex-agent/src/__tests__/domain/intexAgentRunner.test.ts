@@ -112,7 +112,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('17.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('18.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -346,6 +346,342 @@ describe('createIntexAgentRunner', () => {
       suggestedNextStep: 'Ask for the missing date.',
     });
   });
+
+  it.each([
+    {
+      message: 'Add lunch with Marta at noon for one hour.',
+      events: [],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'Dodaj lunch z Martą o 12:00 na godzinę.',
+      events: [],
+      expectedReply: 'Którego dnia lub na jaką datę mam dodać to wydarzenie?',
+      expectedNextStep: 'Podaj dzień lub datę wydarzenia w kalendarzu.',
+    },
+    {
+      message: 'Add lunch with Marta at noon.',
+      events: [event('assistant_message', { text: 'What should I add?' }), event('user_message', { text: 123 })],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'Add lunch with Marta at noon.',
+      events: [
+        event('user_message', { text: 'Show my calendar events tomorrow.' }),
+        event('assistant_message', { text: 'There are no events tomorrow.' }),
+      ],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'May I schedule lunch with Marta at noon?',
+      events: [],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'Add the 2nd planning session at noon.',
+      events: [],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'Schedule the site inspection on the 2nd floor at noon.',
+      events: [],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'Schedule the site inspection in May at noon.',
+      events: [],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'Add dentist at noon.',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta next Tuesday.' }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time should I use?' }),
+        event('user_message', { text: 'Actually, show me my notes.' }),
+        event('assistant_message', { text: 'Here are your notes.' }),
+      ],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'At noon for one hour.',
+      events: [
+        event('clarification_requested', {
+          message: 'Which date should I use?',
+          missingFields: ['date'],
+        }),
+        event('assistant_message', { text: 'Which date should I use?' }),
+      ],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'Add dentist at noon.',
+      events: [
+        event('user_message', { text: 'Create a note.' }),
+        event('clarification_requested', {
+          message: 'What should the note contain?',
+          missingFields: ['content'],
+          candidateIntents: ['create_note'],
+        }),
+        event('assistant_message', { text: 'What should the note contain?' }),
+      ],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'At noon for one hour.',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta next Tuesday.' }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('clarification_requested', {
+          message: 'Where should I add it?',
+          missingFields: ['location'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'Where should I add it?' }),
+      ],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'At noon for one hour.',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta next Tuesday.' }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time should I use?' }),
+        event('user_message', { text: 'Actually, cancel that.' }),
+        event('assistant_message', { text: 'Okay.' }),
+        event('user_message', { text: 'Add dentist.' }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time should I use?' }),
+      ],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'At Building A.',
+      events: [
+        event('user_message', { text: 'Create a note.' }),
+        event('clarification_requested', {
+          message: 'What should the note contain?',
+          missingFields: ['content'],
+          candidateIntents: ['create_note'],
+        }),
+        event('assistant_message', { text: 'What should the note contain?' }),
+        event('user_message', { text: 'Add dentist at noon.' }),
+        event('clarification_requested', {
+          message: 'Where should I add it?',
+          missingFields: ['location'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'Where should I add it?' }),
+      ],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+    {
+      message: 'At noon for one hour.',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta.' }),
+        undefined,
+        event('assistant_message', { text: 'Let me clarify that request.' }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time should I use?' }),
+      ] as unknown as IntexAgentSessionEvent[],
+      expectedReply: 'Which day or date should I use for this calendar event?',
+      expectedNextStep: 'Provide the day or date for the calendar event.',
+    },
+  ])(
+    'deterministically asks for a missing calendar date before calling the runner LLM: $message',
+    async ({ events, expectedNextStep, expectedReply, message }) => {
+      const client = new FakeToolCallingClient([]);
+      let createCalendarEventCalls = 0;
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['create_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          createCalendarEvent: async () => {
+            createCalendarEventCalls += 1;
+            return 'event-1';
+          },
+        }),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events,
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: expectedReply,
+        clarification: expectedReply,
+        blockerReason: 'missing_required_details',
+        missingFields: ['date'],
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep: expectedNextStep,
+      });
+      expect(client.calls).toHaveLength(0);
+      expect(createCalendarEventCalls).toBe(0);
+    }
+  );
+
+  it.each([
+    {
+      message: 'Add lunch with Marta next Tuesday at noon for one hour.',
+      events: [],
+      replyContext: undefined,
+    },
+    {
+      message: 'At noon for one hour.',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta next Tuesday.' }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time should I use?' }),
+      ],
+      replyContext: undefined,
+    },
+    {
+      message: 'At noon for one hour.',
+      events: [
+        event('user_message', {
+          text: 'Schedule the quoted appointment.',
+          replyContext: {
+            replyToWamid: 'wamid-prior-calendar-source',
+            source: 'inbound_user_message',
+            text: 'Dentist next Tuesday',
+            truncated: false,
+          },
+        }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time should I use?' }),
+      ],
+      replyContext: undefined,
+    },
+    {
+      message: 'At Building A.',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta next Tuesday.' }),
+        event('clarification_requested', {
+          message: 'What time should I use?',
+          missingFields: ['time'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time should I use?' }),
+        event('user_message', { text: 'At noon.' }),
+        event('clarification_requested', {
+          message: 'Where should I add it?',
+          missingFields: ['location'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'Where should I add it?' }),
+      ],
+      replyContext: undefined,
+    },
+    {
+      message: 'Add lunch with Marta on 2026-07-21 at noon.',
+      events: [],
+      replyContext: undefined,
+    },
+    {
+      message: 'Schedule the site inspection on the 2nd at noon.',
+      events: [],
+      replyContext: undefined,
+    },
+    {
+      message: 'Dodaj lunch z Martą 21 lipca o 12:00.',
+      events: [],
+      replyContext: undefined,
+    },
+    {
+      message: 'Schedule this at noon.',
+      events: [],
+      replyContext: {
+        replyToWamid: 'wamid-calendar-source',
+        source: 'inbound_user_message' as const,
+        text: 'Dentist next Tuesday',
+        truncated: false,
+      },
+    },
+  ])(
+    'allows calendar confirmation when an explicit date signal exists: $message',
+    async ({ events, message, replyContext }) => {
+      const client = new ToolExecutingFakeToolCallingClient({
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Lunch with Marta',
+          start: '2026-07-21T12:00:00+02:00',
+          end: '2026-07-21T13:00:00+02:00',
+        },
+      }, [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['create_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events,
+        message,
+        ...(replyContext !== undefined ? { replyContext } : {}),
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(result).toMatchObject({
+        outcome: 'needs_confirmation',
+        toolName: 'create_calendar_event',
+      });
+      expect(client.calls).toHaveLength(1);
+    }
+  );
 
   it('uses an injected intent classifier to expose context-derived tools', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
@@ -1821,7 +2157,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('17.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('18.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);

@@ -386,7 +386,8 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
           },
           linearIssueId: {
             type: 'string',
-            description: 'Optional Linear issue ID to associate with the task.',
+            description:
+              'Optional Linear issue ID to associate with the task. Omit it unless the user explicitly supplies the identifier.',
           },
           taskMode: {
             type: 'string',

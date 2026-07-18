@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('17.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('18.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('10.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('11.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -89,6 +89,24 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('show every event candidate you can identify');
     expect(prompt).toContain('create only one calendar event per confirmed tool call');
     expect(prompt).toContain('Current-date questions are answerable from Current date-time');
+  });
+
+  it('requires an explicit calendar date and preserves exact identifiers across clarification', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain(
+      'Never infer a missing calendar-event date from Current date-time or treat a bare time such as "at noon" as today'
+    );
+    expect(prompt).toContain(
+      'Preserve every exact user-provided identifier, code, reference, and opaque token verbatim across clarification turns and in final tool arguments'
+    );
+    expect(prompt).toContain(
+      'Never invent an identifier or code that the user did not provide; omit linearIssueId unless the user explicitly supplies it'
+    );
   });
 
   it('acknowledges current-session context retention without echoing fragment details', () => {
