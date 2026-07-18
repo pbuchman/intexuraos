@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('18.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('19.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('11.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('12.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -103,6 +103,9 @@ describe('buildIntexAgentSystemPrompt', () => {
     );
     expect(prompt).toContain(
       'Preserve every exact user-provided identifier, code, reference, and opaque token verbatim across clarification turns and in final tool arguments'
+    );
+    expect(prompt).toContain(
+      'For a new explicit create or save request after a completed tool action, build the new mutating tool arguments from the current request and its unresolved active clarification chain only'
     );
     expect(prompt).toContain(
       'Never invent an identifier or code that the user did not provide; omit linearIssueId unless the user explicitly supplies it'

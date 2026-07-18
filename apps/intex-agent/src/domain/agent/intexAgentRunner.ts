@@ -74,6 +74,11 @@ const MUTATING_TOOL_NAMES = new Set<MutatingIntexAgentToolName>([
   'delete_user_preference',
 ]);
 
+const OPAQUE_REFERENCE_PATTERN =
+  /(?<![\p{L}\p{N}_-])(?=[\p{L}\p{N}_-]*\p{L})(?=[\p{L}\p{N}_-]*\p{N})[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)+(?![\p{L}\p{N}_-])/gu;
+const EXPLICIT_REFERENCE_EXCLUSION_PREFIX_PATTERN =
+  /(?<!\p{L})(?:(?:do not|don['’]?t)\s+(?:include|copy|keep|repeat|save)|(?:omit|exclude|remove|without)|nie\s+(?:uwzględniaj|uwzgledniaj|dodawaj|kopiuj|zapisuj|powtarzaj)|(?:pomiń|pomin|wyklucz|usuń|usun|bez))\s*(?:(?:the|this|ten|tego|tę|ta)\s+)?(?:(?:code|reference|identifier|token|kod|referencję|referencje|identyfikator)\s*)?(?:[:=-]\s*)?$/iu;
+
 type LocalizedText = Record<IntexAgentReplyLanguage, string>;
 interface ClassifierUnsupportedReplyMap {
   unsupported_capability: string;
@@ -433,6 +438,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           messages,
           intent,
           exposedToolNames,
+          currentMessage: input.message,
         },
         toolExecutions,
         config.webAppUrl ?? DEFAULT_WEB_APP_URL,
@@ -758,6 +764,7 @@ interface RunnerOutputValidationInput {
   messages: ToolCallingMessage[];
   intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
   exposedToolNames: IntexAgentToolName[];
+  currentMessage: string;
 }
 
 async function parseRunnerContent(
@@ -770,16 +777,21 @@ async function parseRunnerContent(
   const parsed = await validateRunnerOutput(input);
   const toolExecution = getCompletedToolExecution(toolExecutions);
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
+    const confirmationArgs = preserveCurrentTurnOpaqueReferences(
+      toolExecution.toolName,
+      toolExecution.args,
+      input.currentMessage
+    );
     return {
       outcome: 'needs_confirmation',
       reply: buildConfirmationReply(
         toolExecution.toolName,
-        toolExecution.args,
+        confirmationArgs,
         userPreferences,
         replyLanguage
       ),
       toolName: toolExecution.toolName,
-      toolArgs: toolExecution.args,
+      toolArgs: confirmationArgs,
       ...(parsed?.summary !== undefined ? { summary: parsed.summary } : {}),
     };
   }
@@ -807,20 +819,21 @@ async function parseRunnerContent(
   }
 
   switch (parsed.outcome) {
-    case 'needs_clarification':
+    case 'needs_clarification': {
+      const candidateIntents =
+        input.intent.kind === 'tool' ? input.intent.allowedToolNames : parsed.candidateIntents;
       return {
         outcome: parsed.outcome,
         reply: parsed.reply,
         ...(parsed.blockerReason !== undefined ? { blockerReason: parsed.blockerReason } : {}),
         ...(parsed.missingFields !== undefined ? { missingFields: parsed.missingFields } : {}),
-        ...(parsed.candidateIntents !== undefined
-          ? { candidateIntents: parsed.candidateIntents }
-          : {}),
+        ...(candidateIntents !== undefined ? { candidateIntents } : {}),
         ...(parsed.suggestedNextStep !== undefined
           ? { suggestedNextStep: parsed.suggestedNextStep }
           : {}),
         ...(parsed.clarification !== undefined ? { clarification: parsed.clarification } : {}),
       };
+    }
     case 'no_action':
       return { outcome: parsed.outcome, reply: parsed.reply };
     case 'unsupported':
@@ -861,6 +874,47 @@ async function parseRunnerContent(
       );
     }
   }
+}
+
+function preserveCurrentTurnOpaqueReferences(
+  toolName: MutatingIntexAgentToolName,
+  args: Record<string, unknown>,
+  currentMessage: string
+): Record<string, unknown> {
+  if (toolName !== 'create_note') return args;
+
+  const currentReferences = extractRestorableOpaqueReferences(currentMessage);
+  if (currentReferences.length === 0) return args;
+
+  const argumentReferences = new Set(extractOpaqueReferences(JSON.stringify(args)));
+  const missingReferences = currentReferences.filter(
+    (reference) => !argumentReferences.has(reference)
+  );
+  if (missingReferences.length === 0) return args;
+
+  const noteArgs = args as unknown as CreateNoteToolArgs;
+  return {
+    ...args,
+    content: [noteArgs.content, ...missingReferences].join(' '),
+  };
+}
+
+function extractOpaqueReferences(value: string): string[] {
+  return [...new Set(Array.from(value.matchAll(OPAQUE_REFERENCE_PATTERN), (match) => match[0]))];
+}
+
+function extractRestorableOpaqueReferences(value: string): string[] {
+  const lastIndexByReference = new Map<string, number>();
+  for (const match of value.matchAll(OPAQUE_REFERENCE_PATTERN)) {
+    lastIndexByReference.set(match[0], match.index);
+  }
+
+  return [...lastIndexByReference.entries()]
+    .filter(([, index]) => {
+      const prefix = value.slice(Math.max(0, index - 160), index);
+      return !EXPLICIT_REFERENCE_EXCLUSION_PREFIX_PATTERN.test(prefix);
+    })
+    .map(([reference]) => reference);
 }
 
 function buildCompletedToolExecutionResult(

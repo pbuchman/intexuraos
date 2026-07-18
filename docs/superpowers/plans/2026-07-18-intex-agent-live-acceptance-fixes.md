@@ -432,13 +432,28 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 - [x] Strengthen the versioned runner prompt so a bare time never defaults to today and every exact identifier/code/reference survives clarification into final tool arguments.
 - [x] Make scenario `014` treat its literal redacted confirmation labels as complete judge evidence and deterministically assert `workerType=minimax` plus `taskMode=planning` in both confirmation and execution evidence.
 - [x] Close every Critical/Important independent-review finding and run `pnpm run ci:tracked` on the exact final source/test/evaluation diff (`5542/5542` tests, coverage, build, format, and bundle budget passed).
-- [ ] Commit, push, merge, wait for exact Home Dev deployment, rerun preflight, and require focused live scenarios `003` and `014` to pass before the complete endpoint corpus.
+- [x] Commit, push, merge, wait for exact Home Dev deployment, rerun preflight, and require focused live scenarios `003` and `014` to pass before the complete endpoint corpus.
 - [ ] Require the 20-scenario endpoint gate to exit `0`; only then run `full` once and require its fresh endpoint corpus plus authorized Matrix smoke to exit `0`.
 - [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
 
 **Acceptance:** the deterministic date gate prevents invented event dates without reducing valid calendar routing, exact identifiers survive clarification, scenario `014` is judged only from observable privacy-safe evidence, the real endpoint and full gates exit `0`, and Matrix remains strictly downstream of endpoint success.
 
 **Review status:** independent calendar-chain and scenario-`014` re-reviews approved the final implementation after verifying topic boundaries, multi-clarification continuity, inbound quoted context, ordinal/month false positives, omitted Linear identifiers, closed sanitization paths, and 100% branch coverage of the new runner gate. No Critical or Important findings remain.
+
+### Task 20: Close the three residual failures from the exact deployed corpus
+
+**Evidence:** deployed endpoint run `eval-3c30827d-fdbe-4772-949b-4a9a18cbf8ae` completed all 20 scenarios with 58 turns, 58 judged replies, 18 tool calls, zero infrastructure failures, complete MiniMax M3 usage/cost accounting, and cleanup for all synthetic users. Seventeen scenarios passed. Focused repeats made scenarios `006` and `010` pass without a product change, identifying stochastic model/judge sensitivity; scenario `008` failed again and a privacy-safe direct diagnostic proved that the first missing-time clarification did not persist its classified calendar intent, so the next time-only answer was incorrectly treated as a new missing-date request. The endpoint exited `1`, therefore Matrix/full was correctly not run.
+
+- [x] Add a RED → GREEN runner regression proving that a tool intent selected by the classifier remains in `candidateIntents` when the runner LLM asks for missing fields, preserving the active multi-turn clarification chain.
+- [x] Strengthen the versioned product prompt so a new save/create action cannot inherit content or identifiers from an earlier completed action unless the user explicitly requests reuse; for note previews, deterministically restore every exact current-turn opaque letter-digit reference that a stochastic model omitted, without rewriting other tool arguments.
+- [x] Calibrate scenario `010` to the observable sanitized contract: `Content: [redacted]` is required, `Title: [redacted]` is optional, redacted values are complete evidence, and the isolated reply need not name its audio/transcript source.
+- [x] Make completed closed tool evidence authoritative to MiniMax M3 for a concise completion claim while preserving every failure enum, privacy boundary, deterministic assertion, model, provider order, repair limit, and fail-closed behavior.
+- [ ] Close every Critical/Important independent-review finding and run `pnpm run ci:tracked` on the exact final source/test/evaluation diff.
+- [ ] Commit, push, merge, wait for the exact Home Dev deployment, rerun preflight, and require focused live scenarios `006`, `008`, and `010` to pass before the complete endpoint corpus.
+- [ ] Require the 20-scenario endpoint gate to exit `0`; only then run `full` once and require its fresh endpoint corpus plus the authorized Matrix smoke to exit `0`.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+**Acceptance:** clarification metadata survives every runner-generated follow-up, new mutating requests are isolated from completed actions, MiniMax judges only observable closed facts, the real endpoint and full gates exit `0`, Matrix remains strictly downstream of endpoint success, and the deployed sessions UI passes the logged-in desktop/mobile audit.
 
 ### Deferred perfection (recorded, not implemented in this loop)
 
