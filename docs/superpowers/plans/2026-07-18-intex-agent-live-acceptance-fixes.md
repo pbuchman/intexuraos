@@ -4,7 +4,7 @@
 
 **Goal:** Remove the infrastructure defects discovered during Home Dev acceptance, redeploy the exact fixes, and complete `preflight` → `endpoint` → `full`.
 
-**Architecture:** The Intex Agent sanitizer omits normalized-empty event values before they reach the strict evaluator wire schema. The shared OpenRouter client rejects malformed or in-band error completions as provider failures before MiniMax output parsing. MiniMax remains the sole judge in JSON-object mode; its dedicated client requires parameter-compatible OpenRouter routing, followed by local `JSON.parse`, strict Zod validation, one same-model repair, and no fallback.
+**Architecture:** The Intex Agent sanitizer omits normalized-empty event values before they reach the strict evaluator wire schema. The shared OpenRouter client rejects malformed or in-band error completions as provider failures before MiniMax output parsing. MiniMax remains the sole judge in JSON-object mode; its dedicated client uses an evidence-based three-host order, and one canonical verdict contract drives Zod plus the initial, Matrix, and repair prompts.
 
 **Tech Stack:** TypeScript 5.7, Node.js 22, pnpm 10, Vitest 4, Zod 3, Home Dev, OpenRouter, MiniMax M3.
 
@@ -13,10 +13,10 @@
 - The only evaluation judge is `or:minimax/minimax-m3` (`minimax/minimax-m3` at the raw OpenRouter boundary).
 - Claude Sonnet is not used as judge, fallback, repair model, or retry model.
 - A MiniMax failure, invalid JSON, missing credential, or timeout is an infrastructure failure. It never silently passes or switches models.
-- Preserve JSON-object mode, `provider.require_parameters: true`, temperature `0`, strict local Zod validation, and at most one same-model structured repair. Do not parse reasoning as the answer.
+- Preserve JSON-object mode, `provider.require_parameters: true`, temperature `0`, strict local Zod validation, and at most one same-model structured repair. Use only `gmicloud` → `minimax` → `morph`, with fallback outside the list disabled. Do not parse reasoning as the answer.
 - Product tools remain mocked in endpoint scenarios; every synthetic user is cleaned in `finally`.
 - Never log response content, provider error text, real user identifiers, Matrix identifiers, paths, tokens, or messages.
-- Do not implement strict JSON Schema routing, provider pinning, a second model, or any deferred-perfection item in this fix. `provider.require_parameters: true` is required only on the dedicated MiniMax evaluator client.
+- Do not implement strict JSON Schema routing, a second model, or any deferred-perfection item in this fix. The required-parameter flag and ordered provider restriction are required only on the dedicated MiniMax evaluator client.
 - Every production change follows RED → GREEN and receives an independent task review.
 
 ## Live Contract Amendment — 2026-07-18
@@ -24,7 +24,9 @@
 - Two consecutive deployed preflights passed every local/account/Matrix check and failed only the MiniMax provider probe. A privacy-safe A/B request proved that default routing selected a path returning `content: null` for JSON mode.
 - Removing `response_format` restored string content and made preflight pass, but scenario 001 then produced invalid judge output both initially and after the one repair. Prompt-only JSON is not accepted as the final contract.
 - OpenRouter documents mixed MiniMax M3 endpoint support. Two probes with `response_format` plus `provider.require_parameters: true` returned valid string content and separate reasoning, so the evaluator preserves JSON mode and constrains routing by capability rather than provider name.
-- Keep MiniMax M3, temperature `0`, strict prompts, `JSON.parse`, Zod, one repair, closed errors, and no fallback. Do not parse chain-of-thought, add JSON Schema routing, pin a provider, switch models, or weaken the non-string response guard.
+- The next real endpoint run still failed scenario 001 after one repair. Privacy-safe structural diagnostics proved the exact schema issue: GMICloud, direct MiniMax, and Morph returned valid JSON with only `failures[]:invalid_enum_value`; the prompt never listed the allowed enum values, so repair repeated the same error. Parasail returned `content: null`, and Together returned `429` in the same matrix.
+- Before delivery, the replacement self-contained prompt was exercised against the same synthetic scenario: GMICloud, direct MiniMax, and Morph each returned schema-valid verdict JSON on the initial call, while endpoint determinism and cleanup again passed. No response content was printed or persisted.
+- Keep MiniMax M3, temperature `0`, strict `JSON.parse` plus Zod, one repair, and closed errors. Make the prompt contract self-contained and route in the verified order GMICloud, direct MiniMax, then Morph, with no fallback outside that list. Do not parse chain-of-thought, add JSON Schema routing, switch models, or weaken the non-string response guard.
 
 ---
 
@@ -146,7 +148,40 @@
 
 ---
 
-### Task 4: Review, deliver, and repeat live acceptance
+### Task 4: Make the MiniMax verdict contract self-contained and routing deterministic
+
+**Files:**
+- Modify: `packages/infra-openrouter/src/types.ts`
+- Modify: `packages/infra-openrouter/src/client.ts`
+- Test: `packages/infra-openrouter/src/__tests__/client.test.ts`
+- Modify: `tools/intex-agent-evals/src/minimaxJudge.ts`
+- Test: `tools/intex-agent-evals/src/__tests__/minimaxJudge.test.ts`
+
+**Interfaces:**
+- Consumes: the six allowed judge failure codes and OpenRouter provider-order options.
+- Produces: one canonical enum shared by Zod and every full-verdict prompt; requests ordered through `gmicloud`, `minimax`, and `morph` with `allow_fallbacks: false`.
+
+- [x] **Step 1: Write failing contract and routing tests**
+
+  Require every canonical failure code, the exact JSON skeleton, and the pass-coherence rule in endpoint, Matrix, and repair prompts. Require repair to correct an invalid enum when given one chance. Require the shared OpenRouter client to serialize `order` and `allow_fallbacks` while still omitting `provider` for default callers, and require the dedicated evaluator's exact three-host order.
+
+- [x] **Step 2: Verify RED**
+
+  Run the focused OpenRouter and MiniMax evaluator suites. The new prompt and provider assertions must fail against the deployed implementation while all pre-existing assertions continue to pass.
+
+- [x] **Step 3: Implement the canonical prompt and provider contract**
+
+  Define the failure tuple once and reuse it in Zod and prompt construction. Include the complete compact skeleton, enum list, and pass rule in initial, Matrix, and repair instructions; bump the changed prompt versions. Add optional shared-client `order` and `allowFallbacks` serialization, then enable the verified order only in the MiniMax evaluator. Preserve one repair and every fail-closed guard.
+
+- [x] **Step 4: Verify GREEN and review**
+
+  Run both focused suites and `pnpm run ci:tracked` on the exact combined diff. Require independent code and specification review before delivery.
+
+**Acceptance:** valid MiniMax JSON can satisfy the complete schema without guessing hidden enums, repair has all information needed to correct a verdict, known null-content/rate-limited hosts cannot be selected, and every non-evaluator OpenRouter caller is unchanged.
+
+---
+
+### Task 5: Review, deliver, and repeat live acceptance
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-18-intex-agent-live-acceptance-fixes.md` only to record final evidence.

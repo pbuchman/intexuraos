@@ -971,6 +971,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
+        providerRouting: {},
       });
 
       const result = await client.generateChat([{ role: 'user', content: 'hello' }], {
@@ -995,6 +996,7 @@ describe('createOpenRouterClient', () => {
 
     it('forwards reasoning options to OpenRouter chat completions', async () => {
       let capturedBody: Record<string, unknown> | undefined;
+      const providerOrder = ['gmicloud', 'minimax', 'morph'];
 
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => {
@@ -1022,8 +1024,13 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
-        providerRouting: { requireParameters: true },
+        providerRouting: {
+          requireParameters: true,
+          order: providerOrder,
+          allowFallbacks: false,
+        },
       });
+      providerOrder[0] = 'caller-mutated-provider';
 
       const result = await client.generateChat([{ role: 'user', content: 'hello' }], {
         promptType: 'whatsapp-conversation-assistant',
@@ -1042,7 +1049,11 @@ describe('createOpenRouterClient', () => {
         max_tokens: 2048,
         exclude: true,
       });
-      expect(capturedBody?.['provider']).toEqual({ require_parameters: true });
+      expect(capturedBody?.['provider']).toEqual({
+        require_parameters: true,
+        order: ['gmicloud', 'minimax', 'morph'],
+        allow_fallbacks: false,
+      });
     });
 
     it('streams chat completion deltas and final usage', async () => {
@@ -1074,7 +1085,11 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
-        providerRouting: { requireParameters: true },
+        providerRouting: {
+          requireParameters: true,
+          order: ['gmicloud', 'minimax', 'morph'],
+          allowFallbacks: false,
+        },
       });
       const events: unknown[] = [];
 
@@ -1095,7 +1110,11 @@ describe('createOpenRouterClient', () => {
       expect(capturedBody).toMatchObject({
         session_id: 'session-123',
         response_format: { type: 'json_object' },
-        provider: { require_parameters: true },
+        provider: {
+          require_parameters: true,
+          order: ['gmicloud', 'minimax', 'morph'],
+          allow_fallbacks: false,
+        },
       });
       expect(events).toContainEqual({ type: 'delta', text: 'Hel' });
       expect(events).toContainEqual({ type: 'delta', text: 'lo' });

@@ -97,6 +97,10 @@ export interface OpenRouterConfig {
   providerRouting?: {
     /** Route only to providers that support every supplied request parameter. */
     requireParameters?: boolean;
+    /** Provider slugs in preferred routing order. */
+    order?: readonly string[];
+    /** Whether OpenRouter may route outside the configured provider order. */
+    allowFallbacks?: boolean;
   };
 }
 
