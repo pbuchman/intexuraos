@@ -20,6 +20,8 @@ import type {
 } from '../../domain/sessions/types.js';
 
 const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
+const SCENARIO_017_MESSAGE =
+  'Add a durable preference with this exact row: reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.';
 const ENGLISH_GREETING_REPLY = 'Hi! I am doing well. How can I help?';
 const POLISH_GREETING_REPLY = 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?';
 
@@ -814,6 +816,282 @@ describe('createIntexAgentRunner', () => {
     });
     expect(client.calls[0]?.tools).toEqual([]);
     expect(client.calls[0]?.toolChoice).toBe('auto');
+  });
+
+  it('characterizes scenario 017 when an explicit preference add is misclassified as conversation', async () => {
+    let addUserPreferenceCalls = 0;
+    const client = new FakeToolCallingClient([
+      ok({
+        content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: conversationIntentClassifier(),
+      toolExecutor: fakeToolExecutor({
+        addUserPreference: async () => {
+          addUserPreferenceCalls += 1;
+          return JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' });
+        },
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: SCENARIO_017_MESSAGE,
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toEqual({
+      outcome: 'no_action',
+      reply: 'No action needed.',
+    });
+    expect(client.calls[0]?.tools).toEqual([]);
+    expect(client.calls[0]?.toolChoice).toBe('auto');
+    expect(addUserPreferenceCalls).toBe(0);
+  });
+
+  it('characterizes scenario 017 when a required-tool turn returns final text without a tool call', async () => {
+    let addUserPreferenceCalls = 0;
+    const client = new FakeToolCallingClient([
+      ok({
+        content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['add_user_preference']),
+      toolExecutor: fakeToolExecutor({
+        addUserPreference: async () => {
+          addUserPreferenceCalls += 1;
+          return JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' });
+        },
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: SCENARIO_017_MESSAGE,
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toEqual({
+      outcome: 'no_action',
+      reply: 'No action needed.',
+    });
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['add_user_preference']);
+    expect(client.calls[0]?.toolChoice).toBe('required');
+    expect(addUserPreferenceCalls).toBe(0);
+  });
+
+  it('uses a schema-validated scenario 017 preview when runner output remains malformed after repair', async () => {
+    let addUserPreferenceCalls = 0;
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'add_user_preference',
+        args: {
+          text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+          expectedVersion: 0,
+        },
+      },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok({
+        content: 'still malformed after repair',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['add_user_preference']),
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor({
+        addUserPreference: async () => {
+          addUserPreferenceCalls += 1;
+          return JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' });
+        },
+      }),
+    });
+
+    await expect(runner.run({
+      session: session(),
+      events: [],
+      message: SCENARIO_017_MESSAGE,
+      currentDateTime: CURRENT_DATE_TIME,
+    })).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply:
+        'Add this instruction memory entry?\n\nNew entry: reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+      toolName: 'add_user_preference',
+      toolArgs: {
+        text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+        expectedVersion: 0,
+      },
+    });
+    expect(responseRepairClient.calls).toHaveLength(1);
+    expect(client.calls[0]?.toolChoice).toBe('required');
+    expect(addUserPreferenceCalls).toBe(0);
+  });
+
+  it('keeps malformed runner output fail-closed after a read-only tool execution', async () => {
+    let getUserPreferencesCalls = 0;
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['get_user_preferences']),
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () => {
+          getUserPreferencesCalls += 1;
+          return JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: '' });
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Show my durable preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
+    });
+    expect(getUserPreferencesCalls).toBe(1);
+  });
+
+  it('keeps malformed runner output fail-closed when mutating preview arguments fail validation', async () => {
+    let addUserPreferenceCalls = 0;
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'add_user_preference',
+        args: { text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.' },
+      },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['add_user_preference']),
+      toolExecutor: fakeToolExecutor({
+        addUserPreference: async () => {
+          addUserPreferenceCalls += 1;
+          return JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' });
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: SCENARIO_017_MESSAGE,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
+    });
+    expect(addUserPreferenceCalls).toBe(0);
+  });
+
+  it('keeps malformed runner output fail-closed after two schema-valid previews of the same mutating tool', async () => {
+    let addUserPreferenceCalls = 0;
+    const previewCall = {
+      toolName: 'add_user_preference',
+      args: {
+        text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+        expectedVersion: 0,
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      [previewCall, previewCall],
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 2,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok({
+        content: 'still malformed after repair',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['add_user_preference']),
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor({
+        addUserPreference: async () => {
+          addUserPreferenceCalls += 1;
+          return JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' });
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: SCENARIO_017_MESSAGE,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
+    });
+    expect(responseRepairClient.calls).toHaveLength(1);
+    expect(client.calls[0]?.toolChoice).toBe('required');
+    expect(addUserPreferenceCalls).toBe(0);
   });
 
   it('preserves a direct answer when the model labels a conversation reply as completed', async () => {

@@ -591,13 +591,6 @@ async function parseRunnerContent(
   replyLanguage: IntexAgentReplyLanguage
 ): Promise<IntexAgentRunnerResult> {
   const parsed = await validateRunnerOutput(input);
-  if (parsed === null) {
-    return fallbackClarificationResult(
-      replyLanguage,
-      fallbackReasonForInvalidRunnerContent(input.content)
-    );
-  }
-
   const toolExecution = getCompletedToolExecution(toolExecutions);
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
     return {
@@ -610,8 +603,15 @@ async function parseRunnerContent(
       ),
       toolName: toolExecution.toolName,
       toolArgs: toolExecution.args,
-      ...(parsed.summary !== undefined ? { summary: parsed.summary } : {}),
+      ...(parsed?.summary !== undefined ? { summary: parsed.summary } : {}),
     };
+  }
+
+  if (parsed === null) {
+    return fallbackClarificationResult(
+      replyLanguage,
+      fallbackReasonForInvalidRunnerContent(input.content)
+    );
   }
 
   if (
