@@ -145,6 +145,20 @@ describe('createIntexAgentToolDefinitions', () => {
     });
   });
 
+  it('allows a Linear issue only when the user explicitly supplied its identifier', () => {
+    const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_code_task'
+    );
+
+    expect(codeTaskTool?.parameters['required']).not.toContain('linearIssueId');
+    expect(codeTaskTool?.parameters['properties']).toMatchObject({
+      linearIssueId: {
+        type: 'string',
+        description: expect.stringMatching(/omit.*unless.*user explicitly supplies/iu),
+      },
+    });
+  });
+
   it('describes external save forwarding without inspecting URLs', () => {
     const externalSaveTool = createIntexAgentToolDefinitions(createExecutor()).find(
       (tool) => tool.name === 'save_external'

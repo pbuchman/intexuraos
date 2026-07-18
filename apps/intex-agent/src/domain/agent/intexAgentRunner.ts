@@ -117,6 +117,25 @@ const RETAIN_ONLY_REPLIES: LocalizedText = {
   pl: 'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
 };
 
+const CALENDAR_DATE_CLARIFICATION_REPLIES: LocalizedText = {
+  en: 'Which day or date should I use for this calendar event?',
+  pl: 'Którego dnia lub na jaką datę mam dodać to wydarzenie?',
+};
+
+const CALENDAR_DATE_CLARIFICATION_NEXT_STEPS: LocalizedText = {
+  en: 'Provide the day or date for the calendar event.',
+  pl: 'Podaj dzień lub datę wydarzenia w kalendarzu.',
+};
+
+const CALENDAR_DIRECT_DATE_SIGNAL_PATTERN =
+  /(?<![\p{L}\p{N}])(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|poniedział(?:ek|ku)|wtorek|wtorku|środ(?:a|ę|y)|czwart(?:ek|ku)|pią(?:tek|tku)|sobot(?:a|ę|y)|niedziel(?:a|ę|i)|today|tomorrow|tonight|day\s+after\s+tomorrow|dzisiaj|dziś|jutro|pojutrze|(?:in|za)\s+(?:\d+|one|two|three|jeden|jedną|dwa|dwie|trzy)\s+(?:days?|dni|dzień))(?=$|[^\p{L}\p{N}])/iu;
+
+const CALENDAR_ORDINAL_DATE_SIGNAL_PATTERN =
+  /(?<![\p{L}\p{N}])on\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)(?=\s*(?:$|[,.;!?]|(?:at|from|between|until|for)\b))/iu;
+
+const CALENDAR_CONTEXTUAL_MONTH_SIGNAL_PATTERN =
+  /(?<![\p{L}\p{N}])(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?)(?=$|[^\p{L}\p{N}])/iu;
+
 const CLASSIFIER_UNSUPPORTED_REPLIES: Record<
   IntexAgentReplyLanguage,
   ClassifierUnsupportedReplyMap
@@ -362,6 +381,23 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         }
       }
 
+      if (
+        intent.kind === 'tool' &&
+        intent.allowedToolNames.includes('create_calendar_event') &&
+        !hasCalendarDateSignal(input.message, input.events, input.replyContext)
+      ) {
+        const clarification = CALENDAR_DATE_CLARIFICATION_REPLIES[replyLanguage];
+        return {
+          outcome: 'needs_clarification',
+          reply: clarification,
+          clarification,
+          blockerReason: 'missing_required_details',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+          suggestedNextStep: CALENDAR_DATE_CLARIFICATION_NEXT_STEPS[replyLanguage],
+        };
+      }
+
       const toolExecutions: IntexAgentToolExecution[] = [];
       const tools = createIntexAgentToolDefinitions(
         createTrackingToolExecutor(createConfirmationPreviewExecutor(config.toolExecutor), toolExecutions)
@@ -405,6 +441,86 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       );
     },
   };
+}
+
+function hasCalendarDateSignal(
+  message: string,
+  events: readonly IntexAgentSessionEvent[],
+  replyContext: IntexIncomingMessageReplyContext | undefined
+): boolean {
+  if (containsCalendarDateSignal(message)) return true;
+  if (
+    replyContext?.source === 'inbound_user_message' &&
+    containsCalendarDateSignal(replyContext.text)
+  ) {
+    return true;
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'user_message') return false;
+    if (event?.type !== 'clarification_requested') continue;
+    if (!isCalendarClarification(event)) return false;
+    return activeCalendarClarificationChainContainsDate(events, index);
+  }
+
+  return false;
+}
+
+function activeCalendarClarificationChainContainsDate(
+  events: readonly IntexAgentSessionEvent[],
+  latestClarificationIndex: number
+): boolean {
+  let expectsUserMessage = true;
+
+  for (let index = latestClarificationIndex - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event === undefined) continue;
+
+    if (expectsUserMessage) {
+      if (event.type === 'clarification_requested') return false;
+      if (event.type !== 'user_message') continue;
+
+      const priorMessage = event.payload['text'];
+      if (typeof priorMessage === 'string' && containsCalendarDateSignal(priorMessage)) {
+        return true;
+      }
+      const priorReplyContext = parseIncomingReplyContext(event.payload['replyContext']);
+      if (
+        priorReplyContext?.source === 'inbound_user_message' &&
+        containsCalendarDateSignal(priorReplyContext.text)
+      ) {
+        return true;
+      }
+      expectsUserMessage = false;
+      continue;
+    }
+
+    if (event.type === 'user_message') return false;
+    if (event.type !== 'clarification_requested') continue;
+    if (!isCalendarClarification(event)) return false;
+    expectsUserMessage = true;
+  }
+
+  return false;
+}
+
+function containsCalendarDateSignal(message: string): boolean {
+  const normalized = message.normalize('NFKC');
+  return (
+    CALENDAR_DIRECT_DATE_SIGNAL_PATTERN.test(normalized) ||
+    CALENDAR_ORDINAL_DATE_SIGNAL_PATTERN.test(normalized) ||
+    CALENDAR_CONTEXTUAL_MONTH_SIGNAL_PATTERN.test(normalized)
+  );
+}
+
+function isCalendarClarification(event: IntexAgentSessionEvent): boolean {
+  const candidateIntents = event.payload['candidateIntents'];
+  const missingFields = event.payload['missingFields'];
+  return (
+    (Array.isArray(candidateIntents) && candidateIntents.includes('create_calendar_event')) ||
+    (Array.isArray(missingFields) && missingFields.includes('date'))
+  );
 }
 
 function detectRetainOnlyLanguage(message: string): IntexAgentReplyLanguage | null {

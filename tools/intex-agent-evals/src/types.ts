@@ -185,6 +185,9 @@ export const TIMELINE_PAYLOAD_PATH_METADATA = {
   textPreview: 'string',
   'argsSummary.syntheticMarkerCount': 'number',
   'argsSummary.syntheticMarkerDigest': 'string',
+  'argsSummary.workerType': 'string',
+  'argsSummary.taskMode': 'string',
+  'argsSummary.hasLinearIssueId': 'boolean',
 } as const satisfies AssertionPathMetadata;
 
 export const TIMELINE_PAYLOAD_PATHS = Object.keys(TIMELINE_PAYLOAD_PATH_METADATA);

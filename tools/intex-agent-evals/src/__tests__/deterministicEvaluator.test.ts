@@ -457,6 +457,38 @@ describe('deterministic evaluator', () => {
     ]);
   });
 
+  it('enforces exact sanitized code-task worker and mode confirmation evidence', () => {
+    const scenario = scenarioFor((expected) => {
+      expected.timeline.payloadAssertions = [
+        {
+          eventType: 'confirmation_requested',
+          assertions: [
+            { path: 'argsSummary.workerType', operator: 'equals', value: 'minimax' },
+            { path: 'argsSummary.taskMode', operator: 'equals', value: 'planning' },
+            { path: 'argsSummary.hasLinearIssueId', operator: 'absent' },
+          ],
+        },
+      ];
+    });
+    const response = responseFor(scenario);
+    const confirmation = requiredItem(response.turns, 0).timelineEvents.find(
+      (candidate) => candidate.type === 'confirmation_requested'
+    );
+    if (confirmation === undefined) throw new Error('Expected confirmation event');
+    confirmation.payload = {
+      argsSummary: { workerType: 'minimax', taskMode: 'planning' },
+    };
+
+    expect(evaluateDeterministically(scenario, response).failures).toEqual([]);
+
+    confirmation.payload = {
+      argsSummary: { workerType: 'minimax', taskMode: 'execution', hasLinearIssueId: true },
+    };
+    expect(evaluateDeterministically(scenario, response).failures).toContainEqual(
+      expect.objectContaining({ code: 'timeline_payload_assertion_failed' })
+    );
+  });
+
   it.each([
     ['passed', true, true],
     ['failed', true, false],

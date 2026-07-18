@@ -125,6 +125,11 @@ const REDACTED_CONFIRMATION_CASES = [
     labels: ['Title: [redacted]', 'Prompt: [redacted]'],
   },
   {
+    scenarioId: 'intex-eval-014',
+    turnIndex: 0,
+    labels: ['Prompt: [redacted]', 'Mode: [redacted]', 'Worker: [redacted]'],
+  },
+  {
     scenarioId: 'intex-eval-018',
     turnIndex: 0,
     labels: ['Entry: [redacted]', 'After: [redacted]'],
@@ -918,6 +923,54 @@ describe('tracked scenario catalog', () => {
     }
   });
 
+  it('pins scenario 014 planning worker in both confirmation preview and executed arguments', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-014');
+    const request = scenario.expected.turns[0];
+    const execution = findRequiredToolCall(scenario, 'create_code_task');
+
+    expect(
+      request === undefined
+        ? false
+        : hasEqualsPayloadAssertion(
+            request,
+            'confirmation_requested',
+            'argsSummary.workerType',
+            'minimax'
+          )
+    ).toBe(true);
+    expect(
+      request === undefined
+        ? false
+        : hasEqualsPayloadAssertion(
+            request,
+            'confirmation_requested',
+            'argsSummary.taskMode',
+            'planning'
+          )
+    ).toBe(true);
+    expect(
+      request === undefined
+        ? false
+        : request.timeline.payloadAssertions.some(
+            (payload) =>
+              payload.eventType === 'confirmation_requested' &&
+              payload.assertions.some(
+                (assertion) =>
+                  assertion.path === 'argsSummary.hasLinearIssueId' &&
+                  assertion.operator === 'absent'
+              )
+          )
+    ).toBe(true);
+    expect(execution.argumentAssertions).toEqual(
+      expect.arrayContaining([
+        { path: 'workerType', operator: 'equals', value: 'minimax' },
+        { path: 'taskMode', operator: 'equals', value: 'planning' },
+        { path: 'hasLinearIssueId', operator: 'absent' },
+      ])
+    );
+    expect(semanticCriteriaFor(scenario, 0)).not.toContain('Linear: [redacted]');
+  });
+
   it('uses exactly the base marker plus F01 through F18 for scenario 020', () => {
     const scenario = findScenario(scenarios, 'intex-eval-020');
     const markers = new Set(
@@ -989,7 +1042,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '8da3890c2982192fd75438ede4b0c27d91839d8d826309674077029e219aa935'
+      '7f0e0a4a46e6bafcb52d9c1a11b5b392e8bbb9f32de6c9cde49aba77da64f718'
     );
   });
 });
